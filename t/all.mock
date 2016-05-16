@@ -1,0 +1,35 @@
+eth_accounts []
+=> ["0x841b4d218f211f4e21e856e89d42521b2211201d"]
+
+eth_getBalance ["0x841b4d218f211f4e21e856e89d42521b2211201d"]
+=> "0x0"
+
+web3_clientVersion []
+=> "Geth/v1.3.5/linux/go1.5.1"
+
+eth_protocolVersion []
+=> 63
+
+net_version []
+=> 1
+
+eth_gasPrice []
+=> "0x4a817c800"
+
+eth_hashrate []
+=> "0x0"
+
+net_peerCount []
+=> "0xc"
+
+eth_mining []
+=> false
+
+net_listening []
+=> true
+
+eth_blockNumber []
+=> "0x1755d0"
+
+eth_syncing []
+=> false

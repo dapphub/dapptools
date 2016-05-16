@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+set -e -o pipefail
+$1 |& diff $1.gold -
+touch $@
+echo OK

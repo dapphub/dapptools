@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+set -e -o pipefail
+cat <<.; PS4=$'\n$ '; exec 2>&1; set -x
+Primary seth(1) test suite
+==========================
+.
+
+seth accounts
+seth status

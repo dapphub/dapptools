@@ -2,4 +2,4 @@
 ### seth-status -- show client and network status information
 for property in $(seth status-properties); do
   printf "%-16s\t%s\n" "$property" "$(seth $property || echo -)" &
-done | sort; wait
+done | LANG=C sort; wait
