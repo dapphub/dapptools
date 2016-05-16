@@ -1,0 +1,20 @@
+#!/bin/sh
+# By default, all results and parameters are assumed to be strings.
+# Type declaration format:                   <result> [<params>]
+grep -oP "^$1\s+\K.*" <<EOF || echo string
+eth_syncing                                  object
+eth_accounts                                 array
+eth_sendTransaction                          string object
+eth_call                                     string object
+eth_estimateGas                              string object
+eth_getBlockByHash                           object string nonstring
+eth_getBlockByNumber                         object string nonstring
+eth_getTransactionByHash                     object
+eth_getTransactionByBlockHashAndIndex        object
+eth_getTransactionByBlockNumberAndIndex      object
+eth_getTransactionReceipt                    object
+eth_getUncleByBlockHashAndIndex              object
+eth_getUncleByBlockNumberAndIndex            object
+eth_getCompilers                             array
+eth_compileSolidity                          object
+EOF

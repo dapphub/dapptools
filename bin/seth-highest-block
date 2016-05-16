@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+set -e -o pipefail
+seth sync-status | grep ^highestBlock | cut -f2

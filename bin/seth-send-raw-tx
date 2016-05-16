@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+set -e -o pipefail
+#!/bin/sh -e
+### seth-send-raw-tx -- send an already-signed transaction
+### Usage: seth send-raw-tx
+### The transaction data is read from standard input.
+seth --rpc eth_sendRawTransaction "$(cat)"

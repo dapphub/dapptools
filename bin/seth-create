@@ -1,0 +1,30 @@
+#!/usr/bin/env bash
+### seth-create -- publish a transaction to create a new contract
+### Usage: seth create [<options>] <from-account>
+### The bytecode of the new contract is read from standard input.
+###
+### Options:
+###
+###    -g, --gas=NUMBER         units of gas provided for the transaction
+###    -P, --gas-price=NUMBER   price (in wei) paid for each unit of gas
+###    -v, --value=NUMBER       value (in wei) granted to the new contract
+###
+set -e -o pipefail
+wrong-usage() { seth help ${0##*/seth-}; exit 1; }
+
+optspec=(-o g:P:v: -l "gas: gas-price: value:")
+options=$(getopt -n $(basename $0) "${optspec[@]}" -- "$@")
+eval set -- $options; while [[ $1 ]]; do
+  case $1 in
+    --)                 shift; break;;
+    -g|--gas)           shift; params+=(gas="$1");;
+    -P|--gas-price)     shift; params+=(gasPrice="$1");;
+    -v|--value)         shift; params+=(value="$1");;
+    *)                  wrong-usage;;
+  esac; shift
+done
+
+[[ $# = 2 ]] || wrong-usage
+
+echo seth --rpc eth_sendTransaction \
+from="$1" to="$2" data="$3" "${params[@]}"

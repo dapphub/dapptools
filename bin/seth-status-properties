@@ -1,0 +1,16 @@
+#!/bin/sh
+cat <<.
+client-version
+network-version
+protocol-version
+syncing
+starting-block
+current-block
+highest-block
+listening
+peer-count
+gas-price
+block-number
+mining
+hashrate
+.

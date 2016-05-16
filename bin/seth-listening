@@ -1,0 +1,2 @@
+#!/bin/sh -e
+seth --rpc net_listening

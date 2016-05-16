@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+: ${SETHRC:=~/.sethrc}
+[[ -e $SETHRC ]] && . $SETHRC
+which seth &>/dev/null || PATH+=:$(dirname $0)
+exec seth-${1---help} "${@:2}"

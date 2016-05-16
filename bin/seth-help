@@ -1,0 +1,5 @@
+#!/bin/sh -e
+if test "$1"
+then seth --help-about "$1"
+else seth --help
+fi

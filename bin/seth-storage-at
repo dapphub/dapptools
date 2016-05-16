@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+### seth-storage-at -- print the value of a given storage position
+### Usage: seth storage-at [<options>] <address> <position>
+###
+### Options:
+###
+###   -b, --block=NUMBER        block number (or latest/earliest/pending)
+###
+set -e
+wrong-usage() { seth help ${0##*/seth-}; exit 1; }
+
+optspec=(-o b: -l block:)
+options=$(getopt -n $(basename $0) "${optspec[@]}" -- "$@") || wrong-usage
+eval set -- $options; while [[ $1 ]]; do
+  case $1 in
+    --)            shift; break;;
+    -b|--block)    shift; block=$1;;
+  esac; shift
+done
+
+[[ $# = 2 ]] || wrong-usage
+[[ -z $block || $block = 0x* ]] || wrong-usage
+
+seth --rpc eth_getStorageAt $1 $2 $block

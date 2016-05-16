@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+set -e -o pipefail
+[[ $DEBUG ]] && set -x
+case $1 in
+  string) jshon -Q -e result -u;;
+  object) jshon -Q -e result -j | seth --parse-object;;
+  array) jshon -Q -e result -a -u;;
+  *) echo >&2 seth: error: unknown result type: $1; exit 1;;
+esac
