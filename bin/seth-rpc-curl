@@ -1,0 +1,3 @@
+#!/bin/sh
+exec curl -sS -d @- -H "Content-Type: application/json" \
+  ${ETH_RPC_URL-${ETH_RPC_HOST-localhost}:${ETH_RPC_PORT-8545}}

@@ -1,2 +1,0 @@
-#!/bin/sh -e
-curl -sS -d @- -H "Content-Type: application/json" ${1?}

@@ -1,2 +1,2 @@
-#!/bin/sh -e
-seth rpc --decimal eth_gasPrice
+#!/bin/sh
+exec seth rpc eth_gasPrice

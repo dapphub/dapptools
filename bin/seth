@@ -23,6 +23,7 @@ set -e
 [[ $SETH_INITALIZED ]] || {
   : ${SETHRC:=~/.sethrc}; [[ -e $SETHRC ]] && . $SETHRC
   which seth &>/dev/null || PATH+=:$(dirname $0)
+  export ETH_BLOCK=${ETH_BLOCK-latest}
   export SETH_INITIALIZED=1
 }
 

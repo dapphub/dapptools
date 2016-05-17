@@ -1,7 +1,0 @@
-#!/bin/sh -e
-version=$(seth rpc --decimal net_version)
-case $version in
-0) echo testnet;;
-1) echo mainnet;;
-*) echo $version;;
-esac

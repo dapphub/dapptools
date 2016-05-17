@@ -1,4 +1,14 @@
 #!/usr/bin/env bash
 grep -oP '^(\S)\1\1( \K.*)?' $(dirname $0)/seth${1+-$1} |
 perl -pe 's/^(\S)\1\1$//' | sed 1d
-[[ $1 ]] || seth help-commands
+[[ $1 ]] || cat <<.
+
+Commands:
+
+$(grep -hoP "^(\\S)\\1\\1 seth-\\K[^ ]* -- .*" $(dirname $0)/seth-* |
+sed "s/ -- / /" | while read name description; do
+  printf "   %-12s  %s\n" "$name" "$description"
+done)
+
+Report bugs to <https://github.com/dbrock/seth>.
+.

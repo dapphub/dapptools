@@ -1,7 +1,7 @@
 #!/usr/bin/env node
-// seth-test-rpc -- run a command with a fake Ethereum RPC server
-// Usage: seth test-rpc <command> [<args>]
-// The canned RPC interactions are read from file descriptor 3.
+// seth-mock-rpc -- run a command with a mocked RPC server
+// Usage: seth mock-rpc 20<mock.json <command> [<args>]
+// The mocked RPC interactions are read from file descriptor 20.
 
 var assert = require("assert")
 var cp = require("child_process")
@@ -9,11 +9,11 @@ var fs = require("fs")
 var http = require("http")
 
 if (process.argv.length < 3) {
-  cp.execSync("seth help test-rpc")
+  cp.execSync("seth help mock-rpc")
   process.exit(1)
 }
 
-var mocks = JSON.parse(fs.readFileSync("/dev/fd/3"))
+var mocks = JSON.parse(fs.readFileSync("/dev/fd/20"))
 var command = process.argv[2]
 var args = process.argv.slice(3)
 
@@ -32,7 +32,7 @@ function handleRequest(request, response) {
         response.end(JSON.stringify(mock))
       } else {
         console.error(`# Unexpected RPC call:`)
-        console.error(JSON.stringify(json, null, 2).replace(/^/gm, "#   "))
+        console.error(json.replace(/^/gm, "#   "))
         console.error("#")
         response.end("missing mock response")
       }
@@ -64,6 +64,8 @@ function getMockResponse(request, callback) {
       return
     }
   }
+
+  callback(null)
 }
 
 function deepEqual(a, b) {

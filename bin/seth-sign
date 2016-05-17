@@ -1,6 +1,8 @@
-#!/bin/sh -e
+#!/bin/sh
 ### seth-sign -- sign arbitrary data with one of your account keys
 ### Usage: seth sign <account>
 ### The data to be signed is read from standard input.
 
-seth rpc eth_sign ${1?} "$(cat)"
+exec seth rpc eth_sign --     \
+  -s "${1?}"         -iappend \
+  -s "`seth to-hex`" -iappend

@@ -1,0 +1,8 @@
+#!/bin/sh -e
+version=`seth rpc net_version`
+case $version in
+  0) echo 0/Olympic;;
+  1) echo 1/Frontier/Homestead;;
+  2) echo 2/Morden;;
+  *) echo $version/Unknown;;
+esac

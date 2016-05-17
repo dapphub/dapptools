@@ -1,5 +1,0 @@
-#!/usr/bin/env bash
-object=`cat`
-for key in $(jshon <<<"$object" -k); do
-  printf "%s\t%s\n" "$key" "$(jshon <<<"$object" -e "$key" -u)"
-done

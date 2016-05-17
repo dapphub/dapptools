@@ -1,17 +1,10 @@
 #!/usr/bin/env bash
-set -e -o pipefail; shopt -s lastpipe
-
-seth rpc eth_syncing | while read property value; do
-  case $property in
-    false) seth block-number; exit;;
-    startingBlock) starting=$((value));;
-    highestBlock) highest=$((value));;
-    currentBlock) current=$((value));;
-  esac
-done
-
-amount=$((current - starting)) total=$((highest - starting))
-percent=$((100 * amount / total))
-progress="$amount/$total of $highest [${percent}%]"
-
-echo "$current ($progress)"
+set -e
+result=$(seth rpc eth_syncing)
+if [[ $result = false ]]; then
+  seth rpc eth_blockNumber
+else
+  highest=$(echo "$result" | grep -oP "^highestBlock\\s*\K.*")
+  current=$(echo "$result" | grep -oP "^currentBlock\\s*\K.*")
+  echo $((current))/$((highest)) [$((current * 100 / highest))%]
+fi

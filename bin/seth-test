@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+description="$* ${scenario+# $scenario}"
+"$@" 2>&1 | if delta=$(diff ${DIFFOPTS--C3} /dev/fd/10 -); then
+  echo ok - $description
+else
+  echo not ok - $description
+  sed "s/^/# /" <<<"$delta"
+  exit 1
+fi

@@ -1,4 +1,0 @@
-#!/usr/bin/env bash
-response=`cat`
-seth <<<"$response" rpc-parse-result ||
-seth <<<"$response" rpc-parse-error

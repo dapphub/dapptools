@@ -1,0 +1,3 @@
+#!/bin/sh
+echo `seth rpc web3_clientVersion` \
+  PV`seth rpc eth_protocolVersion`

@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+#!/bin/sh
 ### seth-call -- call a contract without updating the blockchain
 ### Usage: seth call [-b <block>] [--value=<value>] <account> <contract>
 ### Call <contract> from <account> immediately on your local machine.
@@ -9,5 +9,10 @@
 ###
 ### To specify the gas limit or price, use the `-g' or `-P' options.
 
-seth rpc eth_call \
-from="$1" to="$2" data="$(cat)" $(seth tx-params) -- $ETH_BLOCK
+exec seth rpc eth_call -- \
+  -n {} `seth tx-params`  \
+    -s "$1"    -i from    \
+    -s "$2"    -i to      \
+    -s "`cat`" -i data    \
+    -iappend              \
+  -s "${ETH_BLOCK?}" -iappend

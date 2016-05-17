@@ -1,8 +1,10 @@
-#!/bin/sh -e
+#!/bin/sh
 ### seth-balance -- print the balance of an address on the blockchain
 ### Usage: seth balance [-b <block>] <address>
 ### Print the balance (in wei) associated with <address>.
 ###
 ### If `-b' is given, print the balance as of <block>.
 
-seth rpc --decimal eth_getBalance ${1?} $ETH_BLOCK
+exec seth rpc eth_getBalance -- \
+  -s "${1?}"       -iappend     \
+  -s ${ETH_BLOCK?} -iappend

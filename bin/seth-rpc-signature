@@ -1,8 +1,0 @@
-#!/bin/sh
-grep -oP "^$1\s+\K.*" <<EOF || echo string
-eth_sendTransaction                          object
-eth_call                                     object
-eth_estimateGas                              object
-eth_getBlockByHash                           string nonstring
-eth_getBlockByNumber                         string nonstring
-EOF
