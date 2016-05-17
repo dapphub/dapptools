@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 method=${1?} param_types=(${2?}); shift 2
+
 while [[ $1 ]]; do
   case ${param_types[0]-string} in
     nonstring) params+=(-n "$1");;
@@ -12,7 +13,10 @@ while [[ $1 ]]; do
           *) echo >&2 error: missing \`--\' object terminator; exit 1;;
         esac; shift; done;;
     *) echo >&2 error: unknown parameter type: $(type); exit 1;;
-  esac; params+=(-i append); shift; done
+  esac
+  params+=(-i append)
+  shift
+done
 
 exec jshon <<<{} -s 2.0 -i jsonrpc -n 1 -i id \
 -s $method -i method -n [] "${params[@]}" -i params

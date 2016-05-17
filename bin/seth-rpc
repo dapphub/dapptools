@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+set -e -o pipefail; shopt -s lastpipe
+[[ $DEBUG ]] && set -x
+: ${ETH_RPC_URL:=${ETH_RPC_HOST-localhost}:${ETH_RPC_PORT-8545}}
+
+seth rpc-signature $1 | read result_type param_types
+seth rpc-print $1 "$param_types" "${@:2}" |
+seth rpc-send $ETH_RPC_URL |
+if [[ $RAW ]]; then
+  cat
+else
+  result=$(seth rpc-parse)
+  if [[ $SETH_DECIMAL ]]; then
+    seth to-dec "$result"
+  else
+    echo "$result"
+  fi
+fi

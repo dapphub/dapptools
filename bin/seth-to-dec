@@ -1,0 +1,6 @@
+#!/bin/sh -e
+### seth-to-dec -- convert a hexadecimal number into decimal format
+### Usage: seth to-dec <number>
+### Converts <number> from hexadecimal into decimal.
+
+echo $((${1?}))

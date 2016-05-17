@@ -1,24 +1,8 @@
-#!/usr/bin/env bash
-### seth-balance -- print the balance of an account
-### Usage: seth balance [<options>] <account> 
+#!/bin/sh -e
+### seth-balance -- print the balance of an address on the blockchain
+### Usage: seth balance [-b <block>] <address>
+### Print the balance (in wei) associated with <address>.
 ###
-### Options:
-###
-###   -b, --block=NUMBER        block number (or latest/earliest/pending)
-###
-set -e
-wrong-usage() { seth help ${0##*/seth-}; exit 1; }
+### If `-b' is given, print the balance as of <block>.
 
-optspec=(-o b: -l block:)
-options=$(getopt -n $(basename $0) "${optspec[@]}" -- "$@") || wrong-usage
-eval set -- $options; while [[ $1 ]]; do
-  case $1 in
-    --)            shift; break;;
-    -b|--block)    shift; block=$1;;
-  esac; shift
-done
-
-[[ $# = 1 ]] || wrong-usage
-[[ -z $block || $block = 0x* ]] || wrong-usage
-
-seth --rpc eth_getBalance $1 $block
+seth rpc --decimal eth_getBalance ${1?} $ETH_BLOCK

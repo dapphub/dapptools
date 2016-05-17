@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+set -e -o pipefail; shopt -s lastpipe
+
+seth rpc eth_syncing | while read property value; do
+  case $property in
+    false) seth block-number; exit;;
+    startingBlock) starting=$((value));;
+    highestBlock) highest=$((value));;
+    currentBlock) current=$((value));;
+  esac
+done
+
+amount=$((current - starting)) total=$((highest - starting))
+percent=$((100 * amount / total))
+progress="$amount/$total of $highest [${percent}%]"
+
+echo "$current ($progress)"

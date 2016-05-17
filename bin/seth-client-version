@@ -1,2 +1,0 @@
-#!/bin/sh
-seth --rpc web3_clientVersion

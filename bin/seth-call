@@ -1,32 +1,13 @@
 #!/usr/bin/env bash
-### seth-call -- call a contract without creating a transaction
-### Usage: seth call [<options>] <from-account> <to-account>
-### The call data is read from standard input.
+### seth-call -- call a contract without updating the blockchain
+### Usage: seth call [-b <block>] [--value=<value>] <account> <contract>
+### Call <contract> from <account> immediately on your local machine.
+### The calldata of the transaction is read from standard input.
 ###
-### Options:
+### If `-b' is given, perform the call against the state as of <block>.
+### If `--value' is given, simulate sending <value> wei with the call.
 ###
-###    -b, --block=NUMBER       block number (or latest/earliest/pending)
-###    -g, --gas=NUMBER         units of gas provided for the transaction
-###    -P, --gas-price=NUMBER   price (in wei) paid for each unit of gas
-###    -v, --value=NUMBER       value (in wei) sent with the transaction
-###
-set -e -o pipefail
-wrong-usage() { seth help ${0##*/seth-}; exit 1; }
+### To specify the gas limit or price, use the `-g' or `-P' options.
 
-optspec=(-o g:P:v: -l "gas: gas-price: value:")
-options=$(getopt -n $(basename $0) "${optspec[@]}" -- "$@")
-eval set -- $options; while [[ $1 ]]; do
-  case $1 in
-    --)                 shift; break;;
-    -b|--block)         shift; block=$1;;
-    -g|--gas)           shift; params+=(gas="$1");;
-    -P|--gas-price)     shift; params+=(gasPrice="$1");;
-    -v|--value)         shift; params+=(value="$1");;
-    *)                  wrong-usage;;
-  esac; shift
-done
-
-[[ $# = 2 ]] || wrong-usage
-
-echo seth --rpc eth_call \
-from="$1" to="$2" data="$(cat)" "${params[@]}" -- $block
+seth rpc eth_call \
+from="$1" to="$2" data="$(cat)" $(seth tx-params) -- $ETH_BLOCK

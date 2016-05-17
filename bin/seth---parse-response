@@ -1,4 +1,0 @@
-#!/bin/sh -e
-response=`cat`
-echo "$response" | seth --parse-result $1 ||
-echo "$response" | seth --parse-error

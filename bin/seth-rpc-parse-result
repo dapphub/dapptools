@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+set -e -o pipefail
+[[ $DEBUG ]] && set -x
+result=$(jshon -Q -e result -j)
+case $result in
+  "{"*) seth <<<"$result" rpc-parse-object;;
+  "["*) jshon <<<"$result" -a -u;;
+  *) jshon <<<"[$result]" -e 0 -u;;
+esac

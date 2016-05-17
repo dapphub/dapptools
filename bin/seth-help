@@ -1,5 +1,4 @@
-#!/bin/sh -e
-if test "$1"
-then seth --help-about "$1"
-else seth --help
-fi
+#!/usr/bin/env bash
+grep -oP '^(\S)\1\1( \K.*)?' $(dirname $0)/seth${1+-$1} |
+perl -pe 's/^(\S)\1\1$//' | sed 1d
+[[ $1 ]] || seth help-commands

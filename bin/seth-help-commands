@@ -1,0 +1,12 @@
+#!/bin/sh -e
+cat <<.
+
+Commands:
+
+$(grep -hoP "^(\\S)\\1\\1 seth-\\K[^ ]* -- .*" $(dirname $0)/seth-* |
+sed "s/ -- / /" | while read name description; do
+  printf "   %-12s  %s\n" "$name" "$description"
+done)
+
+Report bugs to <https://github.com/dbrock/seth>.
+.

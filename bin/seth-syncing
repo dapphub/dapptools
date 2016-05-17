@@ -1,3 +1,0 @@
-#!/usr/bin/env bash
-status=$(seth sync-status) || exit
-[[ $status = false ]] && echo false || echo true

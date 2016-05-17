@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-### seth-accounts -- show a list of accounts and balances
+### seth-accounts -- show a list of your local accounts and balances
 set -e -o pipefail
-seth --rpc eth_accounts | while read account; do
-  echo $account $(seth balance $account) &
+
+seth rpc eth_accounts | while read account; do
+  printf "%-47s %s\n" $account $(seth balance $account) &
 done | sort; wait

@@ -1,0 +1,5 @@
+#!/bin/sh -e
+version=$(seth network-version)
+peers="$(seth rpc --decimal net_peerCount) peers"
+[[ $(seth rpc net_listening) = true ]] && listening=", listening"
+echo "$version (${peers}${listening})"

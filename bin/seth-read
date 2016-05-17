@@ -1,0 +1,7 @@
+#!/bin/sh -e
+### seth-storage -- print the contents of a specific storage slot
+### Usage: seth storage [-b <block>] <address> <position>
+###
+### If `-b' is given, print the contents as of <block>.
+
+seth rpc eth_getStorageAt ${1?} ${2?} $ETH_BLOCK

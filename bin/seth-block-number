@@ -1,2 +1,2 @@
 #!/bin/sh -e
-seth --rpc eth_blockNumber
+seth rpc --decimal eth_blockNumber

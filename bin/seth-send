@@ -1,0 +1,13 @@
+#!/bin/sh -e
+### seth-send -- publish a transaction to the blockchain
+### Usage: seth send [--value=<value>] <account> [<contract>]
+### Publish a transaction to call <contract> from <account>.
+### The calldata of the transaction is read from standard input.
+###
+### If <contract> is not given, create a new contract instead.
+### If `--value' is given, transfer <value> wei along with the transaction.
+###
+### To specify the gas limit or gas price, use the `-g' or `-P' options.
+
+seth rpc eth_sendTransaction \
+from="${1?}" ${2+to="$2"} data="$(cat)" $(seth tx-params)

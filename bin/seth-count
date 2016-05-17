@@ -1,0 +1,8 @@
+#!/bin/sh -e
+### seth-count -- print the number of transactions sent from an address
+### Usage: seth count [-b <block>] <address>
+### Print the number of transactions sent from <address>.
+###
+### If `-b' is given, print the count as of <block>.
+
+seth rpc --decimal eth_getTransactionCount ${1?} $ETH_BLOCK

@@ -1,6 +1,54 @@
 #!/usr/bin/env bash
+### seth -- command-line Ethereum RPC client
+### Usage: seth [<options>] <command> [<args>]
+### Perform Ethereum RPC calls from the comfort of your command line.
+###
+### Connection options:
+###
+###    -h, --rpc-host=<host>      RPC endpoint host (default: localhost)
+###    -p, --rpc-port=<number>    RPC endpoint port (default: 8545)
+###        --rpc-url=<url>        RPC endpoint URL (overrides `-h' and `-p')
+###
+### Local query options:
+###
+###    -b, --block=<number>       block number (default: latest)
+###
+### Transaction options:
+###
+###    -g, --gas=<number>         units of gas provided for the transaction
+###    -P, --gas-price=<number>   price (in wei) paid for each unit of gas
+###        --value=<number>       value (in wei) sent with the transaction
 set -e
-: ${SETHRC:=~/.sethrc}
-[[ -e $SETHRC ]] && . $SETHRC
-which seth &>/dev/null || PATH+=:$(dirname $0)
-seth-${1---help} "${@:2}"
+
+[[ $SETH_INITALIZED ]] || {
+  : ${SETHRC:=~/.sethrc}; [[ -e $SETHRC ]] && . $SETHRC
+  which seth &>/dev/null || PATH+=:$(dirname $0)
+  export SETH_INITIALIZED=1
+}
+
+optspec=(-o h:p:b:$:g:P: -l "\
+rpc-host: rpc-port: rpc-url: block: value: gas: gas-price: decimal")
+options=$(getopt -n $(basename $0) "${optspec[@]}" -- "$@")
+eval set -- $options
+
+while [[ $1 ]]; do
+  case $1 in
+    --)                 shift; break;;
+
+    -h|--rpc-host)      shift; export ETH_RPC_HOST=$1;;
+    -p|--rpc-port)      shift; export ETH_RPC_PORT=$1;;
+       --rpc-url)       shift; export ETH_RPC_URL=$1;;
+
+    -b|--block)         shift; export ETH_BLOCK=$1;;
+
+    -g|--gas)           shift; export ETH_GAS=$1;;
+    -G|--gas-price)     shift; export ETH_GAS_PRICE=$1;;
+       --value)         shift; export ETH_VALUE=$1;;
+
+       --decimal)       export SETH_DECIMAL=yes;;
+
+    *)                  seth help seth; exit 1;;
+  esac; shift
+done
+
+seth-${1-help} "${@:2}"

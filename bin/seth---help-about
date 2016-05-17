@@ -1,4 +1,0 @@
-#!/bin/sh -e
-grep -oP '^(\S)\1\1( \K.*)?' $(dirname $0)/seth-$1 |
-perl -pe 's/^(\S)\1\1$//' |
-sed 1d
