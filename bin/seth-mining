@@ -1,6 +1,9 @@
-#!/bin/sh
-if test "`seth rpc eth_mining`" = true; then
-  echo `seth rpc eth_hashrate` hash/s
+#!/usr/bin/env bash
+set -e
+mining=`seth rpc eth_mining`
+if [[ $mining = true ]]; then
+  rate=`seth rpc eth_hashrate`
+  echo $rate hash/s
 else
   echo disabled
 fi

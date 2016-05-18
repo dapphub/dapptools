@@ -1,2 +1,3 @@
-#!/bin/sh
-echo `seth rpc net_peerCount` peers
+#!/bin/sh -e
+count=`seth rpc net_peerCount`
+echo $count peers

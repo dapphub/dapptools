@@ -1,0 +1,2 @@
+#!/bin/sh
+exec seth fix2dec 9 ${1?}

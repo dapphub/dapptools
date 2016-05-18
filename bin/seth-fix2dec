@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+scale=${1?} number=${2?}
+if [[ ${#number} -lt $scale ]]; then
+  printf "0.%0${scale}d\n" $number
+else
+  size=$((${#number} - $scale))
+  echo ${number:0:$size}.${number:$size}
+fi

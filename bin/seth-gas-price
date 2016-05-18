@@ -1,2 +1,4 @@
-#!/bin/sh
-exec seth rpc eth_gasPrice
+#!/usr/bin/env bash
+set -e -o pipefail && shopt -s lastpipe
+seth rpc eth_gasPrice | read wei
+echo `seth wei2gwei $wei` Gwei
