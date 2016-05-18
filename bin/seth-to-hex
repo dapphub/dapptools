@@ -1,7 +1,0 @@
-#!/bin/sh
-### seth-to-hex -- convert arbitrary data into hexadecimal format
-### Usage: seth to-hex
-### Converts data read from standard input into hexadecimal.
-
-test $# = 0 || { seth help to-hex; exit 1; }
-echo 0x$(od -t x1 | sed s/^[0-9]*// | tr -d " \\n")

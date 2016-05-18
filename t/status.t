@@ -1,5 +1,5 @@
 #!/bin/sh -e
-scenario=syncing \
+scenario=1 \
 seth test 10<<. seth mock-rpc 20<<. seth status
 block           1529686/1532348 [99%]
 chain           1/Frontier/Homestead
@@ -17,13 +17,15 @@ network         12 peers
  ["eth_mining", [], false],
  ["net_listening", [], true],
  ["eth_blockNumber", [], "0x1755d0"],
+ ["eth_getBlockByNumber", ["0", false],
+  { "hash": "0xd4e56740f876aef8c010b86a40d5f56745a118d0906a34e69aec8c0db1cb8fa3" }],
  ["eth_syncing", [], {
    "currentBlock": "0x175756",
    "highestBlock": "0x1761bc",
    "startingBlock": "0x17564d"
  }]]
 .
-scenario=mining \
+scenario=2 \
 seth test 10<<. seth mock-rpc 20<<. seth status
 block           1529296
 chain           2/Morden
@@ -41,5 +43,7 @@ network         5 peers
  ["eth_mining", [], true],
  ["net_listening", [], false],
  ["eth_blockNumber", [], "0x1755d0"],
+ ["eth_getBlockByNumber", ["0", false],
+  { "hash": "0x0cd786a2425d16f152c658316c423e6ce1181e15c3295826d7c9904cba9ce303" }],
  ["eth_syncing", [], false]]
 .
