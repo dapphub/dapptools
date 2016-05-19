@@ -1,7 +1,0 @@
-#!/bin/sh
-### seth-sha3 -- print the Keccak-256 hash of any arbitrary data
-### Usage: seth sha3
-### The data to be hashed is read from standard input.
-
-exec seth rpc web3_sha3 -- \
-  -s "`seth to-hex`" -iappend

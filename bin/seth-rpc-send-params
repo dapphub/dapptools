@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+echo -n {} \
+  ${ETH_DATA:+      -s $ETH_DATA      -i data     } \
+  ${ETH_FROM:+      -s $ETH_FROM      -i from     } \
+  ${ETH_GAS:+       -s $ETH_GAS       -i gas      } \
+  ${ETH_GAS_PRICE:+ -s $ETH_GAS_PRICE -i gasPrice } \
+  ${ETH_TO:+        -s $ETH_TO        -i to       } \
+  ${ETH_VALUE:+     -s $ETH_VALUE     -i value    } \
+  -iappend

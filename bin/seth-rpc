@@ -1,33 +1,33 @@
 #!/usr/bin/env bash
 request=`seth rpc-request "$1" -- "${@:2}"`
-response=`echo "$request" | seth rpc-curl`
+response=`seth rpc-curl <<<"$request"`
 
-if ! result=`echo "$response" | jshon -Q -e result -j`; then
-  echo "$response" | jshon -Q -e error -j
+if ! result=$(jshon -Q <<<"$response" -e result -j); then
+  jshon -Q <<<"$response" -e error -j
   exit 1
 fi
 
 case $result in
-  \"*\") result=`echo "[$result]" | jshon -a -u`;;
-  \[*\]) result=`echo "$result" | jshon -a -j | while read -r entry; do
-    if [[ $entry = \"*\" ]]; then
-      echo "[$entry]" | jshon -a -u
-    else
-      echo "$entry"
-    fi
-  done`;;
-  \{*\}) result=`echo "$result" | jshon -k | while read -r key; do
-    value=$(echo "$result" | jshon -e "$key" -j)
-    if [[ $value = \"*\" ]]; then
-      value=$(echo "[$value]" | jshon -a -u)
-    fi
-    printf "%-23s %s\n" "$key" "$value"
-  done`;;
+  \"*\") result=$(jshon <<<"[$result]" -a -u);;
+  \[*\]) result=$(jshon <<<"$result" -a -j |
+    while read -r entry; do
+      if [[ $entry = \"*\" ]]; then
+        echo "[$entry]" | jshon -a -u
+      else
+        echo "$entry"
+      fi
+    done);;
+  \{*\}) result=$(jshon <<<"$result" -k |
+    while read -r key; do
+      value=$(jshon <<<"$result" -e "$key" -j)
+      [[ $value = \"*\" ]] && value=$(jshon <<<"[$value]" -a -u)
+      printf "%-23s %s\n" "$key" "$value"
+    done);;
 esac
 
 if [[ $result =~ 0x[[:xdigit:]]+ && ${#result} -lt 20 ]]; then
   result=${result^^} result=${result:2}
-  result=`echo "ibase=16; $result" | bc`
+  result=`bc <<<"ibase=16; $result"`
 fi
 
 echo "$result"

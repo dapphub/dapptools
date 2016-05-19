@@ -5,4 +5,4 @@
 ### The raw transaction data is read from standard input.
 
 exec seth rpc2 eth_sendRawTransaction -- \
-  -s "`cat`" -iappend
+  -s "`seth data`" -iappend

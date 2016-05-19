@@ -1,2 +1,2 @@
 #!/bin/sh
-exec seth fix2dec 18 $1
+exec seth fix2dec 18 ${1?}

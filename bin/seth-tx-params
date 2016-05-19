@@ -1,4 +1,0 @@
-#!/usr/bin/env bash
-[[ $ETH_GAS ]]       && echo gas=$ETH_GAS
-[[ $ETH_GAS_PRICE ]] && echo gasPrice=$ETH_GAS_PRICE
-[[ $ETH_VALUE ]]     && echo value=$ETH_VALUE

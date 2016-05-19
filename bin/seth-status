@@ -3,4 +3,5 @@
 
 for property in block chain client gas-price mining network; do
   printf "%-15s %s\n" "$property" "$(seth $property || echo -)" &
-done | LANG=C sort; wait
+done | LANG=C sort
+wait

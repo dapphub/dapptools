@@ -1,0 +1,8 @@
+#!/bin/sh -e
+data=`cat`
+if echo ${data#0x} | grep [^[:xdigit]] >/dev/null 2>&1; then
+  echo >&2 error: bad hexadecimal data: $data
+  exit 1
+else
+  echo $data
+fi

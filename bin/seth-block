@@ -1,16 +1,11 @@
 #!/usr/bin/env bash
+[[ $1 ]] && exec seth rpc eth_getBlockByNumber -- \
+  -s `seth dec2hex "$1"` -iappend -n false -iappend
+
 set -e
-if [[ $1 ]]; then
-  seth rpc eth_getBlockByNumber -- \
-    -s 0x`printf %x "$1"` -iappend \
-    -n false              -iappend
-else
-  result=$(seth rpc eth_syncing)
-  if [[ $result = false ]]; then
-    seth rpc eth_blockNumber
-  else
-    highest=$(echo "$result" | grep -oP "^highestBlock\\s*\K.*")
-    current=$(echo "$result" | grep -oP "^currentBlock\\s*\K.*")
-    echo $((current))/$((highest)) [$((current * 100 / highest))%]
-  fi
-fi
+result=`seth rpc eth_syncing`
+[[ $result = false ]] && exec seth rpc eth_blockNumber
+
+highest=`grep <<<"$result" -oP "^highestBlock\\s*\K.*"`
+current=`grep <<<"$result" -oP "^currentBlock\\s*\K.*"`
+echo $((current))/$((highest)) [$((current * 100 / highest))%]

@@ -1,18 +1,12 @@
 #!/bin/sh
 ### seth-call -- call a contract without updating the blockchain
-### Usage: seth call [-b <block>] [--value=<value>] <account> <contract>
-### Call <contract> from <account> immediately on your local machine.
-### The calldata of the transaction is read from standard input.
+### Usage: seth call <receiver> [-a <account>] [-b <block>] [-w <wei>]
+### Ask your local EVM for the result of making a call to <receiver>.
 ###
-### If `-b' is given, perform the call against the state as of <block>.
-### If `--value' is given, simulate sending <value> wei with the call.
-###
-### To specify the gas limit or price, use the `-g' or `-P' options.
+### The simulated transaction's calldata is read from standard input.
+### With `-b', perform the call against the chain state as of <block>.
+### With `-w', simulate transferring <wei> to <receiver> with the call.
 
-exec seth rpc eth_call -- \
-  -n {} `seth tx-params`  \
-    -s "$1"    -i from    \
-    -s "$2"    -i to      \
-    -s "`cat`" -i data    \
-    -iappend              \
+ETH_DATA="`seth data`" ETH_TO=$1 \
+exec seth rpc eth_call -- `seth rpc-send-params` \
   -s "${ETH_BLOCK?}" -iappend
