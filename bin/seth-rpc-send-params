@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-echo -n {} \
+printf %s "-n " # lol
+echo {} \
   ${ETH_DATA:+      -s $ETH_DATA      -i data     } \
   ${ETH_FROM:+      -s $ETH_FROM      -i from     } \
   ${ETH_GAS:+       -s $ETH_GAS       -i gas      } \
