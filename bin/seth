@@ -8,32 +8,23 @@
 ###    -H, --rpc-host=<host>      RPC endpoint host (default: localhost)
 ###    -P, --rpc-port=<number>    RPC endpoint port (default: 8545)
 ###    -R, --rpc-url=<url>        RPC endpoint URL (overrides `-H' and `-P')
+       opts+=(H:P:R:)             longopts+=(rpc-host: rpc-port: rpc-url:)
 ###
 ### EVM options:
 ###
 ###    -b, --block=<number>       block number (default: latest)
+       opts+=(b:)                 longopts+=(block:)
 ###
 ### Transaction options:
 ###
 ###    -g, --gas=<number>         units of gas provided for the transaction
 ###    -p, --gas-price=<number>   price (in wei) paid for each unit of gas
-###    -w, --wei=<number>         value (in wei) sent with the transaction
-###        --value=<number>       synonym for `-w'
+###    -$, --value=<number>       value (in wei) sent with the transaction
+       opts+=(g:p:$:)             longopts+=(gas: gas-price: value:)
 
 set -e
-
-if ! [[ $SETH_INITALIZED ]]; then
-  : ${SETHRC:=~/.sethrc}
-  [[ -e $SETHRC ]] && . $SETHRC
-  which seth &>/dev/null || PATH+=:$(dirname $0)
-  export ETH_BLOCK=${ETH_BLOCK-latest}
-  export SETH_INITIALIZED=1
-fi
-
-optspec=(-o h:p:b:$:g:P: -l "\
-rpc-host: rpc-port: rpc-url: block: gas: gas-price: wei: value:")
-options=$(getopt -n $(basename $0) "${optspec[@]}" -- "$@")
-eval set -- $options
+args=$(getopt -n $(basename $0) -o "${opts[*]}" -l "${longopts[*]}" -- "$@")
+eval set -- $args
 
 while [[ $1 ]]; do
   case $1 in
@@ -47,11 +38,18 @@ while [[ $1 ]]; do
 
     -g|--gas)           shift; export ETH_GAS=$1;;
     -p|--gas-price)     shift; export ETH_GAS_PRICE=$1;;
-    -w|--wei)           shift; export ETH_VALUE=$1;;
-       --value)         shift; export ETH_VALUE=$1;;
+    -$|--value)         shift; export ETH_VALUE=$1;;
 
     *)                  seth help seth; exit 1;;
   esac; shift
 done
+
+if ! [[ $SETH_INITALIZED ]]; then
+  : ${SETHRC:=~/.sethrc}
+  [[ -e $SETHRC ]] && . $SETHRC
+  which seth &>/dev/null || PATH+=:$(dirname $0)
+  export ETH_BLOCK=${ETH_BLOCK-latest}
+  export SETH_INITIALIZED=1
+fi
 
 seth-${1-help} "${@:2}"
