@@ -1,7 +1,7 @@
 #!/bin/sh -e
 scenario=1 \
 seth test 10<<. seth mock-rpc 20<<. seth status
-block           1529686/1532348 [99%]
+block           1529686/1532348 [9%]
 chain           1/Frontier/Homestead
 client          Geth/v1.3.5/linux/go1.5.1 PV63
 gas-price       20.000000000 Gwei

@@ -5,7 +5,8 @@
 set -e
 result=`seth rpc eth_syncing`
 [[ $result = false ]] && exec seth rpc eth_blockNumber
-
 highest=`grep <<<"$result" -oP "^highestBlock\\s*\K.*"`
 current=`grep <<<"$result" -oP "^currentBlock\\s*\K.*"`
-echo $((current))/$((highest)) [$((current * 100 / highest))%]
+starting=`grep <<<"$result" -oP "^startingBlock\\s*\K.*"`
+progress=$(((current - starting) * 100 / (highest - starting)))
+echo $((current))/$((highest)) [$progress%]
