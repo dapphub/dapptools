@@ -3,4 +3,5 @@
 ### Usage: seth hex2dec <number>
 ### Converts <number> from hexadecimal into decimal.
 
-printf "%d\n" 0x"${1#0x}"
+hex=${1?} hex=${hex#0x} hex=${hex^^}
+echo "ibase=16; $hex" | bc

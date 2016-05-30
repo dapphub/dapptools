@@ -1,2 +1,3 @@
 #!/bin/sh
-printf 0x%x\\n "$1"
+hex=`echo "obase=16; ${1?}" | bc`
+echo 0x${hex,,}
