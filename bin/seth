@@ -8,7 +8,7 @@
 ###    -H, --rpc-host=<host>      RPC endpoint host (default: localhost)
 ###    -P, --rpc-port=<number>    RPC endpoint port (default: 8545)
 ###    -R, --rpc-url=<url>        RPC endpoint URL (overrides `-H' and `-P')
-       opts+=(H:P:R:)             longopts+=(rpc-host: rpc-port: rpc-url:)
+       opts+=(H:P:R:)             longopts+=(rpc-host:rpc-port:rpc-url:)
 ###
 ### EVM options:
 ###
@@ -17,10 +17,11 @@
 ###
 ### Transaction options:
 ###
+###    -a, --account=<address>    account to send transaction from
 ###    -g, --gas=<number>         units of gas provided for the transaction
 ###    -p, --gas-price=<number>   price (in wei) paid for each unit of gas
 ###    -$, --value=<number>       value (in wei) sent with the transaction
-       opts+=(g:p:$:)             longopts+=(gas: gas-price: value:)
+       opts+=(a:g:p:$:)           longopts+=(account:gas:gas-price:value:)
 
 set -e
 args=$(getopt -n $(basename $0) -o "${opts[*]}" -l "${longopts[*]}" -- "$@")
@@ -36,6 +37,7 @@ while [[ $1 ]]; do
 
     -b|--block)         shift; export ETH_BLOCK=$1;;
 
+    -a|--account)       shift; export ETH_FROM=$1;;
     -g|--gas)           shift; export ETH_GAS=$1;;
     -p|--gas-price)     shift; export ETH_GAS_PRICE=$1;;
     -$|--value)         shift; export ETH_VALUE=$1;;

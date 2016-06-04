@@ -9,5 +9,5 @@
 ###
 ### If no calldata is given, just transfer <wei> to <receiver>.
 
-ETH_DATA="`seth data`" ETH_TO=$1 \
+export ETH_DATA="`seth data`" ETH_TO=$1
 exec seth rpc eth_sendTransaction -- `seth rpc-send-params`
