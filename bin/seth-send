@@ -1,13 +1,11 @@
-#!/bin/sh
+#!/usr/bin/env bash
 ### seth-send -- publish a transaction to the blockchain
-### Usage: seth send [-a <account>] [-w <wei>] [<receiver>]
-### Publish a transaction making a call to <receiver> from <account>.
-### If no <receiver> is given, this creates a new contract instead.
+### Usage: seth send [-a <account>] [-m <money>] <receiver> [<calldata>]
+### Publish a transaction to call <receiver> from <account>.
 ###
-### The transaction's calldata is read from standard input.
-### With `-w', transfer <wei> to <receiver> (or the new contract).
-###
-### If no calldata is given, just transfer <wei> to <receiver>.
+### If no <calldata> is given, read it from standard input instead.
+### If no <calldata> is given at all, just transfer <money> to <receiver>.
 
-export ETH_DATA="`seth data`" ETH_TO=$1
-exec seth rpc eth_sendTransaction -- `seth rpc-send-params`
+data=`seth data ${2+"$2"}` || exit
+exec seth rpc eth_sendTransaction -- -n {} ${1:+-s "$1" -i to} \
+  -s "$data" -i data `seth rpc-send-params` -iappend

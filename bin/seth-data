@@ -1,8 +1,5 @@
-#!/bin/sh -e
-data=`cat`
-if echo ${data#0x} | grep [^[:xdigit]] >/dev/null 2>&1; then
-  echo >&2 error: bad hexadecimal data: $data
-  exit 1
-else
-  echo $data
-fi
+#!/usr/bin/env bash
+[[ $1 ]] || set -- "`cat`"
+[[ $1 =~ ^0x[[:xdigit:]]+ ]] ||
+{ echo >&2 "${0##*/}: error: invalid data format: $1"; exit 1; }
+echo $1

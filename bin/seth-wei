@@ -1,0 +1,14 @@
+#!/bin/sh -e
+### seth-wei -- convert to wei from any other ether unit
+### Usage: seth wei <amount> <unit>
+### Convert <amount> expressed in <unit> into an amount of wei.
+### Recognized units are `ETH', `Gwei' and `wei'.
+test $# = 2 || { seth help wei; exit 1; }
+
+case ${2,,} in
+  eth) scale=18;;
+  gwei) scale=9;;
+  *) echo >&2 ${0##*/}: error: unrecognized unit: $2; exit 1;;
+esac
+
+echo "$1 * 10^$scale / 1" | bc

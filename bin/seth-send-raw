@@ -1,8 +1,8 @@
-#!/bin/sh
+#!/bin/sh -e
 ### seth-send-raw -- publish a previously signed transaction
-### Usage: seth send-raw
+### Usage: seth send-raw [<txdata>]
 ### Publish a previously signed transaction to the blockchain.
-### The raw transaction data is read from standard input.
+###
+### If no <txdata> is given, read it from standard input instead.
 
-exec seth rpc2 eth_sendRawTransaction -- \
-  -s "`seth data`" -iappend
+seth rpc eth_sendRawTransaction -- -s "`seth data ${1+"$1"}`" -iappend
