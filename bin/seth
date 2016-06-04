@@ -40,7 +40,7 @@ while [[ $1 ]]; do
     -p|--gas-price)     shift; export ETH_GAS_PRICE=$1;;
     -$|--value)         shift; export ETH_VALUE=$1;;
 
-    *)                  seth help seth; exit 1;;
+    *)                  printf 'internal error: %q\n' "$1"; exit 1;;
   esac; shift
 done
 
