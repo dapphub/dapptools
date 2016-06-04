@@ -11,3 +11,7 @@ test: $(patsubst %.t,%.ok,$(wildcard t/*.t))
 
 link:;    ln -s   `pwd`/bin/* $(prefix)/bin
 install:; install `pwd`/bin/* $(prefix)/bin
+uninstall:
+	@echo Press enter to remove "$(prefix)/bin/seth*" \
+        or Ctrl-C to cancel; read
+	rm $(prefix)/bin/seth*
