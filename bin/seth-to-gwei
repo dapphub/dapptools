@@ -1,0 +1,3 @@
+#!/bin/sh -e
+wei=`seth to-wei ${1?}`
+echo `seth to-fix 9 $wei` Gwei

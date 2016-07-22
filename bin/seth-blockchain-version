@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+set -eu
+
+version=`seth network`
+genesis=`seth block 0`
+hash=`seth field hash <<<"$genesis"`
+
+case $version/$hash in
+  0/0xfd4af92a79c7fc2fd8bf0d342f2e832e1d4f485c85b9152d2039e03bc604fdca)
+    name=Olympic;;
+  1/0xd4e56740f876aef8c010b86a40d5f56745a118d0906a34e69aec8c0db1cb8fa3)
+    name=Frontier/Homestead;;
+  2/0x0cd786a2425d16f152c658316c423e6ce1181e15c3295826d7c9904cba9ce303)
+    name=Morden;;
+  *)
+    name=Unknown/$hash;;
+esac
+
+echo $version/$name

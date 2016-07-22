@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+### seth-send-raw-tx -- publish an already-signed transaction
+### Usage: seth send-raw-tx [<txdata>]
+### Publish a previously signed transaction to the blockchain.
+###
+### If no <txdata> is given, read it from standard input instead.
+
+set -e
+txdata=`seth ensure-hexnum ${1+"$1"}`
+seth rpc eth_sendRawTransaction -- -s $txdata -iappend

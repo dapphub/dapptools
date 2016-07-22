@@ -1,5 +1,2 @@
 #!/bin/sh -e
-mining=`seth rpc eth_mining`
-[ "$mining" = false ] && exec echo disabled
-hashrate=`seth rpc eth_hashrate`
-echo $hashrate hash/s
+seth rpc eth_mining

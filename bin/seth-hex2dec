@@ -1,7 +1,0 @@
-#!/bin/sh
-### seth-hex2dec -- convert a hexadecimal number into decimal format
-### Usage: seth hex2dec <number>
-### Converts <number> from hexadecimal into decimal.
-
-hex=${1?} hex=${hex#0x} hex=${hex^^}
-echo "ibase=16; $hex" | bc

@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+exec seth rpc eth_getBlockByNumber -- \
+  -s `seth to-hex "${1?missing block number}"` -iappend \
+  -n false -iappend

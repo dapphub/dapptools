@@ -9,52 +9,64 @@
 ###    -p, --rpc-port=<number>    RPC endpoint port (default: `8545')
 ###    -u, --rpc-url=<url>        RPC endpoint URL (overrides `-h' and `-p')
 opts+=(h:p:u:)
-longopts+=(rpc-host:rpc-port:rpc-url:)
+optl+=(rpc-host:rpc-port:rpc-url:)
 ###
 ### Common options:
 ###
-###    -a, --account=<address>    account to use or send transaction from
-###    -b, --block=<number>       block number (e.g. `985000' or `latest')
-###
-###    -g, --gas=<number>         number of gas units to provide
+###    -f, --from=<account>       account to use or send transaction from
+###    -g, --gas=<number>         number of units of gas to provide
 ###        --gas-price=<money>    price of each gas unit (e.g. `20 Gwei')
-###
-###    -m, --money=<money>        amount of money to send (e.g. `0.01 ETH')
-opts+=(a:b:g:m:)
-longopts+=(account:block:gas:gas-price:money)
+###    -v, --value=<money>        amount of value to send (e.g. `0.1 ETH')
+###    -b, --block=<number>       block number (e.g. `985000' or `latest')
+opts+=(f:b:g:v:)
+optl+=(from:block:gas:gas-price:value)
 
 set -e
-args=$(getopt -n $(basename $0) -o "${opts[*]}" -l "${longopts[*]}" -- "$@")
+args=$(getopt -n ${0##*/} -o "${opts[*]}" -l "${optl[*]}" -- "$@")
 eval set -- $args
 
 while [[ $1 ]]; do
   case $1 in
-    --)                 shift; break;;
+    --)              shift; break;;
 
-    -h|--rpc-host)      shift; export SETH_RPC_HOST=$1;;
-    -p|--rpc-port)      shift; export SETH_RPC_PORT=$1;;
-    -u|--rpc-url)       shift; export SETH_RPC_URL=$1;;
+    -h|--rpc-host)   shift; export SETH_RPC_HOST=$1;;
+    -p|--rpc-port)   shift; export SETH_RPC_PORT=$1;;
+    -u|--rpc-url)    shift; export SETH_RPC_URL=$1;;
 
-    -b|--block)         shift; export SETH_BLOCK=$1;;
 
-    -a|--account)       shift; export SETH_ACCOUNT=$1;;
-    -g|--gas)           shift; export SETH_GAS=$1;;
-       --gas-price)     shift; export SETH_GAS_PRICE=$1;;
-    -m|--money)         shift; export SETH_MONEY=$1;;
+    -f|--from)       shift; export SETH_FROM=$1;;
+    -g|--gas)        shift; export SETH_GAS=$1;;
+       --gas-price)  shift; export SETH_GAS_PRICE;;
+    -v|--value)      shift; export SETH_VALUE;;
+    -b|--block)      shift; export SETH_BLOCK=$1;;
 
-    *)                  printf 'internal error: %q\n' "$1"; exit 1;;
-  esac; shift
+    *)
+      printf "${0##*/}: internal error: %q\n" "$1"
+      exit 1
+  esac
+  shift
 done
 
-[[ $SETH_GAS_PRICE ]] && SETH_GAS_PRICE_WEI=`seth wei $SETH_GAS_PRICE`
-[[ $SETH_MONEY ]] && SETH_MONEY_WEI=`seth wei $SETH_MONEY`
+if ! [[ $SETH_STARTED ]]; then
+  # Prevent reentry if `~/.sethrc' uses `seth(1)'
+  export SETH_STARTED=1
 
-if ! [[ $SETH_INITALIZED ]]; then
+  if ! which seth-help &>/dev/null; then
+    for dir in ${SETH_LIBEXEC-`dirname $0`/../libexec/seth}/*; do
+      PATH+=:$dir
+    done
+  fi
+
   : ${SETHRC:=~/.sethrc}
-  [[ -e $SETHRC ]] && . $SETHRC
-  which seth &>/dev/null || PATH+=:$(dirname $0)
-  export ETH_BLOCK=${ETH_BLOCK-latest}
-  export SETH_INITIALIZED=1
+  if [[ -e $SETHRC ]]; then
+    source $SETHRC
+  fi
 fi
 
-seth-${1-help} "${@:2}"
+for var in SETH_GAS_PRICE SETH_VALUE; do
+  if [[ ${!var} ]]; then
+    export $var=`seth to-wei "${!var}"`
+  fi
+done
+
+exec "seth-${1-help}" "${@:2}"

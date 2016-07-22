@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+### seth-send-tx -- sign and publish a transaction to the blockchain
+### Usage: seth send-tx [-f <from>] [-v <value>] [<receiver>] [<calldata>]
+### Publish a transaction to call <receiver> from <account>.
+### If no <receiver> is given, create a new contract instead.
+###
+### If no <calldata> is given, read it from standard input instead.
+### If no <calldata> is given at all, just transfer <value> to <receiver>.
+
+set -e
+[[ $1 ]] && receiver=`seth check-blob "$1"`
+calldata=`seth check-blob ${2+"$2"}`
+exec seth rpc eth_sendTransaction -- \
+  -n {} \
+    ${receiver+
+    -s "$receiver" -i to} \
+    -s "$calldata" -i data \
+    `seth rpc-send-tx-params` \
+    -iappend

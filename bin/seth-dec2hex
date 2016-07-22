@@ -1,3 +1,0 @@
-#!/usr/bin/env bash
-hex=`echo "obase=16; ${1?}" | bc`
-echo 0x${hex,,}

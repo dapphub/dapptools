@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+set -e
+num=${1?missing decimal number}
+if [[ $num =~ ^[[:digit:]]+ ]]; then
+  hexnum=`bc <<<"obase=16; $num"`
+  echo 0x${hexnum,,}
+else  
+  echo >&2 "${0##*/}: error: not a decimal number: $num"
+  exit 1
+fi
+

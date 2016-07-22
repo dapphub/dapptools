@@ -1,33 +1,17 @@
 #!/usr/bin/env bash
-request=`seth rpc-request "$1" -- "${@:2}"`
+set -e
+jsonrpc2-result() { jshon -Q -e result -j; }
+jsonrpc2-error()  { jshon -Q -e error -j; }
+
+request=`seth jsonrpc2-req -- "$@"`
 response=`seth rpc-curl <<<"$request"`
 
-if ! result=$(jshon -Q <<<"$response" -e result -j); then
-  jshon -Q <<<"$response" -e error -j
+if result=`jsonrpc2-result <<<"$response"`; then
+  seth show-json "$result"
+elif error=`jsonrpc2-error <<<"$response"`; then
+  seth show-json >&2 "$error"
+  exit 1
+else
+  echo >&2 "$response"
   exit 1
 fi
-
-case $result in
-  \"*\") result=$(jshon <<<"[$result]" -a -u);;
-  \[*\]) result=$(jshon <<<"$result" -a -j |
-    while read -r entry; do
-      if [[ $entry = \"*\" ]]; then
-        echo "[$entry]" | jshon -a -u
-      else
-        echo "$entry"
-      fi
-    done);;
-  \{*\}) result=$(jshon <<<"$result" -k |
-    while read -r key; do
-      value=$(jshon <<<"$result" -e "$key" -j)
-      [[ $value = \"*\" ]] && value=$(jshon <<<"[$value]" -a -u)
-      printf "%-23s %s\n" "$key" "$value"
-    done);;
-esac
-
-if [[ $result =~ 0x[[:xdigit:]]+ && ${#result} -lt 20 ]]; then
-  result=${result^^} result=${result:2}
-  result=`bc <<<"ibase=16; $result"`
-fi
-
-echo "$result"

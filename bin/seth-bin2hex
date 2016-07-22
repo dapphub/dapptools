@@ -1,6 +1,0 @@
-#!/bin/sh
-### seth-bin2hex -- convert binary data into hexadecimal format
-### Usage: seth bin2hex
-### Reads binary data from standard input and prints it in hexadecimal.
-
-echo 0x$(od -t x1 | sed "s/^[0-9]*//" | tr -d " \\n")

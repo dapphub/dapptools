@@ -1,4 +1,1 @@
-#!/bin/sh -e
-client=`seth rpc web3_clientVersion`
-protocol=`seth rpc eth_protocolVersion`
-echo $client PV$protocol
+seth-client-version

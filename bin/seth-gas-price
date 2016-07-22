@@ -1,4 +1,3 @@
 #!/bin/sh -e
 wei=`seth rpc eth_gasPrice`
-gwei=`seth wei2gwei $wei`
-echo $gwei Gwei
+seth to-gwei "$wei"

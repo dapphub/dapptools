@@ -5,11 +5,19 @@
 ###
 ### With `-a <account>', simulate calling <receiver> from <account>
 ### With `-b <block>', use the state of the blockchain as of <block>.
-### With `-m <money>', simulate transferring <money> to <receiver>.
+### With `-v <value>', simulate transferring <value> to <receiver>.
 ###
 ### If no <calldata> is given, read it from standard input instead.
 
-data=`seth data ${2+"$2"}` || exit
-echo exec seth rpc eth_call -- -n {} -s "${1?}" -i to \
-  -s "$data" -i data `seth rpc-send-params` -iappend \
-  ${SETH_BLOCK+-s "$SETH_BLOCK" -iappend}
+receiver=`seth check-blob "${1?missing receiver}"`
+calldata=`seth check-blob ${2+"$2"}`
+
+echo exec seth rpc eth_call -- \
+  -n {} \
+    -s $receiver -i to \
+    -s $calldata -i data \
+    `seth rpc-send-tx-params` \
+    -iappend \
+  ${SETH_BLOCK+
+  -s "$SETH_BLOCK"
+    -iappend}

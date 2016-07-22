@@ -1,7 +1,22 @@
-#!/bin/sh
+#!/usr/bin/env bash
 ### seth-status -- display client and network status information
 
-for property in block chain client gas-price mining network; do
-  printf "%-15s %s\n" "$property" "$(seth $property || echo -)" &
+set -e
+seth client-version >/dev/null
+
+commands=(
+  blockchain
+  client
+  protocol
+  gas-price
+  mining
+  hashrate
+  peer-count
+  syncing
+)
+
+for command in ${commands[*]}; do
+  value=`seth $command || echo -`
+  printf "%-15s %s\n" "$command" "$value" &
 done | LANG=C sort
 wait

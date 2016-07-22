@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+### seth-to-dec -- convert a hexadecimal number into decimal format
+### Usage: seth to-dec <hexdata>
+### Converts <hexdata> from hexadecimal into decimal.
+
+set -e
+hexdata=`seth to-hexdata "${1?missing hexdata}"`
+hexnum=${hexdata#0x}
+num=`bc <<<"ibase=16; ${hexnum^^}"`
+tr -d '\n\\' <<<"$num"
+echo

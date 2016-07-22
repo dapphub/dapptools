@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+params=(
+  from:SETH_FROM
+  gas:SETH_GAS
+  gasPrice:SETH_GAS_PRICE
+  value:SETH_VALUE
+)
+
+for param in ${params[*]}; do
+  property=${item%:*}
+  variable=${item#*:}
+  if [[ ${!variable} ]]; then
+    if [[ ${!variable} = *\ * ]]; then
+      echo >&2 "${0##*/}: error: $variable contains whitespace"
+      exit 1
+    else
+      echo -s ${!variable} -i $property
+    fi
+  fi
+done

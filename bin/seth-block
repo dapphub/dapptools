@@ -1,12 +1,6 @@
-#!/usr/bin/env bash
-[[ $1 ]] && exec seth rpc eth_getBlockByNumber -- \
-  -s `seth dec2hex "$1"` -iappend -n false -iappend
-
-set -e
-result=`seth rpc eth_syncing`
-[[ $result = false ]] && exec seth rpc eth_blockNumber
-highest=`grep <<<"$result" -oP "^highestBlock\\s*\K.*"`
-current=`grep <<<"$result" -oP "^currentBlock\\s*\K.*"`
-starting=`grep <<<"$result" -oP "^startingBlock\\s*\K.*"`
-progress=$(((current - starting) * 100 / (highest - starting)))
-echo $((current))/$((highest)) [$progress%]
+#!/bin/sh -e
+if [[ $# = 1 ]]; then
+  seth get-block-by-number "$1"
+else
+  seth syncing
+fi

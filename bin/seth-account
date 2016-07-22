@@ -2,8 +2,7 @@
 ### seth-account -- display a list of your local accounts
 
 set -e -o pipefail
-seth rpc eth_accounts |
-while read account; do
+seth rpc eth_accounts | while read account; do
   printf "%s %30s\n" $account "`seth balance $account`" &
 done | sort
 wait

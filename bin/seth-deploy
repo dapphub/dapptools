@@ -1,8 +1,0 @@
-#!/bin/sh
-### seth-deploy -- deploy a contract to the blockchain
-### Usage: seth deploy [-a <account>] [-m <money>] [<calldata>]
-### Publish a transaction to deploy a new contract to the blockchain.
-###
-### If no <calldata> is given, read it from standard input instead.
-
-exec seth send "" "$@"

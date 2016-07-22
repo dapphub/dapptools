@@ -1,8 +1,8 @@
 #!/bin/sh -e
 ### seth-sign -- sign some data with one of your account keys
-### Usage: seth sign [-a <account>] [<data>]
-### Sign <data> with the private key of <account> (or `SETH_ACCOUNT').
+### Usage: seth sign [-f <account>] [<hexdata>]
+### Sign <hexdata> with the private key of <account> (or `SETH_FROM').
 ###
-### If no <data> is given, read it from standard input instead.
+### If no <hexdata> is given, read it from standard input instead.
 
 seth rpc eth_sign -- -s "${1?}" -iappend -s "`seth data ${2+"$2"}`" -iappend

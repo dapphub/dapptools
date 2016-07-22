@@ -1,5 +1,0 @@
-#!/usr/bin/env bash
-[[ $1 ]] || set -- "`cat`"
-[[ $1 =~ ^0x[[:xdigit:]]+ ]] ||
-{ echo >&2 "${0##*/}: error: invalid data format: $1"; exit 1; }
-echo $1
