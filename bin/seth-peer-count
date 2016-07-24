@@ -1,2 +1,2 @@
 #!/bin/sh -e
-seth rpc net_peerCount
+seth --jsonrpc net_peerCount

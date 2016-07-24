@@ -2,21 +2,21 @@
 ### seth-status -- display client and network status information
 
 set -e
-seth client-version >/dev/null
+seth client >/dev/null
 
 commands=(
+  block
   blockchain
   client
-  protocol
   gas-price
-  mining
   hashrate
+  listening
+  mining
+  protocol
   peer-count
-  syncing
 )
 
 for command in ${commands[*]}; do
   value=`seth $command || echo -`
   printf "%-15s %s\n" "$command" "$value" &
-done | LANG=C sort
-wait
+done | LANG=C sort; wait

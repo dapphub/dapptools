@@ -1,2 +1,1 @@
-#!/bin/sh -e
-seth rpc web3_clientVersion
+seth-client

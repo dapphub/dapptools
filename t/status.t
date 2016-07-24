@@ -1,6 +1,6 @@
-#!/bin/sh -e
+#!/usr/bin/env bash
 scenario=1 \
-seth test 10<<. seth mock-rpc 20<<. seth status
+seth --test 10<<. seth --jsonrpc-mock 20<<. seth status
 block           1529686/1532348 [9%]
 chain           1/Frontier/Homestead
 client          Geth/v1.3.5/linux/go1.5.1 PV63
@@ -26,7 +26,7 @@ network         12 peers
  }]]
 .
 scenario=2 \
-seth test 10<<. seth mock-rpc 20<<. seth status
+seth --test 10<<. seth --jsonrpc-mock 20<<. seth status
 block           1529296
 chain           2/Morden
 client          Geth/v1.3.5/linux/go1.5.1 PV62

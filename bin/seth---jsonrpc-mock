@@ -1,6 +1,6 @@
 #!/usr/bin/env node
-// seth-mock-rpc -- run a command with a mocked RPC server
-// Usage: seth mock-rpc 20<mock.json <command> [<args>]
+/// seth---jsonrpc-mock -- run a command with a mocked RPC server
+// Usage: seth --jsonrpc-mock 20<mock.json <command> [<args>]
 // The mocked RPC interactions are read from file descriptor 20.
 
 var assert = require("assert")
@@ -9,7 +9,7 @@ var fs = require("fs")
 var http = require("http")
 
 if (process.argv.length < 3) {
-  cp.execSync("seth help mock-rpc")
+  cp.execSync("seth help -- --jsonrpc-mock")
   process.exit(1)
 }
 

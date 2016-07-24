@@ -1,1 +1,12 @@
-seth-get-storage-at
+#!/usr/bin/env bash
+### seth-storage -- show the value of a storage slot
+### Usage: seth storage [-b <block>] <address> <slot>
+###
+### If `-b' is given, print the value as of <block>.
+
+set -e
+seth --jsonrpc eth_getStorageAt \
+  -s "${1?missing address}" -iappend \
+  -s "${2?missing position}" -iappend \
+  ${SETH_BLOCK+
+  -s "${SETH_BLOCK?}" -iappend}

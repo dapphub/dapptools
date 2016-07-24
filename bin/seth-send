@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+### seth-send -- sign and publish a transaction to the blockchain
+### Usage: seth send [-f <account>] [-v <value>] [<receiver>] [<calldata>]
+### Publish a transaction to call <receiver> from <account>.
+### If no <receiver> is given, create a new contract instead.
+###
+### If no <calldata> is given, read it from standard input instead.
+### If no <calldata> is given at all, just transfer <value> to <receiver>.
+
+set -e
+[[ $1 ]] && receiver=`seth --to-hexdata "$1"`
+calldata=`seth --to-hexdata ${2+"$2"}`
+seth --jsonrpc eth_sendTransaction \
+  -n {} \
+    ${receiver+
+    -s $receiver -i to} \
+    -s $calldata -i data \
+    `seth --send-params` \
+    -iappend

@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+set -e
+jsonrpc-result() { jshon -Q -e result -j; }
+jsonrpc-error()  { jshon -Q -e error -j; }
+
+request=`seth --jsonrpc-req "$@"`
+response=`seth --jsonrpc-curl <<<"$request"`
+
+if result=`jsonrpc-result <<<"$response"`; then
+  seth --show-json "$result"
+elif error=`jsonrpc-error <<<"$response"`; then
+  { printf '%q ' "$@"; echo
+    SETH_KEY_WIDTH=10 seth --show-json "$error" |
+    sed 's/^/  /'; } |
+  sed >&2 "s/^/seth: error: /"
+  exit 1
+else
+  echo >&2 "$response"
+  exit 1
+fi

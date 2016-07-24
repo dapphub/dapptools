@@ -1,4 +1,5 @@
-#!/usr/bin/env bash
-exec seth rpc eth_getBlockByNumber -- \
-  -s `seth to-hex "${1?missing block number}"` -iappend \
+#!/bin/sh -e
+number=`seth --to-hex "${1?missing block number}"`
+seth --jsonrpc eth_getBlockByNumber \
+  -s $number -iappend \
   -n false -iappend

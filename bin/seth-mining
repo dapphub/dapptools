@@ -1,2 +1,2 @@
 #!/bin/sh -e
-seth rpc eth_mining
+seth --jsonrpc eth_mining

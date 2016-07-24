@@ -5,6 +5,7 @@ number=${2?missing number}
 if [[ ${#number} -lt $scale ]]; then
   printf "0.%0${scale}d\n" $number
 else
-  size=$((${#number} - $scale))
-  echo ${number:0:$size}.${number:$size}
+  whole_digits=$((${#number} - $scale))
+  whole_part=${number:0:$whole_digits}
+  echo ${whole_part:-0}.${number:$whole_digits}
 fi

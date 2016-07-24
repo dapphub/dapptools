@@ -1,8 +1,15 @@
-#!/bin/sh -e
+#!/usr/bin/env bash
 ### seth-sign -- sign some data with one of your account keys
 ### Usage: seth sign [-f <account>] [<hexdata>]
 ### Sign <hexdata> with the private key of <account> (or `SETH_FROM').
 ###
 ### If no <hexdata> is given, read it from standard input instead.
 
-seth rpc eth_sign -- -s "${1?}" -iappend -s "`seth data ${2+"$2"}`" -iappend
+set -e
+
+account=`seth --to-hexdata "${SETH_FROM?missing account}"`
+hexdata=`seth --to-hexdata ${1+"$1"}`
+
+seth --jsonrpc eth_sign \
+  -s "$account" -iappend \
+  -s "$hexdata" -iappend

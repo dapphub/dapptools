@@ -1,1 +1,2 @@
-seth-client-version
+#!/bin/sh -e
+seth --jsonrpc web3_clientVersion

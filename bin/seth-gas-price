@@ -1,3 +1,4 @@
-#!/bin/sh -e
-wei=`seth rpc eth_gasPrice`
-seth to-gwei "$wei"
+#!/usr/bin/env bash
+set -e
+wei=`seth --jsonrpc eth_gasPrice`
+seth --to-gwei "$wei"

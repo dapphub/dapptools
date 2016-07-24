@@ -1,6 +1,12 @@
-#!/bin/sh -e
-if [[ $# = 1 ]]; then
-  seth get-block-by-number "$1"
+#!/usr/bin/env bash
+set -e
+if [[ $1 ]]; then
+  block=`seth get-block-by-number "$1"`
+  if [[ $2 ]]; then
+    seth --field "$2" <<<"$block"
+  else
+    echo "$block"
+  fi
 else
   seth syncing
 fi

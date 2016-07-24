@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+set -e
+set -- $*
+set -- ${1?missing amount} ${2-wei}
+
+case ${2,,} in
+  wei)  scale=0;;
+  gwei) scale=9;;
+  eth)  scale=18;;
+  *)
+    echo >&2 "${0##*/}: error: unrecognized money: $*"
+    exit 1
+esac
+
+bc <<<"$1 * 10^$scale / 1"

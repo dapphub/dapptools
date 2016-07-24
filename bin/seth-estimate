@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-### seth-call -- call a contract without updating the blockchain
-### Usage: seth call [-f <account>] [-v <value>] <receiver> [<calldata>]
-### Perform a local call to <receiver> without creating a transaction.
+### seth-estimate -- estimate how much gas a transaction would use
+### Usage: seth estimate [-f <account>] [-v <value>] <receiver> [<calldata>]
+### Perform a local call to <receiver> and return the gas usage.
 ###
 ### With `-f <account>', simulate calling <receiver> from <account>
 ### With `-v <value>', simulate transferring <value> to <receiver>.
@@ -10,11 +10,12 @@
 ### If no <calldata> is given, read it from standard input instead.
 
 set -e
-receiver=`seth --to-hexdata "${1?missing receiver}"`
+[[ $1 ]] && receiver=`seth --to-hexdata "$1"`
 calldata=`seth --to-hexdata ${2+"$2"}`
-seth --jsonrpc eth_call \
+seth --jsonrpc eth_estimateGas \
   -n {} \
-    -s $receiver -i to \
+    ${receiver+
+    -s $receiver -i to} \
     -s $calldata -i data \
     `seth --send-params` \
     -iappend \

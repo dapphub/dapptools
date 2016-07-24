@@ -1,2 +1,2 @@
 #!/bin/sh -e
-seth rpc eth_hashrate
+seth --jsonrpc eth_hashrate

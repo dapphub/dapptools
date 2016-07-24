@@ -1,10 +1,15 @@
-#!/bin/sh
-### seth-code -- print the bytecode of a contract on the blockchain
-### Usage: seth code [-b <block>] <contract>
-### Print the bytecode of <contract> as recorded on the blockchain.
+#!/usr/bin/env bash
+### seth-code -- show the bytecode of a contract on the blockchain
+### Usage: seth code [-b <block>] <address>
+### Print the bytecode of the contract at <address>.
 ###
 ### If `-b' is given, print the bytecode as of <block>.
 
-exec seth rpc2 eth_getCode -- \
-  -s "${1?}"         -iappend \
-  -s "${ETH_BLOCK?}" -iappend
+set -e
+
+contract=`seth --to-hexdata "${1?missing address}"`
+block=${SETH_BLOCK-latest}
+
+seth --jsonrpc eth_getCode \
+  -s "$contract" -iappend \
+  -s "$block" -iappend

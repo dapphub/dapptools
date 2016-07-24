@@ -1,2 +1,1 @@
-#!/bin/sh -e
-seth rpc eth_protocolVersion
+seth-protocol
