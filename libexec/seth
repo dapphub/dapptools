@@ -1,0 +1,69 @@
+#!/usr/bin/env bash
+### seth -- command-line Ethereum RPC client
+### Usage: seth [<options>] <command> [<args>]
+### Perform Ethereum RPC calls from the comfort of your command line.
+###
+### Connection options:
+###
+###    -h, --rpc-host=<host>      RPC endpoint host (default: `localhost')
+###    -p, --rpc-port=<number>    RPC endpoint port (default: `8545')
+###    -u, --rpc-url=<url>        RPC endpoint URL (overrides `-h' and `-p')
+opts+=(h:p:u:)
+optl+=(rpc-host:,rpc-port:,rpc-url:,)
+###
+### Transaction options:
+###
+###    -f, --from=<account>       account to use or to send transaction from
+###    -g, --gas=<number>         number of units of gas to provide
+###        --gas-price=<money>    price of each gas unit (e.g. `20 Gwei')
+###    -v, --value=<money>        amount of money to send (e.g. `0.1 ETH')
+opts+=(f:g:v:)
+optl+=(from:,gas:,gas-price:,value:,)
+###
+### Transaction options (local call):
+###
+###    -b, --block=<number>       block number (default: `latest')
+opts+=(b:)
+optl+=(block:,)
+
+set -e
+program-exists() { which $1 &>/dev/null; }
+
+if ! [[ $SETH_INITIALIZED ]]; then
+  export SETH_INITIALIZED=1
+  [[ -e ~/.sethrc ]] && . ~/.sethrc
+fi
+
+if [[ $2 = --help ]]; then
+  seth help -- "$1"
+elif [[ $1 = -* ]] && program-exists "seth-$1"; then
+  seth-"$@"
+else
+  args=$(getopt -n ${0##*/} -o "${opts[*]}" -l "${optl[*]}" -- "$@")
+  eval set -- $args
+
+  while [[ $1 ]]; do
+    case $1 in
+      --)              shift; break;;
+
+      -h|--rpc-host)   shift; export SETH_RPC_HOST=$1;;
+      -p|--rpc-port)   shift; export SETH_RPC_PORT=$1;;
+      -u|--rpc-url)    shift; export SETH_RPC_URL=$1;;
+
+
+      -f|--from)       shift; export SETH_FROM=$1;;
+      -g|--gas)        shift; export SETH_GAS=$1;;
+         --gas-price)  shift; export SETH_GAS_PRICE;;
+      -v|--value)      shift; export SETH_VALUE;;
+
+      -b|--block)      shift; export SETH_BLOCK=$1;;
+
+      *)
+        printf "${0##*/}: internal error: %q\n" "$1"
+        exit 1
+    esac
+    shift
+  done
+
+  exec "seth-${1-help}" "${@:2}"
+fi

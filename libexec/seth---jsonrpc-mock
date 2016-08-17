@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-/// seth---jsonrpc-mock -- run a command with a mocked RPC server
+// seth---jsonrpc-mock -- run a command with a mocked RPC server
 // Usage: seth --jsonrpc-mock 20<mock.json <command> [<args>]
 // The mocked RPC interactions are read from file descriptor 20.
 
