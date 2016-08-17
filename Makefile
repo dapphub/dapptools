@@ -1,4 +1,4 @@
-PATH := bin:$(PATH)
+SHELL = bash
 
 all: image test
 image = dbrock/seth
@@ -16,11 +16,11 @@ test:; $(run) sh -ec 'make install; for t in t/*; do (set -x; $$t); done'
 prefix = /usr/local
 install:
 	mkdir -p $(prefix)/{bin,libexec}
-	cp    bin/*     $(prefix)/bin/
-	cp -r libexec/* $(prefix)/libexec/
+	cp bin/seth $(prefix)/bin/seth
+	cp -r libexec/seth $(prefix)/libexec/seth
 link:
 	mkdir -p $(prefix)/{bin,libexec}
-	ln -s `pwd`/bin/*     $(prefix)/bin/
-	ln -s `pwd`/libexec/* $(prefix)/libexec/
+	ln -s `pwd`/bin/seth $(prefix)/bin/seth
+	ln -s `pwd`/libexec/seth $(prefix)/libexec/seth
 uninstall:
 	rm -r $(prefix)/{bin,libexec}/seth
