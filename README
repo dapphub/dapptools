@@ -1,0 +1,6 @@
+Seth is a command-line client for the Ethereum JSON-RPC API.
+
+Use `make install' to install Seth into `/usr/local'.
+Use `make link' to link it into `/usr/local' from this directory.
+
+Seth depends on curl(1) and jshon(1).
