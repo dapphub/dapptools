@@ -1,0 +1,35 @@
+#!/usr/bin/env bash
+set -e
+
+if ! [[ $1 =~ ^([^\[\(]+)\
+[\[\(]([^\[\(]*)[\]\)]\
+([\[\(](([^\[\(]*))[\]\)])?$ ]]; then
+  echo >&2 "${0##*/}: error: bad signature: $1"
+  exit 1
+fi
+
+name=${BASH_REMATCH[1]}
+inputs=${BASH_REMATCH[2]//,/ }
+outputs=${BASH_REMATCH[4]//,/ }
+
+for type in $inputs; do input_args+=(
+  -n {}
+    -s param_$((++n)) -i name
+    -s $type          -i type
+  -i append
+); done
+
+for type in $outputs; do output_args+=(
+  -n {}
+    -s param_$((++n)) -i name
+    -s $type          -i type
+  -i append
+); done
+
+jshon <<<[]                           \
+ -n {}                                \
+   -s $name                -i name    \
+   -s function             -i type    \
+   -n [] ${input_args[*]}  -i inputs  \
+   -n [] ${output_args[*]} -i outputs \
+ -i 0

@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 ### seth -- command-line Ethereum RPC client
 ### Usage: seth [<options>] <command> [<args>]
+###    or: seth <command> --help
+###
 ### Perform Ethereum RPC calls from the comfort of your command line.
 ###
 ### Connection options:

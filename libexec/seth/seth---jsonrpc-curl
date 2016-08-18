@@ -1,4 +1,6 @@
 #!/bin/sh -e
-curl -s --show-error -d @- \
-  -H "Content-Type: application/json" \
-  ${SETH_RPC_URL-${SETH_RPC_HOST-localhost}:${SETH_RPC_PORT-8545}}
+data=`cat`
+[[ $SETH_DEBUG_CURL ]] && set -x
+curl -sS -H "Content-Type: application/json" \
+${SETH_RPC_URL-${SETH_RPC_HOST-localhost}:${SETH_RPC_PORT-8545}} \
+-d "$data"

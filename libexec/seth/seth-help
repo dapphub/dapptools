@@ -1,10 +1,9 @@
 #!/usr/bin/env bash
-file=`dirname $0`/seth${1+-$1}
-header=$(grep -oP '^(\S)\1\1( \K.*)?' "$file" | perl -pe 's/^(\S)\1\1$//')
+file=${0%/*}/seth${1+-$1}
+header=$(grep -oP '^(\S)\1\1?( \K.*)?' "$file" | perl -pe 's/^(\S)\1\1?$//')
 
 if ! [[ $header ]]; then
-  echo "${0##*/}: no help for \`seth-$1'"
-  sed "s/^/> /" "$file"
+  sed "s/^/${0##*/}: /" "$file"
 elif [[ `wc -l <<<"$header"` = 1 ]]; then
   echo "$header"
 else
@@ -13,19 +12,31 @@ fi
 
 if ! [[ $1 ]]; then
   for file in `dirname $0`/seth-*; do
-    if ! [[ -L $file ]]; then
-      programs+=("$file")
+    if [[ -L $file ]]; then
+      continue
+    elif [[ $file = */seth---* ]]; then
+      utils+=("$file")
+    else
+      commands+=("$file")
     fi
   done
 
+  list-commands() {
+    grep -hoP "^(\\S)\\1\\1 seth-\\K[^ ]* -- .*" "$@" |
+    sed "s/ -- / /" | while read name label; do
+      printf "   %-12s  %s\n" "$name" "$label"
+    done | LANG=C sort
+  }
+
   cat <<.
+
+Special commands:
+
+$(list-commands "${utils[@]}")
 
 Commands:
 
-$(grep -hoP "^(\\S)\\1\\1 seth-\\K[^ ]* -- .*" "${programs[@]}" |
-  sed "s/ -- / /" | while read name label; do
-    printf "   %-12s  %s\n" "$name" "$label"
-  done)
+$(list-commands "${commands[@]}")
 
 Report bugs to <https://github.com/dbrock/seth>.
 .

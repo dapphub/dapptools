@@ -2,7 +2,7 @@
 set -e
 [[ $1 ]] || set -- "`cat`"
 
-if [[ $1 =~ 0x^[[:xdigit:]]+$ ]]; then
+if [[ $1 =~ ^0x[[:xdigit:]]+$ ]]; then
   echo ${1,,}
 elif [[ $1 =~ ^[[:xdigit:]]+$ ]]; then
   echo 0x${1,,}

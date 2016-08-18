@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-### seth-storage -- show the value of a storage slot
+### seth-storage -- show the value of a storage slot on the blockchain
 ### Usage: seth storage [-b <block>] <address> <slot>
 ###
 ### If `-b' is given, print the value as of <block>.

@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
-### seth-estimate -- estimate how much gas a transaction would use
+### seth-estimate -- estimate how much gas a transaction would consume
 ### Usage: seth estimate [-f <account>] [-v <value>] <receiver> [<calldata>]
+###    or: seth estimate [-f <account>] [-v <value>] <receiver> <sig> [<args>]
+###
 ### Perform a local call to <receiver> and return the gas usage.
 ###
 ### With `-f <account>', simulate calling <receiver> from <account>
@@ -11,14 +13,8 @@
 
 set -e
 [[ $1 ]] && receiver=`seth --to-hexdata "$1"`
-calldata=`seth --to-hexdata ${2+"$2"}`
+calldata=`seth calldata ${2+"${@:2}"}`
 seth --jsonrpc eth_estimateGas \
-  -n {} \
-    ${receiver+
-    -s $receiver -i to} \
-    -s $calldata -i data \
-    `seth --send-params` \
-    -iappend \
-  ${SETH_BLOCK+
-  -s "$SETH_BLOCK"
-    -iappend}
+  -n {} `seth --send-params` -s $calldata -i data \
+    ${receiver+-s $receiver -i to} -iappend \
+  ${SETH_BLOCK+-s "$SETH_BLOCK" -iappend}

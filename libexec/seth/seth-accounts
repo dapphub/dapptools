@@ -1,10 +1,1 @@
-#!/usr/bin/env bash
-### seth-accounts -- display a list of your local accounts
-set -e
-accounts=`seth --jsonrpc eth_accounts`
-while read account; do
-  { balance=`seth balance "$account"`
-    printf "%s %30s\n" "$account" "$balance"
-  } &
-done <<<"$accounts" | sort
-wait
+seth-account*

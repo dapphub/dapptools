@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-### seth-sign -- sign some data with one of your account keys
+### seth-sign -- sign arbitrary data with one of your account keys
 ### Usage: seth sign [-f <account>] [<hexdata>]
 ### Sign <hexdata> with the private key of <account> (or `SETH_FROM').
 ###

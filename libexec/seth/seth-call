@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 ### seth-call -- call a contract without updating the blockchain
 ### Usage: seth call [-f <account>] [-v <value>] <receiver> [<calldata>]
+###    or: seth call [-f <account>] [-v <value>] <receiver> <sig> [<args>]
+###
 ### Perform a local call to <receiver> without creating a transaction.
 ###
 ### With `-f <account>', simulate calling <receiver> from <account>
@@ -11,13 +13,12 @@
 
 set -e
 receiver=`seth --to-hexdata "${1?missing receiver}"`
-calldata=`seth --to-hexdata ${2+"$2"}`
-seth --jsonrpc eth_call \
-  -n {} \
-    -s $receiver -i to \
-    -s $calldata -i data \
-    `seth --send-params` \
-    -iappend \
-  ${SETH_BLOCK+
-  -s "$SETH_BLOCK"
-    -iappend}
+calldata=`seth calldata ${2+"${@:2}"}`
+result=$(seth --jsonrpc eth_call \
+  -n {}                          \
+    -s $calldata -i data         \
+    -s $receiver -i to           \
+    `seth --send-params`         \
+  -iappend                       \
+  ${SETH_BLOCK+-s "$SETH_BLOCK" -iappend})
+seth --decode "$2" <<<"$result"
