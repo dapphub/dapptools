@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+x=`seth --jsonrpc eth_mining`
+[[ $x = true ]]

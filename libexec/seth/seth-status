@@ -1,22 +1,6 @@
 #!/usr/bin/env bash
 ### seth-status -- display Ethereum client and network status information
-
 set -e
 seth client >/dev/null
-
-commands=(
-  block
-  chain
-  client
-  gas-price
-  hashrate
-  listening
-  mining
-  protocol
-  peers
-)
-
-for command in ${commands[*]}; do
-  value=`seth $command || echo -`
-  printf "%-15s %s\n" "$command" "$value" &
-done | sort; wait
+[[ $1 ]] || set -- block chain client online mining price
+for x; do y=`seth $x || echo -`; echo $x$'\t'$y & done | sort; wait

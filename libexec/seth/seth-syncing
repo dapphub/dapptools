@@ -2,8 +2,7 @@
 set -e
 result=`seth --jsonrpc eth_syncing`
 if [[ $result = false ]]; then
-  number=`seth block-number`
-  echo $number [not syncing]
+  seth block-number
 else
   b0=`seth --field <<<"$result" startingBlock`
   b=` seth --field <<<"$result" currentBlock`

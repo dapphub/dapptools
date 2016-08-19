@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+x=`seth --jsonrpc net_listening`
+[[ $x = true ]]

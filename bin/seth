@@ -1,5 +1,2 @@
-#!/usr/bin/env bash
-set -e
-expand() { sed 's,/[^/]*/\.\./,/,' <<<"$1"; }
-for path in ${0%/*}/../libexec/*; do PATH=`expand "$path"`:$PATH; done
-seth "$@"
+#!/bin/sh -e
+PATH=${0%/*/*}/libexec/seth:$PATH seth "$@"

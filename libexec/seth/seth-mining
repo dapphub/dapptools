@@ -1,2 +1,7 @@
 #!/bin/sh -e
-seth --jsonrpc eth_mining
+if seth is-mining; then
+  x=`seth hashrate`
+  echo "yes [$x]"
+else
+  echo no
+fi

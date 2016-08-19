@@ -10,8 +10,8 @@ case $network/$genesis in
     name=Frontier/Homestead
     oracle=0x2bd2326c993dfaef84f696526064ff22eba5b362
     if [[ `seth call $oracle forked[][bool]` = true ]]
-    then name+="/DAO-fork (ETH)"
-    else name+="/Classic (ETC)"
+    then name+=/Hardfork; currency=ETH
+    else name+=/Classic; currency=ETC
     fi;;
   2/0x0cd786a2425d16f152c658316c423e6ce1181e15c3295826d7c9904cba9ce303)
     name=Morden;;
@@ -19,4 +19,4 @@ case $network/$genesis in
     name=Unknown/$genesis;;
 esac
 
-echo $network/$name
+echo $network/$name${currency+ "($currency)"}

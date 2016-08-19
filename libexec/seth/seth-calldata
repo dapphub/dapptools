@@ -4,7 +4,7 @@
 ###    or: seth calldata [<calldata>]
 
 set -e
-if [[ $1 =~ ^([^\[\(]+)[\([] ]]; then
+if [[ $1 =~ ^([^\[\(]+)[\(\[] ]]; then
   name=${BASH_REMATCH[1]}
   for arg in "${@:2}"; do args+=(-p "$arg"); done
   abi=`seth --abi-json "$1"`
