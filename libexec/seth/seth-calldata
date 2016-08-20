@@ -1,14 +1,24 @@
 #!/usr/bin/env bash
-### seth-calldata -- pack function name and arguments into calldata
-### Usage: seth calldata <name>(<inputs>)(<outputs>) [<args>...]
+### seth-calldata -- pack function names and arguments into calldata
+### Usage: seth calldata <signature> [<args>...]
 ###    or: seth calldata [<calldata>]
+###
+### The <signature> needs to look like this: `<name>(<types>)',
+### although outputs are ignored: `<name>(<inputs>)(<outputs>)'.
+###
+### If no valid <signature> is given, treat it as <calldata> instead.
+### If no <calldata> is given, read it from standard input instead.
+### If <calldata> is given, just pass it through in normalized form.
 
 set -e
 if [[ $1 =~ ^([^\[\(]+)[\(\[] ]]; then
   name=${BASH_REMATCH[1]}
-  for arg in "${@:2}"; do args+=(-p "$arg"); done
-  abi=`seth --abi-json "$1"`
-  calldata=`ethabi encode function <(echo "$abi") "$name" "${args[@]}" -l`
+  abi=$(seth --abi-json "$1")
+  shift; for x; do args+=(-p "${x#0x}"); done
+  calldata=$(
+    [[ $SETH_DEBUG_ETHABI ]] && set -x
+    ethabi encode function <(echo "$abi") "$name" "${args[@]}" -l
+  )
   if [[ $calldata = error* ]]; then
     echo >&2 "ethabi: $calldata"
     exit 1

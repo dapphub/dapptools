@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -e
-network=`seth network`
-genesis=`seth block 0 hash`
+network=$(seth network)
+genesis=$(seth block 0 hash)
 
 case $network/$genesis in
   0/0xfd4af92a79c7fc2fd8bf0d342f2e832e1d4f485c85b9152d2039e03bc604fdca)
@@ -9,14 +9,17 @@ case $network/$genesis in
   1/0xd4e56740f876aef8c010b86a40d5f56745a118d0906a34e69aec8c0db1cb8fa3)
     name=Frontier/Homestead
     oracle=0x2bd2326c993dfaef84f696526064ff22eba5b362
-    if [[ `seth call $oracle forked[][bool]` = true ]]
-    then name+=/Hardfork; currency=ETH
-    else name+=/Classic; currency=ETC
+    if [[ $(seth block-number) -lt 1920000 ]]; then
+      name+="/Unforked (ETH)"
+    elif [[ $(seth call $oracle "forked()(bool)") = true ]]; then
+      id=ethlive name+="/Forked (ETH)"
+    else
+      id=etclive name+="/Classic (ETC)"
     fi;;
   2/0x0cd786a2425d16f152c658316c423e6ce1181e15c3295826d7c9904cba9ce303)
-    name=Morden;;
+    id=morden name=Morden;;
   *)
     name=Unknown/$genesis;;
 esac
 
-echo $network/$name${currency+ "($currency)"}
+echo "${id-unknown}:$network/$name"

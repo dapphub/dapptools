@@ -1,12 +1,17 @@
 #!/usr/bin/env bash
 set -e
-[[ $1 ]] || set -- "`cat`"
+[[ $2 ]] && { echo >&2 "Usage: ${0##*/} <hexdata>"; exit 1; }
+[[ $1 ]] || set -- "$(cat)"
 
-if [[ $1 =~ ^0x[[:xdigit:]]+$ ]]; then
-  echo ${1,,}
+if [[ $1 = @* ]]; then
+  x=$(seth --lookup "$1")
+  exec "$0" "$x"
+elif [[ $1 =~ ^0x[[:xdigit:]]+$ ]]; then
+  echo "${1,,}"
 elif [[ $1 =~ ^[[:xdigit:]]+$ ]]; then
-  echo 0x${1,,}
-else  
-  echo >&2 "${0##*/}: error: invalid hexdata: \`$1'"
+  echo "0x${1,,}"
+else
+  first=${1:0:20} rest=${1:21}
+  echo >&2 "${0##*/}: error: invalid hexdata: \`$first${rest:+...}'"
   exit 1
 fi

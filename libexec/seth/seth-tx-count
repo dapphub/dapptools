@@ -1,1 +1,10 @@
-seth-get-tx-count
+#!/usr/bin/env bash
+### seth-tx-count -- show the number of transactions sent from an address
+### Usage: seth tx-count [-b <block>] <address>
+### Print the number of transactions sent from <address>.
+###
+### If `-b' is given, print the number of transactions as of <block>.
+set -e
+address=$(seth --to-hexdata "${1?missing address}")
+seth --jsonrpc eth_getTransactionCount \
+-s "$address" -iappend -s "${SETH_BLOCK-latest}" -iappend

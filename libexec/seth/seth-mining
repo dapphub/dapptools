@@ -1,7 +1,9 @@
 #!/bin/sh -e
 if seth is-mining; then
-  x=`seth hashrate`
-  echo "yes [$x]"
+  status="yes [`seth hashrate || echo unknown hashrate`]"
 else
-  echo no
+  status=no
 fi
+
+difficulty=`seth difficulty`
+echo "$status [difficulty: $((difficulty / 1000000000)) trillion]"

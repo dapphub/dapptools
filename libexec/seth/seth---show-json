@@ -10,7 +10,7 @@ main() case $1 in
       value=`jshon <<<"$1" -e "$key" -j`
       value=`show-json "$value"`
       printf "%-${SETH_KEY_WIDTH-23}s %s\n" "$key" "$value"
-    done;;
+    done | sort;;
   \"*\") show-json "$1";;
   *) echo "$1";;
 esac

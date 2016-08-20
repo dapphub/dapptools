@@ -1,20 +1,24 @@
 #!/usr/bin/env bash
-### seth-estimate -- estimate how much gas a transaction would consume
-### Usage: seth estimate [-f <account>] [-v <value>] <receiver> [<calldata>]
-###    or: seth estimate [-f <account>] [-v <value>] <receiver> <sig> [<args>]
+### seth-estimate -- estimate how much gas a transaction will likely use
+### Usage: seth estimate [-f <sender>] [-v <value>] <recv> [<data>]
+###    or: seth estimate [-f <sender>] [-v <value>] <recv> <sig> [<args>]
 ###
-### Perform a local call to <receiver> and return the gas usage.
+### Perform a local call to <recv> and return the gas usage.
 ###
-### With `-f <account>', simulate calling <receiver> from <account>
-### With `-v <value>', simulate transferring <value> to <receiver>.
+### With `-f <sender>', simulate calling <recv> from <sender>
+### With `-v <value>', simulate transferring <value> to <recv>.
 ### With `-b <block>', use the state of the blockchain as of <block>.
 ###
-### If no <calldata> is given, read it from standard input instead.
+### If <sig> has the form `<name>(<types>)', infer <data> from <sig>/<args>.
+### If no <sig> or <data> is given, read it from standard input instead.
 
 set -e
-[[ $1 ]] && receiver=`seth --to-hexdata "$1"`
-calldata=`seth calldata ${2+"${@:2}"}`
-seth --jsonrpc eth_estimateGas \
-  -n {} `seth --send-params` -s $calldata -i data \
-    ${receiver+-s $receiver -i to} -iappend \
-  ${SETH_BLOCK+-s "$SETH_BLOCK" -iappend}
+[[ $1 ]] && to=$(seth --to-address "$1")
+data=$(seth calldata ${2+"${@:2}"})
+jshon+=(-n {})
+jshon+=(-s "$data" -i data)
+[[ $to ]] && jshon+=(-s "$to" -i to)
+jshon+=($(seth --send-params))
+jshon+=(-i append)
+[[ $SETH_BLOCK ]] && jshon+=(-s "$SETH_BLOCK" -i append)
+seth --jsonrpc eth_estimateGas "${jshon[@]}"

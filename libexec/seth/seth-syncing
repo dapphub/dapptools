@@ -1,11 +1,16 @@
 #!/usr/bin/env bash
 set -e
-result=`seth --jsonrpc eth_syncing`
-if [[ $result = false ]]; then
-  seth block-number
-else
-  b0=`seth --field <<<"$result" startingBlock`
-  b=` seth --field <<<"$result" currentBlock`
-  b1=`seth --field <<<"$result" highestBlock`
+result=$(seth --jsonrpc eth_syncing)
+if [[ $result != false ]]; then
+  b0=$(seth --field <<<"$result" startingBlock)
+  b1=$(seth --field <<<"$result" highestBlock)
+  b=$(seth --field <<<"$result" currentBlock)
   echo $((b))/$((b1)) [$(((b - b0) * 100 / (b1 - b0)))%]
+elif [[ $(seth chain) =~ (/Forked|/Classic) ]]; then
+  t2=$((($(date +%s) - $(seth block 1920000 timestamp))/60/60/24))
+  t1=$((($(date +%s) - $(seth block 1 timestamp))/60/60/24))
+  number=$(seth number)
+  echo "$number [$t1 days since genesis, $t2 days since hard fork]"
+else
+  seth number
 fi

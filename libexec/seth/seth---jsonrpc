@@ -9,10 +9,9 @@ response=`seth --jsonrpc-curl <<<"$request"`
 if result=`jsonrpc-result <<<"$response"`; then
   seth --show-json "$result"
 elif error=`jsonrpc-error <<<"$response"`; then
-  { printf '%q ' "$@"; echo
-    SETH_KEY_WIDTH=10 seth --show-json "$error" |
-    sed 's/^/  /'; } |
-  sed >&2 "s/^/seth: error: /"
+  { echo "$request"
+    SETH_KEY_WIDTH=10 seth --show-json "$error" | sed 's/^/error:   /'
+  } | sed >&2 "s/^/${0##*/}: /"
   exit 1
 else
   echo >&2 "$response"

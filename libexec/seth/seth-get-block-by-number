@@ -1,5 +1,4 @@
 #!/bin/sh -e
-number=`seth --to-hex "${1?missing block number}"`
-seth --jsonrpc eth_getBlockByNumber \
-  -s $number -iappend \
-  -n false -iappend
+number=${1?missing block number}
+[ $1 = latest ] || number=`seth --to-hex "$1"`
+seth --jsonrpc eth_getBlockByNumber -s $number -iappend -n false -iappend

@@ -1,24 +1,26 @@
 #!/usr/bin/env bash
 ### seth-call -- call a contract without updating the blockchain
-### Usage: seth call [-f <account>] [-v <value>] <receiver> [<calldata>]
-###    or: seth call [-f <account>] [-v <value>] <receiver> <sig> [<args>]
+### Usage: seth call [-f <sender>] [-v <value>] <recv> [<data>]
+###    or: seth call [-f <sender>] [-v <value>] <recv> <sig> [<args>]
 ###
-### Perform a local call to <receiver> without creating a transaction.
+### Perform a local call to <recv> (without creating a transaction).
+### Print the result to standard output (decoded, if <sig> is given).
 ###
-### With `-f <account>', simulate calling <receiver> from <account>
-### With `-v <value>', simulate transferring <value> to <receiver>.
+### With `-f <sender>', simulate calling <recv> from <sender>
+### With `-v <value>', simulate transferring <value> to <recv>.
 ### With `-b <block>', use the state of the blockchain as of <block>.
 ###
-### If no <calldata> is given, read it from standard input instead.
+### If <sig> has the form `<name>(<types>)', infer <data> from <sig>/<args>.
+### If no <sig> or <data> is given, read it from standard input instead.
 
 set -e
-receiver=`seth --to-hexdata "${1?missing receiver}"`
-calldata=`seth calldata ${2+"${@:2}"}`
-result=$(seth --jsonrpc eth_call \
-  -n {}                          \
-    -s $calldata -i data         \
-    -s $receiver -i to           \
-    `seth --send-params`         \
-  -iappend                       \
-  ${SETH_BLOCK+-s "$SETH_BLOCK" -iappend})
+to=$(seth --to-address "${1?missing receiver}")
+data=$(seth calldata ${2+"${@:2}"})
+jshon+=(-n {})
+jshon+=(-s "$data" -i data)
+jshon+=(-s "$to" -i to)
+jshon+=($(seth --send-params))
+jshon+=(-i append)
+[[ $SETH_BLOCK ]] && jshon+=(-s "$SETH_BLOCK" -i append)
+result=$(seth --jsonrpc eth_call "${jshon[@]}")
 seth --decode "$2" <<<"$result"

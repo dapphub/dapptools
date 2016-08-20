@@ -2,8 +2,8 @@
 set -e
 number=${1?missing number}
 if [[ $number =~ ^[[:digit:]]+ ]]; then
-  hexnum=`bc <<<"obase=16; $number"`
-  echo 0x${hexnum,,}
+  hexnum=$(bc <<<"obase=16; $number")
+  echo "0x${hexnum,,}"
 else
   seth --to-hexdata "$number"
 fi

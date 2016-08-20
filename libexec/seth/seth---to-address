@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+set -e
+hexdata=$(seth --to-hexdata "$@")
+if [[ ${#hexdata} = 42 ]]; then
+  echo $hexdata
+else
+  echo >&2 "${0##*/}: error: bad address: \`$hexdata'"
+  exit 1
+fi

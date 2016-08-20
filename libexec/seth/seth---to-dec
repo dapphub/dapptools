@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -e
-hexdata=`seth --to-hexdata "${1?missing hexdata}"`
+hexdata=$(seth --to-hexdata "${1?missing hexdata}")
 hexnum=${hexdata#0x}
-num=`bc <<<"ibase=16; ${hexnum^^}"`
+num=$(bc <<<"ibase=16; ${hexnum^^}")
 tr -d '\n\\' <<<"$num"
 echo

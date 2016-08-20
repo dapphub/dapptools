@@ -6,7 +6,7 @@
 ### If `-b' is given, print the balance as of <block>.
 
 set -e
-wei=`seth --jsonrpc eth_getBalance \
-  -s "${1?missing account}" -iappend \
-  -s ${SETH_BLOCK-latest} -iappend`
+wei=$(seth --jsonrpc eth_getBalance \
+-s "${1?missing account}" -iappend \
+-s "${SETH_BLOCK-latest}" -iappend)
 seth --to-eth "$wei"

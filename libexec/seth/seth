@@ -20,16 +20,21 @@ optl+=(rpc-host:,rpc-port:,rpc-url:,)
 ###        --gas-price=<money>    price of each gas unit (e.g. `20 Gwei')
 ###    -v, --value=<money>        amount of money to send (e.g. `0.1 ETH')
 opts+=(f:g:v:)
-optl+=(from:,gas:,gas-price:,value:,)
+optl+=(from:,gas:,gas-price:,value:)
 ###
-### Transaction options (local call):
+### Transaction options (for `seth send'):
+###
+###    -a, --async                exit after printing transaction hash
+opts+=(a)
+optl+=(async)
+###
+### Transaction options (for `seth call' and `seth estimate'):
 ###
 ###    -b, --block=<number>       block number (default: `latest')
 opts+=(b:)
 optl+=(block:,)
 
 set -e
-program-exists() { which $1 &>/dev/null; }
 
 if ! [[ $SETH_INITIALIZED ]]; then
   export SETH_INITIALIZED=1
@@ -38,7 +43,7 @@ fi
 
 if [[ $2 = --help ]]; then
   seth help -- "$1"
-elif [[ $1 = -* ]] && program-exists "seth-$1"; then
+elif [[ $1 = -* ]] && which "seth-$1" &>/dev/null; then
   seth-"$@"
 else
   args=$(getopt -n ${0##*/} -o "${opts[*]}" -l "${optl[*]}" -- "$@")
@@ -56,7 +61,9 @@ else
       -f|--from)       shift; export SETH_FROM=$1;;
       -g|--gas)        shift; export SETH_GAS=$1;;
          --gas-price)  shift; export SETH_GAS_PRICE;;
-      -v|--value)      shift; export SETH_VALUE;;
+      -v|--value)      shift; export SETH_VALUE=$1;;
+
+      -a|--async)      export SETH_ASYNC=1;;
 
       -b|--block)      shift; export SETH_BLOCK=$1;;
 

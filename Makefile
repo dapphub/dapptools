@@ -9,7 +9,7 @@ dirs:; mkdir -p $(prefix)/$(dirs)
 files = $(shell ls -d $(dirs)/*)
 install:; cp -r -n $(dirs) $(prefix)
 link: dirs; for x in $(files); do ln -s `pwd`/$$x $(prefix)/$$x; done
-uninstall:; rm -r $(prefix)/$(files)
+uninstall:; rm -r $(addprefix $(prefix)/,$(files))
 
 build:; docker build -t $(image) .
 run = docker run --rm -it -v `pwd`:`pwd`:ro -w `pwd` $(image)

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 file=${0%/*}/seth${1+-$1}
-header=$(grep -oP '^(\S)\1\1?( \K.*)?' "$file" | perl -pe 's/^(\S)\1\1?$//')
+header=$(grep -oP '^(\S)\1\1( \K.*)?' "$file" | perl -pe 's/^(\S)\1\1$//')
 
 if ! [[ $header ]]; then
   sed "s/^/${0##*/}: /" "$file"

@@ -4,7 +4,7 @@
 ### Reads binary data from standard input and prints it as hexdata.
 
 set -e
-hexdump=`od -t x1`
-nibbles=`sed "s/^[0-9]*//" <<<"$hexdump"`
-hexdata=`tr -d " \\n" <<<"$nibbles"`
+hexdump=$(od -t x1)
+nibbles=$(sed "s/^[0-9]*//" <<<"$hexdump")
+hexdata=$(tr -d " \\n" <<<"$nibbles")
 echo 0x$hexdata

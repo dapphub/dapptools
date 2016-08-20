@@ -1,12 +1,17 @@
 #!/usr/bin/env bash
-set -e
-if [[ $1 ]]; then
-  block=`seth get-block-by-number "$1"`
-  if [[ $2 ]]; then
-    seth --field "$2" <<<"$block"
-  else
-    echo "$block"
-  fi
-else
-  seth syncing
-fi
+### seth-block -- print general or specific information about a block
+### Usage: seth block [<block>] [<field>]
+### Print information about <block> (either a number or the string `latest').
+###
+### If <field> is given, print only that piece of information.
+### If no <field> is given, print all available information about <block>.
+###
+### If no <block> is given, print latest block number and syncing info.
+set -e -o pipefail
+[[ $3 ]] && { seth block --help; exit 1; }
+[[ $1 ]] || exec seth syncing
+result=$(seth get-block-by-number "$1")
+[[ $result != null && $2 ]] && exec seth --field "$2" <<<"$result"
+[[ $result != null ]] && exec echo "$result"
+echo >&2 "${0##*/}: error: no such block: $1"
+exit 1
