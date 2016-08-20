@@ -12,5 +12,5 @@ result=$(seth --jsonrpc eth_getTransactionReceipt "${jshon[@]}")
 [[ ${block-null} != null ]] && exec echo "$result"
 [[ $SETH_ASYNC ]] && { echo >&2 "${0##*/}: error: unknown: $tx"; exit 1; }
 sleep 1
-[[ SETH_TICK ]] && printf . >&2
+[[ $SETH_TICK ]] && printf . >&2
 exec "$0" "$@"

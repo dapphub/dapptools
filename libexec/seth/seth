@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+set -e
 ### seth -- command-line Ethereum RPC client
 ### Usage: seth [<options>] <command> [<args>]
 ###    or: seth <command> --help
@@ -15,29 +16,36 @@ optl+=(rpc-host:,rpc-port:,rpc-url:,)
 ###
 ### Transaction options:
 ###
-###    -f, --from=<account>       account to use or to send transaction from
+###    -f, --from=<account>       account to use or send transaction from
+###    -o, --origin=<account>     synonym for `--from'
+###
 ###    -g, --gas=<number>         number of units of gas to provide
 ###        --gas-price=<money>    price of each gas unit (e.g. `20 Gwei')
 ###    -v, --value=<money>        amount of money to send (e.g. `0.1 ETH')
-opts+=(f:g:v:)
-optl+=(from:,gas:,gas-price:,value:)
+opts+=(f:o:g:v:)
+optl+=(from:,origin:,gas:,gas-price:,value:)
 ###
-### Transaction options (for `seth send'):
+### Options for seth-send(1) and seth-receipt(1):
 ###
 ###    -a, --async                exit after printing transaction hash
 opts+=(a)
 optl+=(async)
 ###
-### Transaction options (for `seth call' and `seth estimate'):
+### Options for seth-call(1), seth-estimate(1) and others:
 ###
 ###    -b, --block=<number>       block number (default: `latest')
 opts+=(b:)
 optl+=(block:,)
-
-set -e
+###
+### Other options:
+###
+###    -s, --silent               suppress standard error logging output
+###    -q, --quiet                synonym for `--silent'
+opts+=(sq)
+optl+=(silent,quiet)
 
 if ! [[ $SETH_INITIALIZED ]]; then
-  export SETH_INITIALIZED=1
+  export SETH_INITIALIZED=true
   [[ -e ~/.sethrc ]] && . ~/.sethrc
 fi
 
@@ -58,14 +66,19 @@ else
       -u|--rpc-url)    shift; export SETH_RPC_URL=$1;;
 
 
+      -o|--origin)     shift; export SETH_FROM=$1;;
       -f|--from)       shift; export SETH_FROM=$1;;
+
       -g|--gas)        shift; export SETH_GAS=$1;;
          --gas-price)  shift; export SETH_GAS_PRICE;;
       -v|--value)      shift; export SETH_VALUE=$1;;
 
-      -a|--async)      export SETH_ASYNC=1;;
+      -a|--async)      export SETH_ASYNC=true;;
 
       -b|--block)      shift; export SETH_BLOCK=$1;;
+
+      -s|--silent)     export SETH_SILENT=true;;
+      -q|--quiet)      export SETH_SILENT=true;;
 
       *)
         printf "${0##*/}: internal error: %q\n" "$1"

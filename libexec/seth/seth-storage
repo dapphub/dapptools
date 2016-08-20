@@ -1,9 +1,12 @@
 #!/usr/bin/env bash
 ### seth-storage -- show the value of a storage slot on the blockchain
-### Usage: seth storage [-b <block>] <address> <slot>
-### Show the value of a storage slot on the blockchain.
-### If `-b' is given, print the value as of <block>.
-exec seth --jsonrpc eth_getStorageAt -- \
--s "${1?missing address}" -iappend \
--s "${2?missing position}" -iappend \
-${SETH_BLOCK+-s "${SETH_BLOCK?}" -iappend}
+### Usage: seth storage [-b <block>] <object> <slot>
+###
+### Print the value of a storage slot in an object on the blockchain.
+jshon+=(-s "${1?missing object address}" -iappend)
+jshon+=(-s "${2?missing storage slot}" -iappend)
+
+### If <block> is given, print the value as of that specific block.
+[[ $SETH_BLOCK ]] $$ jshon+=(-s "$SETH_BLOCK" -iappend)
+
+seth --jsonrpc eth_getStorageAt "${jshon[@]}"

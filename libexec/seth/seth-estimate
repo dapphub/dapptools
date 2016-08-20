@@ -1,23 +1,23 @@
 #!/usr/bin/env bash
 ### seth-estimate -- estimate how much gas a transaction will likely use
-### Usage: seth estimate [-f <sender>] [-v <value>] <recv> [<data>]
-###    or: seth estimate [-f <sender>] [-v <value>] <recv> <sig> [<args>]
+### Usage: seth estimate [-f <sender>] [-v <value>] <object> [<data>]
+###    or: seth estimate [-f <sender>] [-v <value>] <object> <sig> [<args>]
 ###
-### Perform a local call to <recv> and return the gas usage.
+### Perform a local call to <object> and return the gas usage.
 ###
-### With `-f <sender>', simulate calling <recv> from <sender>
-### With `-v <value>', simulate transferring <value> to <recv>.
+### With `-f <sender>', simulate calling <object> from <sender>
+### With `-v <value>', simulate transferring <value> to <object>.
 ### With `-b <block>', use the state of the blockchain as of <block>.
 ###
 ### If <sig> has the form `<name>(<types>)', infer <data> from <sig>/<args>.
 ### If no <sig> or <data> is given, read it from standard input instead.
 
 set -e
-[[ $1 ]] && to=$(seth --to-address "$1")
+[[ $1 ]] && object=$(seth --to-address "$1")
 data=$(seth calldata ${2+"${@:2}"})
 jshon+=(-n {})
 jshon+=(-s "$data" -i data)
-[[ $to ]] && jshon+=(-s "$to" -i to)
+[[ $object ]] && jshon+=(-s "$object" -i to)
 jshon+=($(seth --send-params))
 jshon+=(-i append)
 [[ $SETH_BLOCK ]] && jshon+=(-s "$SETH_BLOCK" -i append)

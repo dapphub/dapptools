@@ -1,26 +1,33 @@
 #!/usr/bin/env bash
+set -e
 ### seth-call -- call a contract without updating the blockchain
-### Usage: seth call [-f <sender>] [-v <value>] <recv> [<data>]
-###    or: seth call [-f <sender>] [-v <value>] <recv> <sig> [<args>]
+### Usage: seth call [-b <block>] [-v <value>] <object> <sig> [<args>]
+###    or: seth call [-b <block>] [-v <value>] <object> [<data>]
 ###
-### Perform a local call to <recv> (without creating a transaction).
-### Print the result to standard output (decoded, if <sig> is given).
-###
-### With `-f <sender>', simulate calling <recv> from <sender>
-### With `-v <value>', simulate transferring <value> to <recv>.
-### With `-b <block>', use the state of the blockchain as of <block>.
+### Perform a local call to <object> without publishing a transaction.
+jshon+=(-n {})
+object=$(seth --to-address "${1?missing address of receiver object}")
+jshon+=(-s "$object" -i to)
+
 ###
 ### If <sig> has the form `<name>(<types>)', infer <data> from <sig>/<args>.
 ### If no <sig> or <data> is given, read it from standard input instead.
-
-set -e
-to=$(seth --to-address "${1?missing receiver}")
 data=$(seth calldata ${2+"${@:2}"})
-jshon+=(-n {})
 jshon+=(-s "$data" -i data)
-jshon+=(-s "$to" -i to)
+
+###
+### If `-o <origin>' is given, simulate calling <object> from <origin>
+### If `-v <value>' is given, simulate transferring <value> to <object>.
 jshon+=($(seth --send-params))
 jshon+=(-i append)
+
+### If `-b <block>' is given, use the state of the blockchain as of <block>.
 [[ $SETH_BLOCK ]] && jshon+=(-s "$SETH_BLOCK" -i append)
+
+###
+### Print the return value to standard output (decoded, if <sig> is given).
 result=$(seth --jsonrpc eth_call "${jshon[@]}")
 seth --decode "$2" <<<"$result"
+
+###
+### See also seth-estimate(1), seth-send(1), seth-storage(1), seth-code(1).

@@ -1,14 +1,13 @@
 #!/usr/bin/env bash
+set -e
 ### seth-send -- sign and publish a transaction to the blockchain
-### Usage: seth send [-a] [-f <origin>] [-v <value>] <object> <sig> [<args>]
-###    or: seth send [-a] [-f <origin>] [-v <value>] [<object>] [<data>]
+### Usage: seth send [-a] [-o <origin>] [-v <value>] <object> <sig> [<args>]
+###    or: seth send [-a] [-o <origin>] [-v <value>] [<object>] [<data>]
 ###
 ### Publish a transaction signed by <origin> to call <object> with <data>.
 ### If no <object> is given, create a new object (initialized from <data>).
-###
 ### If no <origin> is given, fall back to `$SETH_ORIGIN' or `$SETH_FROM'.
-### If no <origin> is given at all, just print an error message and exit.
-set -e
+### If no <origin> is given at all, print an error message and exit.
 [[ $1 ]] && object=$(seth --to-address "$1")
 [[ $object ]] && jshon+=(-s "$object" -i to)
 
@@ -23,26 +22,30 @@ jshon+=($(seth --send-params))
 tx=$(seth --jsonrpc eth_sendTransaction -n {} "${jshon[@]}" -i append)
 
 ###
-### If `-a' is given, then print the transaction hash and exit immediately.
+### If `-a' is given, just print the transaction hash and exit immediately.
 [[ $SETH_ASYNC ]] && exec echo "$tx"
 
 ### Otherwise, wait for the transaction receipt and then proceed as follows:
-echo >&2 "${0##*/}: $tx"
-echo -n >&2 "${0##*/}: Waiting for transaction receipt..."
-n=$(SETH_TICK=yes seth receipt "$tx" blockNumber)
-echo >&2
-echo >&2 "${0##*/}: Transaction included in block $n."
+info() if ! [[ $SETH_SILENT ]]; then echo >&2 "$@"; fi
+info "${0##*/}: $tx"
+info -n "${0##*/}: Waiting for transaction receipt..."
+[[ $SETH_SILENT ]] || export SETH_TICK=true
+number=$(seth receipt "$tx" blockNumber)
+info
+info "${0##*/}: Transaction included in block $number."
 
-###
-### If no <object> is given, print the address of the newly created object.
+### If no <object> was given, print the address of the newly created object.
 [[ $object ]] || exec seth receipt "$tx" contractAddress
 
-### If <object> is given, print the inferred return value of the transaction.
-### Warning: inferred value may be wrong in case of conflicting transactions.
-echo >&2 "${0##*/}: \
+### If <object> was given, print the "inferred" return value of the call.
+### Warning: return value may be wrong in case of conflicting transactions.
+info "${0##*/}: \
 warning: return value may be inaccurate (see \`seth send --help')"
 
 # XXX: Inferring the return value of the transaction by performing the
 # equivalent call on the previous block can produce incorrect results
 # if multiple conflicting transactions are included in the same block.
 seth --block="$((n - 1))" call "$@"
+
+###
+### See also seth-receipt(1), seth-call(1), seth-sign(1), seth-send-raw(1).
