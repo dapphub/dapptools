@@ -1,8 +1,9 @@
+- eth_getBlockByHash
+
 - eth_getBlockTransactionCountByHash
 - eth_getBlockTransactionCountByNumber
 - eth_getUncleCountByBlockHash
 - eth_getUncleCountByBlockNumber
-- eth_getBlockByHash
 - eth_getTransactionByHash
 - eth_getTransactionByBlockHashAndIndex
 - eth_getTransactionByBlockNumberAndIndex

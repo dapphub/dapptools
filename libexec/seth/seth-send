@@ -20,9 +20,11 @@ jshon+=(-s "$data" -i data)
 
 jshon+=($(seth --send-params))
 tx=$(seth --jsonrpc eth_sendTransaction -n {} "${jshon[@]}" -i append)
+
 if [[ $tx =~ ^0x0*$ ]]; then
    echo >&2 "${0##*/}: error: bad tx hash: $tx"
-   echo >&2 "${0##*/}: is your account locked?"
+   echo >&2 "${0##*/}: sender account: $SETH_ORIGIN"
+   echo >&2 "${0##*/}: make sure sender account is unlocked"
    exit 1
 fi
 

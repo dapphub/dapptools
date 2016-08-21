@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 ### seth-account -- display a list of your local accounts and balances
 set -e -o pipefail
-print() { x=$(seth balance "$1"); echo "$1"$'\t'"$x"; }
+print() { x=$(seth balance "$1"); printf "%s\t%s\n" "$1" "$x"; }
 seth --jsonrpc eth_accounts | while read x; do print "$x" & done | sort
 wait
