@@ -1,5 +1,3 @@
-- eth_getTransactionReceipt
-
 - eth_getBlockTransactionCountByHash
 - eth_getBlockTransactionCountByNumber
 - eth_getUncleCountByBlockHash
