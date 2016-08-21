@@ -87,5 +87,7 @@ else
     shift
   done
 
+  export SETH_ORIGIN=${SETH_ORIGIN-${SETH_FROM-$ETH_FROM}}
+
   exec "seth-${1-help}" "${@:2}"
 fi

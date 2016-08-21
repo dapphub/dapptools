@@ -38,6 +38,6 @@ Commands:
 
 $(list-commands "${commands[@]}")
 
-Report bugs to <https://github.com/dbrock/seth>.
+Report bugs to <https://github.com/nexusdev/seth>.
 .
 fi

@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 set -e
-hexdata=$(seth --to-hexdata "${1?missing hexdata}")
+[[ $1 ]] || exec xargs -n1 "$0"
+hexdata=$(seth --to-hexdata "$1")
 hexnum=${hexdata#0x}
 num=$(bc <<<"ibase=16; ${hexnum^^}")
 tr -d '\n\\' <<<"$num"

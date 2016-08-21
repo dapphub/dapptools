@@ -2,7 +2,7 @@ default: test
 
 SHELL = bash
 dirs = {bin,libexec}
-image ?= dbrock/seth
+image ?= nexusdev/seth
 prefix ?= /usr/local
 
 dirs:; mkdir -p $(prefix)/$(dirs)

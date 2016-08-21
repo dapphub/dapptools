@@ -12,6 +12,6 @@ elif [[ $1 =~ ^[[:xdigit:]]+$ ]]; then
   echo "0x${1,,}"
 else
   first=${1:0:20} rest=${1:21}
-  echo >&2 "${0##*/}: error: invalid hexdata: \`$first${rest:+...}'"
+  echo >&2 "${0##*/}: error: invalid hexdata: \`$1'"
   exit 1
 fi

@@ -3,4 +3,4 @@ Seth NEWS file listing user-visible changes.
 August 18, 2016
 
  * Seth now depends on ethabi(1) from Ethcore in order to allow calls
-   such as `seth call 0xabc...def foo[uint8,int256][bool] 123 456'.
+   such as `seth call $foo "bar(uint8,int256)(bool)" 123 456'.

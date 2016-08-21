@@ -3,11 +3,14 @@
 ### Usage: echo <hexdata> | seth --decode [<name>(<inputs>)(<outputs>)]
 
 set -e
-data=`cat`
+data=$(cat)
 if [[ $1 =~ ^([^[\(]+)[\([].*[\([] ]]; then
   name=${BASH_REMATCH[1]}
-  abi=`seth --abi-json "$1"`
-  result=$(ethabi decode function <(echo "$abi") "$name" "${data#0x}")
+  abi=$(seth --abi-json "$1")
+  result=$(
+    [[ $SETH_DEBUG_ETHABI ]] && set -x
+    ethabi decode function <(echo "$abi") "$name" "${data#0x}"
+  )
   if [[ $result = error* ]]; then
     echo >&2 "ethabi: $result"
     exit 1
