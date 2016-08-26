@@ -1,14 +1,15 @@
 #!/usr/bin/env bash
 ### seth-calldata -- pack function names and arguments into calldata
-### Usage: seth calldata <signature> [<args>...]
-###    or: seth calldata [<calldata>]
+### Usage: seth calldata <sig> [<args>]
+###    or: seth calldata [<hexdata>]
 ###
-### The <signature> needs to look like this: `<name>(<types>)',
-### although outputs are ignored: `<name>(<inputs>)(<outputs>)'.
+### Pack <sig> and <args> into data suitable for passing to `seth call'.
 ###
-### If no valid <signature> is given, treat it as <calldata> instead.
-### If no <calldata> is given, read it from standard input instead.
-### If <calldata> is given, just pass it through in normalized form.
+### The <sig> needs to look like `<name>(<in-types>)[(<out-types>)]'.
+### The <out-types> are ignored and can be omitted altogether.
+###
+### If <sig> is given but is not valid, treat it as <hexdata> instead.
+### If no arguments are given, read <hexdata> from standard input instead.
 
 set -e
 if [[ $1 =~ ^([^\[\(]+)[\(\[] ]]; then
@@ -25,9 +26,8 @@ if [[ $1 =~ ^([^\[\(]+)[\(\[] ]]; then
   else
     echo 0x${calldata#0x}
   fi
-elif ! [[ $2 ]]; then
-  seth --to-hexdata "$@"
+elif [[ $2 ]]; then
+  seth --bad-usage "$0"
 else
-  seth calldata --help >&2
-  exit 1
+  seth --to-hexdata "$@"
 fi
