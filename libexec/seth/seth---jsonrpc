@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 set -e
 
-version=$(jshon --version) min=20131105
+version=$(jshon --version)
+min=20131105
 if [[ $version -lt $min ]]; then
   echo >&2 "${0##*/}: error: jshon $version is too old (need $min or newer)"
   exit 1
