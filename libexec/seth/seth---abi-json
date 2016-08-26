@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 set -e
+### seth---abi-json -- print the ABI of a function in standard JSON format
+### Usage: seth --abi-json <sig>
 
 if ! [[ $1 =~ ^([^\(]+)\(([^\(]*)\)(\(([^\(]*)\))?$ ]]; then
   echo >&2 "${0##*/}: error: bad signature: $1"
@@ -18,9 +20,8 @@ for type in $output_types; do
   outputs_jshon+=(-n {} -s "x$((++n))" -i name -s "$type" -i type -i append)
 done
 
-jshon <<<[] \
- -n {} \
-   -s "$name" -i name -s function -i type \
-   -n [] "${inputs_jshon[@]}" -i inputs \
-   -n [] "${outputs_jshon[@]}" -i outputs \
-   -i append
+jshon -n [] -n {} \
+-s "$name" -i name -s function -i type \
+-n [] "${inputs_jshon[@]}" -i inputs \
+-n [] "${outputs_jshon[@]}" -i outputs \
+-i append

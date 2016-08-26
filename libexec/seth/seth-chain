@@ -8,11 +8,10 @@ case $network/$genesis in
     name=Olympic;;
   1/0xd4e56740f876aef8c010b86a40d5f56745a118d0906a34e69aec8c0db1cb8fa3)
     name=Frontier/Homestead
-    oracle=0x2bd2326c993dfaef84f696526064ff22eba5b362
     if [[ $(seth block-number) -lt 1920000 ]]; then
       name+="/Unforked (ETH)"
-    elif [[ $(seth call $oracle "forked()(bool)") = true ]]; then
-      id=ethlive name+="/Forked (ETH)"
+    elif seth is-dao-fork; then
+      id=ethlive name+="/DAO-fork (ETH)"
     else
       id=etclive name+="/Classic (ETC)"
     fi;;

@@ -6,5 +6,6 @@
 ### If `-b' is given, print the number of transactions as of <block>.
 set -e
 address=$(seth --to-hexdata "${1?missing address}")
-seth --jsonrpc eth_getTransactionCount \
--s "$address" -iappend -s "${SETH_BLOCK-latest}" -iappend
+jshon+=(-s "$address" -iappend)
+jshon+=(-s "${SETH_BLOCK-latest}" -iappend)
+seth --jsonrpc eth_getTransactionCount "${jshon[@]}"

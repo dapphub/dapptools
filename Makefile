@@ -20,4 +20,4 @@ run:; $(run) sh -c 'make -s install && $(cmd)'
 
 install-test:; $(MAKE) install run-tests uninstall
 link-test:; $(MAKE) link run-tests uninstall
-run-tests:; for t in t/*; do (set -x; $$t); done
+run-tests:; seth test

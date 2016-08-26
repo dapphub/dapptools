@@ -3,10 +3,9 @@
 ### Usage: seth storage [-b <block>] <object> <slot>
 ###
 ### Print the value of a storage slot in an object on the blockchain.
-jshon+=(-s "${1?missing object address}" -iappend)
-jshon+=(-s "${2?missing storage slot}" -iappend)
-
 ### If <block> is given, print the value as of that specific block.
+[[ $# = 2 ]] || seth --bad-usage "$0"
+jshon+=(-s "$1" -iappend)
+jshon+=(-s "$2" -iappend)
 [[ $SETH_BLOCK ]] $$ jshon+=(-s "$SETH_BLOCK" -iappend)
-
 seth --jsonrpc eth_getStorageAt "${jshon[@]}"

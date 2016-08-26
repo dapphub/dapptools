@@ -1,8 +1,0 @@
-#!/usr/bin/env bash
-"$@" 2>&1 | if delta=$(diff "${DIFFOPTS--C3}" /dev/fd/10 -); then
-  echo "ok - $*"
-else
-  echo "not ok - $*"
-  sed "s/^/# /" <<<"$delta"
-  exit 1
-fi

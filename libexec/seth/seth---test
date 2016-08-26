@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+set -e
+
+if [[ $1 = -j ]]; then
+  parallel=1
+elif [[ $1 ]]; then
+  seth --bad-usage "$0"
+fi
+
+for x in ${0%/*}/*.t; do
+  if output=$("$x"); then
+    echo "ok - ${x##*/}"
+  else
+    echo "not ok - ${x##*/}"
+    echo "$output"
+    exit 1
+  fi &
+
+  if [[ $parallel ]]; then
+    pids+=($!)
+  else
+    wait
+  fi
+done
+
+if [[ $parallel ]]; then
+  for pid in "${pids[@]}"; do wait "$pid"; done
+fi

@@ -1,2 +1,3 @@
 #!/bin/sh -e
-seth --jsonrpc eth_hashrate
+rate=$(seth --jsonrpc eth_hashrate)
+echo "$rate hash/s"

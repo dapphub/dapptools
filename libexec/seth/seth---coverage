@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+set -e
+tmpdir=$(mktemp -d)
+trap 'rm -rf "$tmpdir"' EXIT
+kcov "$tmpdir" "$@"
+{ for x in ${0%/*}/*; do echo 0.0; echo "$x"; done
+  { cat "$tmpdir/$1/index.json"
+    echo 'console.log(JSON.stringify(data))'
+  } | node | jshon -e files -a -e covered -u -p -e summary_name -u
+} | while read -r covered; read -r file; do
+  echo "$covered"; echo "${file##*/}"
+done | paste -s -d '\t\n' |
+sort -r -n | sort -u -k 2 | sort -n | grep -v '^100\.0'

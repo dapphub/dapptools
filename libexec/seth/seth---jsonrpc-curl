@@ -1,7 +1,6 @@
-#!/bin/sh -e
-data=`cat`
-run() { [[ $SETH_DEBUG_CURL ]] && set -x; curl -sS \
--H "Content-Type: application/json" \
-${SETH_RPC_URL-${SETH_RPC_HOST-localhost}:${SETH_RPC_PORT-8545}} \
--d "$data"; }
-if [[ $SETH_DEBUG_CURL ]]; then time run; else run; fi
+#!/usr/bin/env bash
+set -e
+data=$(cat)
+url=${SETH_RPC_URL:-${SETH_RPC_HOST:-localhost}:${SETH_RPC_PORT:-8545}}
+[[ $SETH_DEBUG_CURL ]] && set -x
+echo "$(curl -sS -H "Content-Type: application/json" "$url" -d "$data")"

@@ -1,2 +1,0 @@
-#!/bin/sh -e
-seth --jsonrpc eth_protocolVersion

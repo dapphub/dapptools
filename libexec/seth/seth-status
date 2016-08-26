@@ -2,6 +2,6 @@
 ### seth-status -- display Ethereum client and network status information
 set -e
 seth client >/dev/null
-[[ $1 ]] || set -- block chain client hash mining online price
+[[ $1 ]] || set -- block chain client hash mining online price time
 export SETH_BLOCK=$(seth block-number)
 for x; do { y=$(seth $x || echo -); echo $x$'\t'$y; } & done | sort; wait

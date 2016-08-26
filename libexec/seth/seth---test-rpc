@@ -1,26 +1,27 @@
 #!/usr/bin/env node
-// seth---test-jsonrpc -- run a command with a mocked RPC server
-// Usage: seth --test-jsonrpc 20<mock.json <command> [<args>]
-// The mocked RPC interactions are read from file descriptor 20.
+/// seth---test-rpc -- run a command with a mocked RPC server
+/// Usage: seth --test-rpc 20<mock.json <command> [<args>]
+/// The mocked RPC interactions are read from file descriptor 20.
 
 var assert = require("assert")
 var cp = require("child_process")
 var fs = require("fs")
 var http = require("http")
 
-if (process.argv.length < 3) {
-  cp.execSync("seth --test-jsonrpc --help")
+var command = process.argv[2]
+var args = process.argv.slice(3)
+
+if (!command) {
+  cp.execSync("seth --test-rpc --help")
   process.exit(1)
 }
 
 var mocks = JSON.parse(fs.readFileSync("/dev/fd/20"))
-var command = process.argv[2]
-var args = process.argv.slice(3)
-
 var server = http.createServer(handleRequest).listen(() => {
   cp.spawn(command, args, {
-    stdio: "inherit", env: Object.assign({}, process.env, {
-      ETH_RPC_URL: `localhost:${server.address().port}`
+    stdio: "inherit",
+    env: Object.assign({}, process.env, {
+      SETH_RPC_URL: `localhost:${server.address().port}`
     }),
   }).on("close", status => process.exit(status))
 })

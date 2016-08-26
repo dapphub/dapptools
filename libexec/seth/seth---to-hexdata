@@ -1,11 +1,16 @@
 #!/usr/bin/env bash
 set -e
-[[ $2 ]] && { echo >&2 "Usage: ${0##*/} <hexdata>"; exit 1; }
-[[ $1 ]] || set -- "$(cat)"
+
+if [[ $# = 0 ]]; then
+  set -- "$(cat)"
+elif [[ $# != 1 ]]; then
+  echo >&2 "Usage: ${0##*/} <hexdata>"
+  exit 1
+fi    
 
 if [[ $1 = @* ]]; then
-  x=$(seth --lookup "$1")
-  exec "$0" "$x"
+  value=$(seth --lookup "$1")
+  "$0" "$value"
 elif [[ $1 =~ ^0x[[:xdigit:]]+$ ]]; then
   echo "${1,,}"
 elif [[ $1 =~ ^[[:xdigit:]]+$ ]]; then

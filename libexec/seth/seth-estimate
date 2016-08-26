@@ -1,18 +1,18 @@
 #!/usr/bin/env bash
-### seth-estimate -- estimate how much gas a transaction will likely use
-### Usage: seth estimate [-f <sender>] [-v <value>] <object> [<data>]
-###    or: seth estimate [-f <sender>] [-v <value>] <object> <sig> [<args>]
+set -e
+### seth-estimate -- estimate how much gas a transaction is likely to use
+### Usage: seth estimate [-F <origin>] [-b <block>] <object> [<data>]
+###    or: seth estimate [-F <origin>] [-b <block>] <object> <sig> [<args>]
 ###
 ### Perform a local call to <object> and return the gas usage.
 ###
-### With `-f <sender>', simulate calling <object> from <sender>
-### With `-v <value>', simulate transferring <value> to <object>.
+### With `-F <origin>', simulate calling <object> from <origin>
+### With `-V <value>', simulate transferring <value> to <object>.
 ### With `-b <block>', use the state of the blockchain as of <block>.
 ###
 ### If <sig> has the form `<name>(<types>)', infer <data> from <sig>/<args>.
 ### If no <sig> or <data> is given, read it from standard input instead.
 
-set -e
 [[ $1 ]] && object=$(seth --to-address "$1")
 data=$(seth calldata ${2+"${@:2}"})
 jshon+=(-n {})

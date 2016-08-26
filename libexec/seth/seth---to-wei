@@ -1,11 +1,13 @@
 #!/usr/bin/env bash
-error() { echo >&2 "${0##*/}: error: $*"; exit 1; }
-set -- "$*"
-[[ ${1?missing amount} = *\ * ]] || set -- "$1 wei"
+[[ $# = 1 ]] || seth --bad-usage "$0"
+[[ $1 = *\ * ]] || set -- "$1 wei"
 number=${1%% *} unit=${1#* }
+
 case ${unit,,} in
-wei) scale=0;;
-gwei) scale=9;;
-eth) scale=18;;
-*) error "unrecognized monetary value: \`$1'";; esac
-bc <<<"$number * 10^$scale / 1"
+  wei) scale=0;;
+  gwei) scale=9;;
+  eth) scale=18;;
+  *) seth --error "$0" "unrecognized monetary value: \`$1'"
+esac
+
+bc <<<"$number * 10 ^ $scale / 1"

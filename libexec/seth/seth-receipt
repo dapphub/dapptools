@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -e
 ### seth-receipt -- wait for a transaction receipt to appear and print it
-### Usage: seth receipt [-a|--async] <tx-hash> [<field>]
-error() { echo >&2 "${##*/}: error: $*"; exit 1; }
+### Usage: seth receipt [--async] <tx-hash> [<field>]
+error() { echo >&2 "${0##*/}: error: $*"; exit 1; }
 
 ### Print information about the transaction receipt for <tx-hash>.
 tx=$(seth --to-hexdata "${1?missing transaction hash}")
@@ -10,7 +10,7 @@ jshon+=(-s "$tx" -i append)
 
 receipt=$(seth --jsonrpc eth_getTransactionReceipt "${jshon[@]}")
 if [[ $receipt != null ]]
-then blockNumber=$(seth --field "$2" <<<"$receipt" blockNumber); fi
+then blockNumber=$(seth --field <<<"$receipt" blockNumber); fi
 
 ### If <field> is given, print only that piece of information.
 if [[ ${blockNumber-null} != null && $2 ]]
@@ -19,7 +19,7 @@ then exec seth --field "$2" <<<"$receipt"; fi
 if [[ ${blockNumber-null} != null ]]
 then exec echo "$receipt"; fi
 
-### Unless `-a' is given, wait indefinitely for the receipt to appear.
+### Unless `--async' is given, wait indefinitely for the receipt to appear.
 [[ $SETH_ASYNC ]] && error "not found: $tx"
 sleep 1
 [[ $SETH_TICK ]] && printf . >&2

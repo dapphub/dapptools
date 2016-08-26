@@ -1,10 +1,7 @@
 #!/bin/sh -e
 if seth is-online; then
-  x=`seth peers`
-  status="yes [$x peers]"
+  number=$(seth peers)
+  echo "yes [$number peers]"
 else
-  status=no
+  echo no
 fi
-
-proto=`seth proto`
-echo "$status (PV$proto)"

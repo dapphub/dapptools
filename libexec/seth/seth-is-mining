@@ -1,3 +1,2 @@
-#!/usr/bin/env bash
-x=`seth --jsonrpc eth_mining`
-[[ $x = true ]]
+#!/bin/sh -e
+eq true seth --jsonrpc eth_mining

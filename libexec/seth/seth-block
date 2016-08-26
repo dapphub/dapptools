@@ -1,15 +1,15 @@
 #!/usr/bin/env bash
-### seth-block -- print general or specific information about a block
 set -e
-[[ $1 ]] || exec seth syncing
-[[ $3 ]] && { seth block --help >&2; exit 1; }
+### seth-block -- print general or specific information about a block
 ### Usage: seth block [<block>] [<field>]
-### Show information about <block> (default: `latest').
-block=$(seth get-block-by-number "$1")
+### Show information about <block> (a number, a hash or `latest').
 ###
+### If no <block> is given, display blockchain sync status instead.
 ### If <field> is given, print only that piece of information.
-[[ $block != null && $2 ]] && exec <<<"$block" seth --field "$2"
-### If no <field> is given, print all the fields in a big table.
-[[ $block != null ]] && exec <<<"$block" cat
-echo >&2 "${0##*/}: error: no such block: $1"
-exit 1
+### If no <field> is given, show all the fields in a big table.
+[[ $3 ]] && seth --bad-usage "$0"
+[[ $1 ]] || exec seth syncing
+block=$(seth get-block-by-number "$1")
+[[ $block = null ]] && seth --error "$0" "no such block: $1"
+[[ $2 ]] && exec seth --field "$2" <<<"$block"
+echo "$block"

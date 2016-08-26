@@ -1,43 +1,54 @@
 #!/usr/bin/env bash
-file=${0%/*}/seth${1+-$1}
-header=$(grep -oP '^(\S)\1\1( \K.*)?' "$file" | perl -pe 's/^(\S)\1\1$//')
+### seth-help -- print help about seth(1) or one of its subcommands
+### Usage: seth help [<command>]
+###    or: seth <command> --help
+
+BUGS=https://github.com/nexusdev/seth/issues/new
+
+name=${0##*/} name=${name%-help}
+file=${0%-*}${1+-$1}
+header=$(
+  grep -oP '^(\S)\1\1( \K.*)?' "$file" |
+  perl -pe 's/^(\S)\1\1$//'
+)
 
 if ! [[ $header ]]; then
   sed "s/^/${0##*/}: /" "$file"
-elif [[ `wc -l <<<"$header"` = 1 ]]; then
+elif [[ $(wc -l <<<"$header") = 1 ]]; then
   echo "$header"
 else
   sed 1d <<<"$header"
+  # sed "1{/^(\S)\1\1 $name/}d" <<<"$header"
 fi
 
-if ! [[ $1 ]]; then
-  for file in `dirname $0`/seth-*; do
-    if [[ -L $file ]]; then
-      continue
-    elif [[ $file = */seth---* ]]; then
-      utils+=("$file")
-    else
-      commands+=("$file")
-    fi
-  done
+[[ $1 ]] && exit
 
-  list-commands() {
-    grep -hoP "^(\\S)\\1\\1 seth-\\K[^ ]* -- .*" "$@" |
-    sed "s/ -- / /" | while read name label; do
-      printf "   %-12s  %s\n" "$name" "$label"
-    done | LANG=C sort
-  }
+for file in ${0%/*}/$name-*; do
+  if [[ -L $file ]]; then
+    continue
+  elif [[ $file = */$name---* ]]; then
+    special_commands+=("$file")
+  else
+    normal_commands+=("$file")
+  fi
+done
 
-  cat <<.
+list-commands() {
+  grep -hoP "^(\\S)\\1\\1 $name-\\K[^ ]* -- .*" "$@" |
+  sed "s/ -- / /" | while read name label; do
+    printf "   %-14s  %s\n" "$name" "$label"
+  done | LANG=C sort
+}
+
+cat <<.
 
 Special commands:
 
-$(list-commands "${utils[@]}")
+$(list-commands "${special_commands[@]}")
 
 Commands:
 
-$(list-commands "${commands[@]}")
+$(list-commands "${normal_commands[@]}")
 
-Report bugs to <https://github.com/nexusdev/seth>.
+Report bugs to <$BUGS>.
 .
-fi

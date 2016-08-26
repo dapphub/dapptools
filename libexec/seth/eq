@@ -1,0 +1,3 @@
+#!/bin/sh -e
+result=$("${@:2}")
+test "$result" = "$1"
