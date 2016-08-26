@@ -24,7 +24,7 @@ jshon+=(-i append)
 
 ### If `-b <block>' is given, use the state of the blockchain as of <block>.
 ###
-[[ $SETH_BLOCK ]] && jshon+=(-s "$SETH_BLOCK" -i append)
+jshon+=(-s "${SETH_BLOCK-latest}" -i append)
 
 ### Print the return value to standard output (decoded, if <sig> is given).
 ###
