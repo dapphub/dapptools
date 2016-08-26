@@ -7,5 +7,5 @@
 [[ $# = 2 ]] || seth --bad-usage "$0"
 jshon+=(-s "$1" -iappend)
 jshon+=(-s "$2" -iappend)
-[[ $SETH_BLOCK ]] $$ jshon+=(-s "$SETH_BLOCK" -iappend)
+jshon+=(-s "${SETH_BLOCK-latest}" -iappend)
 seth --jsonrpc eth_getStorageAt "${jshon[@]}"

@@ -20,5 +20,5 @@ jshon+=(-s "$data" -i data)
 [[ $object ]] && jshon+=(-s "$object" -i to)
 jshon+=($(seth --send-params))
 jshon+=(-i append)
-[[ $SETH_BLOCK ]] && jshon+=(-s "$SETH_BLOCK" -i append)
+jshon+=(-s "${SETH_BLOCK-latest}" -i append)
 seth --jsonrpc eth_estimateGas "${jshon[@]}"
