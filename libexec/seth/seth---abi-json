@@ -20,7 +20,7 @@ for type in $output_types; do
   outputs_jshon+=(-n {} -s "x$((++n))" -i name -s "$type" -i type -i append)
 done
 
-jshon -n [] -n {} \
+jshon <<<[] -n {} \
 -s "$name" -i name -s function -i type \
 -n [] "${inputs_jshon[@]}" -i inputs \
 -n [] "${outputs_jshon[@]}" -i outputs \

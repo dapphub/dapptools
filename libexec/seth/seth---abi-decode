@@ -4,7 +4,6 @@ set -e
 ### Usage: seth --abi-decode <name>(<in-types>)(<out-types>) <hexdata>
 ### Decode <hexdata> according to <out-types> (<in-types> are ignored).
 
-[[ $1 = *\(* && $2 ]] || { seth --abi-decode --help >&2; exit 1; }
 [[ $1 = *\(*\(* ]] || exec echo "$2"
 
 name=${1%%\(*}

@@ -29,10 +29,6 @@ jshon+=(-i append)
 ### Print the return value to standard output (decoded, if <sig> is given).
 ###
 result=$(seth --jsonrpc eth_call "${jshon[@]}")
-if [[ $2 ]]; then
-  seth --abi-decode "$2" "$result"
-else
-  echo "$result"
-fi
+seth --abi-decode "$2" "$result"
 
 ### See also seth-send(1), seth-estimate(1), seth-storage(1), seth-code(1).

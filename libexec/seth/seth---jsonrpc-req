@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-exec jshon \
--n {} \
+set -e
+jshon <<<{} \
 -s 2.0 \
   -i jsonrpc \
 -n 1 \
