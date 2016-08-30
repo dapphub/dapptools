@@ -46,6 +46,36 @@ opts+=(sq) optl+=(silent,quiet)
 
 if ! [[ $SETH_INITIALIZED ]]; then
   export SETH_INITIALIZED=true
+
+  case $(uname) in
+  Linux)
+    ;;
+  Darwin)
+    if which ggrep &>/dev/null; then
+      export GREP=ggrep
+    else
+      echo >&2 "${0##*/}: error: ggrep: command not found"
+      installation='brew tap homebrew/dupes && brew install grep'
+      echo >&2 "${0##*/}: please run \`$installation'"
+      exit 1
+    fi
+
+    shopt -s nullglob
+    for getopt in "$(brew --prefix)"/Cellar/gnu-getopt/*/bin; do :; done
+    if [[ $getopt ]]; then
+      PATH=$getopt:$PATH
+    else
+      echo >&2 "${0##*/}: error: gnu-getopt: package not found"
+      installation='brew install gnu-getopt'
+      echo >&2 "${0##*/}: please run \`$installation'"
+      exit 1
+    fi
+    ;;
+  *)
+    echo >&2 "${0##*/}: error: unsupported operating system: $(uname)"
+    exit 1
+  esac
+    
   [[ -e ~/.sethrc ]] && . ~/.sethrc
 fi
 
