@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+set -e
+for x; do
+  [[ $x = *.t ]] && continue
+  case $(head -1 "$x") in
+  "#!/bin/sh"*|"#!/usr/bin/env bash")
+    shellcheck "$x"
+  esac
+done

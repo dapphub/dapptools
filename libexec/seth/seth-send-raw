@@ -4,7 +4,7 @@
 ### Publish a previously signed transaction to the blockchain.
 ###
 ### If no <txdata> is given, read it from standard input instead.
-
 set -e
-txdata=`seth --to-hexdata ${1+"$1"}`
-seth --jsonrpc eth_sendRawTransaction -s $txdata -iappend
+txdata=$(seth --to-hexdata "$@")
+jshon+=(-s "$txdata" -iappend)
+seth --jsonrpc eth_sendRawTransaction "${jshon[@]}"

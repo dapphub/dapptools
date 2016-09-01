@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-set -e
 ### seth-block -- print general or specific information about a block
 ### Usage: seth block [<block>] [<field>]
 ### Show information about <block> (a number, a hash or `latest').
@@ -7,6 +6,7 @@ set -e
 ### If no <block> is given, display blockchain sync status instead.
 ### If <field> is given, print only that piece of information.
 ### If no <field> is given, show all the fields in a big table.
+set -e
 [[ $3 ]] && seth --bad-usage "$0"
 [[ $1 ]] || exec seth syncing
 block=$(seth get-block-by-number "$1")

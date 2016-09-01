@@ -1,11 +1,7 @@
 #!/usr/bin/env bash
 set -e
-
-number=$(if [[ $1 = latest ]]; then
-  echo $1
-else
-  seth --to-hex "$1"
-fi)
-
-seth --jsonrpc eth_getBlockByNumber \
--s "$number" -iappend -n false -i append
+number=$1
+[[ $1 = latest ]] || number=$(seth --to-hex "$1")
+jshon+=(-s "$number" -iappend)
+jshon+=(-n false -i append)
+seth --jsonrpc eth_getBlockByNumber "${jshon[@]}"

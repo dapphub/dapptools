@@ -17,8 +17,7 @@ if ! [[ $header ]]; then
 elif [[ $(wc -l <<<"$header") = 1 ]]; then
   echo "$header"
 else
-  sed 1d <<<"$header"
-  # sed "1{/^(\S)\1\1 $name/}d" <<<"$header"
+  sed "1{/^$name\\S* -- /d}" <<<"$header"
 fi
 
 [[ $1 ]] && exit

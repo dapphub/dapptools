@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
+### Usage: seth --to-hexdata [<hexdata>]
 set -e
 
 if [[ $# = 0 ]]; then
   set -- "$(cat)"
 elif [[ $# != 1 ]]; then
-  echo >&2 "Usage: ${0##*/} <hexdata>"
-  exit 1
+  seth --bad-usage "$0"
 fi    
 
 if [[ $1 = @* ]]; then
@@ -16,7 +16,5 @@ elif [[ $1 =~ ^0x[[:xdigit:]]+$ ]]; then
 elif [[ $1 =~ ^[[:xdigit:]]+$ ]]; then
   echo "0x${1,,}"
 else
-  first=${1:0:20} rest=${1:21}
-  echo >&2 "${0##*/}: error: invalid hexdata: \`$1'"
-  exit 1
+  seth --error "$0" "invalid hexdata: \`$1'"
 fi

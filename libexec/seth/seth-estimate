@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-set -e
 ### seth-estimate -- estimate how much gas a transaction is likely to use
 ### Usage: seth estimate [-F <origin>] [-b <block>] <object> [<data>]
 ###    or: seth estimate [-F <origin>] [-b <block>] <object> <sig> [<args>]
@@ -12,12 +11,13 @@ set -e
 ###
 ### If <sig> has the form `<name>(<types>)', infer <data> from <sig>/<args>.
 ### If no <sig> or <data> is given, read it from standard input instead.
-
-[[ $1 ]] && object=$(seth --to-address "$1")
-data=$(seth calldata ${2+"${@:2}"})
+set -e
+[[ $1 ]] || seth --bad-usage "$0"
+object=$(seth --to-address "$1")
+data=$(seth calldata "${@:2}")
 jshon+=(-n {})
+jshon+=(-s "$object" -i to)
 jshon+=(-s "$data" -i data)
-[[ $object ]] && jshon+=(-s "$object" -i to)
 jshon+=($(seth --send-params))
 jshon+=(-i append)
 jshon+=(-s "${SETH_BLOCK-latest}" -i append)

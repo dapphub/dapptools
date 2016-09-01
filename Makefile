@@ -13,11 +13,4 @@ uninstall:; rm -r $(addprefix $(prefix)/,$(files))
 
 build:; docker build -t $(image) .
 run = docker run --rm -it -v `pwd`:`pwd`:ro -w `pwd` $(image)
-system-test: install-test link-test
-test: build; $(run) make system-test
-shell:; $(run) $(SHELL)
-run:; $(run) sh -c 'make -s install && $(cmd)'
-
-install-test:; $(MAKE) install run-tests uninstall
-link-test:; $(MAKE) link run-tests uninstall
-run-tests:; seth test
+test: build; $(run) ./bin/seth --test

@@ -1,30 +1,34 @@
 #!/usr/bin/env bash
 set -e
-main() case $1 in
+main() {
+  case $1 in
   \[*\]) jshon <<<"$1" -a -j |
     while read -r item; do
       show-json "$item"
     done;;
   \{*\}) jshon <<<"$1" -k |
     while read -r key; do
-      value=`jshon <<<"$1" -e "$key" -j`
-      value=`show-json "$value"`
+      value=$(jshon <<<"$1" -e "$key" -j)
+      value=$(show-json "$value")
       printf "%-${SETH_KEY_WIDTH-23}s %s\n" "$key" "$value"
     done | sort;;
   \"*\") show-json "$1";;
   *) echo "$1";;
-esac
+  esac
+}
 
-show-json() if [[ $1 = \"*\" ]]; then
-  unquoted=`echo "[$1]" | jshon -a -u`
-  if is-short-hexnum 20 "$unquoted"; then
-    show-hexnum "$unquoted"
+show-json() {
+  if [[ $1 = \"*\" ]]; then
+    unquoted=$(jshon <<<"[$1]" -a -u)
+    if is-short-hexnum 20 "$unquoted"; then
+      show-hexnum "$unquoted"
+    else
+      echo "$unquoted"
+    fi
   else
-    echo "$unquoted"
+    echo "$1"
   fi
-else
-  echo "$1"
-fi
+}
 
 is-short-hexnum() {
   [[ ${#2} -lt $1 && $2 =~ 0x[[:xdigit:]]+ ]]

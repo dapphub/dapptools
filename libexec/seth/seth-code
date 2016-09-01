@@ -1,1 +1,11 @@
-seth-get-code
+#!/usr/bin/env bash
+### seth-code -- show the bytecode of an object on the blockchain
+### Usage: seth code [-b <block>] <object>
+### Print the bytecode of <object> (an address on the blockchain).
+### If `-b' is given, print the bytecode as of <block>.
+set -e
+[[ $# = 1 ]] || seth --bad-usage "$0"
+object=$(seth --to-address "$@")
+jshon+=(-s "$object" -iappend)
+jshon+=(-s "${SETH_BLOCK-latest}" -iappend)
+seth --jsonrpc eth_getCode "${jshon[@]}"

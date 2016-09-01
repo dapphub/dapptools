@@ -1,62 +1,46 @@
 #!/usr/bin/env bash
-set -e
 ### seth-send -- sign and publish a transaction to the blockchain
 ### Usage: seth send [-F <origin>] [-V <value>] <object> <sig> [<args>]
 ###    or: seth send [-F <origin>] [-V <value>] <object> [<data>]
 ###    or: seth send [-F <origin>] [-V <value>] --create <data>
 ###
-[[ $1 ]] || { seth help send >&2; exit 1; }
-
 ### Publish a transaction (signed by <origin>) to call <object> with <data>.
-### If no <origin> is given, try `$SETH_ORIGIN', `$SETH_FROM' or `$ETH_FROM'.
+### If no <origin> is given, try `$SETH_FROM', `$SETH_ORIGIN' or `$ETH_FROM'.
 ### If `--create' is given, create a new object, initialized from <data>.
 ###
-if ! [[ $SETH_CREATE ]]; then
-  object=$(seth --to-address "$1"); shift
-  jshon+=(-s "$object" -i to)
-fi
-
 ### If <sig> has the form `<name>(<types>)', infer <data> from <sig>/<args>.
 ### If no <data> is given, just call <object> without any call data.
 ###
-data=$(seth calldata "$@")
-jshon+=(-s "$data" -i data)
-
-jshon+=($(seth --send-params))
-tx=$(seth --jsonrpc eth_sendTransaction -n {} "${jshon[@]}" -i append)
-
-if [[ $tx =~ ^0x0*$ ]]; then
-  echo >&2 "${0##*/}: error: bad tx hash: $tx"
-  echo >&2 "${0##*/}: origin account: $SETH_ORIGIN"
-  echo >&2 "${0##*/}: make sure account is unlocked"
-  exit 1
-fi
-
 ### If `--async' is given, print the transaction hash and exit immediately.
 ###
+### Otherwise, wait for the transaction receipt and then proceed as follows.
+### If no <object> was given, print the address of the newly created object.
+### If <object> was given, print the "inferred" return value of the call.
+### Warning: in case of conflicting transactions, return value may be wrong.
+###
+### See also seth-receipt(1), seth-call(1), seth-sign(1), seth-send-raw(1).
+set -e
+[[ $1 ]] || seth --bad-usage "$0"
+
+jshon+=(-n {})
+[[ $SETH_CREATE ]] || { object=$(seth --to-address "$1"); shift; }
+[[ $object ]] && jshon+=(-s "$object" -i to)
+data=$(seth calldata "$@")
+jshon+=(-s "$data" -i data)
+jshon+=($(seth --send-params))
+jshon+=(-i append)
+tx=$(seth --jsonrpc eth_sendTransaction "${jshon[@]}")
+[[ $tx =~ ^0x0*$ ]] && seth --error "$0" "bad tx hash: $tx (account locked?)"
 [[ $SETH_ASYNC ]] && exec echo "$tx"
 
-### Otherwise, wait for the transaction receipt and then proceed as follows.
-info() if ! [[ $SETH_SILENT ]]; then echo >&2 "$@"; fi
-info "${0##*/}: $tx"
-info -n "${0##*/}: Waiting for transaction receipt..."
+seth --info "${0##*/}: $tx"
+seth --info -n "${0##*/}: Waiting for transaction receipt..."
 [[ $SETH_SILENT ]] || export SETH_TICK=true
 n=$(seth receipt "$tx" blockNumber)
-info
-info "${0##*/}: Transaction included in block $n."
-
-### If no <object> was given, print the address of the newly created object.
+seth --info
+seth --info "${0##*/}: Transaction included in block $n."
 [[ $object ]] || exec seth receipt "$tx" contractAddress
-
-### If <object> was given, print the "inferred" return value of the call.
-### Warning: return value may be wrong in case of conflicting transactions.
-###
-info "${0##*/}: \
-warning: return value may be inaccurate (see \`seth send --help')"
-
 # XXX: Inferring the return value of the transaction by performing the
 # equivalent call on the previous block can produce incorrect results
 # if multiple conflicting transactions are included in the same block.
 seth -b "$((n - 1))" call "$object" "$@"
-
-### See also seth-receipt(1), seth-call(1), seth-sign(1), seth-send-raw(1).
