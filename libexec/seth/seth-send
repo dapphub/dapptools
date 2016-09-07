@@ -33,12 +33,14 @@ tx=$(seth --jsonrpc eth_sendTransaction "${jshon[@]}")
 [[ $tx =~ ^0x0*$ ]] && seth --error "$0" "bad tx hash: $tx (account locked?)"
 [[ $SETH_ASYNC ]] && exec echo "$tx"
 
-seth --info "${0##*/}: $tx"
-seth --info -n "${0##*/}: Waiting for transaction receipt..."
+info() { [[ $SETH_SILENT ]] || echo >&2 "$@"; }
+
+info "${0##*/}: $tx"
+info -n "${0##*/}: Waiting for transaction receipt..."
 [[ $SETH_SILENT ]] || export SETH_TICK=true
 n=$(seth receipt "$tx" blockNumber)
-seth --info
-seth --info "${0##*/}: Transaction included in block $n."
+info
+info "${0##*/}: Transaction included in block $n."
 [[ $object ]] || exec seth receipt "$tx" contractAddress
 # XXX: Inferring the return value of the transaction by performing the
 # equivalent call on the previous block can produce incorrect results
