@@ -1,24 +1,18 @@
 #!/usr/bin/env bash
 set -e
-network=$(seth network)
 genesis=$(seth block 0 hash)
 
-case $network/$genesis in
-  0/0xfd4af92a79c7fc2fd8bf0d342f2e832e1d4f485c85b9152d2039e03bc604fdca)
-    name=Olympic;;
-  1/0xd4e56740f876aef8c010b86a40d5f56745a118d0906a34e69aec8c0db1cb8fa3)
-    name=Frontier/Homestead
+case $genesis in
+  0x0cd786a2425d16f152c658316c423e6ce1181e15c3295826d7c9904cba9ce303)
+    id=morden;;
+  0xd4e56740f876aef8c010b86a40d5f56745a118d0906a34e69aec8c0db1cb8fa3)
     if [[ $(seth block-number) -lt 1920000 ]]; then
-      name+="/Unforked (ETH)"
+      id=ethlive-pre-dao
     elif seth is-dao-fork; then
-      id=ethlive name+="/DAO-fork (ETH)"
+      id=ethlive
     else
-      id=etclive name+="/Classic (ETC)"
+      id=etclive
     fi;;
-  2/0x0cd786a2425d16f152c658316c423e6ce1181e15c3295826d7c9904cba9ce303)
-    id=morden name=Morden;;
-  *)
-    name=Unknown/$genesis;;
 esac
 
-echo "${id-unknown}:$network/$name"
+echo "${id-unknown}"
