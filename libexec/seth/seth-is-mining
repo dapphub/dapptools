@@ -1,2 +1,0 @@
-#!/bin/sh -e
-eq true seth --jsonrpc eth_mining

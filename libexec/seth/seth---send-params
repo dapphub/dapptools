@@ -6,6 +6,7 @@ param() {
     else
       if [[ $3 = --wei ]]; then
         value=$(seth --to-wei "${!1}")
+        value=$(seth --to-hex "$value")
       else
         value=${!1}
       fi

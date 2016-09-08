@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+### seth-version -- display Seth and Ethereum client version information
+set -e
+for x in client protocol network genesis dao-fork; do
+  printf '%-8s  %s\n' "$x" "$(seth "$x" || echo -)" &
+done | sort

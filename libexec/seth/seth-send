@@ -1,48 +1,52 @@
 #!/usr/bin/env bash
 ### seth-send -- sign and publish a transaction to the blockchain
-### Usage: seth send [-F <origin>] [-V <value>] <object> <sig> [<args>]
-###    or: seth send [-F <origin>] [-V <value>] <object> [<data>]
-###    or: seth send [-F <origin>] [-V <value>] --create <data>
+### Usage: seth send [<options>] [-F <sender>] <receiver> <sig> [<args>]
+###    or: seth send [<options>] [-F <sender>] <receiver> [<data>]
+###    or: seth send [<options>] [-F <sender>] --new <data>
 ###
-### Publish a transaction (signed by <origin>) to call <object> with <data>.
-### If no <origin> is given, try `$SETH_FROM', `$SETH_ORIGIN' or `$ETH_FROM'.
-### If `--create' is given, create a new object, initialized from <data>.
+### Publish a transaction signed by <sender> to call <receiver> with <data>.
+### If no <sender> is given, try `$SETH_SENDER', `$SETH_FROM' or `$ETH_FROM'.
 ###
 ### If <sig> has the form `<name>(<types>)', infer <data> from <sig>/<args>.
-### If no <data> is given, just call <object> without any call data.
+### If no <data> is given, just call <receiver> without any calldata.
+### With `--new', create a new object initialized from <data>.
 ###
-### If `--async' is given, print the transaction hash and exit immediately.
+### With `--no-wait', print the transaction hash and exit immediately.
+### With `--new', print the address of the newly created object.
+### With <receiver>, print an educated guess of the call's return value.
+### Note: The return value will be wrong if other transactions interfere.
 ###
-### Otherwise, wait for the transaction receipt and then proceed as follows.
-### If no <object> was given, print the address of the newly created object.
-### If <object> was given, print the "inferred" return value of the call.
-### Warning: in case of conflicting transactions, return value may be wrong.
-###
-### See also seth-receipt(1), seth-call(1), seth-sign(1), seth-send-raw(1).
+### See also seth-call(1), seth-sign(1), seth-publish(1), seth-receipt(1).
 set -e
 [[ $1 ]] || seth --bad-usage "$0"
+[[ $SETH_NEW ]] || { RECEIVER=$(seth --to-address "$1"); shift; }
+DATA=$(seth calldata "$@")
 
 jshon+=(-n {})
-[[ $SETH_CREATE ]] || { object=$(seth --to-address "$1"); shift; }
-[[ $object ]] && jshon+=(-s "$object" -i to)
-data=$(seth calldata "$@")
-jshon+=(-s "$data" -i data)
+[[ $RECEIVER ]] && jshon+=(-s "$RECEIVER" -i to)
+jshon+=(-s "$DATA" -i data)
 jshon+=($(seth --send-params))
 jshon+=(-i append)
+
 tx=$(seth --jsonrpc eth_sendTransaction "${jshon[@]}")
 [[ $tx =~ ^0x0*$ ]] && seth --error "$0" "bad tx hash: $tx (account locked?)"
-[[ $SETH_ASYNC ]] && exec echo "$tx"
+
+[[ $SETH_WAIT != no ]] && exec echo "$tx"
 
 info() { [[ $SETH_SILENT ]] || echo >&2 "$@"; }
 
+info "${0##*/}: Published transaction (${#DATA} bytes):"
 info "${0##*/}: $tx"
+
 info -n "${0##*/}: Waiting for transaction receipt..."
 [[ $SETH_SILENT ]] || export SETH_TICK=true
 n=$(seth receipt "$tx" blockNumber)
 info
+
 info "${0##*/}: Transaction included in block $n."
-[[ $object ]] || exec seth receipt "$tx" contractAddress
-# XXX: Inferring the return value of the transaction by performing the
-# equivalent call on the previous block can produce incorrect results
-# if multiple conflicting transactions are included in the same block.
-seth -b "$((n - 1))" call "$object" "$@"
+[[ $RECEIVER ]] || exec seth receipt "$tx" contractAddress
+
+# Warning: Guessing the return value of the transaction by performing the
+# equivalent call on the previous block will produce incorrect results
+# when multiple conflicting transactions are included in the same block.
+seth -b "$((n - 1))" call "$RECEIVER" "$@"

@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
-[[ $# = 1 ]] || seth --bad-usage "$0"
-[[ $1 = *\ * ]] || set -- "$1 wei"
+### seth---to-wei -- convert an ETH or Gwei value into (unitless) wei
+### Usage: seth --to-wei <value> [<unit>]
+set -e
+[[ $1 ]] || seth --bad-usage "$0"
+set -- "$*"
+[[ $1 = *" "* ]] || set -- "$1 wei"
 number=${1%% *} unit=${1#* }
 
 case ${unit,,} in

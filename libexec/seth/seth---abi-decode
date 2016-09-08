@@ -4,9 +4,10 @@ set -e
 ### Usage: seth --abi-decode <name>(<in-types>)(<out-types>) <hexdata>
 ### Decode <hexdata> according to <out-types> (<in-types> are ignored).
 
-[[ $1 = *\(*\(* ]] || exec echo "$2"
+# If there are no <out-types>, just print <hexdata> and exit:
+[[ $1 = *"("*"("* ]] || exec echo "$2"
 
-name=${1%%\(*}
+name=${1%%"("*}
 abi=$(seth --abi-json "$1")
 result=$(
   [[ $SETH_DEBUG_ETHABI ]] && set -x

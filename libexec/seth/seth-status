@@ -1,9 +1,0 @@
-#!/usr/bin/env bash
-### seth-status -- display Ethereum client and network status information
-set -e
-seth client >/dev/null
-[[ $1 ]] || set -- block chain client online
-SETH_BLOCK=$(seth block-number)
-export SETH_BLOCK
-print() { x=$(seth "$1" || echo -); printf '%s\t%s\n' "$1" "$x"; }
-for name; do print "$name" & done | sort; wait

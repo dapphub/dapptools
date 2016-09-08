@@ -14,37 +14,35 @@ opts+=h:p: optl+=host:,port:,
 
 ### Transaction options:
 ###
-###    -F, --from=<origin>        account to use or send transaction from
-###        --origin=<origin>      (synonym for `--from')
+###    -F, --from=<sender>        account to send transaction, etc., from
 ###
 ###    -G, --gas=<number>         number of units of gas to provide
 ###        --gas-price=<amount>   price of each gas unit (e.g. `20 Gwei')
 ###
 ###    -V, --value=<amount>       amount of money to send (e.g. `0.1 ETH')
 ###
-opts+=F:G:V: optl+=from:,origin:,gas:,gas-price:,value:,
+opts+=F:G:V: optl+=from:,gas:,gas-price:,value:,
 
+### Options for seth-call(1), seth-estimate(1) and others:
+###
+###    -B, --block=<number>       block number (default: `latest')
+###
+opts+=B: optl+=block:,
+
+### Options for seth-send(1):
+###
+###    --new                      use the calldata to create a new object
+###
 ### Options for seth-send(1) and seth-receipt(1):
 ###
 ###    --[no-]wait                wait for transaction receipt (or not)
 ###
-### Options for seth-send(1):
-###
-###    --create, --deploy         use the calldata to create a new object
-###
-optl+=wait,no-wait,create,deploy,
-
-### Options for seth-call(1), seth-estimate(1) and others:
-###
-###    -b, --block=<number>       block number (default: `latest')
-###
-opts+=b: optl+=block:,
+optl+=new,no-wait,wait,
 
 ### Other options:
 ###
 ###    -s, --silent               suppress standard error logging output
-###    -q, --quiet                (synonym for `--silent')
-opts+=sq optl+=silent,quiet,
+opts+=sq optl+=silent,
 
 set -e
 
@@ -79,7 +77,7 @@ if ! [[ $SETH_INITIALIZED ]]; then
     echo >&2 "${0##*/}: error: unsupported operating system: $(uname)"
     exit 1
   esac
-    
+
   [[ -e ~/.sethrc ]] && . ~/.sethrc
 fi
 
@@ -100,29 +98,24 @@ while [[ $1 ]]; do
     -p|--port)       shift; export SETH_PORT=$1;;
 
     -F|--from)       shift; export SETH_FROM=$1;;
-       --origin)     shift; export SETH_FROM=$1;;
-
     -G|--gas)        shift; export SETH_GAS=$1;;
        --gas-price)  shift; export SETH_GAS_PRICE;;
-
     -V|--value)      shift; export SETH_VALUE=$1;;
 
-       --create)            export SETH_CREATE=yes;;
-       --deploy)            export SETH_CREATE=yes;;
+    -B|--block)      shift; export SETH_BLOCK=$1;;
+
+       --new)               export SETH_NEW=yes;;
 
        --wait)              export SETH_WAIT=yes;;
        --no-wait)           export SETH_WAIT=no;;
 
-    -b|--block)      shift; export SETH_BLOCK=$1;;
-
     -s|--silent)            export SETH_SILENT=yes;;
-    -q|--quiet)             export SETH_SILENT=yes;;
 
     *) printf "${0##*/}: internal error: %q\n" "$1"; exit 1
   esac; shift
 done
 
-export SETH_FROM=${SETH_FROM:-${SETH_ORIGIN:-${ETH_FROM:-$ETH_ORIGIN}}}
+export SETH_FROM=${SETH_FROM:-${SETH_SENDER:-${ETH_FROM:-$ETH_SENDER}}}
 export SETH_HOST=${SETH_HOST:-${SETH_RPC_HOST:-$ETH_RPC_HOST}}
 export SETH_PORT=${SETH_PORT:-${SETH_RPC_PORT:-$ETH_RPC_PORT}}
 export SETH_URL=${SETH_URL:-${SETH_RPC_URL:-$ETH_RPC_URL}}

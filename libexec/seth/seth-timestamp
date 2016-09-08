@@ -1,1 +1,2 @@
-seth-time
+#!/bin/sh -e
+seth block "${1-${SETH_BLOCK-latest}}" timestamp

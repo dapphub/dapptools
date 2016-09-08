@@ -1,6 +1,2 @@
 #!/bin/sh -e
-if seth is-mining; then
-  seth hashrate
-else
-  echo no
-fi
+seth --jsonrpc eth_mining

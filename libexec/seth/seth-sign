@@ -1,13 +1,11 @@
 #!/usr/bin/env bash
 ### seth-sign -- sign arbitrary data with one of your account keys
-### Usage: seth sign [-F <account>] [<hexdata>]
-### Sign <hexdata> with the private key of <account> (or `SETH_FROM').
-###
-### If no <hexdata> is given, read it from standard input instead.
+### Usage: seth sign [-F <sender>] <data>
+### Sign <data> with the private key of <account>.
 set -e
-account=$(seth --to-hexdata "${SETH_FROM?missing account}")
-hexdata=$(seth --to-hexdata "$@")
-jshon+=(-s "$account" -iappend)
-jshon+=(-s "$hexdata" -iappend)
+[[ $# = 1 ]] || seth --bad-usage "$0"
+SENDER=$(seth --to-address "${SETH_FROM?missing sender}")
+DATA=$(seth --to-hexdata "$1")
+jshon+=(-s "$SENDER" -iappend)
+jshon+=(-s "$DATA" -iappend)
 seth --jsonrpc eth_sign "${jshon[@]}"
-

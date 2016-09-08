@@ -1,17 +1,14 @@
 #!/usr/bin/env bash
-### seth-calldata -- pack function names and arguments into calldata
+### seth-calldata -- pack function signatures and arguments into calldata
 ### Usage: seth calldata <sig> [<args>]
-###    or: seth calldata [<hexdata>]
+###    or: seth calldata <data>
 ###
 ### Pack <sig> and <args> into data suitable for passing to `seth call'.
 ###
-### The <sig> needs to look like `<name>(<in-types>)[(<out-types>)]'.
-### The <out-types> are ignored and can be omitted altogether.
-###
-### If <sig> is given but is not valid, treat it as <hexdata> instead.
-### If no arguments are given, read <hexdata> from standard input instead.
+### If <sig> has the form `<name>(<types>)', pack <sig>/<args> into calldata.
+### If <sig> has no parentheses in it, just treat it as hexdata instead.
 set -e
-if [[ $1 =~ ^([^\[\(]+)[\(\[] ]]; then
+if [[ $1 =~ ^([^\(]+)\( ]]; then
   name=${BASH_REMATCH[1]}
   abi=$(seth --abi-json "$1")
   shift; for x; do args+=(-p "${x#0x}"); done

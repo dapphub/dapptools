@@ -1,18 +1,15 @@
 #!/usr/bin/env bash
-set -e
-genesis=$(seth block 0 hash)
-
-case $genesis in
+case $(seth genesis) in
   0x0cd786a2425d16f152c658316c423e6ce1181e15c3295826d7c9904cba9ce303)
-    id=morden;;
+    echo morden;;
   0xd4e56740f876aef8c010b86a40d5f56745a118d0906a34e69aec8c0db1cb8fa3)
-    if [[ $(seth block-number) -lt 1920000 ]]; then
-      id=ethlive-pre-dao
-    elif seth is-dao-fork; then
-      id=ethlive
+    if (($(seth block-number) < 1920000)); then
+      echo ethlivepredao
+    elif [[ $(seth dao-fork) = true ]]; then
+      echo ethlive
     else
-      id=etclive
+      echo etclive
     fi;;
+  *)
+    echo unknown;;
 esac
-
-echo "${id-unknown}"

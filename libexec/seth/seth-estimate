@@ -1,22 +1,21 @@
 #!/usr/bin/env bash
 ### seth-estimate -- estimate how much gas a transaction is likely to use
-### Usage: seth estimate [-F <origin>] [-b <block>] <object> [<data>]
-###    or: seth estimate [-F <origin>] [-b <block>] <object> <sig> [<args>]
+### Usage: seth estimate [<options>] <receiver> <sig> [<args>]
+###    or: seth estimate [<options>] <receiver> <data>
 ###
-### Perform a local call to <object> and return the gas usage.
-###
-### With `-F <origin>', simulate calling <object> from <origin>
-### With `-V <value>', simulate transferring <value> to <object>.
-### With `-b <block>', use the state of the blockchain as of <block>.
+### Perform a local call to <receiver> and return the gas usage.
 ###
 ### If <sig> has the form `<name>(<types>)', infer <data> from <sig>/<args>.
-### If no <sig> or <data> is given, read it from standard input instead.
+###
+### With `-B <block>', use the state of the blockchain as of <block>.
+### With `-F <sender>', simulate calling <receiver> from <sender>
+### With `-V <value>', simulate transferring <value> to <receiver>.
 set -e
-[[ $1 ]] || seth --bad-usage "$0"
-object=$(seth --to-address "$1")
+[[ $2 ]] || seth --bad-usage "$0"
+receiver=$(seth --to-address "$1")
 data=$(seth calldata "${@:2}")
 jshon+=(-n {})
-jshon+=(-s "$object" -i to)
+jshon+=(-s "$receiver" -i to)
 jshon+=(-s "$data" -i data)
 jshon+=($(seth --send-params))
 jshon+=(-i append)

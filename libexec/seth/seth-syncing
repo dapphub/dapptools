@@ -1,8 +1,2 @@
-#!/usr/bin/env bash
-set -e
-result=$(seth --jsonrpc eth_syncing)
-[[ $result = false ]] && exec seth number
-b0=$(seth --field <<<"$result" startingBlock)
-b1=$(seth --field <<<"$result" highestBlock)
-b=$(seth --field <<<"$result" currentBlock)
-echo $((b))/$((b1)) [$(((b - b0) * 100 / (b1 - b0)))%]
+#!/bin/sh -e
+seth --jsonrpc eth_syncing

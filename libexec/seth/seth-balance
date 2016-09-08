@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-### seth-balance -- show the balance of an address on the blockchain
-### Usage: seth balance [-b <block>] <account>
-### Print the balance associated with <account>.
+### seth-balance -- show the balance of any account on the blockchain
+### Usage: seth balance [-B <block>] <account>
+### Print the balance of <account> in ETH.
 ###
-### If `-b' is given, print the balance as of <block>.
-
+### With `-B <block>', print the balance as of <block>.
 set -e
-wei=$(seth --jsonrpc eth_getBalance \
--s "${1?missing account}" -iappend \
--s "${SETH_BLOCK-latest}" -iappend)
-seth --to-eth "$wei"
+[[ $1 ]] || seth --bad-usage "$0"
+jshon+=(-s "$1" -iappend)
+jshon+=(-s "${SETH_BLOCK-latest}" -iappend)
+x=$(seth --jsonrpc eth_getBalance "${jshon[@]}")
+seth --to-eth "$x"

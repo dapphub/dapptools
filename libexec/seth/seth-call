@@ -1,27 +1,25 @@
 #!/usr/bin/env bash
 ### seth-call -- call a contract without updating the blockchain
-### Usage: seth call [-b <block>] [-F <origin>] <object> <sig> [<args>]
-###    or: seth call [-b <block>] [-F <origin>] <object> [<data>]
+### Usage: seth call [<options>] <receiver> <sig> [<args>]
+###    or: seth call [<options>] <receiver> <data>
 ###
-### Perform a local call to <object> without publishing a transaction.
+### Perform a local call to <receiver> without publishing a transaction.
 ###
-### If <sig> has the form `<name>(<types>)', infer <data> from <sig>/<args>.
-### If no <sig> or <data> is given, read it from standard input instead.
+### With <sig> of the form `<name>(<types>)', infer <data> from <sig>/<args>.
+### With `name(<in-types>)(<out-types>)', also decode the return values.
 ###
-### If `-b <block>' is given, use the state of the blockchain as of <block>.
-### If `-F <origin>' is given, simulate calling <object> from <origin>
-### If `-V <value>' is given, simulate transferring <value> to <object>.
-###
-### Print the return value to standard output (decoded, if <sig> is given).
+### With `-B <block>', use the state of the blockchain as of <block>.
+### With `-F <sender>', simulate calling <receiver> from <sender>
+### With `-V <value>', simulate transferring <value> to <receiver>.
 ###
 ### See also seth-send(1), seth-estimate(1), seth-storage(1), seth-code(1).
 set -e
-[[ $1 ]] || seth --bad-usage "$0"
-object=$(seth --to-address "$1")
-data=$(seth calldata "${@:2}")
+[[ $2 ]] || seth --bad-usage "$0"
+RECEIVER=$(seth --to-address "$1")
+DATA=$(seth calldata "${@:2}")
 jshon+=(-n {})
-jshon+=(-s "$object" -i to)
-jshon+=(-s "$data" -i data)
+jshon+=(-s "$RECEIVER" -i to)
+jshon+=(-s "$DATA"     -i data)
 jshon+=($(seth --send-params))
 jshon+=(-i append)
 jshon+=(-s "${SETH_BLOCK-latest}" -i append)

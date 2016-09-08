@@ -8,7 +8,7 @@
 ### If no <field> is given, show all the fields in a big table.
 set -e
 [[ $3 ]] && seth --bad-usage "$0"
-[[ $1 ]] || exec seth syncing
+[[ $1 ]] || exec seth block-number
 block=$(seth get-block-by-number "$1")
 [[ $block = null ]] && seth --error "$0" "no such block: $1"
 [[ $2 ]] && exec seth --field "$2" <<<"$block"

@@ -1,0 +1,2 @@
+#!/bin/sh -e
+seth block 0 hash

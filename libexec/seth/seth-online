@@ -1,7 +1,0 @@
-#!/bin/sh -e
-if seth is-online; then
-  number=$(seth peers)
-  echo "yes [$number peers]"
-else
-  echo no
-fi

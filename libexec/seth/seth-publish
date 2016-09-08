@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-### seth-send-raw -- publish an already-signed transaction to the blockchain
-### Usage: seth send-raw [<txdata>]
+### seth-publish -- publish an already-signed transaction to the blockchain
+### Usage: seth publish [<txdata>]
 ### Publish a previously signed transaction to the blockchain.
 ###
 ### If no <txdata> is given, read it from standard input instead.
