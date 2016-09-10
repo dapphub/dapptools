@@ -10,8 +10,11 @@
 set -e
 if [[ $1 =~ ^([^\(]+)\( ]]; then
   name=${BASH_REMATCH[1]}
-  abi=$(seth --abi-json "$1")
-  shift; for x; do args+=(-p "${x#0x}"); done
+  abi=$(seth --abi-json "$1"); shift
+  for arg; do
+    [[ $arg = @* ]] && arg=$(seth --lookup "$arg")
+    args+=(-p "${arg#0x}")
+  done
   calldata=$(
     [[ $SETH_DEBUG_ETHABI ]] && set -x
     ethabi encode function <(echo "$abi") "$name" "${args[@]}" -l
