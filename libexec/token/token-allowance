@@ -3,4 +3,4 @@
 ### Usage: token allowance <token> <owner> <spender>
 test $# = 3 || { token allowance --help >&2; exit 1; }
 x=$(seth call "$1" "allowance(address,address)(uint)" "${@:2}")
-seth --to-dec "$x"
+token format "$1" "$x"

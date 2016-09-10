@@ -1,6 +1,7 @@
 #!/bin/sh -e
 ### token-transfer -- transfer tokens from one account to another
 ### Usage: token transfer <token> [<source>] <recipient> <amount>
+### Note: <amount> must be an integer representing wei (or equivalent).
 case $# in
 4) seth send "$1" "transferFrom(address,address,uint)(bool)" "${@:2}";;
 3) seth send "$1" "transfer(address,uint)(bool)"             "${@:2}";;

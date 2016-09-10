@@ -3,4 +3,4 @@
 ### Usage: token supply <token>
 test $# = 1 || { token supply --help >&2; exit 1; }
 x=$(seth call "$1" "totalSupply()(uint)")
-seth --to-dec "$x"
+token format "$1" "$x"

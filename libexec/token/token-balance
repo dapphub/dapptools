@@ -3,4 +3,4 @@
 ### Usage: token balance <token> <account>
 test $# = 2 || { token balance --help >&2; exit 1; }
 x=$(seth call "$1" "balanceOf(address)(uint)" "$2")
-seth --to-dec "$x"
+token format "$1" "$x"
