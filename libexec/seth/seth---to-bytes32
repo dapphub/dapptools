@@ -1,0 +1,3 @@
+#!/bin/sh -e
+test $# = 0 && set -- "$(cat)"
+printf "%-64s\n" "${1#0x}" | tr ' ' 0
