@@ -1,0 +1,44 @@
+#!/usr/bin/env bash
+### token-help -- show help about token(1) or one of its subcommands
+### Usage: token help [<command>]
+###    or: token <command> --help
+
+BUGS=https://github.com/nexusdev/token/issues/new
+
+name=${0##*/} name=${name%-help}
+file=${0%-*}${1+-$1}
+header=$(
+  grep -oP '^(\S)\1\1( \K.*)?' "$file" |
+  perl -pe 's/^(\S)\1\1$//'
+)
+
+if ! [[ $header ]]; then
+  sed "s/^/${0##*/}: /" "$file"
+elif [[ $(wc -l <<<"$header") = 1 ]]; then
+  echo "$header"
+else
+  sed "1{/^$name\\S* -- /d}" <<<"$header"
+fi
+
+[[ $1 ]] && exit
+
+for file in ${0%/*}/$name-*; do
+  [[ -L $file ]] && continue
+  commands+=("$file")
+done
+
+list-commands() {
+  grep -hoP "^(\\S)\\1\\1 $name-\\K[^ ]* -- .*" "$@" |
+  sed "s/ -- / /" | while read name label; do
+    printf "   %-14s  %s\n" "$name" "$label"
+  done | LANG=C sort
+}
+
+cat <<.
+
+Commands:
+
+$(list-commands "${commands[@]}")
+
+Report bugs to <$BUGS>.
+.

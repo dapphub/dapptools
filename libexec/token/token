@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+### token -- command-line client for ERC20 tokens
+### Usage: token [<options>] <command> [<args>]
+###    or: token <command> --help
+###
+### Perform ERC20 token errands from the comfort of your command line.
+
+set -e
+
+if ! [[ $TOKEN_INIT ]]; then
+  export TOKEN_INIT=true
+  [[ -e ~/.tokenrc ]] && . ~/.tokenrc
+fi
+
+if [[ $2 = --help ]]; then
+  exec "${0##*/}" help -- "$1"
+elif [[ $1 = -* ]] && which "${0##*/}-$1" &>/dev/null; then
+  exec "${0##*/}-$1" "${@:2}"
+fi
+
+args=$(getopt -n "${0##*/}" -o "$opts" -l "$optl" -- "$@")
+eval "set -- $args"
+
+while [[ $1 ]]; do
+  case $1 in
+    --) shift; break;;
+    *) printf "${0##*/}: internal error: %q\n" "$1"; exit 1
+  esac; shift
+done
+
+"${0##*/}-${1-help}" "${@:2}"

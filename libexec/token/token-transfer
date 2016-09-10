@@ -1,0 +1,8 @@
+#!/bin/sh -e
+### token-transfer -- transfer tokens from one account to another
+### Usage: token transfer <token> [<source>] <recipient> <amount>
+case $# in
+4) seth send "$1" "transferFrom(address,address,uint)(bool)" "${@:2}";;
+3) seth send "$1" "transfer(address,uint)(bool)"             "${@:2}";;
+*) token transfer --help >&2; exit 1;;
+esac
