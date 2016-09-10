@@ -4,7 +4,9 @@ param() {
     if [[ ${!1} = *\ * ]]; then
       seth --error "$0" "$1 contains whitespace"
     else
-      if [[ $3 = --wei ]]; then
+      if [[ $3 = --address ]]; then
+        value=$(seth --to-address "${!1}")
+      elif [[ $3 = --wei ]]; then
         value=$(seth --to-wei "${!1}")
         value=$(seth --to-hex "$value")
       else
@@ -15,7 +17,7 @@ param() {
   fi
 }
 
-param SETH_FROM       from
+param SETH_FROM       from      --address
 param SETH_GAS        gas
 param SETH_GAS_PRICE  gasPrice  --wei
 param SETH_VALUE      value     --wei

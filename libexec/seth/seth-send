@@ -31,11 +31,11 @@ jshon+=(-i append)
 tx=$(seth --jsonrpc eth_sendTransaction "${jshon[@]}")
 [[ $tx =~ ^0x0*$ ]] && seth --error "$0" "bad tx hash: $tx (account locked?)"
 
-[[ $SETH_WAIT != no ]] && exec echo "$tx"
+[[ $SETH_WAIT = no ]] && exec echo "$tx"
 
 info() { [[ $SETH_SILENT ]] || echo >&2 "$@"; }
 
-info "${0##*/}: Published transaction (${#DATA} bytes):"
+info "${0##*/}: Published $((${#DATA} - 2))-byte transaction:"
 info "${0##*/}: $tx"
 
 info -n "${0##*/}: Waiting for transaction receipt..."
@@ -49,4 +49,5 @@ info "${0##*/}: Transaction included in block $n."
 # Warning: Guessing the return value of the transaction by performing the
 # equivalent call on the previous block will produce incorrect results
 # when multiple conflicting transactions are included in the same block.
-seth -b "$((n - 1))" call "$RECEIVER" "$@"
+info "${0##*/}: note: return value may be inaccurate"
+seth -B "$((n - 1))" call "$RECEIVER" "$@"

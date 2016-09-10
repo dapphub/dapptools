@@ -19,8 +19,8 @@ then exec seth --field "$2" <<<"$receipt"; fi
 if [[ ${blockNumber-null} != null ]]
 then exec echo "$receipt"; fi
 
-### Unless `--async' is given, wait indefinitely for the receipt to appear.
-[[ $SETH_ASYNC ]] && error "not found: $tx"
+### Unless `--no-wait' is given, wait indefinitely for the receipt to appear.
+[[ $SETH_WAIT = no ]] && error "not found: $tx"
 sleep 1
 [[ $SETH_TICK ]] && printf . >&2
 exec "$0" "$@"
