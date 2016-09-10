@@ -1,9 +1,12 @@
-#!/bin/sh -e
+#!/usr/bin/env bash
 ### token-transfer -- transfer tokens from one account to another
-### Usage: token transfer <token> [<source>] <recipient> <amount>
+### Usage: token transfer <token> <recipient> <amount> [<source>]
 ### Note: <amount> must be an integer representing wei (or equivalent).
-case $# in
-4) seth send "$1" "transferFrom(address,address,uint)(bool)" "${@:2}";;
-3) seth send "$1" "transfer(address,uint)(bool)"             "${@:2}";;
-*) token transfer --help >&2; exit 1;;
-esac
+set -e
+[[ $# = [34] ]] || { token transfer --help >&2; exit 1; }
+x=$(token parse "$3")
+if [[ $# = 3 ]]; then
+  seth send "$1" "transfer(address,uint)(bool)" "$2" "$x"
+else
+  seth send "$1" "transferFrom(address,address,uint)(bool)" "$4" "$2" "$x"
+fi
