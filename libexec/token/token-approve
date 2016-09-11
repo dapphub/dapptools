@@ -2,6 +2,7 @@
 ### token-approve -- approve another account to spend your tokens
 ### Usage: token approve <token> <spender> <amount>
 ### Note: <amount> must be an integer representing wei (or equivalent).
-test $# = 3 || { token approve --help >&2; exit 1; }
-x=$(token parse "$3")
-seth send "$1" "approve(address,uint)(bool)" "$2" "$x"
+[ $# = 3 ] || token approve --usage
+amount=$(token --parse "$3")
+sig="approve(address,uint)(bool)"
+seth send "$1" "$sig" "$2" "$amount"
