@@ -1,1 +1,2 @@
-seth-help
+#!/bin/sh -e
+seth help
