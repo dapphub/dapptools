@@ -35,7 +35,8 @@ tx=$(seth --jsonrpc eth_sendTransaction "${jshon[@]}")
 
 info() { [[ $SETH_SILENT ]] || echo >&2 "$@"; }
 
-info "${0##*/}: Published $((${#DATA} - 2))-byte transaction."
+bytes=$((${#DATA} - 2))
+info "${0##*/}: Published transaction with $bytes bytes of calldata."
 info "${0##*/}: $tx"
 
 info -n "${0##*/}: Waiting for transaction receipt..."
