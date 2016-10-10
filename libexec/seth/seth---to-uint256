@@ -1,0 +1,3 @@
+#!/bin/sh -e
+hex=$(seth --to-hex "$1")
+printf "%64s\n" "${hex#0x}" | tr ' ' 0
