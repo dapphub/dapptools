@@ -6,7 +6,9 @@
 ### With `-B <block>', print the balance as of <block>.
 set -e
 [[ $1 ]] || seth --bad-usage "$0"
-jshon+=(-s "$1" -iappend)
+account=$1
+[[ $account = @* ]] && account=$(seth --lookup "$account")
+jshon+=(-s "$account" -iappend)
 jshon+=(-s "${SETH_BLOCK-latest}" -iappend)
 x=$(seth --jsonrpc eth_getBalance "${jshon[@]}")
 seth --to-eth "$x"
