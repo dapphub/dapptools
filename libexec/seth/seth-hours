@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+set -e
+minutes=$(seth minutes)
+echo $((minutes / 60))
