@@ -3,5 +3,5 @@ set -e
 number=$1
 [[ $1 = latest ]] || number=$(seth --to-hex "$1")
 jshon+=(-s "$number" -iappend)
-jshon+=(-n false -i append)
+jshon+=(-n false -iappend)
 seth --jsonrpc eth_getBlockByNumber "${jshon[@]}"

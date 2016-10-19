@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
 ### seth-keccak -- print the Keccak hash of an arbitrary piece of data
 set -e
-[[ $# = 1 ]] || { seth keccak --help >&2; exit 1; }
-seth --jsonrpc web3_sha3 -s "$1" -i append
+[[ $# = 1 ]] || seth --bad-usage "$0"
+seth --jsonrpc web3_sha3 -s "$1" -iappend
