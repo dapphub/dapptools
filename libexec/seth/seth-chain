@@ -7,10 +7,10 @@ case $genesis in
   0xd4e56740f876aef8c010b86a40d5f56745a118d0906a34e69aec8c0db1cb8fa3)
     if (($(seth block-number) < 1920000)); then
       echo ethlivepredao
-    elif [[ $(seth dao-fork) = true ]]; then
-      echo ethlive
-    else
+    elif [[ $(seth classic) = true ]]; then
       echo etclive
+    else
+      echo ethlive
     fi;;
   *)
     echo unknown;;
