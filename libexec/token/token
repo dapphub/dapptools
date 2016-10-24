@@ -3,15 +3,8 @@
 ### Usage: token [<options>] <command> [<args>]
 ###    or: token <command> --help
 ###
-### Perform ERC20 token errands from the comfort of your command line.
-
+### Easily do things with your Ethereum tokens.
 set -e
-
-if [[ $2 = --help ]]; then
-  token-help "$1"
-elif [[ $2 = --usage ]]; then
-  token-help "$1" >&2
-  exit 1
-else
-  token-"${1-help}" "${@:2}"
-fi
+[[ $2 = --help  ]] && exec token-help "$1"
+[[ $2 = --usage ]] && { token-help "$1" >&2; exit 1; }
+token-"${1-help}" "${@:2}"

@@ -1,5 +1,5 @@
 #!/bin/sh -e
-### token-allowance -- print the amount one account can spend from another
+### token-allowance -- print how much one account can transfer from another
 ### Usage: token allowance <token> <owner> <spender>
 [ $# = 3 ] || token allowance --usage
 sig="allowance(address,address)(uint)"

@@ -1,8 +1,4 @@
 #!/usr/bin/env bash
-### token-help -- show help about token(1) or one of its subcommands
-### Usage: token help [<command>]
-###    or: token <command> --help
-
 BUGS=https://github.com/nexusdev/token/issues/new
 
 name=${0##*/} name=${name%-help}
