@@ -1,9 +1,7 @@
 #!/bin/sh -e
-### token-transfer -- transfer tokens from one account to another
-### Usage: token transfer <token> <to> <amount> [<from>]
-### Perform a `transfer' or (if <from> is given) `transferFrom' operation.
-###
-### Note: <amount> must be an integer representing wei (or equivalent).
+### token-transfer -- transfer tokens to one account from another
+### Usage: token transfer <token> <destination> <amount> [<source>]
+### Perform a `transfer' or (if <source> is given) `transferFrom' operation.
 [ $# = 3 ] || [ $# = 4 ] || token transfer --usage
 amount=$(token --parse "$3")
 if [ $# = 3 ]; then
