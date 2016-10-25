@@ -1,4 +1,5 @@
 default: test
+server:; python -m SimpleHTTPServer
 
 SHELL = bash
 dirs = {bin,libexec}
