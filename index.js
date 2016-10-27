@@ -13,9 +13,16 @@ location.hash.replace(/^\#\?/, "").split("&").forEach(function(part) {
 
 if (!params.token || !params.account) {
   var token = prompt("What is the address of the ERC20 token?")
+  var decimals = prompt("How many decimal places does the token have?")
   var account = prompt("Which account are you interested in?")
-  location.hash = `?token=${token}&account=${account}`
-  location.reload()
+  location.hash = `?token=${token}&decimals=${decimals}&account=${account}`
+}
+
+if (!params.decimals) {
+  location.hash = `?token=${params.token}&decimals=18&account=${params.account}`
+} else if (params.decimals > 20) {
+  alert("Sorry, but the maximum number of decimal places is 20.")
+  location.hash = `?token=${params.token}&decimals=20&account=${params.account}`
 }
 
 var ERC20 = abi([["balanceOf", ["address"], ["uint"]]])
@@ -56,12 +63,18 @@ function load() {
           <td><code>${params.token}</code></td>
         </tr>
         <tr>
+          <th>Decimals</th>
+          <td><code>${params.decimals}</code></td>
+        </tr>
+        <tr>
           <th>Account</th>
           <td><code>${params.account}</code></td>
         </tr>
         <tr>
           <th>Balance</th>
-          <td><code>${web3.fromWei(balance, "ether")}</code></td>
+          <td><code>${balance.dividedBy(
+            web3.toBigNumber(10).toPower(params.decimals)
+          ).toFixed(params.decimals)}</code></td>
         </tr>
       </table>
     `
