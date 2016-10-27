@@ -1,0 +1,3 @@
+#!/bin/sh -e
+x=$(seth block "${SETH_BLOCK-latest}" timestamp)
+date -d "@$x" "$@"

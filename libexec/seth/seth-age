@@ -1,0 +1,5 @@
+#!/bin/sh -e
+### seth-age -- show the age of the last block relative to now
+seconds=$(seth seconds)
+block=$(seth block)
+echo "$seconds seconds since block $block"
