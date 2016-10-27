@@ -1,3 +1,0 @@
-#!/usr/bin/env bash
-fork=0x87b2bc3f12e3ded808c6d4b9b528381fa2a7e95ff2368ba93191a9495daa7f50
-[[ $(seth block 1920001 hash) = $fork ]] && echo true || echo false
