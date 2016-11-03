@@ -10,5 +10,6 @@ account=$1
 [[ $account = @* ]] && account=$(seth --lookup "$account")
 jshon+=(-s "$account" -iappend)
 jshon+=(-s "${SETH_BLOCK-latest}" -iappend)
-x=$(seth --jsonrpc eth_getBalance "${jshon[@]}")
-seth --to-eth "$x"
+balance=$(seth --jsonrpc eth_getBalance "${jshon[@]}")
+[[ $balance = 0x* ]] && balance=$(seth --to-dec "$balance")
+seth --to-eth "$balance"
