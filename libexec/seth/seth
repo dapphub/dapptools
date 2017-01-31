@@ -42,7 +42,8 @@ optl+=new,no-wait,wait,
 ### Other options:
 ###
 ###    -s, --silent               suppress standard error logging output
-opts+=sq optl+=silent,
+###    -j, --json-output          print raw JSON to standard output
+opts+=sj optl+=silent,json-output,
 
 set -e
 
@@ -110,6 +111,7 @@ while [[ $1 ]]; do
        --no-wait)           export SETH_WAIT=no;;
 
     -s|--silent)            export SETH_SILENT=yes;;
+    -j|--json-output)       export SETH_JSON_OUTPUT=yes;;
 
     *) printf "${0##*/}: internal error: %q\n" "$1"; exit 1
   esac; shift
