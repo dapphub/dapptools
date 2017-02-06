@@ -10,7 +10,7 @@ param() {
         value=$(seth --to-wei "${!1}")
         value=$(seth --to-hex "$value")
       else
-        value=${!1}
+        value=$(seth --to-hex "${!1}")
       fi
       echo -s "$value" -i "$2"
     fi
