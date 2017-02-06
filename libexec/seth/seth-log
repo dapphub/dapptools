@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+### seth-log -- print the transaction logs of some contract
+### Usage: seth log [-B <block>] [--follow] <address>
+set -e
+jshon+=(-n {})
+jshon+=(-s "$(seth --to-address ${1?})" -i address)
+jshon+=(-s "${SETH_BLOCK-earliest}" -i fromBlock)
+jshon+=(-i append)
+id=$(seth --jsonrpc eth_newFilter "${jshon[@]}")
+trap 'seth --jsonrpc eth_uninstallFilter -s "$id" -i append >/dev/null' EXIT
+SETH_JSON_OUTPUT=yes \
+seth --jsonrpc eth_getFilterLogs -s "$id" -i append | jshon -a -j
+[[ $SETH_FOLLOW ]] && seth log-follow "$id"

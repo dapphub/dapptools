@@ -31,13 +31,17 @@ opts+=B: optl+=block:,
 
 ### Options for seth-send(1):
 ###
-###    --new                      use the calldata to create a new object
+###    --create                   use the calldata to create a new object
 ###
 ### Options for seth-send(1) and seth-receipt(1):
 ###
-###    --[no-]wait                wait for transaction receipt (or not)
+###    --no-wait                  do not wait for transaction receipt
 ###
-optl+=new,no-wait,wait,
+### Options for seth-log(1):
+###
+###    -f, --follow               go into a loop watching for new logs
+###
+opts+=f optl+=new,create,no-wait,wait,follow
 
 ### Other options:
 ###
@@ -105,10 +109,12 @@ while [[ $1 ]]; do
 
     -B|--block)      shift; export SETH_BLOCK=$1;;
 
-       --new)               export SETH_NEW=yes;;
+       --create)            export SETH_CREATE=yes;;
+       --new)               export SETH_CREATE=yes;;
 
        --wait)              export SETH_WAIT=yes;;
        --no-wait)           export SETH_WAIT=no;;
+    -f|--follow)            export SETH_FOLLOW=yes;;
 
     -s|--silent)            export SETH_SILENT=yes;;
     -j|--json-output)       export SETH_JSON_OUTPUT=yes;;

@@ -2,24 +2,24 @@
 ### seth-send -- sign and publish a transaction to the blockchain
 ### Usage: seth send [<options>] [-F <sender>] <receiver> <sig> [<args>]
 ###    or: seth send [<options>] [-F <sender>] <receiver> [<data>]
-###    or: seth send [<options>] [-F <sender>] --new <data>
+###    or: seth send [<options>] [-F <sender>] --create <data>
 ###
 ### Publish a transaction signed by <sender> to call <receiver> with <data>.
 ### If no <sender> is given, try `$SETH_SENDER', `$SETH_FROM' or `$ETH_FROM'.
 ###
 ### If <sig> has the form `<name>(<types>)', infer <data> from <sig>/<args>.
 ### If no <data> is given, just call <receiver> without any calldata.
-### With `--new', create a new object initialized from <data>.
+### With `--create', create a new object initialized from <data>.
 ###
 ### With `--no-wait', print the transaction hash and exit immediately.
-### With `--new', print the address of the newly created object.
+### With `--create', print the address of the newly created object.
 ### With <receiver>, print an educated guess of the call's return value.
 ### Note: The return value will be wrong if other transactions interfere.
 ###
 ### See also seth-call(1), seth-sign(1), seth-publish(1), seth-receipt(1).
 set -e
 [[ $1 ]] || seth --bad-usage "$0"
-[[ $SETH_NEW ]] || { RECEIVER=$(seth --to-address "$1"); shift; }
+[[ $SETH_CREATE ]] || { RECEIVER=$(seth --to-address "$1"); shift; }
 DATA=$(seth calldata "$@")
 
 jshon+=(-n {})
