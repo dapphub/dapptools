@@ -1,0 +1,26 @@
+#!/usr/bin/env node
+var basename = x => x.replace(/\..*?$/, "")
+var cat      = x => require("fs").readFileSync(x, { encoding: "utf-8" })
+var format   = x => JSON.stringify(x, null, 2)
+var ls       = x => require("fs").readdirSync(x)
+var merge    = (...xs) => Object.assign({}, ...xs)
+var uniq     = xs => [...new Set(xs)]
+
+console.log(format(merge(require(`${process.cwd()}/ERC190.json`), {
+  lockfile_version: "1",
+  contract_types: merge(uniq(ls("build").map(basename)).map(name => ({
+    [name]: {
+      contract_name    : name,
+      abi              : JSON.parse(cat(`build/${name}.abi`)),
+      bytecode         : cat(`build/${name}.bin`),
+      runtime_bytecode : cat(`build/${name}.bin-runtime`),
+    }
+  }))),
+  deployments: {
+  },
+  sources: {
+    // "./src/foo.sol": "ipfs://...",
+  },
+  build_dependencies: {
+  },
+})))
