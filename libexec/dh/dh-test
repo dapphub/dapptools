@@ -1,0 +1,2 @@
+#!/bin/sh -e
+for x in src/*.t.sol; do dapple-quicktest "$x"; done

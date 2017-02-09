@@ -1,0 +1,2 @@
+#!/bin/sh -e
+echo "Usage: dh <command> [<args>...]"
