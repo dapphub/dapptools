@@ -1,0 +1,4 @@
+#!/bin/sh -e
+dh check "$0"
+(set -x; git -C "lib/${1?}" submodule update --init --recursive --remote)
+(set -x; git commit -m "${0##*/} $1")

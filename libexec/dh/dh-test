@@ -1,2 +1,3 @@
-#!/bin/sh -e
-for x in src/*.t.sol; do dapple-quicktest "$x"; done
+#!/usr/bin/env bash
+set -e && shopt -s nullglob
+# for x in src/*; do (set -x; dapple-quicktest "$x"); done

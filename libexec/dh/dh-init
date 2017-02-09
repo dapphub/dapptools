@@ -1,0 +1,30 @@
+#!/usr/bin/env bash
+set -x -o noclobber
+git init
+cat >.gitignore <<.
+/build
+.
+cat >Makefile <<.
+all:; dh build
+test:; dh test
+.
+cat >ERC190.json <<.
+{
+  "package_name": "$(basename $(pwd))",
+  "version": "0.1.0",
+  "meta": {
+    "description": "",
+    "license": "",
+    "authors": [
+    ],
+    "keywords": [
+    ]
+  },
+  "dependencies": {
+  },
+  "deployments": {
+  }
+}
+.
+mkdir -p lib src
+dh save "$0" "$@"

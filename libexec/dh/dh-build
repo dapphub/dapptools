@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
 set -e && shopt -s nullglob
-solc=(solc --abi --bin --bin-runtime -o build)
+solc=(solc --abi --bin --bin-runtime -o build =)
 for x in lib/*; do solc+=("${x#lib/}=$x/src"); done
 for x in src/*.sol; do (set -x; "${solc[@]}" "$x"); done

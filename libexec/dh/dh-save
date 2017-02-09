@@ -1,0 +1,3 @@
+#!/bin/sh -e
+(set -x; git add -A)
+(set -x; git commit -m "${1##*/} ${*:2}")
