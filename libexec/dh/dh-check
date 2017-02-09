@@ -1,6 +1,0 @@
-#!/usr/bin/env bash
-[[ $(git status --short 2>/dev/null) ]] || exit 0
-exec >&2
-echo "${1##*/}: error: dirty working tree"
-echo "Please commit or stash your changes first."
-exit 1

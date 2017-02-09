@@ -1,0 +1,2 @@
+#!/bin/sh -e
+PATH=${0%/*/*}/libexec/dapp:$PATH dapp "$@"

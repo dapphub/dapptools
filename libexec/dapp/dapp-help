@@ -1,0 +1,2 @@
+#!/bin/sh -e
+echo "Usage: dapp <command> [<args>...]"

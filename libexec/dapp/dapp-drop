@@ -1,4 +1,4 @@
 #!/bin/sh -e
-dh check "$0"
+dapp --safe "$0"
 (set -x; git rm -r "lib/$1")
-dh save "$0" "$@"
+dapp --save "$0" "$@"

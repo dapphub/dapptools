@@ -1,2 +1,0 @@
-#!/bin/sh -e
-PATH=${0%/*/*}/libexec/dh:$PATH dh "$@"
