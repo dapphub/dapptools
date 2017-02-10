@@ -1,1 +1,5 @@
-dapp-plop
+#!/bin/sh -e
+dapp --safe "$0"
+url=https://github.com/dapphub/${1?missing package name}
+(set -x; git submodule add "$url" "lib/$1")
+dapp --save "$0" "$@"

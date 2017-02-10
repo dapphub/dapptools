@@ -1,1 +1,4 @@
-dapp-drop
+#!/bin/sh -e
+dapp --safe "$0"
+(set -x; git rm -r "lib/$1")
+dapp --save "$0" "$@"
