@@ -74,9 +74,16 @@ data Contract = Contract {
 } deriving Show
 makeLenses ''Contract
 
+data Env = Env {
+  _contracts   :: !(Map Word256 Contract),
+  _solc        :: (Map Word256 SolcContract),
+  _sha3Crack   :: (Map Word256 [Word8]),
+  _sourceCache :: SourceCache
+} deriving (Show)
+makeLenses ''Env
+
 data VM = VM {
   _done        :: !Bool,
-  _contracts   :: !(Map Word256 Contract),
   _contract    :: !Word256,
   _vmCode      :: !ByteString,
   _pc          :: !Int,
@@ -86,9 +93,7 @@ data VM = VM {
   _callvalue   :: !Word256,
   _callstack   :: ![Frame],
   _caller      :: !Word256,
-  _solc        :: (Map Word256 SolcContract),
-  _sha3Crack   :: (Map Word256 [Word8]),
-  _sourceCache :: SourceCache
+  _env         :: !Env
 } deriving Show
 makeLenses ''VM
 
@@ -105,7 +110,7 @@ initialContract theCode = Contract {
 
 exec1 :: VM -> IO VM
 exec1 vm = do
-  let Just !c = vm ^? contracts . ix (vm ^. contract)
+  let Just !c = vm ^? env . contracts . ix (vm ^. contract)
   if vm ^. pc < BS.length (vm ^. vmCode)
     then
       let vm' = vm & pc +~ opSize op
@@ -161,7 +166,7 @@ exec1 vm = do
         0x55 {- SSTORE -} -> do
           case stk of
             (x:y:xs) -> do
-              return $! vm' & contracts . ix (vm ^. contract) . storage . at x .~ Just y
+              return $! vm' & env . contracts . ix (vm ^. contract) . storage . at x .~ Just y
                             & stack .~ xs
             _ -> error "underrun"
 
@@ -248,7 +253,7 @@ exec1 vm = do
                 -- cpprint ("SHA3 preimage", bytes)
                 return $! vm'
                   & stack .~ hash : xs
-                  & sha3Crack . at hash .~ Just bytes
+                  & env . sha3Crack . at hash .~ Just bytes
             _ -> error "underrun"
 
         0x34 {- CALLVALUE -} ->
@@ -265,7 +270,7 @@ exec1 vm = do
 
         0x3b {- EXTCODESIZE -} ->
           stackOp1_1 vm'
-            (\x -> num ((vm ^? contracts . ix x . codesize) ?: 0))
+            (\x -> num ((vm ^? env . contracts . ix x . codesize) ?: 0))
 
         0x5a {- GAS -} ->
           stackOp0_1 vm' 0xffffffffffffffffff
@@ -284,13 +289,13 @@ exec1 vm = do
                                  (vm' ^. callvalue)
                                  (vm' ^. caller)
                                  (CallLinkage xOutOffset xOutSize)
-                                 (vm ^?! contracts . ix xTo . codehash,
+                                 (vm ^?! env . contracts . ix xTo . codehash,
                                   if xInSize >= 4
                                   then Just $! vm ^. memory . word32At xInOffset
                                   else Nothing)
               return $! vm'
                 & callstack %~ (frame':)
-                & vmCode   .~ (vm ^?! contracts . ix xTo . code)
+                & vmCode   .~ (vm ^?! env . contracts . ix xTo . code)
                 & pc       .~ 0
                 & stack    .~ mempty
                 & memory   .~ mempty
@@ -320,7 +325,7 @@ exec1 vm = do
                     & calldata  .~ (frame ^. frameCalldata)
                     & caller    .~ (frame ^. frameCaller)
                     & contract  .~ (frame ^. frameContract)
-                    & vmCode    .~ (vm ^?! contracts . ix (frame ^. frameContract) . code)
+                    & vmCode    .~ (vm ^?! env . contracts . ix (frame ^. frameContract) . code)
 
         0xf3 {- RETURN -} ->
           case stk of
@@ -330,7 +335,7 @@ exec1 vm = do
                 (frame:frames) ->
                   case frame ^. frameLinkage of
                     CreateLinkage ->
-                      let created = vm ^?! contracts . ix (vm ^. contract)
+                      let created = vm ^?! env . contracts . ix (vm ^. contract)
                           contract' =
                             initialContract
                              (BS.pack [Map.findWithDefault 0 (xOffset + num i) mem | i <- [0..xSize-1]])
@@ -345,8 +350,8 @@ exec1 vm = do
                         & calldata  .~ (frame ^. frameCalldata)
                         & caller    .~ (frame ^. frameCaller)
                         & contract  .~ (frame ^. frameContract)
-                        & vmCode    .~ (vm ^?! contracts . ix (frame ^. frameContract) . code)
-                        & contracts . at (vm ^. contract) .~ Just contract'
+                        & vmCode    .~ (vm ^?! env . contracts . ix (frame ^. frameContract) . code)
+                        & env . contracts . at (vm ^. contract) .~ Just contract'
 
                     CallLinkage yOffset ySize ->
                       return $! vm'
@@ -364,7 +369,7 @@ exec1 vm = do
                         & calldata  .~ (frame ^. frameCalldata)
                         & caller    .~ (frame ^. frameCaller)
                         & contract  .~ (frame ^. frameContract)
-                        & vmCode    .~ (vm ^?! contracts . ix (frame ^. frameContract) . code)
+                        & vmCode    .~ (vm ^?! env . contracts . ix (frame ^. frameContract) . code)
 
             _ -> error "underrun"
 
@@ -377,8 +382,8 @@ exec1 vm = do
                     initialContract $
                       BS.pack [Map.findWithDefault 0 (xOffset + i) mem | i <- [0..xSize-1]]
                   contracts' =
-                    (vm ^. contracts) & at address' .~ (Just $! contract')
-                                      & ix (vm ^. contract) . nonce +~ 1
+                    (vm ^. env . contracts) & at address' .~ (Just $! contract')
+                                            & ix (vm ^. contract) . nonce +~ 1
               in return $! vm'
                 & callstack %~ (Frame (vm' ^. contract)
                                       (vm' ^. pc)
@@ -397,7 +402,7 @@ exec1 vm = do
                 & callvalue .~ xValue
                 & caller    .~ (vm ^. contract)
                 & contract  .~ address'
-                & contracts .~ contracts'
+                & env . contracts .~ contracts'
             _ -> error "underrun"
 
         0x39 {- CODECOPY -} ->
@@ -440,7 +445,7 @@ exec vm = when (not (vm ^. done)) (exec1 vm >>= exec)
 
 checkJump :: (Monad m, Integral n) => VM -> n -> m VM
 checkJump vm x =
-  let theCode = vm ^. contracts . ix (vm ^. contract) . code in
+  let theCode = vm ^. env . contracts . ix (vm ^. contract) . code in
   if num x < BS.length theCode && BS.index theCode (num x) == 0x5b
   then return $! vm & pc .~ num x
   else error "bad jump destination"
@@ -448,17 +453,22 @@ checkJump vm x =
 initialVm :: ByteString -> Word256 -> ByteString -> Map Text SolcContract -> SourceCache -> VM
 initialVm theCalldata theCallvalue theCode theSolc theSourceCache = VM {
   _done = False,
-  _contracts = Map.fromList [
-    (123, Contract {
-      _code = theCode,
-      _codesize = BS.length theCode,
-      _codehash = keccak theCode,
-      _storage = mempty,
-      _balance = 0,
-      _nonce = 0,
-      _opIxMap = mkOpIxMap theCode
-    })
-  ],
+  _env = Env {
+    _contracts = Map.fromList [
+      (123, Contract {
+        _code = theCode,
+        _codesize = BS.length theCode,
+        _codehash = keccak theCode,
+        _storage = mempty,
+        _balance = 0,
+        _nonce = 0,
+        _opIxMap = mkOpIxMap theCode
+      })
+    ],
+    _solc = Map.fromList [(x ^. solcCodehash,  x) | x <- Map.elems theSolc],
+    _sha3Crack = mempty,
+    _sourceCache = theSourceCache
+  },
   _contract = 123,
   _pc = 0,
   _vmCode = theCode,
@@ -467,10 +477,7 @@ initialVm theCalldata theCallvalue theCode theSolc theSourceCache = VM {
   _calldata = theCalldata,
   _callvalue = theCallvalue,
   _callstack = mempty,
-  _caller = 0,
-  _solc = Map.fromList [(x ^. solcCodehash,  x) | x <- Map.elems theSolc],
-  _sha3Crack = mempty,
-  _sourceCache = theSourceCache
+  _caller = 0
 }
 
 run :: Text -> Text -> Text -> IO ()
@@ -510,9 +517,9 @@ opSize _                          = 1
 mkOpIxMap :: ByteString -> Vector Int
 mkOpIxMap xs = Vector.create $ new (BS.length xs) >>= \v ->
   -- Loop over the byte string accumulating a vector-mutating action.
-  -- This is somewhat obfuscated, but fast.
+  -- This is somewhat obfuscated, but should be fast.
   let (_, _, _, m) =
-        BS.foldl' (\x y -> (go v x y)) (0 :: Word8, 0, 0, return ()) xs
+        BS.foldl' (go v) (0 :: Word8, 0, 0, return ()) xs
   in m >> return v
   where
     go v (0, !i, !j, !m) x | x >= 0x60 && x <= 0x7f =

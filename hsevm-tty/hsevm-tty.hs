@@ -81,7 +81,7 @@ repl ui = do
             Just bp -> do
               say "Breakpoint set.  Matching code found in contracts:"
               cpprint $
-                map (\(h, _) -> ui ^?! uiVm . _Just . solc . ix h . name)
+                map (\(h, _) -> ui ^?! uiVm . _Just . env . solc . ix h . name)
                   (filter (\(_, w) -> Vector.elem True w) bp)
               repl (ui & uiBreakpoints %~ (bp ++))
 
@@ -102,8 +102,8 @@ repl ui = do
             Nothing -> say "VM not created yet."
             Just vm ->
               let
-                c = vm ^?! contracts . ix (vm ^. contract)
-                solC = vm ^? solc . ix (c ^. codehash)
+                c = vm ^?! env . contracts . ix (vm ^. contract)
+                solC = vm ^? env . solc . ix (c ^. codehash)
               in cpprint (
                 ("pc", vm ^. pc),
                 ("stack", vm ^. stack),
@@ -146,8 +146,8 @@ step behavior ui k =
         say "Execution finished."
         repl ui
       else let
-        c = vm ^?! contracts . ix (vm ^. contract)
-        solcC = vm ^?! solc . ix (c ^. codehash)
+        c = vm ^?! env . contracts . ix (vm ^. contract)
+        solcC = vm ^?! env . solc . ix (c ^. codehash)
         ch = c ^. codehash
         bps = filter (\(h, _) -> h == ch) (ui ^. uiBreakpoints)
         theOpIx = (c ^. opIxMap) Vector.! (vm ^. pc)
@@ -164,10 +164,10 @@ step behavior ui k =
 currentSrcMap :: VM -> Maybe SrcMap
 currentSrcMap vm =
   let
-    c = vm ^?! contracts . ix (vm ^. contract)
+    c = vm ^?! env . contracts . ix (vm ^. contract)
     theOpIx = (c ^. opIxMap) Vector.! (vm ^. pc)
   in
-    vm ^? solc . ix (c ^. codehash) . solcSrcmap . ix (theOpIx)
+    vm ^? env . solc . ix (c ^. codehash) . solcSrcmap . ix (theOpIx)
 
 srcMapCodePos :: UIState -> SrcMap -> Maybe (Text, Int)
 srcMapCodePos ui sm =
@@ -184,7 +184,7 @@ locateBreakpoint ui fileName lineNo = do
       l = ls !! (lineNo - 1)
       offset = 1 + sum (map ((+ 1) . BS.length) (take (lineNo - 1) ls))
       horizon = offset + BS.length l
-  return $ Map.elems (ui ^. uiVm . _Just . solc)
+  return $ Map.elems (ui ^. uiVm . _Just . env . solc)
     & map (\c -> (
         c ^. solcCodehash,
         Vector.create $ new (Seq.length (c ^. solcSrcmap)) >>= \v -> do
