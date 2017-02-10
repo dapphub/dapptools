@@ -8,11 +8,11 @@ mk .gitignore <<.
 /build
 .
 mk Makefile <<.
-all:; dapp make
-test:; dapp test
+all  :; dapp make
+test :; dapp test
 .
 mk src/Makefile <<.
-all:; \$(MAKE) -C ..
+all :; \$(MAKE) -C ..
 .
 mk ERC190.json <<.
 {

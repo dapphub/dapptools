@@ -1,1 +1,17 @@
-Type `make link' to install dapp(1).
+INSTALLATION
+
+   make link                  install dapp(1)
+   make install               install dapp(1) by copying, not linking
+   make uninstall             uninstall dapp(1)
+                              
+USAGE                         
+                              
+   dapp init                  initialize a new dapp
+   dapp make                  compile your dapp
+   dapp test                  test your dapp
+                              
+   dapp install <pkg>         install the <pkg> package (e.g. `ds-auth')
+   dapp update <pkg>          update the <pkg> package
+   dapp uninstall <pkg>       uninstall the <pkg> package
+                              
+   dapp publish               publish your dapp as a package
