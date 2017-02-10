@@ -1,17 +1,22 @@
 #!/usr/bin/env bash
-set -x -o noclobber
-git init
-mk() { cat >$1; git add $1; }
+set -o noclobber
+mk() { cat >$1; (set -x; git add $1); }
+name=$(basename $(pwd))
+(set -x; git init)
+(set -x; mkdir -p lib src)
 mk .gitignore <<.
 /build
 .
 mk Makefile <<.
-all:; dapp build
+all:; dapp make
 test:; dapp test
+.
+mk src/Makefile <<.
+all:; \$(MAKE) -C ..
 .
 mk ERC190.json <<.
 {
-  "package_name": "$(basename $(pwd))",
+  "package_name": "$name",
   "version": "0.1.0",
   "meta": {
     "description": "",
@@ -27,5 +32,5 @@ mk ERC190.json <<.
   }
 }
 .
-mkdir -p lib src
-dapp --save "$0" "$@"
+dapp --save "$0" "$name"
+echo OK.
