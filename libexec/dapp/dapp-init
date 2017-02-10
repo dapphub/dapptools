@@ -5,7 +5,7 @@ name=$(basename $(pwd))
 (set -x; git init)
 (set -x; mkdir -p lib src)
 mk .gitignore <<.
-/build
+/src.out
 .
 mk Makefile <<.
 all  :; dapp make
@@ -14,23 +14,13 @@ test :; dapp test
 mk src/Makefile <<.
 all :; \$(MAKE) -C ..
 .
-mk ERC190.json <<.
-{
-  "package_name": "$name",
-  "version": "0.1.0",
-  "meta": {
-    "description": "",
-    "license": "",
-    "authors": [
-    ],
-    "keywords": [
-    ]
-  },
-  "dependencies": {
-  },
-  "deployments": {
-  }
-}
+mk Dappfile <<.
+name            $name
+description
+version         0.0.1
+
+author          $(whoami)
+license         Apache-2.0
 .
 dapp --save "$0" "$name"
 echo OK.

@@ -1,0 +1,54 @@
+#!/usr/bin/env node
+var DAPP_OUT = process.env.DAPP_OUT
+
+var basename = x => x.replace(/\..*?$/, "")
+var cat      = x => require("fs").readFileSync(x, { encoding: "utf-8" })
+var format   = x => JSON.stringify(x, null, 2)
+var lines    = x => x ? x.split("\n") : []
+var ls       = x => require("fs").readdirSync(x)
+var merge    = (...xs) => Object.assign({}, ...xs)
+var uniq     = xs => [...new Set(xs)]
+
+var dapp = lines(cat("Dappfile"))
+.filter (x => /^[^#]/.test(x))
+.map    (x => x.match(/^(\S+)(.*)/))
+.reduce ((a, [m, k, v]) => ((a[k] = a[k] || []).push(v.trim()), a), {})
+
+console.log(format({
+  lockfile_version : "1",
+
+  package_name : dapp.name[0],
+  version      : dapp.version[0],
+
+  meta: {
+    description : dapp.description[0],
+    license     : dapp.license[0],
+    authors     : dapp.author,
+    keywords    : dapp.keyword,
+  },
+
+  build_dependencies: {
+    // TODO
+  },
+
+  dependencies: {
+    // TODO
+  },
+
+  sources: {
+    // TODO
+  },
+
+  deployments: {
+    // TODO
+  },
+
+  contract_types: merge(...uniq(ls(DAPP_OUT).map(basename)).map(name => ({
+    [name]: {
+      contract_name    : name,
+      abi              : JSON.parse(cat(`${DAPP_OUT}/${name}.abi`)),
+      bytecode         : cat(`${DAPP_OUT}/${name}.bin`),
+      runtime_bytecode : cat(`${DAPP_OUT}/${name}.bin-runtime`),
+    }
+  }))),
+}))
