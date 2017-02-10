@@ -637,3 +637,27 @@ word32Bytes x = BS.pack [byteAt x (3 - i) | i <- [0..3]]
 --   0xf4 -> OpDelegatecall
 --   0xf5 -> OpSuicide
 --   _    -> (OpUnknown x)
+
+{-
+  Unimplemented:
+    addmod
+    address
+    balance
+    blockhash
+    byte
+    callcode
+    coinbase
+    delegatecall
+    difficulty
+    gaslimit
+    gasprice
+    msize
+    mulmod
+    number
+    origin
+    sdiv
+    signextend
+    smod
+    suicide
+    xor
+-}    
