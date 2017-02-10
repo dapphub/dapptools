@@ -450,20 +450,12 @@ checkJump vm x =
   then return $! vm & pc .~ num x
   else error "bad jump destination"
 
-initialVm :: ByteString -> Word256 -> ByteString -> Map Text SolcContract -> SourceCache -> VM
-initialVm theCalldata theCallvalue theCode theSolc theSourceCache = VM {
+initialVm :: ByteString -> Word256 -> Text -> Map Text SolcContract -> SourceCache -> VM
+initialVm theCalldata theCallvalue theContractName theSolc theSourceCache = VM {
   _done = False,
   _env = Env {
     _contracts = Map.fromList [
-      (123, Contract {
-        _code = theCode,
-        _codesize = BS.length theCode,
-        _codehash = keccak theCode,
-        _storage = mempty,
-        _balance = 0,
-        _nonce = 0,
-        _opIxMap = mkOpIxMap theCode
-      })
+      (123, initialContract (theSolc ^?! ix theContractName . runtimeCode))
     ],
     _solc = Map.fromList [(x ^. solcCodehash,  x) | x <- Map.elems theSolc],
     _sha3Crack = mempty,
@@ -471,7 +463,7 @@ initialVm theCalldata theCallvalue theCode theSolc theSourceCache = VM {
   },
   _contract = 123,
   _pc = 0,
-  _vmCode = theCode,
+  _vmCode = theSolc ^?! ix theContractName . runtimeCode,
   _stack = mempty,
   _memory = mempty,
   _calldata = theCalldata,
@@ -484,7 +476,7 @@ run :: Text -> Text -> Text -> IO ()
 run file contractName abi = do
   Just (c, cache) <- readSolc (Text.unpack file)
   exec (initialVm (word32Bytes $ abiKeccak (encodeUtf8 abi)) 0
-    (c ^?! ix contractName . runtimeCode) c cache)
+    contractName c cache)
 
 -- Copied from the standard library just to get specialization.
 -- We also use bit operations instead of modulo and multiply.

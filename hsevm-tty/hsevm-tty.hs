@@ -124,7 +124,7 @@ setEntry ui contractName abiEntry =
     vm = initialVm
            (word32Bytes (abiKeccak (encodeUtf8 abiEntry)))
            0
-           (ui ^?! uiContracts . ix contractName . runtimeCode)
+           contractName
            (ui ^. uiContracts)
            (ui ^. uiSourceCache)
   in do
