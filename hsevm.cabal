@@ -27,6 +27,7 @@ library
   build-depends:
     aeson,
     base >=4.9 && <4.10,
+    binary,
     bytestring,
     containers,
     criterion,
