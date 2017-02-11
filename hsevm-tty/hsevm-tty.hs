@@ -16,10 +16,10 @@ import Control.Lens
 import Control.Monad
 import Data.DoubleWord
 import Data.Function (fix)
-import Data.List
+import Data.List (sort, find, foldl')
 import Data.Map.Strict (Map)
 import Data.Sequence (Seq)
-import Data.Text (Text)
+import Data.Text (Text, isPrefixOf)
 import Data.Text.Encoding (encodeUtf8)
 import Data.Vector.Unboxed (Vector)
 import Data.Vector.Unboxed.Mutable (new, write)
@@ -73,6 +73,17 @@ repl ui = do
                 putStrLn $ "  " ++ Text.unpack k ++ "   hash " ++ show v
           repl ui
 
+        ["test", x] -> do
+          case ui ^? uiContracts . ix x of
+            Nothing -> say "error: No such contract."
+            Just c ->
+              case unitTestMethods c of
+                [] -> say "error: No unit tests to run."
+                methods -> forM_ methods $ \m -> do
+                  say $ "Running " ++ Text.unpack (c ^. name) ++ "::" ++ Text.unpack m
+                  exec (vmForEntryPoint ui (c ^. name) m)
+          repl ui
+
         ["break", fileName, lineNo] -> do
           case locateBreakpoint ui fileName (read (Text.unpack lineNo)) of
             Nothing -> do
@@ -120,16 +131,14 @@ repl ui = do
 
 setEntry :: UIState -> Text -> Text -> IO ()
 setEntry ui contractName abiEntry =
-  let
-    vm = initialVm
-           (word32Bytes (abiKeccak (encodeUtf8 abiEntry)))
-           0
-           contractName
-           (ui ^. uiContracts)
-           (ui ^. uiSourceCache)
-  in do
-    say $ "Entry set to `" ++ Text.unpack contractName ++ "::" ++ Text.unpack abiEntry ++ "'."
-    repl (ui & uiVm .~ Just vm)
+  do say $ "Entry set to `" ++ Text.unpack contractName ++ "::" ++ Text.unpack abiEntry ++ "'."
+     repl (ui & uiVm .~ Just (vmForEntryPoint ui contractName abiEntry))
+
+vmForEntryPoint :: UIState -> Text -> Text -> VM
+vmForEntryPoint ui contractName abiEntry =
+  initialVm
+    (word32Bytes (abiKeccak (encodeUtf8 abiEntry)))
+    0 contractName (ui ^. uiContracts) (ui ^. uiSourceCache)
 
 data Behavior = StopOnBreakpoint | SingleStep | DoNotStop
   deriving (Show, Eq)
@@ -208,6 +217,12 @@ main = do
       Just (c, cache) <- readSolc a
       say $ "Loaded " ++ show (Map.size c) ++ " contracts from `" ++ a ++ "':"
       cpprint (Map.keys c)
+      let unitTests = findUnitTests (Map.elems c)
+      when (not (null unitTests)) $ do
+        say ""
+        say $ "Found " ++ show (length unitTests) ++ " unit test classes:"
+        say $ "  " ++ Text.unpack (Text.intercalate ", " (map fst unitTests))
+      say ""
       repl UIState {
         _uiVm = Nothing,
         _uiContracts = c,
@@ -215,3 +230,23 @@ main = do
         _uiBreakpoints = mempty
       }
     _ -> die "usage: hsevm <solc>"
+
+unitTestMarkerAbi :: Word32
+unitTestMarkerAbi = abiKeccak (encodeUtf8 "IS_TEST()")
+
+findUnitTests :: [SolcContract] -> [(Text, [Text])]
+findUnitTests = concatMap f where
+  f c =
+    case c ^? abiMap . ix unitTestMarkerAbi of
+      Nothing -> []
+      Just _  ->
+        let testNames = unitTestMethods c
+        in if null testNames
+           then []
+           else [(c ^. name, testNames)]
+
+unitTestMethods :: SolcContract -> [Text]
+unitTestMethods c = sort (filter (isUnitTestName) (Map.elems (c ^. abiMap)))
+  where
+    isUnitTestName s =
+      "test_" `isPrefixOf` s -- || "testFail_" `isPrefixOf` s
