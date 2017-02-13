@@ -6,12 +6,12 @@ INSTALLATION
                               
 USAGE                         
                               
-   dapp init                  initialize a new dapp
-   dapp make                  compile your dapp
-   dapp test                  test your dapp
+   dapp init                  create a new dapp in 
+   dapp build                 compile your dapp's source code
+   dapp test                  run the test suite for your dapp
                               
    dapp install <pkg>         install the <pkg> package (e.g. `ds-auth')
-   dapp update <pkg>          update the <pkg> package
+   dapp upgrade <pkg>         upgrade the <pkg> package
    dapp uninstall <pkg>       uninstall the <pkg> package
                               
-   dapp publish               publish your dapp as a package
+   dapp publish               publish to https://www.ethpm.com/

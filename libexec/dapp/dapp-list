@@ -1,0 +1,5 @@
+#!/bin/sh -e
+result=$(seth call @ethpm_index \
+"getAllPackageReleaseHashes(string)(bytes32[])" \
+"${1?missing package name}")
+printf "0x%s\n" ${result//[^a-f0-9]/ }

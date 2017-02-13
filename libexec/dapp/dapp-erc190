@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 var DAPP_OUT = process.env.DAPP_OUT
+var DAPP_SRC = process.env.DAPP_SRC
 
 var basename = x => x.replace(/\..*?$/, "")
 var cat      = x => require("fs").readFileSync(x, { encoding: "utf-8" })
@@ -10,9 +11,37 @@ var merge    = (...xs) => Object.assign({}, ...xs)
 var uniq     = xs => [...new Set(xs)]
 
 var dapp = lines(cat("Dappfile"))
-.filter (x => /^[^#]/.test(x))
+.filter (x => /^[^#].*\S/.test(x))
 .map    (x => x.match(/^(\S+)(.*)/))
 .reduce ((a, [m, k, v]) => ((a[k] = a[k] || []).push(v.trim()), a), {})
+
+if (!dapp.name.length) {
+  console.error("error: Dappfile: missing name")
+  process.exit(1)
+}
+
+if (!dapp.version.length) {
+  console.error("error: Dappfile: missing version")
+  process.exit(1)
+}
+
+try {
+  if (!require("fs").lstatSync("src").isDirectory()) {
+    throw new Error
+  }
+} catch (error) {
+  console.error("error: missing `src' directory")
+  process.exit(1)
+}
+
+try {
+  if (!require("fs").lstatSync("src.out").isDirectory()) {
+    throw new Error
+  }
+} catch (error) {
+  console.error("error: missing `src.out' directory")
+  process.exit(1)
+}
 
 console.log(format({
   lockfile_version : "1",
@@ -21,8 +50,8 @@ console.log(format({
   version      : dapp.version[0],
 
   meta: {
-    description : dapp.description[0],
-    license     : dapp.license[0],
+    description : (dapp.description || [])[0],
+    license     : (dapp.license || [])[0],
     authors     : dapp.author,
     keywords    : dapp.keyword,
   },
@@ -31,13 +60,9 @@ console.log(format({
     // TODO
   },
 
-  dependencies: {
-    // TODO
-  },
-
-  sources: {
-    // TODO
-  },
+  sources: merge(...ls(DAPP_SRC).filter(x => /\.sol$/.test(x)).map(name => ({
+    [`./${DAPP_SRC}/${name}`]: cat(`./${DAPP_SRC}/${name}`),
+  }))),
 
   deployments: {
     // TODO

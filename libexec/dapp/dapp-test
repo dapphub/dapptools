@@ -1,3 +1,2 @@
-#!/usr/bin/env bash
-set -e && shopt -s nullglob
-# for x in src/*; do (set -x; dapple-quicktest "$x"); done
+#!/bin/sh -e
+dapple-quicktest "$DAPP_OUT"

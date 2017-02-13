@@ -1,0 +1,9 @@
+#!/bin/sh -e
+types=uint32,uint32,uint32,string,string,string,uint256,uint256
+sig="getReleaseData(bytes32)($types)"
+values=$(seth call @ethpm_index "$sig" "${1?missing release hash}")
+names="major minor patch alpha build lockfile created updated"
+for name in $names; do
+  read $name
+  echo $name ${!name}
+done <<<"$values"

@@ -1,1 +1,30 @@
-#!/usr/bin/env node
+#!/usr/bin/env bash
+set -e -o pipefail
+lockfile=$(dapp erc190)
+hash=$(ipfs add -q <<<"$lockfile")
+sig="release(string,uint32,uint32,uint32,string,string,string)(bool)"
+name=$(grep '^name ' Dappfile | awk '{ print $2 }')
+version=$(grep '^version ' Dappfile | awk '{ print $2 }')
+if [[ $version = *.*.* ]]; then
+  version=(${version//./ })
+  version=("${version[@]:0:3}")
+else
+  echo >&2 "${0##*/}: error: ${version}: only semver supported"
+  exit 1
+fi
+values=("$name" "${version[@]}" "" "ipfs://$hash")
+
+if ! [[ $ETH_FROM || $SETH_FROM ]]; then
+  echo >&2 "${0##*/}: error: please set \`ETH_FROM' to publish packages"
+  exit 1
+fi
+version=${version[*]} version=${version// /.}
+echo "Publishing $name-$version to package index on $(seth chain)..."
+ok=$(ETH_GAS=1000000 seth send @ethpm_index "$sig" "${values[@]}")
+if [[ $ok = true ]]; then
+  echo "OK."
+else
+  echo "[[$ok]]"
+  echo >&2 "${0##*/}: error: failed to publish lockfile to package index"
+  exit 1
+fi

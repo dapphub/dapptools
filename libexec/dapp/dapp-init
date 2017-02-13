@@ -5,11 +5,11 @@ name=$(basename $(pwd))
 (set -x; git init)
 (set -x; mkdir -p lib src)
 mk .gitignore <<.
-/src.out
+*.out
 .
 mk Makefile <<.
-all  :; dapp make
-test :; dapp test
+all:; dapp build
+test: all; dapp test
 .
 mk src/Makefile <<.
 all :; \$(MAKE) -C ..
