@@ -9,7 +9,7 @@ mk .gitignore <<.
 .
 mk Makefile <<.
 all:; dapp build
-test: all; dapp test
+test:; dapp test
 .
 mk Dappfile <<.
 name            $name
