@@ -5,7 +5,7 @@ name=$(basename $(pwd))
 (set -x; git init)
 (set -x; mkdir -p lib src)
 mk .gitignore <<.
-*.out
+/out
 .
 mk Makefile <<.
 all:; dapp build

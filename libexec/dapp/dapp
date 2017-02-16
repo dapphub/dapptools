@@ -1,7 +1,7 @@
 #!/bin/sh -e
 export DAPP_SRC=${DAPP_SRC-src}
 export DAPP_LIB=${DAPP_LIB-lib}
-export DAPP_OUT=$DAPP_SRC.out
+export DAPP_OUT=${DAPP_OUT-out}
 export ROPSTEN_ETHPM_INDEX=0x8011df4830b4f696cd81393997e5371b93338878
 
 "${0##*/}-${1-help}" "${@:2}"

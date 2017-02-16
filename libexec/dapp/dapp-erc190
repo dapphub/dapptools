@@ -26,20 +26,20 @@ if (!dapp.version.length) {
 }
 
 try {
-  if (!require("fs").lstatSync("src").isDirectory()) {
+  if (!require("fs").lstatSync(DAPP_SRC).isDirectory()) {
     throw new Error
   }
 } catch (error) {
-  console.error("error: missing `src' directory")
+  console.error(`error: missing \`${DAPP_SRC}' directory`)
   process.exit(1)
 }
 
 try {
-  if (!require("fs").lstatSync("src.out").isDirectory()) {
+  if (!require("fs").lstatSync(DAPP_OUT).isDirectory()) {
     throw new Error
   }
 } catch (error) {
-  console.error("error: missing `src.out' directory")
+  console.error(`error: missing \`${DAPP_OUT}' directory`)
   process.exit(1)
 }
 
