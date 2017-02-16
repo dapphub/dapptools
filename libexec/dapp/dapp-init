@@ -11,9 +11,6 @@ mk Makefile <<.
 all:; dapp build
 test: all; dapp test
 .
-mk src/Makefile <<.
-all :; \$(MAKE) -C ..
-.
 mk Dappfile <<.
 name            $name
 description
@@ -22,5 +19,6 @@ version         0.0.1
 author          $(whoami)
 license         Apache-2.0
 .
-dapp --save "$0" "$name"
+git add -A
+dapp --commit "$0" "$name"
 echo OK.
