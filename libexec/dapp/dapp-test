@@ -1,3 +1,3 @@
 #!/bin/sh -e
 dapp build
-dapple-quicktest "$DAPP_OUT"
+(set -x; dapple-quicktest "$DAPP_OUT")
