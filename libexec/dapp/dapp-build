@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
 set -e && shopt -s nullglob
-mkdir -p "$DAPP_OUT"
 solc=(solc $SOLC_FLAGS --abi --bin --bin-runtime = -o "$DAPP_OUT")
 for x in $DAPP_LIB/*; do solc+=("${x#$DAPP_LIB/}=$x/$DAPP_SRC"); done
 for x in $DAPP_SRC/*.sol; do (set -x; "${solc[@]}" "$x"); done
