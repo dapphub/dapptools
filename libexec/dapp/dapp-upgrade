@@ -1,4 +1,7 @@
 #!/bin/sh -e
 dapp --sanity "$0"
-(set -x; git -C "lib/${1?}" submodule update --init --recursive --remote)
+(set -x; git -C "lib/${1?}" checkout master)
+(set -x; git -C "lib/${1?}" pull origin master)
+(set -x; git add "lib/${1?}")
 (set -x; git commit -m "${0##*/} $1")
+(set -x; git submodule update --init --recursive)
