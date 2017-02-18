@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
 set -e -o pipefail && shopt -s nullglob
 solc=(solc $SOLC_FLAGS --abi --bin --bin-runtime = -o "$DAPP_OUT")
-tree-hash() (cd "$1"; find | xargs shasum | shasum | awk '{print $1}')
 
 declare -A pkg_src
 declare -A pkg_hash
 
 find-remappings() for pkg in $prefix${prefix+/}$DAPP_LIB/*; do
-  name=${pkg##*/} src=$pkg/$DAPP_SRC
-  hash=$(tree-hash "$src")
+  name=${pkg##*/}
+  src=$pkg/$DAPP_SRC
+  hash=$(git -C "$src" rev-parse HEAD)
 
   if [[ ${pkg_src[$name]} ]]; then
     if [[ $hash != ${pkg_hash[$name]} ]]; then
@@ -22,7 +22,7 @@ find-remappings() for pkg in $prefix${prefix+/}$DAPP_LIB/*; do
     pkg_hash[$name]=$hash
   fi
 
-  prefix=$prefix${prefix+/}$pkg find-remappings
+  prefix=$pkg find-remappings
 done
 
 find-remappings
