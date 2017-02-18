@@ -1,5 +1,36 @@
 #!/usr/bin/env bash
-set -e && shopt -s nullglob
+set -e -o pipefail && shopt -s nullglob
 solc=(solc $SOLC_FLAGS --abi --bin --bin-runtime = -o "$DAPP_OUT")
-for x in $DAPP_LIB/*; do solc+=("${x#$DAPP_LIB/}=$x/$DAPP_SRC"); done
-for x in $DAPP_SRC/*.sol; do (set -x; "${solc[@]}" "$x"); done
+tree-hash() (cd "$1"; find | xargs shasum | shasum | awk '{print $1}')
+
+declare -A pkg_src
+declare -A pkg_hash
+
+find-remappings() for pkg in $prefix${prefix+/}$DAPP_LIB/*; do
+  name=${pkg##*/} src=$pkg/$DAPP_SRC
+  hash=$(tree-hash "$src")
+
+  if [[ ${pkg_src[$name]} ]]; then
+    if [[ $hash != ${pkg_hash[$name]} ]]; then
+      echo >&2 "${0##*/}: error: mismatching packages:"
+      echo >&2 "${0##*/}: error: (1) ${pkg_src[$name]}"
+      echo >&2 "${0##*/}: error: (2) $src"
+      exit 1
+    fi
+  else
+    pkg_src[$name]=$src
+    pkg_hash[$name]=$hash
+  fi
+
+  prefix=$prefix${prefix+/}$pkg find-remappings
+done
+
+find-remappings
+
+for name in "${!pkg_src[@]}"; do
+  solc+=("$name=${pkg_src[$name]}")
+done
+
+for x in $DAPP_SRC/*.sol; do
+  (set -x; "${solc[@]}" "$x")
+done

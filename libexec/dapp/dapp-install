@@ -1,6 +1,6 @@
 #!/bin/sh -e
 dapp --sanity "$0"
 url=https://github.com/dapphub/${1?missing package name}
-(set -x; git submodule add "$url" "lib/$1")
+(set -x; git submodule add --force "$url" "lib/$1")
 (set -x; git submodule update --init --recursive)
 dapp --commit "$0" "$@"
