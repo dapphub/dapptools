@@ -1,0 +1,44 @@
+#!/usr/bin/env node
+var pkg_src = {}, pkg_hash = {}
+
+findRemappings(".")
+
+Object.keys(pkg_src).forEach(name => {
+  console.log(`${name}=${pkg_src[name]}`)
+})
+
+function findRemappings(prefix) {
+  return ls(`${prefix}/${process.env.DAPP_LIB}`).forEach(name => {
+    var lib = `${prefix}/${process.env.DAPP_LIB}`
+    var src = `${lib}/${name}/${process.env.DAPP_SRC}`
+    var hash = run("git", ["-C", src, "rev-parse", "HEAD"])
+  
+    if (pkg_src[name]) {
+      if (hash != pkg_hash[name]) {
+        console.error(`${PROGRAM_NAME}: error: mismatching packages:`)
+        console.error(`${PROGRAM_NAME}: error: (1) ${pkg_src[name]}`)
+        console.error(`${PROGRAM_NAME}: error: (2) ${src}`)
+        process.exit(1)
+      }
+    } else {
+      pkg_src[name] = src.replace(/^.\//, "")
+      pkg_hash[name] = hash
+    }
+  
+    findRemappings(`${lib}/${name}`)
+  })
+}
+
+function ls(dir) {
+  try {
+    return require("fs").readdirSync(dir)
+  } catch (error) {
+    return []
+  }
+}
+
+function run(cmd, args) {
+  return require("child_process").execFileSync(cmd, args, {
+    encoding: "utf-8"
+  })
+}

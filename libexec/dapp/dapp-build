@@ -1,36 +1,6 @@
 #!/usr/bin/env bash
 set -e -o pipefail && shopt -s nullglob
 solc=(solc $SOLC_FLAGS --abi --bin --bin-runtime = -o "$DAPP_OUT")
-
-declare -A pkg_src
-declare -A pkg_hash
-
-find-remappings() for pkg in $prefix${prefix+/}$DAPP_LIB/*; do
-  name=${pkg##*/}
-  src=$pkg/$DAPP_SRC
-  hash=$(git -C "$src" rev-parse HEAD)
-
-  if [[ ${pkg_src[$name]} ]]; then
-    if [[ $hash != ${pkg_hash[$name]} ]]; then
-      echo >&2 "${0##*/}: error: mismatching packages:"
-      echo >&2 "${0##*/}: error: (1) ${pkg_src[$name]}"
-      echo >&2 "${0##*/}: error: (2) $src"
-      exit 1
-    fi
-  else
-    pkg_src[$name]=$src
-    pkg_hash[$name]=$hash
-  fi
-
-  prefix=$pkg find-remappings
-done
-
-find-remappings
-
-for name in "${!pkg_src[@]}"; do
-  solc+=("$name=${pkg_src[$name]}")
-done
-
-for x in $DAPP_SRC/*.sol; do
-  (set -x; "${solc[@]}" "$x")
-done
+remappings=$(dapp remappings)
+while read line; do solc+=("$line"); done <<<"$remappings"
+for x in $DAPP_SRC/*.sol; do (set -x; "${solc[@]}" "$x"); done
