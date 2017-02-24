@@ -18,6 +18,6 @@ jshon+=(-n {})
 jshon+=(-s "$receiver" -i to)
 jshon+=(-s "$data" -i data)
 jshon+=($(seth --send-params))
-jshon+=(-i append)
-jshon+=(-s "${SETH_BLOCK-latest}" -i append)
+jshon+=(-iappend)
+jshon+=(-s "${SETH_BLOCK-latest}" -iappend)
 seth --jsonrpc eth_estimateGas "${jshon[@]}"

@@ -2,4 +2,4 @@
 ### seth-keccak -- print the Keccak hash of an arbitrary piece of data
 set -e
 [[ $# = 1 ]] || seth --bad-usage "$0"
-seth --jsonrpc web3_sha3 -s "$1" -iappend
+seth --jsonrpc web3_sha3 -s "$1" -i append

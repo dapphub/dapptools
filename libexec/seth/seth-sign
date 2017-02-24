@@ -6,6 +6,6 @@ set -e
 [[ $# = 1 ]] || seth --bad-usage "$0"
 SENDER=$(seth --to-address "${SETH_FROM?missing sender}")
 DATA=$(seth --to-hexdata "$1")
-jshon+=(-s "$SENDER" -iappend)
-jshon+=(-s "$DATA" -iappend)
+jshon+=(-s "$SENDER" -i append)
+jshon+=(-s "$DATA" -i append)
 seth --jsonrpc eth_sign "${jshon[@]}"

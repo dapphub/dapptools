@@ -8,8 +8,8 @@ set -e
 [[ $1 ]] || seth --bad-usage "$0"
 account=$1
 [[ $account = @* ]] && account=$(seth --lookup "$account")
-jshon+=(-s "$account" -iappend)
-jshon+=(-s "${SETH_BLOCK-latest}" -iappend)
+jshon+=(-s "$account" -i append)
+jshon+=(-s "${SETH_BLOCK-latest}" -i append)
 balance=$(seth --jsonrpc eth_getBalance "${jshon[@]}")
 [[ $balance = 0x* ]] && balance=$(seth --to-dec "$balance")
 seth --to-eth "$balance"

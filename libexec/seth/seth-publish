@@ -6,5 +6,5 @@
 ### If no <txdata> is given, read it from standard input instead.
 set -e
 txdata=$(seth --to-hexdata "$@")
-jshon+=(-s "$txdata" -iappend)
+jshon+=(-s "$txdata" -i append)
 seth --jsonrpc eth_sendRawTransaction "${jshon[@]}"
