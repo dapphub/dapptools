@@ -8,7 +8,7 @@ set -e
 [[ $1 = *"("*"("* ]] || exec seth --to-hex "$2"
 
 name=${1%%"("*}
-abi=$(seth --abi-json "$1")
+abi=$(seth --abi-function-json "$1")
 result=$(
   [[ $SETH_DEBUG_ETHABI ]] && set -x
   ethabi decode function <(echo "$abi") "$name" "${2#0x}"

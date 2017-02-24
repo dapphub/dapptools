@@ -1,0 +1,17 @@
+#!/usr/bin/env node
+/// seth---abi-function-json -- print the ABI of a function in JSON format
+/// Usage: seth --abi-function-json <sig>
+var PROGRAM = process.argv[1].replace(/.*\//, "")
+var sig = process.argv[2], match
+
+if (match = sig.match(/^([^()]+)\(([^()]*)\)(?:\(([^()]*)\))?$/)) {
+  var [, name, inputs, outputs] = match
+  var num = 0, param = type => ({ name: `x${++num}`, type })
+  console.log(JSON.stringify([{
+    name, type: "function", inputs: inputs.split(",").map(param),
+    outputs: (outputs ? outputs.split(",") : []).map(param),
+  }], null, 2))
+} else {
+  console.error(`${PROGRAM}: error: bad signature: ${sig}`)
+  process.exit(1)
+}

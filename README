@@ -23,8 +23,7 @@ List of user commands:
   Usage: seth --abi-event-json <sig>
   Print the ABI of an event in JSON format.
 
-  [TODO: Rename to `--abi-function-json'.]
-  Usage: seth --abi-json <sig>
+  Usage: seth --abi-function-json <sig>
   Print the ABI of a function in JSON format.
 
   Usage: seth accounts
