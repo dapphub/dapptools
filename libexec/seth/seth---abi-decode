@@ -3,8 +3,6 @@
 ### Usage: seth --abi-decode <name>(<in-types>)(<out-types>) <hexdata>
 ### Decode <hexdata> according to <out-types> (<in-types> are ignored).
 set -e
-
-# If there are no <out-types>, just print <hexdata> and exit:
 [[ $1 = *"("*"("* ]] || exec seth --to-hex "$2"
 
 name=${1%%"("*}

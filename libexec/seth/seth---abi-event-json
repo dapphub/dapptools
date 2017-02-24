@@ -1,21 +1,22 @@
-#!/usr/bin/env bash
-### seth---abi-event-json -- print the JSON ABI for a single event
-### Usage: seth --abi-event-json <sig>
-set -e
+#!/usr/bin/env node
+/// seth---abi-event-json -- print the ABI of an event in JSON format
+/// Usage: seth --abi-event-json <sig>
+var PROGRAM = process.argv[1].replace(/.*\//, "")
+var sig = process.argv[2], match
 
-if ! [[ $1 =~ ^([^\(]+)\(([^\(]*)\)$ ]]; then
-  echo >&2 "${0##*/}: error: bad signature: $1"
-  exit 1
-fi
+var parseParam = param => param.trim().replace(/\s+/, " ")
+.match(/^(\S+)(?: (indexed))?(?: (\S+))?$/)
 
-name=${BASH_REMATCH[1]}
-input_types=${BASH_REMATCH[2]//,/ }
-
-for type in $input_types; do
-  inputs_jshon+=(-n {} -s "x$((++n))" -i name -s "$type" -i type -i append)
-done
-
-jshon <<<[] -n {} \
--s "$name" -i name -s event -i type \
--n [] "${inputs_jshon[@]}" -i inputs \
--i append
+if (match = sig.match(/^([^()]+)\(([^()]*)\)$/)) {
+  var [, name, params] = match, num = 0
+  console.log(JSON.stringify([{
+    name, type: "event", outputs: [],
+    inputs: params.split(",").map(param => {
+      var [, type, indexed, name] = parseParam(param)
+      return { type, indexed: !!indexed, name: name || `x${++num}` }
+    }),
+  }], null, 2))
+} else {
+  console.error(`${PROGRAM}: error: bad signature: ${sig}`)
+  process.exit(1)
+}
