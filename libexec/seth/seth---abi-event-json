@@ -1,22 +1,2 @@
-#!/usr/bin/env node
-/// seth---abi-event-json -- print the ABI of an event in JSON format
-/// Usage: seth --abi-event-json <sig>
-var PROGRAM = process.argv[1].replace(/.*\//, "")
-var sig = process.argv[2], match
-
-var parseParam = param => param.trim().replace(/\s+/, " ")
-.match(/^(\S+)(?: (indexed))?(?: (\S+))?$/)
-
-if (match = sig.match(/^([^()]+)\(([^()]*)\)$/)) {
-  var [, name, params] = match, num = 0
-  console.log(JSON.stringify([{
-    name, type: "event", outputs: [],
-    inputs: params.split(",").map(param => {
-      var [, type, indexed, name] = parseParam(param)
-      return { type, indexed: !!indexed, name: name || `x${++num}` }
-    }),
-  }], null, 2))
-} else {
-  console.error(`${PROGRAM}: error: bad signature: ${sig}`)
-  process.exit(1)
-}
+#!/bin/sh -e
+seth abi "event $1;"
