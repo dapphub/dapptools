@@ -1,8 +1,7 @@
 INSTALLATION
 
-   make link                  install dapp(1)
-   make install               install dapp(1) by copying, not linking
-   make uninstall             uninstall dapp(1)
+   make link                  install dapp(1) into /usr/local
+   make uninstall             uninstall dapp(1) from /usr/local
                               
 USAGE                         
                               

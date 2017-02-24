@@ -1,0 +1,11 @@
+{
+  "name": "dapp-cli",
+  "version": "0.9.15",
+  "bin": {
+    "dapp": "bin/dapp"
+  },
+  "dependencies": {
+    "bignumber.js": "^3.0.1",
+    "ethereumjs-abi": "^0.6.4"
+  }
+}
