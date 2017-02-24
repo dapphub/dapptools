@@ -8,7 +8,11 @@
 set -e
 [[ $3 ]] && seth --bad-usage "$0"
 [[ $1 ]] || exec seth block-number
-block=$(seth get-block-by-number "$1")
+if [[ $1 = 0x* ]]; then
+  block=$(seth get-block-by-hash "$1")
+else
+  block=$(seth get-block-by-number "$1")
+fi
 [[ $block = null ]] && seth --error "$0" "no such block: $1"
 [[ $2 ]] && exec seth --field "$2" <<<"$block"
 echo "$block"

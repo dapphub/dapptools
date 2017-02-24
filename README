@@ -15,16 +15,16 @@ Report bugs to <https://github.com/dapphub/seth/issues/new>.
 
 List of user commands:
 
-  Usage: seth --abi-decode <name>(<in-types>)(<out-types>) <hexdata>
   [TODO: Rename to `--abi-decode-call'.]
   [TODO: Change the awkward `<name>(<in-types>)(<out-types>)' syntax?]
+  Usage: seth --abi-decode <name>(<in-types>)(<out-types>) <hexdata>
   Decode <hexdata> according to <out-types>, ignoring <in-types>.
 
   Usage: seth --abi-event-json <sig>
   Print the ABI of an event in JSON format.
 
-  Usage: seth --abi-json <sig>
   [TODO: Rename to `--abi-function-json'.]
+  Usage: seth --abi-json <sig>
   Print the ABI of a function in JSON format.
 
   Usage: seth accounts
@@ -33,21 +33,22 @@ List of user commands:
   Usage: seth age
   Report the age of the current block.
 
-  Usage: seth balance [-B <block>] <account>
   [TODO: Add `-h' option?]
+  Usage: seth balance [-B <block>] <account>
   Print the balance of <account> in ETH.
 
-  Usage: seth (block|block-number|number)
   [TODO: Remove `seth block' alias?]
   [TODO: Add <block> argument to find the number of a specific block?]
+  Usage: seth (block|block-number|number)
   Print the latest block number.
 
   [TODO: Allow <block> to be `current' (also defaulting to `latest')?]
+  [TODO: Allow setting the second parameter of `eth_getBlockByHash'?]
+  [TODO: Make <block> default to `latest'?]
   Usage: seth block [-j|--json] [<block>] [<field>]
   Print a table of information about <block> (a number, a hash or `latest').
   If <field> is given, print only that field.
   If no <block> is given, print the latest block number instead.
-  [TODO: Make <block> default to `latest'?]
 
   [TODO: Change <sig> syntax?]
   Usage: seth call [<options>] <receiver> <sig> [<args>]
