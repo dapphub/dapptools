@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-### seth-calldata -- pack function signatures and arguments into calldata
+### seth-calldata -- pack a signature and a list of arguments into calldata
 ### Usage: seth calldata <sig> [<args>]
 ###    or: seth calldata <data>
 ###

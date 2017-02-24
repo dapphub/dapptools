@@ -1,11 +1,10 @@
 #!/usr/bin/env bash
-### seth-block -- print general or specific information about a block
-### Usage: seth block [<block>] [<field>]
-### Show information about <block> (a number, a hash or `latest').
+### seth-block -- print a table of information about a specific block
+### Usage: seth block [-j|--json] [<block>] [<field>]
+### Print a table of information about <block>.
 ###
-### If no <block> is given, display blockchain sync status instead.
-### If <field> is given, print only that piece of information.
-### If no <field> is given, show all the fields in a big table.
+### If a <field> is given, print only that field.
+### If no <block> is given, print the current block number instead.
 set -e
 [[ $3 ]] && seth --bad-usage "$0"
 [[ $1 ]] || exec seth block-number

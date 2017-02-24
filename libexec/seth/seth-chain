@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+### seth-chain -- print the symbolic name of the current blockchain
+### Print the name of the current chain (`ropsten', `ethlive', `etclive').
+### This name is used for looking up symbolic addresses (like `@weth').
 set -e
 [[ $SETH_CHAIN ]] && exec echo $SETH_CHAIN
 genesis=$(seth genesis)

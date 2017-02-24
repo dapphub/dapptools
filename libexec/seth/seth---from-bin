@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 ### seth---from-bin -- convert binary data into hexdata
 ### Usage: seth --from-bin <data.bin >data.hex
-### Reads binary data from standard input and prints it as hexdata.
+### Read binary data from standard input and print it as hexdata.
 set -e
 hexdump=$(od -t x1)
 nibbles=$(sed "s/^[0-9]*//" <<<"$hexdump")
