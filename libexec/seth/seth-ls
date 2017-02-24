@@ -1,1 +1,7 @@
-seth-account
+#!/usr/bin/env bash
+### seth-ls -- display a list of your local accounts and balances
+set -e
+accounts=$(seth accounts)
+for x in $accounts; do
+  printf "%s\t%s\n" "$x" "$(seth balance "$x" || echo -)" &
+done | sort
