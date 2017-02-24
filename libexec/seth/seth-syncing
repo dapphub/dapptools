@@ -1,2 +1,5 @@
-#!/bin/sh -e
-seth --jsonrpc eth_syncing
+#!/usr/bin/env bash
+set -e
+syncing=$(seth --jsonrpc eth_syncing)
+# The return value is either `false' or a JSON object.
+[[ $syncing != false ]]

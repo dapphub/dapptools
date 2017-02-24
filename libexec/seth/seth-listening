@@ -1,2 +1,4 @@
-#!/bin/sh -e
-seth --jsonrpc net_listening
+#!/usr/bin/env bash
+set -e
+listening=$(seth --jsonrpc net_listening)
+[[ $listening = true ]]
