@@ -3,7 +3,7 @@
 ### Usage: seth logs [-B <block>] [--follow] <address>
 set -e
 jshon+=(-n {})
-jshon+=(-s "$(seth --to-address ${1?})" -i address)
+jshon+=(-s "$(seth --to-address "${1?}")" -i address)
 jshon+=(-s "${SETH_BLOCK-earliest}" -i fromBlock)
 jshon+=(-i append)
 id=$(seth --jsonrpc eth_newFilter "${jshon[@]}")

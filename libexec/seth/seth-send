@@ -63,4 +63,4 @@ info "${0##*/}: Transaction included in block $number."
 # equivalent call on the previous block will produce incorrect results
 # when multiple conflicting transactions are included in the same block.
 info "${0##*/}: note: return value may be inaccurate"
-seth -B "$((n - 1))" call "$TO" "$@"
+seth -B "$((number - 1))" call "$TO" "$@"

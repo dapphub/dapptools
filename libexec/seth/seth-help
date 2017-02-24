@@ -34,7 +34,7 @@ done
 
 list-commands() {
   grep -hoP "^(\\S)\\1\\1 $name-\\K[^ ]* -- .*" "$@" |
-  sed "s/ -- / /" | while read name label; do
+  sed "s/ -- / /" | while read -r name label; do
     printf "   %-14s  %s\n" "$name" "$label"
   done | LANG=C sort
 }

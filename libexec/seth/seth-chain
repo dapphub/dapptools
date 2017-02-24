@@ -3,7 +3,7 @@
 ### Print the name of the current chain (`ropsten', `ethlive', `etclive').
 ### This name is used for looking up symbolic addresses (like `@weth').
 set -e
-[[ $SETH_CHAIN ]] && exec echo $SETH_CHAIN
+[[ $SETH_CHAIN ]] && exec echo "$SETH_CHAIN"
 genesis=$(seth genesis)
 case $genesis in
   0xd4e56740f876aef8c010b86a40d5f56745a118d0906a34e69aec8c0db1cb8fa3)

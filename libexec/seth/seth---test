@@ -1,3 +1,0 @@
-#!/bin/sh -e
-seth --test-shellcheck "${0%/*}"/*
-seth --test-coverage --test-run "${0%/*}"/*.t
