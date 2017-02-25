@@ -1,6 +1,9 @@
-#!/bin/sh -e
+#!/usr/bin/env bash
 ### seth-abi -- convert an ABI from Solidity syntax to JSON form
 ### Usage: seth abi <solidity-fragment>
-[ $# = 1 ] || seth --bad-usage "$0"
-echo "pragma solidity ^0.4.8; contract A { $1 }" |
-solc --combined-json=abi | jshon -e contracts -e A -e abi -u
+set -e
+[[ $1 ]] || seth --bad-usage "$0"
+input="pragma solidity ^0.4.8; contract A { $1 }"
+output=$(solc --combined-json=abi <<<"$input")
+abi=$(jshon -e contracts -e A -e abi -u <<<"$output")
+seth --decorate-abi "$abi"

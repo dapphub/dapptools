@@ -1,0 +1,8 @@
+#!/usr/bin/env node
+var topic = process.argv[2]
+var abi = JSON.parse(process.env.SETH_ABI)
+var event = abi.filter(x => x.topic == topic)[0]
+
+if (event) {
+  console.log(event.name)
+}
