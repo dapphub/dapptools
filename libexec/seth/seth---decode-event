@@ -2,13 +2,13 @@
 set -e
 topics=($(jshon -e topics -a -u <<<"$1"))
 data=$(jshon -e data -u <<<"$1")
-name=$(seth --event-name "${topics[0]}")
-if [[ $name ]]; then
+event=$(seth --event-name "${topics[0]}")
+if [[ $event ]]; then
   for x in "${topics[@]}"; do ethabi+=(-l "${x#0x}"); done
   ethabi decode log <(echo "$SETH_ABI") \
-  "$name" "${ethabi[@]}" "${data#0x}" | {
-    while read -r name type value; do
-      jshon+=(-s "$value" -i "$name")
-    done; jshon <<<{} "${jshon[@]}" -j
+  "$event" "${ethabi[@]}" "${data#0x}" | {
+    while read -r param type value; do
+      jshon+=(-s "$value" -i "$param")
+    done; jshon <<<{} -s "$event" -i type "${jshon[@]}" -j
   }
 fi
