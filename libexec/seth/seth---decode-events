@@ -1,0 +1,2 @@
+#!/bin/sh -e
+while read -r event; do seth --decode-event "$event"; done
