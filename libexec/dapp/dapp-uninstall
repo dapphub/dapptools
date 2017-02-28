@@ -1,4 +1,5 @@
-#!/bin/sh -e
+#!/usr/bin/env bash
+set -e
 dapp --sanity "$0"
 (set -x; git rm -r "lib/$1")
 dapp --commit "$0" "$@"
