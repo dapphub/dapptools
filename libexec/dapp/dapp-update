@@ -1,2 +1,3 @@
-#!/bin/sh -e
+#!/usr/bin/env bash
+set -e
 (set -x; git submodule update --init --recursive)
