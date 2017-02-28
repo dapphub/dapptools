@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -e
 dapp --sanity "$0"
-(set -x; git submodule update --init --remote ${1+"lib/${1?}"})
+(set -x; git submodule update --init --remote "${1+lib/$1}")
 if [[ $(git status --porcelain -- lib) ]]; then
   (set -x; git add lib)
   (set -x; git commit -m "${0##*/}${1+ $*}")

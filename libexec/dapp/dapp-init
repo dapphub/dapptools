@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -o noclobber
-mk() { cat >$1; (set -x; git add $1); }
-mka() { cat >>$1; (set -x; git add $1); }
-name=$(basename $(pwd))
+mk() { cat >"$1"; (set -x; git add "$1"); }
+mka() { cat >>"$1"; (set -x; git add "$1"); }
+name=$(basename "$(pwd)")
 (set -x; git init)
 (set -x; mkdir -p lib src)
 mka .gitignore <<.

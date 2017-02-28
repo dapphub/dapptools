@@ -1,5 +1,6 @@
-#!/bin/sh -e
-result=$(seth call @ethpm_index \
+#!/usr/bin/env bash
+set -e
+hashes=$(seth call @ethpm_index \
 "getAllPackageReleaseHashes(string)(bytes32[])" \
 "${1?missing package name}")
-printf "0x%s\n" ${result//[^a-f0-9]/ }
+for hash in $hashes; do echo 0x"$hash"; done
