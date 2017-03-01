@@ -20,6 +20,22 @@ version         0.0.1
 author          $(whoami)
 license         Apache-2.0
 .
+mk src/test.sol <<.
+pragma solidity ^0.4.8;
+
+import "ds-test/test.sol";
+
+contract Test is DSTest {
+    function test_basic_sanity() {
+        assert(true);
+    }
+
+    function testFail_basic_sanity() {
+        assert(false);
+    }
+}
+.
 git add -A
 dapp --commit "$0" "$name"
-echo OK.
+(set -x; dapp install ds-test)
+(set -x; make test)
