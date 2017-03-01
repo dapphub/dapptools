@@ -380,9 +380,7 @@ function getTests() {
 }
 
 function getTestClasses() {
-  return getClasses().filter(isTestClass).filter(
-    x => x.members.some(isTestMethod)
-  )
+  return getClasses().filter(x => x.members.some(isTestMethod))
 }
 
 function getTestMethods() {
@@ -393,10 +391,6 @@ function getTestMethods() {
       })
     })
   ))
-}
-
-function isTestClass({ name, members }) {
-  return name != "Test" && members.some(x => x.name == "IS_TEST")
 }
 
 function isTestMethod({ name, inputs }) {
