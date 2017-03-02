@@ -2,6 +2,7 @@
 ### seth-logs -- print the transaction logs of some contract
 ### Usage: seth logs [-B <block>] [--follow] <address>
 set -e
+[[ $1 ]] || seth --bad-usage "$0"
 jshon+=(-n {})
 jshon+=(-s "$(seth --to-address "${1?}")" -i address)
 jshon+=(-s "${SETH_BLOCK-earliest}" -i fromBlock)
