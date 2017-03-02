@@ -1,2 +1,5 @@
-#!/bin/sh -e
-while read -r event; do seth --decode-event "$event"; done
+#!/usr/bin/env bash
+set -e
+while read -r event; do
+  seth --decode-event "$event"
+done

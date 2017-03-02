@@ -1,2 +1,3 @@
-#!/bin/sh -e
+#!/usr/bin/env bash
+set -e
 sed -n "/^\($1\)\b/{s/^\S*\s*\(.*\)/\1/;p}"

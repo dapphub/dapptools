@@ -1,6 +1,7 @@
-#!/bin/sh -e
+#!/usr/bin/env bash
 ### seth-date -- invoke date(1) with the timestamp of a certain block
 ### Usage: seth date [-B <block>] [<date-options>]
 ### Invoke date(1) with the timestamp of <block> (default: `latest').
+set -e
 x=$(seth block "${SETH_BLOCK-latest}" timestamp)
 date -d "@$x" "$@"

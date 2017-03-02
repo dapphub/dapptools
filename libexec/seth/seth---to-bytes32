@@ -1,3 +1,4 @@
-#!/bin/sh -e
-test $# = 0 && set -- "$(cat)"
+#!/usr/bin/env bash
+set -e
+[[ $1 ]] || set -- "$(cat)"
 printf "%-64s\n" "${1#0x}" | tr ' ' 0

@@ -1,4 +1,5 @@
-#!/bin/sh -e
+#!/usr/bin/env bash
+set -e
 seth --jsonrpc eth_getFilterChanges -s "$1" -i append
 sleep 1
 exec "$0" "$@"
