@@ -7,10 +7,7 @@ BUGS=https://github.com/dapphub/seth/issues/new
 
 name=seth
 file=${0%-*}${1+-$1}
-header=$(
-  grep -oP '^(\S)\1\1( \K.*)?' "$file" |
-  perl -pe 's/^(\S)\1\1$//'
-)
+header=$(perl -ne 'print "$2\n" if /^(\S)\1\1(?: (.*))?/' "$file")
 
 if ! [[ $header ]]; then
   sed "s/^/${0##*/}: /" "$file"
@@ -33,8 +30,9 @@ for file in ${0%/*}/$name-*; do
 done
 
 list-commands() {
-  grep -hoP "^(\\S)\\1\\1 $name-\\K[^ ]* -- .*" "$@" |
-  sed "s/ -- / /" | while read -r name label; do
+  cat "$@" |
+  perl -ne 'print "$2 $3\n" if /^(\S)\1\1 '"$name"'-(\S+) -- (.*)/' |
+  while read -r name label; do
     printf "   %-14s  %s\n" "$name" "$label"
   done | LANG=C sort
 }

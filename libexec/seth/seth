@@ -58,15 +58,6 @@ if ! [[ $SETH_INITIALIZED ]]; then
   Linux)
     ;;
   Darwin)
-    if which ggrep &>/dev/null; then
-      export GREP=ggrep
-    else
-      echo >&2 "${0##*/}: error: ggrep: command not found"
-      installation='brew tap homebrew/dupes && brew install grep'
-      echo >&2 "${0##*/}: please run \`$installation'"
-      exit 1
-    fi
-
     shopt -s nullglob
     for getopt in "$(brew --prefix)"/Cellar/gnu-getopt/*/bin; do :; done
     if [[ $getopt ]]; then
