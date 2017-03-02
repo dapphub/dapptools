@@ -2,7 +2,7 @@
 set -e
 if [[ $1 =~ ^[[:digit:]]+$ ]]; then
   hexnum=$(bc <<<"obase=16; $1")
-  echo "0x${hexnum,,}"
+  echo "0x$(tr A-F a-f <<<"$hexnum")"
 elif [[ $1 = 0x* ]]; then
   seth --to-hexdata "$1"
 elif [[ $1 =~ ^[[:xdigit:]]+$ ]]; then

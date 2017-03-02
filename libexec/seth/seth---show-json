@@ -20,7 +20,7 @@ is-short-hexnum() {
 
 show-hexnum() {
   digits=${1:2}
-  bc <<<"ibase=16; ${digits^^}"
+  bc <<<"ibase=16; $(tr a-f A-F <<<"$digits")"
 }
 
 if [[ $SETH_JSON_OUTPUT ]]; then

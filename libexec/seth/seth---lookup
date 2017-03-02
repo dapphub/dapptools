@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 set -e
 chain=$(seth chain)
-name=${chain%%:*}_${1#@} name=${name^^} name=${name//-/_}
+name=${chain%%:*}_${1#@}
+name=$(tr a-z A-Z <<<$"name")
+name=${name//-/_}
 
 if [[ ${chain%%:*} = unknown ]]; then
   echo >&2 "${0##*/}: error: unknown chain: $chain"
