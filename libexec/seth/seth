@@ -10,8 +10,6 @@
 ###    -h, --host=<host>          RPC endpoint host (default: `localhost')
 ###    -p, --port=<port>          RPC endpoint port (default: `8545')
 ###
-opts+=h:p: optl+=host:,port:,
-
 ### Transaction options:
 ###
 ###    -F, --from=<sender>        account to send transaction, etc., from
@@ -21,14 +19,10 @@ opts+=h:p: optl+=host:,port:,
 ###
 ###    -V, --value=<amount>       amount of money to send (e.g. `0.1 ETH')
 ###
-opts+=F:G:V: optl+=from:,gas:,gas-price:,value:,
-
 ### Options for seth-call(1), seth-estimate(1) and others:
 ###
 ###    -B, --block=<number>       block number (default: `latest')
 ###
-opts+=B: optl+=block:,
-
 ### Options for seth-send(1):
 ###
 ###    --create                   use the calldata to create a new object
@@ -41,39 +35,45 @@ opts+=B: optl+=block:,
 ###
 ###    -f, --follow               go into a loop watching for new logs
 ###
-opts+=f optl+=new,create,no-wait,wait,follow
-
 ### Other options:
 ###
 ###    -s, --silent               suppress standard error logging output
 ###    -j, --json-output          print raw JSON to standard output
-opts+=sj optl+=silent,json-output,
+
+OPTS="seth [<options>] <command> [<args>]
+seth <command> --help
+--
+  Connection options
+host=hostname        RPC endpoint host (default: \`localhost')
+port=number          RPC endpoint port (default: \`8545')
+
+  Transaction options
+F,from=address       account to send transaction from
+G,gas=number         number of units of gas to provide
+gas-price=amount     price of each gas unit (e.g. \`20 Gwei')
+V,value=amount       amount of money to send (e.g. \`0.1 ETH')
+
+  Options for seth-call(1), seth-estimate(1) and others
+B,block=number       block number (default: \`latest')
+
+  Options for seth-send(1)
+create               use the calldata to create a new object
+
+  Options for seth-send(1) and seth-receipt(1)
+no-wait              do not wait for transaction receipt
+
+  Options for seth-log(1)
+f,follow             go into a loop watching for new logs
+
+  Other options:
+s,silent             suppress standard error logging output
+j,json-output        print raw JSON to standard output
+"
 
 set -e
 
 if ! [[ $SETH_INITIALIZED ]]; then
   export SETH_INITIALIZED=true
-
-  case $(uname) in
-  Linux)
-    ;;
-  Darwin)
-    shopt -s nullglob
-    for getopt in "$(brew --prefix)"/Cellar/gnu-getopt/*/bin; do :; done
-    if [[ $getopt ]]; then
-      PATH=$getopt:$PATH
-    else
-      echo >&2 "${0##*/}: error: gnu-getopt: package not found"
-      installation='brew install gnu-getopt'
-      echo >&2 "${0##*/}: please run \`$installation'"
-      exit 1
-    fi
-    ;;
-  *)
-    echo >&2 "${0##*/}: error: unsupported operating system: $(uname)"
-    exit 1
-  esac
-
   [[ -e ~/.sethrc ]] && . ~/.sethrc
 fi
 
@@ -83,8 +83,7 @@ elif [[ $1 = -* ]] && which "${0##*/}-$1" &>/dev/null; then
   exec "${0##*/}-$1" "${@:2}"
 fi
 
-args=$(getopt -n "${0##*/}" -o "$opts" -l "$optl" -- "$@")
-eval "set -- $args"
+eval "$(git rev-parse --parseopt -- "$@" <<<"$OPTS" || echo exit $?)"
 
 while [[ $1 ]]; do
   case $1 in
