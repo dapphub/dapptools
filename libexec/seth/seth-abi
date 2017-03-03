@@ -4,6 +4,8 @@
 set -e
 [[ $1 ]] || seth --bad-usage "$0"
 input="pragma solidity ^0.4.8; contract A { $1 }"
-output=$(solc --combined-json=abi <<<"$input")
-abi=$(jshon -e contracts -e A -e abi -u <<<"$output")
+json=$(solc --combined-json=abi <<<"$input")
+# Changed from "A" to "<stdin>:A" in solc 0.4.10:
+name=$(jshon <<<"$json" -e contracts -k)
+abi=$(jshon <<<"$json" -e contracts -e "$name" -e abi -u)
 seth --decorate-abi "$abi"
