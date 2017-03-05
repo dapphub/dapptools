@@ -1,4 +1,4 @@
 #!/usr/bin/env bash
 set -e
 dapp build
-dapp quicktest "$DAPP_OUT" $@
+dapp quicktest "$DAPP_OUT" "$@"
