@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+set -e
+url=https://github.com/dapphub/${1?missing package name}
+(set -x; git clone "$url" --recursive)
