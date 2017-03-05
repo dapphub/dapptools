@@ -3,10 +3,9 @@ set -e
 export DAPP_SRC=${DAPP_SRC-src}
 export DAPP_LIB=${DAPP_LIB-lib}
 export DAPP_OUT=${DAPP_OUT-out}
-export ROPSTEN_ETHPM_INDEX=0x8011df4830b4f696cd81393997e5371b93338878
 
 version=$(solc --version)
-if echo "$version" | grep -q 0.4.9; then
+if grep -q 0.4.9 <<<"$version"; then
   echo >&2 "${0##*/}: error: solc 0.4.9 not supported"
   echo >&2 "${0##*/}: error: https://github.com/dapphub/dapp/issues/8"
   echo >&2 "${0##*/}: error: please downgrade to 0.4.8 or upgrade to 0.4.10"
