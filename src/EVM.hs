@@ -160,7 +160,9 @@ exec1 vm = do
         0x52 {- MSTORE -} ->
           case stk of
             (x:y:xs) ->
-              return $! vm' & memory . word256At x .~ y & stack .~ xs
+              return $!
+                vm' & memory . word256At x .~ y
+                    & stack .~ xs
             _ -> error "underrun"
 
         0x55 {- SSTORE -} -> do
