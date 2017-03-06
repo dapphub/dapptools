@@ -20,20 +20,26 @@ List of user commands:
   Usage: seth --abi-decode <name>(<in-types>)(<out-types>) <hexdata>
   Decode <hexdata> according to <out-types>, ignoring <in-types>.
 
-  Usage: seth --abi-event-json <sig>
+  **Usage:** `seth --abi-event-json <sig>`
+  
   Print the ABI of an event in JSON format.
 
-  Usage: seth --abi-function-json <sig>
+  **Usage:** `seth --abi-function-json <sig>`
+  
   Print the ABI of a function in JSON format.
 
-  Usage: seth accounts
+  **Usage:** `seth accounts`
+  
   Print a list of accounts.
 
-  Usage: seth age
+  **Usage:** `seth age`
+  
   Report the age of the current block.
 
   [TODO: Add `-h` option?]
-  Usage: seth balance [-B <block>] <account>
+  
+  **Usage:** `seth balance [-B <block>] <account>`
+  
   Print the balance of <account> in ETH.
 
   [TODO: Remove `seth block` alias?]
