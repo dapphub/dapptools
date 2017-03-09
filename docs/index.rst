@@ -20,9 +20,9 @@ Dapp is a simple command line tool for smart contract development. It supports t
    :caption: Contents:
 
    installation.rst
-   getting_started_with_contracts.rst
+   getting_started.rst
    package_management.rst
    building.rst
    unit_testing.rst
-   deployments.rst
+   creating_contracts.rst
 
