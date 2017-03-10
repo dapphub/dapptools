@@ -1,5 +1,5 @@
 NAME
-   seth -- perform Ethereum JSON-RPC calls from the comfort of your command line
+   seth -- perform Ethereum tasks from the comfort of your command line
 
 SYNOPSIS
    seth [<options>] <command> [<args>]

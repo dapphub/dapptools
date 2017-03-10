@@ -10,7 +10,8 @@
 set -e
 if [[ $1 =~ ^([^\(]+)\( ]]; then
   name=${BASH_REMATCH[1]}
-  abi=$(seth --abi-function-json "$1"); shift
+  abi=$(seth --abi-function-json "$1")
+  shift
   for arg; do
     [[ $arg = @* ]] && arg=$(seth --lookup "$arg")
     args+=(-p "${arg#0x}")
