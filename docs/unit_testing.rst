@@ -15,7 +15,7 @@ First, make sure you are comfortable :ref:`installing packages using dapp <packa
 
 .. code:: bash
 
-    dapp install ds-test
+    $ dapp install ds-test
 
 .. note::
     Running ``dapp init`` will install ``ds-test`` for you, making this step unnecessary in most cases.
@@ -215,8 +215,8 @@ Function Modifiers
 | logs_gas( ) | Logs the amount of gas that your test case consumes |
 +-------------+-----------------------------------------------------+
 
-Assertions
-----------
+Assertions Functions
+--------------------
 
 +-------------------------------------------------+
 | Function                                        |  
@@ -239,7 +239,7 @@ Assertions
 Logging Events
 --------------
 
-These events will log information to the console, which is useful for debugging.
+These events will log information to the console, making them useful for debugging.
 
 +--------------------------------------------------------------+
 | Event                                                        |

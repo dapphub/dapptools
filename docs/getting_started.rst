@@ -35,6 +35,6 @@ You will see that dapp does a few things for you:
     license         Apache-2.0
 
 4. Installs a package called ``ds-test``, which is used when :ref:`testing your contracts <unit_testing>`. This package is installed in the ``lib`` folder.
-5. Creates a `src` directory and ``test.sol``
+5. Creates a ``src`` directory and ``test.sol``
 6. Runs a sanity test with ``dapp test``. This causes the ``Test`` contract from ``test.sol`` to be built. The compiler's output is put in the ``out`` directory.
 7. Commits the changes that were made.
