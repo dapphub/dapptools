@@ -442,8 +442,13 @@ stackOp2_1 vm f =
       return $! vm & stack .~ z : xs
     _ -> error "underrun"
 
-exec :: VM -> IO ()
-exec vm = when (not (vm ^. done)) (exec1 vm >>= exec)
+exec :: VM -> IO VM
+exec vm = if vm ^. done then return vm else exec1 vm >>= exec
+
+continue :: ByteString -> Word256 -> Text -> Map Text SolcContract -> SourceCache -> VM -> VM
+continue theCalldata theCallvalue theContractName theSolc theSourceCache vm =
+  initialVm theCalldata theCallvalue theContractName theSolc theSourceCache
+    & env .~ (vm ^. env)
 
 checkJump :: (Monad m, Integral n) => VM -> n -> m VM
 checkJump vm x =
@@ -474,7 +479,7 @@ initialVm theCalldata theCallvalue theContractName theSolc theSourceCache = VM {
   _caller = 0
 }
 
-run :: Text -> Text -> Text -> IO ()
+run :: Text -> Text -> Text -> IO VM
 run file contractName abi = do
   Just (c, cache) <- readSolc (Text.unpack file)
   exec (initialVm (word32Bytes $ abiKeccak (encodeUtf8 abi)) 0

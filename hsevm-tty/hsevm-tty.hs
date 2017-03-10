@@ -54,7 +54,10 @@ repl ui = do
               Just vm ->
                 case currentSrcMap vm >>= srcMapCodePos ui of
                   Nothing -> "(evm@unknown) "
-                  Just (x, y) -> "(evm@" ++ Text.unpack x ++ ":" ++ show y ++ ") "
+                  Just (x, y) ->
+                    case currentSrcMap vm >>= srcMapCode ui of
+                      Nothing -> error "internal error"
+                      Just c -> "(evm@" ++ Text.unpack x ++ ":" ++ show y ++ ") `" ++ show c ++ "' "
   readline lbl >>= \case
     Nothing -> return ()
     Just line -> do
@@ -80,8 +83,10 @@ repl ui = do
               case unitTestMethods c of
                 [] -> say "error: No unit tests to run."
                 methods -> forM_ methods $ \m -> do
+                  say $ "Running " ++ Text.unpack (c ^. name) ++ "::setUp()"
+                  vm1 <- exec (vmForEntryPoint ui (c ^. name) "setUp()")
                   say $ "Running " ++ Text.unpack (c ^. name) ++ "::" ++ Text.unpack m
-                  exec (vmForEntryPoint ui (c ^. name) m)
+                  exec (continueWithEntryPoint ui (c ^. name) m vm1)
           repl ui
 
         ["break", fileName, lineNo] -> do
@@ -104,9 +109,14 @@ repl ui = do
         ["continue"] ->
           let k ui' = step DoNotStop ui' k in k ui
 
-        []       -> step SingleStep ui repl
         ["step"] -> step SingleStep ui repl
         ["s"]    -> step SingleStep ui repl
+
+        x | x == [] || x == ["n"] ->
+          case ui ^. uiVm of
+            Nothing -> say "No VM yet."
+            Just vm ->
+              let k ui' = step (StepSource (currentSrcMap vm)) ui' k in k ui
 
         ["vm"] -> do
           case ui ^. uiVm of
@@ -140,7 +150,14 @@ vmForEntryPoint ui contractName abiEntry =
     (word32Bytes (abiKeccak (encodeUtf8 abiEntry)))
     0 contractName (ui ^. uiContracts) (ui ^. uiSourceCache)
 
-data Behavior = StopOnBreakpoint | SingleStep | DoNotStop
+continueWithEntryPoint :: UIState -> Text -> Text -> VM -> VM
+continueWithEntryPoint ui contractName abiEntry vm =
+  continue
+    (word32Bytes (abiKeccak (encodeUtf8 abiEntry)))
+    0 contractName (ui ^. uiContracts) (ui ^. uiSourceCache)
+    vm
+
+data Behavior = StopOnBreakpoint | SingleStep | DoNotStop | StepSource (Maybe SrcMap)
   deriving (Show, Eq)
 
 step :: Behavior -> UIState -> (UIState -> IO ()) -> IO ()
@@ -162,13 +179,15 @@ step behavior ui k =
         theOpIx = (c ^. opIxMap) Vector.! (vm ^. pc)
         onBreakpoint = any (\(w, v) -> w == ch && v Vector.! theOpIx) bps
       in
-        if behavior == StopOnBreakpoint && onBreakpoint 
-        then do
-          say $ "Stopped at breakpoint in `" ++ Text.unpack (solcC ^. name) ++ "'."
-          repl ui
-        else do
-          vm' <- exec1 vm
-          k (ui & uiVm .~ (Just $! vm'))
+        case behavior of
+          StopOnBreakpoint | onBreakpoint -> do
+            say $ "Stopped at breakpoint in `" ++ Text.unpack (solcC ^. name) ++ "'."
+            repl ui
+          StepSource sm | currentSrcMap vm /= sm -> do
+            repl ui
+          otherwise -> do
+            vm' <- exec1 vm
+            k (ui & uiVm .~ (Just $! vm'))
 
 currentSrcMap :: VM -> Maybe SrcMap
 currentSrcMap vm =
@@ -184,6 +203,12 @@ srcMapCodePos ui sm =
   where
     f v = BS.count 0xa (BS.take (srcMapOffset sm - 1) v) + 1
     
+srcMapCode :: UIState -> SrcMap -> Maybe BS.ByteString
+srcMapCode ui sm =
+  fmap f $ ui ^? uiSourceCache . sourceFiles . ix (srcMapFile sm)
+  where
+    f (_, v) = BS.take (min 80 (srcMapLength sm)) (BS.drop (srcMapOffset sm) v)
+
 locateBreakpoint :: UIState -> Text -> Int -> Maybe [(Word256, Vector Bool)]
 locateBreakpoint ui fileName lineNo = do
   (i, (t, s)) <-
@@ -213,7 +238,6 @@ main = do
   xs <- getArgs
   case xs of
     [a] -> do
-      setCurrentDirectory (takeDirectory a)
       Just (c, cache) <- readSolc a
       say $ "Loaded " ++ show (Map.size c) ++ " contracts from `" ++ a ++ "':"
       cpprint (Map.keys c)
