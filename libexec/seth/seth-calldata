@@ -1,12 +1,14 @@
 #!/usr/bin/env bash
 ### seth-calldata -- pack a signature and a list of arguments into calldata
 ### Usage: seth calldata <sig> [<args>]
+###    or: seth calldata <file>
 ###    or: seth calldata <data>
 ###
 ### Pack <sig> and <args> into data suitable for passing to `seth call'.
-###
 ### If <sig> has the form `<name>(<types>)', pack <sig>/<args> into calldata.
-### If <sig> has no parentheses in it, just treat it as hexdata instead.
+###
+### If <file> contains a slash character, treat it as a file name to read.
+### Otherwise, ensure <data> begins with `0x' and treat it as hexdata.
 set -e
 if [[ $1 =~ ^([^\(]+)\( ]]; then
   name=${BASH_REMATCH[1]}
@@ -29,5 +31,5 @@ if [[ $1 =~ ^([^\(]+)\( ]]; then
 elif [[ $2 ]]; then
   seth --bad-usage "$0"
 else
-  seth --to-hexdata "$@"
+  seth --to-hexdata "$1"
 fi
