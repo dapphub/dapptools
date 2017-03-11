@@ -11,7 +11,7 @@ Object.keys(pkg_src).forEach(name => {
 function findRemappings(prefix) {
   return ls(`${prefix}/${process.env.DAPP_LIB}`).forEach(name => {
     var lib = `${prefix}/${process.env.DAPP_LIB}`
-    var src = `${lib}/${name}/${process.env.DAPP_SRC}`
+    var src = `${lib}/${name}/${process.env.DAPP_SRC}`.replace(/^.\//, "")
     var hash = run("git", ["-C", src, "rev-parse", "HEAD"])
   
     if (pkg_src[name]) {
@@ -22,7 +22,7 @@ function findRemappings(prefix) {
         process.exit(1)
       }
     } else {
-      pkg_src[name] = src.replace(/^.\//, "")
+      pkg_src[name] = src
       pkg_hash[name] = hash
     }
   
