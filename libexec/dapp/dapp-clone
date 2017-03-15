@@ -1,12 +1,4 @@
 #!/usr/bin/env bash
 set -e
-in=${1?missing package name}
-in=(${1//// })
-if [ ${#in[@]} -eq "2" ]
-then
-  repo="${in[0]}/${in[1]}"
-else
-  repo="dapphub/${in[0]}"
-fi
-url=https://github.com/${repo}
-(set -x; git clone "$url" --recursive)
+[[ ${1?missing package name} = */* ]] || set -- "dapphub/$1"
+(set -x; git clone "git@github.com:$1" --recursive)
