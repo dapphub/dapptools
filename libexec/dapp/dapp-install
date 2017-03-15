@@ -1,7 +1,17 @@
 #!/usr/bin/env bash
 set -e
 dapp --sanity "$0"
-url=https://github.com/dapphub/${1?missing package name}
-(set -x; git submodule add --force "$url" "lib/$1")
+in=${1?missing package name}
+in=(${1//// })
+if [ ${#in[@]} -eq "2" ]
+then
+  repo="${in[0]}/${in[1]}"
+  name=${in[1]}
+else
+  repo="dapphub/${in[0]}"
+  name=${in[0]}
+fi
+url=https://github.com/${repo}
+(set -x; git submodule add --force "$url" "lib/$name")
 (set -x; git submodule update --init --recursive)
 dapp --commit "$0" "$@"
