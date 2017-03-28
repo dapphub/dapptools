@@ -11,7 +11,7 @@
 ### If <sig> has the form `<name>(<types>)', infer <data> from <sig>/<args>.
 ### If no <data> is given, just call <to> without any calldata.
 ### With `--create', create a new object initialized from <code> and <data>.
-### With `--create' and <sig>, encode constructor arguments <args> into <data>.
+### With `--create' and <sig>, encode constructor args <args> into <data>.
 ###
 ### With `--no-wait', print the transaction hash and exit immediately.
 ### With `--create', print the address of the newly created object.
@@ -63,4 +63,4 @@ info "${0##*/}: Transaction included in block $number."
 # equivalent call on the previous block will produce incorrect results
 # when multiple conflicting transactions are included in the same block.
 info "${0##*/}: note: return value may be inaccurate"
-seth -B "$((number - 1))" call "$TO" "$@"
+seth -B "$((number - 1))" call "$TO" "${@:2}"
