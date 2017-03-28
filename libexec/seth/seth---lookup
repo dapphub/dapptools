@@ -2,7 +2,7 @@
 set -e
 chain=$(seth chain)
 name=${chain%%:*}_${1#@}
-name=$(tr a-z A-Z <<<$"name")
+name=$(tr a-z A-Z <<<"$name")
 name=${name//-/_}
 
 if [[ ${chain%%:*} = unknown ]]; then
