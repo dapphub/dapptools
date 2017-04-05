@@ -27,6 +27,7 @@ process.on("unhandledException", () => process.exit(1))
 var inputFiles = []
 var skipBuild = false
 var verbose = 0
+var testRegex = new RegExp('^test')
 
 for (var i = 0; i < PROGRAM_ARGS.length; i++) {
   var arg = PROGRAM_ARGS[i]
@@ -394,7 +395,7 @@ function getTestMethods() {
 }
 
 function isTestMethod({ name, inputs }) {
-  return /^test/.test(name) && inputs.length == 0
+  return testRegex.test(name) && inputs.length == 0
 }
 
 function sortMembers(members) {
