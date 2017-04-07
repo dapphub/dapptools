@@ -20,10 +20,10 @@ This program depends on Seth (see <https://github.com/nexusdev/seth>).
 Example usage:
 
    $ cat ~/.sethrc
-   export MORDEN_MKR=0xffb1c99b389ba527a9194b1606b3565a07da3eef
-   export MORDEN_MKR_DECIMALS=18
-   export MORDEN_DANIEL=0x29a566c6f4fa3a692d1f6d7b598cb8b4fc772ddb
-   export MORDEN_KENNY=0xe264e14c25b6e423a9fe30a2f45c06c99923dc62
+   export KOVAN_MKR=0x4bb514a7f83fbb13c2b41448208e89fabbcfe2fb
+   export KOVAN_MKR_DECIMALS=18
+   export KOVAN_DANIEL=0x0101010101010101010101010101010101010101
+   export KOVAN_KENNY=0x0202020202020202020202020202020202020202
 
    $ token supply @mkr
    1000000.000000000000000000
