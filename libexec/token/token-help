@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-BUGS=https://github.com/nexusdev/token/issues/new
+BUGS=https://github.com/dapphub/token/issues/new
 
 name=${0##*/} name=${name%-help}
 file=${0%-*}${1+-$1}
