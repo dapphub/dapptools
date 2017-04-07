@@ -6,6 +6,7 @@ INSTALLATION
 USAGE                         
                               
    dapp init                  create a new dapp in 
+   dapp clean                 clean the dapp's output directory
    dapp build                 compile your dapp's source code
    dapp test                  run the test suite for your dapp
                               
