@@ -3,17 +3,14 @@ BUGS=https://github.com/nexusdev/token/issues/new
 
 name=${0##*/} name=${name%-help}
 file=${0%-*}${1+-$1}
-header=$(
-  grep -oP '^(\S)\1\1( \K.*)?' "$file" |
-  perl -pe 's/^(\S)\1\1$//'
-)
+header=$(perl -ne 'print "$2\n" if /^(\S)\1\1(?: (.*))?/' "$file")
 
 if ! [[ $header ]]; then
   sed "s/^/${0##*/}: /" "$file"
 elif [[ $(wc -l <<<"$header") = 1 ]]; then
   echo "$header"
 else
-  sed "1{/^$name\\S* -- /d}" <<<"$header"
+  sed "1{/^$name\\S* -- /d;}" <<<"$header"
 fi
 
 [[ $1 ]] && exit
@@ -24,8 +21,9 @@ for file in ${0%/*}/$name-*; do
 done
 
 list-commands() {
-  grep -hoP "^(\\S)\\1\\1 $name-\\K[^ ]* -- .*" "$@" |
-  sed "s/ -- / /" | while read name label; do
+  cat "$@" |
+  perl -ne 'print "$2 $3\n" if /^(\S)\1\1 '"$name"'-(\S+) -- (.*)/' |
+  while read -r name label; do
     printf "   %-14s  %s\n" "$name" "$label"
   done | LANG=C sort
 }
