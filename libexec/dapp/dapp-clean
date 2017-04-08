@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+set -e
+rm -r "${DAPP_OUT?}"
