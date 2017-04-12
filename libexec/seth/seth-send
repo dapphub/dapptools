@@ -22,6 +22,11 @@
 set -e
 [[ $1 ]] || seth --bad-usage "$0"
 
+[[ $SETH_FROM ]] ||
+seth --error "$0" "\`ETH_FROM' not set -- send from what account?"
+[[ $SETH_GAS ]] ||
+seth --warn "$0" "\`ETH_GAS' not set; using default gas amount"
+
 if [[ $SETH_CREATE ]]; then
   DATA=$(seth --to-hexdata "$1")
   if [[ $2 ]]; then

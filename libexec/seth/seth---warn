@@ -1,0 +1,2 @@
+#!/usr/bin/env bash
+echo >&2 "${1##*/}: warning: ${*:2}"
