@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 set -e
-solc=(solc $SOLC_FLAGS --abi --bin --bin-runtime = -o "$DAPP_OUT" --overwrite)
+(set -x; dapp clean)
+solc=(solc $SOLC_FLAGS --abi --bin --bin-runtime = -o "$DAPP_OUT")
 remappings=$(dapp remappings)
 while read -r line; do solc+=("$line"); done <<<"$remappings"
 shopt -s nullglob
