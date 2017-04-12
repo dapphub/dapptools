@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-set -e -o pipefail
+set -e
 solc=(solc $SOLC_FLAGS --abi --bin --bin-runtime = -o "$DAPP_OUT" --overwrite)
 remappings=$(dapp remappings)
 while read -r line; do solc+=("$line"); done <<<"$remappings"
