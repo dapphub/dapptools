@@ -17,6 +17,8 @@
 ###    -G, --gas=<number>         number of units of gas to provide
 ###        --gas-price=<amount>   price of each gas unit (e.g. `20 Gwei')
 ###
+###    -N, --nonce=<nonce>        nonce value to use for the transaction
+###
 ###    -V, --value=<amount>       amount of money to send (e.g. `0.1 ETH')
 ###
 ### Options for seth-call(1), seth-estimate(1) and others:
@@ -51,6 +53,7 @@ port=number          RPC endpoint port (default: \`8545')
 F,from=address       account to send transaction from
 G,gas=number         number of units of gas to provide
 gas-price=amount     price of each gas unit (e.g. \`20 Gwei')
+N,nonce=nonce        nonce value to use for the transaction
 V,value=amount       amount of money to send (e.g. \`0.1 ETH')
 
   Options for seth-call(1), seth-estimate(1) and others
@@ -95,6 +98,7 @@ while [[ $1 ]]; do
     -F|--from)       shift; export SETH_FROM=$1;;
     -G|--gas)        shift; export SETH_GAS=$1;;
        --gas-price)  shift; export SETH_GAS_PRICE;;
+    -N|--nonce)      shift; export SETH_NONCE=$1;;
     -V|--value)      shift; export SETH_VALUE=$1;;
 
     -B|--block)      shift; export SETH_BLOCK=$1;;
