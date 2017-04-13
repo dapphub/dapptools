@@ -67,5 +67,5 @@ info "${0##*/}: Transaction included in block $number."
 # Warning: Guessing the return value of the transaction by performing the
 # equivalent call on the previous block will produce incorrect results
 # when multiple conflicting transactions are included in the same block.
-info "${0##*/}: note: return value may be inaccurate"
-seth -B "$((number - 1))" call "$TO" "${@:2}"
+[[ $SETH_GUESS_RETURN ]] && info "${0##*/}: note: return value may be inaccurate"
+[[ $SETH_GUESS_RETURN ]] && seth -B "$((number - 1))" call "$TO" "${@:2}"
