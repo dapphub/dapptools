@@ -65,6 +65,3 @@ Usage: seth --to-gwei <amount> [<unit>]
 
 [TODO: Remove?]
 Usage: seth --to-wei <amount> [<unit>]
-
-[TODO: Remove or change to display only Seth version?]
-Usage: seth version

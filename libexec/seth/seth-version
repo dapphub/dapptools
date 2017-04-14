@@ -1,6 +1,0 @@
-#!/usr/bin/env bash
-### seth-version -- display Seth and Ethereum client version information
-set -e
-for x in genesis network protocol client; do
-  printf '%-8s  %s\n' "$x" "$(seth "$x" || echo -)" &
-done | sort
