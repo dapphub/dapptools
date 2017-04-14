@@ -36,9 +36,6 @@ Usage: seth ls
 [TODO: Remove in favor of `seth age'?]
 Usage: seth minutes [-B <block>]
 
-[TODO: Rename to `seth network-version'?]
-Usage: seth network
-
 [TODO: Remove `seth peers' alias?]
 Usage: seth (peer-count|peers)
 
