@@ -1,1 +1,3 @@
-seth-peers
+#!/usr/bin/env bash
+set -e
+seth --jsonrpc net_peerCount
