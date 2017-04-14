@@ -8,7 +8,7 @@ Usage: seth --abi-decode <name>(<in-types>)(<out-types>) <hexdata>
 Usage: seth balance [-B <block>] <account>
 
 [TODO: Add <block> argument to find the number of a specific block?]
-Usage: seth (block|block-number|number)
+Usage: seth block-number
 
 [TODO: Allow <block> to be `current' (also defaulting to `latest')?]
 [TODO: Allow setting the second parameter of `eth_getBlockByHash'?]
@@ -18,8 +18,7 @@ Usage: seth block [-j|--json] <block> [<field>]
 Usage: seth --from-ascii <text>...
 
 [TODO: Add `-h' option?]
-[TODO: Remove `seth price' alias?]
-Usage: seth (gas-price|price)
+Usage: seth gas-price
 
 [TODO: Remove in favor of `seth block 0 hash'?]
 Usage: seth genesis
