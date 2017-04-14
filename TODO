@@ -20,9 +20,6 @@ Usage: seth --from-ascii <text>...
 [TODO: Add `-h' option?]
 Usage: seth gas-price
 
-[TODO: Remove in favor of `seth block <block> hash'?]
-Usage: seth hash [-B <block>]
-
 [TODO: Remove in favor of `seth age'?]
 Usage: seth hours [-B <block>]
 
