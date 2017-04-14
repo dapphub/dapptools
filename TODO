@@ -1,13 +1,73 @@
 - eth_newBlockFilter
 - eth_newPendingTransactionFilter
 
-- shh_post
-- shh_version
-- shh_newIdentity
-- shh_hasIdentity
-- shh_newGroup
-- shh_addToGroup
-- shh_newFilter
-- shh_uninstallFilter
-- shh_getFilterChanges
-- shh_getMessages
+[TODO: Rename to `--abi-decode-result'?]
+Usage: seth --abi-decode <name>(<in-types>)(<out-types>) <hexdata>
+
+[TODO: Add `-h' option?]
+Usage: seth balance [-B <block>] <account>
+
+[TODO: Remove `seth block' and `seth number' aliases?]
+[TODO: Add <block> argument to find the number of a specific block?]
+Usage: seth (block|block-number|number)
+
+[TODO: Allow <block> to be `current' (also defaulting to `latest')?]
+[TODO: Allow setting the second parameter of `eth_getBlockByHash'?]
+[TODO: Make <block> default to `latest'?]
+Usage: seth block [-j|--json] [<block>] [<field>]
+
+[TODO: Allow passing <text> through standard input?]
+Usage: seth --from-ascii <text>...
+
+[TODO: Add `-h' option?]
+[TODO: Remove `seth price' alias?]
+Usage: seth (gas-price|price)
+
+[TODO: Remove in favor of `seth block 0 hash'?]
+Usage: seth genesis
+
+[TODO: Remove in favor of `seth block <block> hash'?]
+Usage: seth hash [-B <block>]
+
+[TODO: Remove in favor of `seth age'?]
+Usage: seth hours [-B <block>]
+
+[TODO: Allow passing <hexdata> through standard input?]
+Usage: seth keccak <hexdata>
+
+[TODO: Allow more than one address?]
+[TODO: Allow other filter options?]
+Usage: seth logs [-B <block>] [--follow] <address>
+
+[TODO: Add `-h' option?]
+Usage: seth ls
+
+[TODO: Remove in favor of `seth age'?]
+Usage: seth minutes [-B <block>]
+
+[TODO: Rename to `seth network-version'?]
+Usage: seth network
+
+[TODO: Remove `seth peers' alias?]
+Usage: seth (peer-count|peers)
+
+[TODO: Rename to `seth protocol-version'?]
+Usage: seth protocol
+
+[TODO: Remove in favor of `seth age'?]
+Usage: seth seconds [-B <block>]
+
+[TODO: Allow passing <hexdata> through standard input?]
+Usage: seth sign [-F <sender>] <hexdata>
+
+[TODO: Remove in favor of `seth block <block> timestamp'?]
+Usage: seth timestamp [-B <block>]
+
+[TODO: Remove?]
+Usage: seth --to-gwei <amount> [<unit>]
+
+[TODO: Remove?]
+Usage: seth --to-wei <amount> [<unit>]
+
+[TODO: Remove or change to display only Seth version?]
+Usage: seth version
