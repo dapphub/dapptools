@@ -1,1 +1,3 @@
-seth-number
+#!/usr/bin/env bash
+set -e
+seth --jsonrpc eth_blockNumber

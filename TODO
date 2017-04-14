@@ -7,14 +7,12 @@ Usage: seth --abi-decode <name>(<in-types>)(<out-types>) <hexdata>
 [TODO: Add `-h' option?]
 Usage: seth balance [-B <block>] <account>
 
-[TODO: Remove `seth block' and `seth number' aliases?]
 [TODO: Add <block> argument to find the number of a specific block?]
 Usage: seth (block|block-number|number)
 
 [TODO: Allow <block> to be `current' (also defaulting to `latest')?]
 [TODO: Allow setting the second parameter of `eth_getBlockByHash'?]
-[TODO: Make <block> default to `latest'?]
-Usage: seth block [-j|--json] [<block>] [<field>]
+Usage: seth block [-j|--json] <block> [<field>]
 
 [TODO: Allow passing <text> through standard input?]
 Usage: seth --from-ascii <text>...
