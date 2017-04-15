@@ -13,6 +13,8 @@ Dapp is a simple command line tool for smart contract development. It supports t
 * Unit testing
 * Simple contract deployments
 
+If you would like to understand Dapp better, you can `chat with the development team <https://dapphub.chat/channel/dapp-cli>`_ or `view the code on Github <https://github.com/dapphub/dapp>`_.
+
 
 
 .. toctree::
