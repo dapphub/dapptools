@@ -6,7 +6,9 @@ Installing Dapp
 Installing with Nix
 -------------------
 
-Soon dapp will be distributed via the `Nix Package Manager <https://nixos.org/nix/>`_, which allows us to provide a consistent experience across all Unix-based operating systems (i.e. various Linux distros and OSX/Mac OS). In the meantime however, you will need to perform some manual steps to get it. This section will be updated as the installation process gets streamlined.
+Soon dapp will be completely distributed via the `Nix Package Manager <https://nixos.org/nix/>`_, which allows us to provide a consistent experience across all Unix-based operating systems (i.e. various Linux distros and OSX/Mac OS). `Getting started with Nix <https://nixos.org/nix/manual/#chap-quick-start>`_ is very easy and you will be glad you did it. Its purely functional approach is unique to the domain of package management and it makes Nix quite powerful. 
+
+In the meantime, you will need to perform some manual steps to get dapp. This section will be updated as the installation process gets streamlined.
 
 First `download ethrun <https://github.com/dapphub/ethrun/releases>`_, rename it to ``ethrun``, chmod it's permissions to 755, and move it to somewhere on your `$PATH <https://en.wikipedia.org/wiki/PATH_(variable)>`_:
 
@@ -15,7 +17,7 @@ First `download ethrun <https://github.com/dapphub/ethrun/releases>`_, rename it
     $ cp ethrun-v0.1.0-osx /usr/local/bin/ethrun
     $ chmod 755 /usr/local/bin/ethrun
 
-`Getting started with Nix <https://nixos.org/nix/manual/#chap-quick-start>`_ is very easy and you will be glad you did it. Its purely functional approach is unique to the domain of package management and it makes Nix quite powerful. The rest of the installation process looks like this:
+The rest of the installation process looks like this:
 
 .. code:: bash
 
