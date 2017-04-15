@@ -6,21 +6,33 @@ Installing Dapp
 Installing with Nix
 -------------------
 
-Dapp is distributed via the `Nix Package Manager <https://nixos.org/nix/>`_, which allows us to provide a consistent experience across all Unix-based operating systems (i.e. various Linux distros and OSX/Mac OS).
+Soon dapp will be distributed via the `Nix Package Manager <https://nixos.org/nix/>`_, which allows us to provide a consistent experience across all Unix-based operating systems (i.e. various Linux distros and OSX/Mac OS). In the meantime however, you will need to perform some manual steps to get it. This section will be updated as the installation process gets streamlined.
 
-`Getting started with Nix <https://nixos.org/nix/manual/#chap-quick-start>`_ is very easy and you will be glad you did it. Its purely functional approach is unique to the domain of package management and it makes Nix quite powerful. Once you have it installed, getting dapp is as simple as:
+First `download ethrun <https://github.com/dapphub/ethrun/releases>`_, rename it to ``ethrun``, chmod it's permissions to 755, and move it to somewhere on your `$PATH <https://en.wikipedia.org/wiki/PATH_(variable)>`_:
 
 .. code:: bash
 
-    $ nix-env -i dapp
+    $ cp ethrun-v0.1.0-osx /usr/local/bin/ethrun
+    $ chmod 755 /usr/local/bin/ethrun
+
+`Getting started with Nix <https://nixos.org/nix/manual/#chap-quick-start>`_ is very easy and you will be glad you did it. Its purely functional approach is unique to the domain of package management and it makes Nix quite powerful. The rest of the installation process looks like this:
+
+.. code:: bash
+
+    $ curl https://nixos.org/nix/install | sh
+    $ nix-env -i ethabi jshon
+    $ git clone https://github.com/dapphub/seth
+    $ git clone https://github.com/dapphub/dapp
+    $ make link -C seth
+    $ make link -C dapp
 
 Dapp depends on some blockchain development tools that are very useful in their own right. In particular, you may find `seth <https://github.com/dapphub/seth>`_ convenient when working with any Ethereum client's `JSON RPC API <https://github.com/ethereum/wiki/wiki/JSON-RPC>`_. You can explore the full list of dependencies below.
 
 
-Installing from Source
+Installing without Nix
 ----------------------
 
-Dapp's source is available `on GitHub <https://github.com/dapphub/dapp>`_ and is easy to install yourself. The program will expect you to have these depenedencies installed: 
+The program will expect you to have these depenedencies installed: 
 
 
 * `bc <https://www.gnu.org/software/bc/manual/html_mono/bc.html>`_

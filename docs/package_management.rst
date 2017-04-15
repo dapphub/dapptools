@@ -4,37 +4,48 @@
 Package Management
 ###################
 
-Dapp's package management feature allows you to install and publish smart contracts for the purposes of code reuse and discovery. It uses the newly-standardized `Ethereum Smart Contract Packaging Specification <https://github.com/ethereum/EIPs/issues/190>`_, or EthPM for short, which makes it easy for you to incorporate anyone's code into your project.
+Dapp's package management feature allows you to both download and publish smart contracts for the purposes of code reuse and discovery. Recently, a new standard was created called the `Ethereum Smart Contract Packaging Specification <https://github.com/ethereum/EIPs/issues/190>`_, or EthPM for short. It uses `IPFS <https://ipfs.io/>`_ addresses to identify and distribute smart contract code in a decentralized manner. 
+
+In the near future, a `registry contract <https://www.ethpm.com/>`_ will be deployed to the Ethereum blockchain for easy lookup of package addresses by unique human-friendly names. This will allow for a user experience identical to other package managers you might be more familiar with (e.g. ``npm install my-cool-package``). In the meantime, dapp uses `git submodules <https://git-scm.com/book/en/v2/Git-Tools-Submodules>`_ to mimic the experience of installing EthPM packages.
+
+.. note::
+    A good resource for working with git submodules can be found at `Chris Jean's blog <https://chrisjean.com/git-submodules-adding-using-removing-and-updating/>`_
 
 
 Installing Packages
 -------------------
 
-EthPM packages are always identified by their `IPFS <https://ipfs.io/>`_ address. Like Ethereum addresses, IPFS addresses are not easily read by humans. In the near future, a `registry contract <https://www.ethpm.com/>`_ will be deployed to the Ethereum blockchain for easy lookup of package addresses by unique human-friendly names. This will allow for a user experience identical to other package managers you might be more familiar with (e.g. ``npm install my-cool-package``). In the meantime, you can still install packages by referencing their IPFS address:
+Dapp will install a git submodule for you based on the github path you specify. If you don't specify a github user, dapp will choose dapphub as the default. Thus both of these commands will install code in your ``lib`` folder:
 
 .. code:: bash
 
-    $ dapp install ipfs://QmYsapuVLeihAANcYTbLxmCT4RWnZTtJ1WnNZ7c4zohCYW
+    # installing a submodule from  https://github.com/dapphub/ds-auth
 
-This will cause dapp to pull the package from either DappHub's servers (by default) or any IPFS node that you configure it to talk to. It will install the code in your ``lib`` folder, where it can then be imported into your contracts by its package name (e.g. if I install the ``ds-token`` package, then you can access ``token.sol`` like so: ``import ds-token/token.sol``)
+    $ dapp install ds-auth
+
+and:
+
+.. code:: bash
+
+    # installing a submodule from  https://github.com/apmilen/my-cool-package
+    
+    $ dapp install apmilen/my-cool-package 
+
+Files in your installed packages can be imported in your source code by referencing the git submodule name:
+
+::
+
+    pragma solidity ^0.4.0;
+
+    import "ds-auth/auth.sol";
+
+    contract TestContract is DSAuth {}
 
 Publishing Packages
 -------------------
 
-When you are ready to make your Solidity available to the wider community, you can publish your package:
+Since dapp package management currently works off git submodules, publishing code to the default branch of your repository is equivalent to releasing a new package.
 
-
-
-.. code:: bash
-
-    $ dapp publish
-
-Dapp will bundle up all your source code and depenedencies and start putting them into IPFS. When it has all your files' addresses, it bundles these and your ``Dappfile`` project metadata (e.g. version numbers, authors, deployment addresses) into an `ERC190 lockfile <https://github.com/ethpm/ethpm-spec/blob/master/release-lockfile.spec.md>`_ and puts that into IPFS as well. The returned address can then be used by anyone to locate and install the package.
-
-Resolving Version Conflicts
----------------------------
-
-Coming soon!
 
 Discovering Packages
 --------------------
