@@ -15,7 +15,11 @@ request=$(seth --jsonrpc-req "$@")
 response=$(seth --jsonrpc-curl <<<"$request")
 
 if result=$(jsonrpc-result <<<"$response"); then
-  seth --show-json <<<"$result"
+  if [[ $result = null ]]; then
+    seth --error "$0" "null result"
+  else
+    seth --show-json <<<"$result"
+  fi
 elif error=$(jsonrpc-error <<<"$response"); then
   { echo "$request"
     SETH_KEY_WIDTH=10 seth --show-json <<<"$error" | sed 's/^/error:   /'
