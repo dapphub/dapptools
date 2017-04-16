@@ -7,8 +7,8 @@
 ###
 ### Connection options:
 ###
-###    -h, --host=<host>          RPC endpoint host (default: `localhost')
-###    -p, --port=<port>          RPC endpoint port (default: `8545')
+###    --jsonrpc-host=<host>      JSONRPC host (default: `localhost')
+###    --jsonrpc-port=<port>      JSONRPC port (default: `8545')
 ###
 ### Transaction options:
 ###
@@ -45,8 +45,8 @@ OPTS="seth [<options>] <command> [<args>]
 seth <command> --help
 --
   Connection options
-host=hostname        RPC endpoint host (default: \`localhost')
-port=number          RPC endpoint port (default: \`8545')
+jsonrpc-host=host    JSONRPC host (default: \`localhost')
+jsonrpc-port=port    JSONRPC port (default: \`8545')
 
   Transaction options
 F,from=address       account to send transaction from
@@ -90,8 +90,8 @@ while [[ $1 ]]; do
   case $1 in
     --)              shift; break;;
 
-    -h|--host)       shift; export SETH_HOST=$1;;
-    -p|--port)       shift; export SETH_PORT=$1;;
+    --jsonrpc-host)  shift; export SETH_HOST=$1;;
+    --jsonrpc-port)  shift; export SETH_PORT=$1;;
 
     -F|--from)       shift; export SETH_FROM=$1;;
     -G|--gas)        shift; export SETH_GAS=$1;;
