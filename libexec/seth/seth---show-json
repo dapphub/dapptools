@@ -23,7 +23,7 @@ show-hexnum() {
   bc <<<"ibase=16; $(tr a-f A-F <<<"$digits")"
 }
 
-if [[ $SETH_JSON_OUTPUT ]]; then
+if [[ $SETH_JSON ]]; then
   jshon
 else
   json=$(cat)

@@ -9,6 +9,6 @@ jshon+=(-s "${SETH_BLOCK-earliest}" -i fromBlock)
 jshon+=(-i append)
 id=$(seth --jsonrpc eth_newFilter "${jshon[@]}")
 trap 'seth --jsonrpc eth_uninstallFilter -s "$id" -i append >/dev/null' EXIT
-SETH_JSON_OUTPUT=yes \
+SETH_JSON=yes \
 seth --jsonrpc eth_getFilterLogs -s "$id" -i append | jshon -a -j
 if [[ $SETH_FOLLOW ]]; then seth logs-follow "$id"; fi

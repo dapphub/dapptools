@@ -110,7 +110,7 @@ while [[ $1 ]]; do
        --no-wait)           export SETH_WAIT=no;;
        --follow)            export SETH_FOLLOW=yes;;
 
-       --json)              export SETH_JSON_OUTPUT=yes;;
+       --json)              export SETH_JSON=yes;;
 
     *) printf "${0##*/}: internal error: %q\n" "$1"; exit 1
   esac; shift
