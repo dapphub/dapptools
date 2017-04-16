@@ -7,8 +7,8 @@
 ###
 ### Connection options:
 ###
-###    --jsonrpc-host=<host>      JSONRPC host (default: `localhost')
-###    --jsonrpc-port=<port>      JSONRPC port (default: `8545')
+###    --rpc-host=<host>          JSON-RPC host (default: `localhost')
+###    --rpc-port=<port>          JSON-RPC port (default: `8545')
 ###
 ### Transaction options:
 ###
@@ -37,8 +37,8 @@ OPTS="seth [<options>] <command> [<args>]
 seth <command> --help
 --
   Connection options
-jsonrpc-host=host    JSONRPC host (default: \`localhost')
-jsonrpc-port=port    JSONRPC port (default: \`8545')
+rpc-host=host        JSON-RPC host (default: \`localhost')
+rpc-port=port        JSON-RPC port (default: \`8545')
 
   Transaction options
 F,from=address       account to send transaction from
@@ -79,8 +79,8 @@ while [[ $1 ]]; do
   case $1 in
     --)              shift; break;;
 
-    --jsonrpc-host)  shift; export ETH_JSONRPC_HOST=$1;;
-    --jsonrpc-port)  shift; export ETH_JSONRPC_PORT=$1;;
+    --rpc-host)      shift; export ETH_RPC_HOST=$1;;
+    --rpc-port)      shift; export ETH_RPC_PORT=$1;;
 
     -B|--block)      shift; export ETH_BLOCK=$1;;
     -F|--from)       shift; export ETH_FROM=$1;;
