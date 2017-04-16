@@ -1,4 +1,0 @@
-#!/usr/bin/env bash
-set -e
-wei=$(seth --to-wei "$@")
-echo "$(seth --to-fix 9 "$wei") Gwei"
