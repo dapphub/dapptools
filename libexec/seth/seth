@@ -92,8 +92,8 @@ while [[ $1 ]]; do
   case $1 in
     --)              shift; break;;
 
-    --jsonrpc-host)  shift; export SETH_HOST=$1;;
-    --jsonrpc-port)  shift; export SETH_PORT=$1;;
+    --jsonrpc-host)  shift; export ETH_JSONRPC_HOST=$1;;
+    --jsonrpc-port)  shift; export ETH_JSONRPC_PORT=$1;;
 
     -F|--from)       shift; export SETH_FROM=$1;;
     -G|--gas)        shift; export SETH_GAS=$1;;
@@ -118,9 +118,5 @@ done
 
 export SETH_FROM=${SETH_FROM:-${SETH_SENDER:-${ETH_FROM:-$ETH_SENDER}}}
 export SETH_GAS=${SETH_GAS:-$ETH_GAS}
-
-export SETH_HOST=${SETH_HOST:-${SETH_RPC_HOST:-$ETH_RPC_HOST}}
-export SETH_PORT=${SETH_PORT:-${SETH_RPC_PORT:-$ETH_RPC_PORT}}
-export SETH_URL=${SETH_URL:-${SETH_RPC_URL:-$ETH_RPC_URL}}
 
 "${0##*/}-${1-help}" "${@:2}"

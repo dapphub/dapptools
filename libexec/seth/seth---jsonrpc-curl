@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 set -e
 data=$(cat)
-url=${SETH_URL:-${SETH_HOST:-localhost}:${SETH_PORT:-8545}}
+url=${ETH_JSONRPC_HOST:-localhost}:${ETH_JSONRPC_PORT:-8545}
 [[ $SETH_DEBUG_CURL ]] && set -x
 curl -sS -H "Content-Type: application/json" "$url" -d "$data"
