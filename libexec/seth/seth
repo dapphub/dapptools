@@ -35,11 +35,11 @@
 ###
 ### Options for seth-log(1):
 ###
-###    -f, --follow               go into a loop watching for new logs
+###    --follow                   go into a loop watching for new logs
 ###
 ### Other options:
 ###
-###    -j, --json-output          print raw JSON to standard output
+###    --json                     print results in JSON format
 
 OPTS="seth [<options>] <command> [<args>]
 seth <command> --help
@@ -65,10 +65,10 @@ create               use the calldata to create a new object
 no-wait              do not wait for transaction receipt
 
   Options for seth-log(1)
-f,follow             go into a loop watching for new logs
+follow               go into a loop watching for new logs
 
   Other options:
-j,json-output        print raw JSON to standard output
+json                 print results in JSON format
 "
 
 set -e
@@ -102,13 +102,12 @@ while [[ $1 ]]; do
     -B|--block)      shift; export SETH_BLOCK=$1;;
 
        --create)            export SETH_CREATE=yes;;
-       --new)               export SETH_CREATE=yes;;
 
        --wait)              export SETH_WAIT=yes;;
        --no-wait)           export SETH_WAIT=no;;
-    -f|--follow)            export SETH_FOLLOW=yes;;
+       --follow)            export SETH_FOLLOW=yes;;
 
-    -j|--json-output)       export SETH_JSON_OUTPUT=yes;;
+       --json)              export SETH_JSON_OUTPUT=yes;;
 
        --guess-return)      export SETH_GUESS_RETURN=yes;;
 
