@@ -20,9 +20,6 @@ Usage: seth --from-ascii <text>...
 [TODO: Add `-h' option?]
 Usage: seth gas-price
 
-[TODO: Remove in favor of `seth age'?]
-Usage: seth hours [-B <block>]
-
 [TODO: Allow passing <hexdata> through standard input?]
 Usage: seth keccak <hexdata>
 
@@ -33,17 +30,8 @@ Usage: seth logs [-B <block>] [--follow] <address>
 [TODO: Add `-h' option?]
 Usage: seth ls
 
-[TODO: Remove in favor of `seth age'?]
-Usage: seth minutes [-B <block>]
-
-[TODO: Remove in favor of `seth age'?]
-Usage: seth seconds [-B <block>]
-
 [TODO: Allow passing <hexdata> through standard input?]
 Usage: seth sign [-F <sender>] <hexdata>
-
-[TODO: Remove?]
-Usage: seth --to-gwei <amount> [<unit>]
 
 [TODO: Remove?]
 Usage: seth --to-wei <amount> [<unit>]
