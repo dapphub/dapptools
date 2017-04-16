@@ -11,7 +11,7 @@ in rec {
   postInstall =
     let
       path = pkgs.lib.makeBinPath [
-        pkgs.curl pkgs.ethabi pkgs.git pkgs.jshon pkgs.solc
+        pkgs.bc pkgs.curl pkgs.ethabi pkgs.git pkgs.jshon pkgs.solc
       ];
     in
       ''wrapProgram "$out/bin/seth" --prefix PATH : "${path}"'';

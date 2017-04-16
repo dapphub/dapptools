@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-### seth-tx -- print general or specific information about a transaction
+### seth-tx -- print a table of information about a transaction
 ### Usage: seth tx <tx-hash> [<field>]
 ### Show information about the transaction <tx-hash>.
 ###

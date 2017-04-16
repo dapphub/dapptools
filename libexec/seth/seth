@@ -18,7 +18,7 @@
 ###        --nonce=<number>       nonce value to use for the transaction
 ###    -V, --value=<number>       amount (in wei) of ETH to send
 ###
-### Options for seth-call(1), seth-estimate(1) and others:
+### Options for seth-call(1):
 ###
 ###    -B, --block=<number>       block number (default: `latest')
 ###
@@ -36,21 +36,21 @@
 OPTS="seth [<options>] <command> [<args>]
 seth <command> --help
 --
-  Connection options
+  Connection options:
 rpc-host=host        JSON-RPC host (default: \`localhost')
 rpc-port=port        JSON-RPC port (default: \`8545')
 
-  Transaction options
+  Transaction options:
 F,from=address       account to send transaction from
 G,gas=number         number of gas units to provide
 gas-price=number     price (in wei) of each gas unit
 nonce=number         nonce value to use for the transaction
 V,value=number       amount (in wei) of ETH to send
 
-  Options for seth-call(1), seth-estimate(1) and others
+  Options for seth-call(1):
 B,block=number       block number (default: \`latest')
 
-  Options for seth-send(1)
+  Options for seth-send(1):
 create               use the calldata to create a new object
 guess                guess the return value of the call
 

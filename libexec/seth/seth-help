@@ -3,7 +3,7 @@
 ### Usage: seth help [<command>]
 ###    or: seth <command> --help
 
-BUGS=https://github.com/dapphub/seth/issues/new
+BUGS=https://github.com/dapphub/seth/issues
 
 name=seth
 file=${0%-*}${1+-$1}
