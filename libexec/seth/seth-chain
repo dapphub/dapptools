@@ -8,12 +8,10 @@ genesis=$(seth block 0 hash)
 case $genesis in
   0xd4e56740f876aef8c010b86a40d5f56745a118d0906a34e69aec8c0db1cb8fa3)
     case $(seth block 1920000 hash 2>/dev/null || echo null) in
-      0x4985f5ca3d2afbec36529aa96f74de3cc10a2a4a6c44f2157a57d2c6059a11bb)
-        echo ethlive;;
       0x94365e3a8c0b35089c1d1195081fe7489b528a84b22199c916180db8b28ade7f)
         echo etclive;;
       *)
-        echo ethlivepredao;;
+        echo ethlive;;
     esac;;
   0xa3c565fc15c7478862d50ccd6561e3c06b24cc509bf388941c25ea985ce32cb9)
     echo kovan;;
