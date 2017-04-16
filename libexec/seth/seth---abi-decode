@@ -13,8 +13,8 @@ result=$(
 )
 
 if [[ $result = error* ]]; then
-  [[ $SETH_SILENT ]] || echo >&2 "ethabi: $2"
-  [[ $SETH_SILENT ]] || echo >&2 "ethabi: $result"
+  echo >&2 "ethabi: $2"
+  echo >&2 "ethabi: $result"
   exit 1
 fi
 
