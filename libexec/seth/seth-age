@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
-### seth-age -- show the age of the last block relative to now
+### seth-age -- show the timestamp of the latest block
 set -e
-seconds=$(seth seconds)
-block=$(seth block)
-echo "$seconds seconds since block $block"
+timestamp=$(seth block latest timestamp)
+date -d@"$timestamp"
