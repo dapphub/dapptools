@@ -28,6 +28,7 @@
 ### Options for seth-send(1):
 ###
 ###    --create                   use the calldata to create a new object
+###    --guess                    guess the return value of the call
 ###
 ### Options for seth-send(1) and seth-receipt(1):
 ###
@@ -60,6 +61,7 @@ B,block=number       block number (default: \`latest')
 
   Options for seth-send(1)
 create               use the calldata to create a new object
+guess                guess the return value of the call
 
   Options for seth-send(1) and seth-receipt(1)
 no-wait              do not wait for transaction receipt
@@ -102,14 +104,13 @@ while [[ $1 ]]; do
     -B|--block)      shift; export SETH_BLOCK=$1;;
 
        --create)            export SETH_CREATE=yes;;
+       --guess)             export SETH_GUESS=yes;;
 
        --wait)              export SETH_WAIT=yes;;
        --no-wait)           export SETH_WAIT=no;;
        --follow)            export SETH_FOLLOW=yes;;
 
        --json)              export SETH_JSON_OUTPUT=yes;;
-
-       --guess-return)      export SETH_GUESS_RETURN=yes;;
 
     *) printf "${0##*/}: internal error: %q\n" "$1"; exit 1
   esac; shift

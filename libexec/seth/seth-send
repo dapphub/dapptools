@@ -60,6 +60,6 @@ echo >&2
 echo >&2 "${0##*/}: Transaction included in block $number."
 [[ $TO ]] || exec seth receipt "$tx" contractAddress
 
-[[ $SETH_GUESS_RETURN ]] || exit
+[[ $SETH_GUESS ]] || exit
 echo >&2 "${0##*/}: warning: return value may be inaccurate"
 seth -B "$((number - 1))" call "$TO" "${@:2}"
