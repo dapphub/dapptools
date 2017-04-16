@@ -57,7 +57,7 @@ guess                guess the return value of the call
   Other options:
 async                do not wait for transaction receipt
 follow               go into a loop watching for new logs
-json                 print output in JSON format (if applicable)
+json                 print output as JSON (if applicable)
 "
 
 set -e

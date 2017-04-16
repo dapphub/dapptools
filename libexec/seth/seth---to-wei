@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-### seth---to-wei -- convert an ETH or Gwei value into (unitless) wei
+### seth---to-wei -- convert an ETH amount into wei
 ### Usage: seth --to-wei <value> [<unit>]
 set -e
 [[ $1 ]] || seth --bad-usage "$0"
@@ -10,7 +10,6 @@ unit=$(tr A-Z a-z <<<"$unit")
 
 case $unit in
   wei) scale=0;;
-  gwei) scale=9;;
   eth) scale=18;;
   *) seth --error "$0" "unrecognized monetary value: \`$1'"
 esac
