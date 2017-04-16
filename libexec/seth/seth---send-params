@@ -17,8 +17,8 @@ param() {
   fi
 }
 
-param SETH_FROM       from      --address
-param SETH_GAS        gas
-param SETH_GAS_PRICE  gasPrice  --wei
-param SETH_NONCE      nonce
-param SETH_VALUE      value     --wei
+param ETH_FROM       from      --address
+param ETH_GAS        gas
+param ETH_GAS_PRICE  gasPrice  --wei
+param ETH_NONCE      nonce
+param ETH_VALUE      value     --wei

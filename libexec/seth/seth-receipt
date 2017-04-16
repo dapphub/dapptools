@@ -13,6 +13,6 @@ receipt=$(seth --jsonrpc eth_getTransactionReceipt "${jshon[@]}")
 [[ $receipt != null ]] && number=$(seth --field <<<"$receipt" blockNumber)
 [[ ${number-null} != null && $2 ]] && exec seth --field "$2" <<<"$receipt"
 [[ ${number-null} != null ]] && exec echo "$receipt"
-[[ $SETH_WAIT = no ]] && seth --error "$0" "not found: $tx"
+[[ $SETH_ASYNC = yes ]] && seth --error "$0" "not found: $tx"
 sleep 1; [[ $SETH_TICK ]] && printf . >&2
 exec "$0" "$@"

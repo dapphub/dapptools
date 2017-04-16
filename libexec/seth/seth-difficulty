@@ -1,3 +1,3 @@
 #!/usr/bin/env bash
 set -e
-seth block "${1-${SETH_BLOCK-latest}}" difficulty
+seth block "${1-${ETH_BLOCK-latest}}" difficulty

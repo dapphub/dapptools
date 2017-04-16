@@ -8,5 +8,5 @@ set -e
 [[ $# = 1 ]] || seth --bad-usage "$0"
 ADDRESS=$(seth --to-hexdata "$1")
 jshon+=(-s "$ADDRESS" -i append)
-jshon+=(-s "${SETH_BLOCK-latest}" -i append)
+jshon+=(-s "${ETH_BLOCK-latest}" -i append)
 seth --jsonrpc eth_getTransactionCount "${jshon[@]}"

@@ -5,7 +5,7 @@ set -e
 [[ $1 ]] || seth --bad-usage "$0"
 jshon+=(-n {})
 jshon+=(-s "$(seth --to-address "${1?}")" -i address)
-jshon+=(-s "${SETH_BLOCK-earliest}" -i fromBlock)
+jshon+=(-s "${ETH_BLOCK-earliest}" -i fromBlock)
 jshon+=(-i append)
 id=$(seth --jsonrpc eth_newFilter "${jshon[@]}")
 trap 'seth --jsonrpc eth_uninstallFilter -s "$id" -i append >/dev/null' EXIT

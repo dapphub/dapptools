@@ -10,5 +10,5 @@ address=$(seth --to-address "$1")
 slot=$(seth --to-hex "$2")
 jshon+=(-s "$address" -i append)
 jshon+=(-s "$slot" -i append)
-jshon+=(-s "${SETH_BLOCK-latest}" -i append)
+jshon+=(-s "${ETH_BLOCK-latest}" -i append)
 seth --jsonrpc eth_getStorageAt "${jshon[@]}"

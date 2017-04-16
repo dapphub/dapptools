@@ -4,7 +4,8 @@
 ### Sign <data> with the private key of <account>.
 set -e
 [[ $# = 1 ]] || seth --bad-usage "$0"
-SENDER=$(seth --to-address "${SETH_FROM?missing sender}")
+[[ $ETH_FROM ]] || seth --error "$0" "\`ETH_FROM' not set"
+SENDER=$(seth --to-address "$ETH_FROM")
 DATA=$(seth --to-hexdata "$1")
 jshon+=(-s "$SENDER" -i append)
 jshon+=(-s "$DATA" -i append)

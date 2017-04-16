@@ -6,7 +6,7 @@
 ###    or: seth send [<opts>] [-F <from>] --create <code> [<data>]
 ###
 ### Publish a transaction signed by <from> to call <to> with <data>.
-### If no <from> is given, try `$ETH_FROM' or `$SETH_FROM'.
+### If no <from> is given, try `$ETH_FROM'.
 ###
 ### If <sig> has the form `<name>(<types>)', infer <data> from <sig>/<args>.
 ### If no <data> is given, just call <to> without any calldata.
@@ -22,9 +22,9 @@
 set -e
 [[ $1 ]] || seth --bad-usage "$0"
 
-[[ $SETH_FROM ]] ||
-seth --error "$0" "\`ETH_FROM' not set -- send from what account?"
-[[ $SETH_GAS ]] ||
+[[ $ETH_FROM ]] ||
+seth --error "$0" "\`ETH_FROM' not set --- send from which account?"
+[[ $ETH_GAS ]] ||
 seth --warn "$0" "\`ETH_GAS' not set; using default gas amount"
 
 if [[ $SETH_CREATE ]]; then
@@ -48,7 +48,7 @@ jshon+=(-i append)
 tx=$(seth --jsonrpc eth_sendTransaction "${jshon[@]}")
 [[ $tx =~ ^0x0*$ ]] && seth --error "$0" "bad tx hash: $tx (account locked?)"
 
-[[ $SETH_WAIT = no ]] && exec echo "$tx"
+[[ $SETH_ASYNC = yes ]] && exec echo "$tx"
 
 bytes=$((${#DATA} - 2))
 echo >&2 "${0##*/}: Published transaction with $bytes bytes of calldata."

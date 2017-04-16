@@ -22,6 +22,6 @@ jshon+=(-s "$RECEIVER" -i to)
 jshon+=(-s "$DATA"     -i data)
 jshon+=($(seth --send-params))
 jshon+=(-i append)
-jshon+=(-s "${SETH_BLOCK-latest}" -i append)
+jshon+=(-s "${ETH_BLOCK-latest}" -i append)
 result=$(seth --jsonrpc eth_call "${jshon[@]}")
 seth --abi-decode "$2" "$result"
