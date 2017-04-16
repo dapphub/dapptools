@@ -1,5 +1,3 @@
 #!/usr/bin/env bash
 set -e
-wei=$(seth --jsonrpc eth_gasPrice)
-gwei=$(seth --to-gwei "$wei")
-echo "$gwei/gas"
+seth --jsonrpc eth_gasPrice
