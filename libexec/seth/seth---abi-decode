@@ -13,8 +13,8 @@ result=$(
 )
 
 if [[ $result = error* ]]; then
-  echo >&2 "ethabi: $2"
   echo >&2 "ethabi: $result"
+  echo >&2 "ethabi: error: data = \`$2'"
   exit 1
 fi
 
