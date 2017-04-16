@@ -1,6 +1,0 @@
-#!/usr/bin/env bash
-set -e
-[[ $1 ]] || exec xargs "$0"
-wei=$(seth --to-wei "$@")
-eth=$(seth --to-fix 18 "$wei")
-echo "$eth ETH"
