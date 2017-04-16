@@ -10,7 +10,9 @@ in rec {
   buildPhase = "true";
   postInstall =
     let
-      path = pkgs.lib.makeBinPath [pkgs.ethabi pkgs.curl pkgs.jshon];
+      path = pkgs.lib.makeBinPath [
+        pkgs.curl pkgs.ethabi pkgs.git pkgs.jshon pkgs.solc
+      ];
     in
       ''wrapProgram "$out/bin/seth" --prefix PATH : "${path}"'';
   };
