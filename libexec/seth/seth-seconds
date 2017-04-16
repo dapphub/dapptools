@@ -1,7 +1,0 @@
-#!/usr/bin/env bash
-### seth-seconds -- print the age of the latest block in seconds
-set -e
-date=$(seth date)
-date=$(date +%s -d "$date")
-now=$(date +%s)
-echo $((now - date))
