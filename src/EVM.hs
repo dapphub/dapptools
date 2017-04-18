@@ -407,6 +407,9 @@ exec1 vm = do
                 & env . contracts .~ contracts'
             _ -> error "underrun"
 
+        0x38 {- CODESIZE -} ->
+          stackOp0_1 vm' (fromIntegral (BS.length (vm ^. vmCode)))
+      
         0x39 {- CODECOPY -} ->
           case stk of
             (memoryOffset:codeOffset:codeSize:xs) -> return $!
@@ -416,6 +419,9 @@ exec1 vm = do
                                   (c ^? code . ix (num (codeOffset + i))) ?: 0)
                                  | i <- [0..codeSize-1]])
             _ -> error "underrun"
+
+        x -> do
+          error ("opcode " ++ show x)
 
     else do
       cpprint ("pc" :: String, vm ^. pc)
