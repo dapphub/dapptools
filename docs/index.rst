@@ -6,14 +6,20 @@
 Dapp
 ================================
 
+.. |github| image:: https://img.shields.io/badge/view%20source-github-blue.svg?style=flat-square
+   :target: https://github.com/dapphub/dapp   
+
+.. |chat| image:: https://img.shields.io/badge/community-chat-blue.svg?style=flat-square
+   :target: https://dapphub.chat
+   
+|github|  |chat|
+
 Dapp is a simple command line tool for smart contract development. It supports these common usecases:
 
 * Package management
 * Source code building
 * Unit testing
 * Simple contract deployments
-
-If you would like to understand Dapp better, you can `chat with the development team <https://dapphub.chat/channel/dapp-cli>`_ or `view the code on Github <https://github.com/dapphub/dapp>`_.
 
 
 
