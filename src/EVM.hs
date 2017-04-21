@@ -56,7 +56,7 @@ data Linkage = CallLinkage Word256 Word256
 
 data FrameState = FrameState {
   _contract    :: !Word256,
-  _vmCode      :: !ByteString,
+  _code        :: !ByteString,
   _pc          :: !Int,
   _stack       :: ![Word256],
   _memory      :: !(Map Word256 Word8),
@@ -69,14 +69,14 @@ makeLenses ''FrameState
 
 blankState :: FrameState
 blankState = FrameState
-  { _contract = 0
-  , _vmCode = mempty
-  , _pc = 0
-  , _stack = mempty
-  , _memory = mempty
-  , _calldata = mempty
+  { _contract  = 0
+  , _code      = mempty
+  , _pc        = 0
+  , _stack     = mempty
+  , _memory    = mempty
+  , _calldata  = mempty
   , _callvalue = 0
-  , _caller = 0
+  , _caller    = 0
   }
 
 data Frame = Frame {
@@ -155,10 +155,10 @@ accessMemoryWord x = accessMemoryRange x 32
 exec1 :: VM -> IO VM
 exec1 vm = do
   let Just !c = vm ^? env . contracts . ix (vm ^. state . contract)
-  if vm ^. state . pc < BS.length (vm ^. state . vmCode)
+  if vm ^. state . pc < BS.length (vm ^. state . code)
     then
       let vm' = vm & state . pc +~ opSize op
-          op  = BS.index (vm ^. state . vmCode) (vm ^. state .pc)
+          op  = BS.index (vm ^. state . code) (vm ^. state .pc)
           mem = vm ^. state . memory
           stk = vm ^. state . stack
       in case op of
@@ -166,7 +166,7 @@ exec1 vm = do
         x {- PUSH -} | x >= 0x60 && x <= 0x7f ->
           let !n = num x - 0x60 + 1
               !xs = BS.take n (BS.drop (1 + vm ^. state . pc)
-                                       (vm ^. state . vmCode))
+                                       (vm ^. state . code))
           in stackOp0_1 vm' (word (BS.unpack xs))
 
         0x15 {- ISZERO -} ->
@@ -523,14 +523,14 @@ exec1 vm = do
                            (0, Nothing) :)
                 & state .~
                     (blankState
-                      & vmCode    .~ xCode
+                      & code      .~ xCode
                       & callvalue .~ xValue
                       & caller    .~ (vm ^. state . contract)
                       & contract  .~ address')
             _ -> error "underrun"
 
         0x38 {- CODESIZE -} ->
-          stackOp0_1 vm' (fromIntegral (BS.length (vm ^. state . vmCode)))
+          stackOp0_1 vm' (fromIntegral (BS.length (vm ^. state . code)))
 
         0x39 {- CODECOPY -} ->
           case stk of
@@ -643,7 +643,7 @@ continue theCalldata theCallvalue theContractName theSolc theSourceCache theBloc
 
 checkJump :: (Monad m, Integral n) => VM -> n -> m VM
 checkJump vm x =
-  let theCode = vm ^. state . vmCode in
+  let theCode = vm ^. state . code in
   if num x < BS.length theCode && BS.index theCode (num x) == 0x5b
   then return $! vm & state . pc .~ num x
   else error "bad jump destination"
@@ -667,7 +667,7 @@ initialVm theCalldata theCallvalue theContractName theSolc theSourceCache theBlo
   _state = FrameState {
     _contract = 123,
     _pc = 0,
-    _vmCode = theSolc ^?! ix theContractName . runtimeCode,
+    _code = theSolc ^?! ix theContractName . runtimeCode,
     _stack = mempty,
     _memory = mempty,
     _calldata = theCalldata,
