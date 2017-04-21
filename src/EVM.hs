@@ -7,6 +7,7 @@
 {-# Language Rank2Types #-}
 {-# Language TemplateHaskell #-}
 {-# Language TypeFamilies #-}
+{-# Language FlexibleContexts #-}
 
 module EVM where
 
@@ -150,7 +151,15 @@ accessMemoryRange f l vm =
 accessMemoryWord :: Word256 -> VM -> VM
 accessMemoryWord x = accessMemoryRange x 32
 
-
+copyBytesToMemory
+  :: (IxValue s ~ Word8, Ixed s, Num (Index s))
+  => s -> Word256 -> Word256 -> Word256 -> VM -> VM
+copyBytesToMemory bs size xOffset yOffset vm =
+  vm & state . memory .~
+         flip union (vm ^. state . memory)
+           (fromList
+             [ (yOffset + i, (bs ^? ix (num (xOffset + i))) ?: 0)
+               | i <- [0 .. size - 1] ])
 
 exec1 :: VM -> IO VM
 exec1 vm = do
@@ -338,13 +347,9 @@ exec1 vm = do
             (toOffset:fromOffset:theSize:xs) ->
               return $!
                 vm' & state . stack .~ xs
-                    & state . memory .~ flip union mem
-                        (fromList [
-                            (toOffset + i,
-                             (vm ^? state . calldata
-                                          . ix (num (fromOffset + i)))
-                               ?: 0)
-                            | i <- [0..theSize-1]])
+                    & copyBytesToMemory
+                        (vm ^. state . calldata)
+                        theSize fromOffset toOffset
             _ -> error "underrun"
 
         0x20 {- SHA3 -} ->
@@ -490,13 +495,9 @@ exec1 vm = do
                         & frames .~ fs
                         & state .~ f ^. frameState
                         & state . stack %~ (1 :)
-                        & state . memory    .~ (
-                            let m = f ^. frameState . memory
-                            in flip union m
-                                 (fromList [(yOffset + i,
-                                            (vm ^? state . memory . ix (num (xOffset + i))) ?: 0)
-                                           | i <- [0..ySize-1]])
-                          )
+                        & copyBytesToMemory
+                            (vm ^. state . memory)
+                            ySize xOffset yOffset
                         & accessMemoryRange xOffset xSize
 
             _ -> error "underrun"
@@ -536,10 +537,9 @@ exec1 vm = do
           case stk of
             (memOffset:codeOffset:codeSize:xs) -> return $!
               vm' & state . stack .~ xs
-                  & state . memory .~ flip union mem
-                      (fromList [(memOffset + i,
-                                  (c ^? bytecode . ix (num (codeOffset + i))) ?: 0)
-                                 | i <- [0..codeSize-1]])
+                  & copyBytesToMemory
+                      (c ^. bytecode)
+                      codeSize codeOffset memOffset
             _ -> error "underrun"
 
         0x08 {- ADDMOD -} ->
@@ -589,13 +589,9 @@ returnOp returnCode (xOffset, xSize) vm =
             & frames .~ fs
             & state .~ f ^. frameState
             & state . stack %~ (returnCode :)
-            & state . memory    .~ (
-                let m = f ^. frameState . memory
-                in flip union m
-                     (fromList [(yOffset + i,
-                                (vm ^? state . memory . ix (num (xOffset + i))) ?: 0)
-                               | i <- [0..ySize-1]])
-              )
+            & copyBytesToMemory
+                (vm ^. state . memory)
+                ySize xOffset yOffset
 
 toWord512 :: Word256 -> Word512
 toWord512 x = fromHiAndLo 0 x
