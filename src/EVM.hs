@@ -108,11 +108,11 @@ data Env = Env {
 makeLenses ''Env
 
 data Block = Block {
-  _coinbase :: !Word256,
-  _timestamp :: !Word256,
-  _number :: !Word256,
+  _coinbase   :: !Word256,
+  _timestamp  :: !Word256,
+  _number     :: !Word256,
   _difficulty :: !Word256,
-  _gaslimit :: !Word256
+  _gaslimit   :: !Word256
 } deriving Show
 makeLenses ''Block
 
@@ -163,289 +163,61 @@ copyBytesToMemory bs size xOffset yOffset vm =
 
 exec1 :: VM -> IO VM
 exec1 vm = do
-  let Just !c = vm ^? env . contracts . ix (vm ^. state . contract)
-  if vm ^. state . pc < BS.length (vm ^. state . code)
-    then
-      let vm' = vm & state . pc +~ opSize op
-          op  = BS.index (vm ^. state . code) (vm ^. state .pc)
-          mem = vm ^. state . memory
-          stk = vm ^. state . stack
-      in case op of
 
-        x {- PUSH -} | x >= 0x60 && x <= 0x7f ->
+  -- short name for the current contract
+  let Just !c = vm ^? env . contracts . ix (vm ^. state . contract)
+
+  -- inside code bounds?
+  if vm ^. state . pc < BS.length (vm ^. state . code)
+    then let
+
+      -- old vm with updated code pointer
+      vm' = vm & state . pc +~ opSize op
+
+      -- current operation byte
+      op  = BS.index (vm ^. state . code) (vm ^. state .pc)
+
+      -- short names for current memory and stack
+      mem = vm ^. state . memory
+      stk = vm ^. state . stack
+
+    in case op of
+
+        -- op: PUSH
+        x | x >= 0x60 && x <= 0x7f ->
           let !n = num x - 0x60 + 1
               !xs = BS.take n (BS.drop (1 + vm ^. state . pc)
                                        (vm ^. state . code))
           in stackOp0_1 vm' (word (BS.unpack xs))
 
-        0x15 {- ISZERO -} ->
-          stackOp1_1 vm' (\case 0 -> 1; _ -> 0)
+        -- op: DUP
+        x | x >= 0x80 && x <= 0x8f ->
+          let !i = x - 0x80 + 1 in
+          if length stk < num i
+          then underrun vm
+          else
+            let !y = vm ^?! state . stack . ix (num i - 1)
+            in return $!
+                 vm' & state . stack %~ (y:)
 
-        0x57 {- JUMPI -} -> do
-          case stk of
-            (x:y:xs) ->
-              if y == 0
-              then return $! vm' & state . stack .~ xs
-              else checkJump (vm & state . stack .~ xs) x
-            _ -> error "underrun"
-
-        0x56 {- JUMP -} ->
-          case stk of
-            (x:xs) -> checkJump (vm & state . stack .~ xs) x
-            _ -> error "underrun"
-
-        x | x >= 0x90 && x <= 0x9f -> {- SWAP -}
+        -- op: SWAP
+        x | x >= 0x90 && x <= 0x9f ->
           let !i = x - 0x90 + 1 in
           if length stk < num i
-          then error "underrun"
+          then underrun vm
           else return $!
             vm' & state . stack . ix 0 .~
                     (vm ^?! state . stack . ix (num i))
                 & state . stack . ix (num i) .~
                     (vm ^?! state . stack . ix 0)
 
-        x | x >= 0x80 && x <= 0x8f -> {- DUP -}
-          let !i = x - 0x80 + 1 in
-          if length stk < num i
-          then error "underrun"
-          else
-            let !y = vm ^?! state . stack . ix (num i - 1)
-            in return $!
-                 vm' & state . stack %~ (y:)
-
-        0x50 {- POP -} ->
-          case stk of
-            (_:xs) -> return $! vm' & state . stack .~ xs
-            _ -> error "underrun"
-
-        0x52 {- MSTORE -} ->
-          case stk of
-            (x:y:xs) ->
-              return $!
-                vm' & state . memory . word256At x .~ y
-                    & state . stack .~ xs
-                    & accessMemoryWord x
-            _ -> error "underrun"
-
-        0x53 {- MSTORE8 -} ->
-          case stk of
-            (x:y:xs) ->
-              return $!
-                vm' & state . memory . at x .~ Just (num (y .&. 0xff))
-                    & state . stack .~ xs
-                    & accessMemoryRange x 1
-            _ -> error "underrun"
-
-        0x55 {- SSTORE -} -> do
-          case stk of
-            (x:y:xs) -> do
-              return $!
-                vm' & env . contracts . ix (vm ^. state . contract)
-                          . storage . at x .~ Just y
-                    & state . stack .~ xs
-            _ -> error "underrun"
-
-        0x58 {- PC -} ->
-          stackOp0_1 vm' (num (vm ^. state . pc))
-
-        0x59 {- MSIZE -} ->
-          stackOp0_1 vm' (vm ^. memorySize)
-
-        0x04 {- DIV -} ->
-          stackOp2_1 vm' $ \x ->
-            \case
-              0 -> 0
-              y -> div x y
-
-        0x05 {- SDIV -} ->
-          stackOp2_1 vm' $ \x ->
-            \case
-              0 -> 0
-              y -> unsignedWord (div (signedWord x) (signedWord y))
-
-        0x06 {- MOD -} ->
-          stackOp2_1 vm' $ \x ->
-            \case
-              0 -> 0
-              y -> mod x y
-
-        0x07 {- SMOD -} ->
-          stackOp2_1 vm' $ \x ->
-            \case
-              0 -> 0
-              y -> unsignedWord (mod (signedWord x) (signedWord y))
-
-        0x16 {- AND -} ->
-          stackOp2_1 vm' (.&.)
-
-        0x17 {- OR -} ->
-          stackOp2_1 vm' (.|.)
-
-        0x18 {- XOR -} ->
-          stackOp2_1 vm' xor
-
-        0x19 {- NOT -} ->
-          stackOp1_1 vm' complement
-
-        0x1a {- BYTE -} ->
-          stackOp2_1 vm' $ \n x ->
-            if n >= 32 then 0
-            else (shiftR x (8 * (31 - num n))) .&. 0xff
-
-        0x02 {- MUL -} ->
-          stackOp2_1 vm' (*)
-
-        0x0a {- EXP -} ->
-          stackOp2_1 vm' (^)
-
-        0x0b {- SIGNEXTEND -} ->
-          stackOp2_1 vm' $ \bytes x ->
-            if bytes >= 32 then x
-            else let n = num bytes * 8 + 7 in
-              if testBit x n
-              then x .|. complement (bit n - 1)
-              else x .&. (bit n - 1)
-
-        0x01 {- ADD -} ->
-          stackOp2_1 vm' (+)
-
-        0x03 {- SUB -} ->
-          stackOp2_1 vm' (-)
-
-        0x14 {- EQ -} ->
-          stackOp2_1 vm' (\x y -> if x == y then 1 else 0)
-
-        0x10 {- LT -} ->
-          stackOp2_1 vm' (\x y -> if x < y then 1 else 0)
-
-        0x12 {- SLT -} ->
-          stackOp2_1 vm' $ \x y ->
-            if (num x :: Int256) < (num y :: Int256) then 1 else 0
-
-        0x13 {- SGT -} ->
-          stackOp2_1 vm' $ \x y ->
-            if (num x :: Int256) > (num y :: Int256) then 1 else 0
-
-        0x11 {- GT -} ->
-          stackOp2_1 vm' (\x y -> if x > y then 1 else 0)
-
-        0x5b {- JUMPDEST -} -> return $! vm'
-
-        x {- LOG -} | x >= 0xa0 && x <= 0xa4 ->
+        -- op: LOG
+        x | x >= 0xa0 && x <= 0xa4 ->
           let !n = x - 0xa0 + 1 in
           return $! vm' & state . stack %~ drop (num n + 1)
 
-        0x36 {- CALLDATASIZE -} ->
-          stackOp0_1 vm' (num (BS.length (vm ^. state . calldata)))
-
-        0x35 {- CALLDATALOAD -} ->
-          stackOp1_1 vm'
-            (\x -> wordAt (num x) (vm ^. state . calldata))
-
-        0x37 {- CALLDATACOPY -} ->
-          case stk of
-            (toOffset:fromOffset:theSize:xs) ->
-              return $!
-                vm' & state . stack .~ xs
-                    & copyBytesToMemory
-                        (vm ^. state . calldata)
-                        theSize fromOffset toOffset
-            _ -> error "underrun"
-
-        0x20 {- SHA3 -} ->
-          case stk of
-            (xOffset:xSize:xs) ->
-              let m = vm' ^. state . memory
-                  bytes = [(Map.lookup (xOffset + i) m) ?: 0
-                           | i <- [0..xSize-1]]
-                  hash = keccak (BS.pack bytes)
-              in do
-                -- cpprint ("SHA3 preimage", bytes)
-                return $! vm'
-                  & state . stack .~ hash : xs
-                  & env . sha3Crack . at hash .~ Just bytes
-                  & accessMemoryRange xOffset xSize
-            _ -> error "underrun"
-
-        0x30 {- ADDRESS -} ->
-          stackOp0_1 vm' (vm ^. state . contract)
-
-        0x34 {- CALLVALUE -} ->
-          stackOp0_1 vm' (vm ^. state . callvalue)
-
-        0x33 {- CALLER -} ->
-          stackOp0_1 vm' (vm ^. state . caller)
-
-        0x31 {- BALANCE -} ->
-          stackOp1_1 vm' $ \x ->
-            (vm ^? env . contracts . ix x . balance) ?: 0
-
-        0x32 {- ORIGIN -} ->
-          stackOp0_1 vm' (vm ^. env . origin)
-
-        0x51 {- MLOAD -} ->
-          case vm ^. state . stack of
-            (x:xs) -> return $!
-              vm & state . stack .~ (vm ^. state . memory . word256At x : xs)
-                 & accessMemoryWord x
-            _ -> error "underrun"
-
-        0x54 {- SLOAD -} -> do
-          stackOp1_1 vm' (\x -> (c ^. storage . at x) ?: 0)
-
-        0x3b {- EXTCODESIZE -} ->
-          stackOp1_1 vm'
-            (\x -> num ((vm ^? env . contracts . ix x . codesize) ?: 0))
-
-        0x40 {- BLOCKHASH -} ->
-          -- fake zero block hashes everywhere
-          stackOp1_1 vm' (const 0)
-
-        0x41 {- COINBASE -}   -> stackOp0_1 vm' (vm ^. block . coinbase)
-        0x42 {- TIMESTAMP -}  -> stackOp0_1 vm' (vm ^. block . timestamp)
-        0x43 {- NUMBER -}     -> stackOp0_1 vm' (vm ^. block . number)
-        0x44 {- DIFFICULTY -} -> stackOp0_1 vm' (vm ^. block . difficulty)
-        0x45 {- GASLIMIT -}   -> stackOp0_1 vm' (vm ^. block . gaslimit)
-        0x5a {- GAS -}        -> stackOp0_1 vm' 0xffffffffffffffffff
-
-        0xf1 {- CALL -} ->
-          case stk of
-            (_:xTo:xValue:xInOffset:xInSize:xOutOffset:xOutSize:xs) -> do
-              let frame' =
-                    Frame
-                      ((vm' ^. state) & stack .~ xs)
-                      (CallLinkage xOutOffset xOutSize)
-                      (vm ^?! env . contracts . ix xTo . codehash,
-                       if xInSize >= 4
-                         then Just $!
-                                vm ^. state . memory . word32At xInOffset
-                         else Nothing)
-                      
-                  state' = (vm' ^. state)
-                    & pc .~ 0
-                    & stack .~ mempty
-                    & memory .~ mempty
-                    & contract .~ xTo
-                    & calldata .~
-                        (let m = vm' ^. state . memory in BS.pack [
-                            (Map.lookup (xInOffset + i) m) ?: 0
-                            | i <- [0..xInSize-1]
-                         ])
-                    & callvalue .~ xValue
-                    & caller    .~ (vm ^. state . contract)
-                    
-              return $! vm'
-                & frames %~ (frame' :)
-                & state .~ state'
-                & accessMemoryRange xInOffset xInSize
-                & accessMemoryRange xOutOffset xOutSize
-    
-            _ -> error "underrun"
-
-        0xf2 {- CALLCODE -} ->
-          error "CALLCODE not supported (use DELEGATECALL)"
-
-        0x00 {- STOP -} ->
+        -- op: STOP
+        0x00 ->
           case vm ^. frames of
             [] -> return $! vm' & done .~ True
             (f:fs) -> do
@@ -454,55 +226,275 @@ exec1 vm = do
                 & state .~ f ^. frameState
                 & state . stack %~ (1 :)
 
-        0xff {- SUICIDE -} ->
-          case vm ^. state . stack of
-            [] -> error "underrun"
-            (x:_) ->
-              let self = vm ^. state . contract
-                  vm'' = vm' & suicides %~ (self :)
-                             & env . contracts . ix x . balance +~
-                                 (vm ^?! env . contracts . ix self . balance)
-                             & env . contracts . ix self . balance .~ 0
-              in returnOp 0 (0, 0) vm''
+        -- op: ADD
+        0x01 -> stackOp2_1 vm' (+)
 
-        0xf3 {- RETURN -} ->
+        -- op: MUL
+        0x02 -> stackOp2_1 vm' (*)
+
+        -- op: SUB
+        0x03 -> stackOp2_1 vm' (-)
+
+        -- op: DIV
+        0x04 -> stackOp2_1 vm' $ \x -> \case 0 -> 0; y -> div x y
+
+        -- op: SDIV
+        0x05 ->
+          stackOp2_1 vm' $ \x ->
+            \case
+              0 -> 0
+              y -> unsignedWord (div (signedWord x) (signedWord y))
+
+        -- op: MOD
+        0x06 -> stackOp2_1 vm' $ \x -> \case 0 -> 0; y -> mod x y
+
+        -- op: SMOD
+        0x07 ->
+          stackOp2_1 vm' $ \x ->
+            \case
+              0 -> 0
+              y -> unsignedWord (mod (signedWord x) (signedWord y))
+
+        -- op: ADDMOD
+        0x08 ->
+          stackOp3_1 vm'
+            (\x y z -> fromWord512
+              ((toWord512 x + toWord512 y) `mod` (toWord512 z)))
+
+        -- op: MULMOD
+        0x09 ->
+          stackOp3_1 vm'
+            (\x y z -> fromWord512
+              ((toWord512 x * toWord512 y) `mod` (toWord512 z)))
+
+        -- op: LT
+        0x10 -> stackOp2_1 vm' (\x y -> if x < y then 1 else 0)
+
+        -- op: GT
+        0x11 -> stackOp2_1 vm' (\x y -> if x > y then 1 else 0)
+
+        -- op: SLT
+        0x12 ->
+          stackOp2_1 vm' $ \x y ->
+            if (num x :: Int256) < (num y :: Int256) then 1 else 0
+
+        -- op: SGT
+        0x13 ->
+          stackOp2_1 vm' $ \x y ->
+            if (num x :: Int256) > (num y :: Int256) then 1 else 0
+
+        -- op: EQ
+        0x14 -> stackOp2_1 vm' (\x y -> if x == y then 1 else 0)
+
+        -- op: ISZERO
+        0x15 -> stackOp1_1 vm' (\case 0 -> 1; _ -> 0)
+
+        -- op: AND
+        0x16 -> stackOp2_1 vm' (.&.)
+
+        -- op: OR
+        0x17 -> stackOp2_1 vm' (.|.)
+
+        -- op: XOR
+        0x18 -> stackOp2_1 vm' xor
+
+        -- op: NOT
+        0x19 -> stackOp1_1 vm' complement
+
+        -- op: BYTE
+        0x1a -> stackOp2_1 vm' $ \n x ->
+                  if n >= 32 then 0
+                  else (shiftR x (8 * (31 - num n))) .&. 0xff
+
+        -- op: SHA3
+        0x20 ->
           case stk of
-            (xOffset:xSize:_) ->
-              case vm ^. frames of
-                [] -> return $! vm' & done .~ True
-                (f:fs) ->
-                  case f ^. frameLinkage of
-                    CreateLinkage ->
-                      let created =
-                            vm ^?! env . contracts . ix (vm ^. state . contract)
-                          contract' =
-                            initialContract
-                             (BS.pack
-                              [ Map.findWithDefault 0 (xOffset + num i) mem
-                                | i <- [0..xSize-1]
-                              ])
-                             & storage .~ (created ^. storage)
-                             & balance .~ (created ^. balance)
-                      in return $! vm'
-                        & frames .~ fs
-                        & state .~ f ^. frameState
-                        & state . stack %~ (vm ^. state . contract :)
-                        & accessMemoryRange xOffset xSize
-                        & env . contracts . at (vm ^. state . contract) .~ Just contract'
+            (xOffset:xSize:xs) ->
+              let bytes = [(Map.lookup (xOffset + i) mem) ?: 0
+                           | i <- [0..xSize-1]]
+                  hash  = keccak (BS.pack bytes)
+              in do
+                return $! vm'
+                  & state . stack             .~ hash : xs
+                  & env . sha3Crack . at hash .~ Just bytes
+                  & accessMemoryRange xOffset xSize
+            _ -> underrun vm
 
-                    CallLinkage yOffset ySize ->
-                      return $! vm'
-                        & frames .~ fs
-                        & state .~ f ^. frameState
-                        & state . stack %~ (1 :)
-                        & copyBytesToMemory
-                            (vm ^. state . memory)
-                            ySize xOffset yOffset
-                        & accessMemoryRange xOffset xSize
+        -- op: ADDRESS
+        0x30 -> stackOp0_1 vm' (vm ^. state . contract)
 
-            _ -> error "underrun"
+        -- op: BALANCE
+        0x31 -> stackOp1_1 vm' $ \x ->
+          (vm ^? env . contracts . ix x . balance) ?: 0
 
-        0xf0 {- CREATE -} -> do
+        -- op: ORIGIN
+        0x32 -> stackOp0_1 vm' (vm ^. env . origin)
+
+        -- op: CALLER
+        0x33 -> stackOp0_1 vm' (vm ^. state . caller)
+
+        -- op: CALLVALUE
+        0x34 -> stackOp0_1 vm' (vm ^. state . callvalue)
+
+        -- op: CALLDATALOAD
+        0x35 -> stackOp1_1 vm' $ \x -> wordAt (num x) (vm ^. state . calldata)
+
+        -- op: CALLDATASIZE
+        0x36 -> stackOp0_1 vm' $ num (BS.length (vm ^. state . calldata))
+
+        -- op: CALLDATACOPY
+        0x37 ->
+          case stk of
+            (toOffset:fromOffset:theSize:xs) ->
+              return $!
+                vm' & state . stack .~ xs
+                    & copyBytesToMemory
+                        (vm ^. state . calldata)
+                        theSize fromOffset toOffset
+            _ -> underrun vm
+
+        -- op: CODESIZE
+        0x38 ->
+          stackOp0_1 vm' (fromIntegral (BS.length (vm ^. state . code)))
+
+        -- op: CODECOPY
+        0x39 ->
+          case stk of
+            (memOffset:codeOffset:codeSize:xs) -> return $!
+              vm' & state . stack .~ xs
+                  & copyBytesToMemory
+                      (c ^. bytecode)
+                      codeSize codeOffset memOffset
+            _ -> underrun vm
+
+        -- op: EXTCODESIZE
+        0x3b ->
+          stackOp1_1 vm'
+            (\x -> num ((vm ^? env . contracts . ix x . codesize) ?: 0))
+
+        -- op: EXTCODECOPY
+        0x3c ->
+          case stk of
+            (extAccount:memOffset:codeOffset:codeSize:xs) ->
+              let theCode = (vm ^? env . contracts . ix extAccount . bytecode) ?: mempty
+              in return $!
+                   vm' & state . stack .~ xs
+                       & copyBytesToMemory
+                           theCode codeSize codeOffset memOffset
+            _ -> underrun vm
+
+        -- op: BLOCKHASH
+        0x40 ->
+          -- fake zero block hashes everywhere
+          stackOp1_1 vm' (const 0)
+
+        -- op: COINBASE
+        0x41   -> stackOp0_1 vm' (vm ^. block . coinbase)
+
+        -- op: TIMESTAMP
+        0x42  -> stackOp0_1 vm' (vm ^. block . timestamp)
+
+        -- op: NUMBER
+        0x43     -> stackOp0_1 vm' (vm ^. block . number)
+
+        -- op: DIFFICULTY
+        0x44 -> stackOp0_1 vm' (vm ^. block . difficulty)
+
+        -- op: GASLIMIT
+        0x45   -> stackOp0_1 vm' (vm ^. block . gaslimit)
+
+        -- op: POP
+        0x50 ->
+          case stk of
+            (_:xs) -> return $! vm' & state . stack .~ xs
+            _ -> underrun vm
+
+        -- op: MLOAD
+        0x51 ->
+          case vm ^. state . stack of
+            (x:xs) -> return $!
+              vm & state . stack .~ (mem ^. word256At x : xs)
+                 & accessMemoryWord x
+            _ -> underrun vm
+
+        -- op: MSTORE
+        0x52 ->
+          case stk of
+            (x:y:xs) ->
+              return $!
+                vm' & state . memory . word256At x .~ y
+                    & state . stack .~ xs
+                    & accessMemoryWord x
+            _ -> underrun vm
+
+        -- op: MSTORE8
+        0x53 ->
+          case stk of
+            (x:y:xs) ->
+              return $!
+                vm' & state . memory . at x .~ Just (num (y .&. 0xff))
+                    & state . stack .~ xs
+                    & accessMemoryRange x 1
+            _ -> underrun vm
+
+        -- op: SLOAD
+        0x54 -> do
+          stackOp1_1 vm' (\x -> (c ^. storage . at x) ?: 0)
+
+        -- op: SSTORE
+        0x55 -> do
+          case stk of
+            (x:y:xs) -> do
+              return $!
+                vm' & env . contracts . ix (vm ^. state . contract)
+                          . storage . at x .~ Just y
+                    & state . stack .~ xs
+            _ -> underrun vm
+
+        -- op: JUMP
+        0x56 ->
+          case stk of
+            (x:xs) -> checkJump (vm & state . stack .~ xs) x
+            _ -> underrun vm
+
+        -- op: JUMPI
+        0x57 -> do
+          case stk of
+            (x:y:xs) ->
+              if y == 0
+              then return $! vm' & state . stack .~ xs
+              else checkJump (vm & state . stack .~ xs) x
+            _ -> underrun vm
+
+        -- op: PC
+        0x58 ->
+          stackOp0_1 vm' (num (vm ^. state . pc))
+
+        -- op: MSIZE
+        0x59 ->
+          stackOp0_1 vm' (vm ^. memorySize)
+
+        -- op: GAS
+        0x5a -> stackOp0_1 vm' 0xffffffffffffffffff
+
+        -- op: JUMPDEST
+        0x5b -> return $! vm'
+
+        -- op: EXP
+        0x0a ->
+          stackOp2_1 vm' (^)
+
+        -- op: SIGNEXTEND
+        0x0b ->
+          stackOp2_1 vm' $ \bytes x ->
+            if bytes >= 32 then x
+            else let n = num bytes * 8 + 7 in
+              if testBit x n
+              then x .|. complement (bit n - 1)
+              else x .&. (bit n - 1)
+
+        -- op: CREATE
+        0xf0 -> do
           case stk of
             (xValue:xOffset:xSize:xs) ->
               let address' =
@@ -528,29 +520,96 @@ exec1 vm = do
                       & callvalue .~ xValue
                       & caller    .~ (vm ^. state . contract)
                       & contract  .~ address')
-            _ -> error "underrun"
+            _ -> underrun vm
 
-        0x38 {- CODESIZE -} ->
-          stackOp0_1 vm' (fromIntegral (BS.length (vm ^. state . code)))
-
-        0x39 {- CODECOPY -} ->
+        -- op: CALL
+        0xf1 ->
           case stk of
-            (memOffset:codeOffset:codeSize:xs) -> return $!
-              vm' & state . stack .~ xs
-                  & copyBytesToMemory
-                      (c ^. bytecode)
-                      codeSize codeOffset memOffset
-            _ -> error "underrun"
+            (_:xTo:xValue:xInOffset:xInSize:xOutOffset:xOutSize:xs) -> do
+              let frame' =
+                    Frame
+                      ((vm' ^. state) & stack .~ xs)
+                      (CallLinkage xOutOffset xOutSize)
+                      (vm ^?! env . contracts . ix xTo . codehash,
+                       if xInSize >= 4
+                         then Just $! mem ^. word32At xInOffset
+                         else Nothing)
 
-        0x08 {- ADDMOD -} ->
-          stackOp3_1 vm'
-            (\x y z -> fromWord512
-              ((toWord512 x + toWord512 y) `mod` (toWord512 z)))
+                  state' = (vm' ^. state)
+                    & pc .~ 0
+                    & stack .~ mempty
+                    & memory .~ mempty
+                    & contract .~ xTo
+                    & calldata .~
+                        (BS.pack [
+                            (Map.lookup (xInOffset + i) mem) ?: 0
+                            | i <- [0..xInSize-1]
+                         ])
+                    & callvalue .~ xValue
+                    & caller    .~ (vm ^. state . contract)
 
-        0x09 {- MULMOD -} ->
-          stackOp3_1 vm'
-            (\x y z -> fromWord512
-              ((toWord512 x * toWord512 y) `mod` (toWord512 z)))
+              return $! vm'
+                & frames %~ (frame' :)
+                & state .~ state'
+                & accessMemoryRange xInOffset xInSize
+                & accessMemoryRange xOutOffset xOutSize
+
+            _ -> underrun vm
+
+        -- op: CALLCODE
+        0xf2 ->
+          error "CALLCODE not supported (use DELEGATECALL)"
+
+        -- op: RETURN
+        0xf3 ->
+          case stk of
+            (xOffset:xSize:_) ->
+              case vm ^. frames of
+                [] -> return $! vm' & done .~ True
+                (f:fs) ->
+                  case f ^. frameLinkage of
+                    CreateLinkage ->
+                      return $! vm'
+                        & frames .~ fs
+                        & state .~ f ^. frameState
+                        & state . stack %~ (vm ^. state . contract :)
+                        & accessMemoryRange xOffset xSize
+                        & env . contracts . at (vm ^. state . contract) .~
+                            if xSize == 0
+                            then Nothing
+                            else let created =
+                                       vm ^?! env . contracts . ix (vm ^. state . contract)
+                                     contract' =
+                                       initialContract
+                                        (BS.pack
+                                         [ Map.findWithDefault 0 (xOffset + num i) mem
+                                           | i <- [0..xSize-1]
+                                         ])
+                                        & storage .~ (created ^. storage)
+                                        & balance .~ (created ^. balance)
+                                   in Just contract'
+
+                    CallLinkage yOffset ySize ->
+                      return $! vm'
+                        & frames .~ fs
+                        & state .~ f ^. frameState
+                        & state . stack %~ (1 :)
+                        & copyBytesToMemory mem ySize xOffset yOffset
+                        & accessMemoryRange xOffset xSize
+
+            _ -> underrun vm
+
+        -- op: SUICIDE
+        0xff ->
+          case vm ^. state . stack of
+            [] -> underrun vm
+            (x:_) ->
+              let self = vm ^. state . contract
+                  vm'' = vm' & suicides %~ (self :)
+                             & env . contracts . ix x . balance +~
+                                 (vm ^?! env . contracts . ix self . balance)
+                             & env . contracts . ix self . balance .~ 0
+              in returnOp 0 (0, 0) vm''
 
         x -> do
           error ("opcode " ++ show x)
@@ -560,28 +619,34 @@ exec1 vm = do
       cpprint ("contract" :: String, vm ^. state . contract)
       error "error"
 
-returnOp :: Word256 -> (Word256, Word256) -> VM -> IO VM
+underrun :: Monad m => VM -> m VM
+underrun vm = returnOp 0 (0, 0) vm
+
+returnOp :: Monad m => Word256 -> (Word256, Word256) -> VM -> m VM
 returnOp returnCode (xOffset, xSize) vm =
   case vm ^. frames of
     [] -> return $! vm & done .~ True
     (f:fs) ->
       case f ^. frameLinkage of
         CreateLinkage ->
-          let created = vm ^?! env . contracts . ix (vm ^. state . contract)
-              contract' =
-                initialContract
-                 (BS.pack
-                   [ Map.findWithDefault 0 (xOffset + num i)
-                       (vm ^. state . memory)
-                     | i <- [0..xSize-1]])
-                 & storage .~ (created ^. storage)
-                 & balance .~ (created ^. balance)
-          in return $! vm
+          return $! vm
             & accessMemoryRange xOffset xSize
-            & env . contracts . at (vm ^. state . contract) .~ Just contract'
             & frames .~ fs
             & state .~ (f ^. frameState)
             & state . stack %~ (vm ^. state . contract :)
+            & env . contracts . at (vm ^. state . contract) .~
+                if xSize == 0
+                then Nothing
+                else
+                  let created =
+                        vm ^?! env . contracts . ix (vm ^. state . contract)
+                  in Just $ initialContract
+                              (BS.pack
+                                [ Map.findWithDefault 0 (xOffset + num i)
+                                    (vm ^. state . memory)
+                                  | i <- [0..xSize-1]])
+                              & storage .~ (created ^. storage)
+                              & balance .~ (created ^. balance)
 
         CallLinkage yOffset ySize ->
           return $! vm
@@ -609,7 +674,7 @@ stackOp1_1 vm f =
     (x:xs) ->
       let !y = f x in
       return $! vm & state . stack .~ y : xs
-    _ -> error "underrun"
+    _ -> underrun vm
 
 stackOp2_1 :: Monad m => VM -> (Word256 -> Word256 -> Word256) -> m VM
 stackOp2_1 vm f =
@@ -617,7 +682,7 @@ stackOp2_1 vm f =
     (x:y:xs) ->
       let !z = f x y in
       return $! vm & state . stack .~ z : xs
-    _ -> error "underrun"
+    _ -> underrun vm
 
 stackOp3_1 :: Monad m => VM
   -> (Word256 -> Word256 -> Word256 -> Word256)
@@ -627,7 +692,7 @@ stackOp3_1 vm f =
     (x:y:z:xs) ->
       let !a = f x y z in
       return $! vm & state . stack .~ a : xs
-    _ -> error "underrun"
+    _ -> underrun vm
 
 exec :: VM -> IO VM
 exec vm = if vm ^. done then return vm else exec1 vm >>= exec
