@@ -33,7 +33,7 @@ Dapp depends on some blockchain development tools that are very useful in their 
 Installing without Nix
 ----------------------
 
-The program will expect you to have these depenedencies installed: 
+The program will expect you to have these dependencies installed: 
 
 
 * `bc <https://www.gnu.org/software/bc/manual/html_mono/bc.html>`_
