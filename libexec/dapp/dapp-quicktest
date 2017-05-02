@@ -51,7 +51,7 @@ for (var i = 0; i < PROGRAM_ARGS.length; i++) {
 
 var classesJSON
 
-if (inputFiles.length == 1 && (
+if (inputFiles.length >= 1 && (
   require("fs").lstatSync(inputFiles[0]).isDirectory()
 )) {
   classesJSON = {
@@ -79,6 +79,15 @@ if (inputFiles.length == 1 && (
   }
 } else {
   console.error(`${PROGRAM_NAME}: need to provide an input directory`)
+}
+
+// extra bytecode to deploy via ethrun
+var extraBytecode = []
+if (inputFiles.length > 1 && (
+  require("fs").lstatSync(inputFiles[0]).isDirectory()
+)) {
+  const readBytes = f => require("fs").readFileSync(f, { encoding: "utf-8"})
+  extraBytecode = inputFiles.slice(1).map(readBytes)
 }
 
 if (!getTestClasses().length) {
@@ -139,7 +148,7 @@ function runTest(test) {
   child.stdout.on("data", x => output.push(x))
   child.stdout.on("end", () => handleTestOutput(test, Buffer.concat(output)))
   child.stdin.end([
-    ...inputFiles.slice(0, inputFiles.length - 1),
+    ...extraBytecode,
     test.class.bytecode,
   ].map(x => `${x}\n`).join(""))
 }
@@ -148,7 +157,7 @@ function handleTestOutput(test, output) {
   test.finished = true
   test.results = JSON.parse(output)
 
-  test.failed = !!Number(test.results[3].output)
+  test.failed = !!Number(test.results.slice(-1)[0].output)
   test.passed = test.results.every(x => x.success) && !test.failed
 
   test.inverted = /^test(Fail|Error)/.test(test.name)
