@@ -78,7 +78,7 @@ if (inputFiles.length == 1 && (
     }))
   }
 } else {
-  classesJSON = getClassesJSON()
+  console.error(`${PROGRAM_NAME}: need to provide an input directory`)
 }
 
 if (!getTestClasses().length) {
@@ -460,21 +460,6 @@ function getClasses() {
       var abi = JSON.parse(classesJSON[name].interface)
       return getClass({ name, bytecode, runtimeBytecode, abi })
     })
-  }
-}
-
-function getClassesJSON() {
-  try {
-    return JSON.parse(require("fs").readFileSync(
-      inputFiles.length ? inputFiles[inputFiles.length - 1] : `${
-        require("child_process").execSync(`{
-          grep build_dir: [Dd]appfile || echo - build
-        } | awk '{print $2}'`, { encoding: "utf-8" }).trim()
-      }/classes.json`
-    ))
-  } catch (error) {
-    console.error(`${PROGRAM_NAME}: ${error.message}`)
-    process.exit(1)
   }
 }
 
