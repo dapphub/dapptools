@@ -1,4 +1,24 @@
 #!/usr/bin/env bash
 set -e
 dapp build
-dapp quicktest "$DAPP_OUT" "$@"
+
+# compute library addresses as hash(sender, nonce)
+sender="0x00a329c0648769a73afac7f9381e08fb43dbea72"  # ethrun sender
+nonce=1048576  # magic starting nonce
+
+# need to know the names and locations of all of the libraries
+libraries=$(grep -EoR '^library\s+\w+' $DAPP_SRC $DAPP_LIB \
+          | sed -E 's/:library\s+/:/' \
+          | sort)
+links=""
+for lib in $libraries; do
+    address="$(dapp address $sender $nonce)"
+    links="$links $lib:$address"
+    ((nonce++))
+done
+(set -x; solc --link --libraries "$links" $DAPP_OUT/*.bin)
+
+# pass the library bin files through to ethrun
+# (needs to be exact same order as above for nonces)
+deploy=$(echo "$libraries" | sed -E "s/.*:(.*)/$DAPP_OUT\/\1.bin/")
+(set -x; dapp quicktest "$@" "$DAPP_OUT" $deploy)
