@@ -1,9 +1,9 @@
-{ mkDerivation, aeson, attoparsec, base, binary, bytestring
-, containers, criterion, cryptonite, data-dword, deepseq, directory
-, filepath, ghci-pretty, HUnit, lens, lens-aeson, memory, process
-, QuickCheck, readline, stdenv, tasty, tasty-hunit
-, tasty-quickcheck, tasty-smallcheck, temporary, text
-, unordered-containers, vector
+{ mkDerivation, aeson, attoparsec, base, base16-bytestring, binary
+, bytestring, containers, criterion, cryptonite, data-dword
+, deepseq, directory, filepath, ghci-pretty, HUnit, lens
+, lens-aeson, memory, optparse-generic, process, QuickCheck
+, readline, stdenv, tasty, tasty-hunit, tasty-quickcheck
+, tasty-smallcheck, temporary, text, unordered-containers, vector
 }:
 mkDerivation {
   pname = "hsevm";
@@ -17,13 +17,15 @@ mkDerivation {
     process temporary text unordered-containers vector
   ];
   executableHaskellDepends = [
-    attoparsec base bytestring containers data-dword directory filepath
-    ghci-pretty lens readline text vector
+    attoparsec base base16-bytestring bytestring containers data-dword
+    directory filepath ghci-pretty lens optparse-generic readline text
+    vector
   ];
   testHaskellDepends = [
     base ghci-pretty HUnit QuickCheck tasty tasty-hunit
     tasty-quickcheck tasty-smallcheck
   ];
+  benchmarkHaskellDepends = [ base criterion text ];
   enableLibraryProfiling = true;
   enableExecutableProfiling = true;
   homepage = "https://github.com/mbrock/hsevm";

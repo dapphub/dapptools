@@ -49,6 +49,30 @@ library
   default-language:
     Haskell2010
 
+executable hsevm-cli
+  default-language:
+    Haskell2010
+  hs-source-dirs:
+    hsevm-cli
+  main-is:
+    hsevm-cli.hs
+  ghc-options:
+    -O2 -threaded
+  build-depends:
+    base,
+    bytestring,
+    containers,
+    data-dword,
+    directory,
+    filepath,
+    ghci-pretty,
+    hsevm,
+    lens,
+    text,
+    vector,
+    optparse-generic,
+    base16-bytestring
+    
 executable hsevm-tty
   default-language:
     Haskell2010
@@ -71,7 +95,8 @@ executable hsevm-tty
     lens,
     readline,
     text,
-    vector
+    vector,
+    optparse-generic
 
 benchmark hsevm-benchmark
   default-language:

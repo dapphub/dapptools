@@ -709,6 +709,53 @@ checkJump vm x =
   then return $! vm & state . pc .~ num x
   else error "bad jump destination"
 
+data VMOpts = VMOpts
+  { vmoptCode :: ByteString
+  , vmoptCalldata :: ByteString
+  , vmoptValue :: Word256
+  , vmoptAddress :: Word256
+  , vmoptCaller :: Word256
+  , vmoptOrigin :: Word256
+  , vmoptNumber :: Word256
+  , vmoptTimestamp :: Word256
+  , vmoptCoinbase :: Word256
+  , vmoptDifficulty :: Word256
+  , vmoptGaslimit :: Word256
+  }
+
+makeVm :: VMOpts -> VM
+makeVm o = VM
+  { _done = False
+  , _frames = mempty
+  , _suicides = mempty
+  , _memorySize = 0
+  , _block = Block
+    { _coinbase = vmoptCoinbase o
+    , _timestamp = vmoptTimestamp o
+    , _number = vmoptNumber o
+    , _difficulty = vmoptDifficulty o
+    , _gaslimit = vmoptGaslimit o
+    }
+  , _state = FrameState
+    { _pc = 0
+    , _stack = mempty
+    , _memory = mempty
+    , _code = vmoptCode o
+    , _contract = vmoptAddress o
+    , _calldata = vmoptCalldata o
+    , _callvalue = vmoptValue o
+    , _caller = vmoptCaller o
+    }
+  , _env = Env
+    { _sha3Crack = mempty
+    , _sourceCache = mempty
+    , _solc = mempty
+    , _origin = vmoptOrigin o
+    , _contracts = Map.fromList
+      [(vmoptAddress o, initialContract (vmoptCode o))]
+    }
+  }
+
 initialVm :: ByteString -> Word256 -> Text -> Map Text SolcContract -> SourceCache -> Block -> Word256 -> VM
 initialVm theCalldata theCallvalue theContractName theSolc theSourceCache theBlock theOrigin = VM {
   _done = False,
