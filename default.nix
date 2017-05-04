@@ -17,9 +17,9 @@ mkDerivation {
     process temporary text unordered-containers vector
   ];
   executableHaskellDepends = [
-    attoparsec base base16-bytestring bytestring containers data-dword
-    directory filepath ghci-pretty lens optparse-generic readline text
-    vector
+    aeson attoparsec base base16-bytestring bytestring containers
+    data-dword directory filepath ghci-pretty lens optparse-generic
+    readline text vector
   ];
   testHaskellDepends = [
     base ghci-pretty HUnit QuickCheck tasty tasty-hunit

@@ -175,7 +175,7 @@ exec1 vm = do
       vm' = vm & state . pc +~ opSize op
 
       -- current operation byte
-      op  = BS.index (vm ^. state . code) (vm ^. state .pc)
+      op  = BS.index (vm ^. state . code) (vm ^. state . pc)
 
       -- short names for current memory and stack
       mem = vm ^. state . memory
@@ -389,19 +389,19 @@ exec1 vm = do
           stackOp1_1 vm' (const 0)
 
         -- op: COINBASE
-        0x41   -> stackOp0_1 vm' (vm ^. block . coinbase)
+        0x41 -> stackOp0_1 vm' (vm ^. block . coinbase)
 
         -- op: TIMESTAMP
-        0x42  -> stackOp0_1 vm' (vm ^. block . timestamp)
+        0x42 -> stackOp0_1 vm' (vm ^. block . timestamp)
 
         -- op: NUMBER
-        0x43     -> stackOp0_1 vm' (vm ^. block . number)
+        0x43 -> stackOp0_1 vm' (vm ^. block . number)
 
         -- op: DIFFICULTY
         0x44 -> stackOp0_1 vm' (vm ^. block . difficulty)
 
         -- op: GASLIMIT
-        0x45   -> stackOp0_1 vm' (vm ^. block . gaslimit)
+        0x45 -> stackOp0_1 vm' (vm ^. block . gaslimit)
 
         -- op: POP
         0x50 ->
@@ -721,7 +721,7 @@ data VMOpts = VMOpts
   , vmoptCoinbase :: Word256
   , vmoptDifficulty :: Word256
   , vmoptGaslimit :: Word256
-  }
+  } deriving Show
 
 makeVm :: VMOpts -> VM
 makeVm o = VM

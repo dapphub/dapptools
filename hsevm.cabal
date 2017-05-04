@@ -59,6 +59,7 @@ executable hsevm-cli
   ghc-options:
     -O2 -threaded
   build-depends:
+    aeson,
     base,
     bytestring,
     containers,
