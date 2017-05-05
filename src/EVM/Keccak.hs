@@ -20,6 +20,9 @@ word32 xs = sum [ fromIntegral x `shiftL` (8*n)
 octets :: Word256 -> [Word8]
 octets x = [fromIntegral (shiftR x (8 * i)) | i <- [0..31]]
 
+octets160 :: Word256 -> [Word8]
+octets160 x = [fromIntegral (shiftR x (8 * i)) | i <- [0..19]]
+
 keccak :: ByteString -> Word256
 keccak bs =
    word (map fromIntegral (take 32 (BA.unpack (hash bs :: Digest Keccak_256))))
@@ -28,8 +31,28 @@ abiKeccak :: ByteString -> Word32
 abiKeccak bs =
   word32 $ take 4 (BA.unpack (hash bs :: Digest Keccak_256))
 
+rlpWord256 :: Word256 -> ByteString
+rlpWord256 x = BS.pack ([0x80, 32] ++ octets x)
+
+rlpWord160 :: Word256 -> ByteString
+rlpWord160 x = BS.pack ([0x80, 20] ++ octets160 x)
+
+rlpWord :: Word256 -> ByteString
+rlpWord x | x <= 0x7f = BS.pack [fromIntegral x]
+rlpWord x =
+  let xs = BS.dropWhile (== 0) (rlpWord256 x)
+  in BS.cons (0x80 + fromIntegral (BS.length xs)) xs
+
+rlpList :: [ByteString] -> ByteString
+rlpList xs =
+  let n = sum (map BS.length xs)
+  in if n <= 55
+     then BS.cons (fromIntegral (0xc0 + n)) (BS.concat xs)
+     else
+       let ns = rlpWord (fromIntegral n)
+       in BS.cons (fromIntegral (0xf7 + BS.length ns)) (BS.concat (ns : xs))
+
 newContractAddress :: Word256 -> Word256 -> Word256
-newContractAddress a n | n < 0x7f =
+newContractAddress a n =
   0xffffffffffffffffffffffffffffffffffffffff .&.
-    (keccak $ BS.pack ([0x80, 32] ++ octets a ++ [fromIntegral n]))
-newContractAddress _ _ | otherwise = error "foo"
+    (keccak $ rlpList [rlpWord160 a, rlpWord n])
