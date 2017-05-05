@@ -37,6 +37,8 @@ import qualified Data.Aeson as JSON
 import qualified Data.Aeson.Types as JSON
 import qualified Data.Map as Map
 
+import System.Console.Readline
+
 newtype Hexword = Hexword { hexWord256 :: Word256 }
   deriving (Num, Integral, Real, Ord, Enum, Eq)
 
@@ -53,8 +55,9 @@ instance FromJSON Hexword where
   parseJSON v = do
     s <- Text.unpack <$> parseJSON v
     case reads s of
-      [(x, "")] -> return x
-      _         -> fail $ "invalid hex word (" ++ s ++ ")"
+      [(x, "")]  -> return (Hexword x)
+      [(0, "x")] -> return (Hexword 0)
+      _          -> fail $ "invalid hex word (" ++ s ++ ")"
 
 instance FromJSON Word256 where
   parseJSON v =
@@ -70,8 +73,9 @@ instance FromJSON Address where
 instance FromJSONKey Word256 where
   fromJSONKey = JSON.FromJSONKeyTextParser $ \s ->
     case reads (Text.unpack s) of
-      [(x, "")] -> return x
-      _         -> fail $ "invalid word (" ++ Text.unpack s ++ ")"
+      [(x, "")]  -> return x
+      [(0, "x")] -> return 0
+      _          -> fail $ "invalid word (" ++ Text.unpack s ++ ")"
 
 instance FromJSONKey Address where
   fromJSONKey = JSON.FromJSONKeyTextParser $ \s ->
@@ -105,7 +109,10 @@ data Command
       , difficulty :: Maybe Hexword
       }
   | VMTest
-      { file :: String }
+      { file  :: String
+      , test  :: [String]
+      , debug :: Bool
+      }
   deriving (Show, Generic, Eq)
 
 instance ParseRecord Command
@@ -230,12 +237,22 @@ main = do
   opts <- getRecord "hsevm -- Ethereum evaluator"
   case opts of
     Exec {}  -> print (vmFromCommand opts)
-    VMTest f ->
-      parseTestCases <$> Lazy.readFile f >>=
+    VMTest {} ->
+      parseTestCases <$> Lazy.readFile (file opts) >>=
        \case
          Left err -> print err
-         Right tests ->
-           mapM_ runVMTest (Map.toList tests)
+         Right allTests ->
+           let testFilter =
+                 if null (test opts)
+                 then id
+                 else filter (\(x, _) -> elem x (test opts))
+           in mapM_ (runVMTest (optsMode opts))
+                (testFilter (Map.toList allTests))
+
+optsMode :: Command -> Mode
+optsMode x = if debug x then Debug else Run
+
+data Mode = Debug | Run
 
 testContractsToVM :: Map Address ContractSpec -> Map Word256 EVM.Contract
 testContractsToVM = Map.fromList . map f . Map.toList
@@ -249,11 +266,33 @@ testContractToVM x =
     & EVM.nonce   .~ hexWord256 (contractNonce x)
     & EVM.storage .~ contractStorage x
 
-runVMTest :: (String, VMTestCase) -> IO ()
-runVMTest (name, test) = do
+runVMTest :: Mode -> (String, VMTestCase) -> IO ()
+runVMTest mode (name, test) = do
   putStrLn name
   let vm = EVM.makeVm (testVmOpts test)
              & EVM.env . EVM.contracts .~ testContractsToVM (testContracts test)
   cpprint (EVM.codeOps (EVM.vmoptCode (testVmOpts test)))
-  vm' <- EVM.exec vm
-  return ()
+  case mode of
+    Run -> do vm' <- EVM.exec vm
+              return ()
+    Debug -> debugger vm
+
+debugger :: EVM.VM -> IO ()
+debugger vm = do
+  cpprint (vm ^. EVM.state)
+  cpprint (EVM.vmOp vm)
+  cpprint (EVM.opParams vm)
+  cpprint (vm ^. EVM.frames)
+  if vm ^. EVM.done == True
+    then do putStrLn "done"
+    else
+    readline "(evm) " >>=
+      \case
+        Nothing ->
+          return ()
+        Just line ->
+          case words line of
+            [] -> EVM.exec1 vm >>= debugger
+            _  -> do
+              print "Huh?"
+              debugger vm

@@ -56,8 +56,8 @@ executable hsevm-cli
     hsevm-cli
   main-is:
     hsevm-cli.hs
-  ghc-options:
-    -O2 -threaded
+--  ghc-options:
+--    -O2 -threaded
   build-depends:
     aeson,
     base,
@@ -68,6 +68,7 @@ executable hsevm-cli
     filepath,
     ghci-pretty,
     hsevm,
+    readline,
     lens,
     lens-aeson,
     text,

@@ -629,6 +629,30 @@ exec1 vm = do
             & state .~ f ^. frameState
             & state . stack %~ (1 :)
 
+opParams :: VM -> Map String Word256
+opParams vm =
+  case vmOp vm of
+    Just OpCreate ->
+      params $ words "value offset size"
+    Just OpCall ->
+      params $ words "gas to value in-offset in-size out-offset out-size"
+    Just OpCodecopy ->
+      params $ words "mem-offset code-offset code-size"
+    Just OpSha3 ->
+      params $ words "offset size"
+    Just OpCalldatacopy ->
+      params $ words "to from size"
+    Just OpExtcodecopy ->
+      params $ words "account mem-offset code-offset code-size"
+    Just OpReturn ->
+      params $ words "offset size"
+    _ -> mempty
+  where
+    params xs =
+      if length (vm ^. state . stack) >= length xs
+      then Map.fromList (zip xs (vm ^. state . stack))
+      else mempty
+
 underrun :: Monad m => VM -> m VM
 underrun vm = returnOp 0 (0, 0) vm
 
@@ -640,10 +664,13 @@ returnOp returnCode (xOffset, xSize) vm =
       case f ^. frameLinkage of
         CreateLinkage ->
           return $! vm
+            & (if xSize == 0
+               then done .~ True -- because all gas is consumed
+               else id)
             & accessMemoryRange xOffset xSize
             & frames .~ fs
             & state .~ (f ^. frameState)
-            & state . stack %~ (vm ^. state . contract :)
+            & state . stack %~ ((if xSize == 0 then 0 else vm ^. state . contract) :)
             & env . contracts . at (vm ^. state . contract) .~
                 if xSize == 0
                 then Nothing
@@ -954,6 +981,15 @@ data Op
   | OpPush !Word256
   | OpUnknown Word8
   deriving (Show, Eq)
+
+vmOp :: VM -> Maybe Op
+vmOp vm =
+  let i  = vm ^. state . pc
+      xs = BS.drop i (vm ^. state . code)
+      op = BS.index xs 0
+  in if BS.null xs
+     then Nothing
+     else Just (readOp op (BS.drop 1 xs))
 
 readOp :: Word8 -> ByteString -> Op
 readOp x _  | x >= 0x80 && x <= 0x8f = OpDup (x - 0x80 + 1)
