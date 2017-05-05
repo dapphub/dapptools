@@ -69,8 +69,10 @@ executable hsevm-cli
     ghci-pretty,
     hsevm,
     lens,
+    lens-aeson,
     text,
     vector,
+    unordered-containers,
     optparse-generic,
     base16-bytestring
     
