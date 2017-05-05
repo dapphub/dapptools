@@ -96,7 +96,7 @@ data Contract = Contract {
   _balance  :: !Word256,
   _nonce    :: !Word256,
   _opIxMap  :: !(Vector Int)
-} deriving Show
+} deriving (Eq, Show)
 makeLenses ''Contract
 
 data Env = Env {
@@ -118,7 +118,7 @@ data Block = Block {
 makeLenses ''Block
 
 data VM = VM {
-  _done        :: !Bool,
+  _done        :: !(Maybe ByteString),
   _env         :: !Env,
   _block       :: !Block,
   _frames      :: ![Frame],
@@ -162,6 +162,14 @@ copyBytesToMemory bs size xOffset yOffset vm =
                 (fromList
                   [ (yOffset + i, (bs ^? ix (num (xOffset + i))) ?: 0)
                     | i <- [0 .. size - 1] ])
+
+readMemory :: Word256 -> Word256 -> VM -> ByteString
+readMemory offset size vm =
+  if size == 0 then ""
+  else
+    let mem = vm ^. state . memory
+    in BS.pack [(Map.lookup (offset + i) mem) ?: 0
+                | i <- [0..size-1]]
 
 exec1 :: VM -> IO VM
 exec1 vm = do
@@ -221,7 +229,7 @@ exec1 vm = do
         -- op: STOP
         0x00 ->
           case vm ^. frames of
-            [] -> return $! vm' & done .~ True
+            [] -> return $! vm' & done .~ Just ""
             (f:fs) -> do
               return $! vm'
                 & frames .~ fs
@@ -245,7 +253,13 @@ exec1 vm = do
           stackOp2_1 vm' $ \x ->
             \case
               0 -> 0
-              y -> unsignedWord (div (signedWord x) (signedWord y))
+              y ->
+                let sx = signedWord x
+                    sy = signedWord y
+                    k  = if (sx < 0) /= (sy < 0)
+                         then (-1)
+                         else 1
+                in unsignedWord (k * div (abs sx) (abs sy))
 
         -- op: MOD
         0x06 -> stackOp2_1 vm' $ \x -> \case 0 -> 0; y -> mod x y
@@ -255,7 +269,11 @@ exec1 vm = do
           stackOp2_1 vm' $ \x ->
             \case
               0 -> 0
-              y -> unsignedWord (mod (signedWord x) (signedWord y))
+              y ->
+                let sx = signedWord x
+                    sy = signedWord y
+                    k  = if sx < 0 then (-1) else 1
+                in unsignedWord (k * mod (abs sx) (abs sy))
 
         -- op: ADDMOD
         0x08 ->
@@ -453,7 +471,9 @@ exec1 vm = do
             (x:y:xs) -> do
               return $!
                 vm' & env . contracts . ix (vm ^. state . contract)
-                          . storage . at x .~ Just y
+                          . storage . at x .~ (if y == 0
+                                               then Nothing
+                                               else Just y)
                     & state . stack .~ xs
             _ -> underrun vm
 
@@ -571,7 +591,7 @@ exec1 vm = do
           case stk of
             (xOffset:xSize:_) ->
               case vm ^. frames of
-                [] -> return $! vm' & done .~ True
+                [] -> return $! vm' & done .~ Just (readMemory xOffset xSize vm)
                 (f:fs) ->
                   case f ^. frameLinkage of
                     CreateLinkage ->
@@ -622,7 +642,7 @@ exec1 vm = do
 
     else
       case vm ^. frames of
-        [] -> return $! vm & done .~ True
+        [] -> return $! vm & done .~ Just ""
         (f:fs) -> do
           return $! vm
             & frames .~ fs
@@ -659,13 +679,13 @@ underrun vm = returnOp 0 (0, 0) vm
 returnOp :: Monad m => Word256 -> (Word256, Word256) -> VM -> m VM
 returnOp returnCode (xOffset, xSize) vm =
   case vm ^. frames of
-    [] -> return $! vm & done .~ True
+    [] -> return $! vm & done .~ Just (readMemory xOffset xSize vm)
     (f:fs) ->
       case f ^. frameLinkage of
         CreateLinkage ->
           return $! vm
             & (if xSize == 0
-               then done .~ True -- because all gas is consumed
+               then done .~ Just "" -- because all gas is consumed
                else id)
             & accessMemoryRange xOffset xSize
             & frames .~ fs
@@ -732,7 +752,7 @@ stackOp3_1 vm f =
     _ -> underrun vm
 
 exec :: VM -> IO VM
-exec vm = if vm ^. done then return vm else exec1 vm >>= exec
+exec vm = if isJust (vm ^. done) then return vm else exec1 vm >>= exec
 
 continue :: ByteString -> Word256 -> Text -> Map Text SolcContract -> SourceCache -> Block -> Word256 -> VM -> VM
 continue theCalldata theCallvalue theContractName theSolc theSourceCache theBlock theOrigin vm =
@@ -762,7 +782,7 @@ data VMOpts = VMOpts
 
 makeVm :: VMOpts -> VM
 makeVm o = VM
-  { _done = False
+  { _done = Nothing
   , _frames = mempty
   , _suicides = mempty
   , _memorySize = 0
@@ -795,7 +815,7 @@ makeVm o = VM
 
 initialVm :: ByteString -> Word256 -> Text -> Map Text SolcContract -> SourceCache -> Block -> Word256 -> VM
 initialVm theCalldata theCallvalue theContractName theSolc theSourceCache theBlock theOrigin = VM {
-  _done = False,
+  _done = Nothing,
   _env = Env {
     _contracts = Map.fromList [
       (123, initialContract (theSolc ^?! ix theContractName . runtimeCode))

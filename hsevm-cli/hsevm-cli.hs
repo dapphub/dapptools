@@ -135,6 +135,42 @@ data VMTestExpectation = VMTestExpectation
   , expectedContracts :: Maybe (Map Address ContractSpec)
   } deriving Show
 
+checkTestExpectation :: VMTestExpectation -> EVM.VM -> IO Bool
+checkTestExpectation x vm = do
+  e1 <- maybe (return True) (checkExpectedContracts vm) (expectedContracts x)
+          >>= \case True ->
+                      return True
+                    False -> do
+                      putStrLn "failed contract expectations"
+                      return False
+
+  e2 <- maybe (return True) (checkExpectedOut vm) (expectedOut x)
+          >>= \case True ->
+                      return True
+                    False -> do
+                      putStrLn "failed output value"
+                      return False
+
+  return (e1 && e2)
+
+checkExpectedOut :: EVM.VM -> ByteString -> IO Bool
+checkExpectedOut vm expected =
+  case vm ^. EVM.done of
+    Nothing -> error "VM not done"
+    Just out ->
+      if out == expected
+      then
+        return True
+      else do
+        cpprint (out, expected)
+        return False
+
+checkExpectedContracts :: EVM.VM -> Map Address ContractSpec -> IO Bool
+checkExpectedContracts vm expected =
+  if testContractsToVM expected == vm ^. EVM.env . EVM.contracts
+  then return True
+  else cpprint (testContractsToVM expected, vm ^. EVM.env . EVM.contracts) >> return False
+
 instance FromJSON ContractSpec where
   parseJSON (JSON.Object v) = ContractSpec
     <$> v .: "balance"
@@ -246,8 +282,12 @@ main = do
                  if null (test opts)
                  then id
                  else filter (\(x, _) -> elem x (test opts))
-           in mapM_ (runVMTest (optsMode opts))
-                (testFilter (Map.toList allTests))
+           in do
+             let tests = testFilter (Map.toList allTests)
+             putStrLn $ "Running " ++ show (length tests) ++ " tests"
+             mapM_ (runVMTest (optsMode opts)) tests
+             putStrLn ""
+
 
 optsMode :: Command -> Mode
 optsMode x = if debug x then Debug else Run
@@ -268,13 +308,15 @@ testContractToVM x =
 
 runVMTest :: Mode -> (String, VMTestCase) -> IO ()
 runVMTest mode (name, test) = do
-  putStrLn name
   let vm = EVM.makeVm (testVmOpts test)
              & EVM.env . EVM.contracts .~ testContractsToVM (testContracts test)
-  cpprint (EVM.codeOps (EVM.vmoptCode (testVmOpts test)))
   case mode of
     Run -> do vm' <- EVM.exec vm
-              return ()
+              ok <- checkTestExpectation (testExpectation test) vm'
+              if ok
+                then putStr "."
+                else putStr "F"
+
     Debug -> debugger vm
 
 debugger :: EVM.VM -> IO ()
@@ -283,7 +325,7 @@ debugger vm = do
   cpprint (EVM.vmOp vm)
   cpprint (EVM.opParams vm)
   cpprint (vm ^. EVM.frames)
-  if vm ^. EVM.done == True
+  if vm ^. EVM.done /= Nothing
     then do putStrLn "done"
     else
     readline "(evm) " >>=
