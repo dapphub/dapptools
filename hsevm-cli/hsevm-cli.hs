@@ -196,15 +196,14 @@ readN s = fromIntegral (read s :: Integer)
 
 wordField :: JSON.Object -> Text -> JSON.Parser Word256
 wordField x f = (readN . Text.unpack)
-                  <$> (x .: f >>= parseJSON)
+                  <$> (x .: f)
 
 addrField :: JSON.Object -> Text -> JSON.Parser Word256
 addrField x f = (readN . ("0x" ++) . Text.unpack)
-                  <$> (x .: f >>= parseJSON)
+                  <$> (x .: f)
 
 dataField :: JSON.Object -> Text -> JSON.Parser ByteString
-dataField x f = hexText . Text.drop 2
-                  <$> (x .: f >>= parseJSON)
+dataField x f = hexText <$> (x .: f)
 
 vmFromCommand :: Command -> EVM.VM
 vmFromCommand opts =
@@ -231,4 +230,30 @@ main = do
   opts <- getRecord "hsevm -- Ethereum evaluator"
   case opts of
     Exec {}  -> print (vmFromCommand opts)
-    VMTest f -> Lazy.readFile f >>= cpprint . parseTestCases
+    VMTest f ->
+      parseTestCases <$> Lazy.readFile f >>=
+       \case
+         Left err -> print err
+         Right tests ->
+           mapM_ runVMTest (Map.toList tests)
+
+testContractsToVM :: Map Address ContractSpec -> Map Word256 EVM.Contract
+testContractsToVM = Map.fromList . map f . Map.toList
+  where
+    f (a, x) = (addressWord256 a, testContractToVM x)
+
+testContractToVM :: ContractSpec -> EVM.Contract
+testContractToVM x =
+  EVM.initialContract (contractCode x)
+    & EVM.balance .~ hexWord256 (contractBalance x)
+    & EVM.nonce   .~ hexWord256 (contractNonce x)
+    & EVM.storage .~ contractStorage x
+
+runVMTest :: (String, VMTestCase) -> IO ()
+runVMTest (name, test) = do
+  putStrLn name
+  let vm = EVM.makeVm (testVmOpts test)
+             & EVM.env . EVM.contracts .~ testContractsToVM (testContracts test)
+  cpprint (EVM.codeOps (EVM.vmoptCode (testVmOpts test)))
+  vm' <- EVM.exec vm
+  return ()

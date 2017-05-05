@@ -28,6 +28,9 @@ import Data.Bits
 import Data.Maybe
 import Data.Word
 
+import qualified Data.Sequence as Seq
+import Data.Sequence (Seq)
+
 import qualified Data.ByteString as BS
 import Data.ByteString (ByteString)
 
@@ -41,8 +44,6 @@ import Data.Text.Encoding (encodeUtf8)
 import qualified Data.Vector.Unboxed as Vector
 import Data.Vector.Unboxed (Vector)
 import Data.Vector.Unboxed.Mutable (new, write)
-
-import IPPrint.Colored
 
 mkUnpackedDoubleWord "Word512" ''Word256 "Int512" ''Int256 ''Word256
   [''Typeable, ''Data, ''Generic]
@@ -155,11 +156,12 @@ copyBytesToMemory
   :: (IxValue s ~ Word8, Ixed s, Num (Index s))
   => s -> Word256 -> Word256 -> Word256 -> VM -> VM
 copyBytesToMemory bs size xOffset yOffset vm =
-  vm & state . memory .~
-         flip union (vm ^. state . memory)
-           (fromList
-             [ (yOffset + i, (bs ^? ix (num (xOffset + i))) ?: 0)
-               | i <- [0 .. size - 1] ])
+  if size == 0 then vm
+  else vm & state . memory .~
+              flip union (vm ^. state . memory)
+                (fromList
+                  [ (yOffset + i, (bs ^? ix (num (xOffset + i))) ?: 0)
+                    | i <- [0 .. size - 1] ])
 
 exec1 :: VM -> IO VM
 exec1 vm = do
@@ -258,13 +260,13 @@ exec1 vm = do
         -- op: ADDMOD
         0x08 ->
           stackOp3_1 vm'
-            (\x y z -> fromWord512
+            (\x y z -> if z == 0 then 0 else fromWord512
               ((toWord512 x + toWord512 y) `mod` (toWord512 z)))
 
         -- op: MULMOD
         0x09 ->
           stackOp3_1 vm'
-            (\x y z -> fromWord512
+            (\x y z -> if z == 0 then 0 else fromWord512
               ((toWord512 x * toWord512 y) `mod` (toWord512 z)))
 
         -- op: LT
@@ -367,6 +369,10 @@ exec1 vm = do
                       codeSize codeOffset memOffset
             _ -> underrun vm
 
+        -- op: GASPRICE
+        0x3a ->
+          stackOp0_1 vm' 0
+
         -- op: EXTCODESIZE
         0x3b ->
           stackOp1_1 vm'
@@ -413,8 +419,8 @@ exec1 vm = do
         0x51 ->
           case vm ^. state . stack of
             (x:xs) -> return $!
-              vm & state . stack .~ (mem ^. word256At x : xs)
-                 & accessMemoryWord x
+              vm' & state . stack .~ (mem ^. word256At x : xs)
+                  & accessMemoryWord x
             _ -> underrun vm
 
         -- op: MSTORE
@@ -614,10 +620,14 @@ exec1 vm = do
         x -> do
           error ("opcode " ++ show x)
 
-    else do
-      cpprint ("pc" :: String, vm ^. state . pc)
-      cpprint ("contract" :: String, vm ^. state . contract)
-      error "error"
+    else
+      case vm ^. frames of
+        [] -> return $! vm & done .~ True
+        (f:fs) -> do
+          return $! vm
+            & frames .~ fs
+            & state .~ f ^. frameState
+            & state . stack %~ (1 :)
 
 underrun :: Monad m => VM -> m VM
 underrun vm = returnOp 0 (0, 0) vm
@@ -876,80 +886,157 @@ word32Bytes x = BS.pack [byteAt x (3 - i) | i <- [0..3]]
 
 {- We will need to parse ops into data soon, so let's keep this code. -}
 
--- readOp :: Word8 -> Seq Word8 -> Op
--- readOp x _  | x >= 0x80 && x <= 0x8f = OpDup (x - 0x80 + 1)
--- readOp x _  | x >= 0x90 && x <= 0x9f = OpSwap (x - 0x90 + 1)
--- readOp x _  | x >= 0xa0 && x <= 0xa4 = OpLog (x - 0xa0 + 1)
--- readOp x xs | x >= 0x60 && x <= 0x7f =
---   let n   = x - 0x60 + 1
---       xs' = Seq.take (num n) xs
---       len = Seq.length xs'
---   in if len == fromIntegral n
---      then OpPush (toList xs')
---      else OpPush (toList xs' ++ replicate (len - num n) 0)
--- readOp x _ = case x of
---   0x00 -> OpStop
---   0x01 -> OpAdd
---   0x02 -> OpMul
---   0x03 -> OpSub
---   0x04 -> OpDiv
---   0x05 -> OpSdiv
---   0x06 -> OpMod
---   0x07 -> OpSmod
---   0x08 -> OpAddmod
---   0x09 -> OpMulmod
---   0x0a -> OpExp
---   0x0b -> OpSignextend
---   0x10 -> OpLt
---   0x11 -> OpGt
---   0x12 -> OpSlt
---   0x13 -> OpSgt
---   0x14 -> OpEq
---   0x15 -> OpIszero
---   0x16 -> OpAnd
---   0x17 -> OpOr
---   0x18 -> OpXor
---   0x19 -> OpNot
---   0x1a -> OpByte
---   0x20 -> OpSha3
---   0x30 -> OpAddress
---   0x31 -> OpBalance
---   0x32 -> OpOrigin
---   0x33 -> OpCaller
---   0x34 -> OpCallvalue
---   0x35 -> OpCalldataload
---   0x36 -> OpCalldatasize
---   0x37 -> OpCalldatacopy
---   0x38 -> OpCodesize
---   0x39 -> OpCodecopy
---   0x3a -> OpGasprice
---   0x3b -> OpExtcodesize
---   0x3c -> OpExtcodecopy
---   0x40 -> OpBlockhash
---   0x41 -> OpCoinbase
---   0x42 -> OpTimestamp
---   0x43 -> OpNumber
---   0x44 -> OpDifficulty
---   0x45 -> OpGaslimit
---   0x50 -> OpPop
---   0x51 -> OpMload
---   0x52 -> OpMstore
---   0x53 -> OpMstore8
---   0x54 -> OpSload
---   0x55 -> OpSstore
---   0x56 -> OpJump
---   0x57 -> OpJumpi
---   0x58 -> OpPc
---   0x59 -> OpMsize
---   0x5a -> OpGas
---   0x5b -> OpJumpdest
---   0xf0 -> OpCreate
---   0xf1 -> OpCall
---   0xf2 -> OpCallcode
---   0xf3 -> OpReturn
---   0xf4 -> OpDelegatecall
---   0xf5 -> OpSuicide
---   _    -> (OpUnknown x)
+data Op
+  = OpStop
+  | OpAdd
+  | OpMul
+  | OpSub
+  | OpDiv
+  | OpSdiv
+  | OpMod
+  | OpSmod
+  | OpAddmod
+  | OpMulmod
+  | OpExp
+  | OpSignextend
+  | OpLt
+  | OpGt
+  | OpSlt
+  | OpSgt
+  | OpEq
+  | OpIszero
+  | OpAnd
+  | OpOr
+  | OpXor
+  | OpNot
+  | OpByte
+  | OpSha3
+  | OpAddress
+  | OpBalance
+  | OpOrigin
+  | OpCaller
+  | OpCallvalue
+  | OpCalldataload
+  | OpCalldatasize
+  | OpCalldatacopy
+  | OpCodesize
+  | OpCodecopy
+  | OpGasprice
+  | OpExtcodesize
+  | OpExtcodecopy
+  | OpBlockhash
+  | OpCoinbase
+  | OpTimestamp
+  | OpNumber
+  | OpDifficulty
+  | OpGaslimit
+  | OpPop
+  | OpMload
+  | OpMstore
+  | OpMstore8
+  | OpSload
+  | OpSstore
+  | OpJump
+  | OpJumpi
+  | OpPc
+  | OpMsize
+  | OpGas
+  | OpJumpdest
+  | OpCreate
+  | OpCall
+  | OpCallcode
+  | OpReturn
+  | OpDelegatecall
+  | OpSuicide
+  | OpDup !Word8
+  | OpSwap !Word8
+  | OpLog !Word8
+  | OpPush !Word256
+  | OpUnknown Word8
+  deriving (Show, Eq)
+
+readOp :: Word8 -> ByteString -> Op
+readOp x _  | x >= 0x80 && x <= 0x8f = OpDup (x - 0x80 + 1)
+readOp x _  | x >= 0x90 && x <= 0x9f = OpSwap (x - 0x90 + 1)
+readOp x _  | x >= 0xa0 && x <= 0xa4 = OpLog (x - 0xa0 + 1)
+readOp x xs | x >= 0x60 && x <= 0x7f =
+  let n   = x - 0x60 + 1
+      xs' = BS.take (num n) xs
+      len = BS.length xs'
+  in if len == fromIntegral n
+     then OpPush (word (BS.unpack xs'))
+     else OpPush (word (BS.unpack xs' ++ replicate (len - num n) 0))
+readOp x _ = case x of
+  0x00 -> OpStop
+  0x01 -> OpAdd
+  0x02 -> OpMul
+  0x03 -> OpSub
+  0x04 -> OpDiv
+  0x05 -> OpSdiv
+  0x06 -> OpMod
+  0x07 -> OpSmod
+  0x08 -> OpAddmod
+  0x09 -> OpMulmod
+  0x0a -> OpExp
+  0x0b -> OpSignextend
+  0x10 -> OpLt
+  0x11 -> OpGt
+  0x12 -> OpSlt
+  0x13 -> OpSgt
+  0x14 -> OpEq
+  0x15 -> OpIszero
+  0x16 -> OpAnd
+  0x17 -> OpOr
+  0x18 -> OpXor
+  0x19 -> OpNot
+  0x1a -> OpByte
+  0x20 -> OpSha3
+  0x30 -> OpAddress
+  0x31 -> OpBalance
+  0x32 -> OpOrigin
+  0x33 -> OpCaller
+  0x34 -> OpCallvalue
+  0x35 -> OpCalldataload
+  0x36 -> OpCalldatasize
+  0x37 -> OpCalldatacopy
+  0x38 -> OpCodesize
+  0x39 -> OpCodecopy
+  0x3a -> OpGasprice
+  0x3b -> OpExtcodesize
+  0x3c -> OpExtcodecopy
+  0x40 -> OpBlockhash
+  0x41 -> OpCoinbase
+  0x42 -> OpTimestamp
+  0x43 -> OpNumber
+  0x44 -> OpDifficulty
+  0x45 -> OpGaslimit
+  0x50 -> OpPop
+  0x51 -> OpMload
+  0x52 -> OpMstore
+  0x53 -> OpMstore8
+  0x54 -> OpSload
+  0x55 -> OpSstore
+  0x56 -> OpJump
+  0x57 -> OpJumpi
+  0x58 -> OpPc
+  0x59 -> OpMsize
+  0x5a -> OpGas
+  0x5b -> OpJumpdest
+  0xf0 -> OpCreate
+  0xf1 -> OpCall
+  0xf2 -> OpCallcode
+  0xf3 -> OpReturn
+  0xf4 -> OpDelegatecall
+  0xf5 -> OpSuicide
+  _    -> (OpUnknown x)
+
+codeOps :: ByteString -> Seq Op
+codeOps xs =
+  case BS.uncons xs of
+    Nothing ->
+      mempty
+    Just (x, xs') ->
+      readOp x xs' Seq.<| codeOps (BS.drop (opSize x) xs)
 
 {-
   Unimplemented:
