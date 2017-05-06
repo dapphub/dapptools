@@ -25,7 +25,7 @@ library
     EVM.Solidity,
     EVM.Keccak,
     EVM.Types,
-    EVM.Test
+    EVM.VMTest
   ghc-options:
     -O2 -Wall
   build-depends:

@@ -5,13 +5,20 @@
 {-# Language OverloadedStrings #-}
 {-# Language TemplateHaskell #-}
 
-module EVM.Test where
+module EVM.VMTest
+  ( Case
+  , parseSuite
+  , vmForCase
+  , checkExpectation
+  ) where
 
 import qualified EVM
 
 import EVM.Types
 
 import Control.Lens
+import Control.Monad
+
 import IPPrint.Colored (cpprint)
 
 import Data.ByteString (ByteString)
@@ -25,39 +32,35 @@ import qualified Data.Aeson        as JSON
 import qualified Data.Aeson.Types  as JSON
 import qualified Data.ByteString.Lazy  as Lazy
 
-data VMTestCase = VMTestCase
+data Case = Case
   { testVmOpts      :: EVM.VMOpts
-  , testContracts   :: Map Address ContractSpec
-  , testExpectation :: VMTestExpectation
+  , testContracts   :: Map Address Contract
+  , testExpectation :: Expectation
   } deriving Show
 
-data ContractSpec = ContractSpec
+data Contract = Contract
   { contractBalance :: Hexword
   , contractCode    :: ByteString
   , contractNonce   :: Hexword
   , contractStorage :: Map Word256 Word256
   } deriving Show
 
-data VMTestExpectation = VMTestExpectation
+data Expectation = Expectation
   { expectedOut :: Maybe ByteString
-  , expectedContracts :: Maybe (Map Address ContractSpec)
+  , expectedContracts :: Maybe (Map Address Contract)
   } deriving Show
 
-checkTestExpectation :: VMTestExpectation -> EVM.VM -> IO Bool
-checkTestExpectation x vm = do
-  e1 <- maybe (return True) (checkExpectedContracts vm) (expectedContracts x)
-          >>= \case True ->
-                      return True
-                    False -> do
-                      putStrLn "failed contract expectations"
-                      return False
+checkExpectation :: Case -> EVM.VM -> IO Bool
+checkExpectation x vm = do
+  let check f g s =
+        do v <- maybe (return True) (f vm) (g (testExpectation x))
+           unless v (putStrLn s)
+           return v
 
-  e2 <- maybe (return True) (checkExpectedOut vm) (expectedOut x)
-          >>= \case True ->
-                      return True
-                    False -> do
-                      putStrLn "failed output value"
-                      return False
+  e1 <- check checkExpectedContracts expectedContracts
+          "failed contract expectations"
+  e2 <- check checkExpectedOut expectedOut
+          "failed output value"
 
   return (e1 && e2)
 
@@ -73,14 +76,16 @@ checkExpectedOut vm expected =
         cpprint (out, expected)
         return False
 
-checkExpectedContracts :: EVM.VM -> Map Address ContractSpec -> IO Bool
+checkExpectedContracts :: EVM.VM -> Map Address Contract -> IO Bool
 checkExpectedContracts vm expected =
-  if testContractsToVM expected == vm ^. EVM.env . EVM.contracts
+  if realizeContracts expected == vm ^. EVM.env . EVM.contracts
   then return True
-  else cpprint (testContractsToVM expected, vm ^. EVM.env . EVM.contracts) >> return False
+  else do
+    cpprint (realizeContracts expected, vm ^. EVM.env . EVM.contracts)
+    return False
 
-instance FromJSON ContractSpec where
-  parseJSON (JSON.Object v) = ContractSpec
+instance FromJSON Contract where
+  parseJSON (JSON.Object v) = Contract
     <$> v .: "balance"
     <*> (hexText <$> v .: "code")
     <*> v .: "nonce"
@@ -88,16 +93,16 @@ instance FromJSON ContractSpec where
   parseJSON invalid =
     JSON.typeMismatch "VM test case contract" invalid
 
-instance FromJSON VMTestCase where
-  parseJSON (JSON.Object v) = VMTestCase
-    <$> parseTestVmOpts v
-    <*> parseTestContracts v
-    <*> parseTestExpectation v
+instance FromJSON Case where
+  parseJSON (JSON.Object v) = Case
+    <$> parseVmOpts v
+    <*> parseContracts v
+    <*> parseExpectation v
   parseJSON invalid =
       JSON.typeMismatch "VM test case" invalid
 
-parseTestVmOpts :: JSON.Object -> JSON.Parser EVM.VMOpts
-parseTestVmOpts v =
+parseVmOpts :: JSON.Object -> JSON.Parser EVM.VMOpts
+parseVmOpts v =
   do envV  <- v .: "env"
      execV <- v .: "exec"
      case (envV, execV) of
@@ -117,29 +122,34 @@ parseTestVmOpts v =
        _ ->
          JSON.typeMismatch "VM test case" (JSON.Object v)
 
-parseTestContracts ::
-  JSON.Object -> JSON.Parser (Map Address ContractSpec)
-parseTestContracts v =
+parseContracts ::
+  JSON.Object -> JSON.Parser (Map Address Contract)
+parseContracts v =
   v .: "pre" >>= parseJSON
 
-parseTestExpectation :: JSON.Object -> JSON.Parser VMTestExpectation
-parseTestExpectation v =
-  VMTestExpectation
+parseExpectation :: JSON.Object -> JSON.Parser Expectation
+parseExpectation v =
+  Expectation
     <$> (fmap hexText <$> v .:? "out")
     <*> v .:? "post"
 
-parseTestCases ::
-  Lazy.ByteString -> Either String (Map String VMTestCase)
-parseTestCases = JSON.eitherDecode'
+parseSuite ::
+  Lazy.ByteString -> Either String (Map String Case)
+parseSuite = JSON.eitherDecode'
 
-testContractsToVM :: Map Address ContractSpec -> Map Word256 EVM.Contract
-testContractsToVM = Map.fromList . map f . Map.toList
+realizeContracts :: Map Address Contract -> Map Word256 EVM.Contract
+realizeContracts = Map.fromList . map f . Map.toList
   where
-    f (a, x) = (addressWord256 a, testContractToVM x)
+    f (a, x) = (addressWord256 a, realizeContract x)
 
-testContractToVM :: ContractSpec -> EVM.Contract
-testContractToVM x =
+realizeContract :: Contract -> EVM.Contract
+realizeContract x =
   EVM.initialContract (contractCode x)
     & EVM.balance .~ hexWord256 (contractBalance x)
     & EVM.nonce   .~ hexWord256 (contractNonce x)
     & EVM.storage .~ contractStorage x
+
+vmForCase :: Case -> EVM.VM
+vmForCase x =
+  EVM.makeVm (testVmOpts x)
+    & EVM.env . EVM.contracts .~ realizeContracts (testContracts x)

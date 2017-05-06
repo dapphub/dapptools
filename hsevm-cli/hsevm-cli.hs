@@ -6,9 +6,9 @@
 {-# Language TemplateHaskell #-}
 
 import qualified EVM as EVM
+import qualified EVM.VMTest as VMTest
 
 import EVM.Types
-import EVM.Test
 
 import Control.Lens
 
@@ -18,7 +18,7 @@ import IPPrint.Colored (cpprint)
 import Options.Generic
 import System.Console.Readline
 
-import qualified Data.ByteString.Lazy  as Lazy
+import qualified Data.ByteString.Lazy  as ByteString
 import qualified Data.Map              as Map
 
 data Command
@@ -45,6 +45,28 @@ data Command
 
 instance ParseRecord Command
 
+data Mode = Debug | Run
+
+main :: IO ()
+main = do
+  opts <- getRecord "hsevm -- Ethereum evaluator"
+  case opts of
+    Exec {}   -> print (vmFromCommand opts)
+    VMTest {} ->
+      VMTest.parseSuite <$> ByteString.readFile (file opts) >>=
+       \case
+         Left err -> print err
+         Right allTests ->
+           let testFilter =
+                 if null (test opts)
+                 then id
+                 else filter (\(x, _) -> elem x (test opts))
+           in do
+             let tests = testFilter (Map.toList allTests)
+             putStrLn $ "Running " ++ show (length tests) ++ " tests"
+             mapM_ (runVMTest (optsMode opts)) tests
+             putStrLn ""
+
 vmFromCommand :: Command -> EVM.VM
 vmFromCommand opts =
   EVM.makeVm $ EVM.VMOpts
@@ -65,42 +87,17 @@ vmFromCommand opts =
     word f def = maybe def hexWord256 (f opts)
     addr f def = maybe def addressWord256 (f opts)
 
-main :: IO ()
-main = do
-  opts <- getRecord "hsevm -- Ethereum evaluator"
-  case opts of
-    Exec {}  -> print (vmFromCommand opts)
-    VMTest {} ->
-      parseTestCases <$> Lazy.readFile (file opts) >>=
-       \case
-         Left err -> print err
-         Right allTests ->
-           let testFilter =
-                 if null (test opts)
-                 then id
-                 else filter (\(x, _) -> elem x (test opts))
-           in do
-             let tests = testFilter (Map.toList allTests)
-             putStrLn $ "Running " ++ show (length tests) ++ " tests"
-             mapM_ (runVMTest (optsMode opts)) tests
-             putStrLn ""
-
-
 optsMode :: Command -> Mode
 optsMode x = if debug x then Debug else Run
 
-data Mode = Debug | Run
-
-runVMTest :: Mode -> (String, VMTestCase) -> IO ()
+runVMTest :: Mode -> (String, VMTest.Case) -> IO ()
 runVMTest mode (_name, x) = do
-  let vm = EVM.makeVm (testVmOpts x)
-             & EVM.env . EVM.contracts .~ testContractsToVM (testContracts x)
+  let vm = VMTest.vmForCase x
   case mode of
-    Run -> do vm' <- EVM.exec vm
-              ok <- checkTestExpectation (testExpectation x) vm'
-              if ok
-                then putStr "."
-                else putStr "F"
+    Run ->
+      do vm' <- EVM.exec vm
+         ok <- VMTest.checkExpectation x vm'
+         putStr (if ok then "." else "F")
 
     Debug -> debugger vm
 
