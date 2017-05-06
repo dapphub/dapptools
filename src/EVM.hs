@@ -30,17 +30,14 @@ import Control.Lens hiding (op, (:<), (|>))
 -- Various data structures
 import Data.ByteString             (ByteString)
 import Data.Map.Strict             (Map, union, fromList)
-import Data.Maybe                  (isJust, fromMaybe)
+import Data.Maybe                  (fromMaybe)
 import Data.Sequence               (Seq)
-import Data.Text                   (Text)
-import Data.Text.Encoding          (encodeUtf8)
 import Data.Vector.Unboxed         (Vector)
 import Data.Vector.Unboxed.Mutable (new, write)
 
 import qualified Data.ByteString      as BS
 import qualified Data.Map.Strict      as Map
 import qualified Data.Sequence        as Seq
-import qualified Data.Text            as Text
 import qualified Data.Vector.Unboxed  as Vector
 
 -- Some stuff for "generic programming", needed to create Word512
@@ -789,14 +786,6 @@ stackOp3_1 vm f =
       return $! vm & state . stack .~ a : xs
     _ -> underrun vm
 
-exec :: VM -> IO VM
-exec vm = if isJust (vm ^. done) then return vm else exec1 vm >>= exec
-
-continue :: ByteString -> Word256 -> Text -> Map Text SolcContract -> SourceCache -> Block -> Word256 -> VM -> VM
-continue theCalldata theCallvalue theContractName theSolc theSourceCache theBlock theOrigin vm =
-  initialVm theCalldata theCallvalue theContractName theSolc theSourceCache theBlock theOrigin
-    & env .~ (vm ^. env)
-
 checkJump :: (Monad m, Integral n) => VM -> n -> m VM
 checkJump vm x =
   let theCode = vm ^. state . code in
@@ -850,41 +839,6 @@ makeVm o = VM
       [(vmoptAddress o, initialContract (vmoptCode o))]
     }
   }
-
-initialVm :: ByteString -> Word256 -> Text -> Map Text SolcContract -> SourceCache -> Block -> Word256 -> VM
-initialVm theCalldata theCallvalue theContractName theSolc theSourceCache theBlock theOrigin = VM {
-  _done = Nothing,
-  _env = Env {
-    _contracts = Map.fromList [
-      (123, initialContract (theSolc ^?! ix theContractName . runtimeCode))
-    ],
-    _solc = Map.fromList [(x ^. solcCodehash,  x) | x <- Map.elems theSolc],
-    _sha3Crack = mempty,
-    _sourceCache = theSourceCache,
-    _origin = theOrigin
-  },
-  _block = theBlock,
-  _frames = mempty,
-  _suicides = mempty,
-  _memorySize = 0,
-  _state = FrameState {
-    _contract = 123,
-    _pc = 0,
-    _code = theSolc ^?! ix theContractName . runtimeCode,
-    _stack = mempty,
-    _memory = mempty,
-    _calldata = theCalldata,
-    _callvalue = theCallvalue,
-    _caller = 0
-  }
-}
-
-run :: Text -> Text -> Text -> IO VM
-run file contractName abi = do
-  Just (c, cache) <- readSolc (Text.unpack file)
-  let theBlock = Block 0 0 0 0 0
-  exec (initialVm (word32Bytes $ abiKeccak (encodeUtf8 abi)) 0
-    contractName c cache theBlock 0)
 
 -- Copied from the standard library just to get specialization.
 -- We also use bit operations instead of modulo and multiply.
@@ -968,8 +922,6 @@ byteAt x j = num (x `shiftR` (j * 8)) .&. 0xff
 
 word32Bytes :: Word32 -> ByteString
 word32Bytes x = BS.pack [byteAt x (3 - i) | i <- [0..3]]
-
-{- We will need to parse ops into data soon, so let's keep this code. -}
 
 data Op
   = OpStop

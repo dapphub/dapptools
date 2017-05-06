@@ -1,3 +1,5 @@
+-- Main file of the hsevm CLI program
+
 {-# Language BangPatterns #-}
 {-# Language DeriveGeneric #-}
 {-# Language GeneralizedNewtypeDeriving #-}
@@ -11,8 +13,10 @@ import qualified EVM.VMTest as VMTest
 import EVM.Types
 
 import Control.Lens
+import Control.Monad (unless)
 
 import Data.ByteString (ByteString)
+import Data.List (intercalate)
 
 import IPPrint.Colored (cpprint)
 import Options.Generic
@@ -21,6 +25,8 @@ import System.Console.Readline
 import qualified Data.ByteString.Lazy  as ByteString
 import qualified Data.Map              as Map
 
+-- This record defines the program's command-line options
+-- automatically via the `optparse-generic` package.
 data Command
   = Exec
       { code       :: ByteString
@@ -64,8 +70,11 @@ main = do
            in do
              let tests = testFilter (Map.toList allTests)
              putStrLn $ "Running " ++ show (length tests) ++ " tests"
-             mapM_ (runVMTest (optsMode opts)) tests
-             putStrLn ""
+             results <- mapM (runVMTest (optsMode opts)) tests
+             let failed = [name | (name, False) <- zip (map fst tests) results]
+             unless (null failed) $ do
+               putStrLn ""
+               putStrLn $ "Failed: " ++ intercalate ", " failed
 
 vmFromCommand :: Command -> EVM.VM
 vmFromCommand opts =
@@ -90,16 +99,26 @@ vmFromCommand opts =
 optsMode :: Command -> Mode
 optsMode x = if debug x then Debug else Run
 
-runVMTest :: Mode -> (String, VMTest.Case) -> IO ()
-runVMTest mode (_name, x) = do
+exec :: EVM.VM -> IO EVM.VM
+exec vm =
+  case vm ^. EVM.done of
+    Just _ -> return vm
+    _      -> EVM.exec1 vm >>= exec
+
+runVMTest :: Mode -> (String, VMTest.Case) -> IO Bool
+runVMTest mode (name, x) = do
   let vm = VMTest.vmForCase x
   case mode of
     Run ->
-      do vm' <- EVM.exec vm
+      do putStr (name ++ ": ")
+         vm' <- exec vm
          ok <- VMTest.checkExpectation x vm'
-         putStr (if ok then "." else "F")
+         putStrLn (if ok then "OK" else "FAIL")
+         return ok
 
-    Debug -> debugger vm
+    Debug ->
+      do debugger vm
+         return True -- XXX
 
 debugger :: EVM.VM -> IO ()
 debugger vm = do
