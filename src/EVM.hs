@@ -16,58 +16,125 @@ import Prelude hiding ((^))
 import EVM.Solidity
 import EVM.Keccak
 
-import Data.DoubleWord
+-- Bits and words
+import Data.Bits (xor, shiftL, shiftR, (.&.), (.|.))
+import Data.Bits (Bits, bit, testBit, complement)
+import Data.DoubleWord (Word256, Int256)
+import Data.DoubleWord (loWord, signedWord, unsignedWord, fromHiAndLo)
 import Data.DoubleWord.TH
+import Data.Word (Word8, Word32)
 
+-- We make heavy use of the lens library for nested field access
+import Control.Lens hiding (op, (:<), (|>))
+
+-- Various data structures
+import Data.ByteString             (ByteString)
+import Data.Map.Strict             (Map, union, fromList)
+import Data.Maybe                  (isJust, fromMaybe)
+import Data.Sequence               (Seq)
+import Data.Text                   (Text)
+import Data.Text.Encoding          (encodeUtf8)
+import Data.Vector.Unboxed         (Vector)
+import Data.Vector.Unboxed.Mutable (new, write)
+
+import qualified Data.ByteString      as BS
+import qualified Data.Map.Strict      as Map
+import qualified Data.Sequence        as Seq
+import qualified Data.Text            as Text
+import qualified Data.Vector.Unboxed  as Vector
+
+-- Some stuff for "generic programming", needed to create Word512
 import Data.Data
 import GHC.Generics
 
-import Control.Lens hiding (op, (:<), (|>))
-
-import Data.Bits
-import Data.Maybe
-import Data.Word
-
-import qualified Data.Sequence as Seq
-import Data.Sequence (Seq)
-
-import qualified Data.ByteString as BS
-import Data.ByteString (ByteString)
-
-import qualified Data.Map.Strict as Map
-import Data.Map.Strict (Map, union, fromList)
-
-import qualified Data.Text as Text
-import Data.Text (Text)
-import Data.Text.Encoding (encodeUtf8)
-
-import qualified Data.Vector.Unboxed as Vector
-import Data.Vector.Unboxed (Vector)
-import Data.Vector.Unboxed.Mutable (new, write)
-
+-- We need a 512-bit word for doing ADDMOD and MULMOD with full precision.
 mkUnpackedDoubleWord "Word512" ''Word256 "Int512" ''Int256 ''Word256
   [''Typeable, ''Data, ''Generic]
 
--- When invoking another contract, e.g., through CALL or CREATE, the
--- linkage is what we need to remember when we come back, aside from
--- all the VM state.  (The term `linkage' comes from SICP's
--- compiler chapter.)
-data Linkage = CallLinkage Word256 Word256
-             | CreateLinkage
-               deriving Show
+-- Main structure of the program: state of a stepwise EVM execution.
+data VM = VM
+  { _done        :: !(Maybe ByteString)
+  , _state       :: !FrameState
+  , _frames      :: ![Frame]
+  , _env         :: !Env
+  , _block       :: !Block
+  , _suicides    :: ![Word256]
+  , _memorySize  :: !Word256
+  } deriving Show
 
-data FrameState = FrameState {
-  _contract    :: !Word256,
-  _code        :: !ByteString,
-  _pc          :: !Int,
-  _stack       :: ![Word256],
-  _memory      :: !(Map Word256 Word8),
-  _calldata    :: !ByteString,
-  _callvalue   :: !Word256,
-  _caller      :: !Word256
-} deriving Show
+-- A frame is an entry in the VM's "call stack"
+-- with the context needed to return from a CALL/CREATE
+-- along with trace information.
+data Frame = Frame
+  { _frameContext   :: !FrameContext
+  , _frameState     :: !FrameState
+  , _frameTrace     :: !FrameTrace
+  } deriving Show
 
-makeLenses ''FrameState
+-- When returning from a CALL,
+-- we save return data in memory
+-- and put the error flag on the stack.
+--
+-- When returning from a CREATE,
+-- we save return data as contract code
+-- and put the new address on the stack.
+--
+-- The frame context tells us what to do.
+data FrameContext
+  = CallContext
+    { callContextOffset :: Word256
+    , callContextSize   :: Word256 }
+  | CreationContext
+  deriving Show
+
+-- Used to associate a frame with contract and method.
+--
+-- TODO: Put this in the frame context instead.
+--       Different info is anyway needed for CALL vs CREATE.
+data FrameTrace = FrameTrace
+  { _traceCodehash :: Word256
+  , _traceAbi      :: Maybe Word32
+  } deriving Show
+
+-- The ``registers'' of the VM along with memory and data stack.
+data FrameState = FrameState
+  { _contract    :: !Word256
+  , _code        :: !ByteString
+  , _pc          :: !Int
+  , _stack       :: ![Word256]
+  , _memory      :: !(Map Word256 Word8)
+  , _calldata    :: !ByteString
+  , _callvalue   :: !Word256
+  , _caller      :: !Word256
+  } deriving Show
+
+-- The state of a contract.
+data Contract = Contract
+  { _bytecode :: !ByteString
+  , _storage  :: !(Map Word256 Word256)
+  , _balance  :: !Word256
+  , _nonce    :: !Word256
+  , _codehash :: !Word256
+  , _codesize :: !Int -- (redundant?)
+  , _opIxMap  :: !(Vector Int)
+  } deriving (Eq, Show)
+
+-- Kind of a hodgepodge?
+data Env = Env
+  { _contracts   :: !(Map Word256 Contract)
+  , _solc        :: (Map Word256 SolcContract)
+  , _sha3Crack   :: (Map Word256 [Word8])
+  , _sourceCache :: SourceCache
+  , _origin      :: Word256
+  } deriving (Show)
+
+data Block = Block
+  { _coinbase   :: !Word256
+  , _timestamp  :: !Word256
+  , _number     :: !Word256
+  , _difficulty :: !Word256
+  , _gaslimit   :: !Word256
+  } deriving Show
 
 blankState :: FrameState
 blankState = FrameState
@@ -81,63 +148,24 @@ blankState = FrameState
   , _caller    = 0
   }
 
-data Frame = Frame {
-  _frameState     :: !FrameState,
-  _frameLinkage   :: !Linkage,
-  _frameTrace     :: (Word256, Maybe Word32) {- (codehash, abi) -}
-} deriving Show
+makeLenses ''FrameState
+makeLenses ''FrameTrace
 makeLenses ''Frame
-
-data Contract = Contract {
-  _bytecode :: !ByteString,
-  _codehash :: !Word256,
-  _codesize :: !Int,
-  _storage  :: !(Map Word256 Word256),
-  _balance  :: !Word256,
-  _nonce    :: !Word256,
-  _opIxMap  :: !(Vector Int)
-} deriving (Eq, Show)
-makeLenses ''Contract
-
-data Env = Env {
-  _contracts   :: !(Map Word256 Contract),
-  _solc        :: (Map Word256 SolcContract),
-  _sha3Crack   :: (Map Word256 [Word8]),
-  _sourceCache :: SourceCache,
-  _origin      :: Word256
-} deriving (Show)
-makeLenses ''Env
-
-data Block = Block {
-  _coinbase   :: !Word256,
-  _timestamp  :: !Word256,
-  _number     :: !Word256,
-  _difficulty :: !Word256,
-  _gaslimit   :: !Word256
-} deriving Show
 makeLenses ''Block
-
-data VM = VM {
-  _done        :: !(Maybe ByteString),
-  _env         :: !Env,
-  _block       :: !Block,
-  _frames      :: ![Frame],
-  _suicides    :: ![Word256],
-  _memorySize  :: !Word256,
-  _state       :: !FrameState
-} deriving Show
+makeLenses ''Contract
+makeLenses ''Env
 makeLenses ''VM
 
 initialContract :: ByteString -> Contract
-initialContract theCode = Contract {
-  _bytecode = theCode,
-  _codesize = BS.length theCode,
-  _codehash = keccak theCode,
-  _storage  = mempty,
-  _balance  = 0,
-  _nonce    = 0,
-  _opIxMap  = mkOpIxMap theCode
-}
+initialContract theCode = Contract
+  { _bytecode = theCode
+  , _codesize = BS.length theCode
+  , _codehash = keccak theCode
+  , _storage  = mempty
+  , _balance  = 0
+  , _nonce    = 0
+  , _opIxMap  = mkOpIxMap theCode
+  }
 
 ceilDiv :: Integral a => a -> a -> a
 ceilDiv a b =
@@ -537,9 +565,14 @@ exec1 vm = do
                 & accessMemoryRange xOffset xSize
                 & env . contracts .~ contracts'
                 & frames %~
-                    (Frame ((vm' ^. state) & stack .~ xs)
-                           CreateLinkage
-                           (0, Nothing) :)
+                    (Frame
+                     { _frameContext = CreationContext
+                     , _frameState   = ((vm' ^. state) & stack .~ xs)
+                     , _frameTrace   = FrameTrace
+                         { _traceCodehash = 0
+                         , _traceAbi      = Nothing
+                         }
+                     } :)
                 & state .~
                     (blankState
                       & code      .~ xCode
@@ -554,12 +587,17 @@ exec1 vm = do
             (_:xTo:xValue:xInOffset:xInSize:xOutOffset:xOutSize:xs) -> do
               let frame' =
                     Frame
-                      ((vm' ^. state) & stack .~ xs)
-                      (CallLinkage xOutOffset xOutSize)
-                      (vm ^?! env . contracts . ix xTo . codehash,
-                       if xInSize >= 4
-                         then Just $! mem ^. word32At xInOffset
-                         else Nothing)
+                      { _frameContext = CallContext xOutOffset xOutSize
+                      , _frameState = ((vm' ^. state) & stack .~ xs)
+                      , _frameTrace = FrameTrace
+                        { _traceCodehash =
+                            vm ^?! env . contracts . ix xTo . codehash
+                        , _traceAbi =
+                            if xInSize >= 4
+                            then Just $! mem ^. word32At xInOffset
+                            else Nothing
+                        }
+                      }
 
                   state' = (vm' ^. state)
                     & pc .~ 0
@@ -593,8 +631,8 @@ exec1 vm = do
               case vm ^. frames of
                 [] -> return $! vm' & done .~ Just (readMemory xOffset xSize vm)
                 (f:fs) ->
-                  case f ^. frameLinkage of
-                    CreateLinkage ->
+                  case f ^. frameContext of
+                    CreationContext ->
                       return $! vm'
                         & frames .~ fs
                         & state .~ f ^. frameState
@@ -615,7 +653,7 @@ exec1 vm = do
                                         & balance .~ (created ^. balance)
                                    in Just contract'
 
-                    CallLinkage yOffset ySize ->
+                    CallContext yOffset ySize ->
                       return $! vm'
                         & frames .~ fs
                         & state .~ f ^. frameState
@@ -681,8 +719,8 @@ returnOp returnCode (xOffset, xSize) vm =
   case vm ^. frames of
     [] -> return $! vm & done .~ Just (readMemory xOffset xSize vm)
     (f:fs) ->
-      case f ^. frameLinkage of
-        CreateLinkage ->
+      case f ^. frameContext of
+        CreationContext ->
           return $! vm
             & (if xSize == 0
                then done .~ Just "" -- because all gas is consumed
@@ -705,7 +743,7 @@ returnOp returnCode (xOffset, xSize) vm =
                               & storage .~ (created ^. storage)
                               & balance .~ (created ^. balance)
 
-        CallLinkage yOffset ySize ->
+        CallContext yOffset ySize ->
           return $! vm
             & accessMemoryRange xOffset xSize
             & frames .~ fs
