@@ -21,12 +21,17 @@ cabal-version:
 
 library
   exposed-modules:
-    EVM, EVM.Solidity, EVM.Keccak
+    EVM,
+    EVM.Solidity,
+    EVM.Keccak,
+    EVM.Types,
+    EVM.Test
   ghc-options:
     -O2 -Wall
   build-depends:
     aeson,
     base >=4.9 && <4.10,
+    base16-bytestring,
     binary,
     bytestring,
     containers,
@@ -39,6 +44,7 @@ library
     lens,
     lens-aeson,
     memory,
+    optparse-generic,
     process,
     temporary,
     text,
@@ -56,8 +62,8 @@ executable hsevm-cli
     hsevm-cli
   main-is:
     hsevm-cli.hs
---  ghc-options:
---    -O2 -threaded
+  ghc-options:
+    -O2 -Wall -threaded
   build-depends:
     aeson,
     base,
