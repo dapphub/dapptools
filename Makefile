@@ -9,7 +9,7 @@ files = $(shell ls -d $(dirs)/*)
 install:; cp -r -n $(dirs) $(prefix)
 link: uninstall dirs; for x in $(files); do \
 ln -s `pwd`/$$x $(prefix)/$$x; done
-uninstall:; rm -r $(addprefix $(prefix)/,$(files))
+uninstall:; rm -rf $(addprefix $(prefix)/,$(files))
 
 test:
 	set -e; \
