@@ -1,31 +1,68 @@
 #!/usr/bin/env bash
 set -o noclobber
-mk() { cat >"$1"; (set -x; git add "$1"); }
-mka() { cat >>"$1"; (set -x; git add "$1"); }
-name=$(basename "$(pwd)")
+[[ -e .git ]] && dapp --sanity "$0"
+
+create() { cat >"$1"; (set -x; git add "$1"); }
+insert() {
+  while read -r line; do
+    grep -qF "$line" "$1" || printf >>"$1" '%s\n' "$line"
+  done
+  (set -x; git add "$1")
+}
+
 (set -x; git init)
 (set -x; mkdir -p lib src)
-mka .gitignore <<.
+
+cat >.dapprc <<.
+# export ETH_FROM=0x0000000000000000000000000000000000000000
+.
+
+insert .gitignore <<.
+/.dapprc
 /out
 .
-mk Makefile <<.
-all:; dapp build
-test:; dapp test
+
+insert .dappobjects <<.
 .
-mk Dappfile <<.
+
+name=$(basename "$(pwd)")
+words=$(sed 's/[^a-z0-9]\+/\n/ig' <<<"$name")
+while read -r word; do type+=${word^}; done <<<"$words"
+
+create Makefile <<.
+type = $type
+name = \$(type)
+
+all:; dapp build
+clean:; dapp clean
+test:; dapp test
+deploy:; dapp deploy \$(type) \$(args) --name=\$(name)
+.
+
+create Dappfile <<.
 name            $name
-description
-version         0.0.1
+description     A newly-created dapp
+version         0.0.0
 
 author          $(whoami)
 license         Apache-2.0
 .
-mk src/test.sol <<.
+
+create "src/$type.sol" <<.
+pragma solidity ^0.4.8;
+
+contract $type {
+}
+.
+
+create src/$type.t.sol <<.
 pragma solidity ^0.4.8;
 
 import "ds-test/test.sol";
 
-contract Test is DSTest {
+import "./$type.sol";
+
+contract ${type}Test is DSTest {
     function test_basic_sanity() {
         assert(true);
     }
@@ -35,7 +72,8 @@ contract Test is DSTest {
     }
 }
 .
+
 git add -A
-dapp --commit "$0" "$name"
+(set -x; git commit -m "dapp init $name")
 (set -x; dapp install ds-test)
 (set -x; make test)
