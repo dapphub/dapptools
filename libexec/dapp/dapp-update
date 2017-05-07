@@ -1,3 +1,7 @@
 #!/usr/bin/env bash
 set -e
-(set -x; git submodule update --init --recursive)
+if [[ $1 ]]; do
+  for x; do (set -x; git submodule update --init "lib/$1"); done
+else
+  (set -x; git submodule update --init)
+fi

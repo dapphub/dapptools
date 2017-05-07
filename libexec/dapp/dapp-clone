@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
 set -e
-[[ ${1?missing package name} = */* ]] || set -- "dapphub/$1"
-(set -x; git clone "git@github.com:$1" --recursive)
+deps=$(dapp --parse-deps "$@")
+while read -r unparsed name url; do
+  ssh_url=${url/"https://github.com/"/"git@github.com:"}
+  (set -x; git clone "$ssh_url" "$name" --recursive)
+done <<<"$deps"

@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
 set -e
 dapp --sanity "$0"
-(set -x; git rm -r "lib/$1")
-dapp --commit "$0" "$@"
+: ${1?missing package name}
+for x; do
+  (set -x; git rm -r "lib/$x")
+  (set -x; git commit -m "dapp uninstall $x")
+done
