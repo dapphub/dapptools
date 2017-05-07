@@ -1,6 +1,0 @@
-{
-  "dependencies": {
-    "bignumber.js": "^3.0.1",
-    "ethereumjs-abi": "^0.6.4"
-  }
-}

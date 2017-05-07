@@ -55,7 +55,7 @@ contract $type {
 }
 .
 
-create src/$type.t.sol <<.
+create "src/$type.t.sol" <<.
 pragma solidity ^0.4.8;
 
 import "ds-test/test.sol";

@@ -10,6 +10,9 @@ install:; cp -r -n $(dirs) $(prefix)
 link: dirs; for x in $(files); do ln -s `pwd`/$$x $(prefix)/$$x; done
 uninstall:; rm -r $(addprefix $(prefix)/,$(files))
 
-test:; ! grep '^#!/bin/sh' libexec/*/* && \
-grep '^#!/usr/bin/env bash' libexec/*/* | \
-cut -d: -f1 | xargs shellcheck
+test:
+	set -e; \
+	for x in libexec/*/*; do [[ -f $$x ]] && files+=($$x); done; \
+	! grep '^#!/bin/sh' "$${files[@]}"; \
+	grep '^#!/usr/bin/env bash' "$${files[@]}" | \
+	cut -d: -f1 | xargs shellcheck
