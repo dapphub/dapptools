@@ -17,7 +17,6 @@ import qualified EVM
 import EVM.Types
 
 import Control.Lens
-import Control.Monad
 
 import IPPrint.Colored (cpprint)
 
@@ -35,7 +34,7 @@ import qualified Data.ByteString.Lazy  as Lazy
 data Case = Case
   { testVmOpts      :: EVM.VMOpts
   , testContracts   :: Map Address Contract
-  , testExpectation :: Expectation
+  , testExpectation :: Maybe Expectation
   } deriving Show
 
 data Contract = Contract
@@ -46,35 +45,33 @@ data Contract = Contract
   } deriving Show
 
 data Expectation = Expectation
-  { expectedOut :: Maybe ByteString
-  , expectedContracts :: Maybe (Map Address Contract)
+  { expectedOut :: ByteString
+  , expectedContracts :: Map Address Contract
   } deriving Show
 
 checkExpectation :: Case -> EVM.VM -> IO Bool
-checkExpectation x vm = do
-  let check f g s =
-        do v <- maybe (return True) (f vm) (g (testExpectation x))
-           unless v (putStrLn s)
-           return v
+checkExpectation x vm =
+  case (testExpectation x, view EVM.result vm) of
+    (Just expectation, EVM.VMSuccess output) -> do
+      (&&) <$> checkExpectedContracts vm (expectedContracts expectation)
+           <*> checkExpectedOut output (expectedOut expectation)
+    (Nothing, EVM.VMSuccess _) ->
+      return False
+    (Nothing, EVM.VMFailure) ->
+      return True
+    (Just _, EVM.VMFailure) ->
+      return False
+    (_, EVM.VMRunning) ->
+      error "VMRunning?"
 
-  e1 <- check checkExpectedContracts expectedContracts
-          "failed contract expectations"
-  e2 <- check checkExpectedOut expectedOut
-          "failed output value"
-
-  return (e1 && e2)
-
-checkExpectedOut :: EVM.VM -> ByteString -> IO Bool
-checkExpectedOut vm expected =
-  case vm ^. EVM.done of
-    Nothing -> error "VM not done"
-    Just out ->
-      if out == expected
-      then
-        return True
-      else do
-        cpprint (out, expected)
-        return False
+checkExpectedOut :: ByteString -> ByteString -> IO Bool
+checkExpectedOut output expected =
+  if output == expected
+  then
+    return True
+  else do
+    cpprint ("output mismatch" :: String, output, expected)
+    return False
 
 checkExpectedContracts :: EVM.VM -> Map Address Contract -> IO Bool
 checkExpectedContracts vm expected =
@@ -114,11 +111,11 @@ parseVmOpts v =
            <*> addrField exec "address"
            <*> addrField exec "caller"
            <*> addrField exec "origin"
-           <*> addrField env  "currentCoinbase"
            <*> wordField env  "currentNumber"
            <*> wordField env  "currentTimestamp"
-           <*> wordField env  "currentGasLimit"
+           <*> addrField env  "currentCoinbase"
            <*> wordField env  "currentDifficulty"
+           <*> wordField env  "currentGasLimit"
        _ ->
          JSON.typeMismatch "VM test case" (JSON.Object v)
 
@@ -127,11 +124,15 @@ parseContracts ::
 parseContracts v =
   v .: "pre" >>= parseJSON
 
-parseExpectation :: JSON.Object -> JSON.Parser Expectation
+parseExpectation :: JSON.Object -> JSON.Parser (Maybe Expectation)
 parseExpectation v =
-  Expectation
-    <$> (fmap hexText <$> v .:? "out")
-    <*> v .:? "post"
+  do out       <- fmap hexText <$> v .:? "out"
+     contracts <- v .:? "post"
+     case (out, contracts) of
+       (Just x, Just y) ->
+         return (Just (Expectation x y))
+       _ ->
+         return Nothing
 
 parseSuite ::
   Lazy.ByteString -> Either String (Map String Case)

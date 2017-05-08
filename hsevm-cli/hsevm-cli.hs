@@ -21,6 +21,7 @@ import Data.List (intercalate)
 import IPPrint.Colored (cpprint)
 import Options.Generic
 import System.Console.Readline
+import System.IO
 
 import qualified Data.ByteString.Lazy  as ByteString
 import qualified Data.Map              as Map
@@ -101,9 +102,11 @@ optsMode x = if debug x then Debug else Run
 
 exec :: EVM.VM -> IO EVM.VM
 exec vm =
-  case vm ^. EVM.done of
-    Just _ -> return vm
-    _      -> EVM.exec1 vm >>= exec
+  case vm ^. EVM.result of
+    EVM.VMRunning -> do
+      EVM.exec1 vm >>= exec
+    _ ->
+      return vm
 
 runVMTest :: Mode -> (String, VMTest.Case) -> IO Bool
 runVMTest mode (name, x) = do
@@ -111,6 +114,7 @@ runVMTest mode (name, x) = do
   case mode of
     Run ->
       do putStr (name ++ ": ")
+         hFlush stdout
          vm' <- exec vm
          ok <- VMTest.checkExpectation x vm'
          putStrLn (if ok then "OK" else "FAIL")
@@ -126,8 +130,8 @@ debugger vm = do
   cpprint (EVM.vmOp vm)
   cpprint (EVM.opParams vm)
   cpprint (vm ^. EVM.frames)
-  if vm ^. EVM.done /= Nothing
-    then do putStrLn "done"
+  if vm ^. EVM.result /= EVM.VMRunning
+    then do print (vm ^. EVM.result)
     else
     readline "(evm) " >>=
       \case
@@ -135,5 +139,11 @@ debugger vm = do
           return ()
         Just line ->
           case words line of
-            [] -> EVM.exec1 vm >>= debugger
+            [] ->
+              EVM.exec1 vm >>= debugger
+            ["block"] ->
+              do cpprint (view EVM.block vm)
+                 debugger vm
+            ["storage"] ->
+              do cpprint (view (EVM.env . EVM.contracts) vm)
             _  -> debugger vm

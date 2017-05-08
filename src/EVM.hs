@@ -48,9 +48,16 @@ import GHC.Generics
 mkUnpackedDoubleWord "Word512" ''Word256 "Int512" ''Int256 ''Word256
   [''Typeable, ''Data, ''Generic]
 
+-- The different result states of a VM
+data VMResult
+  = VMRunning
+  | VMFailure
+  | VMSuccess !ByteString
+  deriving (Eq, Show)
+
 -- Main structure of the program: state of a stepwise EVM execution.
 data VM = VM
-  { _done        :: !(Maybe ByteString)
+  { _result      :: !VMResult
   , _state       :: !FrameState
   , _frames      :: ![Frame]
   , _env         :: !Env
@@ -120,7 +127,7 @@ data Contract = Contract
 data Env = Env
   { _contracts   :: !(Map Word256 Contract)
   , _solc        :: (Map Word256 SolcContract)
-  , _sha3Crack   :: (Map Word256 [Word8])
+  , _sha3Crack   :: (Map Word256 ByteString)
   , _sourceCache :: SourceCache
   , _origin      :: Word256
   } deriving (Show)
@@ -238,7 +245,7 @@ exec1 vm = do
         -- op: SWAP
         x | x >= 0x90 && x <= 0x9f ->
           let !i = x - 0x90 + 1 in
-          if length stk < num i
+          if length stk < num i + 1
           then underrun vm
           else return $!
             vm' & state . stack . ix 0 .~
@@ -254,7 +261,7 @@ exec1 vm = do
         -- op: STOP
         0x00 ->
           case vm ^. frames of
-            [] -> return $! vm' & done .~ Just ""
+            [] -> return $! vm' & result .~ VMSuccess ""
             (f:fs) -> do
               return $! vm'
                 & frames .~ fs
@@ -355,9 +362,8 @@ exec1 vm = do
         0x20 ->
           case stk of
             (xOffset:xSize:xs) ->
-              let bytes = [(Map.lookup (xOffset + i) mem) ?: 0
-                           | i <- [0..xSize-1]]
-                  hash  = keccak (BS.pack bytes)
+              let bytes = readMemory xOffset xSize vm
+                  hash  = keccak bytes
               in do
                 return $! vm'
                   & state . stack             .~ hash : xs
@@ -550,10 +556,7 @@ exec1 vm = do
             (xValue:xOffset:xSize:xs) ->
               let address' =
                     newContractAddress (vm' ^. state . contract) (c ^. nonce)
-                  xCode = BS.pack [
-                    Map.findWithDefault 0 (xOffset + i) mem
-                      | i <- [0..xSize-1]
-                    ]
+                  xCode = readMemory xOffset xSize vm
                   contract' = initialContract mempty
                   contracts' =
                     (vm ^. env . contracts) & at address' .~ (Just $! contract')
@@ -581,39 +584,38 @@ exec1 vm = do
         -- op: CALL
         0xf1 ->
           case stk of
-            (_:xTo:xValue:xInOffset:xInSize:xOutOffset:xOutSize:xs) -> do
-              let frame' =
-                    Frame
-                      { _frameContext = CallContext xOutOffset xOutSize
-                      , _frameState = ((vm' ^. state) & stack .~ xs)
-                      , _frameTrace = FrameTrace
-                        { _traceCodehash =
-                            vm ^?! env . contracts . ix xTo . codehash
-                        , _traceAbi =
-                            if xInSize >= 4
-                            then Just $! mem ^. word32At xInOffset
-                            else Nothing
-                        }
-                      }
-
-                  state' = (vm' ^. state)
-                    & pc .~ 0
-                    & stack .~ mempty
-                    & memory .~ mempty
-                    & contract .~ xTo
-                    & calldata .~
-                        (BS.pack [
-                            (Map.lookup (xInOffset + i) mem) ?: 0
-                            | i <- [0..xInSize-1]
-                         ])
-                    & callvalue .~ xValue
-                    & caller    .~ (vm ^. state . contract)
-
-              return $! vm'
-                & frames %~ (frame' :)
-                & state .~ state'
-                & accessMemoryRange xInOffset xInSize
-                & accessMemoryRange xOutOffset xOutSize
+            (_:xTo:xValue:xInOffset:xInSize:xOutOffset:xOutSize:xs) ->
+              case vm ^? env . contracts . ix xTo . bytecode of
+                Nothing ->
+                  returnOp 0 (0, 0) vm
+                Just newCode ->
+                  let frame' =
+                        Frame
+                          { _frameContext = CallContext xOutOffset xOutSize
+                          , _frameState = ((vm' ^. state) & stack .~ xs)
+                          , _frameTrace = FrameTrace
+                            { _traceCodehash =
+                                vm ^?! env . contracts . ix xTo . codehash
+                            , _traceAbi =
+                                if xInSize >= 4
+                                then Just $! mem ^. word32At xInOffset
+                                else Nothing
+                            }
+                          }
+                      state' = (vm' ^. state)
+                        & pc        .~ 0
+                        & code      .~ newCode
+                        & stack     .~ mempty
+                        & memory    .~ mempty
+                        & contract  .~ xTo
+                        & calldata  .~ readMemory xInOffset xInSize vm
+                        & callvalue .~ xValue
+                        & caller    .~ (vm ^. state . contract)
+                  in return $! vm'
+                       & frames %~ (frame' :)
+                       & state .~ state'
+                       & accessMemoryRange xInOffset xInSize
+                       & accessMemoryRange xOutOffset xOutSize
 
             _ -> underrun vm
 
@@ -626,7 +628,9 @@ exec1 vm = do
           case stk of
             (xOffset:xSize:_) ->
               case vm ^. frames of
-                [] -> return $! vm' & done .~ Just (readMemory xOffset xSize vm)
+                [] ->
+                  return $! vm'
+                    & result .~ VMSuccess (readMemory xOffset xSize vm)
                 (f:fs) ->
                   case f ^. frameContext of
                     CreationContext ->
@@ -642,10 +646,7 @@ exec1 vm = do
                                        vm ^?! env . contracts . ix (vm ^. state . contract)
                                      contract' =
                                        initialContract
-                                        (BS.pack
-                                         [ Map.findWithDefault 0 (xOffset + num i) mem
-                                           | i <- [0..xSize-1]
-                                         ])
+                                        (readMemory xOffset xSize vm)
                                         & storage .~ (created ^. storage)
                                         & balance .~ (created ^. balance)
                                    in Just contract'
@@ -677,7 +678,7 @@ exec1 vm = do
 
     else
       case vm ^. frames of
-        [] -> return $! vm & done .~ Just ""
+        [] -> return $! vm & result .~ VMSuccess ""
         (f:fs) -> do
           return $! vm
             & frames .~ fs
@@ -691,6 +692,8 @@ opParams vm =
       params $ words "value offset size"
     Just OpCall ->
       params $ words "gas to value in-offset in-size out-offset out-size"
+    Just OpSstore ->
+      params $ words "index value"
     Just OpCodecopy ->
       params $ words "mem-offset code-offset code-size"
     Just OpSha3 ->
@@ -701,6 +704,8 @@ opParams vm =
       params $ words "account mem-offset code-offset code-size"
     Just OpReturn ->
       params $ words "offset size"
+    Just OpJumpi ->
+      params $ words "destination condition"
     _ -> mempty
   where
     params xs =
@@ -714,13 +719,17 @@ underrun vm = returnOp 0 (0, 0) vm
 returnOp :: Monad m => Word256 -> (Word256, Word256) -> VM -> m VM
 returnOp returnCode (xOffset, xSize) vm =
   case vm ^. frames of
-    [] -> return $! vm & done .~ Just (readMemory xOffset xSize vm)
+    [] -> return $!
+      vm & result .~
+             case returnCode of
+               0 -> VMFailure
+               _ -> VMSuccess (readMemory xOffset xSize vm)
     (f:fs) ->
       case f ^. frameContext of
         CreationContext ->
           return $! vm
             & (if xSize == 0
-               then done .~ Just "" -- because all gas is consumed
+               then result .~ VMFailure -- because all gas is consumed
                else id)
             & accessMemoryRange xOffset xSize
             & frames .~ fs
@@ -809,7 +818,7 @@ data VMOpts = VMOpts
 
 makeVm :: VMOpts -> VM
 makeVm o = VM
-  { _done = Nothing
+  { _result = VMRunning
   , _frames = mempty
   , _suicides = mempty
   , _memorySize = 0
@@ -1073,7 +1082,7 @@ readOp x _ = case x of
   0xf2 -> OpCallcode
   0xf3 -> OpReturn
   0xf4 -> OpDelegatecall
-  0xf5 -> OpSuicide
+  0xff -> OpSuicide
   _    -> (OpUnknown x)
 
 codeOps :: ByteString -> Seq Op
