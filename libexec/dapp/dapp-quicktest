@@ -25,15 +25,12 @@ var addressNames = {}
 process.on("unhandledException", () => process.exit(1))
 
 var inputFiles = []
-var skipBuild = false
 var verbose = 0
 var testRegex = new RegExp('^test')
 
 for (var i = 0; i < PROGRAM_ARGS.length; i++) {
   var arg = PROGRAM_ARGS[i]
-  if (arg == "--skip-build") {
-    skipBuild = true
-  } else if (/^(-v|--(verbose|report))$/.test(arg)) {
+  if (/^(-v|--(verbose|report))$/.test(arg)) {
     verbose++
   } else if (/^(-r|--regex)$/.test(arg)) {
     next = PROGRAM_ARGS[i + 1]
@@ -49,24 +46,12 @@ for (var i = 0; i < PROGRAM_ARGS.length; i++) {
     process.exit(1)
   } else {
     inputFiles.push(arg)
-    skipBuild = true
-  }
-}
-
-if (!skipBuild) {
-  try {
-    require("child_process").execSync("dapple build --test", {
-      stdio: [null, "inherit", "inherit"]
-    })
-  } catch (error) {
-    console.error(`${PROGRAM_NAME}: ${error}`)
-    process.exit(1)
   }
 }
 
 var classesJSON
 
-if (inputFiles.length == 1 && (
+if (inputFiles.length >= 1 && (
   require("fs").lstatSync(inputFiles[0]).isDirectory()
 )) {
   classesJSON = {
@@ -93,7 +78,16 @@ if (inputFiles.length == 1 && (
     }))
   }
 } else {
-  classesJSON = getClassesJSON()
+  console.error(`${PROGRAM_NAME}: need to provide an input directory`)
+}
+
+// extra bytecode to deploy via ethrun
+var extraBytecode = []
+if (inputFiles.length > 1 && (
+  require("fs").lstatSync(inputFiles[0]).isDirectory()
+)) {
+  const readBytes = f => require("fs").readFileSync(f, { encoding: "utf-8"})
+  extraBytecode = inputFiles.slice(1).map(readBytes)
 }
 
 if (!getTestClasses().length) {
@@ -154,7 +148,7 @@ function runTest(test) {
   child.stdout.on("data", x => output.push(x))
   child.stdout.on("end", () => handleTestOutput(test, Buffer.concat(output)))
   child.stdin.end([
-    ...inputFiles.slice(0, inputFiles.length - 1),
+    ...extraBytecode,
     test.class.bytecode,
   ].map(x => `${x}\n`).join(""))
 }
@@ -163,7 +157,7 @@ function handleTestOutput(test, output) {
   test.finished = true
   test.results = JSON.parse(output)
 
-  test.failed = !!Number(test.results[3].output)
+  test.failed = !!Number(test.results.slice(-1)[0].output)
   test.passed = test.results.every(x => x.success) && !test.failed
 
   test.inverted = /^test(Fail|Error)/.test(test.name)
@@ -475,21 +469,6 @@ function getClasses() {
       var abi = JSON.parse(classesJSON[name].interface)
       return getClass({ name, bytecode, runtimeBytecode, abi })
     })
-  }
-}
-
-function getClassesJSON() {
-  try {
-    return JSON.parse(require("fs").readFileSync(
-      inputFiles.length ? inputFiles[inputFiles.length - 1] : `${
-        require("child_process").execSync(`{
-          grep build_dir: [Dd]appfile || echo - build
-        } | awk '{print $2}'`, { encoding: "utf-8" }).trim()
-      }/classes.json`
-    ))
-  } catch (error) {
-    console.error(`${PROGRAM_NAME}: ${error.message}`)
-    process.exit(1)
   }
 }
 
