@@ -8,8 +8,8 @@ nonce=1048576  # magic starting nonce
 
 # need to know the names and locations of all of the libraries
 sources=$(find $DAPP_SRC $DAPP_LIB -name '*.sol')
-libraries=$(grep -E '^library\s+\w+' $sources \
-          | sed -E 's/:library\s+(\w+)\s+(\{|is).*/:\1/' \
+libraries=$(grep -EH '^library\s+\w+' $sources \
+          | sed -E 's/:library[[:space:]]+([_[:alnum:]]+)[[:space:]]+(\{|is).*/:\1/' \
           | sort)
 links=""
 for lib in $libraries; do
