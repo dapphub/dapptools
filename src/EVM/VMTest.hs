@@ -138,10 +138,10 @@ parseSuite ::
   Lazy.ByteString -> Either String (Map String Case)
 parseSuite = JSON.eitherDecode'
 
-realizeContracts :: Map Address Contract -> Map Word256 EVM.Contract
+realizeContracts :: Map Address Contract -> Map Word160 EVM.Contract
 realizeContracts = Map.fromList . map f . Map.toList
   where
-    f (a, x) = (addressWord256 a, realizeContract x)
+    f (a, x) = (addressWord160 a, realizeContract x)
 
 realizeContract :: Contract -> EVM.Contract
 realizeContract x =

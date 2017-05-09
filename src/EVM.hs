@@ -19,7 +19,7 @@ import EVM.Keccak
 -- Bits and words
 import Data.Bits (xor, shiftL, shiftR, (.&.), (.|.))
 import Data.Bits (Bits, bit, testBit, complement)
-import Data.DoubleWord (Word256, Int256)
+import Data.DoubleWord (Word256, Int256, Word160)
 import Data.DoubleWord (loWord, signedWord, unsignedWord, fromHiAndLo)
 import Data.DoubleWord.TH
 import Data.Word (Word8, Word32)
@@ -62,7 +62,7 @@ data VM = VM
   , _frames      :: ![Frame]
   , _env         :: !Env
   , _block       :: !Block
-  , _suicides    :: ![Word256]
+  , _suicides    :: ![Word160]
   , _memorySize  :: !Word256
   } deriving Show
 
@@ -98,14 +98,14 @@ data FrameTrace = FrameTrace
 
 -- The ``registers'' of the VM along with memory and data stack.
 data FrameState = FrameState
-  { _contract    :: !Word256
+  { _contract    :: !Word160
   , _code        :: !ByteString
   , _pc          :: !Int
   , _stack       :: ![Word256]
   , _memory      :: !(Map Word256 Word8)
   , _calldata    :: !ByteString
   , _callvalue   :: !Word256
-  , _caller      :: !Word256
+  , _caller      :: !Word160
   } deriving Show
 
 -- The state of a contract.
@@ -121,15 +121,15 @@ data Contract = Contract
 
 -- Kind of a hodgepodge?
 data Env = Env
-  { _contracts   :: !(Map Word256 Contract)
-  , _solc        :: (Map Word256 SolcContract)
+  { _contracts   :: !(Map Word160 Contract)
+  , _solc        :: (Map Word160 SolcContract)
   , _sha3Crack   :: (Map Word256 ByteString)
   , _sourceCache :: SourceCache
-  , _origin      :: Word256
+  , _origin      :: Word160
   } deriving (Show)
 
 data Block = Block
-  { _coinbase   :: !Word256
+  { _coinbase   :: !Word160
   , _timestamp  :: !Word256
   , _number     :: !Word256
   , _difficulty :: !Word256
@@ -372,7 +372,7 @@ exec1 vm = do
 
         -- op: BALANCE
         0x31 -> stackOp1_1 vm' $ \x ->
-          (vm ^? env . contracts . ix x . balance) ?: 0
+          (vm ^? env . contracts . ix (num x) . balance) ?: 0
 
         -- op: ORIGIN
         0x32 -> stackOp0_1 vm' (vm ^. env . origin)
@@ -387,7 +387,7 @@ exec1 vm = do
         0x35 -> stackOp1_1 vm' $ \x -> wordAt (num x) (vm ^. state . calldata)
 
         -- op: CALLDATASIZE
-        0x36 -> stackOp0_1 vm' $ num (BS.length (vm ^. state . calldata))
+        0x36 -> stackOp0_1 vm' $ BS.length (vm ^. state . calldata)
 
         -- op: CALLDATACOPY
         0x37 ->
@@ -402,7 +402,7 @@ exec1 vm = do
 
         -- op: CODESIZE
         0x38 ->
-          stackOp0_1 vm' (fromIntegral (BS.length (vm ^. state . code)))
+          stackOp0_1 vm' (BS.length (vm ^. state . code))
 
         -- op: CODECOPY
         0x39 ->
@@ -416,18 +416,20 @@ exec1 vm = do
 
         -- op: GASPRICE
         0x3a ->
-          stackOp0_1 vm' 0
+          stackOp0_1 vm' (0 :: Word256)
 
         -- op: EXTCODESIZE
         0x3b ->
           stackOp1_1 vm'
-            (\x -> num ((vm ^? env . contracts . ix x . codesize) ?: 0))
+            (\x -> num ((vm ^? env . contracts . ix (num x) . codesize) ?: 0))
 
         -- op: EXTCODECOPY
         0x3c ->
           case stk of
             (extAccount:memOffset:codeOffset:codeSize:xs) ->
-              let theCode = (vm ^? env . contracts . ix extAccount . bytecode) ?: mempty
+              let theCode =
+                    (vm ^? env . contracts . ix (num extAccount) . bytecode)
+                      ?: mempty
               in return $!
                    vm' & state . stack .~ xs
                        & copyBytesToMemory
@@ -521,14 +523,14 @@ exec1 vm = do
 
         -- op: PC
         0x58 ->
-          stackOp0_1 vm' (num (vm ^. state . pc))
+          stackOp0_1 vm' (vm ^. state . pc)
 
         -- op: MSIZE
         0x59 ->
           stackOp0_1 vm' (vm ^. memorySize)
 
         -- op: GAS
-        0x5a -> stackOp0_1 vm' 0xffffffffffffffffff
+        0x5a -> stackOp0_1 vm' (0xffffffffffffffffff :: Word256)
 
         -- op: JUMPDEST
         0x5b -> return $! vm'
@@ -581,7 +583,7 @@ exec1 vm = do
         0xf1 ->
           case stk of
             (_:xTo:xValue:xInOffset:xInSize:xOutOffset:xOutSize:xs) ->
-              case vm ^? env . contracts . ix xTo . bytecode of
+              case vm ^? env . contracts . ix (num xTo) . bytecode of
                 Nothing ->
                   returnOp 0 (0, 0) vm
                 Just newCode ->
@@ -591,7 +593,7 @@ exec1 vm = do
                           , _frameState = ((vm' ^. state) & stack .~ xs)
                           , _frameTrace = FrameTrace
                             { _traceCodehash =
-                                vm ^?! env . contracts . ix xTo . codehash
+                                vm ^?! env . contracts . ix (num xTo) . codehash
                             , _traceAbi =
                                 if xInSize >= 4
                                 then Just $! mem ^. word32At xInOffset
@@ -603,7 +605,7 @@ exec1 vm = do
                         & code      .~ newCode
                         & stack     .~ mempty
                         & memory    .~ mempty
-                        & contract  .~ xTo
+                        & contract  .~ num xTo
                         & calldata  .~ readMemory xInOffset xInSize vm
                         & callvalue .~ xValue
                         & caller    .~ (vm ^. state . contract)
@@ -633,7 +635,7 @@ exec1 vm = do
                       return $! vm'
                         & frames .~ fs
                         & state .~ f ^. frameState
-                        & state . stack %~ (vm ^. state . contract :)
+                        & state . stack %~ (num (vm ^. state . contract) :)
                         & accessMemoryRange xOffset xSize
                         & env . contracts . at (vm ^. state . contract) .~
                             if xSize == 0
@@ -664,7 +666,7 @@ exec1 vm = do
             (x:_) ->
               let self = vm ^. state . contract
                   vm'' = vm' & suicides %~ (self :)
-                             & env . contracts . ix x . balance +~
+                             & env . contracts . ix (num x) . balance +~
                                  (vm ^?! env . contracts . ix self . balance)
                              & env . contracts . ix self . balance .~ 0
               in returnOp 0 (0, 0) vm''
@@ -730,7 +732,7 @@ returnOp returnCode (xOffset, xSize) vm =
             & accessMemoryRange xOffset xSize
             & frames .~ fs
             & state .~ (f ^. frameState)
-            & state . stack %~ ((if xSize == 0 then 0 else vm ^. state . contract) :)
+            & state . stack %~ ((if xSize == 0 then 0 else num (vm ^. state . contract)) :)
             & env . contracts . at (vm ^. state . contract) .~
                 if xSize == 0
                 then Nothing
@@ -761,9 +763,9 @@ toWord512 x = fromHiAndLo 0 x
 fromWord512 :: Word512 -> Word256
 fromWord512 x = loWord x
 
-stackOp0_1 :: Monad m => VM -> Word256 -> m VM
+stackOp0_1 :: (Integral i, Monad m) => VM -> i -> m VM
 stackOp0_1 vm !x =
-  return $! vm & state . stack %~ (x :)
+  return $! vm & state . stack %~ (num x :)
 
 stackOp1_1 :: Monad m => VM -> (Word256 -> Word256) -> m VM
 stackOp1_1 vm f =
@@ -802,12 +804,12 @@ data VMOpts = VMOpts
   { vmoptCode :: ByteString
   , vmoptCalldata :: ByteString
   , vmoptValue :: Word256
-  , vmoptAddress :: Word256
-  , vmoptCaller :: Word256
-  , vmoptOrigin :: Word256
+  , vmoptAddress :: Word160
+  , vmoptCaller :: Word160
+  , vmoptOrigin :: Word160
   , vmoptNumber :: Word256
   , vmoptTimestamp :: Word256
-  , vmoptCoinbase :: Word256
+  , vmoptCoinbase :: Word160
   , vmoptDifficulty :: Word256
   , vmoptGaslimit :: Word256
   } deriving Show

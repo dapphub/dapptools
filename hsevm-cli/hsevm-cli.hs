@@ -95,7 +95,7 @@ vmFromCommand opts =
     }
   where
     word f def = maybe def hexWord256 (f opts)
-    addr f def = maybe def addressWord256 (f opts)
+    addr f def = maybe def addressWord160 (f opts)
 
 optsMode :: Command -> Mode
 optsMode x = if debug x then Debug else Run

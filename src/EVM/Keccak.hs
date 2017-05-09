@@ -20,7 +20,7 @@ word32 xs = sum [ fromIntegral x `shiftL` (8*n)
 octets :: Word256 -> [Word8]
 octets x = [fromIntegral (shiftR x (8 * i)) | i <- [0..31]]
 
-octets160 :: Word256 -> [Word8]
+octets160 :: Word160 -> [Word8]
 octets160 x = [fromIntegral (shiftR x (8 * i)) | i <- [0..19]]
 
 keccak :: ByteString -> Word256
@@ -34,7 +34,7 @@ abiKeccak bs =
 rlpWord256 :: Word256 -> ByteString
 rlpWord256 x = BS.pack ([0x80, 32] ++ octets x)
 
-rlpWord160 :: Word256 -> ByteString
+rlpWord160 :: Word160 -> ByteString
 rlpWord160 x = BS.pack ([0x80, 20] ++ octets160 x)
 
 rlpWord :: Word256 -> ByteString
@@ -52,7 +52,7 @@ rlpList xs =
        let ns = rlpWord (fromIntegral n)
        in BS.cons (fromIntegral (0xf7 + BS.length ns)) (BS.concat (ns : xs))
 
-newContractAddress :: Word256 -> Word256 -> Word256
+newContractAddress :: Word160 -> Word256 -> Word160
 newContractAddress a n =
-  0xffffffffffffffffffffffffffffffffffffffff .&.
+  fromIntegral
     (keccak $ rlpList [rlpWord160 a, rlpWord n])

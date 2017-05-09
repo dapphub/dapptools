@@ -19,7 +19,7 @@ import qualified Data.Text.Encoding  as Text
 newtype Hexword = Hexword { hexWord256 :: Word256 }
   deriving (Num, Integral, Real, Ord, Enum, Eq)
 
-newtype Address = Address { addressWord256 :: Word256 }
+newtype Address = Address { addressWord160 :: Word160 }
   deriving (Num, Integral, Real, Ord, Enum, Eq)
 
 instance Read Hexword where readsPrec _ = readHex . drop 2
@@ -89,7 +89,7 @@ wordField :: JSON.Object -> Text -> JSON.Parser Word256
 wordField x f = (readN . Text.unpack)
                   <$> (x .: f)
 
-addrField :: JSON.Object -> Text -> JSON.Parser Word256
+addrField :: JSON.Object -> Text -> JSON.Parser Word160
 addrField x f = (readN . ("0x" ++) . Text.unpack)
                   <$> (x .: f)
 
