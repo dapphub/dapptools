@@ -75,15 +75,11 @@ data Frame = Frame
   , _frameTrace     :: !FrameTrace
   } deriving Show
 
--- When returning from a CALL,
--- we save return data in memory
+-- When returning from a CALL, we save return data in memory
 -- and put the error flag on the stack.
 --
--- When returning from a CREATE,
--- we save return data as contract code
+-- When returning from a CREATE -- we save return data as contract code
 -- and put the new address on the stack.
---
--- The frame context tells us what to do.
 data FrameContext
   = CallContext
     { callContextOffset :: Word256
