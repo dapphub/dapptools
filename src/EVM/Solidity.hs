@@ -157,7 +157,7 @@ readJSON json = do
   return (contracts, sources)
   where
     f x y = Map.fromList . map (g y) . HMap.toList $ x
-    g srcs (s, x) =
+    g _ (s, x) =
       let theCode = toCode (x ^?! key "bin-runtime" . _String)
       in (s, SolcContract {
         _solcCodehash = keccak theCode,

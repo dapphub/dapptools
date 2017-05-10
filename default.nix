@@ -1,7 +1,7 @@
 { mkDerivation, aeson, attoparsec, base, base16-bytestring, binary
 , bytestring, containers, criterion, cryptonite, data-dword
 , deepseq, directory, filepath, ghci-pretty, HUnit, lens
-, lens-aeson, memory, optparse-generic, process, QuickCheck
+, lens-aeson, memory, mtl, optparse-generic, process, QuickCheck
 , readline, stdenv, tasty, tasty-hunit, tasty-quickcheck
 , tasty-smallcheck, temporary, text, unordered-containers, vector
 }:
@@ -14,12 +14,12 @@ mkDerivation {
   libraryHaskellDepends = [
     aeson base base16-bytestring binary bytestring containers criterion
     cryptonite data-dword deepseq directory ghci-pretty lens lens-aeson
-    memory optparse-generic process temporary text unordered-containers
-    vector
+    memory mtl optparse-generic process temporary text
+    unordered-containers vector
   ];
   executableHaskellDepends = [
     aeson attoparsec base base16-bytestring bytestring containers
-    data-dword directory filepath ghci-pretty lens lens-aeson
+    data-dword directory filepath ghci-pretty lens lens-aeson mtl
     optparse-generic readline text unordered-containers vector
   ];
   testHaskellDepends = [

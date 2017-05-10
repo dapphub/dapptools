@@ -14,6 +14,7 @@ import EVM.Types
 
 import Control.Lens
 import Control.Monad (unless)
+import Control.Monad.State
 
 import Data.ByteString (ByteString)
 import Data.List (intercalate)
@@ -100,13 +101,11 @@ vmFromCommand opts =
 optsMode :: Command -> Mode
 optsMode x = if debug x then Debug else Run
 
-exec :: EVM.VM -> IO EVM.VM
-exec vm =
-  case vm ^. EVM.result of
-    EVM.VMRunning -> do
-      EVM.exec1 vm >>= exec
-    _ ->
-      return vm
+exec :: State EVM.VM EVM.VMResult
+exec =
+  use EVM.result >>= \case
+    EVM.VMRunning -> EVM.exec1 >> exec
+    x -> return x
 
 runVMTest :: Mode -> (String, VMTest.Case) -> IO Bool
 runVMTest mode (name, x) = do
@@ -115,7 +114,7 @@ runVMTest mode (name, x) = do
     Run ->
       do putStr (name ++ ": ")
          hFlush stdout
-         vm' <- exec vm
+         let vm' = execState exec vm
          ok <- VMTest.checkExpectation x vm'
          putStrLn (if ok then "OK" else "FAIL")
          return ok
@@ -140,7 +139,7 @@ debugger vm = do
         Just line ->
           case words line of
             [] ->
-              EVM.exec1 vm >>= debugger
+              debugger (execState EVM.exec1 vm)
             ["block"] ->
               do cpprint (view EVM.block vm)
                  debugger vm
