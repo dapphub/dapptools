@@ -33,15 +33,15 @@ data Command
       { code       :: ByteString
       , trace      :: Bool
       , calldata   :: Maybe ByteString
-      , address    :: Maybe Address
-      , caller     :: Maybe Address
-      , origin     :: Maybe Address
-      , coinbase   :: Maybe Address
-      , value      :: Maybe Hexword
-      , number     :: Maybe Hexword
-      , timestamp  :: Maybe Hexword
-      , gaslimit   :: Maybe Hexword
-      , difficulty :: Maybe Hexword
+      , address    :: Maybe Addr
+      , caller     :: Maybe Addr
+      , origin     :: Maybe Addr
+      , coinbase   :: Maybe Addr
+      , value      :: Maybe W256
+      , number     :: Maybe W256
+      , timestamp  :: Maybe W256
+      , gaslimit   :: Maybe W256
+      , difficulty :: Maybe W256
       }
   | VMTest
       { file  :: String
@@ -94,8 +94,8 @@ vmFromCommand opts =
     , EVM.vmoptDifficulty = word difficulty 0
     }
   where
-    word f def = maybe def hexWord256 (f opts)
-    addr f def = maybe def addressWord160 (f opts)
+    word f def = maybe def id (f opts)
+    addr f def = maybe def id (f opts)
 
 optsMode :: Command -> Mode
 optsMode x = if debug x then Debug else Run

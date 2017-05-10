@@ -24,7 +24,6 @@ import Data.ByteString (ByteString)
 import Data.Aeson ((.:), (.:?))
 import Data.Aeson (FromJSON (..))
 import Data.Map (Map)
-import Data.DoubleWord
 
 import qualified Data.Map          as Map
 import qualified Data.Aeson        as JSON
@@ -33,20 +32,20 @@ import qualified Data.ByteString.Lazy  as Lazy
 
 data Case = Case
   { testVmOpts      :: EVM.VMOpts
-  , testContracts   :: Map Address Contract
+  , testContracts   :: Map Addr Contract
   , testExpectation :: Maybe Expectation
   } deriving Show
 
 data Contract = Contract
-  { contractBalance :: Hexword
+  { contractBalance :: W256
   , contractCode    :: ByteString
-  , contractNonce   :: Hexword
-  , contractStorage :: Map Word256 Word256
+  , contractNonce   :: W256
+  , contractStorage :: Map W256 W256
   } deriving Show
 
 data Expectation = Expectation
   { expectedOut :: ByteString
-  , expectedContracts :: Map Address Contract
+  , expectedContracts :: Map Addr Contract
   } deriving Show
 
 checkExpectation :: Case -> EVM.VM -> IO Bool
@@ -73,7 +72,7 @@ checkExpectedOut output expected =
     cpprint ("output mismatch" :: String, output, expected)
     return False
 
-checkExpectedContracts :: EVM.VM -> Map Address Contract -> IO Bool
+checkExpectedContracts :: EVM.VM -> Map Addr Contract -> IO Bool
 checkExpectedContracts vm expected =
   if realizeContracts expected == vm ^. EVM.env . EVM.contracts
   then return True
@@ -120,7 +119,7 @@ parseVmOpts v =
          JSON.typeMismatch "VM test case" (JSON.Object v)
 
 parseContracts ::
-  JSON.Object -> JSON.Parser (Map Address Contract)
+  JSON.Object -> JSON.Parser (Map Addr Contract)
 parseContracts v =
   v .: "pre" >>= parseJSON
 
@@ -138,16 +137,16 @@ parseSuite ::
   Lazy.ByteString -> Either String (Map String Case)
 parseSuite = JSON.eitherDecode'
 
-realizeContracts :: Map Address Contract -> Map Word160 EVM.Contract
+realizeContracts :: Map Addr Contract -> Map Addr EVM.Contract
 realizeContracts = Map.fromList . map f . Map.toList
   where
-    f (a, x) = (addressWord160 a, realizeContract x)
+    f (a, x) = (a, realizeContract x)
 
 realizeContract :: Contract -> EVM.Contract
 realizeContract x =
   EVM.initialContract (contractCode x)
-    & EVM.balance .~ hexWord256 (contractBalance x)
-    & EVM.nonce   .~ hexWord256 (contractNonce x)
+    & EVM.balance .~ contractBalance x
+    & EVM.nonce   .~ contractNonce x
     & EVM.storage .~ contractStorage x
 
 vmForCase :: Case -> EVM.VM

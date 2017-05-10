@@ -13,13 +13,12 @@ module EVM.Solidity (
 ) where
 
 import EVM.Keccak
+import EVM.Types
 
 import Control.DeepSeq
 import Control.Lens
 import Data.Aeson.Lens
--- import Data.Attoparsec.Text
 import Control.Applicative
-import Data.DoubleWord
 import Data.Foldable
 
 import Data.ByteString (ByteString)
@@ -29,7 +28,7 @@ import Data.ByteString.Builder
 import Data.Map.Strict (Map)
 import Data.Maybe
 import Data.Monoid
-import Data.Vector (Vector, (!))
+import Data.Vector (Vector)
 import Data.Text (Text, pack, intercalate)
 import Data.Text.Encoding (encodeUtf8)
 import Data.Text.IO (readFile, writeFile)
@@ -46,9 +45,6 @@ import qualified Data.HashMap.Strict as HMap
 import qualified Data.Map.Strict as Map
 import qualified Data.Text as Text
 import qualified Data.Vector as Vector
-
-instance NFData Word128
-instance NFData Word256
 
 data JumpType = JumpInto | JumpFrom | JumpRegular
   deriving (Show, Eq, Ord, Generic, NFData)
@@ -112,7 +108,7 @@ makeSrcMaps = (\case (_, Fe, _) -> Nothing; x -> Just (done x))
     go _ (xs, _, p)                          = (xs, Fe, p)
     
 data SolcContract = SolcContract {
-  _solcCodehash :: Word256,
+  _solcCodehash :: W256,
   _runtimeCode :: ByteString,
   _name :: Text,
   _abiMap :: Map Word32 Text,
@@ -129,7 +125,7 @@ makeLenses ''SourceCache
 
 instance Monoid SourceCache where
   mempty = SourceCache mempty mempty mempty
-  mappend (SourceCache a b c) (SourceCache d e f) = error "lol"
+  mappend (SourceCache _ _ _) (SourceCache _ _ _) = error "lol"
 
 makeSourceCache :: [Text] -> IO SourceCache
 makeSourceCache paths = do

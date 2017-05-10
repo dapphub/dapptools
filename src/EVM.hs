@@ -13,15 +13,15 @@ module EVM where
 
 import Prelude hiding ((^))
 
+import EVM.Types
 import EVM.Solidity
 import EVM.Keccak
 
 -- Bits and words
 import Data.Bits (xor, shiftL, shiftR, (.&.), (.|.))
 import Data.Bits (Bits, bit, testBit, complement)
-import Data.DoubleWord (Word256, Int256, Word160)
+import Data.DoubleWord (Int256)
 import Data.DoubleWord (loWord, signedWord, unsignedWord, fromHiAndLo)
-import Data.DoubleWord.TH
 import Data.Word (Word8, Word32)
 
 -- We make heavy use of the lens library for nested field access
@@ -40,14 +40,6 @@ import qualified Data.Map.Strict      as Map
 import qualified Data.Sequence        as Seq
 import qualified Data.Vector.Unboxed  as Vector
 
--- Some stuff for "generic programming", needed to create Word512
-import Data.Data
-import GHC.Generics
-
--- We need a 512-bit word for doing ADDMOD and MULMOD with full precision.
-mkUnpackedDoubleWord "Word512" ''Word256 "Int512" ''Int256 ''Word256
-  [''Typeable, ''Data, ''Generic]
-
 -- The different result states of a VM
 data VMResult
   = VMRunning
@@ -62,8 +54,8 @@ data VM = VM
   , _frames      :: ![Frame]
   , _env         :: !Env
   , _block       :: !Block
-  , _suicides    :: ![Word160]
-  , _memorySize  :: !Word256
+  , _suicides    :: ![Addr]
+  , _memorySize  :: !W256
   } deriving Show
 
 -- A frame is an entry in the VM's "call stack"
@@ -82,8 +74,8 @@ data Frame = Frame
 -- and put the new address on the stack.
 data FrameContext
   = CallContext
-    { callContextOffset :: Word256
-    , callContextSize   :: Word256 }
+    { callContextOffset :: W256
+    , callContextSize   :: W256 }
   | CreationContext
   deriving Show
 
@@ -92,48 +84,48 @@ data FrameContext
 -- TODO: Put this in the frame context instead.
 --       Different info is anyway needed for CALL vs CREATE.
 data FrameTrace = FrameTrace
-  { _traceCodehash :: Word256
+  { _traceCodehash :: W256
   , _traceAbi      :: Maybe Word32
   } deriving Show
 
 -- The ``registers'' of the VM along with memory and data stack.
 data FrameState = FrameState
-  { _contract    :: !Word160
+  { _contract    :: !Addr
   , _code        :: !ByteString
   , _pc          :: !Int
-  , _stack       :: ![Word256]
-  , _memory      :: !(Map Word256 Word8)
+  , _stack       :: ![W256]
+  , _memory      :: !(Map W256 Word8)
   , _calldata    :: !ByteString
-  , _callvalue   :: !Word256
-  , _caller      :: !Word160
+  , _callvalue   :: !W256
+  , _caller      :: !Addr
   } deriving Show
 
 -- The state of a contract.
 data Contract = Contract
   { _bytecode :: !ByteString
-  , _storage  :: !(Map Word256 Word256)
-  , _balance  :: !Word256
-  , _nonce    :: !Word256
-  , _codehash :: !Word256
+  , _storage  :: !(Map W256 W256)
+  , _balance  :: !W256
+  , _nonce    :: !W256
+  , _codehash :: !W256
   , _codesize :: !Int -- (redundant?)
   , _opIxMap  :: !(Vector Int)
   } deriving (Eq, Show)
 
 -- Kind of a hodgepodge?
 data Env = Env
-  { _contracts   :: !(Map Word160 Contract)
-  , _solc        :: (Map Word160 SolcContract)
-  , _sha3Crack   :: (Map Word256 ByteString)
+  { _contracts   :: !(Map Addr Contract)
+  , _solc        :: (Map Addr SolcContract)
+  , _sha3Crack   :: (Map W256 ByteString)
   , _sourceCache :: SourceCache
-  , _origin      :: Word160
+  , _origin      :: Addr
   } deriving (Show)
 
 data Block = Block
-  { _coinbase   :: !Word160
-  , _timestamp  :: !Word256
-  , _number     :: !Word256
-  , _difficulty :: !Word256
-  , _gaslimit   :: !Word256
+  { _coinbase   :: !Addr
+  , _timestamp  :: !W256
+  , _number     :: !W256
+  , _difficulty :: !W256
+  , _gaslimit   :: !W256
   } deriving Show
 
 blankState :: FrameState
@@ -172,17 +164,17 @@ ceilDiv a b =
   let (q, r) = quotRem a b
   in q + if r /= 0 then 1 else 0
 
-accessMemoryRange :: Word256 -> Word256 -> VM -> VM
+accessMemoryRange :: W256 -> W256 -> VM -> VM
 accessMemoryRange _ 0 vm = vm
 accessMemoryRange f l vm =
   vm & memorySize .~ max (vm ^. memorySize) (ceilDiv (f + l) 32)
 
-accessMemoryWord :: Word256 -> VM -> VM
+accessMemoryWord :: W256 -> VM -> VM
 accessMemoryWord x = accessMemoryRange x 32
 
 copyBytesToMemory
   :: (IxValue s ~ Word8, Ixed s, Num (Index s))
-  => s -> Word256 -> Word256 -> Word256 -> VM -> VM
+  => s -> W256 -> W256 -> W256 -> VM -> VM
 copyBytesToMemory bs size xOffset yOffset vm =
   if size == 0 then vm
   else vm & state . memory .~
@@ -191,7 +183,7 @@ copyBytesToMemory bs size xOffset yOffset vm =
                   [ (yOffset + i, (bs ^? ix (num (xOffset + i))) ?: 0)
                     | i <- [0 .. size - 1] ])
 
-readMemory :: Word256 -> Word256 -> VM -> ByteString
+readMemory :: W256 -> W256 -> VM -> ByteString
 readMemory offset size vm =
   if size == 0 then ""
   else
@@ -278,30 +270,30 @@ exec1 vm = do
 
         -- op: SDIV
         0x05 ->
-          stackOp2_1 vm' $ \x ->
+          stackOp2_1 vm' $ \(W256 x) ->
             \case
               0 -> 0
-              y ->
+              (W256 y) ->
                 let sx = signedWord x
                     sy = signedWord y
                     k  = if (sx < 0) /= (sy < 0)
                          then (-1)
                          else 1
-                in unsignedWord (k * div (abs sx) (abs sy))
+                in W256 . unsignedWord $ k * div (abs sx) (abs sy)
 
         -- op: MOD
         0x06 -> stackOp2_1 vm' $ \x -> \case 0 -> 0; y -> mod x y
 
         -- op: SMOD
         0x07 ->
-          stackOp2_1 vm' $ \x ->
+          stackOp2_1 vm' $ \(W256 x) ->
             \case
               0 -> 0
-              y ->
+              (W256 y) ->
                 let sx = signedWord x
                     sy = signedWord y
                     k  = if sx < 0 then (-1) else 1
-                in unsignedWord (k * mod (abs sx) (abs sy))
+                in W256 . unsignedWord $ k * mod (abs sx) (abs sy)
 
         -- op: ADDMOD
         0x08 ->
@@ -416,7 +408,7 @@ exec1 vm = do
 
         -- op: GASPRICE
         0x3a ->
-          stackOp0_1 vm' (0 :: Word256)
+          stackOp0_1 vm' (0 :: W256)
 
         -- op: EXTCODESIZE
         0x3b ->
@@ -530,7 +522,7 @@ exec1 vm = do
           stackOp0_1 vm' (vm ^. memorySize)
 
         -- op: GAS
-        0x5a -> stackOp0_1 vm' (0xffffffffffffffffff :: Word256)
+        0x5a -> stackOp0_1 vm' (0xffffffffffffffffff :: W256)
 
         -- op: JUMPDEST
         0x5b -> return $! vm'
@@ -683,7 +675,7 @@ exec1 vm = do
             & state .~ f ^. frameState
             & state . stack %~ (1 :)
 
-opParams :: VM -> Map String Word256
+opParams :: VM -> Map String W256
 opParams vm =
   case vmOp vm of
     Just OpCreate ->
@@ -714,7 +706,7 @@ opParams vm =
 underrun :: Monad m => VM -> m VM
 underrun vm = returnOp 0 (0, 0) vm
 
-returnOp :: Monad m => Word256 -> (Word256, Word256) -> VM -> m VM
+returnOp :: Monad m => W256 -> (W256, W256) -> VM -> m VM
 returnOp returnCode (xOffset, xSize) vm =
   case vm ^. frames of
     [] -> return $!
@@ -757,17 +749,17 @@ returnOp returnCode (xOffset, xSize) vm =
                 (vm ^. state . memory)
                 ySize xOffset yOffset
 
-toWord512 :: Word256 -> Word512
-toWord512 x = fromHiAndLo 0 x
+toWord512 :: W256 -> Word512
+toWord512 (W256 x) = fromHiAndLo 0 x
 
-fromWord512 :: Word512 -> Word256
-fromWord512 x = loWord x
+fromWord512 :: Word512 -> W256
+fromWord512 x = W256 (loWord x)
 
 stackOp0_1 :: (Integral i, Monad m) => VM -> i -> m VM
 stackOp0_1 vm !x =
   return $! vm & state . stack %~ (num x :)
 
-stackOp1_1 :: Monad m => VM -> (Word256 -> Word256) -> m VM
+stackOp1_1 :: Monad m => VM -> (W256 -> W256) -> m VM
 stackOp1_1 vm f =
   case vm ^. state . stack of
     (x:xs) ->
@@ -775,7 +767,7 @@ stackOp1_1 vm f =
       return $! vm & state . stack .~ y : xs
     _ -> underrun vm
 
-stackOp2_1 :: Monad m => VM -> (Word256 -> Word256 -> Word256) -> m VM
+stackOp2_1 :: Monad m => VM -> (W256 -> W256 -> W256) -> m VM
 stackOp2_1 vm f =
   case vm ^. state . stack of
     (x:y:xs) ->
@@ -784,7 +776,7 @@ stackOp2_1 vm f =
     _ -> underrun vm
 
 stackOp3_1 :: Monad m => VM
-  -> (Word256 -> Word256 -> Word256 -> Word256)
+  -> (W256 -> W256 -> W256 -> W256)
   -> m VM
 stackOp3_1 vm f =
   case vm ^. state . stack of
@@ -803,15 +795,15 @@ checkJump vm x =
 data VMOpts = VMOpts
   { vmoptCode :: ByteString
   , vmoptCalldata :: ByteString
-  , vmoptValue :: Word256
-  , vmoptAddress :: Word160
-  , vmoptCaller :: Word160
-  , vmoptOrigin :: Word160
-  , vmoptNumber :: Word256
-  , vmoptTimestamp :: Word256
-  , vmoptCoinbase :: Word160
-  , vmoptDifficulty :: Word256
-  , vmoptGaslimit :: Word256
+  , vmoptValue :: W256
+  , vmoptAddress :: Addr
+  , vmoptCaller :: Addr
+  , vmoptOrigin :: Addr
+  , vmoptNumber :: W256
+  , vmoptTimestamp :: W256
+  , vmoptCoinbase :: Addr
+  , vmoptDifficulty :: W256
+  , vmoptGaslimit :: W256
   } deriving Show
 
 makeVm :: VMOpts -> VM
@@ -850,7 +842,7 @@ makeVm o = VM
 -- Copied from the standard library just to get specialization.
 -- We also use bit operations instead of modulo and multiply.
 -- (This operation was significantly slow.)
-(^) :: Word256 -> Word256 -> Word256
+(^) :: W256 -> W256 -> W256
 x0 ^ y0 | y0 < 0    = errorWithoutStackTrace "Negative exponent"
         | y0 == 0   = 1
         | otherwise = f x0 y0
@@ -892,7 +884,7 @@ mkOpIxMap xs = Vector.create $ new (BS.length xs) >>= \v ->
     go v (n, !i, !j, !m) _ =
       {- PUSH data. -}        (n - 1,        i + 1, j,     m >> write v i j)
 
-word :: Integral a => [a] -> Word256
+word :: Integral a => [a] -> W256
 word xs = sum [ num x `shiftL` (8*n)
               | (n, x) <- zip [0..] (reverse xs) ]
 
@@ -900,10 +892,10 @@ word32 :: Integral a => [a] -> Word32
 word32 xs = sum [ num x `shiftL` (8*n)
                 | (n, x) <- zip [0..] (reverse xs) ]
 
-wordAt :: Int -> ByteString -> Word256
+wordAt :: Int -> ByteString -> W256
 wordAt i bs = word [(bs ^? ix j) ?: 0 | j <- [i..(i+31)]]
 
-word256At :: Word256 -> Lens' (Map Word256 Word8) Word256
+word256At :: W256 -> Lens' (Map W256 Word8) W256
 word256At i = lens getter setter where
   getter m =
     let
@@ -911,13 +903,13 @@ word256At i = lens getter setter where
       go !a !n = go (a + shiftL (num $ Map.findWithDefault 0 (i + num n) m)
                                 (8 * (31 - n))) (n - 1)
     in {-# SCC word256At_getter #-}
-      go (0 :: Word256) (31 :: Int)
+      go (0 :: W256) (31 :: Int)
   setter m x =
     {-# SCC word256At_setter #-}
     -- Optimizing this would help significantly.
     union (fromList [(i + 31 - j, byteAt x (num j)) | j <- [0..31]]) m
 
-word32At :: Word256 -> Lens' (Map Word256 Word8) Word32
+word32At :: W256 -> Lens' (Map W256 Word8) Word32
 word32At i = lens getter setter where
   getter m =
     word32 [(m ^? ix (i + j)) ?: 0 | j <- [0..3]]
@@ -995,7 +987,7 @@ data Op
   | OpDup !Word8
   | OpSwap !Word8
   | OpLog !Word8
-  | OpPush !Word256
+  | OpPush !W256
   | OpUnknown Word8
   deriving (Show, Eq)
 
