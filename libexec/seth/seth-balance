@@ -7,7 +7,7 @@
 set -e
 [[ $1 ]] || seth --fail-usage "$0"
 account=$1
-[[ $account = @* ]] && account=$(seth --lookup "$account")
+[[ $account = @* ]] && account=$(seth lookup "$account")
 jshon+=(-s "$account" -i append)
 jshon+=(-s "${ETH_BLOCK-latest}" -i append)
 balance=$(seth rpc eth_getBalance -- "${jshon[@]}")

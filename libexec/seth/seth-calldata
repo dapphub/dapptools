@@ -15,7 +15,7 @@ if [[ $1 =~ ^([^\(]+)\( ]]; then
   abi=$(seth --abi-function-json "$1")
   shift
   for arg; do
-    [[ $arg = @* ]] && arg=$(seth --lookup "$arg")
+    [[ $arg = @* ]] && arg=$(seth lookup "$arg")
     args+=(-p "${arg#0x}")
   done
   calldata=$(

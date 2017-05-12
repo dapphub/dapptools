@@ -9,7 +9,7 @@ elif [[ $# != 1 ]]; then
 fi    
 
 if [[ $1 = @* ]]; then
-  value=$(seth --lookup "$1")
+  value=$(seth lookup "$1")
   "$0" "$value"
 elif [[ $1 =~ / ]]; then
   "$0" <"$1"

@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+set -e
+name=${ETH_ENV+${ETH_ENV}_}${1#@}
+name=$(tr a-z A-Z <<<"$name")
+name=${name//-/_}
+[[ ${!name} ]] || seth --fail "${0##*/}: error: not found: \`$name'"
+echo "${!name}"
