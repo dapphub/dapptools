@@ -8,19 +8,19 @@ if [[ $version -lt $min ]]; then
   exit 1
 fi
 
-jsonrpc-result() { jshon -Q -e result -j; }
-jsonrpc-error() { jshon -Q -e error -j; }
+rpc-result() { jshon -Q -e result -j; }
+rpc-error() { jshon -Q -e error -j; }
 
-request=$(seth --jsonrpc-req "$@")
-response=$(seth --jsonrpc-curl <<<"$request")
+request=$(seth rpc-request -- "$@")
+response=$(seth rpc-curl <<<"$request")
 
-if result=$(jsonrpc-result <<<"$response"); then
+if result=$(rpc-result <<<"$response"); then
   if [[ $result = null ]]; then
-    seth --error "$0" "null result"
+    seth --fail "${0##*/}: error: null result"
   else
     seth --show-json <<<"$result"
   fi
-elif error=$(jsonrpc-error <<<"$response"); then
+elif error=$(rpc-error <<<"$response"); then
   { echo "$request"
     SETH_KEY_WIDTH=10 seth --show-json <<<"$error" | sed 's/^/error:   /'
   } | sed >&2 "s/^/${0##*/}: /"

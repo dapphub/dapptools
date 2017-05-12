@@ -2,7 +2,7 @@
 param() {
   if [[ ${!1} ]]; then
     if [[ ${!1} = *\ * ]]; then
-      seth --error "$0" "$1 contains whitespace"
+      seth --fail "${0##*/}: error: $1 contains whitespace"
     else
       if [[ $3 = --address ]]; then
         value=$(seth --to-address "${!1}")

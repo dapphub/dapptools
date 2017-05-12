@@ -2,7 +2,7 @@
 ### seth-abi -- convert an ABI from Solidity syntax to JSON form
 ### Usage: seth abi <solidity-fragment>
 set -e
-[[ $1 ]] || seth --bad-usage "$0"
+[[ $1 ]] || seth --fail-usage "$0"
 input="pragma solidity ^0.4.8; contract A { $1 }"
 json=$(solc --combined-json=abi <<<"$input")
 # Changed from "A" to "<stdin>:A" in solc 0.4.10:

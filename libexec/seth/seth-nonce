@@ -5,8 +5,8 @@
 ###
 ### With `-B <block>', print the number of transactions as of <block>.
 set -e
-[[ $# = 1 ]] || seth --bad-usage "$0"
+[[ $# = 1 ]] || seth --fail-usage "$0"
 ADDRESS=$(seth --to-hexdata "$1")
 jshon+=(-s "$ADDRESS" -i append)
 jshon+=(-s "${ETH_BLOCK-latest}" -i append)
-seth --jsonrpc eth_getTransactionCount "${jshon[@]}"
+seth rpc eth_getTransactionCount -- "${jshon[@]}"

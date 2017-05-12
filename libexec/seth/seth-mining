@@ -1,4 +1,4 @@
 #!/usr/bin/env bash
 set -e
-mining=$(seth --jsonrpc eth_mining)
+mining=$(seth rpc eth_mining)
 [[ $mining = true ]]

@@ -15,7 +15,7 @@
 ### With `-F <sender>', simulate calling <receiver> from <sender>
 ### With `-V <value>', simulate transferring <value> to <receiver>.
 set -e
-[[ $2 ]] || seth --bad-usage "$0"
+[[ $2 ]] || seth --fail-usage "$0"
 
 if [[ $SETH_CREATE ]]; then
   DATA=$(seth --to-hexdata "$1")
@@ -33,6 +33,6 @@ jshon+=(-n {})
 [[ $TO ]] && jshon+=(-s "$TO" -i to)
 jshon+=(-s "$DATA" -i data)
 jshon+=($(seth --send-params))
-jshon+=(-iappend)
-jshon+=(-s "${ETH_BLOCK-latest}" -iappend)
-seth --jsonrpc eth_estimateGas "${jshon[@]}"
+jshon+=(-i append)
+jshon+=(-s "${ETH_BLOCK-latest}" -i append)
+seth rpc eth_estimateGas -- "${jshon[@]}"

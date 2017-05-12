@@ -29,7 +29,7 @@ if [[ $1 =~ ^([^\(]+)\( ]]; then
     echo "0x${calldata#0x}"
   fi
 elif [[ $2 ]]; then
-  seth --bad-usage "$0"
+  seth --fail-usage "$0"
 else
   seth --to-hexdata "$1"
 fi

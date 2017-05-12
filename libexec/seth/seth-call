@@ -14,7 +14,7 @@
 ###
 ### See also seth-send(1), seth-estimate(1), seth-storage(1), seth-code(1).
 set -e
-[[ $2 ]] || seth --bad-usage "$0"
+[[ $2 ]] || seth --fail-usage "$0"
 RECEIVER=$(seth --to-address "$1")
 DATA=$(seth calldata "${@:2}")
 jshon+=(-n {})
@@ -23,5 +23,5 @@ jshon+=(-s "$DATA"     -i data)
 jshon+=($(seth --send-params))
 jshon+=(-i append)
 jshon+=(-s "${ETH_BLOCK-latest}" -i append)
-result=$(seth --jsonrpc eth_call "${jshon[@]}")
+result=$(seth rpc eth_call -- "${jshon[@]}")
 seth --abi-decode "$2" "$result"

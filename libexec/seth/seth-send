@@ -13,19 +13,19 @@
 ### With `--create', create a new object initialized from <code> and <data>.
 ### With `--create' and <sig>, encode constructor args <args> into <data>.
 ###
-### With `--no-wait', print the transaction hash and exit immediately.
+### With `--async', print the transaction hash and exit immediately.
 ### With `--create', print the address of the newly created object.
 ### With <to>, print an educated guess of the call's return value.
 ### Note: The return value will be wrong if other transactions interfere.
 ###
 ### See also seth-call(1), seth-sign(1), seth-publish(1), seth-receipt(1).
 set -e
-[[ $1 ]] || seth --bad-usage "$0"
+[[ $1 ]] || seth --fail-usage "$0"
 
 [[ $ETH_FROM ]] ||
-seth --error "$0" "\`ETH_FROM' not set --- send from which account?"
+seth --fail "${0##*/}: error: \`ETH_FROM' not set; send from which account?"
 [[ $ETH_GAS ]] ||
-seth --warn "$0" "\`ETH_GAS' not set; using default gas amount"
+echo >&2 "${0##*/}: warning: \`ETH_GAS' not set; using default gas amount"
 
 if [[ $SETH_CREATE ]]; then
   DATA=$(seth --to-hexdata "$1")
@@ -45,8 +45,9 @@ jshon+=(-s "$DATA" -i data)
 jshon+=($(seth --send-params))
 jshon+=(-i append)
 
-tx=$(seth --jsonrpc eth_sendTransaction "${jshon[@]}")
-[[ $tx =~ ^0x0*$ ]] && seth --error "$0" "bad tx hash: $tx (account locked?)"
+tx=$(seth rpc eth_sendTransaction -- "${jshon[@]}")
+[[ $tx =~ ^0x0*$ ]] &&
+seth --fail "${0##*/}: error: bad tx hash: $tx; account locked?"
 
 [[ $SETH_ASYNC = yes ]] && exec echo "$tx"
 

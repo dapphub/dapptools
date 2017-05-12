@@ -7,4 +7,4 @@
 set -e
 txdata=$(seth --to-hexdata "$@")
 jshon+=(-s "$txdata" -i append)
-seth --jsonrpc eth_sendRawTransaction "${jshon[@]}"
+seth rpc eth_sendRawTransaction -- "${jshon[@]}"

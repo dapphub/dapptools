@@ -5,12 +5,13 @@
 ###
 ### With `-B <block>', print the balance as of <block>.
 set -e
-[[ $1 ]] || seth --bad-usage "$0"
+[[ $1 ]] || seth --fail-usage "$0"
 account=$1
 [[ $account = @* ]] && account=$(seth --lookup "$account")
 jshon+=(-s "$account" -i append)
 jshon+=(-s "${ETH_BLOCK-latest}" -i append)
-balance=$(seth --jsonrpc eth_getBalance "${jshon[@]}")
+balance=$(seth rpc eth_getBalance -- "${jshon[@]}")
 [[ $balance = 0x* ]] && balance=$(seth --to-dec "$balance")
 eth=$(seth --to-fix 18 "$balance")
-echo "$eth ETH"
+eth=$(sed 's/\.\?0*$//' <<<"$eth")
+echo "${eth}E+18"

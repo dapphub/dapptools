@@ -5,7 +5,7 @@ set -e
 if [[ $# = 0 ]]; then
   set -- "$(cat)"
 elif [[ $# != 1 ]]; then
-  seth --bad-usage "$0"
+  seth --fail-usage "$0"
 fi    
 
 if [[ $1 = @* ]]; then
@@ -18,5 +18,5 @@ elif [[ $1 =~ ^0x[[:xdigit:]]*$ ]]; then
 elif [[ $1 =~ ^[[:xdigit:]]+$ ]]; then
   echo "0x$(tr A-F a-f <<<"$1")"
 else
-  seth --error "$0" "invalid hexdata: \`$1'"
+  seth --fail "${0##*/}: error: invalid hexdata: \`$1'"
 fi

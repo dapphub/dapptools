@@ -6,8 +6,8 @@
 ### If <field> is given, print only that piece of information.
 ### If no <field> is given, show all the fields in a big table.
 set -e
-[[ $# = [12] ]] || seth --bad-usage "$0"
+[[ $# = [12] ]] || seth --fail-usage "$0"
 tx=$(seth get-tx-by-hash "$1")
-[[ $tx = null ]] && seth --error "$0" "no such transaction: $1"
+[[ $tx = null ]] && seth --fail "${0##*/}: error: no such transaction: $1"
 [[ $2 ]] && exec seth --field "$2" <<<"$tx"
 echo "$tx"

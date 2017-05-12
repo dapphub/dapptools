@@ -6,7 +6,7 @@ if [[ $1 =~ ^[[:digit:]]+$ ]]; then
 elif [[ $1 = 0x* ]]; then
   seth --to-hexdata "$1"
 elif [[ $1 =~ ^[[:xdigit:]]+$ ]]; then
-  seth --error "$0" "missing \`0x' prefix: \`$1'"
+  seth --fail "${0##*/}: error: missing \`0x' prefix: \`$1'"
 else
-  seth --error "$0" "bad number: \`$1'"
+  seth --fail "${0##*/}: error: bad number: \`$1'"
 fi

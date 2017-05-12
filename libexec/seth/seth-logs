@@ -2,13 +2,13 @@
 ### seth-logs -- print the transaction logs of some contract
 ### Usage: seth logs [-B <block>] [--follow] <address>
 set -e
-[[ $1 ]] || seth --bad-usage "$0"
+[[ $1 ]] || seth --fail-usage "$0"
 jshon+=(-n {})
 jshon+=(-s "$(seth --to-address "${1?}")" -i address)
 jshon+=(-s "${ETH_BLOCK-earliest}" -i fromBlock)
 jshon+=(-i append)
-id=$(seth --jsonrpc eth_newFilter "${jshon[@]}")
-trap 'seth --jsonrpc eth_uninstallFilter -s "$id" -i append >/dev/null' EXIT
+id=$(seth rpc eth_newFilter -- "${jshon[@]}")
+trap 'seth rpc eth_uninstallFilter -- -s "$id" -i append >/dev/null' EXIT
 SETH_JSON=yes \
-seth --jsonrpc eth_getFilterLogs -s "$id" -i append | jshon -a -j
+seth rpc eth_getFilterLogs -- -s "$id" -i append | jshon -a -j
 if [[ $SETH_FOLLOW ]]; then seth logs-follow "$id"; fi
