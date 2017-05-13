@@ -204,7 +204,7 @@ And here is a contract to test it
 API Reference
 =============
 
-These are the modifiers, functions, and events that are available when your test contract inherits from ``DSTest``
+These are the modifiers, functions, and events that are available when your test contract inherits from ``DSTest``, and the different flags available when running ``dapp test``
 
 Function Modifiers
 ------------------
@@ -261,4 +261,14 @@ These events will log information to the console, making them useful for debuggi
 | log_named_decimal_uint(bytes32 key, uint val, uint decimals) |
 +--------------------------------------------------------------+
 
+Dapp Test Flags
+---------------
+
++------------+-------------------------------------------------------------------+
+| Flag       | Description                                                       |
++============+===================================================================+
+| -v         | Logs events to the command line for failing tests                 |
++------------+-------------------------------------------------------------------+
+| -r <REGEX> | Only run tests who's name matches the provided regular expression |
++------------+-------------------------------------------------------------------+
 
