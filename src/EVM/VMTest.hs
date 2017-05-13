@@ -1,3 +1,4 @@
+{-# Language CPP #-}
 {-# Language BangPatterns #-}
 {-# Language DeriveGeneric #-}
 {-# Language GeneralizedNewtypeDeriving #-}
@@ -7,7 +8,9 @@
 
 module EVM.VMTest
   ( Case
+#if MIN_VERSION_aeson(1, 0, 0)
   , parseSuite
+#endif
   , vmForCase
   , checkExpectation
   ) where
@@ -80,6 +83,8 @@ checkExpectedContracts vm expected =
     cpprint (realizeContracts expected, vm ^. EVM.env . EVM.contracts)
     return False
 
+#if MIN_VERSION_aeson(1, 0, 0)
+
 instance FromJSON Contract where
   parseJSON (JSON.Object v) = Contract
     <$> v .: "balance"
@@ -136,6 +141,8 @@ parseExpectation v =
 parseSuite ::
   Lazy.ByteString -> Either String (Map String Case)
 parseSuite = JSON.eitherDecode'
+
+#endif
 
 realizeContracts :: Map Addr Contract -> Map Addr EVM.Contract
 realizeContracts = Map.fromList . map f . Map.toList

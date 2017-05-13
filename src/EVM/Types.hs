@@ -1,3 +1,4 @@
+{-# Language CPP #-}
 {-# Language TemplateHaskell #-}
 {-# Language TypeFamilies #-}
 {-# Language OverloadedStrings #-}
@@ -9,7 +10,12 @@ module EVM.Types where
 
 import Control.DeepSeq
 import Data.Aeson ((.:))
-import Data.Aeson (FromJSON (..), FromJSONKey (..), FromJSONKeyFunction (..))
+import Data.Aeson (FromJSON (..))
+
+#if MIN_VERSION_aeson(1, 0, 0)
+import Data.Aeson (FromJSONKey (..), FromJSONKeyFunction (..))
+#endif
+
 import Data.Bits
 import Data.ByteString (ByteString)
 import Data.ByteString.Base16 as BS16
@@ -67,6 +73,8 @@ instance FromJSON Addr where
       [(x, "")] -> return x
       _         -> fail $ "invalid address (" ++ s ++ ")"
 
+#if MIN_VERSION_aeson(1, 0, 0)
+
 instance FromJSONKey W256 where
   fromJSONKey = FromJSONKeyTextParser $ \s ->
     case reads (Text.unpack s) of
@@ -79,6 +87,8 @@ instance FromJSONKey Addr where
     case reads (Text.unpack s) of
       [(x, "")] -> return x
       _         -> fail $ "invalid word (" ++ Text.unpack s ++ ")"
+
+#endif
 
 instance ParseField W256
 instance ParseFields W256

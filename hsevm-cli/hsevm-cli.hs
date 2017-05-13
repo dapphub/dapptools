@@ -1,5 +1,6 @@
 -- Main file of the hsevm CLI program
 
+{-# Language CPP #-}
 {-# Language BangPatterns #-}
 {-# Language DeriveGeneric #-}
 {-# Language GeneralizedNewtypeDeriving #-}
@@ -8,7 +9,10 @@
 {-# Language TemplateHaskell #-}
 
 import qualified EVM as EVM
+
+#if MIN_VERSION_aeson(1, 0, 0)
 import qualified EVM.VMTest as VMTest
+#endif
 
 import EVM.Types
 
@@ -61,6 +65,7 @@ main = do
   case opts of
     Exec {}   -> print (vmFromCommand opts)
     VMTest {} ->
+#if MIN_VERSION_aeson(1, 0, 0)
       VMTest.parseSuite <$> ByteString.readFile (file opts) >>=
        \case
          Left err -> print err
@@ -77,6 +82,9 @@ main = do
              unless (null failed) $ do
                putStrLn ""
                putStrLn $ "Failed: " ++ intercalate ", " failed
+#else
+      putStrLn "Not supported"
+#endif
 
 vmFromCommand :: Command -> EVM.VM
 vmFromCommand opts =
@@ -107,6 +115,7 @@ exec =
     EVM.VMRunning -> EVM.exec1 >> exec
     x -> return x
 
+#if MIN_VERSION_aeson(1, 0, 0)
 runVMTest :: Mode -> (String, VMTest.Case) -> IO Bool
 runVMTest mode (name, x) = do
   let vm = VMTest.vmForCase x
@@ -122,6 +131,7 @@ runVMTest mode (name, x) = do
     Debug ->
       do debugger vm
          return True -- XXX
+#endif
 
 debugger :: EVM.VM -> IO ()
 debugger vm = do
