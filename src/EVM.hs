@@ -31,6 +31,7 @@ import Control.Lens hiding (op, (:<), (|>))
 import Data.ByteString             (ByteString)
 import Data.Map.Strict             (Map, union, fromList)
 import Data.Maybe                  (fromMaybe, fromJust)
+import Data.Monoid                 (Endo)
 import Data.Sequence               (Seq)
 import Data.Vector.Unboxed         (Vector)
 import Data.Vector.Unboxed.Mutable (new, write)
@@ -55,7 +56,12 @@ data VM = VM
   , _env         :: !Env
   , _block       :: !Block
   , _suicides    :: ![Addr]
+  , _logs        :: !(Seq Log)
   } deriving Show
+
+-- | A log entry
+data Log = Log !Addr !ByteString ![W256]
+  deriving Show
 
 -- | An entry in the VM's "call/create stack"
 data Frame = Frame
@@ -231,7 +237,18 @@ exec1 = do
 
         -- op: LOG
         x | x >= 0xa0 && x <= 0xa4 ->
-          modifying (state . stack) (drop (num x - 0xa0 + 2))
+          let n = (num x - 0xa0 + 2) in
+          case stk of
+            (xOffset:xSize:xs) ->
+              if length xs < n
+              then underrun
+              else do
+                let (topics, xs') = splitAt (n - 1) xs
+                    bytes         = readMemory xOffset xSize vm
+                assign (state . stack) xs'
+                pushToSequence logs (Log self bytes topics)
+            _ ->
+              underrun
 
         -- op: STOP
         0x00 ->
@@ -655,6 +672,9 @@ push x = state . stack %= (x :)
 pushTo :: MonadState s m => ASetter s s [a] [a] -> a -> m ()
 pushTo f x = f %= (x :)
 
+pushToSequence :: MonadState s m => ASetter s s (Seq a) (Seq a) -> a -> m ()
+pushToSequence f x = f %= (Seq.|> x)
+
 underrun :: State VM ()
 underrun = returnOp 0 (0, 0)
 
@@ -747,6 +767,7 @@ makeVm o = VM
   { _result = VMRunning
   , _frames = mempty
   , _suicides = mempty
+  , _logs = mempty
   , _block = Block
     { _coinbase = vmoptCoinbase o
     , _timestamp = vmoptTimestamp o
@@ -796,6 +817,7 @@ num = fromIntegral
 (?:) :: Maybe a -> a -> a
 (?:) = flip fromMaybe
 
+viewJust :: Getting (Endo a) s a -> s -> a
 viewJust f x = x ^?! f
 
 opSize :: Word8 -> Int
