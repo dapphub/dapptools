@@ -34,5 +34,5 @@ docker build -t dapp .
 ### Testing
 
 ```
-docker run -it -v /path/to/your/dapp:/home/node/workspace dapp
+docker run -it -v /path/to/your/dapp:/src dapp
 ```
