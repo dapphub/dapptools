@@ -90,13 +90,12 @@ ethrun code calldatas =
 doEthrunTransactions :: EVM.VM -> Addr -> ByteString -> [ByteString] -> IO ()
 doEthrunTransactions _ _ _ [] = return ()
 doEthrunTransactions vm target targetCode (targetData:xs) = do
-  let callState =
-        EVM.blankState
-          & set EVM.contract target
-          & set EVM.code     targetCode
-          & set EVM.calldata targetData
-          & set EVM.caller   ethrunAddress
-  vm' <- debugger (execState (EVM.reset callState) vm)
+  vm' <- debugger . flip execState vm $ do
+    EVM.resetState
+    EVM.loadContract target
+    assign (EVM.state . EVM.calldata) targetData
+    assign (EVM.state . EVM.caller)   ethrunAddress
+
   case view EVM.result vm' of
     EVM.VMSuccess out -> do
       cpprint (out, vm')

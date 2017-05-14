@@ -55,7 +55,6 @@ data VM = VM
   , _env         :: !Env
   , _block       :: !Block
   , _suicides    :: ![Addr]
-  , _memorySize  :: !W256
   } deriving Show
 
 -- | An entry in the VM's "call/create stack"
@@ -82,6 +81,7 @@ data FrameState = FrameState
   , _pc          :: !Int
   , _stack       :: ![W256]
   , _memory      :: !(Map W256 Word8)
+  , _memorySize  :: !W256
   , _calldata    :: !ByteString
   , _callvalue   :: !W256
   , _caller      :: !Addr
@@ -117,14 +117,15 @@ data Block = Block
 
 blankState :: FrameState
 blankState = FrameState
-  { _contract  = 0
-  , _code      = mempty
-  , _pc        = 0
-  , _stack     = mempty
-  , _memory    = mempty
-  , _calldata  = mempty
-  , _callvalue = 0
-  , _caller    = 0
+  { _contract   = 0
+  , _code       = mempty
+  , _pc         = 0
+  , _stack      = mempty
+  , _memory     = mempty
+  , _memorySize = 0
+  , _calldata   = mempty
+  , _callvalue  = 0
+  , _caller     = 0
   }
 
 makeLenses ''FrameState
@@ -158,13 +159,22 @@ performCreation createdCode = do
             & set storage (view storage now)
             & set balance (view balance now)
 
-reset :: FrameState -> State VM ()
-reset nextState = do
+resetState :: State VM ()
+resetState = do
   -- TODO: handle suicides
   assign result     VMRunning
   assign frames     []
-  assign memorySize 0
-  assign state      nextState
+  assign state      blankState
+
+loadContract :: Addr -> State VM ()
+loadContract target =
+  preuse (env . contracts . ix target . bytecode) >>=
+    \case
+      Nothing ->
+        error "Call target doesn't exist"
+      Just targetCode -> do
+        assign (state . contract) target
+        assign (state . code)     targetCode
 
 exec1 :: State VM ()
 exec1 = do
@@ -479,7 +489,7 @@ exec1 = do
 
         -- op: MSIZE
         0x59 ->
-          push (view memorySize vm)
+          push (the state memorySize)
 
         -- op: GAS
         0x5a -> push (0xffffffffffffffffff :: W256)
@@ -610,7 +620,7 @@ exec1 = do
 accessMemoryRange :: W256 -> W256 -> State VM ()
 accessMemoryRange _ 0 = return ()
 accessMemoryRange f l =
-  memorySize %= \n -> max n (ceilDiv (f + l) 32)
+  state . memorySize %= \n -> max n (ceilDiv (f + l) 32)
   where
     ceilDiv a b =
       let (q, r) = quotRem a b
@@ -737,7 +747,6 @@ makeVm o = VM
   { _result = VMRunning
   , _frames = mempty
   , _suicides = mempty
-  , _memorySize = 0
   , _block = Block
     { _coinbase = vmoptCoinbase o
     , _timestamp = vmoptTimestamp o
@@ -749,6 +758,7 @@ makeVm o = VM
     { _pc = 0
     , _stack = mempty
     , _memory = mempty
+    , _memorySize = 0
     , _code = vmoptCode o
     , _contract = vmoptAddress o
     , _calldata = vmoptCalldata o
