@@ -145,6 +145,27 @@ initialContract theCode = Contract
   , _opIxMap  = mkOpIxMap theCode
   }
 
+performCreation :: ByteString -> State VM ()
+performCreation createdCode = do
+  self <- use (state . contract)
+  zoom (env . contracts . at self) $ do
+    if BS.null createdCode
+      then put Nothing
+      else do
+        Just now <- get
+        put . Just $
+          initialContract createdCode
+            & set storage (view storage now)
+            & set balance (view balance now)
+
+reset :: FrameState -> State VM ()
+reset nextState = do
+  -- TODO: handle suicides
+  assign result     VMRunning
+  assign frames     []
+  assign memorySize 0
+  assign state      nextState
+
 exec1 :: State VM ()
 exec1 = do
   vm <- get
@@ -563,16 +584,7 @@ exec1 = do
                   case view frameContext nextFrame of
                     CreationContext -> do
                       push (num (the state contract))
-                      zoom (env . contracts . at (the state contract)) $
-                        if xSize == 0
-                        then
-                          put Nothing
-                        else do
-                          Just now <- get
-                          put . Just $
-                            initialContract (readMemory xOffset xSize vm)
-                              & set storage (view storage now)
-                              & set balance (view balance now)
+                      performCreation (readMemory xOffset xSize vm)
 
                     CallContext yOffset ySize _ _ -> do
                       push 1
@@ -658,15 +670,7 @@ returnOp returnCode (xOffset, xSize) = do
                 assign (env . contracts . at self) Nothing
               else do
                 push (num self)
-                assign (env . contracts . at self) $
-                  let created = viewJust (env . contracts . ix self) vm
-                  in Just (initialContract
-                            (BS.pack
-                              [ Map.findWithDefault 0 (xOffset + num i)
-                                  (vm ^. state . memory)
-                                | i <- [0 .. xSize - 1]])
-                            & set storage (created ^. storage)
-                            & set balance (created ^. balance))
+                performCreation (readMemory xOffset xSize vm)
 
         CallContext yOffset ySize _ _ -> do
           push returnCode

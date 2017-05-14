@@ -15,6 +15,7 @@ import qualified EVM.VMTest as VMTest
 #endif
 
 import EVM.Types
+import EVM.Keccak (newContractAddress)
 
 import Control.Lens
 import Control.Monad (unless)
@@ -28,7 +29,8 @@ import Options.Generic
 import System.Console.Readline
 import System.IO
 
-import qualified Data.ByteString.Lazy  as ByteString
+import qualified Data.ByteString.Lazy  as LazyByteString
+import qualified Data.ByteString       as ByteString
 import qualified Data.Map              as Map
 
 -- This record defines the program's command-line options
@@ -47,6 +49,11 @@ data Command
       , timestamp  :: Maybe W256
       , gaslimit   :: Maybe W256
       , difficulty :: Maybe W256
+      , debug      :: Bool
+      }
+  | Ethrun
+      { code :: ByteString
+      , call :: [ByteString]
       }
   | VMTest
       { file  :: String
@@ -63,28 +70,63 @@ main :: IO ()
 main = do
   opts <- getRecord "hsevm -- Ethereum evaluator"
   case opts of
-    Exec {}   -> print (vmFromCommand opts)
+    Exec {} ->
+      launchExec opts
     VMTest {} ->
-#if MIN_VERSION_aeson(1, 0, 0)
-      VMTest.parseSuite <$> ByteString.readFile (file opts) >>=
-       \case
-         Left err -> print err
-         Right allTests ->
-           let testFilter =
-                 if null (test opts)
-                 then id
-                 else filter (\(x, _) -> elem x (test opts))
-           in do
-             let tests = testFilter (Map.toList allTests)
-             putStrLn $ "Running " ++ show (length tests) ++ " tests"
-             results <- mapM (runVMTest (optsMode opts)) tests
-             let failed = [name | (name, False) <- zip (map fst tests) results]
-             unless (null failed) $ do
-               putStrLn ""
-               putStrLn $ "Failed: " ++ intercalate ", " failed
-#else
-      putStrLn "Not supported"
-#endif
+      launchVMTest opts
+    Ethrun {} -> do
+      cpprint ("calldatas", call opts)
+      ethrun (code opts) (map (hexByteString "calldata") (call opts))
+
+ethrun :: ByteString -> [ByteString] -> IO ()
+ethrun code calldatas =
+  do let creationCode = hexByteString "stdin" code
+     case runState exec (vmForEthrunCreation creationCode) of
+       (EVM.VMSuccess targetCode, vm1) -> do
+         let target = view (EVM.state . EVM.contract) vm1
+         doEthrunTransactions (execState (EVM.performCreation targetCode) vm1)
+           target targetCode calldatas
+
+doEthrunTransactions :: EVM.VM -> Addr -> ByteString -> [ByteString] -> IO ()
+doEthrunTransactions _ _ _ [] = return ()
+doEthrunTransactions vm target targetCode (targetData:xs) = do
+  let callState =
+        EVM.blankState
+          & set EVM.contract target
+          & set EVM.code     targetCode
+          & set EVM.calldata targetData
+          & set EVM.caller   ethrunAddress
+  vm' <- debugger (execState (EVM.reset callState) vm)
+  case view EVM.result vm' of
+    EVM.VMSuccess out -> do
+      cpprint (out, vm')
+      doEthrunTransactions vm' target targetCode xs
+
+ethrunAddress :: Addr
+ethrunAddress = Addr 0x00a329c0648769a73afac7f9381e08fb43dbea72
+
+vmForEthrunCreation :: ByteString -> EVM.VM
+vmForEthrunCreation creationCode =
+  EVM.makeVm $ EVM.VMOpts
+    { EVM.vmoptCode = creationCode
+    , EVM.vmoptCalldata = ""
+    , EVM.vmoptValue = 0
+    , EVM.vmoptAddress = newContractAddress ethrunAddress 1
+    , EVM.vmoptCaller = ethrunAddress
+    , EVM.vmoptOrigin = ethrunAddress
+    , EVM.vmoptCoinbase = 0
+    , EVM.vmoptNumber = 0
+    , EVM.vmoptTimestamp = 0
+    , EVM.vmoptGaslimit = 0
+    , EVM.vmoptDifficulty = 0
+    }
+
+launchExec :: Command -> IO ()
+launchExec opts =
+  let vm = vmFromCommand opts in
+    case optsMode opts of
+      Run -> print (execState exec vm)
+      Debug -> ignore (debugger vm)
 
 vmFromCommand :: Command -> EVM.VM
 vmFromCommand opts =
@@ -115,6 +157,30 @@ exec =
     EVM.VMRunning -> EVM.exec1 >> exec
     x -> return x
 
+launchVMTest :: Command -> IO ()
+launchVMTest opts =
+#if MIN_VERSION_aeson(1, 0, 0)
+  VMTest.parseSuite <$> LazyByteString.readFile (file opts) >>=
+   \case
+     Left err -> print err
+     Right allTests ->
+       let testFilter =
+             if null (test opts)
+             then id
+             else filter (\(x, _) -> elem x (test opts))
+       in do
+         let tests = testFilter (Map.toList allTests)
+         putStrLn $ "Running " ++ show (length tests) ++ " tests"
+         results <- mapM (runVMTest (optsMode opts)) tests
+         let failed = [name | (name, False) <- zip (map fst tests) results]
+         unless (null failed) $ do
+           putStrLn ""
+           putStrLn $ "Failed: " ++ intercalate ", " failed
+#else
+  putStrLn "Not supported"
+#endif
+
+
 #if MIN_VERSION_aeson(1, 0, 0)
 runVMTest :: Mode -> (String, VMTest.Case) -> IO Bool
 runVMTest mode (name, x) = do
@@ -129,23 +195,25 @@ runVMTest mode (name, x) = do
          return ok
 
     Debug ->
-      do debugger vm
+      do _ <- debugger vm
          return True -- XXX
 #endif
 
-debugger :: EVM.VM -> IO ()
+debugger :: EVM.VM -> IO EVM.VM
 debugger vm = do
   cpprint (vm ^. EVM.state)
   cpprint (EVM.vmOp vm)
   cpprint (EVM.opParams vm)
   cpprint (vm ^. EVM.frames)
   if vm ^. EVM.result /= EVM.VMRunning
-    then do print (vm ^. EVM.result)
+    then do
+      print (vm ^. EVM.result)
+      return vm
     else
     readline "(evm) " >>=
       \case
         Nothing ->
-          return ()
+          return vm
         Just line ->
           case words line of
             [] ->
@@ -155,4 +223,8 @@ debugger vm = do
                  debugger vm
             ["storage"] ->
               do cpprint (view (EVM.env . EVM.contracts) vm)
+                 debugger vm
             _  -> debugger vm
+
+ignore :: Monad m => m a -> m ()
+ignore x = x >> return ()
