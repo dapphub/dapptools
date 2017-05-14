@@ -1,9 +1,10 @@
-{ mkDerivation, aeson, attoparsec, base, base16-bytestring, binary
-, bytestring, containers, criterion, cryptonite, data-dword
-, deepseq, directory, filepath, ghci-pretty, HUnit, lens
-, lens-aeson, memory, mtl, optparse-generic, process, QuickCheck
-, readline, stdenv, tasty, tasty-hunit, tasty-quickcheck
-, tasty-smallcheck, temporary, text, unordered-containers, vector
+{ mkDerivation, aeson, attoparsec, base, base16-bytestring
+, base64-bytestring, binary, bytestring, containers, criterion
+, cryptonite, data-dword, deepseq, directory, filepath, ghci-pretty
+, HUnit, lens, lens-aeson, memory, mtl, optparse-generic, process
+, QuickCheck, readline, stdenv, tasty, tasty-hunit
+, tasty-quickcheck, tasty-smallcheck, temporary, text
+, unordered-containers, vector
 }:
 mkDerivation {
   pname = "hsevm";
@@ -12,10 +13,10 @@ mkDerivation {
   isLibrary = true;
   isExecutable = true;
   libraryHaskellDepends = [
-    aeson base base16-bytestring binary bytestring containers criterion
-    cryptonite data-dword deepseq directory ghci-pretty lens lens-aeson
-    memory mtl optparse-generic process temporary text
-    unordered-containers vector
+    aeson base base16-bytestring base64-bytestring binary bytestring
+    containers criterion cryptonite data-dword deepseq directory
+    ghci-pretty lens lens-aeson memory mtl optparse-generic process
+    temporary text unordered-containers vector
   ];
   executableHaskellDepends = [
     aeson attoparsec base base16-bytestring bytestring containers

@@ -28,10 +28,18 @@ library
     EVM.VMTest
   ghc-options:
     -O2 -Wall
+  if impl(ghcjs)
+    build-depends:
+      ghcjs-base
+    js-sources:
+      jsbits/base64js.min.js
+      jsbits/sha3.min.js
+      jsbits/hsevm-keccak.js
   build-depends:
     aeson,
     base >=4.9 && <4.10,
     base16-bytestring,
+    base64-bytestring,
     binary,
     bytestring,
     containers,
