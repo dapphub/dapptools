@@ -22,17 +22,10 @@
 
 ## Docker
 
-Node based docker image with all neccessary packages installed
-
-### Build
+The provided `Dockerfile` is based on the `node` image.
 
 
 ```
-docker build -t dapp .
-```
-
-### Testing
-
-```
-docker run -it -v /path/to/your/dapp:/src dapp
+docker build -t dapp .                build the Docker image
+docker run -it -v `pwd`:/src dapp     run `dapp test' on the current directory
 ```
