@@ -311,6 +311,8 @@ function formatLog(log) {
       return `${args[0]}: ${formatBytes(args[1])}`
     } else if (/^log_named_u?int$/.test(event.name)) {
       return `${args[0]}: ${new BigNumber(String(args[1]))}`
+    } else if (/^log_named_address$/.test(event.name)) {
+      return `${args[0]}: ${formatBinary(args[1])}`
     } else if (/^log_named_decimal_u?int$/.test(event.name)) {
       var number = new BigNumber(String(args[1]))
       var decimals = Number(args[2])
