@@ -217,12 +217,19 @@ debugger vm = do
           case words line of
             [] ->
               debugger (execState EVM.exec1 vm)
+
             ["block"] ->
               do cpprint (view EVM.block vm)
                  debugger vm
+
             ["storage"] ->
               do cpprint (view (EVM.env . EVM.contracts) vm)
                  debugger vm
+
+            ["disassemble"] ->
+              do cpprint (EVM.codeOps (view (EVM.state . EVM.code) vm))
+                 debugger vm
+
             _  -> debugger vm
 
 ignore :: Monad m => m a -> m ()
