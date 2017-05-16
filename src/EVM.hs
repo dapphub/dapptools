@@ -619,6 +619,40 @@ exec1 = do
 
             _ -> underrun
 
+        -- op: DELEGATECALL
+        0xf4 ->
+          case stk of
+            (_:xTo:xInOffset:xInSize:xOutOffset:xOutSize:xs) ->
+              case preview (env . contracts . ix (num xTo)) vm of
+                Nothing ->
+                  returnOp 0 (0, 0)
+
+                Just target -> do
+                  zoom state $ do
+                    assign pc 0
+                    assign code (view bytecode target)
+                    assign stack mempty
+                    assign memory mempty
+                    assign calldata (readMemory xInOffset xInSize vm)
+
+                  pushTo frames $ Frame
+                    { _frameState = (set stack xs) (view state vm)
+                    , _frameContext = CallContext
+                        { callContextOffset = xOutOffset
+                        , callContextSize   = xOutSize
+                        , callContextCodehash = view codehash target
+                        , callContextAbi =
+                            if xInSize >= 4
+                            then Just $! mem ^. word32At xInOffset
+                            else Nothing
+                        }
+                    }
+
+                  accessMemoryRange xInOffset xInSize
+                  accessMemoryRange xOutOffset xOutSize
+
+            _ -> underrun
+
         -- op: SUICIDE
         0xff ->
           case stk of
