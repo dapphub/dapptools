@@ -237,13 +237,13 @@ exec1 = do
 
         -- op: LOG
         x | x >= 0xa0 && x <= 0xa4 ->
-          let n = (num x - 0xa0 + 2) in
+          let n = (num x - 0xa0) in
           case stk of
             (xOffset:xSize:xs) ->
               if length xs < n
               then underrun
               else do
-                let (topics, xs') = splitAt (n - 1) xs
+                let (topics, xs') = splitAt n xs
                     bytes         = readMemory xOffset xSize vm
                 assign (state . stack) xs'
                 pushToSequence logs (Log self bytes topics)
@@ -991,7 +991,7 @@ opParams vm =
 readOp :: Word8 -> ByteString -> Op
 readOp x _  | x >= 0x80 && x <= 0x8f = OpDup (x - 0x80 + 1)
 readOp x _  | x >= 0x90 && x <= 0x9f = OpSwap (x - 0x90 + 1)
-readOp x _  | x >= 0xa0 && x <= 0xa4 = OpLog (x - 0xa0 + 1)
+readOp x _  | x >= 0xa0 && x <= 0xa4 = OpLog (x - 0xa0)
 readOp x xs | x >= 0x60 && x <= 0x7f =
   let n   = x - 0x60 + 1
       xs' = BS.take (num n) xs
@@ -1063,13 +1063,16 @@ readOp x _ = case x of
   0xff -> OpSuicide
   _    -> (OpUnknown x)
 
-codeOps :: ByteString -> Seq Op
-codeOps xs =
-  case BS.uncons xs of
-    Nothing ->
-      mempty
-    Just (x, xs') ->
-      readOp x xs' Seq.<| codeOps (BS.drop (opSize x) xs)
+codeOps :: ByteString -> Seq (Int, Op)
+codeOps bytes = go 0 bytes
+  where
+    go !i !xs =
+      case BS.uncons xs of
+        Nothing ->
+          mempty
+        Just (x, xs') ->
+          let j = opSize x
+          in (i, readOp x xs') Seq.<| go (i + j) (BS.drop j xs)
 
 {-
   Unimplemented:
