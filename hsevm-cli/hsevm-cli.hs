@@ -200,10 +200,11 @@ runVMTest mode (name, x) = do
 
 debugger :: EVM.VM -> IO EVM.VM
 debugger vm = do
-  cpprint (vm ^. EVM.state)
+  cpprint (view EVM.state vm)
+  cpprint (view EVM.logs vm)
   cpprint (EVM.vmOp vm)
   cpprint (EVM.opParams vm)
-  cpprint (vm ^. EVM.frames)
+  cpprint (view EVM.frames vm)
   if vm ^. EVM.result /= EVM.VMRunning
     then do
       print (vm ^. EVM.result)
