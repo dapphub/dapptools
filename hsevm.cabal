@@ -22,10 +22,13 @@ cabal-version:
 library
   exposed-modules:
     EVM,
+    EVM.ABI,
     EVM.Solidity,
     EVM.Keccak,
     EVM.Types,
-    EVM.VMTest
+    EVM.VMTest,
+    EVM.Exec,
+    EVM.Debug
   ghc-options:
     -O2 -Wall
   if impl(ghcjs)
@@ -58,7 +61,8 @@ library
     temporary,
     text,
     unordered-containers,
-    vector
+    vector,
+    readline
   hs-source-dirs:
     src
   default-language:
@@ -155,5 +159,11 @@ test-suite test
     tasty,
     tasty-hunit,
     tasty-quickcheck,
-    tasty-smallcheck
+    tasty-smallcheck,
+    mtl,
+    ghci-pretty,
+    lens,
+    text,
+    here,
+    bytestring
  

@@ -1,8 +1,8 @@
 { mkDerivation, aeson, attoparsec, base, base16-bytestring
 , base64-bytestring, binary, bytestring, containers, criterion
 , cryptonite, data-dword, deepseq, directory, filepath, ghci-pretty
-, HUnit, lens, lens-aeson, memory, mtl, optparse-generic, process
-, QuickCheck, readline, stdenv, tasty, tasty-hunit
+, here, HUnit, lens, lens-aeson, memory, mtl, optparse-generic
+, process, QuickCheck, readline, stdenv, tasty, tasty-hunit
 , tasty-quickcheck, tasty-smallcheck, temporary, text
 , unordered-containers, vector
 }:
@@ -16,7 +16,7 @@ mkDerivation {
     aeson base base16-bytestring base64-bytestring binary bytestring
     containers criterion cryptonite data-dword deepseq directory
     ghci-pretty lens lens-aeson memory mtl optparse-generic process
-    temporary text unordered-containers vector
+    readline temporary text unordered-containers vector
   ];
   executableHaskellDepends = [
     aeson attoparsec base base16-bytestring bytestring containers
@@ -24,8 +24,8 @@ mkDerivation {
     optparse-generic readline text unordered-containers vector
   ];
   testHaskellDepends = [
-    base ghci-pretty HUnit QuickCheck tasty tasty-hunit
-    tasty-quickcheck tasty-smallcheck
+    base bytestring ghci-pretty here HUnit lens mtl QuickCheck tasty
+    tasty-hunit tasty-quickcheck tasty-smallcheck text
   ];
   benchmarkHaskellDepends = [ base criterion text ];
   enableLibraryProfiling = true;

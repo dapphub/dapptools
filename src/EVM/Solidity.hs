@@ -7,7 +7,7 @@
 
 module EVM.Solidity (
   solidity, readSolc, SolcContract (..),
-  solcCodehash, runtimeCode, name, abiMap, solcSrcmap,
+  solcCodehash, runtimeCode, creationCode, name, abiMap, solcSrcmap,
   makeSrcMaps, SrcMap (..),
   JumpType (..), SourceCache (..), snippetCache, sourceFiles, sourceLines
 ) where
@@ -110,6 +110,7 @@ makeSrcMaps = (\case (_, Fe, _) -> Nothing; x -> Just (done x))
 data SolcContract = SolcContract {
   _solcCodehash :: W256,
   _runtimeCode :: ByteString,
+  _creationCode :: ByteString,
   _name :: Text,
   _abiMap :: Map Word32 Text,
   _solcSrcmap :: Seq SrcMap
@@ -147,7 +148,7 @@ readSolc fp =
 solidity :: Text -> Text -> IO (Maybe ByteString)
 solidity contract src = do
   Just (solc, _) <- readJSON <$> solidity' src
-  return (solc ^? ix contract . runtimeCode)
+  return (solc ^? ix contract . creationCode)
 
 readJSON :: Text -> Maybe (Map Text SolcContract, [Text])
 readJSON json = do
@@ -158,10 +159,13 @@ readJSON json = do
   where
     f x y = Map.fromList . map (g y) . HMap.toList $ x
     g _ (s, x) =
-      let theCode = toCode (x ^?! key "bin-runtime" . _String)
+      let
+        theRuntimeCode = toCode (x ^?! key "bin-runtime" . _String)
+        theCreationCode = toCode (x ^?! key "bin" . _String)
       in (s, SolcContract {
-        _solcCodehash = keccak theCode,
-        _runtimeCode = theCode,
+        _solcCodehash = keccak theRuntimeCode,
+        _runtimeCode = theRuntimeCode,
+        _creationCode = theCreationCode,
         _name = s,
         _abiMap = Map.fromList $
           flip map (toList $ (x ^?! key "abi" . _String) ^?! _Array) $
@@ -185,7 +189,6 @@ signature abi =
         ")"
       ]
 
-
 toCode :: Text -> ByteString
 toCode = toStrict . toLazyByteString . fst . Text.foldl' go (mempty, Nothing)
   where
@@ -198,4 +201,8 @@ solidity' :: Text -> IO Text
 solidity' src = withSystemTempFile "hsevm.sol" $ \path handle -> do
   hClose handle
   writeFile path ("pragma solidity ^0.4.8;\n" <> src)
-  pack <$> readProcess "solc" ["--combined-json=bin-runtime", path] ""
+  pack <$>
+    readProcess
+      "solc"
+      ["--combined-json=bin-runtime,bin,srcmap-runtime,abi", path]
+      ""
