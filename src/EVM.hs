@@ -536,10 +536,22 @@ exec1 = do
               accessMemoryRange xOffset xSize
 
               let
-                newAddr = newContractAddress self (view nonce this)
+                newAddr      = newContractAddress self (view nonce this)
+                creationCode = readMemory xOffset xSize vm
+
+              -- The contract, while being created, has no bytecode,
+              -- so e.g. CODECOPY reads only zeroes, and the creation code
+              -- is only present in the current frame state.
+              --
+              -- Somewhat obscurely, we do set the operation index map
+              -- according to the creation code, because it's needed for
+              -- checking jump destinations.
 
               zoom (env . contracts) $ do
-                assign (at newAddr) (Just (initialContract mempty))
+                assign (at newAddr) . Just $
+                  initialContract mempty
+                    & set opIxMap (mkOpIxMap creationCode)
+
                 modifying (ix self . nonce) succ
 
               pushTo frames $ Frame
@@ -550,7 +562,7 @@ exec1 = do
               assign state $
                 blankState
                   & set contract   newAddr
-                  & set code       (readMemory xOffset xSize vm)
+                  & set code       creationCode
                   & set callvalue  xValue
                   & set caller     self
 
@@ -760,8 +772,22 @@ checkJump :: Integral n => n -> EVM ()
 checkJump x = do
   theCode <- use (state . code)
   if num x < BS.length theCode && BS.index theCode (num x) == 0x5b
-    then state . pc .= num x
+    then
+      insidePushData (num x) >>=
+        \case
+          True ->
+            error "jump destination inside push data"
+          _ ->
+            state . pc .= num x
     else error "bad jump destination"
+
+insidePushData :: Int -> EVM Bool
+insidePushData i = do
+  -- If the operation index for the code pointer is the same
+  -- as for the previous code pointer, then it's inside push data.
+  self <- use (state . contract)
+  x <- useJust (env . contracts . ix self . opIxMap)
+  return (i == 0 || (x Vector.! i) == (x Vector.! (i - 1)))
 
 data VMOpts = VMOpts
   { vmoptCode :: ByteString
@@ -834,6 +860,9 @@ num = fromIntegral
 
 viewJust :: Getting (Endo a) s a -> s -> a
 viewJust f x = x ^?! f
+
+useJust :: MonadState s f => Getting (Endo a) s a -> f a
+useJust f = viewJust f <$> get
 
 opSize :: Word8 -> Int
 opSize x | x >= 0x60 && x <= 0x7f = num x - 0x60 + 2
