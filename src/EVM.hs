@@ -557,39 +557,14 @@ exec1 = do
         -- op: CALL
         0xf1 ->
           case stk of
-            (_:xTo:xValue:xInOffset:xInSize:xOutOffset:xOutSize:xs) ->
-              case preview (env . contracts . ix (num xTo)) vm of
-                Nothing ->
-                  returnOp 0 (0, 0)
-
-                Just target -> do
-                  zoom state $ do
-                    assign pc 0
-                    assign code (view bytecode target)
-                    assign stack mempty
-                    assign memory mempty
-                    assign contract (num xTo)
-                    assign calldata (readMemory xInOffset xInSize vm)
-                    assign callvalue xValue
-                    assign caller (the state contract)
-
-                  pushTo frames $ Frame
-                    { _frameState = (set stack xs) (view state vm)
-                    , _frameContext = CallContext
-                        { callContextOffset = xOutOffset
-                        , callContextSize   = xOutSize
-                        , callContextCodehash = view codehash target
-                        , callContextAbi =
-                            if xInSize >= 4
-                            then Just $! mem ^. word32At xInOffset
-                            else Nothing
-                        }
-                    }
-
-                  accessMemoryRange xInOffset xInSize
-                  accessMemoryRange xOutOffset xOutSize
-
-            _ -> underrun
+            (_:xTo:xValue:xInOffset:xInSize:xOutOffset:xOutSize:xs) -> do
+              delegateCall (num xTo) xInOffset xInSize xOutOffset xOutSize xs
+              zoom state $ do
+                assign callvalue xValue
+                assign caller (the state contract)
+                assign contract (num xTo)
+            _ ->
+              underrun
 
         -- op: CALLCODE
         0xf2 ->
@@ -623,34 +598,7 @@ exec1 = do
         0xf4 ->
           case stk of
             (_:xTo:xInOffset:xInSize:xOutOffset:xOutSize:xs) ->
-              case preview (env . contracts . ix (num xTo)) vm of
-                Nothing ->
-                  returnOp 0 (0, 0)
-
-                Just target -> do
-                  zoom state $ do
-                    assign pc 0
-                    assign code (view bytecode target)
-                    assign stack mempty
-                    assign memory mempty
-                    assign calldata (readMemory xInOffset xInSize vm)
-
-                  pushTo frames $ Frame
-                    { _frameState = (set stack xs) (view state vm)
-                    , _frameContext = CallContext
-                        { callContextOffset = xOutOffset
-                        , callContextSize   = xOutSize
-                        , callContextCodehash = view codehash target
-                        , callContextAbi =
-                            if xInSize >= 4
-                            then Just $! mem ^. word32At xInOffset
-                            else Nothing
-                        }
-                    }
-
-                  accessMemoryRange xInOffset xInSize
-                  accessMemoryRange xOutOffset xOutSize
-
+              delegateCall (num xTo) xInOffset xInSize xOutOffset xOutSize xs
             _ -> underrun
 
         -- op: SUICIDE
@@ -667,6 +615,37 @@ exec1 = do
 
         x -> do
           error ("opcode " ++ show x)
+
+delegateCall :: Addr -> W256 -> W256 -> W256 -> W256 -> [W256] -> State VM ()
+delegateCall xTo xInOffset xInSize xOutOffset xOutSize xs =
+  preuse (env . contracts . ix xTo) >>=
+    \case
+      Nothing -> returnOp 0 (0, 0)
+      Just target -> do
+        vm <- get
+
+        pushTo frames $ Frame
+          { _frameState = (set stack xs) (view state vm)
+          , _frameContext = CallContext
+              { callContextOffset = xOutOffset
+              , callContextSize   = xOutSize
+              , callContextCodehash = view codehash target
+              , callContextAbi =
+                  if xInSize >= 4
+                  then Just $! view (state . memory . word32At xInOffset) vm
+                  else Nothing
+              }
+          }
+
+        zoom state $ do
+          assign pc 0
+          assign code (view bytecode target)
+          assign stack mempty
+          assign memory mempty
+          assign calldata (readMemory xInOffset xInSize vm)
+
+        accessMemoryRange xInOffset xInSize
+        accessMemoryRange xOutOffset xOutSize
 
 accessMemoryRange :: W256 -> W256 -> State VM ()
 accessMemoryRange _ 0 = return ()
