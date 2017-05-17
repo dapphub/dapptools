@@ -141,6 +141,8 @@ makeLenses ''Contract
 makeLenses ''Env
 makeLenses ''VM
 
+type EVM a = State VM a
+
 initialContract :: ByteString -> Contract
 initialContract theCode = Contract
   { _bytecode = theCode
@@ -152,7 +154,7 @@ initialContract theCode = Contract
   , _opIxMap  = mkOpIxMap theCode
   }
 
-performCreation :: ByteString -> State VM ()
+performCreation :: ByteString -> EVM ()
 performCreation createdCode = do
   self <- use (state . contract)
   zoom (env . contracts . at self) $ do
@@ -165,14 +167,14 @@ performCreation createdCode = do
             & set storage (view storage now)
             & set balance (view balance now)
 
-resetState :: State VM ()
+resetState :: EVM ()
 resetState = do
   -- TODO: handle suicides
   assign result     VMRunning
   assign frames     []
   assign state      blankState
 
-loadContract :: Addr -> State VM ()
+loadContract :: Addr -> EVM ()
 loadContract target =
   preuse (env . contracts . ix target . bytecode) >>=
     \case
@@ -182,7 +184,7 @@ loadContract target =
         assign (state . contract) target
         assign (state . code)     targetCode
 
-exec1 :: State VM ()
+exec1 :: EVM ()
 exec1 = do
   vm <- get
 
@@ -616,7 +618,7 @@ exec1 = do
         x -> do
           error ("opcode " ++ show x)
 
-delegateCall :: Addr -> W256 -> W256 -> W256 -> W256 -> [W256] -> State VM ()
+delegateCall :: Addr -> W256 -> W256 -> W256 -> W256 -> [W256] -> EVM ()
 delegateCall xTo xInOffset xInSize xOutOffset xOutSize xs =
   preuse (env . contracts . ix xTo) >>=
     \case
@@ -647,7 +649,7 @@ delegateCall xTo xInOffset xInSize xOutOffset xOutSize xs =
         accessMemoryRange xInOffset xInSize
         accessMemoryRange xOutOffset xOutSize
 
-accessMemoryRange :: W256 -> W256 -> State VM ()
+accessMemoryRange :: W256 -> W256 -> EVM ()
 accessMemoryRange _ 0 = return ()
 accessMemoryRange f l =
   state . memorySize %= \n -> max n (ceilDiv (f + l) 32)
@@ -656,12 +658,12 @@ accessMemoryRange f l =
       let (q, r) = quotRem a b
       in q + if r /= 0 then 1 else 0
 
-accessMemoryWord :: W256 -> State VM ()
+accessMemoryWord :: W256 -> EVM ()
 accessMemoryWord x = accessMemoryRange x 32
 
 copyBytesToMemory
   :: (IxValue s ~ Word8, Ixed s, Num (Index s))
-  => s -> W256 -> W256 -> W256 -> State VM ()
+  => s -> W256 -> W256 -> W256 -> EVM ()
 copyBytesToMemory bs size xOffset yOffset =
   if size == 0 then return ()
   else
@@ -679,7 +681,7 @@ readMemory offset size vm =
     in BS.pack [(Map.lookup (offset + i) mem) ?: 0
                 | i <- [0..size-1]]
 
-push :: W256 -> State VM ()
+push :: W256 -> EVM ()
 push x = state . stack %= (x :)
 
 pushTo :: MonadState s m => ASetter s s [a] [a] -> a -> m ()
@@ -688,10 +690,10 @@ pushTo f x = f %= (x :)
 pushToSequence :: MonadState s m => ASetter s s (Seq a) (Seq a) -> a -> m ()
 pushToSequence f x = f %= (Seq.|> x)
 
-underrun :: State VM ()
+underrun :: EVM ()
 underrun = returnOp 0 (0, 0)
 
-returnOp :: W256 -> (W256, W256) -> State VM ()
+returnOp :: W256 -> (W256, W256) -> EVM ()
 returnOp returnCode (xOffset, xSize) = do
   vm <- get
   case view frames vm of
@@ -728,7 +730,7 @@ toWord512 (W256 x) = fromHiAndLo 0 x
 fromWord512 :: Word512 -> W256
 fromWord512 x = W256 (loWord x)
 
-stackOp1 :: (W256 -> W256) -> State VM ()
+stackOp1 :: (W256 -> W256) -> EVM ()
 stackOp1 f =
   use (state . stack) >>= \case
     (x:xs) ->
@@ -737,7 +739,7 @@ stackOp1 f =
     _ ->
       underrun
 
-stackOp2 :: ((W256, W256) -> W256) -> State VM ()
+stackOp2 :: ((W256, W256) -> W256) -> EVM ()
 stackOp2 f =
   use (state . stack) >>= \case
     (x:y:xs) ->
@@ -745,7 +747,7 @@ stackOp2 f =
     _ ->
       underrun
 
-stackOp3 :: ((W256, W256, W256) -> W256) -> State VM ()
+stackOp3 :: ((W256, W256, W256) -> W256) -> EVM ()
 stackOp3 f =
   use (state . stack) >>= \case
     (x:y:z:xs) ->
@@ -754,7 +756,7 @@ stackOp3 f =
       underrun
 
 -- XXX: EVM forbids jumping to a 0x5b that's inside PUSH data
-checkJump :: Integral n => n -> State VM ()
+checkJump :: Integral n => n -> EVM ()
 checkJump x = do
   theCode <- use (state . code)
   if num x < BS.length theCode && BS.index theCode (num x) == 0x5b
