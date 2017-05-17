@@ -767,7 +767,6 @@ stackOp3 f =
     _ ->
       underrun
 
--- XXX: EVM forbids jumping to a 0x5b that's inside PUSH data
 checkJump :: Integral n => n -> EVM ()
 checkJump x = do
   theCode <- use (state . code)
