@@ -13,8 +13,9 @@ import Control.Monad
 import Data.Binary.Put
 import Data.Bits
 import Data.DoubleWord
-import Data.Text (Text)
-import Data.Text.Encoding (encodeUtf8, decodeUtf8)
+import Data.Monoid
+import Data.Text (Text, pack)
+import Data.Text.Encoding (encodeUtf8)
 import Data.Vector (Vector)
 import Text.Printf (printf)
 
@@ -68,6 +69,18 @@ abiValueType = \case
   AbiString _         -> AbiStringType
   AbiArrayDynamic t _ -> AbiArrayDynamicType t
   AbiArray n t _      -> AbiArrayType n t
+
+abiTypeSolidity :: AbiType -> Text
+abiTypeSolidity = \case
+  AbiUIntType n  -> "uint" <> pack (show n)
+  AbiIntType n   -> "int" <> pack (show n)
+  AbiAddressType -> "address"
+  AbiBoolType    -> "bool"
+  AbiBytesType n -> "bytes" <> pack (show n)
+  AbiBytesDynamicType -> "bytes"
+  AbiStringType -> "string"
+  AbiArrayDynamicType t -> abiTypeSolidity t <> "[]"
+  AbiArrayType n t -> abiTypeSolidity t <> "[" <> pack (show n) <> "]"
 
 putAbi :: AbiValue -> Put
 putAbi = \case
