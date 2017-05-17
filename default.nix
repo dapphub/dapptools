@@ -25,7 +25,7 @@ mkDerivation {
   ];
   testHaskellDepends = [
     base bytestring ghci-pretty here HUnit lens mtl QuickCheck tasty
-    tasty-hunit tasty-quickcheck tasty-smallcheck text
+    tasty-hunit tasty-quickcheck tasty-smallcheck text vector
   ];
   benchmarkHaskellDepends = [ base criterion text ];
   enableLibraryProfiling = true;

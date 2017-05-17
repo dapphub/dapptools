@@ -165,5 +165,6 @@ test-suite test
     lens,
     text,
     here,
-    bytestring
+    bytestring,
+    vector
  

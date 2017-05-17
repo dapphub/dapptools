@@ -15,7 +15,7 @@ import Control.Monad.State (execState, runState)
 import Control.Lens
 
 import Data.Monoid
-
+import qualified Data.Vector as Vector
 import Data.String.Here
 
 import EVM
@@ -27,16 +27,49 @@ import EVM.Debug
 
 import IPPrint.Colored (cpprint)
 
+main :: IO ()
+main = defaultMain $
+
+  testGroup "Solidity expressions"
+    [ testCase "Trivial" $ do
+        SolidityCall "x = 3;" []
+          ===> AbiUInt 256 3
+
+    , testCase "Arithmetic" $ do
+        SolidityCall "x = a + 1;"
+          [AbiUInt 256 1] ===> AbiUInt 256 2
+        SolidityCall "x = a - 1;"
+          [AbiUInt 8 0] ===> AbiUInt 8 255
+
+    , testCase "keccak256()" $ do
+        SolidityCall "x = uint(keccak256(a));"
+          [AbiString ""] ===> AbiUInt 256 0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470
+    ]
+
+  where
+    (===>) = assertSolidityComputation
+
 singleContract :: Text -> Text -> IO (Maybe ByteString)
 singleContract x s =
   solidity x [i|
     contract ${x} { ${s} }
   |]
 
-runStatements :: Text -> Text -> IO (Maybe ByteString)
-runStatements stmts t = do
+runStatements
+  :: Text -> [AbiValue] -> AbiType
+  -> IO (Maybe ByteString)
+runStatements stmts args t = do
+  let params =
+        Text.intercalate ", "
+          (map (\(x, c) -> abiTypeSolidity (abiValueType x)
+                             <> " " <> Text.pack [c])
+            (zip args "abcdefg"))
+      sig =
+        "x(" <> Text.intercalate ","
+                  (map (abiTypeSolidity . abiValueType) args) <> ")"
+
   Just x <- singleContract "X" [i|
-    function x() returns (${t} x) {
+    function x(${params}) returns (${abiTypeSolidity t} x) {
       ${stmts}
     }
   |]
@@ -48,7 +81,8 @@ runStatements stmts t = do
       case flip runState vm2
              (do resetState
                  loadContract target
-                 assign (state . calldata) (word32Bytes (abiKeccak "x()"))
+                 assign (state . calldata)
+                   (abiCalldata sig (Vector.fromList args))
                  exec) of
         (VMSuccess out, _) ->
           return (Just out)
@@ -63,17 +97,12 @@ newtype Bytes = Bytes ByteString
 instance Show Bytes where
   showsPrec _ (Bytes x) _ = show (ByteString.unpack x)
 
-assertSolidityComputation x s =
-  do y <- runStatements s (abiTypeSolidity (abiValueType x))
+data SolidityCall
+  = SolidityCall Text [AbiValue]
+  deriving Show
+
+assertSolidityComputation (SolidityCall s args) x =
+  do y <- runStatements s args (abiValueType x)
      assertEqual (Text.unpack s)
        (fmap Bytes (Just (encodeAbiValue x)))
        (fmap Bytes y)
-
-(===>) = flip assertSolidityComputation
-
-main :: IO ()
-main = defaultMain $
-  testGroup "Solidity expressions"
-    [ testCase "Arithmetic" $
-        "x = 3;" ===> AbiUInt 256 3
-    ]
