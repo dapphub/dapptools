@@ -62,7 +62,9 @@ library
     text,
     unordered-containers,
     vector,
-    readline
+    readline,
+    QuickCheck,
+    quickcheck-text
   hs-source-dirs:
     src
   default-language:
@@ -166,5 +168,5 @@ test-suite test
     text,
     here,
     bytestring,
-    vector
- 
+    vector,
+    binary

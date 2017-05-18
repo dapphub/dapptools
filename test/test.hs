@@ -18,6 +18,11 @@ import Data.Monoid
 import qualified Data.Vector as Vector
 import Data.String.Here
 
+import Data.Binary.Put (runPut)
+import Data.Binary.Get (runGetState)
+
+import qualified Data.ByteString.Lazy as BSLazy
+
 import EVM
 import EVM.ABI
 import EVM.Keccak
@@ -28,9 +33,15 @@ import EVM.Debug
 import IPPrint.Colored (cpprint)
 
 main :: IO ()
-main = defaultMain $
+main = defaultMain $ testGroup "hsevm"
+  [ testGroup "ABI"
+    [ testProperty "Put/get inverse" $ \x ->
+        let bytes = runPut (putAbi x)
+            (x', remaining, _) = runGetState (getAbi (abiValueType x)) bytes 0
+        in x == x' && BSLazy.null remaining
+    ]
 
-  testGroup "Solidity expressions"
+  , testGroup "Solidity expressions"
     [ testCase "Trivial" $ do
         SolidityCall "x = 3;" []
           ===> AbiUInt 256 3
@@ -45,6 +56,7 @@ main = defaultMain $
         SolidityCall "x = uint(keccak256(a));"
           [AbiString ""] ===> AbiUInt 256 0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470
     ]
+  ]
 
   where
     (===>) = assertSolidityComputation
@@ -97,7 +109,7 @@ newtype Bytes = Bytes ByteString
 instance Show Bytes where
   showsPrec _ (Bytes x) _ = show (ByteString.unpack x)
 
-data SolidityCall
+data Invocation
   = SolidityCall Text [AbiValue]
   deriving Show
 
