@@ -1,12 +1,13 @@
 {-# Language BangPatterns #-}
 {-# Language DeriveDataTypeable #-}
 {-# Language DeriveGeneric #-}
+{-# Language FlexibleContexts #-}
 {-# Language LambdaCase #-}
 {-# Language OverloadedStrings #-}
 {-# Language Rank2Types #-}
+{-# Language StrictData #-}
 {-# Language TemplateHaskell #-}
 {-# Language TypeFamilies #-}
-{-# Language FlexibleContexts #-}
 
 module EVM where
 
@@ -45,28 +46,28 @@ import qualified Data.Vector.Unboxed  as Vector
 data VMResult
   = VMRunning              -- ^ More operations to run
   | VMFailure              -- ^ An operation failed
-  | VMSuccess !ByteString  -- ^ Reached STOP, RETURN, or end-of-code
+  | VMSuccess ByteString   -- ^ Reached STOP, RETURN, or end-of-code
   deriving (Eq, Show)
 
 -- | The state of a stepwise EVM execution
 data VM = VM
-  { _result      :: !VMResult
-  , _state       :: !FrameState
-  , _frames      :: ![Frame]
-  , _env         :: !Env
-  , _block       :: !Block
-  , _suicides    :: ![Addr]
-  , _logs        :: !(Seq Log)
+  { _result      :: VMResult
+  , _state       :: FrameState
+  , _frames      :: [Frame]
+  , _env         :: Env
+  , _block       :: Block
+  , _suicides    :: [Addr]
+  , _logs        :: Seq Log
   } deriving Show
 
 -- | A log entry
-data Log = Log !Addr !ByteString ![W256]
+data Log = Log Addr ByteString [W256]
   deriving Show
 
 -- | An entry in the VM's "call/create stack"
 data Frame = Frame
-  { _frameContext   :: !FrameContext
-  , _frameState     :: !FrameState
+  { _frameContext   :: FrameContext
+  , _frameState     :: FrameState
   } deriving Show
 
 -- | Call/create info
@@ -82,43 +83,43 @@ data FrameContext
 
 -- | The "registers" of the VM along with memory and data stack
 data FrameState = FrameState
-  { _contract    :: !Addr
-  , _code        :: !ByteString
-  , _pc          :: !Int
-  , _stack       :: ![W256]
-  , _memory      :: !(Map W256 Word8)
-  , _memorySize  :: !W256
-  , _calldata    :: !ByteString
-  , _callvalue   :: !W256
-  , _caller      :: !Addr
+  { _contract    :: Addr
+  , _code        :: ByteString
+  , _pc          :: Int
+  , _stack       :: [W256]
+  , _memory      :: Map W256 Word8
+  , _memorySize  :: W256
+  , _calldata    :: ByteString
+  , _callvalue   :: W256
+  , _caller      :: Addr
   } deriving Show
 
 -- | The state of a contract
 data Contract = Contract
-  { _bytecode :: !ByteString
-  , _storage  :: !(Map W256 W256)
-  , _balance  :: !W256
-  , _nonce    :: !W256
-  , _codehash :: !W256
-  , _codesize :: !Int -- (redundant?)
-  , _opIxMap  :: !(Vector Int)
+  { _bytecode :: ByteString
+  , _storage  :: Map W256 W256
+  , _balance  :: W256
+  , _nonce    :: W256
+  , _codehash :: W256
+  , _codesize :: Int -- (redundant?)
+  , _opIxMap  :: Vector Int
   } deriving (Eq, Show)
 
 -- | Kind of a hodgepodge?
 data Env = Env
-  { _contracts   :: !(Map Addr Contract)
-  , _solc        :: (Map Addr SolcContract)
-  , _sha3Crack   :: (Map W256 ByteString)
+  { _contracts   :: Map Addr Contract
+  , _solc        :: Map Addr SolcContract
+  , _sha3Crack   :: Map W256 ByteString
   , _sourceCache :: SourceCache
   , _origin      :: Addr
   } deriving (Show)
 
 data Block = Block
-  { _coinbase   :: !Addr
-  , _timestamp  :: !W256
-  , _number     :: !W256
-  , _difficulty :: !W256
-  , _gaslimit   :: !W256
+  { _coinbase   :: Addr
+  , _timestamp  :: W256
+  , _number     :: W256
+  , _difficulty :: W256
+  , _gaslimit   :: W256
   } deriving Show
 
 blankState :: FrameState
