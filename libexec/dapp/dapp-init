@@ -13,16 +13,8 @@ insert() {
 (set -x; git init)
 (set -x; mkdir -p lib src)
 
-cat >.dapprc <<.
-# export ETH_FROM=0x0000000000000000000000000000000000000000
-.
-
 insert .gitignore <<.
-/.dapprc
 /out
-.
-
-insert .dappobjects <<.
 .
 
 name=$(basename "$(pwd)")
@@ -30,13 +22,10 @@ words=$(sed 's/[^a-z0-9]\+/\n/ig' <<<"$name")
 while read -r word; do type+=${word^}; done <<<"$words"
 
 create Makefile <<.
-type = $type
-name = \$(type)
-
 all:; dapp build
 clean:; dapp clean
 test:; dapp test
-deploy:; dapp deploy \$(type) \$(args) --name=\$(name)
+deploy:; dapp create $type
 .
 
 create Dappfile <<.
