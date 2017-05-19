@@ -51,13 +51,13 @@ data VMResult
 
 -- | The state of a stepwise EVM execution
 data VM = VM
-  { _result      :: VMResult
-  , _state       :: FrameState
-  , _frames      :: [Frame]
-  , _env         :: Env
-  , _block       :: Block
-  , _suicides    :: [Addr]
-  , _logs        :: Seq Log
+  { _result        :: VMResult
+  , _state         :: FrameState
+  , _frames        :: [Frame]
+  , _env           :: Env
+  , _block         :: Block
+  , _selfdestructs :: [Addr]
+  , _logs          :: Seq Log
   } deriving Show
 
 -- | A log entry
@@ -170,7 +170,7 @@ performCreation createdCode = do
 
 resetState :: EVM ()
 resetState = do
-  -- TODO: handle suicides
+  -- TODO: handle selfdestructs
   assign result     VMRunning
   assign frames     []
   assign state      blankState
@@ -616,12 +616,12 @@ exec1 = do
               delegateCall (num xTo) xInOffset xInSize xOutOffset xOutSize xs
             _ -> underrun
 
-        -- op: SUICIDE
+        -- op: SELFDESTRUCT
         0xff ->
           case stk of
             [] -> underrun
             (x:_) -> do
-              pushTo suicides self
+              pushTo selfdestructs self
               assign (env . contracts . ix self . balance) 0
               modifying
                 (env . contracts . ix (num x) . balance)
@@ -807,7 +807,7 @@ makeVm :: VMOpts -> VM
 makeVm o = VM
   { _result = VMRunning
   , _frames = mempty
-  , _suicides = mempty
+  , _selfdestructs = mempty
   , _logs = mempty
   , _block = Block
     { _coinbase = vmoptCoinbase o
@@ -987,7 +987,7 @@ data Op
   | OpCallcode
   | OpReturn
   | OpDelegatecall
-  | OpSuicide
+  | OpSelfdestruct
   | OpDup !Word8
   | OpSwap !Word8
   | OpLog !Word8
@@ -1104,7 +1104,7 @@ readOp x _ = case x of
   0xf2 -> OpCallcode
   0xf3 -> OpReturn
   0xf4 -> OpDelegatecall
-  0xff -> OpSuicide
+  0xff -> OpSelfdestruct
   _    -> (OpUnknown x)
 
 codeOps :: ByteString -> Seq (Int, Op)
