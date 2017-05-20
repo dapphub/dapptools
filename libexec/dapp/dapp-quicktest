@@ -190,7 +190,7 @@ function printDetails() {
 function printFailure(failedTest) {
   console.log()
 
-  addressNames[failedTest.results[0].trace[0].action.from] = "Dapp"
+  addressNames[failedTest.results[0].trace[0].action.from] = " "
   addressNames[failedTest.results[0].trace[0].result.address] = failedTest.class.name
 
   var name = failures.every(x => x.class.name == failedTest.class.name)
