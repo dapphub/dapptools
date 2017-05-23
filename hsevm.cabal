@@ -64,7 +64,8 @@ library
     vector,
     readline,
     QuickCheck,
-    quickcheck-text
+    quickcheck-text,
+    ansi-wl-pprint
   hs-source-dirs:
     src
   default-language:

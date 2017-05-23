@@ -97,7 +97,7 @@ data Contract = Contract
 -- | Kind of a hodgepodge?
 data Env = Env
   { _contracts   :: Map Addr Contract
-  , _solc        :: Map Addr SolcContract
+  , _solc        :: Map W256 SolcContract
   , _sha3Crack   :: Map W256 ByteString
   , _sourceCache :: SourceCache
   , _origin      :: Addr
@@ -137,7 +137,7 @@ initialContract :: ByteString -> Contract
 initialContract theCode = Contract
   { _bytecode = theCode
   , _codesize = BS.length theCode
-  , _codehash = keccak theCode
+  , _codehash = if BS.null theCode then 0 else keccak theCode
   , _storage  = mempty
   , _balance  = 0
   , _nonce    = 0
@@ -544,9 +544,10 @@ exec1 = do
 
                 modifying (ix self . nonce) succ
 
+              vm' <- get
               pushTo frames $ Frame
                 { _frameContext = CreationContext
-                , _frameState   = (set stack xs) (view state vm)
+                , _frameState   = (set stack xs) (view state vm')
                 }
 
               assign state $
@@ -585,16 +586,17 @@ exec1 = do
 
                 (nextFrame : remainingFrames) -> do
                   assign frames remainingFrames
-                  assign state (view frameState nextFrame)
 
                   case view frameContext nextFrame of
                     CreationContext -> do
-                      push (num (the state contract))
                       performCreation (readMemory xOffset xSize vm)
+                      assign state (view frameState nextFrame)
+                      push (num (the state contract))
 
                     CallContext yOffset ySize _ _ -> do
-                      push 1
                       copyBytesToMemory mem ySize xOffset yOffset
+                      assign state (view frameState nextFrame)
+                      push 1
 
             _ -> underrun
 

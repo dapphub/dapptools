@@ -1,69 +1,101 @@
 {-# Language DeriveAnyClass #-}
+{-# Language StrictData #-}
 {-# Language TemplateHaskell #-}
 
-module EVM.Solidity (
-  solidity, readSolc, SolcContract (..),
-  solcCodehash, runtimeCode, creationCode, name, abiMap, solcSrcmap,
-  makeSrcMaps, SrcMap (..),
-  JumpType (..), SourceCache (..), snippetCache, sourceFiles, sourceLines
+module EVM.Solidity
+  ( solidity
+  , JumpType (..)
+  , SolcContract (..)
+  , SourceCache (..)
+  , SrcMap (..)
+  , abiMap
+  , contractName
+  , creationCode
+  , makeSrcMaps
+  , readSolc
+  , runtimeCode
+  , snippetCache
+  , solcCodehash
+  , solcSrcmap
+  , sourceFiles
+  , sourceLines
 ) where
 
 import EVM.Keccak
 import EVM.Types
 
+import Control.Applicative
 import Control.DeepSeq
 import Control.Lens
 import Data.Aeson.Lens
-import Control.Applicative
-import Data.Foldable
-
-import Data.ByteString (ByteString)
-import Data.Sequence (Seq)
-import Data.ByteString.Lazy (toStrict)
+import Data.ByteString      (ByteString)
 import Data.ByteString.Builder
-import Data.Map.Strict (Map)
+import Data.ByteString.Lazy (toStrict)
+import Data.Char            (isDigit, digitToInt)
+import Data.Foldable
+import Data.Map.Strict      (Map)
 import Data.Maybe
 import Data.Monoid
-import Data.Vector (Vector)
-import Data.Text (Text, pack, intercalate)
-import Data.Text.Encoding (encodeUtf8)
-import Data.Text.IO (readFile, writeFile)
+import Data.Sequence        (Seq)
+import Data.Text            (Text, pack, intercalate)
+import Data.Text.Encoding   (encodeUtf8)
+import Data.Text.IO         (readFile, writeFile)
+import Data.Vector          (Vector)
 import Data.Word
-import Data.Char (isDigit, digitToInt)
-import GHC.Generics (Generic)
-import Prelude hiding (readFile, writeFile)
-import System.IO hiding (readFile, writeFile)
+import GHC.Generics         (Generic)
+import Prelude hiding       (readFile, writeFile)
+import System.IO hiding     (readFile, writeFile)
 import System.IO.Temp
 import System.Process
 
-import qualified Data.ByteString as BS
-import qualified Data.HashMap.Strict as HMap
-import qualified Data.Map.Strict as Map
-import qualified Data.Text as Text
-import qualified Data.Vector as Vector
+import qualified Data.ByteString      as BS
+import qualified Data.HashMap.Strict  as HMap
+import qualified Data.Map.Strict      as Map
+import qualified Data.Text            as Text
+import qualified Data.Vector          as Vector
+
+data SolcContract = SolcContract {
+  _solcCodehash :: W256,
+  _runtimeCode  :: ByteString,
+  _creationCode :: ByteString,
+  _contractName :: Text,
+  _abiMap       :: Map Word32 Text,
+  _solcSrcmap   :: Seq SrcMap
+} deriving (Show, Eq, Ord, Generic, NFData)
+
+data SourceCache = SourceCache {
+  _snippetCache :: Map (Int, Int) ByteString,
+  _sourceFiles  :: Map Int (Text, ByteString),
+  _sourceLines  :: Map Int (Vector ByteString)
+} deriving (Show, Eq, Ord, Generic, NFData)
+
+instance Monoid SourceCache where
+  mempty = SourceCache mempty mempty mempty
+  mappend (SourceCache _ _ _) (SourceCache _ _ _) = error "lol"
 
 data JumpType = JumpInto | JumpFrom | JumpRegular
   deriving (Show, Eq, Ord, Generic, NFData)
 
 data SrcMap = SM {
-  srcMapOffset :: !Int,
-  srcMapLength :: !Int,
-  srcMapFile   :: !Int,
-  srcMapJump   :: !JumpType
+  srcMapOffset :: {-# UNPACK #-} Int,
+  srcMapLength :: {-# UNPACK #-} Int,
+  srcMapFile   :: {-# UNPACK #-} Int,
+  srcMapJump   :: JumpType
 } deriving (Show, Eq, Ord, Generic, NFData)
 
-data SrcMapParseState = F1 [Int]
-                      | F2 !Int [Int]
-                      | F3 !Int !Int [Int] !Int
-                      | F4 !Int !Int !Int
-                      | F5 !SrcMap
-                      | Fe
-                      deriving Show
+data SrcMapParseState
+  = F1 [Int]
+  | F2 Int [Int]
+  | F3 Int Int [Int] !Int
+  | F4 Int Int Int
+  | F5 SrcMap
+  | Fe
+  deriving Show
 
--- I'm very sorry about this.  I was up late and couldn't figure out
--- how to use Attoparsec in a good way, and I figured I would just
--- write a damn state machine.  This should probably just be a
--- regular expression thing?!
+makeLenses ''SolcContract
+makeLenses ''SourceCache
+
+-- Obscure but efficient parser for the Solidity sourcemap format.
 makeSrcMaps :: Text -> Maybe (Seq SrcMap)
 makeSrcMaps = (\case (_, Fe, _) -> Nothing; x -> Just (done x))
              . Text.foldl' (\x y -> go y x) (mempty, F1 [], SM 0 0 0 JumpRegular)
@@ -103,43 +135,27 @@ makeSrcMaps = (\case (_, Fe, _) -> Nothing; x -> Just (done x))
 
     go _ (xs, _, p)                          = (xs, Fe, p)
     
-data SolcContract = SolcContract {
-  _solcCodehash :: W256,
-  _runtimeCode :: ByteString,
-  _creationCode :: ByteString,
-  _name :: Text,
-  _abiMap :: Map Word32 Text,
-  _solcSrcmap :: Seq SrcMap
-} deriving (Show, Eq, Ord, Generic, NFData)
-makeLenses ''SolcContract
-
-data SourceCache = SourceCache {
-  _snippetCache :: Map (Int, Int) ByteString,
-  _sourceFiles  :: Map Int (Text, ByteString),
-  _sourceLines  :: Map Int (Vector ByteString)
-} deriving (Show, Eq, Ord, Generic, NFData)
-makeLenses ''SourceCache
-
-instance Monoid SourceCache where
-  mempty = SourceCache mempty mempty mempty
-  mappend (SourceCache _ _ _) (SourceCache _ _ _) = error "lol"
-
 makeSourceCache :: [Text] -> IO SourceCache
 makeSourceCache paths = do
   xs <- mapM (BS.readFile . Text.unpack) paths
   return $! SourceCache {
     _snippetCache = mempty,
-    _sourceFiles = Map.fromList (zip [1 .. length paths] (zip paths xs)),
-    _sourceLines = Map.fromList (zip [1 .. length paths] (map (Vector.fromList . BS.split 0xa) xs))
+    _sourceFiles =
+      Map.fromList (zip [1 .. length paths]
+                     (zip paths xs)),
+    _sourceLines =
+      Map.fromList (zip [1 .. length paths]
+                     (map (Vector.fromList . BS.split 0xa) xs))
   }
 
 readSolc :: FilePath -> IO (Maybe (Map Text SolcContract, SourceCache))
 readSolc fp =
   (readJSON <$> readFile fp) >>=
-    \case Nothing -> return Nothing
-          Just (contracts, sources) -> do
-            sourceCache <- makeSourceCache sources
-            return $! Just (contracts, sourceCache)
+    \case
+      Nothing -> return Nothing
+      Just (contracts, sources) -> do
+        sourceCache <- makeSourceCache sources
+        return $! Just (contracts, sourceCache)
 
 solidity :: Text -> Text -> IO (Maybe ByteString)
 solidity contract src = do
@@ -148,8 +164,9 @@ solidity contract src = do
 
 readJSON :: Text -> Maybe (Map Text SolcContract, [Text])
 readJSON json = do
-  contracts <- f <$> (json ^? key "contracts" . _Object)
-                 <*> (fmap (fmap (\x -> x ^. _String)) $ json ^? key "sourceList" . _Array)
+  contracts <-
+    f <$> (json ^? key "contracts" . _Object)
+      <*> (fmap (fmap (^. _String)) $ json ^? key "sourceList" . _Array)
   sources <- toList . fmap (view _String) <$> json ^? key "sourceList" . _Array
   return (contracts, sources)
   where
@@ -160,10 +177,10 @@ readJSON json = do
         theCreationCode = toCode (x ^?! key "bin" . _String)
       in (s, SolcContract {
         _solcCodehash = keccak theRuntimeCode,
-        _runtimeCode = theRuntimeCode,
+        _runtimeCode  = theRuntimeCode,
         _creationCode = theCreationCode,
-        _name = s,
-        _abiMap = Map.fromList $
+        _contractName = s,
+        _abiMap       = Map.fromList $
           flip map (toList $ (x ^?! key "abi" . _String) ^?! _Array) $
             \abi -> (
               abiKeccak (encodeUtf8 (signature abi)),
