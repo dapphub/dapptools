@@ -54,8 +54,9 @@ data Command
       , debug      :: Bool
       }
   | Ethrun
-      { code :: ByteString
-      , call :: [ByteString]
+      { code  :: ByteString
+      , call  :: [ByteString]
+      , debug :: Bool
       }
   | VMTest
       { file  :: String
@@ -78,21 +79,32 @@ main = do
       launchVMTest opts
     Ethrun {} -> do
       cpprint ("calldatas", call opts)
-      ethrun (code opts) (map (hexByteString "calldata") (call opts))
+      ethrun (optsMode opts) (code opts)
+        (map (hexByteString "calldata") (call opts))
 
-ethrun :: ByteString -> [ByteString] -> IO ()
-ethrun code calldatas =
+ethrun :: Mode -> ByteString -> [ByteString] -> IO ()
+ethrun mode code calldatas =
   do let creationCode = hexByteString "stdin" code
      case runState exec (vmForEthrunCreation creationCode) of
        (EVM.VMSuccess targetCode, vm1) -> do
          let target = view (EVM.state . EVM.contract) vm1
-         doEthrunTransactions (execState (EVM.performCreation targetCode) vm1)
+         doEthrunTransactions mode
+           (execState (EVM.performCreation targetCode) vm1)
            target targetCode calldatas
+       (EVM.VMFailure, vm) -> do
+         cpprint ("creation failure", vm)
+       (EVM.VMRunning, _) ->
+         error "internal error"
 
-doEthrunTransactions :: EVM.VM -> Addr -> ByteString -> [ByteString] -> IO ()
-doEthrunTransactions _ _ _ [] = return ()
-doEthrunTransactions vm target targetCode (targetData:xs) = do
-  vm' <- debugger . flip execState vm $ do
+executeOrDebug :: Mode -> EVM.VM -> IO EVM.VM
+executeOrDebug Run   = return . execState exec
+executeOrDebug Debug = debugger
+
+doEthrunTransactions ::
+  Mode -> EVM.VM -> Addr -> ByteString -> [ByteString] -> IO ()
+doEthrunTransactions _ _ _ _ [] = return ()
+doEthrunTransactions mode vm target targetCode (targetData:xs) = do
+  vm' <- executeOrDebug mode . flip execState vm $ do
     EVM.resetState
     EVM.loadContract target
     assign (EVM.state . EVM.calldata) targetData
@@ -101,7 +113,11 @@ doEthrunTransactions vm target targetCode (targetData:xs) = do
   case view EVM.result vm' of
     EVM.VMSuccess out -> do
       cpprint (out, vm')
-      doEthrunTransactions vm' target targetCode xs
+      doEthrunTransactions mode vm' target targetCode xs
+    EVM.VMFailure ->
+      cpprint ("VM failure", vm')
+    EVM.VMRunning ->
+      error "internal error"
 
 launchExec :: Command -> IO ()
 launchExec opts =

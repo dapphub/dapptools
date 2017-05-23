@@ -1,9 +1,4 @@
 {-# Language CPP #-}
-{-# Language BangPatterns #-}
-{-# Language DeriveGeneric #-}
-{-# Language GeneralizedNewtypeDeriving #-}
-{-# Language LambdaCase #-}
-{-# Language OverloadedStrings #-}
 {-# Language TemplateHaskell #-}
 
 module EVM.VMTest

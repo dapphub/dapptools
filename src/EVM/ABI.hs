@@ -25,11 +25,6 @@
 
 -}
 
-{-# Language BangPatterns #-}
-{-# Language DeriveGeneric, DeriveAnyClass #-}
-{-# Language FlexibleContexts #-}
-{-# Language LambdaCase #-}
-{-# Language OverloadedStrings #-}
 {-# Language StrictData #-}
 {-# Language TemplateHaskell #-}
 

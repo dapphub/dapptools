@@ -1,5 +1,3 @@
-{-# Language LambdaCase #-}
-
 module EVM.Debug where
 
 import EVM

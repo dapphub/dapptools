@@ -1,13 +1,5 @@
-{-# Language BangPatterns #-}
-{-# Language DeriveDataTypeable #-}
-{-# Language DeriveGeneric #-}
-{-# Language FlexibleContexts #-}
-{-# Language LambdaCase #-}
-{-# Language OverloadedStrings #-}
-{-# Language Rank2Types #-}
 {-# Language StrictData #-}
 {-# Language TemplateHaskell #-}
-{-# Language TypeFamilies #-}
 
 module EVM where
 
@@ -19,16 +11,13 @@ import EVM.Keccak
 
 import Control.Monad.State hiding (state)
 
--- Bits and words
 import Data.Bits (xor, shiftL, shiftR, (.&.), (.|.))
 import Data.Bits (Bits, bit, testBit, complement)
 import Data.DoubleWord (loWord, signedWord, unsignedWord, fromHiAndLo)
 import Data.Word (Word8, Word32)
 
--- We make heavy use of the lens library for nested field access
 import Control.Lens hiding (op, (:<), (|>))
 
--- Various data structures
 import Data.ByteString             (ByteString)
 import Data.Map.Strict             (Map, union, fromList)
 import Data.Maybe                  (fromMaybe, fromJust)
@@ -628,8 +617,8 @@ exec1 = do
                 (+ (vm ^?! env . contracts . ix self . balance))
               returnOp 0 (0, 0)
 
-        x -> do
-          error ("opcode " ++ show x)
+        _ ->
+          returnOp 0 (0, 0)
 
 delegateCall :: Addr -> W256 -> W256 -> W256 -> W256 -> [W256] -> EVM ()
 delegateCall xTo xInOffset xInSize xOutOffset xOutSize xs =

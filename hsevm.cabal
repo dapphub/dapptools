@@ -69,6 +69,16 @@ library
     src
   default-language:
     Haskell2010
+  default-extensions:
+    BangPatterns,
+    DeriveDataTypeable,
+    DeriveGeneric,
+    FlexibleContexts,
+    GeneralizedNewtypeDeriving,
+    LambdaCase,
+    OverloadedStrings,
+    Rank2Types,
+    TypeFamilies
 
 executable hsevm-cli
   default-language:

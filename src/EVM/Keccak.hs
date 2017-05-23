@@ -1,5 +1,4 @@
 {-# Language CPP #-}
-{-# Language OverloadedStrings #-}
 
 #ifdef __GHCJS__
 {-# Language JavaScriptFFI #-}

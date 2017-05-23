@@ -1,10 +1,5 @@
 {-# Language CPP #-}
 {-# Language TemplateHaskell #-}
-{-# Language TypeFamilies #-}
-{-# Language OverloadedStrings #-}
-{-# Language GeneralizedNewtypeDeriving #-}
-{-# Language DeriveDataTypeable #-}
-{-# Language DeriveGeneric #-}
 
 module EVM.Types where
 

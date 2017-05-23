@@ -1,9 +1,5 @@
-{-# Language OverloadedStrings #-}
-{-# Language BangPatterns #-}
-{-# Language LambdaCase #-}
-{-# Language FlexibleContexts #-}
+{-# Language DeriveAnyClass #-}
 {-# Language TemplateHaskell #-}
-{-# Language DeriveGeneric, DeriveAnyClass #-}
 
 module EVM.Solidity (
   solidity, readSolc, SolcContract (..),

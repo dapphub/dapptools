@@ -1,6 +1,3 @@
-{-# Language LambdaCase #-}
-{-# Language OverloadedStrings #-}
-
 module EVM.Exec where
 
 import Data.ByteString (ByteString)
