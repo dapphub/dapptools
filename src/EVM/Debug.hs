@@ -23,6 +23,8 @@ import IPPrint.Colored (cpprint)
 
 import Text.PrettyPrint.ANSI.Leijen
 
+data Mode = Debug | Run
+
 object :: [(Doc, Doc)] -> Doc
 object xs =
   group $ lbrace

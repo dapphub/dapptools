@@ -29,8 +29,6 @@ import Control.DeepSeq
 import Control.Lens
 import Data.Aeson.Lens
 import Data.ByteString      (ByteString)
-import Data.ByteString.Builder
-import Data.ByteString.Lazy (toStrict)
 import Data.Char            (isDigit, digitToInt)
 import Data.Foldable
 import Data.Map.Strict      (Map)

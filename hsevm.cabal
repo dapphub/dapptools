@@ -28,7 +28,8 @@ library
     EVM.Types,
     EVM.VMTest,
     EVM.Exec,
-    EVM.Debug
+    EVM.Debug,
+    EVM.UnitTest
   ghc-options:
     -O2 -Wall
   if impl(ghcjs)

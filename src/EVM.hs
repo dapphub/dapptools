@@ -20,12 +20,12 @@ import Data.Word (Word8, Word32)
 
 import Control.Lens hiding (op, (:<), (|>))
 
-import Data.ByteString             (ByteString)
-import Data.IntMap.Strict          (IntMap)
-import Data.Map.Strict             (Map, union, fromList)
-import Data.Maybe                  (fromMaybe, fromJust)
-import Data.Monoid                 (Endo)
-import Data.Sequence               (Seq)
+import Data.ByteString              (ByteString)
+import Data.IntMap.Strict           (IntMap)
+import Data.Map.Strict              (Map)
+import Data.Maybe                   (fromMaybe, fromJust)
+import Data.Monoid                  (Endo)
+import Data.Sequence                (Seq)
 import Data.Vector.Storable         (Vector)
 import Data.Vector.Storable.Mutable (new, write)
 
