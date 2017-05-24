@@ -1,10 +1,9 @@
-{ mkDerivation, aeson, ansi-wl-pprint, attoparsec, base
-, base16-bytestring, base64-bytestring, binary, bytestring
-, containers, criterion, cryptonite, data-dword, deepseq, directory
-, filepath, ghci-pretty, here, HUnit, lens, lens-aeson, memory, mtl
-, optparse-generic, process, QuickCheck, quickcheck-text, readline
-, stdenv, tasty, tasty-hunit, tasty-quickcheck, tasty-smallcheck
-, temporary, text, unordered-containers, vector
+{ mkDerivation, aeson, ansi-wl-pprint, base, base16-bytestring
+, base64-bytestring, binary, bytestring, containers, cryptonite
+, data-dword, deepseq, directory, filepath, ghci-pretty, here
+, HUnit, lens, lens-aeson, memory, mtl, optparse-generic, process
+, QuickCheck, quickcheck-text, readline, stdenv, tasty, tasty-hunit
+, tasty-quickcheck, temporary, text, unordered-containers, vector
 }:
 mkDerivation {
   pname = "hsevm";
@@ -14,21 +13,20 @@ mkDerivation {
   isExecutable = true;
   libraryHaskellDepends = [
     aeson ansi-wl-pprint base base16-bytestring base64-bytestring
-    binary bytestring containers criterion cryptonite data-dword
-    deepseq directory ghci-pretty lens lens-aeson memory mtl
-    optparse-generic process QuickCheck quickcheck-text readline
-    temporary text unordered-containers vector
+    binary bytestring containers cryptonite data-dword deepseq
+    directory ghci-pretty lens lens-aeson memory mtl optparse-generic
+    process QuickCheck quickcheck-text readline temporary text
+    unordered-containers vector
   ];
   executableHaskellDepends = [
-    aeson attoparsec base base16-bytestring bytestring containers
-    data-dword directory filepath ghci-pretty lens lens-aeson mtl
-    optparse-generic readline text unordered-containers vector
+    aeson base base16-bytestring bytestring containers data-dword
+    directory filepath ghci-pretty lens lens-aeson mtl optparse-generic
+    readline text unordered-containers vector
   ];
   testHaskellDepends = [
     base binary bytestring ghci-pretty here HUnit lens mtl QuickCheck
-    tasty tasty-hunit tasty-quickcheck tasty-smallcheck text vector
+    tasty tasty-hunit tasty-quickcheck text vector
   ];
-  benchmarkHaskellDepends = [ base criterion text ];
   enableLibraryProfiling = true;
   enableExecutableProfiling = true;
   homepage = "https://github.com/mbrock/hsevm";

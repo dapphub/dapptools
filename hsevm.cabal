@@ -46,7 +46,6 @@ library
     binary,
     bytestring,
     containers,
-    criterion,
     cryptonite,
     data-dword,
     deepseq,
@@ -109,48 +108,6 @@ executable hsevm-cli
     unordered-containers,
     optparse-generic,
     base16-bytestring
-    
-executable hsevm-tty
-  default-language:
-    Haskell2010
-  hs-source-dirs:
-    hsevm-tty
-  main-is:
-    hsevm-tty.hs
-  ghc-options:
-    -O2 -threaded
-  build-depends:
-    attoparsec,
-    base,
-    bytestring,
-    containers,
-    data-dword,
-    directory,
-    filepath,
-    ghci-pretty,
-    hsevm,
-    lens,
-    readline,
-    text,
-    vector,
-    optparse-generic
-
-benchmark hsevm-benchmark
-  default-language:
-    Haskell2010
-  type:
-    exitcode-stdio-1.0
-  hs-source-dirs:
-    benchmark
-  main-is:
-    benchmark.hs
-  ghc-options:
-    -O2
-    -threaded
-    -fprof-auto
-    "-with-rtsopts=-N -p -s -hd -i0.1"
-  build-depends:
-    base, hsevm, criterion, text
 
 test-suite test
   default-language:
@@ -172,7 +129,6 @@ test-suite test
     tasty,
     tasty-hunit,
     tasty-quickcheck,
-    tasty-smallcheck,
     mtl,
     ghci-pretty,
     lens,

@@ -7,13 +7,13 @@ import EVM.Solidity
 
 import Control.Arrow (second)
 
-import qualified Data.Vector.Unboxed   as Vector
+import qualified Data.Vector.Storable   as Vector
 import Data.Text (Text)
 import Data.Map (Map)
 import qualified Data.ByteString       as ByteString
 import qualified Data.Map              as Map
 
-import Control.Monad.State (execState)
+import Control.Monad.State.Strict (execState)
 import Control.Lens
 
 import System.Console.Readline
@@ -47,14 +47,14 @@ prettyContracts x =
 debugger :: Maybe SourceCache -> VM -> IO VM
 debugger maybeCache vm = do
   -- cpprint (view state vm)
-  cpprint (view (state . pc) vm)
-  cpprint (view (state . stack) vm)
-  cpprint (view logs vm)
+  -- cpprint (view (state . pc) vm)
+  -- cpprint (view (state . stack) vm)
+  -- cpprint (view logs vm)
   cpprint (vmOp vm)
   cpprint (opParams vm)
   cpprint (length (view frames vm))
 
-  putDoc (prettyContracts (view (env . contracts) vm))
+  -- putDoc (prettyContracts (view (env . contracts) vm))
 
   case maybeCache of
     Nothing ->
@@ -70,6 +70,7 @@ debugger maybeCache vm = do
       return vm
     else
     readline "(evm) " >>=
+    --- return (Just "") >>=
       \case
         Nothing ->
           return vm

@@ -2,7 +2,7 @@ module EVM.Exec where
 
 import Data.ByteString (ByteString)
 
-import Control.Monad.State (State)
+import Control.Monad.State.Strict (State)
 import Control.Lens
 
 import EVM

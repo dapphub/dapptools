@@ -11,7 +11,7 @@ import Test.Tasty
 import Test.Tasty.QuickCheck (testProperty)
 import Test.Tasty.HUnit
 
-import Control.Monad.State (execState, runState)
+import Control.Monad.State.Strict (execState, runState)
 import Control.Lens
 
 import Data.Monoid

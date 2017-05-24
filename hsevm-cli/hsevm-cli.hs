@@ -22,7 +22,7 @@ import EVM.Types
 
 import Control.Lens
 import Control.Monad (unless)
-import Control.Monad.State
+import Control.Monad.State.Strict
 
 import Data.List (intercalate, sort)
 import Data.Text (Text, isPrefixOf, unpack)
@@ -124,25 +124,24 @@ runUnitTestContract mode contractMap cache (contractName, testNames) = do
                 (EVM.VMSuccess targetCode, vm1) -> do
                   execState (EVM.performCreation targetCode) vm1
         target = view (EVM.state . EVM.contract) vm2
-      vm3 <- return . execState exec . flip execState vm2 $ do
-        EVM.resetState
-        EVM.loadContract target
-        assign (EVM.state . EVM.caller) ethrunAddress
-        assign (EVM.state . EVM.calldata) (EVM.word32Bytes (abiKeccak (encodeUtf8 "setUp()")))
-
-      cpprint (vm3 ^. EVM.result)
 
       forM_ testNames $ \testName -> do
         cpprint ("debugging", testName)
-        let vm4 = vm3 & set (EVM.state . EVM.calldata)
-                            (EVM.word32Bytes (abiKeccak (encodeUtf8 testName)))
-            vm5 = flip execState vm3 $ do
+        let vm3 = flip execState vm2 $ do
+              EVM.resetState
+              EVM.loadContract target
+              assign (EVM.state . EVM.caller) ethrunAddress
+              assign (EVM.state . EVM.calldata) (EVM.word32Bytes (abiKeccak (encodeUtf8 "setUp()")))
+              EVM.VMSuccess _ <- exec
               EVM.resetState
               EVM.loadContract target
               assign (EVM.state . EVM.caller) ethrunAddress
               assign (EVM.state . EVM.calldata) (EVM.word32Bytes (abiKeccak (encodeUtf8 testName)))
               exec
-        cpprint (vm5 ^. EVM.result)
+        -- debugger (Just cache) vm3
+
+        --       exec
+        cpprint (vm3 ^. EVM.result)
         -- case runState exec vm4 of
         --   (EVM.VMRunning, _) ->
         --     error "Internal error"

@@ -48,11 +48,12 @@ import System.IO hiding     (readFile, writeFile)
 import System.IO.Temp
 import System.Process
 
-import qualified Data.ByteString      as BS
-import qualified Data.HashMap.Strict  as HMap
-import qualified Data.Map.Strict      as Map
-import qualified Data.Text            as Text
-import qualified Data.Vector          as Vector
+import qualified Data.ByteString        as BS
+import qualified Data.ByteString.Base16 as BS16
+import qualified Data.HashMap.Strict    as HMap
+import qualified Data.Map.Strict        as Map
+import qualified Data.Text              as Text
+import qualified Data.Vector            as Vector
 
 data SolcContract = SolcContract {
   _solcCodehash :: W256,
@@ -203,17 +204,12 @@ signature abi =
       ]
 
 toCode :: Text -> ByteString
-toCode = toStrict . toLazyByteString . fst . Text.foldl' go (mempty, Nothing)
-  where
-    go (s, Nothing) a = (s, Just $! digitToInt a)
-    go (s, Just a)  b =
-      let !x = fromIntegral (a * 16 + digitToInt b)
-      in (s <> word8 x, Nothing)
+toCode = fst . BS16.decode . encodeUtf8
 
 solidity' :: Text -> IO Text
 solidity' src = withSystemTempFile "hsevm.sol" $ \path handle -> do
   hClose handle
-  writeFile path ("pragma solidity ^0.4.8;\n" <> src)
+  writeFile path ("pragma solidity ^0.4.11;\n" <> src)
   pack <$>
     readProcess
       "solc"

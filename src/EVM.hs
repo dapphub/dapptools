@@ -9,7 +9,7 @@ import EVM.Types
 import EVM.Solidity
 import EVM.Keccak
 
-import Control.Monad.State hiding (state)
+import Control.Monad.State.Strict hiding (state)
 
 import Data.Bits (xor, shiftL, shiftR, (.&.), (.|.))
 import Data.Bits (Bits, bit, testBit, complement)
@@ -19,17 +19,23 @@ import Data.Word (Word8, Word32)
 import Control.Lens hiding (op, (:<), (|>))
 
 import Data.ByteString             (ByteString)
+import Data.IntMap.Strict          (IntMap)
 import Data.Map.Strict             (Map, union, fromList)
 import Data.Maybe                  (fromMaybe, fromJust)
 import Data.Monoid                 (Endo)
 import Data.Sequence               (Seq)
-import Data.Vector.Unboxed         (Vector)
-import Data.Vector.Unboxed.Mutable (new, write)
+import Data.Vector.Storable         (Vector)
+import Data.Vector.Storable.Mutable (new, write)
+
+import Foreign.ForeignPtr (withForeignPtr)
+import Foreign            (castPtr)
+import System.IO.Unsafe   (unsafePerformIO)
 
 import qualified Data.ByteString      as BS
+import qualified Data.IntMap.Strict   as IntMap
 import qualified Data.Map.Strict      as Map
 import qualified Data.Sequence        as Seq
-import qualified Data.Vector.Unboxed  as Vector
+import qualified Data.Vector.Storable as Vector
 
 -- | The possible result states of a VM
 data VMResult
@@ -76,8 +82,8 @@ data FrameState = FrameState
   , _code        :: ByteString
   , _pc          :: Int
   , _stack       :: [W256]
-  , _memory      :: Map W256 Word8
-  , _memorySize  :: W256
+  , _memory      :: IntMap Word8
+  , _memorySize  :: Int
   , _calldata    :: ByteString
   , _callvalue   :: W256
   , _caller      :: Addr
@@ -236,7 +242,7 @@ exec1 = do
               then underrun
               else do
                 let (topics, xs') = splitAt n xs
-                    bytes         = readMemory xOffset xSize vm
+                    bytes         = readMemory (num xOffset) (num xSize) vm
                 assign (state . stack) xs'
                 pushToSequence logs (Log self bytes topics)
             _ ->
@@ -343,11 +349,11 @@ exec1 = do
         0x20 ->
           case stk of
             (xOffset:xSize:xs) -> do
-              let bytes = readMemory xOffset xSize vm
+              let bytes = readMemory (num xOffset) (num xSize) vm
                   hash  = keccak bytes
               assign (state . stack) (hash : xs)
               assign (env . sha3Crack . at hash) (Just bytes)
-              accessMemoryRange xOffset xSize
+              accessMemoryRange (num xOffset) (num xSize)
             _ -> underrun
 
         -- op: ADDRESS
@@ -377,7 +383,8 @@ exec1 = do
           case stk of
             (xTo:xFrom:xSize:xs) -> do
               assign (state . stack) xs
-              copyBytesToMemory (the state calldata) xSize xFrom xTo
+              copyBytesToMemory (the state calldata)
+                (num xSize) (num xFrom) (num xTo)
             _ -> underrun
 
         -- op: CODESIZE
@@ -389,7 +396,8 @@ exec1 = do
           case stk of
             (memOffset:codeOffset:n:xs) -> do
               assign (state . stack) xs
-              copyBytesToMemory (view bytecode this) n codeOffset memOffset
+              copyBytesToMemory (view bytecode this)
+                (num n) (num codeOffset) (num memOffset)
             _ -> underrun
 
         -- op: GASPRICE
@@ -408,7 +416,8 @@ exec1 = do
                     (vm ^? env . contracts . ix (num extAccount) . bytecode)
                       ?: mempty
               assign (state . stack) xs
-              copyBytesToMemory theCode codeSize codeOffset memOffset
+              copyBytesToMemory theCode
+                (num codeSize) (num codeOffset) (num memOffset)
             _ -> underrun
 
         -- op: BLOCKHASH
@@ -441,7 +450,7 @@ exec1 = do
         0x51 ->
           case stk of
             (x:xs) -> do
-              assign (state . stack) (view (word256At x) mem : xs)
+              assign (state . stack) (view (word256At (num x)) mem : xs)
               accessMemoryWord x
             _ -> underrun
 
@@ -449,7 +458,7 @@ exec1 = do
         0x52 ->
           case stk of
             (x:y:xs) -> do
-              assign (state . memory . word256At x) y
+              assign (state . memory . word256At (num x)) y
               assign (state . stack) xs
               accessMemoryWord x
             _ -> underrun
@@ -458,7 +467,7 @@ exec1 = do
         0x53 ->
           case stk of
             (x:y:xs) -> do
-              assign (state . memory . at x) (Just (num (y .&. 0xff)))
+              assign (state . memory . at (num x)) (Just (num (y .&. 0xff)))
               assign (state . stack) xs
               accessMemoryRange x 1
             _ -> underrun
@@ -498,7 +507,7 @@ exec1 = do
 
         -- op: MSIZE
         0x59 ->
-          push (the state memorySize)
+          push (num (the state memorySize))
 
         -- op: GAS
         0x5a -> push (0xffffffffffffffffff :: W256)
@@ -527,7 +536,7 @@ exec1 = do
 
               let
                 newAddr      = newContractAddress self (view nonce this)
-                creationCode = readMemory xOffset xSize vm
+                creationCode = readMemory (num xOffset) (num xSize) vm
 
               -- The contract, while being created, has no bytecode,
               -- so e.g. CODECOPY reads only zeroes, and the creation code
@@ -582,19 +591,23 @@ exec1 = do
               accessMemoryRange xOffset xSize
               case vm ^. frames of
                 [] ->
-                  assign result (VMSuccess (readMemory xOffset xSize vm))
+                  assign result (VMSuccess (readMemory (num xOffset) (num xSize) vm))
 
                 (nextFrame : remainingFrames) -> do
                   assign frames remainingFrames
 
                   case view frameContext nextFrame of
                     CreationContext -> do
-                      performCreation (readMemory xOffset xSize vm)
+                      performCreation (readMemory (num xOffset) (num xSize) vm)
                       assign state (view frameState nextFrame)
                       push (num (the state contract))
 
                     CallContext yOffset ySize _ _ -> do
-                      copyBytesToMemory mem ySize xOffset yOffset
+                      copyBytesToMemory
+                        (readMemory (num xOffset) (num ySize) vm)
+                        (num ySize)
+                        0
+                        (num yOffset)
                       assign state (view frameState nextFrame)
                       push 1
 
@@ -638,7 +651,7 @@ delegateCall xTo xInOffset xInSize xOutOffset xOutSize xs =
               , callContextCodehash = view codehash target
               , callContextAbi =
                   if xInSize >= 4
-                  then Just $! view (state . memory . word32At xInOffset) vm
+                  then Just $! view (state . memory . word32At (num xInOffset)) vm
                   else Nothing
               }
           }
@@ -648,7 +661,7 @@ delegateCall xTo xInOffset xInSize xOutOffset xOutSize xs =
           assign code (view bytecode target)
           assign stack mempty
           assign memory mempty
-          assign calldata (readMemory xInOffset xInSize vm)
+          assign calldata (readMemory (num xInOffset) (num xInSize) vm)
 
         accessMemoryRange xInOffset xInSize
         accessMemoryRange xOutOffset xOutSize
@@ -656,7 +669,7 @@ delegateCall xTo xInOffset xInSize xOutOffset xOutSize xs =
 accessMemoryRange :: W256 -> W256 -> EVM ()
 accessMemoryRange _ 0 = return ()
 accessMemoryRange f l =
-  state . memorySize %= \n -> max n (ceilDiv (f + l) 32)
+  state . memorySize %= \n -> max n (ceilDiv (num (f + l)) 32)
   where
     ceilDiv a b =
       let (q, r) = quotRem a b
@@ -666,24 +679,39 @@ accessMemoryWord :: W256 -> EVM ()
 accessMemoryWord x = accessMemoryRange x 32
 
 copyBytesToMemory
-  :: (IxValue s ~ Word8, Ixed s, Num (Index s))
-  => s -> W256 -> W256 -> W256 -> EVM ()
+  :: ByteString -> Int -> Int -> Int -> EVM ()
 copyBytesToMemory bs size xOffset yOffset =
   if size == 0 then return ()
-  else
-    state . memory %= \mem ->
-      flip union mem
-        (fromList
-          [ (yOffset + i, (bs ^? ix (num (xOffset + i))) ?: 0)
-          | i <- [0 .. size - 1] ])
+  else do
+    mem <- use (state . memory)
+    assign (state . memory) $
+      snd $ BS.foldl' (\(!i, !a) x -> (i + 1, IntMap.insert i x a)) (yOffset, mem)
+        (BS.take size (BS.drop xOffset bs))
 
-readMemory :: W256 -> W256 -> VM -> ByteString
-readMemory offset size vm =
+readMemory :: Int -> Int -> VM -> ByteString
+readMemory offset size vm = readIntMap offset size (view (state . memory) vm)
+
+readIntMap :: Int -> Int -> IntMap Word8 -> ByteString
+readIntMap offset size intmap =
   if size == 0 then ""
   else
-    let mem = vm ^. state . memory
-    in BS.pack [(Map.lookup (offset + i) mem) ?: 0
-                | i <- [0..size-1]]
+    let
+      (_, bigger) =
+        IntMap.split (offset - 1) intmap
+      (range, _) =
+        IntMap.split (offset + size) bigger
+      vec =
+        Vector.create $ do
+          v <- new size
+          IntMap.foldlWithKey'
+            (\m k x -> m >> write v (k - offset) x)
+            (return ())
+            range
+          return v
+    in
+      unsafePerformIO $
+        withForeignPtr (fst (Vector.unsafeToForeignPtr0 vec))
+          (\ptr -> BS.packCStringLen (castPtr ptr, size))
 
 push :: W256 -> EVM ()
 push x = state . stack %= (x :)
@@ -705,7 +733,7 @@ returnOp returnCode (xOffset, xSize) = do
       assign result $
         case returnCode of
           0 -> VMFailure
-          _ -> VMSuccess (readMemory xOffset xSize vm)
+          _ -> VMSuccess (readMemory (num xOffset) (num xSize) vm)
 
     (nextFrame : remainingFrames) -> do
       accessMemoryRange xOffset xSize
@@ -719,13 +747,17 @@ returnOp returnCode (xOffset, xSize) = do
                 assign (env . contracts . at self) Nothing
               else do
                 push (num self)
-                performCreation (readMemory xOffset xSize vm)
+                performCreation (readMemory (num xOffset) (num xSize) vm)
 
         CallContext yOffset ySize _ _ -> do
           push returnCode
           assign frames remainingFrames
           assign state (view frameState nextFrame)
-          copyBytesToMemory (vm ^. state . memory) ySize xOffset yOffset
+          copyBytesToMemory
+            (readMemory (num xOffset) (num ySize) vm)
+            (num ySize)
+            0
+            (num yOffset)
           accessMemoryRange yOffset xSize
 
 toWord512 :: W256 -> Word512
@@ -890,26 +922,26 @@ word32 xs = sum [ num x `shiftL` (8*n)
 wordAt :: Int -> ByteString -> W256
 wordAt i bs = word [(bs ^? ix j) ?: 0 | j <- [i..(i+31)]]
 
-word256At :: W256 -> Lens' (Map W256 Word8) W256
+word256At :: Int -> Lens' (IntMap Word8) W256
 word256At i = lens getter setter where
   getter m =
     let
       go !a (-1) = a
-      go !a !n = go (a + shiftL (num $ Map.findWithDefault 0 (i + num n) m)
+      go !a !n = go (a + shiftL (num $ IntMap.findWithDefault 0 (i + n) m)
                                 (8 * (31 - n))) (n - 1)
     in {-# SCC word256At_getter #-}
       go (0 :: W256) (31 :: Int)
   setter m x =
     {-# SCC word256At_setter #-}
     -- Optimizing this would help significantly.
-    union (fromList [(i + 31 - j, byteAt x (num j)) | j <- [0..31]]) m
+    IntMap.union (IntMap.fromAscList [(i + 31 - j, byteAt x j) | j <- reverse [0..31]]) m
 
-word32At :: W256 -> Lens' (Map W256 Word8) Word32
+word32At :: Int -> Lens' (IntMap Word8) Word32
 word32At i = lens getter setter where
   getter m =
     word32 [(m ^? ix (i + j)) ?: 0 | j <- [0..3]]
   setter m x =
-    union (fromList [(i + 3 - num j, byteAt x j) | j <- [0..3]]) m
+    IntMap.union (IntMap.fromAscList [(i + 3 - j, byteAt x j) | j <- reverse [0..3]]) m
 
 byteAt :: (Bits a, Bits b, Integral a, Num b) => a -> Int -> b
 byteAt x j = num (x `shiftR` (j * 8)) .&. 0xff

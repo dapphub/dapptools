@@ -5,8 +5,9 @@ nix: default.nix hsevm.nix
 repl: nix; cabal repl
 test: nix; cabal test
 
-tty-ghci: nix; cabal repl hsevm-tty
-tty: nix; cabal build hsevm-tty
+profile: default.nix hsevm.nix
+	nix-shell -A hsevmProfiling.env hsevm.nix \
+	  --command 'cabal configure --enable-profiling'
 
 # bench: default.nix
 # 	nix-shell -A hsevmProfiling.env hsevm.nix --command \
