@@ -39,6 +39,8 @@ newtype Addr = Addr { addressWord160 :: Word160 }
 
 instance NFData Word128
 instance NFData Word256
+instance NFData Int128
+instance NFData Int256
 instance NFData W256
 instance NFData Word160
 instance NFData Addr

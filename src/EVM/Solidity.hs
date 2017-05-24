@@ -21,12 +21,13 @@ module EVM.Solidity
   , sourceLines
 ) where
 
+import EVM.ABI
 import EVM.Keccak
 import EVM.Types
 
 import Control.Applicative
 import Control.DeepSeq
-import Control.Lens
+import Control.Lens         hiding (Indexed)
 import Data.Aeson.Lens
 import Data.ByteString      (ByteString)
 import Data.Char            (isDigit, digitToInt)
@@ -59,6 +60,7 @@ data SolcContract = SolcContract {
   _creationCode :: ByteString,
   _contractName :: Text,
   _abiMap       :: Map Word32 Text,
+  _eventMap     :: Map W256 Event,
   _solcSrcmap   :: Seq SrcMap
 } deriving (Show, Eq, Ord, Generic, NFData)
 
@@ -184,6 +186,21 @@ readJSON json = do
               abiKeccak (encodeUtf8 (signature abi)),
               signature abi
             ),
+        _eventMap     = Map.fromList $
+          flip map (filter (\x -> "event" == x ^?! key "type" . _String) . toList $ (x ^?! key "abi" . _String) ^?! _Array) $
+            \abi ->
+              ( keccak (encodeUtf8 (signature abi))
+              , Event
+                  (abi ^?! key "name" . _String)
+                  (case abi ^?! key "anonymous" . _Bool of
+                     True -> Anonymous
+                     False -> NotAnonymous)
+                  (map (\x -> ( fromJust (parseTypeName (x ^?! key "type" . _String))
+                              , if x ^?! key "indexed" . _Bool
+                                then Indexed
+                                else NotIndexed ))
+                    (toList $ abi ^?! key "inputs" . _Array))
+              ),
         _solcSrcmap = fromJust (makeSrcMaps (x ^?! key "srcmap-runtime" . _String))
       })
 

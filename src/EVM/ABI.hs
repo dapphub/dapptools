@@ -25,22 +25,29 @@
 
 -}
 
+{-# Language DeriveAnyClass #-}
 {-# Language StrictData #-}
 {-# Language TemplateHaskell #-}
 
 module EVM.ABI
   ( AbiValue (..)
   , AbiType (..)
+  , Event (..)
+  , Anonymity (..)
+  , Indexed (..)
   , putAbi
   , getAbi
   , abiValueType
   , abiTypeSolidity
   , abiCalldata
   , encodeAbiValue
+  , parseTypeName
   ) where
 
 import EVM.Keccak (abiKeccak)
+import EVM.Types ()
 
+import Control.DeepSeq
 import Control.Monad      (replicateM, replicateM_, forM_)
 import Data.Binary.Get    (Get, label, getWord8, getWord32be, skip)
 import Data.Binary.Put    (Put, runPut, putWord8, putWord32be)
@@ -48,10 +55,11 @@ import Data.Bits          (shiftL, shiftR, (.&.))
 import Data.ByteString    (ByteString)
 import Data.DoubleWord    (Word256, Int256, Word160, signedWord)
 import Data.Monoid        ((<>))
-import Data.Text          (Text, pack)
+import Data.Text          (Text, pack, unpack, isPrefixOf)
 import Data.Text.Encoding (encodeUtf8)
 import Data.Vector        (Vector)
 import Data.Word          (Word32, Word8)
+import GHC.Generics
 
 import Test.QuickCheck hiding ((.&.), label)
 
@@ -70,7 +78,7 @@ data AbiValue
   | AbiString       BS.ByteString
   | AbiArrayDynamic AbiType (Vector AbiValue)
   | AbiArray        Int AbiType (Vector AbiValue)
-  deriving (Show, Read, Eq, Ord)
+  deriving (Show, Read, Eq, Ord, Generic, NFData)
 
 data AbiType
   = AbiUIntType         Int
@@ -82,10 +90,17 @@ data AbiType
   | AbiStringType
   | AbiArrayDynamicType AbiType
   | AbiArrayType        Int AbiType
-  deriving (Show, Read, Eq, Ord)
+  deriving (Show, Read, Eq, Ord, Generic, NFData)
 
 data AbiKind = Dynamic | Static
-  deriving (Show, Read, Eq, Ord)
+  deriving (Show, Read, Eq, Ord, Generic, NFData)
+
+data Anonymity = Anonymous | NotAnonymous
+  deriving (Show, Ord, Eq, Generic, NFData)
+data Indexed   = Indexed   | NotIndexed
+  deriving (Show, Ord, Eq, Generic, NFData)
+data Event     = Event Text Anonymity [(AbiType, Indexed)]
+  deriving (Show, Ord, Eq, Generic, NFData)
 
 abiKind :: AbiType -> AbiKind
 abiKind = \case
@@ -270,6 +285,23 @@ abiCalldata s xs = BSLazy.toStrict . runPut $ do
   putWord32be (abiKeccak (encodeUtf8 s))
   putAbiSeq xs
 
+parseTypeName :: Text -> Maybe AbiType
+parseTypeName = \case
+  "address" ->
+    Just AbiAddressType
+  "bool" ->
+    Just AbiBoolType
+  "bytes" ->
+    Just AbiBytesDynamicType
+  "string" ->
+    Just AbiStringType
+  x | "uint" `isPrefixOf` x ->
+    Just . AbiUIntType . read . unpack $ Text.drop 4 x
+  x | "int" `isPrefixOf` x ->
+    Just . AbiIntType . read . unpack $ Text.drop 3 x
+  x | "bytes" `isPrefixOf` x ->
+    Just . AbiBytesType . read . unpack $ Text.drop 5 x
+  x -> error (show x)
 
 pack32 :: Int -> [Word32] -> Word256
 pack32 n xs =
@@ -295,10 +327,6 @@ getBytesWith256BitPadding i =
   (BS.pack <$> replicateM n getWord8)
     <* skip ((roundTo256Bits n) - n)
   where n = fromIntegral i
-
--- hexify :: BS.ByteString -> Text
--- hexify s = Text.pack (concatMap (printf "%02x") (BS.unpack s))
-
 
 -- QuickCheck instances
 
