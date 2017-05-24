@@ -126,7 +126,7 @@ runUnitTestContract mode contractMap cache (contractName, testNames) = do
         target = view (EVM.state . EVM.contract) vm2
 
       forM_ testNames $ \testName -> do
-        cpprint ("debugging", testName)
+        cpprint testName
         let vm3 = flip execState vm2 $ do
               EVM.resetState
               EVM.loadContract target
@@ -137,11 +137,14 @@ runUnitTestContract mode contractMap cache (contractName, testNames) = do
               EVM.loadContract target
               assign (EVM.state . EVM.caller) ethrunAddress
               assign (EVM.state . EVM.calldata) (EVM.word32Bytes (abiKeccak (encodeUtf8 testName)))
-              exec
-        -- debugger (Just cache) vm3
+
+        -- vm4 <- debugger (Just cache) vm3
 
         --       exec
-        cpprint (vm3 ^. EVM.result)
+        let vm4 = execState exec vm3
+        cpprint (vm4 ^. EVM.result)
+        when (not ("testFail" `isPrefixOf` testName) && vm4 ^. EVM.result == EVM.VMFailure) $
+          ignore (debugger (Just cache) vm3)
         -- case runState exec vm4 of
         --   (EVM.VMRunning, _) ->
         --     error "Internal error"

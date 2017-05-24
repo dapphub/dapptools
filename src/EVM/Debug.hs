@@ -7,11 +7,13 @@ import EVM.Solidity
 
 import Control.Arrow (second)
 
-import qualified Data.Vector.Storable   as Vector
-import Data.Text (Text)
+import Data.ByteString (ByteString)
 import Data.Map (Map)
+import Data.Text (Text)
+
 import qualified Data.ByteString       as ByteString
 import qualified Data.Map              as Map
+import qualified Data.Vector.Storable   as Vector
 
 import Control.Monad.State.Strict (execState)
 import Control.Lens
@@ -36,6 +38,8 @@ prettyContract c =
     , (text "codehash", text (show (c ^. codehash)))
     , (text "balance", int (fromIntegral (c ^. balance)))
     , (text "nonce", int (fromIntegral (c ^. nonce)))
+    , (text "code", text (show (ByteString.take 16 (c ^. bytecode))))
+    , (text "storage", text (show (c ^. storage)))
     ]
 
 prettyContracts :: Map Addr Contract -> Doc
@@ -47,8 +51,8 @@ prettyContracts x =
 debugger :: Maybe SourceCache -> VM -> IO VM
 debugger maybeCache vm = do
   -- cpprint (view state vm)
-  -- cpprint (view (state . pc) vm)
-  -- cpprint (view (state . stack) vm)
+  cpprint ("pc", view (state . pc) vm)
+  cpprint (view (state . stack) vm)
   -- cpprint (view logs vm)
   cpprint (vmOp vm)
   cpprint (opParams vm)
@@ -62,15 +66,15 @@ debugger maybeCache vm = do
     Just cache ->
       case currentSrcMap vm of
         Nothing -> cpprint "no srcmap"
-        Just sm -> cpprint (srcMapCodePos cache sm)
+        Just sm -> cpprint (srcMapCode cache sm)
 
   if vm ^. result /= VMRunning
     then do
       print (vm ^. result)
       return vm
     else
-    readline "(evm) " >>=
-    --- return (Just "") >>=
+    -- readline "(evm) " >>=
+    return (Just "") >>=
       \case
         Nothing ->
           return vm
@@ -85,6 +89,10 @@ debugger maybeCache vm = do
 
             ["storage"] ->
               do cpprint (view (env . contracts) vm)
+                 debugger maybeCache vm
+
+            ["contracts"] ->
+              do putDoc (prettyContracts (view (env . contracts) vm))
                  debugger maybeCache vm
 
             ["disassemble"] ->
@@ -106,3 +114,9 @@ srcMapCodePos cache sm =
   fmap (second f) $ cache ^? sourceFiles . ix (srcMapFile sm)
   where
     f v = ByteString.count 0xa (ByteString.take (srcMapOffset sm - 1) v) + 1
+
+srcMapCode :: SourceCache -> SrcMap -> Maybe ByteString
+srcMapCode cache sm =
+  fmap f $ cache ^? sourceFiles . ix (srcMapFile sm)
+  where
+    f (_, v) = ByteString.take (min 80 (srcMapLength sm)) (ByteString.drop (srcMapOffset sm) v)

@@ -142,8 +142,7 @@ makeSourceCache paths = do
   return $! SourceCache {
     _snippetCache = mempty,
     _sourceFiles =
-      Map.fromList (zip [1 .. length paths]
-                     (zip paths xs)),
+      Map.fromList (zip [0..] (zip paths xs)),
     _sourceLines =
       Map.fromList (zip [1 .. length paths]
                      (map (Vector.fromList . BS.split 0xa) xs))

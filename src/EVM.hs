@@ -3,6 +3,8 @@
 
 module EVM where
 
+import Debug.Trace
+
 import Prelude hiding ((^))
 
 import EVM.Types
@@ -538,19 +540,9 @@ exec1 = do
                 newAddr      = newContractAddress self (view nonce this)
                 creationCode = readMemory (num xOffset) (num xSize) vm
 
-              -- The contract, while being created, has no bytecode,
-              -- so e.g. CODECOPY reads only zeroes, and the creation code
-              -- is only present in the current frame state.
-              --
-              -- Somewhat obscurely, we do set the operation index map
-              -- according to the creation code, because it's needed for
-              -- checking jump destinations.
-
               zoom (env . contracts) $ do
                 assign (at newAddr) . Just $
-                  initialContract mempty
-                    & set opIxMap (mkOpIxMap creationCode)
-
+                  initialContract creationCode
                 modifying (ix self . nonce) succ
 
               vm' <- get
@@ -603,12 +595,12 @@ exec1 = do
                       push (num (the state contract))
 
                     CallContext yOffset ySize _ _ -> do
+                      assign state (view frameState nextFrame)
                       copyBytesToMemory
                         (readMemory (num xOffset) (num ySize) vm)
                         (num ySize)
                         0
                         (num yOffset)
-                      assign state (view frameState nextFrame)
                       push 1
 
             _ -> underrun
@@ -709,7 +701,7 @@ readIntMap offset size intmap =
             range
           return v
     in
-      unsafePerformIO $
+      unsafePerformIO $ do
         withForeignPtr (fst (Vector.unsafeToForeignPtr0 vec))
           (\ptr -> BS.packCStringLen (castPtr ptr, size))
 
@@ -750,9 +742,9 @@ returnOp returnCode (xOffset, xSize) = do
                 performCreation (readMemory (num xOffset) (num xSize) vm)
 
         CallContext yOffset ySize _ _ -> do
-          push returnCode
           assign frames remainingFrames
           assign state (view frameState nextFrame)
+          push returnCode
           copyBytesToMemory
             (readMemory (num xOffset) (num ySize) vm)
             (num ySize)
@@ -799,10 +791,10 @@ checkJump x = do
       insidePushData (num x) >>=
         \case
           True ->
-            error "jump destination inside push data"
+            returnOp 0 (0, 0)
           _ ->
             state . pc .= num x
-    else error "bad jump destination"
+    else returnOp 0 (0, 0)
 
 insidePushData :: Int -> EVM Bool
 insidePushData i = do
