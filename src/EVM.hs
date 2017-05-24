@@ -107,7 +107,6 @@ data Env = Env
   { _contracts   :: Map Addr Contract
   , _solc        :: Map W256 SolcContract
   , _sha3Crack   :: Map W256 ByteString
-  , _sourceCache :: SourceCache
   , _origin      :: Addr
   } deriving (Show)
 
@@ -844,7 +843,6 @@ makeVm o = VM
     }
   , _env = Env
     { _sha3Crack = mempty
-    , _sourceCache = mempty
     , _solc = mempty
     , _origin = vmoptOrigin o
     , _contracts = Map.fromList
