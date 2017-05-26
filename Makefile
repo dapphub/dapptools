@@ -9,6 +9,9 @@ profile: default.nix hsevm.nix
 	nix-shell -A hsevmProfiling.env hsevm.nix \
 	  --command 'cabal configure --enable-profiling'
 
+docker:
+	docker build -t dapphub/hsevm .
+
 # bench: default.nix
 # 	nix-shell -A hsevmProfiling.env hsevm.nix --command \
 #         'cabal configure --enable-profiling --enable-benchmarks && cabal bench'
