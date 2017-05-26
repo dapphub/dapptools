@@ -97,6 +97,7 @@ executable hsevm-cli
     -O2 -Wall
   build-depends:
     base >=4.9 && <4.10,
+    hsevm,
     QuickCheck                        >= 2.9.2 && < 2.10,
     containers                        >= 0.5.7 && < 0.6,
     deepseq                           >= 1.4.2 && < 1.5,
