@@ -178,10 +178,11 @@ data Contract = Contract
 
 -- | Kind of a hodgepodge?
 data Env = Env
-  { _contracts   :: Map Addr Contract
-  , _solc        :: Map W256 SolcContract
-  , _sha3Crack   :: Map W256 ByteString
-  , _origin      :: Addr
+  { _contracts          :: Map Addr Contract
+  , _solcByCreationHash :: Map W256 SolcContract
+  , _solcByRuntimeHash  :: Map W256 SolcContract
+  , _sha3Crack          :: Map W256 ByteString
+  , _origin             :: Addr
   } deriving (Show)
 
 data Block = Block
@@ -921,7 +922,8 @@ makeVm o = VM
     }
   , _env = Env
     { _sha3Crack = mempty
-    , _solc = mempty
+    , _solcByCreationHash = mempty
+    , _solcByRuntimeHash = mempty
     , _origin = vmoptOrigin o
     , _contracts = Map.fromList
       [(vmoptAddress o, initialContract (vmoptCode o))]
@@ -1025,6 +1027,11 @@ vmOp vm =
   in if BS.null xs
      then Nothing
      else Just (readOp op (BS.drop 1 xs))
+
+vmOpIx :: VM -> Maybe Int
+vmOpIx vm =
+  do self <- currentContract vm
+     (view opIxMap self) Vector.!? (view (state . pc) vm)
 
 opParams :: VM -> Map String W256
 opParams vm =

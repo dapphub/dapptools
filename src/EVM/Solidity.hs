@@ -15,8 +15,10 @@ module EVM.Solidity
   , readSolc
   , runtimeCode
   , snippetCache
-  , solcCodehash
-  , solcSrcmap
+  , runtimeCodehash
+  , creationCodehash
+  , runtimeSrcmap
+  , creationSrcmap
   , sourceFiles
   , sourceLines
 ) where
@@ -54,21 +56,23 @@ import qualified Data.Map.Strict        as Map
 import qualified Data.Text              as Text
 import qualified Data.Vector            as Vector
 
-data SolcContract = SolcContract {
-  _solcCodehash :: W256,
-  _runtimeCode  :: ByteString,
-  _creationCode :: ByteString,
-  _contractName :: Text,
-  _abiMap       :: Map Word32 Text,
-  _eventMap     :: Map W256 Event,
-  _solcSrcmap   :: Seq SrcMap
-} deriving (Show, Eq, Ord, Generic, NFData)
+data SolcContract = SolcContract
+  { _runtimeCodehash  :: W256
+  , _creationCodehash :: W256
+  , _runtimeCode      :: ByteString
+  , _creationCode     :: ByteString
+  , _contractName     :: Text
+  , _abiMap           :: Map Word32 Text
+  , _eventMap         :: Map W256 Event
+  , _runtimeSrcmap    :: Seq SrcMap
+  , _creationSrcmap   :: Seq SrcMap
+  } deriving (Show, Eq, Ord, Generic, NFData)
 
-data SourceCache = SourceCache {
-  _snippetCache :: Map (Int, Int) ByteString,
-  _sourceFiles  :: Map Int (Text, ByteString),
-  _sourceLines  :: Map Int (Vector ByteString)
-} deriving (Show, Eq, Ord, Generic, NFData)
+data SourceCache = SourceCache
+  { _snippetCache :: Map (Int, Int) ByteString
+  , _sourceFiles  :: Map Int (Text, ByteString)
+  , _sourceLines  :: Map Int (Vector ByteString)
+  } deriving (Show, Eq, Ord, Generic, NFData)
 
 instance Monoid SourceCache where
   mempty = SourceCache mempty mempty mempty
@@ -176,9 +180,12 @@ readJSON json = do
         theRuntimeCode = toCode (x ^?! key "bin-runtime" . _String)
         theCreationCode = toCode (x ^?! key "bin" . _String)
       in (s, SolcContract {
-        _solcCodehash = keccak theRuntimeCode,
-        _runtimeCode  = theRuntimeCode,
-        _creationCode = theCreationCode,
+        _runtimeCode      = theRuntimeCode,
+        _creationCode     = theCreationCode,
+        _runtimeCodehash  = keccak theRuntimeCode,
+        _creationCodehash = keccak theCreationCode,
+        _runtimeSrcmap    = fromJust (makeSrcMaps (x ^?! key "srcmap-runtime" . _String)),
+        _creationSrcmap   = fromJust (makeSrcMaps (x ^?! key "srcmap" . _String)),
         _contractName = s,
         _abiMap       = Map.fromList $
           flip map (toList $ (x ^?! key "abi" . _String) ^?! _Array) $
@@ -200,8 +207,7 @@ readJSON json = do
                                 then Indexed
                                 else NotIndexed ))
                     (toList $ abi ^?! key "inputs" . _Array))
-              ),
-        _solcSrcmap = fromJust (makeSrcMaps (x ^?! key "srcmap-runtime" . _String))
+              )
       })
 
 signature :: AsValue s => s -> Text

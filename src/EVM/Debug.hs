@@ -17,6 +17,7 @@ import qualified Data.Vector.Storable   as Vector
 
 import Control.Monad.State.Strict (execState)
 import Control.Lens
+import Control.Monad (join)
 
 import System.Console.Readline
 import IPPrint.Colored (cpprint)
@@ -103,13 +104,34 @@ debugger maybeCache vm = do
 
             _  -> debugger maybeCache vm
 
+currentSolc :: VM -> Maybe SolcContract
+currentSolc vm =
+  let
+    c = vm ^?! env . contracts . ix (vm ^. state . contract)
+    theCodehash = view codehash c
+  in
+    case vm ^? env . solcByRuntimeHash . ix theCodehash of
+        Just x ->
+          Just x
+        Nothing ->
+          vm ^? env . solcByCreationHash . ix theCodehash
+
+
 currentSrcMap :: VM -> Maybe SrcMap
 currentSrcMap vm =
   let
     c = vm ^?! env . contracts . ix (vm ^. state . contract)
     theOpIx = (c ^. opIxMap) Vector.! (vm ^. state . pc)
+    theCodehash = view codehash c
+    (isRuntime, solc) =
+      case vm ^? env . solcByRuntimeHash . ix theCodehash of
+        Just x ->
+          (True, Just x)
+        Nothing ->
+          (False, vm ^? env . solcByCreationHash . ix theCodehash)
+    srcmapLens = if isRuntime then runtimeSrcmap else creationSrcmap
   in
-    vm ^? env . solc . ix (c ^. codehash) . solcSrcmap . ix theOpIx
+    join (fmap (preview (srcmapLens . ix theOpIx)) solc)
 
 srcMapCodePos :: SourceCache -> SrcMap -> Maybe (Text, Int)
 srcMapCodePos cache sm =

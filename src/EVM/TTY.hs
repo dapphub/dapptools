@@ -28,7 +28,7 @@ import Control.Monad.State.Strict hiding (state)
 import Data.ByteString (ByteString)
 import Data.List (sortBy)
 import Data.Map (Map)
-import Data.Maybe (fromJust)
+import Data.Maybe (fromJust, fromMaybe)
 import Data.Monoid ((<>))
 import Data.Ord (comparing)
 import Data.Text (Text)
@@ -51,6 +51,7 @@ data Name
   | LogPane
   | TracePane
   | SolidityPane
+  | SolidityViewport
   deriving (Eq, Show, Ord)
 
 data UiVmState = UiVmState
@@ -60,6 +61,7 @@ data UiVmState = UiVmState
   , _uiVmLogList      :: List Name Log
   , _uiVmTraceList    :: List Name Text
   , _uiVmSolidityList :: List Name ByteString
+  , _uiVmSolc         :: Maybe SolcContract
   }
 
 data DappInfo = DappInfo
@@ -101,7 +103,16 @@ main dappRoot jsonFilePath = do
           unitTests = findUnitTests (Map.elems contractMap)
           firstUnitTest = head unitTests
           Just testContract = view (at (fst firstUnitTest)) contractMap
-          vm = initialUnitTestVm testContract (Map.elems contractMap)
+          vm0 = initialUnitTestVm testContract (Map.elems contractMap)
+          vm2 = case runState exec vm0 of
+            (VMRunning, _) -> error "internal error"
+            (VMFailure, _) -> error "creation error"
+            (VMSuccess targetCode, vm1) ->
+              execState (performCreation targetCode) vm1
+          target = view (state . contract) vm2
+          vm = flip execState vm2 $ do
+            setupCall target "setUp()"
+          Just sm = currentSrcMap vm
 
           mkVty = do
             vty <- Vty.mkVty Vty.defaultConfig
@@ -128,6 +139,7 @@ main dappRoot jsonFilePath = do
               ]
             , _uiVmState = UiVmState
               { _uiVm = vm
+              , _uiVmSolc = currentSolc vm
               , _uiVmStackList = list StackPane mempty 1
               , _uiVmBytecodeList =
                   list BytecodePane
@@ -137,7 +149,7 @@ main dappRoot jsonFilePath = do
               , _uiVmTraceList = list TracePane mempty 1
               , _uiVmSolidityList =
                   list SolidityPane
-                    (view (uiDapp . dappSources . sourceLines . ix 0) ui)
+                    (view (uiDapp . dappSources . sourceLines . ix (srcMapFile sm)) ui)
                     1
               }
             }
@@ -151,7 +163,10 @@ app = App
   , appChooseCursor = focusRingCursor (view uiFocusRing)
   , appHandleEvent = \s e ->
       case e of
-        VtyEvent (Vty.EvKey Vty.KEsc []) -> halt s
+        VtyEvent (Vty.EvKey Vty.KEsc []) ->
+          halt s
+        VtyEvent (Vty.EvKey (Vty.KChar 'n') []) ->
+          continue (step s)
         VtyEvent vtyE ->
           handleEventLensed s uiContractList handleListEvent vtyE >>= continue
         _ -> continue s
@@ -169,26 +184,26 @@ app = App
 drawVm ui =
   [ vBox
     [ vLimit 20 $ hBox
-      [ drawStackPane ui
-      , drawBytecodePane ui
-      , drawLogPane ui
+      [ drawStackPane ui <+> vBorder
+      , drawLogPane ui <+> vBorder
+      , drawTracePane ui
       ]
     , hBox $
-      [ hLimit 32 $ drawTracePane ui
+      [ hLimit 72 $ drawBytecodePane ui
       , drawSolidityPane ui
       ]
     ]
   ]
 
 drawStackPane ui =
-  borderWithLabel (txt "Stack") $
+  hBorderWithLabel (txt "Stack") <=>
     renderList
       (\_ x -> str (show x))
       False
       (view (uiVmState . uiVmStackList) ui)
 
 drawBytecodePane ui =
-  borderWithLabel (txt "Bytecode") $
+  hBorderWithLabel (txt "Bytecode") <=>
     renderList
       (\active x -> if not active
                     then withDefAttr dimAttr (opWidget x)
@@ -199,7 +214,7 @@ drawBytecodePane ui =
 withHighlight False = withDefAttr dimAttr
 withHighlight True  = withDefAttr boldAttr
 
-opWidget (i, x) = hLimit 6 (padLeft Max (str (show i ++ " "))) <+> case x of
+opWidget (i, x) = str (show i ++ " ") <+> case x of
   OpStop -> txt "STOP"
   OpAdd -> txt "ADD"
   OpMul -> txt "MUL"
@@ -268,26 +283,32 @@ opWidget (i, x) = hLimit 6 (padLeft Max (str (show i ++ " "))) <+> case x of
   OpUnknown x -> txt "UNKNOWN " <+> str (show x)
 
 drawLogPane ui =
-  borderWithLabel (txt "Logs") $
+  hBorderWithLabel (txt "Logs") <=>
     renderList
       (\_ x -> str (show x))
       False
       (view (uiVmState . uiVmLogList) ui)
 
 drawTracePane ui =
-  borderWithLabel (txt "Trace") $
-    padRight Max (txt "<test construction>")
+  hBorderWithLabel (txt "Trace") <=>
+    (padRight Max $ padBottom Max (txt " "))
+-- str (show (srcMapCodePos (view (uiDapp . dappSources) ui) $ (fromJust $ currentSrcMap (view (uiVmState . uiVm) ui))))
 
 drawSolidityPane ui =
-  borderWithLabel (txt "Solidity") $
-    renderList
-      (\active x ->
-         withHighlight active $
-           txt (case decodeUtf8 x of
-                  "" -> " "
-                  y -> y))
-      False
-      (view (uiVmState . uiVmSolidityList) ui)
+  let
+    lineNo =
+      snd . fromJust $
+        (srcMapCodePos (view (uiDapp . dappSources) ui) $ (fromJust $ currentSrcMap (view (uiVmState . uiVm) ui)))
+  in hBorderWithLabel (txt (maybe "<unknown>" contractPathPart (preview (uiVmState . uiVmSolc . _Just . contractName) ui))) <=>
+       renderList
+         (\active x ->
+            withHighlight active $
+              txt (case decodeUtf8 x of
+                     "" -> " "
+                     y -> y))
+         False
+         (listMoveTo lineNo
+           (view (uiVmState . uiVmSolidityList) ui))
 
 contractNamePart :: Text -> Text
 contractNamePart x = Text.split (== ':') x !! 1
@@ -319,3 +340,35 @@ dimAttr :: AttrName; dimAttr = "dim"
 wordAttr :: AttrName; wordAttr = "word"
 boldAttr :: AttrName; boldAttr = "bold"
 activeAttr :: AttrName; activeAttr = "active"
+
+step :: UiState -> UiState
+step ui =
+  let
+    nextVm = execState exec1 (view (uiVmState . uiVm) ui)
+  in ui & set uiVmState (mkUiVmState nextVm ui)
+
+mkUiVmState :: VM -> UiState -> UiVmState
+mkUiVmState vm ui =
+  let
+    sm = currentSrcMap vm
+    move = case vmOpIx vm of
+             Nothing -> id
+             Just x -> listMoveTo x
+  in UiVmState
+    { _uiVm = vm
+    , _uiVmSolc = currentSolc vm
+    , _uiVmStackList =
+        list StackPane (Vec.fromList $ view (state . stack) vm) 1
+    , _uiVmBytecodeList =
+        move $ list BytecodePane
+          (Vec.imap (,) (view codeOps (fromJust (currentContract vm))))
+          1
+    , _uiVmLogList = list LogPane mempty 1
+    , _uiVmTraceList = list TracePane mempty 1
+    , _uiVmSolidityList =
+        list SolidityPane
+          (case sm of
+             Nothing -> mempty
+             Just x -> view (uiDapp . dappSources . sourceLines . ix (srcMapFile x)) ui)
+          1
+    }

@@ -106,7 +106,8 @@ initialUnitTestVm c theContracts =
     creator = initialContract mempty & set nonce 1
   in vm
     & set (env . contracts . at ethrunAddress) (Just creator)
-    & set (env . solc) (Map.fromList [(view solcCodehash c, c) | c <- theContracts])
+    & set (env . solcByCreationHash) (Map.fromList [(view creationCodehash c, c) | c <- theContracts])
+    & set (env . solcByRuntimeHash) (Map.fromList [(view runtimeCodehash c, c) | c <- theContracts])
 
 unitTestMarkerAbi :: Word32
 unitTestMarkerAbi = abiKeccak (encodeUtf8 "IS_TEST()")
