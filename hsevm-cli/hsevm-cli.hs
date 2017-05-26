@@ -9,6 +9,7 @@
 {-# Language TemplateHaskell #-}
 
 import qualified EVM as EVM
+import qualified EVM.TTY as EVM.TTY
 
 #if MIN_VERSION_aeson(1, 0, 0)
 import qualified EVM.VMTest as VMTest
@@ -54,6 +55,10 @@ data Command
       , dappRoot :: String
       , debug    :: Bool
       }
+  | Interactive
+      { jsonFile :: String
+      , dappRoot :: String
+      }
   | VmTest
       { file  :: String
       , test  :: [String]
@@ -79,6 +84,9 @@ main = do
     DappTest {} ->
       withCurrentDirectory (dappRoot opts) $
         dappTest (optsMode opts) (jsonFile opts)
+    Interactive {} ->
+      withCurrentDirectory (dappRoot opts) $
+        EVM.TTY.main (dappRoot opts) (jsonFile opts)
 
 dappTest :: Mode -> String -> IO ()
 dappTest mode solcFile = do

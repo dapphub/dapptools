@@ -29,7 +29,8 @@ library
     EVM.VMTest,
     EVM.Exec,
     EVM.Debug,
-    EVM.UnitTest
+    EVM.UnitTest,
+    EVM.TTY
   ghc-options:
     -O2 -Wall
   if impl(ghcjs)
@@ -65,7 +66,10 @@ library
     readline,
     QuickCheck,
     quickcheck-text,
-    ansi-wl-pprint
+    ansi-wl-pprint,
+    brick,
+    vty,
+    text-format
   hs-source-dirs:
     src
   default-language:

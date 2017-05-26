@@ -97,9 +97,9 @@ debugger maybeCache vm = do
               do putDoc (prettyContracts (view (env . contracts) vm))
                  debugger maybeCache vm
 
-            ["disassemble"] ->
-              do cpprint (codeOps (view (state . code) vm))
-                 debugger maybeCache vm
+            -- ["disassemble"] ->
+            --   do cpprint (mkCodeOps (view (state . code) vm))
+            --      debugger maybeCache vm
 
             _  -> debugger maybeCache vm
 

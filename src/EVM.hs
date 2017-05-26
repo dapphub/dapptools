@@ -28,6 +28,7 @@ import Data.Monoid                  (Endo)
 import Data.Sequence                (Seq)
 import Data.Vector.Storable         (Vector)
 import Data.Vector.Storable.Mutable (new, write)
+import Data.Foldable                (toList)
 
 import Foreign.ForeignPtr (withForeignPtr)
 import Foreign            (castPtr)
@@ -38,6 +39,78 @@ import qualified Data.IntMap.Strict   as IntMap
 import qualified Data.Map.Strict      as Map
 import qualified Data.Sequence        as Seq
 import qualified Data.Vector.Storable as Vector
+
+import qualified Data.Vector as RegularVector
+import qualified Data.Vector.Mutable as RegularVector (new, write)
+
+data Op
+  = OpStop
+  | OpAdd
+  | OpMul
+  | OpSub
+  | OpDiv
+  | OpSdiv
+  | OpMod
+  | OpSmod
+  | OpAddmod
+  | OpMulmod
+  | OpExp
+  | OpSignextend
+  | OpLt
+  | OpGt
+  | OpSlt
+  | OpSgt
+  | OpEq
+  | OpIszero
+  | OpAnd
+  | OpOr
+  | OpXor
+  | OpNot
+  | OpByte
+  | OpSha3
+  | OpAddress
+  | OpBalance
+  | OpOrigin
+  | OpCaller
+  | OpCallvalue
+  | OpCalldataload
+  | OpCalldatasize
+  | OpCalldatacopy
+  | OpCodesize
+  | OpCodecopy
+  | OpGasprice
+  | OpExtcodesize
+  | OpExtcodecopy
+  | OpBlockhash
+  | OpCoinbase
+  | OpTimestamp
+  | OpNumber
+  | OpDifficulty
+  | OpGaslimit
+  | OpPop
+  | OpMload
+  | OpMstore
+  | OpMstore8
+  | OpSload
+  | OpSstore
+  | OpJump
+  | OpJumpi
+  | OpPc
+  | OpMsize
+  | OpGas
+  | OpJumpdest
+  | OpCreate
+  | OpCall
+  | OpCallcode
+  | OpReturn
+  | OpDelegatecall
+  | OpSelfdestruct
+  | OpDup !Word8
+  | OpSwap !Word8
+  | OpLog !Word8
+  | OpPush !W256
+  | OpUnknown Word8
+  deriving (Show, Eq)
 
 -- | The possible result states of a VM
 data VMResult
@@ -100,6 +173,7 @@ data Contract = Contract
   , _codehash :: W256
   , _codesize :: Int -- (redundant?)
   , _opIxMap  :: Vector Int
+  , _codeOps  :: RegularVector.Vector Op
   } deriving (Eq, Show)
 
 -- | Kind of a hodgepodge?
@@ -140,6 +214,9 @@ makeLenses ''VM
 
 type EVM a = State VM a
 
+currentContract vm =
+  view (env . contracts . at (view (state . contract) vm)) vm
+
 initialContract :: ByteString -> Contract
 initialContract theCode = Contract
   { _bytecode = theCode
@@ -149,6 +226,7 @@ initialContract theCode = Contract
   , _balance  = 0
   , _nonce    = 0
   , _opIxMap  = mkOpIxMap theCode
+  , _codeOps  = mkCodeOps theCode
   }
 
 performCreation :: ByteString -> EVM ()
@@ -939,75 +1017,6 @@ byteAt x j = num (x `shiftR` (j * 8)) .&. 0xff
 word32Bytes :: Word32 -> ByteString
 word32Bytes x = BS.pack [byteAt x (3 - i) | i <- [0..3]]
 
-data Op
-  = OpStop
-  | OpAdd
-  | OpMul
-  | OpSub
-  | OpDiv
-  | OpSdiv
-  | OpMod
-  | OpSmod
-  | OpAddmod
-  | OpMulmod
-  | OpExp
-  | OpSignextend
-  | OpLt
-  | OpGt
-  | OpSlt
-  | OpSgt
-  | OpEq
-  | OpIszero
-  | OpAnd
-  | OpOr
-  | OpXor
-  | OpNot
-  | OpByte
-  | OpSha3
-  | OpAddress
-  | OpBalance
-  | OpOrigin
-  | OpCaller
-  | OpCallvalue
-  | OpCalldataload
-  | OpCalldatasize
-  | OpCalldatacopy
-  | OpCodesize
-  | OpCodecopy
-  | OpGasprice
-  | OpExtcodesize
-  | OpExtcodecopy
-  | OpBlockhash
-  | OpCoinbase
-  | OpTimestamp
-  | OpNumber
-  | OpDifficulty
-  | OpGaslimit
-  | OpPop
-  | OpMload
-  | OpMstore
-  | OpMstore8
-  | OpSload
-  | OpSstore
-  | OpJump
-  | OpJumpi
-  | OpPc
-  | OpMsize
-  | OpGas
-  | OpJumpdest
-  | OpCreate
-  | OpCall
-  | OpCallcode
-  | OpReturn
-  | OpDelegatecall
-  | OpSelfdestruct
-  | OpDup !Word8
-  | OpSwap !Word8
-  | OpLog !Word8
-  | OpPush !W256
-  | OpUnknown Word8
-  deriving (Show, Eq)
-
 vmOp :: VM -> Maybe Op
 vmOp vm =
   let i  = vm ^. state . pc
@@ -1120,8 +1129,8 @@ readOp x _ = case x of
   0xff -> OpSelfdestruct
   _    -> (OpUnknown x)
 
-codeOps :: ByteString -> Seq (Int, Op)
-codeOps bytes = go 0 bytes
+mkCodeOps :: ByteString -> RegularVector.Vector Op
+mkCodeOps bytes = RegularVector.fromList . toList $ go 0 bytes
   where
     go !i !xs =
       case BS.uncons xs of
@@ -1129,7 +1138,7 @@ codeOps bytes = go 0 bytes
           mempty
         Just (x, xs') ->
           let j = opSize x
-          in (i, readOp x xs') Seq.<| go (i + j) (BS.drop j xs)
+          in readOp x xs' Seq.<| go (i + j) (BS.drop j xs)
 
 {-
   Unimplemented:

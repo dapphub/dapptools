@@ -144,7 +144,7 @@ makeSourceCache paths = do
     _sourceFiles =
       Map.fromList (zip [0..] (zip paths xs)),
     _sourceLines =
-      Map.fromList (zip [1 .. length paths]
+      Map.fromList (zip [0 .. length paths - 1]
                      (map (Vector.fromList . BS.split 0xa) xs))
   }
 
