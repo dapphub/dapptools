@@ -55,6 +55,8 @@ data Name
   | SolidityViewport
   deriving (Eq, Show, Ord)
 
+type UiWidget = Widget Name
+
 data UiVmState = UiVmState
   { _uiVm             :: VM
   , _uiVmStackList    :: List Name W256
@@ -143,16 +145,20 @@ app = App
           continue (step s)
         _ -> continue s
   , appStartEvent = return
-  , appAttrMap = const (attrMap Vty.defAttr
-                        [ (selectedAttr, Vty.defAttr `Vty.withStyle` Vty.standout)
-                        , (dimAttr, Vty.defAttr `Vty.withStyle` Vty.dim)
-                        , (borderAttr, Vty.defAttr `Vty.withStyle` Vty.dim)
-                        , (wordAttr, fg Vty.yellow)
-                        , (boldAttr, Vty.defAttr `Vty.withStyle` Vty.bold)
-                        , (activeAttr, Vty.defAttr `Vty.withStyle` Vty.standout)
-                        ])
+  , appAttrMap = const (attrMap Vty.defAttr myTheme)
   }
 
+myTheme :: [(AttrName, Vty.Attr)]
+myTheme =
+  [ (selectedAttr, Vty.defAttr `Vty.withStyle` Vty.standout)
+  , (dimAttr, Vty.defAttr `Vty.withStyle` Vty.dim)
+  , (borderAttr, Vty.defAttr `Vty.withStyle` Vty.dim)
+  , (wordAttr, fg Vty.yellow)
+  , (boldAttr, Vty.defAttr `Vty.withStyle` Vty.bold)
+  , (activeAttr, Vty.defAttr `Vty.withStyle` Vty.standout)
+  ]
+
+drawVm :: UiState -> [UiWidget]
 drawVm ui =
   [ vBox
     [ vLimit 20 $ hBox
@@ -166,7 +172,6 @@ drawVm ui =
       ]
     ]
   ]
-
 
 step :: UiState -> UiState
 step ui =
@@ -204,6 +209,7 @@ mkUiVmState vm ui =
           1
     }
 
+drawStackPane :: UiState -> UiWidget
 drawStackPane ui =
   hBorderWithLabel (txt "Stack") <=>
     renderList
@@ -211,6 +217,7 @@ drawStackPane ui =
       False
       (view (uiVmState . uiVmStackList) ui)
 
+drawBytecodePane :: UiState -> UiWidget
 drawBytecodePane ui =
   hBorderWithLabel (txt "Bytecode") <=>
     renderList
@@ -223,6 +230,7 @@ drawBytecodePane ui =
 withHighlight False = withDefAttr dimAttr
 withHighlight True  = withDefAttr boldAttr
 
+drawLogPane :: UiState -> UiWidget
 drawLogPane ui =
   hBorderWithLabel (txt "Logs") <=>
     renderList
@@ -230,6 +238,7 @@ drawLogPane ui =
       False
       (view (uiVmState . uiVmLogList) ui)
 
+drawTracePane :: UiState -> UiWidget
 drawTracePane ui =
   hBorderWithLabel (txt "Trace") <=>
     renderList
@@ -244,6 +253,7 @@ drawTracePane ui =
       False
       (view (uiVmState . uiVmTraceList) ui)
 
+drawSolidityPane :: UiState -> UiWidget
 drawSolidityPane ui =
   let
     lineNo =
