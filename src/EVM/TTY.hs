@@ -139,21 +139,7 @@ main dappRoot jsonFilePath = do
               [ ContractListPane
               , AbiPane
               ]
-            , _uiVmState = UiVmState
-              { _uiVm = vm
-              , _uiVmSolc = currentSolc vm
-              , _uiVmStackList = list StackPane mempty 1
-              , _uiVmBytecodeList =
-                  list BytecodePane
-                    (Vec.imap (,) (view codeOps (fromJust (currentContract vm))))
-                    1
-              , _uiVmLogList = list LogPane mempty 1
-              , _uiVmTraceList = list TracePane mempty 1
-              , _uiVmSolidityList =
-                  list SolidityPane
-                    (view (uiDapp . dappSources . sourceLines . ix (srcMapFile sm)) ui)
-                    1
-              }
+            , _uiVmState = mkUiVmState vm ui
             }
 
         _ <- customMain mkVty Nothing app ui
