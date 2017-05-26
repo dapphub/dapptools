@@ -31,17 +31,19 @@ import Data.Map (Map)
 import Data.Maybe (fromJust, fromMaybe)
 import Data.Monoid ((<>))
 import Data.Ord (comparing)
-import Data.Text (Text)
+import Data.Text (Text, pack)
 import Data.Text.Encoding (decodeUtf8)
 import Data.Text.Format
 import Data.Text.Lazy (toStrict)
+import Data.Foldable (toList)
 
 import System.Directory (withCurrentDirectory)
 
-import qualified Graphics.Vty as Vty
 import qualified Data.Map as Map
-import qualified Data.Vector as Vec
+import qualified Data.Sequence as Seq
 import qualified Data.Text as Text
+import qualified Data.Vector as Vec
+import qualified Graphics.Vty as Vty
 
 data Name
   = ContractListPane
@@ -59,7 +61,7 @@ data UiVmState = UiVmState
   , _uiVmStackList    :: List Name W256
   , _uiVmBytecodeList :: List Name (Int, Op)
   , _uiVmLogList      :: List Name Log
-  , _uiVmTraceList    :: List Name Text
+  , _uiVmTraceList    :: List Name Frame
   , _uiVmSolidityList :: List Name ByteString
   , _uiVmSolc         :: Maybe SolcContract
   }
@@ -285,13 +287,23 @@ opWidget (i, x) = str (show i ++ " ") <+> case x of
 drawLogPane ui =
   hBorderWithLabel (txt "Logs") <=>
     renderList
-      (\_ x -> str (show x))
+      (\_ (Log _ bs ws) -> str (show bs) <+> txt " " <+> str (show ws))
       False
       (view (uiVmState . uiVmLogList) ui)
 
 drawTracePane ui =
   hBorderWithLabel (txt "Trace") <=>
-    (padRight Max $ padBottom Max (txt " "))
+    renderList
+      (\_ x ->
+         vBox
+           [ str (show (view (frameState . contract) x))
+           , case (view frameContext) x of
+               CreationContext -> txt "(creation)"
+               CallContext _ _ _ abi ->
+                 txt ("(call " <> pack (show abi) <> ")")
+           ])
+      False
+      (view (uiVmState . uiVmTraceList) ui)
 -- str (show (srcMapCodePos (view (uiDapp . dappSources) ui) $ (fromJust $ currentSrcMap (view (uiVmState . uiVm) ui))))
 
 drawSolidityPane ui =
@@ -307,7 +319,7 @@ drawSolidityPane ui =
                      "" -> " "
                      y -> y))
          False
-         (listMoveTo lineNo
+         (listMoveTo (lineNo - 1)
            (view (uiVmState . uiVmSolidityList) ui))
 
 contractNamePart :: Text -> Text
@@ -363,8 +375,12 @@ mkUiVmState vm ui =
         move $ list BytecodePane
           (Vec.imap (,) (view codeOps (fromJust (currentContract vm))))
           1
-    , _uiVmLogList = list LogPane mempty 1
-    , _uiVmTraceList = list TracePane mempty 1
+    , _uiVmLogList = list LogPane (Vec.fromList . toList $ view logs vm) 1
+    , _uiVmTraceList =
+        list
+          TracePane
+          (Vec.fromList $ view frames vm)
+          2
     , _uiVmSolidityList =
         list SolidityPane
           (case sm of
