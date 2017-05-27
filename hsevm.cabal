@@ -94,7 +94,7 @@ executable hsevm-cli
   main-is:
     hsevm-cli.hs
   ghc-options:
-    -O2 -Wall
+    -O2 -Wall -threaded
   build-depends:
     base >=4.9 && <4.10,
     hsevm,
