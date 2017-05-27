@@ -13,3 +13,4 @@ docker:; docker build -t dapphub/hsevm .
 # Static binary built via Docker
 hsevm-linux-x64: docker
 	docker run --rm dapphub/hsevm cat /bin/hsevm > $@
+	chmod +x $@
