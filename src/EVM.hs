@@ -222,7 +222,9 @@ initialContract :: ByteString -> Contract
 initialContract theCode = Contract
   { _bytecode = theCode
   , _codesize = BS.length theCode
-  , _codehash = if BS.null theCode then 0 else keccak theCode
+  , _codehash =
+    if BS.null theCode then 0 else
+      keccak (stripConstructorArguments theCode)
   , _storage  = mempty
   , _balance  = 0
   , _nonce    = 0

@@ -21,6 +21,7 @@ module EVM.Solidity
   , creationSrcmap
   , sourceFiles
   , sourceLines
+  , stripConstructorArguments
 ) where
 
 import EVM.ABI
@@ -236,3 +237,21 @@ solidity' src = withSystemTempFile "hsevm.sol" $ \path handle -> do
       "solc"
       ["--combined-json=bin-runtime,bin,srcmap-runtime,abi", path]
       ""
+
+-- When doing CREATE and passing constructor arguments, Solidity loads
+-- the argument data via the creation bytecode, since there is no "calldata"
+-- for CREATE.
+--
+-- This interferes with our ability to look up the current contract by
+-- codehash, so we must somehow strip away this extra suffix. Luckily
+-- we can detect the end of the actual bytecode by looking for the
+-- "metadata hash". (Not 100% correct, but works in practice.)
+stripConstructorArguments :: ByteString -> ByteString
+stripConstructorArguments bs =
+  let (a, b) = BS.breakSubstring bzzrPrefix (BS.reverse bs)
+  in BS.reverse b <> BS.take (32 + 2) (BS.reverse a)
+
+bzzrPrefix :: ByteString
+bzzrPrefix =
+  -- a1 65 "bzzr0" 0x58 0x20
+  BS.reverse $ BS.pack [0xa1, 0x65, 98, 122, 122, 114, 48, 0x58, 0x20] 
