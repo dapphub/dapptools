@@ -15,14 +15,16 @@ mkDerivation {
   libraryHaskellDepends = [
     aeson ansi-wl-pprint base base16-bytestring base64-bytestring
     binary brick bytestring containers cryptonite data-dword deepseq
-    directory ghci-pretty lens lens-aeson memory mtl optparse-generic
-    process QuickCheck quickcheck-text readline temporary text
-    text-format unordered-containers vector vty
+    directory filepath ghci-pretty lens lens-aeson memory mtl
+    optparse-generic process QuickCheck quickcheck-text readline
+    temporary text text-format unordered-containers vector vty
   ];
   executableHaskellDepends = [
-    aeson base base16-bytestring bytestring containers data-dword
-    directory filepath ghci-pretty lens lens-aeson mtl optparse-generic
-    readline text unordered-containers vector
+    aeson ansi-wl-pprint base base16-bytestring base64-bytestring
+    binary brick bytestring containers cryptonite data-dword deepseq
+    directory filepath ghci-pretty lens lens-aeson memory mtl
+    optparse-generic process QuickCheck quickcheck-text readline
+    temporary text text-format unordered-containers vector vty
   ];
   testHaskellDepends = [
     base binary bytestring ghci-pretty here HUnit lens mtl QuickCheck
