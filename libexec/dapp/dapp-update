@@ -3,5 +3,5 @@ set -e
 if [[ $1 ]]; then
   for x; do (set -x; git submodule update --init "lib/$x"); done
 else
-  (set -x; git submodule update --init)
+  (set -x; git submodule update --init --recursive)
 fi
