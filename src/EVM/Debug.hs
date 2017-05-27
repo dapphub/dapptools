@@ -116,7 +116,6 @@ currentSolc vm =
         Nothing ->
           vm ^? env . solcByCreationHash . ix theCodehash
 
-
 currentSrcMap :: VM -> Maybe SrcMap
 currentSrcMap vm =
   let

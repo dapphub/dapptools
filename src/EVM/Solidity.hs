@@ -194,7 +194,8 @@ readJSON json = do
               signature abi
             ),
         _eventMap     = Map.fromList $
-          flip map (filter (\x -> "event" == x ^?! key "type" . _String) . toList $ (x ^?! key "abi" . _String) ^?! _Array) $
+          flip map (filter (\x -> "event" == x ^?! key "type" . _String)
+                     . toList $ (x ^?! key "abi" . _String) ^?! _Array) $
             \abi ->
               ( keccak (encodeUtf8 (signature abi))
               , Event

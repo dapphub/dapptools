@@ -258,17 +258,24 @@ drawSolidityPane ui =
   let
     lineNo =
       snd . fromJust $
-        (srcMapCodePos (view (uiDapp . dappSources) ui) $ (fromJust $ currentSrcMap (view (uiVmState . uiVm) ui)))
-  in hBorderWithLabel (txt (maybe "<unknown>" contractPathPart (preview (uiVmState . uiVmSolc . _Just . contractName) ui))) <=>
-       renderList
-         (\active x ->
-            withHighlight active $
-              txt (case decodeUtf8 x of
-                     "" -> " "
-                     y -> y))
-         False
-         (listMoveTo (lineNo - 1)
-           (view (uiVmState . uiVmSolidityList) ui))
+        (srcMapCodePos
+         (view (uiDapp . dappSources) ui)
+         (fromJust $
+          currentSrcMap (view (uiVmState . uiVm) ui)))
+  in vBox
+    [ hBorderWithLabel
+        (txt (maybe "<unknown>" contractPathPart
+              (preview (uiVmState . uiVmSolc . _Just . contractName) ui)))
+    , renderList
+        (\active x ->
+           withHighlight active $
+             txt (case decodeUtf8 x of
+                    "" -> " "
+                    y -> y))
+        False
+        (listMoveTo (lineNo - 1)
+          (view (uiVmState . uiVmSolidityList) ui))
+    ]
 
 contractNamePart :: Text -> Text
 contractNamePart x = Text.split (== ':') x !! 1
