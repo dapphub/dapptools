@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
 set -e
 (set -x; dapp clean)
-solc --help | grep -q -- --overwrite && SOLC_FLAGS+=" --overwrite"
 opts=($SOLC_FLAGS)
-jsonopts=--combined-json=abi,bin,bin-runtime,srcmap,srcmap-runtime
+json_opts=--combined-json=abi,bin,bin-runtime,srcmap,srcmap-runtime
+solc --help | grep -q -- --overwrite && opts+=(--overwrite)
 remappings=$(dapp remappings)
 while read -r line; do opts+=("$line"); done <<<"$remappings"
 shopt -s nullglob
 for x in $DAPP_SRC/*.sol; do
-  set -x
-  solc "${opts[@]}" --abi --bin --bin-runtime = -o "$DAPP_OUT" "$x"
-  solc "${opts[@]}" "${jsonopts[@]}" = "$x" > "$DAPP_OUT"/"${x#$DAPP_SRC}".json
+  (set -x; solc "${opts[@]}" --abi --bin --bin-runtime = -o "$DAPP_OUT" "$x")
+  json_file=$DAPP_OUT/${x#$DAPP_SRC}.json
+  (set -x; solc "${opts[@]}" "${json_opts[@]}" = "$x" >"$json_file")
 done
