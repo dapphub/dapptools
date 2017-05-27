@@ -264,7 +264,7 @@ drawSolidityPane ui =
           currentSrcMap (view (uiVmState . uiVm) ui)))
   in vBox
     [ hBorderWithLabel
-        (txt (maybe "<unknown>" contractPathPart
+        (txt (maybe "<unknown>" contractNamePart
               (preview (uiVmState . uiVmSolc . _Just . contractName) ui)))
     , renderList
         (\active x ->
