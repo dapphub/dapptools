@@ -23,6 +23,7 @@ import EVM.UnitTest
 
 import Control.Monad              (unless)
 import Control.Monad.State.Strict (execState)
+import Control.Lens
 import Data.ByteString            (ByteString)
 import Data.List                  (intercalate)
 import System.Directory           (withCurrentDirectory)
@@ -102,7 +103,7 @@ launchExec :: Command -> IO ()
 launchExec opts =
   let vm = vmFromCommand opts in
     case optsMode opts of
-      Run -> print (execState exec vm)
+      Run -> print (view EVM.result (execState exec vm))
       Debug -> ignore (debugger Nothing vm)
 
 vmFromCommand :: Command -> EVM.VM

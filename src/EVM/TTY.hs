@@ -31,10 +31,11 @@ import Data.Map (Map)
 import Data.Maybe (fromJust, fromMaybe)
 import Data.Monoid ((<>))
 import Data.Ord (comparing)
-import Data.Text (Text, pack)
+import Data.Text (Text, pack, unpack)
 import Data.Text.Encoding (decodeUtf8)
 import Data.Text.Format
 import Data.Text.Lazy (toStrict)
+import Data.Tree (drawForest)
 import Data.Foldable (toList)
 
 import System.Directory (withCurrentDirectory)
@@ -42,6 +43,7 @@ import System.Directory (withCurrentDirectory)
 import qualified Data.Map as Map
 import qualified Data.Sequence as Seq
 import qualified Data.Text as Text
+import qualified Data.Tree.Zipper as Zipper
 import qualified Data.Vector as Vec
 import qualified Graphics.Vty as Vty
 
@@ -62,7 +64,7 @@ data UiVmState = UiVmState
   , _uiVmStackList    :: List Name W256
   , _uiVmBytecodeList :: List Name (Int, Op)
   , _uiVmLogList      :: List Name Log
-  , _uiVmTraceList    :: List Name Frame
+  , _uiVmTraceList    :: List Name String
   , _uiVmSolidityList :: List Name ByteString
   , _uiVmSolc         :: Maybe SolcContract
   }
@@ -111,8 +113,16 @@ main dappRoot jsonFilePath = do
             (VMSuccess targetCode, vm1) ->
               execState (performCreation targetCode) vm1
           target = view (state . contract) vm2
-          vm = flip execState vm2 $ do
+          vm3 = flip execState vm2 $ do
             setupCall target "setUp()"
+          vm = case runState exec vm3 of
+            (VMRunning, _) -> error "inetrnal error"
+            (VMFailure, _) -> error "setUp() failed"
+            (VMSuccess _, vm4) ->
+              flip execState vm4 $ do
+                setupCall target (head (snd firstUnitTest))
+                assign contextTrace (Zipper.fromForest [])
+
           Just sm = currentSrcMap vm
 
           mkVty = do
@@ -199,8 +209,8 @@ mkUiVmState vm ui =
     , _uiVmTraceList =
         list
           TracePane
-          (Vec.fromList $ view frames vm)
-          2
+          (Vec.fromList . lines . drawForest . fmap (fmap (unpack . showContext ui)) $ contextTraceForest vm)
+          1
     , _uiVmSolidityList =
         list SolidityPane
           (case sm of
@@ -208,6 +218,20 @@ mkUiVmState vm ui =
              Just x -> view (uiDapp . dappSources . sourceLines . ix (srcMapFile x)) ui)
           1
     }
+
+contractNameByHash :: UiState -> W256 -> Maybe SolcContract
+contractNameByHash ui hash =
+  lookupSolc (view (uiVmState . uiVm) ui) hash
+
+maybeContractName :: Maybe SolcContract -> Text
+maybeContractName =
+  maybe "<unknown contract>" (view (contractName . to contractNamePart))
+
+showContext :: UiState -> FrameContext -> Text
+showContext ui (CreationContext hash) =
+  "CREATE " <> maybeContractName (contractNameByHash ui hash)
+showContext ui (CallContext _ _ hash abi) =
+  "CALL   " <> maybeContractName (contractNameByHash ui hash)
 
 drawStackPane :: UiState -> UiWidget
 drawStackPane ui =
@@ -242,14 +266,7 @@ drawTracePane :: UiState -> UiWidget
 drawTracePane ui =
   hBorderWithLabel (txt "Trace") <=>
     renderList
-      (\_ x ->
-         vBox
-           [ str (show (view (frameState . contract) x))
-           , case (view frameContext) x of
-               CreationContext -> txt "(creation)"
-               CallContext _ _ _ abi ->
-                 txt ("(call " <> pack (show abi) <> ")")
-           ])
+      (\_ x -> str x)
       False
       (view (uiVmState . uiVmTraceList) ui)
 

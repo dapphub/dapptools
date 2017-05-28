@@ -104,6 +104,13 @@ debugger maybeCache vm = do
 
             _  -> debugger maybeCache vm
 
+lookupSolc :: VM -> W256 -> Maybe SolcContract
+lookupSolc vm hash =
+  case vm ^? env . solcByRuntimeHash . ix hash of
+    Just x -> Just x
+    Nothing ->
+      vm ^? env . solcByCreationHash . ix hash
+
 currentSolc :: VM -> Maybe SolcContract
 currentSolc vm =
   let

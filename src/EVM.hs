@@ -1,5 +1,6 @@
 {-# Language StrictData #-}
 {-# Language TemplateHaskell #-}
+{-# Language TypeOperators #-}
 
 module EVM where
 
@@ -30,6 +31,8 @@ import Data.Vector.Storable         (Vector)
 import Data.Vector.Storable.Mutable (new, write)
 import Data.Foldable                (toList)
 
+import Data.Tree
+
 import Foreign.ForeignPtr (withForeignPtr)
 import Foreign            (castPtr)
 import System.IO.Unsafe   (unsafePerformIO)
@@ -39,6 +42,7 @@ import qualified Data.IntMap.Strict   as IntMap
 import qualified Data.Map.Strict      as Map
 import qualified Data.Sequence        as Seq
 import qualified Data.Vector.Storable as Vector
+import qualified Data.Tree.Zipper     as Zipper
 
 import qualified Data.Vector as RegularVector
 import qualified Data.Vector.Mutable as RegularVector (new, write)
@@ -128,7 +132,8 @@ data VM = VM
   , _block         :: Block
   , _selfdestructs :: [Addr]
   , _logs          :: Seq Log
-  } deriving Show
+  , _contextTrace  :: Zipper.TreePos Zipper.Empty FrameContext
+  }
 
 -- | A log entry
 data Log = Log Addr ByteString [W256]
@@ -143,6 +148,7 @@ data Frame = Frame
 -- | Call/create info
 data FrameContext
   = CreationContext
+    { creationContextCodehash :: W256 }
   | CallContext
     { callContextOffset   :: W256
     , callContextSize     :: W256
@@ -217,6 +223,14 @@ type EVM a = State VM a
 
 currentContract vm =
   view (env . contracts . at (view (state . contract) vm)) vm
+
+zipperRootForest z =
+  case Zipper.parent z of
+    Nothing -> Zipper.toForest z
+    Just z' -> zipperRootForest (Zipper.nextSpace z')
+
+contextTraceForest vm =
+  view (contextTrace . to zipperRootForest) vm
 
 initialContract :: ByteString -> Contract
 initialContract theCode = Contract
@@ -336,6 +350,10 @@ exec1 = do
             [] ->
               assign result (VMSuccess "")
             (nextFrame : remainingFrames) -> do
+              modifying contextTrace $ \t ->
+                case Zipper.parent t of
+                  Nothing -> error "internal error (context trace root)"
+                  Just t' -> Zipper.nextSpace t'
               assign frames remainingFrames
               assign state (view frameState nextFrame)
               push 1
@@ -619,17 +637,21 @@ exec1 = do
               let
                 newAddr      = newContractAddress self (view nonce this)
                 creationCode = readMemory (num xOffset) (num xSize) vm
+                newContract  = initialContract creationCode
+                newContext   = CreationContext (view codehash newContract)
 
               zoom (env . contracts) $ do
-                assign (at newAddr) . Just $
-                  initialContract creationCode
+                assign (at newAddr) (Just newContract)
                 modifying (ix self . nonce) succ
 
               vm' <- get
               pushTo frames $ Frame
-                { _frameContext = CreationContext
+                { _frameContext = newContext
                 , _frameState   = (set stack xs) (view state vm')
                 }
+
+              modifying contextTrace $ \t ->
+                Zipper.children $ Zipper.insert (Node newContext []) t
 
               assign state $
                 blankState
@@ -661,6 +683,7 @@ exec1 = do
           case stk of
             (xOffset:xSize:_) -> do
               accessMemoryRange xOffset xSize
+
               case vm ^. frames of
                 [] ->
                   assign result (VMSuccess (readMemory (num xOffset) (num xSize) vm))
@@ -668,8 +691,13 @@ exec1 = do
                 (nextFrame : remainingFrames) -> do
                   assign frames remainingFrames
 
+                  modifying contextTrace $ \t ->
+                    case Zipper.parent t of
+                      Nothing -> error "internal error (context trace root)"
+                      Just t' -> Zipper.nextSpace t'
+
                   case view frameContext nextFrame of
-                    CreationContext -> do
+                    CreationContext _ -> do
                       performCreation (readMemory (num xOffset) (num xSize) vm)
                       assign state (view frameState nextFrame)
                       push (num (the state contract))
@@ -715,9 +743,7 @@ delegateCall xTo xInOffset xInSize xOutOffset xOutSize xs =
       Just target -> do
         vm <- get
 
-        pushTo frames $ Frame
-          { _frameState = (set stack xs) (view state vm)
-          , _frameContext = CallContext
+        let newContext = CallContext
               { callContextOffset = xOutOffset
               , callContextSize   = xOutSize
               , callContextCodehash = view codehash target
@@ -726,7 +752,14 @@ delegateCall xTo xInOffset xInSize xOutOffset xOutSize xs =
                   then Just $! view (state . memory . word32At (num xInOffset)) vm
                   else Nothing
               }
+
+        pushTo frames $ Frame
+          { _frameState = (set stack xs) (view state vm)
+          , _frameContext = newContext
           }
+
+        modifying contextTrace $ \t ->
+          Zipper.children (Zipper.insert (Node newContext []) t)
 
         zoom state $ do
           assign pc 0
@@ -809,8 +842,14 @@ returnOp returnCode (xOffset, xSize) = do
 
     (nextFrame : remainingFrames) -> do
       accessMemoryRange xOffset xSize
+
+      modifying contextTrace $ \t ->
+        case Zipper.parent t of
+          Nothing -> error "internal error (context trace root)"
+          Just t' -> Zipper.nextSpace t'
+
       case view frameContext nextFrame of
-        CreationContext -> do
+        CreationContext _ -> do
             let self = vm ^. state . contract
             if xSize == 0
               then do
@@ -904,6 +943,7 @@ makeVm o = VM
   , _frames = mempty
   , _selfdestructs = mempty
   , _logs = mempty
+  , _contextTrace = Zipper.fromForest []
   , _block = Block
     { _coinbase = vmoptCoinbase o
     , _timestamp = vmoptTimestamp o
