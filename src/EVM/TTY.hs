@@ -10,6 +10,7 @@ import Brick.Widgets.Border.Style
 import Brick.Widgets.Center
 import Brick.Widgets.Edit
 import Brick.Widgets.List
+import Brick.Widgets.Dialog
 
 import EVM
 import EVM.ABI
@@ -37,6 +38,7 @@ import Data.Text.Format
 import Data.Text.Lazy (toStrict)
 import Data.Tree (drawForest)
 import Data.Foldable (toList)
+import Data.Word (Word32)
 
 import System.Directory (withCurrentDirectory)
 
@@ -55,6 +57,7 @@ data Name
   | TracePane
   | SolidityPane
   | SolidityViewport
+  | TestPickerPane
   deriving (Eq, Show, Ord)
 
 type UiWidget = Widget Name
@@ -67,6 +70,7 @@ data UiVmState = UiVmState
   , _uiVmTraceList    :: List Name String
   , _uiVmSolidityList :: List Name ByteString
   , _uiVmSolc         :: Maybe SolcContract
+  , _uiVmDapp         :: DappInfo
   }
 
 data DappInfo = DappInfo
@@ -76,18 +80,23 @@ data DappInfo = DappInfo
   , _dappUnitTests :: [(Text, [Text])]
   }
 
-data UiState = UiState
-  { _uiDapp         :: DappInfo
-  , _uiVmState      :: UiVmState
+data UiTestPickerState = UiTestPickerState
+  { _testPickerList :: List Name (Text, Text)
+  , _testPickerDapp :: DappInfo
   }
 
-makeLenses ''UiVmState
-makeLenses ''DappInfo
-makeLenses ''UiState
+data UiState
+  = UiVmScreen UiVmState
+  | UiTestPickerScreen UiTestPickerState
 
-isUnitTestContract :: Text -> UiState -> Bool
-isUnitTestContract name ui =
-  elem name (map fst (view (uiDapp . dappUnitTests) ui))
+makeLenses ''DappInfo
+makeLenses ''UiVmState
+makeLenses ''UiTestPickerState
+makePrisms ''UiState
+
+isUnitTestContract :: Text -> DappInfo -> Bool
+isUnitTestContract name dapp =
+  elem name (map fst (view dappUnitTests dapp))
 
 example =
   withCurrentDirectory "/home/mbrock/dapphub/sai" $
@@ -104,40 +113,49 @@ main dappRoot jsonFilePath = do
       Just (contractMap, sourceCache) -> do
         let
           unitTests = findUnitTests (Map.elems contractMap)
-          firstUnitTest = head unitTests
-          Just testContract = view (at (fst firstUnitTest)) contractMap
-          vm0 = initialUnitTestVm testContract (Map.elems contractMap)
-          vm2 = case runState exec vm0 of
-            (VMRunning, _) -> error "internal error"
-            (VMFailure, _) -> error "creation error"
-            (VMSuccess targetCode, vm1) ->
-              execState (performCreation targetCode) vm1
-          target = view (state . contract) vm2
-          vm3 = flip execState vm2 $ do
-            setupCall target "setUp()"
-          vm = case runState exec vm3 of
-            (VMRunning, _) -> error "inetrnal error"
-            (VMFailure, _) -> error "setUp() failed"
-            (VMSuccess _, vm4) ->
-              flip execState vm4 $ do
-                setupCall target (head (snd firstUnitTest))
-                assign contextTrace (Zipper.fromForest [])
+          -- firstUnitTest = head unitTests
+          -- Just testContract = view (at (fst firstUnitTest)) contractMap
+          -- vm0 = initialUnitTestVm testContract (Map.elems contractMap)
+          -- vm2 = case runState exec vm0 of
+          --   (VMRunning, _) -> error "internal error"
+          --   (VMFailure, _) -> error "creation error"
+          --   (VMSuccess targetCode, vm1) ->
+          --     execState (performCreation targetCode) vm1
+          -- target = view (state . contract) vm2
+          -- vm3 = flip execState vm2 $ do
+          --   setupCall target "setUp()"
+          -- vm = case runState exec vm3 of
+          --   (VMRunning, _) -> error "inetrnal error"
+          --   (VMFailure, _) -> error "setUp() failed"
+          --   (VMSuccess _, vm4) ->
+          --     flip execState vm4 $ do
+          --       setupCall target (head (snd firstUnitTest))
+          --       assign contextTrace (Zipper.fromForest [])
 
-          Just sm = currentSrcMap vm
+          -- Just sm = currentSrcMap vm
 
           mkVty = do
             vty <- Vty.mkVty Vty.defaultConfig
             Vty.setMode (Vty.outputIface vty) Vty.BracketedPaste True
             return vty
 
-          ui = UiState
-            { _uiDapp = DappInfo
+          dappInfo = DappInfo
               { _dappRoot      = dappRoot
               , _dappUnitTests = unitTests
               , _dappContracts = contractMap
               , _dappSources   = sourceCache
               }
-            , _uiVmState = mkUiVmState vm ui
+
+          ui = UiTestPickerScreen $ UiTestPickerState
+            { _testPickerList =
+                list
+                  TestPickerPane
+                  (Vec.fromList
+                   (concatMap
+                    (\(a, xs) -> [(a, x) | x <- xs])
+                    unitTests))
+                  1
+            , _testPickerDapp = dappInfo
             }
 
         _ <- customMain mkVty Nothing app ui
@@ -145,18 +163,60 @@ main dappRoot jsonFilePath = do
 
 app :: App UiState () Name
 app = App
-  { appDraw = drawVm
+  { appDraw = drawUi
   , appChooseCursor = neverShowCursor
   , appHandleEvent = \s e ->
-      case e of
-        VtyEvent (Vty.EvKey Vty.KEsc []) ->
+
+      case (s, e) of
+        (_, VtyEvent (Vty.EvKey Vty.KEsc []) )->
           halt s
-        VtyEvent (Vty.EvKey (Vty.KChar 'n') []) ->
-          continue (step s)
+
+        (UiVmScreen s', VtyEvent (Vty.EvKey (Vty.KChar 'n') [])) ->
+          continue (UiVmScreen (step s'))
+
+        (UiTestPickerScreen s', VtyEvent (Vty.EvKey (Vty.KEnter) [])) -> do
+          case listSelectedElement (view testPickerList s') of
+            Nothing -> error "nothing selected"
+            Just (_, x) ->
+              continue . UiVmScreen $
+                initialUiVmStateForTest (view testPickerDapp s') x
+
+        (UiTestPickerScreen s', VtyEvent e') -> do
+          s'' <- handleEventLensed s'
+            testPickerList
+            handleListEvent
+            e'
+          continue (UiTestPickerScreen s'')
+
         _ -> continue s
+
   , appStartEvent = return
   , appAttrMap = const (attrMap Vty.defAttr myTheme)
   }
+
+initialUiVmStateForTest :: DappInfo -> (Text, Text) -> UiVmState
+initialUiVmStateForTest dapp (theContractName, theTestName) =
+  let
+     Just testContract = view (dappContracts . at theContractName) dapp
+     vm0 = initialUnitTestVm testContract (Map.elems (view dappContracts dapp))
+     vm2 = case runState exec vm0 of
+       (VMRunning, _) -> error "internal error"
+       (VMFailure, _) -> error "creation error"
+       (VMSuccess targetCode, vm1) ->
+         execState (performCreation targetCode) vm1
+     target = view (state . contract) vm2
+     vm3 = flip execState vm2 $ do
+       setupCall target "setUp()"
+     vm = case runState exec vm3 of
+       (VMRunning, _) -> error "inetrnal error"
+       (VMFailure, _) -> error "setUp() failed"
+       (VMSuccess _, vm4) ->
+         flip execState vm4 $ do
+           setupCall target theTestName
+           assign contextTrace (Zipper.fromForest [])
+           assign logs mempty
+  in
+    mkUiVmState vm dapp
 
 myTheme :: [(AttrName, Vty.Attr)]
 myTheme =
@@ -168,7 +228,23 @@ myTheme =
   , (activeAttr, Vty.defAttr `Vty.withStyle` Vty.standout)
   ]
 
-drawVm :: UiState -> [UiWidget]
+drawUi :: UiState -> [UiWidget]
+drawUi (UiVmScreen s) = drawVm s
+drawUi (UiTestPickerScreen s) = drawTestPicker s
+
+drawTestPicker :: UiTestPickerState -> [UiWidget]
+drawTestPicker ui =
+  [ center . borderWithLabel (txt "Unit tests") .
+      hLimit 80 $
+        renderList
+          (\selected (x, y) ->
+             withHighlight selected $
+               txt " Debug " <+> txt (contractNamePart x) <+> txt "::" <+> txt y)
+          True
+          (view testPickerList ui)
+  ]
+
+drawVm :: UiVmState -> [UiWidget]
 drawVm ui =
   [ vBox
     [ vLimit 20 $ hBox
@@ -183,14 +259,14 @@ drawVm ui =
     ]
   ]
 
-step :: UiState -> UiState
+step :: UiVmState -> UiVmState
 step ui =
   let
-    nextVm = execState exec1 (view (uiVmState . uiVm) ui)
-  in ui & set uiVmState (mkUiVmState nextVm ui)
+    nextVm = execState exec1 (view uiVm ui)
+  in mkUiVmState nextVm (view uiVmDapp ui)
 
-mkUiVmState :: VM -> UiState -> UiVmState
-mkUiVmState vm ui =
+mkUiVmState :: VM -> DappInfo -> UiVmState
+mkUiVmState vm dapp =
   let
     sm = currentSrcMap vm
     move = case vmOpIx vm of
@@ -198,6 +274,7 @@ mkUiVmState vm ui =
              Just x -> listMoveTo x
   in UiVmState
     { _uiVm = vm
+    , _uiVmDapp = dapp
     , _uiVmSolc = currentSolc vm
     , _uiVmStackList =
         list StackPane (Vec.fromList $ view (state . stack) vm) 1
@@ -209,39 +286,51 @@ mkUiVmState vm ui =
     , _uiVmTraceList =
         list
           TracePane
-          (Vec.fromList . lines . drawForest . fmap (fmap (unpack . showContext ui)) $ contextTraceForest vm)
+          (Vec.fromList . lines . drawForest . fmap (fmap (unpack . showContext vm)) $ contextTraceForest vm)
           1
     , _uiVmSolidityList =
         list SolidityPane
           (case sm of
              Nothing -> mempty
-             Just x -> view (uiDapp . dappSources . sourceLines . ix (srcMapFile x)) ui)
+             Just x -> view (dappSources . sourceLines . ix (srcMapFile x)) dapp)
           1
     }
 
-contractNameByHash :: UiState -> W256 -> Maybe SolcContract
-contractNameByHash ui hash =
-  lookupSolc (view (uiVmState . uiVm) ui) hash
+contractByHash :: VM -> W256 -> Maybe SolcContract
+contractByHash vm hash =
+  lookupSolc vm hash
 
 maybeContractName :: Maybe SolcContract -> Text
 maybeContractName =
   maybe "<unknown contract>" (view (contractName . to contractNamePart))
 
-showContext :: UiState -> FrameContext -> Text
-showContext ui (CreationContext hash) =
-  "CREATE " <> maybeContractName (contractNameByHash ui hash)
-showContext ui (CallContext _ _ hash abi) =
-  "CALL   " <> maybeContractName (contractNameByHash ui hash)
+maybeAbiName :: SolcContract -> Word32 -> Maybe Text
+maybeAbiName solc abi = preview (abiMap . ix abi) solc
 
-drawStackPane :: UiState -> UiWidget
+showContext :: VM -> FrameContext -> Text
+showContext vm (CreationContext hash) =
+  "CREATE " <> maybeContractName (contractByHash vm hash)
+showContext vm (CallContext _ _ hash abi) =
+  case contractByHash vm hash of
+    Nothing ->
+      "CALL [unknown]"
+    Just solc ->
+      "CALL "
+        <> view (contractName . to contractNamePart) solc
+        <> " "
+        <> maybe "[fallback function]"
+             (\x -> maybe "[unknown method]" id (maybeAbiName solc x))
+             abi
+
+drawStackPane :: UiVmState -> UiWidget
 drawStackPane ui =
   hBorderWithLabel (txt "Stack") <=>
     renderList
       (\_ x -> str (show x))
       False
-      (view (uiVmState . uiVmStackList) ui)
+      (view uiVmStackList ui)
 
-drawBytecodePane :: UiState -> UiWidget
+drawBytecodePane :: UiVmState -> UiWidget
 drawBytecodePane ui =
   hBorderWithLabel (txt "Bytecode") <=>
     renderList
@@ -249,40 +338,40 @@ drawBytecodePane ui =
                     then withDefAttr dimAttr (opWidget x)
                     else withDefAttr boldAttr (opWidget x))
       False
-      (view (uiVmState . uiVmBytecodeList) ui)
+      (view uiVmBytecodeList ui)
 
 withHighlight False = withDefAttr dimAttr
 withHighlight True  = withDefAttr boldAttr
 
-drawLogPane :: UiState -> UiWidget
+drawLogPane :: UiVmState -> UiWidget
 drawLogPane ui =
   hBorderWithLabel (txt "Logs") <=>
     renderList
       (\_ (Log _ bs ws) -> str (show bs) <+> txt " " <+> str (show ws))
       False
-      (view (uiVmState . uiVmLogList) ui)
+      (view uiVmLogList ui)
 
-drawTracePane :: UiState -> UiWidget
+drawTracePane :: UiVmState -> UiWidget
 drawTracePane ui =
   hBorderWithLabel (txt "Trace") <=>
     renderList
       (\_ x -> str x)
       False
-      (view (uiVmState . uiVmTraceList) ui)
+      (view uiVmTraceList ui)
 
-drawSolidityPane :: UiState -> UiWidget
+drawSolidityPane :: UiVmState -> UiWidget
 drawSolidityPane ui =
   let
     lineNo =
       snd . fromJust $
         (srcMapCodePos
-         (view (uiDapp . dappSources) ui)
+         (view (uiVmDapp . dappSources) ui)
          (fromJust $
-          currentSrcMap (view (uiVmState . uiVm) ui)))
+          currentSrcMap (view uiVm ui)))
   in vBox
     [ hBorderWithLabel
         (txt (maybe "<unknown>" contractNamePart
-              (preview (uiVmState . uiVmSolc . _Just . contractName) ui)))
+              (preview (uiVmSolc . _Just . contractName) ui)))
     , renderList
         (\active x ->
            withHighlight active $
@@ -291,7 +380,7 @@ drawSolidityPane ui =
                     y -> y))
         False
         (listMoveTo (lineNo - 1)
-          (view (uiVmState . uiVmSolidityList) ui))
+          (view uiVmSolidityList ui))
     ]
 
 contractNamePart :: Text -> Text
