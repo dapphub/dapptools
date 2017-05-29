@@ -11,4 +11,4 @@ RUN apk add --update ncurses-static \
 && ln -s /usr/lib/libncursesw.a /usr/lib/libncurses.a \
 && cabal configure --disable-executable-dynamic --ghc-option=-optl-static --ghc-option=-optl-pthread \
 && cabal build \
-&& cp dist/build/hsevm-cli/hsevm /bin/hsevm
+&& cp dist/build/hsevm/hsevm /bin/hsevm
