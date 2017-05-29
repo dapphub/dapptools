@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -e
 for x; do
-  if [[ $x =~ ^[^/]+/([^/]+)$ ]]; then
+  if [[ ${x:?} =~ ^[^/]+/([^/]+)$ ]]; then
     echo "$x" "${BASH_REMATCH[1]}" "https://github.com/$x"
   elif [[ $x =~ .*[@:/](.*) ]]; then
     name=${BASH_REMATCH[1]%.*}
