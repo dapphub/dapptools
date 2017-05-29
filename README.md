@@ -16,9 +16,19 @@ Ethereum Foundation's reference test suite is begun but not completed.
 
 ## Installing
 
+### Static binary
+
 If you don't want to compile anything, and you're on Linux, you can
 download a static binary from the "Releases" tab on GitHub.
-Otherwise, read on:
+If the static binary complains about a "terminfo"
+file, you have to set the `TERMINFO` environment variable; on Ubuntu,
+you should do
+
+    $ export TERMINFO=/lib/terminfo
+    
+(Put that in your `~/.bashrc` for convenience.)
+
+### Building
 
 The fastest way to build and install `hsevm` is usually to use the
 [Nix](https://nixos.org/nix/) package manager, which works on Linux,
