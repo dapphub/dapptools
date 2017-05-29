@@ -1,4 +1,4 @@
-default.nix: hsevm.cabal; cabal2nix --enable-profiling . > default.nix
+default.nix: hsevm.cabal; cabal2nix . > default.nix
 
 nix: default.nix hsevm.nix
 	nix-shell -A hsevm.env hsevm.nix --command \

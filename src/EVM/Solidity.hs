@@ -231,11 +231,11 @@ toCode = fst . BS16.decode . encodeUtf8
 solidity' :: Text -> IO Text
 solidity' src = withSystemTempFile "hsevm.sol" $ \path handle -> do
   hClose handle
-  writeFile path ("pragma solidity ^0.4.11;\n" <> src)
+  writeFile path ("pragma solidity ^0.4.8;\n" <> src)
   pack <$>
     readProcess
       "solc"
-      ["--combined-json=bin-runtime,bin,srcmap-runtime,abi", path]
+      ["--combined-json=bin-runtime,bin,srcmap,srcmap-runtime,abi", path]
       ""
 
 -- When doing CREATE and passing constructor arguments, Solidity loads

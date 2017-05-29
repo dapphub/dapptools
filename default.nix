@@ -31,8 +31,6 @@ mkDerivation {
     base binary bytestring ghci-pretty here HUnit lens mtl QuickCheck
     tasty tasty-hunit tasty-quickcheck text vector
   ];
-  enableLibraryProfiling = true;
-  enableExecutableProfiling = true;
   homepage = "https://github.com/mbrock/hsevm";
   description = "Ethereum virtual machine evaluator";
   license = stdenv.lib.licenses.agpl3;

@@ -2,7 +2,7 @@ module EVM.Exec where
 
 import Data.ByteString (ByteString)
 
-import Control.Monad.State.Strict (State)
+import Control.Monad.State.Strict (State, get)
 import Control.Lens
 
 import EVM
@@ -34,3 +34,7 @@ exec =
   use EVM.result >>= \case
     EVM.VMRunning -> EVM.exec1 >> exec
     x -> return x
+
+execWhile :: (VM -> Bool) -> State VM ()
+execWhile p =
+  get >>= \x -> if p x then execWhile p else return ()

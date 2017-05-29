@@ -7,9 +7,8 @@ let pkgs = import <nixpkgs> {};
       };
     };
 in rec {
-  hsevm = pkgs.haskellPackages.callPackage ./default.nix {};
-  hsevmProfiling = profiling.callPackage ./default.nix {};
-  test = pkgs.runCommand "hsevm" {} ''
-    ${hsevm}/bin/hsevm
-  '';
+  hsevm = (pkgs.haskellPackages.callPackage ./default.nix {}).overrideAttrs (old: rec {
+    buildInputs = [pkgs.solc];
+  });
+  # hsevmProfiling = profiling.callPackage ./default.nix {};
 }

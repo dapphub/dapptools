@@ -113,26 +113,6 @@ main dappRoot jsonFilePath = do
       Just (contractMap, sourceCache) -> do
         let
           unitTests = findUnitTests (Map.elems contractMap)
-          -- firstUnitTest = head unitTests
-          -- Just testContract = view (at (fst firstUnitTest)) contractMap
-          -- vm0 = initialUnitTestVm testContract (Map.elems contractMap)
-          -- vm2 = case runState exec vm0 of
-          --   (VMRunning, _) -> error "internal error"
-          --   (VMFailure, _) -> error "creation error"
-          --   (VMSuccess targetCode, vm1) ->
-          --     execState (performCreation targetCode) vm1
-          -- target = view (state . contract) vm2
-          -- vm3 = flip execState vm2 $ do
-          --   setupCall target "setUp()"
-          -- vm = case runState exec vm3 of
-          --   (VMRunning, _) -> error "inetrnal error"
-          --   (VMFailure, _) -> error "setUp() failed"
-          --   (VMSuccess _, vm4) ->
-          --     flip execState vm4 $ do
-          --       setupCall target (head (snd firstUnitTest))
-          --       assign contextTrace (Zipper.fromForest [])
-
-          -- Just sm = currentSrcMap vm
 
           mkVty = do
             vty <- Vty.mkVty Vty.defaultConfig

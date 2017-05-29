@@ -127,4 +127,4 @@ unitTestMethods :: SolcContract -> [Text]
 unitTestMethods c = sort (filter (isUnitTestName) (Map.elems (c ^. abiMap)))
   where
     isUnitTestName s =
-      "test" `isPrefixOf` s -- || "testFail" `isPrefixOf` s
+      "test" `isPrefixOf` s
