@@ -12,6 +12,8 @@ while showing the Solidity source, or run arbitrary EVM code.
 (especially the precompiled contracts are missing). Testing against the
 Ethereum Foundation's reference test suite is begun but not completed.
 
+[![asciicast](https://asciinema.org/a/5j8eec71hl55l16hsbrn91j8e.png)](https://asciinema.org/a/5j8eec71hl55l16hsbrn91j8e)
+
 ## Installing
 
 If you don't want to compile anything, and you're on Linux, you can
