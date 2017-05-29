@@ -152,7 +152,10 @@ app = App
           halt s
 
         (UiVmScreen s', VtyEvent (Vty.EvKey (Vty.KChar 'n') [])) ->
-          continue (UiVmScreen (step s'))
+          continue (UiVmScreen (stepOneOpcode s'))
+
+        (UiVmScreen s', VtyEvent (Vty.EvKey (Vty.KChar 'N') [])) ->
+          continue (UiVmScreen (stepOneSourcePosition s'))
 
         (UiTestPickerScreen s', VtyEvent (Vty.EvKey (Vty.KEnter) [])) -> do
           case listSelectedElement (view testPickerList s') of
@@ -239,10 +242,18 @@ drawVm ui =
     ]
   ]
 
-step :: UiVmState -> UiVmState
-step ui =
+stepOneOpcode :: UiVmState -> UiVmState
+stepOneOpcode ui =
   let
     nextVm = execState exec1 (view uiVm ui)
+  in mkUiVmState nextVm (view uiVmDapp ui)
+
+stepOneSourcePosition :: UiVmState -> UiVmState
+stepOneSourcePosition ui =
+  let
+    initialPosition = currentSrcMap (view uiVm ui)
+    stillHere s = currentSrcMap s == initialPosition
+    nextVm = execState (execWhile stillHere) (view uiVm ui)
   in mkUiVmState nextVm (view uiVmDapp ui)
 
 mkUiVmState :: VM -> DappInfo -> UiVmState
