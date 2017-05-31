@@ -12,3 +12,4 @@ deploy:
   file: "hsevm-${TRAVIS_TAG}-linux-x64.tar.gz"
   on:
     tags: true
+  skip_cleanup: true
