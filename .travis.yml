@@ -1,0 +1,16 @@
+sudo: required
+services:
+  - docker
+script:
+  - make hsevm-linux-x64
+before_deploy:
+  - tar czf hsevm-${TRAVIS_TAG}-linux-x64.tar.gz hsevm-linux-x64
+deploy:
+  provider: releases
+  api_key:
+    secure: "tRh9Fj9Ix3eST1uQfVr1t5RQfg2mBlLLartJUTB9ETUIpMVq7M21RsL39vjp2zz4rc+rbp3gbPcAlE4hKRJyU8g/kz1UvJR7hcsH6ptZkkkQVw8r1pRSAmEsnTPJ6zLXUGMjOHMsUUhtdI0DuiuZA6a2LvfNUGGjVfBpIdoaI7MOGeKtL6jTxJaSxJJn4tV/UYbBQTNubS9gt0+YRowpAIH+H09wCXM0WjgQtnatlI2COeADmmv9w3tk3x01+S7pjwul/V2mHtKeQ3khSc5cGxN24+hqbp1dt3qQ+XM6qq1pFyXr9x7Fs7n4MGQdFOtUKC5rDP2GdGDt8r7uh5heh/1XK7TeixjT1ACoFSV159wnIoyUztU4rAkTKq4ZvNPlPz/r16cb1jSjxOaAg+tOo+rIPC2pMpkHNyTsYBNGGD7xD4Kv7iLN8B8BEZxQqPrfFCPNk3hyLBoaEIymtou4Z12WY2nxURYJ0D7TIrlhf3KV8B+K+OyZlkybvJdGI8S8z2/6a2+4ZK0clfbRNgfPB4Ap/LX8uADXrD7mZC2hfSZ+Mhu0n5p99dG5HBNqQXe9YR5+ixauWOWO0vEpieacSA/2IGb4yKdJ3ebpzbIaNyzD0dBTyLVaBz3t6jFUXv7FaAMLZMZ6xjpceXwcPGIR8VtRiEhfgkO4zEdR/miefOU="
+  file_glob: true
+  file: "hsevm-${TRAVIS_TAG}-linux-x64.tar.gz"
+  skip_cleanup: true
+  on:
+    tags: true
