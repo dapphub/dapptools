@@ -1,16 +1,14 @@
 sudo: required
 services:
-  - docker
+- docker
 script:
-  - make hsevm-linux-x64
+- make hsevm-linux-x64
 before_deploy:
-  - tar czf hsevm-${TRAVIS_TAG}-linux-x64.tar.gz hsevm-linux-x64
+- tar czf hsevm-${TRAVIS_TAG}-linux-x64.tar.gz hsevm-linux-x64
 deploy:
   provider: releases
   api_key:
-    secure: "tRh9Fj9Ix3eST1uQfVr1t5RQfg2mBlLLartJUTB9ETUIpMVq7M21RsL39vjp2zz4rc+rbp3gbPcAlE4hKRJyU8g/kz1UvJR7hcsH6ptZkkkQVw8r1pRSAmEsnTPJ6zLXUGMjOHMsUUhtdI0DuiuZA6a2LvfNUGGjVfBpIdoaI7MOGeKtL6jTxJaSxJJn4tV/UYbBQTNubS9gt0+YRowpAIH+H09wCXM0WjgQtnatlI2COeADmmv9w3tk3x01+S7pjwul/V2mHtKeQ3khSc5cGxN24+hqbp1dt3qQ+XM6qq1pFyXr9x7Fs7n4MGQdFOtUKC5rDP2GdGDt8r7uh5heh/1XK7TeixjT1ACoFSV159wnIoyUztU4rAkTKq4ZvNPlPz/r16cb1jSjxOaAg+tOo+rIPC2pMpkHNyTsYBNGGD7xD4Kv7iLN8B8BEZxQqPrfFCPNk3hyLBoaEIymtou4Z12WY2nxURYJ0D7TIrlhf3KV8B+K+OyZlkybvJdGI8S8z2/6a2+4ZK0clfbRNgfPB4Ap/LX8uADXrD7mZC2hfSZ+Mhu0n5p99dG5HBNqQXe9YR5+ixauWOWO0vEpieacSA/2IGb4yKdJ3ebpzbIaNyzD0dBTyLVaBz3t6jFUXv7FaAMLZMZ6xjpceXwcPGIR8VtRiEhfgkO4zEdR/miefOU="
-  file_glob: true
+    secure: hUZxnwIpX9wzMSuwlgXQ8ybKWfYd6JUhFJBdhJN12cZrH2+fiQX9rmSV1TryGERREo22VNbYi/1tcDEC4nx9xJm50dPcqkw9muL4oMrF0QYU6sAWmnNndHbhZGTTdJ2MBmzz7Gojx3SUNsny8ewtlCBNmiK5MAeNF2jjLZ4ATgR+ABZpkDV1/KhHQGQUuANV3bZ1S/xk/chnAPkoBb8H0HVGCCeL2SKiMt1GWaoNvIEZw7SXqS6wZsSqmu7iqNlu8pnR8K2rVqRXDiBsUYv6QY2P4swHZd3I00FIOI0/962hTORb1bJHyfEGeHV9VGBEBNBMmkW9Al1uD2fO6BqrVMv93Y6FhZ2pySS5DM+9aCZMdCxS01ov5rgEY2B+zv4mDDEXEdfQGkPLVSpGrLkq7t2RAt+unuSpSVcatreqgZvfrPcptDkm7kYk+2aqcR38XJa00uKeEcbNuXaG9Ok/fZ211MKCsd9uZaSr7oBMta0P18sX2RvVY5Kbs9fqPcYgAz2WLqYUM7n3W8AwbRcfFOQ6Ev/PGVJhACcrmCkZI3lc7ojKInQkPm9PdZI8sbrjmHHJ5tQNs5zVACBsRiiWsrT3EFr2Pd6SVb4Hx2Wrq2dq0yGLLhOmPbPt7pBMp3G6/xYMhRZFabKgQ7XeHR5ybrpsvTR+lq/SAvyojauS8Tc=
   file: "hsevm-${TRAVIS_TAG}-linux-x64.tar.gz"
-  skip_cleanup: true
   on:
-    tags: true
+    repo: dapphub/hsevm
