@@ -22,6 +22,7 @@ module EVM.Solidity
   , sourceFiles
   , sourceLines
   , stripConstructorArguments
+  , lineSubrange
 ) where
 
 import EVM.ABI
@@ -111,7 +112,7 @@ makeSrcMaps = (\case (_, Fe, _) -> Nothing; x -> Just (done x))
     digits' !x !n (d:ds) = digits' (x + d * 10 ^ n) (n + 1) ds
 
     done (xs, s, p) = let (xs', _, _) = go ';' (xs, s, p) in xs'
-    
+
     go ':' (xs, F1 [], p@(SM a _ _ _))       = (xs, F2 a [], p)
     go ':' (xs, F1 ds, p)                    = (xs, F2 (digits ds) [], p)
     go d   (xs, F1 ds, p) | isDigit d        = (xs, F1 (digitToInt d : ds), p)
@@ -140,7 +141,7 @@ makeSrcMaps = (\case (_, Fe, _) -> Nothing; x -> Just (done x))
     go ';' (xs, F5 s, _)                     = (xs |> s, F1 [], s)
 
     go _ (xs, _, p)                          = (xs, Fe, p)
-    
+
 makeSourceCache :: [Text] -> IO SourceCache
 makeSourceCache paths = do
   xs <- mapM (BS.readFile . Text.unpack) paths
@@ -151,7 +152,20 @@ makeSourceCache paths = do
     _sourceLines =
       Map.fromList (zip [0 .. length paths - 1]
                      (map (Vector.fromList . BS.split 0xa) xs))
+
   }
+
+lineSubrange ::
+  Vector ByteString -> (Int, Int) -> Int -> Maybe (Int, Int)
+lineSubrange xs (s1, n1) i =
+  let
+    ks = Vector.map (\x -> 1 + BS.length x) xs
+    s2  = Vector.sum (Vector.take i ks)
+    n2  = ks Vector.! i
+  in
+    if s1 + n1 < s2 || s1 > s2 + n2
+    then Nothing
+    else Just (s1 - s2, min (s2 + n2 - s1) n1)
 
 readSolc :: FilePath -> IO (Maybe (Map Text SolcContract, SourceCache))
 readSolc fp =
@@ -254,4 +268,4 @@ stripConstructorArguments bs =
 bzzrPrefix :: ByteString
 bzzrPrefix =
   -- a1 65 "bzzr0" 0x58 0x20
-  BS.reverse $ BS.pack [0xa1, 0x65, 98, 122, 122, 114, 48, 0x58, 0x20] 
+  BS.reverse $ BS.pack [0xa1, 0x65, 98, 122, 122, 114, 48, 0x58, 0x20]

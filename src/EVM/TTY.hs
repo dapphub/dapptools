@@ -68,7 +68,7 @@ data UiVmState = UiVmState
   , _uiVmBytecodeList :: List Name (Int, Op)
   , _uiVmLogList      :: List Name Log
   , _uiVmTraceList    :: List Name String
-  , _uiVmSolidityList :: List Name ByteString
+  , _uiVmSolidityList :: List Name (Int, ByteString)
   , _uiVmSolc         :: Maybe SolcContract
   , _uiVmDapp         :: DappInfo
   }
@@ -277,13 +277,22 @@ mkUiVmState vm dapp =
     , _uiVmTraceList =
         list
           TracePane
-          (Vec.fromList . lines . drawForest . fmap (fmap (unpack . showContext vm)) $ contextTraceForest vm)
+          (Vec.fromList
+           . lines
+           . drawForest
+           . fmap (fmap (unpack . showContext vm))
+           $ contextTraceForest vm)
           1
     , _uiVmSolidityList =
         list SolidityPane
           (case sm of
              Nothing -> mempty
-             Just x -> view (dappSources . sourceLines . ix (srcMapFile x)) dapp)
+             Just x ->
+               view (dappSources
+                     . sourceLines
+                     . ix (srcMapFile x)
+                     . to (Vec.imap (,)))
+                 dapp)
           1
     }
 
@@ -353,24 +362,34 @@ drawTracePane ui =
 drawSolidityPane :: UiVmState -> UiWidget
 drawSolidityPane ui =
   let
+    sm = fromJust $ currentSrcMap (view uiVm ui)
+    lines = fromJust $ view (uiVmDapp . dappSources . sourceLines . at (srcMapFile sm)) ui
+    subrange i = lineSubrange lines (srcMapOffset sm, srcMapLength sm) i
     lineNo =
-      snd . fromJust $
+      (snd . fromJust $
         (srcMapCodePos
          (view (uiVmDapp . dappSources) ui)
-         (fromJust $
-          currentSrcMap (view uiVm ui)))
+         sm)) - 1
   in vBox
     [ hBorderWithLabel
         (txt (maybe "<unknown>" contractNamePart
               (preview (uiVmSolc . _Just . contractName) ui)))
     , renderList
-        (\active x ->
-           withHighlight active $
-             txt (case decodeUtf8 x of
-                    "" -> " "
-                    y -> y))
+        (\_ (i, x) ->
+           let s = case decodeUtf8 x of "" -> " "; y -> y
+           in case subrange i of
+                Nothing -> withHighlight False (txt s)
+                Just (a, b) ->
+                  let (x, y, z) = ( Text.take a s
+                                  , Text.take b (Text.drop a s)
+                                  , Text.drop (a + b) s
+                                  )
+                  in hBox [ withHighlight False (txt x)
+                          , withHighlight True (txt y)
+                          , withHighlight False (txt z)
+                          ])
         False
-        (listMoveTo (lineNo - 1)
+        (listMoveTo lineNo
           (view uiVmSolidityList ui))
     ]
 
