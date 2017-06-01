@@ -18,8 +18,8 @@ insert .gitignore <<.
 .
 
 name=$(basename "$(pwd)")
-words=$(sed 's/[^a-z0-9]\+/\n/ig' <<<"$name")
-while read -r word; do type+=${word^}; done <<<"$words"
+type=$(<<<"$name" perl -pe 's/(\w+)/\u$1/g')
+type=$(<<<"$type" tr -cd a-zA-Z0-9)
 
 create Makefile <<.
 all:; dapp build
