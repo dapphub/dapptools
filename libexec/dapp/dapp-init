@@ -4,6 +4,7 @@ set -o noclobber
 
 create() { cat >"$1"; (set -x; git add "$1"); }
 insert() {
+  touch "$1"
   while read -r line; do
     grep -qF "$line" "$1" || printf >>"$1" '%s\n' "$line"
   done
