@@ -68,12 +68,12 @@ contract ${type}Test is DSTest {
         $noun = new $type();
     }
 
-    function test_basic_sanity() {
-        assert(true);
-    }
-
     function testFail_basic_sanity() {
         assert(false);
+    }
+
+    function test_basic_sanity() {
+        assert(true);
     }
 }
 .
