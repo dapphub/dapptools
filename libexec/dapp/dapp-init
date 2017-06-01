@@ -7,7 +7,7 @@ solc_version=$(<<<"$solc_version" grep ^Version:)
 solc_version=${solc_version#* }
 solc_version=${solc_version%%+*}
 
-create() { (set +e; cat >"$1"); (set -x; git add "$1"); }
+create() { [[ -e $1 ]] || { cat >"$1"; (set -x; git add "$1"); }; }
 insert() {
   touch "$1"
   while read -r line; do
