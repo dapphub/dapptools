@@ -24,15 +24,18 @@ insert .gitignore <<.
 .
 
 name=$(basename "$(pwd)")
+name=$(<<<"$name" tr A-Z a-z)
+noun=(${name//[^a-z]/ })
+noun=${noun[$((${#noun} - 1))]}
 type=$(<<<"$name" perl -pe 's/(\w+)/\u$1/g')
 type=$(<<<"$type" tr -cd a-zA-Z0-9)
-type=${1-type}
+type=${1-$type}
 
 create Makefile <<.
-all:; dapp build
-clean:; dapp clean
-test:; dapp test
-deploy:; dapp create $type
+all    :; dapp build
+clean  :; dapp clean
+test   :; dapp test
+deploy :; dapp create $type
 .
 
 create Dappfile <<.
@@ -59,6 +62,12 @@ import "ds-test/test.sol";
 import "./$type.sol";
 
 contract ${type}Test is DSTest {
+    $type $noun;
+
+    function setUp() {
+        $noun = new $type();
+    }
+
     function test_basic_sanity() {
         assert(true);
     }
