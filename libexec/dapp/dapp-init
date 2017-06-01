@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-set -o noclobber
+set -e -o noclobber
 [[ -e .git ]] && dapp --sanity "$0"
 
-create() { cat >"$1"; (set -x; git add "$1"); }
+create() { (set +e; cat >"$1"); (set -x; git add "$1"); }
 insert() {
   touch "$1"
   while read -r line; do
