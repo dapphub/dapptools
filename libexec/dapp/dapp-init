@@ -2,6 +2,11 @@
 set -e -o noclobber
 [[ -e .git ]] && dapp --sanity "$0"
 
+solc_version=$(solc --version)
+solc_version=$(<<<"$solc_version" grep ^Version:)
+solc_version=${solc_version#* }
+solc_version=${solc_version%%+*}
+
 create() { (set +e; cat >"$1"); (set -x; git add "$1"); }
 insert() {
   touch "$1"
@@ -39,14 +44,14 @@ license         Apache-2.0
 .
 
 create "src/$type.sol" <<.
-pragma solidity ^0.4.8;
+pragma solidity ^${solc_version};
 
 contract $type {
 }
 .
 
 create "src/$type.t.sol" <<.
-pragma solidity ^0.4.8;
+pragma solidity ^${solc_version};
 
 import "ds-test/test.sol";
 
