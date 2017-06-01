@@ -26,6 +26,7 @@ insert .gitignore <<.
 name=$(basename "$(pwd)")
 type=$(<<<"$name" perl -pe 's/(\w+)/\u$1/g')
 type=$(<<<"$type" tr -cd a-zA-Z0-9)
+type=${1-type}
 
 create Makefile <<.
 all:; dapp build
@@ -69,6 +70,6 @@ contract ${type}Test is DSTest {
 .
 
 git add -A
-(set -x; git commit -m "dapp init $name")
+(set -x; git commit -m "dapp init $type")
 (set -x; dapp install ds-test)
 (set -x; make test)
