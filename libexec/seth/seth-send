@@ -36,12 +36,14 @@ if [[ $SETH_CREATE ]]; then
   fi
 else
   TO=$(seth --to-address "$1")
-  DATA=$(seth calldata "${@:2}")
+  if [[ $2 ]]; then
+    DATA=$(seth calldata "${@:2}")
+  fi
 fi
 
 jshon+=(-n {})
 [[ $TO ]] && jshon+=(-s "$TO" -i to)
-jshon+=(-s "$DATA" -i data)
+[[ $DATA ]] && jshon+=(-s "$DATA" -i data)
 jshon+=($(seth --send-params))
 jshon+=(-i append)
 
