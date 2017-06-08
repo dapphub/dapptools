@@ -21,10 +21,8 @@ The rest of the installation process looks like this:
 .. code:: bash
 
     $ curl https://nixos.org/nix/install | sh
-    $ nix-env -i ethabi jshon
-    $ git clone https://github.com/dapphub/seth
+    $ nix-env -i ethabi jshon seth
     $ git clone https://github.com/dapphub/dapp
-    $ make link -C seth
     $ make link -C dapp
 
 Dapp depends on some blockchain development tools that are very useful in their own right. In particular, you may find `seth <https://github.com/dapphub/seth>`_ convenient when working with any Ethereum client's `JSON RPC API <https://github.com/ethereum/wiki/wiki/JSON-RPC>`_. You can explore the full list of dependencies below.
