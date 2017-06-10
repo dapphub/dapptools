@@ -94,7 +94,7 @@ while [[ $1 ]]; do
 
        --async)             export SETH_ASYNC=yes;;
        --follow)            export SETH_FOLLOW=yes;;
-    -j,--json)              export SETH_JSON=yes;;
+    -j|--json)              export SETH_JSON=yes;;
 
     *) printf "${0##*/}: internal error: %q\n" "$1"; exit 1
   esac; shift
