@@ -631,6 +631,9 @@ exec1 = do
         -- op: CREATE
         0xf0 -> do
           case stk of
+            (xValue:_:_:_) | xValue > view balance this -> do
+              returnOp 0 (0, 0)
+
             (xValue:xOffset:xSize:xs) -> do
               accessMemoryRange xOffset xSize
 
@@ -643,6 +646,7 @@ exec1 = do
               zoom (env . contracts) $ do
                 assign (at newAddr) (Just newContract)
                 modifying (ix self . nonce) succ
+                modifying (ix self . balance) (flip (-) xValue)
 
               vm' <- get
               pushTo frames $ Frame
@@ -665,13 +669,17 @@ exec1 = do
         -- op: CALL
         0xf1 ->
           case stk of
+            (_:_:xValue:_:_:_:_:_) | xValue > view balance this -> do
+              returnOp 0 (0, 0)
             (_:xTo:xValue:xInOffset:xInSize:xOutOffset:xOutSize:xs) -> do
               delegateCall (num xTo) xInOffset xInSize xOutOffset xOutSize xs
               zoom state $ do
                 assign callvalue xValue
                 assign caller (the state contract)
                 assign contract (num xTo)
-            _ ->
+              zoom (env . contracts) $ do
+                ix self      . balance -= xValue
+                ix (num xTo) . balance += xValue
               underrun
 
         -- op: CALLCODE

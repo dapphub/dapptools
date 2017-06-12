@@ -8,8 +8,8 @@ and integrates especially well with the
 command line program can run unit tests, interactively debug contracts
 while showing the Solidity source, or run arbitrary EVM code.
 
-*This software is alpha quality.* It is not yet a complete EVM
-(especially the precompiled contracts are missing). Testing against the
+*This software is alpha quality.* It is not yet a 100% complete EVM
+(almost everything is implemented, but e.g. the precompiled contracts are missing). Testing against the
 Ethereum Foundation's reference test suite is begun but not completed.
 
 [![asciicast](https://asciinema.org/a/5j8eec71hl55l16hsbrn91j8e.png)](https://asciinema.org/a/5j8eec71hl55l16hsbrn91j8e)
