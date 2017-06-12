@@ -103,7 +103,10 @@ initialUnitTestVm c theContracts =
            , vmoptGaslimit = 0
            , vmoptDifficulty = 0
            }
-    creator = initialContract mempty & set nonce 1
+    creator =
+      initialContract mempty
+        & set nonce 1
+        & set balance 1000000000000000000000000000
   in vm
     & set (env . contracts . at ethrunAddress) (Just creator)
     & set (env . solcByCreationHash) (Map.fromList [(view creationCodehash c, c) | c <- theContracts])
