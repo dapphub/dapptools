@@ -21,7 +21,7 @@ The rest of the installation process looks like this:
 .. code:: bash
 
     $ curl https://nixos.org/nix/install | sh
-    $ nix-channel --add https://castle.brockman.se/nix/dapphub
+    $ nix-channel --add https://nix.dapphub.com/pkgs/dapphub
     $ nix-channel --update
     $ nix-env -i seth solc
     $ git clone https://github.com/dapphub/dapp
