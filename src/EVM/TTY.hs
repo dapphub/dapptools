@@ -199,7 +199,7 @@ initialUiVmStateForTest dapp (theContractName, theTestName) =
            assign contextTrace (Zipper.fromForest [])
            assign logs mempty
   in
-    mkUiVmState vm3 dapp
+    mkUiVmState vm dapp
 
 myTheme :: [(AttrName, Vty.Attr)]
 myTheme =
