@@ -38,3 +38,23 @@ exec =
 execWhile :: (VM -> Bool) -> State VM ()
 execWhile p =
   get >>= \x -> if p x then exec1 >> execWhile p else return ()
+
+-- locateBreakpoint :: UIState -> Text -> Int -> Maybe [(Word256, Vector Bool)]
+-- locateBreakpoint ui fileName lineNo = do
+--   (i, (t, s)) <-
+--     flip find (Map.toList (ui ^. uiSourceCache . sourceFiles))
+--       (\(_, (t, _)) -> t == fileName)
+--   let ls = BS.split 0x0a s
+--       l = ls !! (lineNo - 1)
+--       offset = 1 + sum (map ((+ 1) . BS.length) (take (lineNo - 1) ls))
+--       horizon = offset + BS.length l
+--   return $ Map.elems (ui ^. uiVm . _Just . env . solc)
+--     & map (\c -> (
+--         c ^. solcCodehash,
+--         Vector.create $ new (Seq.length (c ^. solcSrcmap)) >>= \v -> do
+--           fst $ foldl' (\(!m, !j) (sm@SM { srcMapOffset = o }) ->
+--             if srcMapFile sm == i && o >= offset && o < horizon
+--             then (m >> write v j True, j + 1)
+--             else (m >> write v j False, j + 1)) (return (), 0) (c ^. solcSrcmap)
+--           return v
+--       ))

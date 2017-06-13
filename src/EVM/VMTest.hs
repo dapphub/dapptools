@@ -54,9 +54,9 @@ checkExpectation x vm =
            <*> checkExpectedOut output (expectedOut expectation)
     (Nothing, EVM.VMSuccess _) ->
       return False
-    (Nothing, EVM.VMFailure) ->
+    (Nothing, EVM.VMFailure _) ->
       return True
-    (Just _, EVM.VMFailure) ->
+    (Just _, EVM.VMFailure _) ->
       return False
     (_, EVM.VMRunning) ->
       error "VMRunning?"

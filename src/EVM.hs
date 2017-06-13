@@ -116,10 +116,19 @@ data Op
   | OpUnknown Word8
   deriving (Show, Eq)
 
+data Error
+  = BalanceTooLow W256 W256
+  | UnrecognizedOpcode Word8
+  | SelfDestruction
+  | StackUnderrun
+  | BadJumpDestination
+  | NoSuchContract Addr
+  deriving (Eq, Show)
+
 -- | The possible result states of a VM
 data VMResult
   = VMRunning              -- ^ More operations to run
-  | VMFailure              -- ^ An operation failed
+  | VMFailure Error        -- ^ An operation failed
   | VMSuccess ByteString   -- ^ Reached STOP, RETURN, or end-of-code
   deriving (Eq, Show)
 
@@ -632,7 +641,7 @@ exec1 = do
         0xf0 -> do
           case stk of
             (xValue:_:_:_) | xValue > view balance this -> do
-              returnOp 0 (0, 0)
+              vmError (BalanceTooLow (view balance this) xValue)
 
             (xValue:xOffset:xSize:xs) -> do
               accessMemoryRange xOffset xSize
@@ -670,7 +679,7 @@ exec1 = do
         0xf1 ->
           case stk of
             (_:_:xValue:_:_:_:_:_) | xValue > view balance this -> do
-              returnOp 0 (0, 0)
+              vmError (BalanceTooLow (view balance this) xValue)
             (_:xTo:xValue:xInOffset:xInSize:xOutOffset:xOutSize:xs) -> do
               delegateCall (num xTo) xInOffset xInSize xOutOffset xOutSize xs
               zoom state $ do
@@ -680,6 +689,7 @@ exec1 = do
               zoom (env . contracts) $ do
                 ix self      . balance -= xValue
                 ix (num xTo) . balance += xValue
+            _ ->
               underrun
 
         -- op: CALLCODE
@@ -738,16 +748,16 @@ exec1 = do
               modifying
                 (env . contracts . ix (num x) . balance)
                 (+ (vm ^?! env . contracts . ix self . balance))
-              returnOp 0 (0, 0)
+              vmError SelfDestruction
 
-        _ ->
-          returnOp 0 (0, 0)
+        xxx ->
+          vmError (UnrecognizedOpcode xxx)
 
 delegateCall :: Addr -> W256 -> W256 -> W256 -> W256 -> [W256] -> EVM ()
 delegateCall xTo xInOffset xInSize xOutOffset xOutSize xs =
   preuse (env . contracts . ix xTo) >>=
     \case
-      Nothing -> returnOp 0 (0, 0)
+      Nothing -> vmError (NoSuchContract xTo)
       Just target -> do
         vm <- get
 
@@ -836,21 +846,15 @@ pushToSequence :: MonadState s m => ASetter s s (Seq a) (Seq a) -> a -> m ()
 pushToSequence f x = f %= (Seq.|> x)
 
 underrun :: EVM ()
-underrun = returnOp 0 (0, 0)
+underrun = vmError StackUnderrun
 
-returnOp :: W256 -> (W256, W256) -> EVM ()
-returnOp returnCode (xOffset, xSize) = do
+vmError :: Error -> EVM ()
+vmError e = do
+  assign result (VMFailure e)
   vm <- get
   case view frames vm of
-    [] -> do
-      assign result $
-        case returnCode of
-          0 -> VMFailure
-          _ -> VMSuccess (readMemory (num xOffset) (num xSize) vm)
-
+    [] -> return ()
     (nextFrame : remainingFrames) -> do
-      accessMemoryRange xOffset xSize
-
       modifying contextTrace $ \t ->
         case Zipper.parent t of
           Nothing -> error "internal error (context trace root)"
@@ -858,26 +862,16 @@ returnOp returnCode (xOffset, xSize) = do
 
       case view frameContext nextFrame of
         CreationContext _ -> do
-            let self = vm ^. state . contract
-            if xSize == 0
-              then do
-                push 0
-                assign result VMFailure
-                assign (env . contracts . at self) Nothing
-              else do
-                push (num self)
-                performCreation (readMemory (num xOffset) (num xSize) vm)
+          assign frames remainingFrames
+          assign state (view frameState nextFrame)
+          push 0
+          let self = vm ^. state . contract
+          assign (env . contracts . at self) Nothing
 
         CallContext yOffset ySize _ _ -> do
           assign frames remainingFrames
           assign state (view frameState nextFrame)
-          push returnCode
-          copyBytesToMemory
-            (readMemory (num xOffset) (num ySize) vm)
-            (num ySize)
-            0
-            (num yOffset)
-          accessMemoryRange yOffset xSize
+          push 0
 
 toWord512 :: W256 -> Word512
 toWord512 (W256 x) = fromHiAndLo 0 x
@@ -918,10 +912,10 @@ checkJump x = do
       insidePushData (num x) >>=
         \case
           True ->
-            returnOp 0 (0, 0)
+            vmError BadJumpDestination
           _ ->
             state . pc .= num x
-    else returnOp 0 (0, 0)
+    else vmError BadJumpDestination
 
 insidePushData :: Int -> EVM Bool
 insidePushData i = do

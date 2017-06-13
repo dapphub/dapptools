@@ -38,8 +38,8 @@ runUnitTestContract mode contractMap cache (contractName, testNames) = do
         vm2 = case runState exec vm0 of
                 (VMRunning, _) ->
                   error "Internal error"
-                (VMFailure, _) ->
-                  error "Creation error"
+                (VMFailure e, _) ->
+                  error ("Creation error: " ++ show e)
                 (VMSuccess targetCode, vm1) -> do
                   execState (performCreation targetCode) vm1
         target = view (state . contract) vm2
@@ -49,37 +49,42 @@ runUnitTestContract mode contractMap cache (contractName, testNames) = do
         hFlush stdout
         let vm3 = flip execState vm2 $ do
               setupCall target "setUp()"
-              VMSuccess _ <- exec
-              setupCall target testName
+              exec
 
-        let vm4 = execState exec vm3
-        case vm4 ^. result of
-          VMFailure ->
-            if "testFail" `isPrefixOf` testName
-              then putStrLn "ok (failed as expected)"
-              else do
-                putStrLn "unexpected failure"
-                _ <- debugger (Just cache) vm3
-                return ()
+        case view result vm3 of
+          VMFailure e -> do
+            putStrLn ("failure in setUp(): " ++ show e)
+            _ <- debugger (Just cache) (vm3 & state . pc -~ 1)
+            return ()
           VMSuccess _ -> do
-            case evalState (setupCall target "failed()" >> exec) vm4 of
-              VMSuccess out ->
-                case runGetOrFail (getAbi AbiBoolType)
-                       (LazyByteString.fromStrict out) of
-                  Right (_, _, AbiBool False) ->
-                    putStrLn "ok"
-                  Right (_, _, AbiBool True) ->
-                    putStrLn "test failed"
-                  Right (_, _, _) ->
+            let vm4 = execState (setupCall target testName >> exec) vm3
+            case vm4 ^. result of
+              VMFailure e ->
+                if "testFail" `isPrefixOf` testName
+                  then putStrLn "ok (failed as expected)"
+                  else do
+                    putStrLn ("unexpected failure: " ++ show e)
+                    _ <- debugger (Just cache) vm4
+                    return ()
+              VMSuccess _ -> do
+                case evalState (setupCall target "failed()" >> exec) vm4 of
+                  VMSuccess out ->
+                    case runGetOrFail (getAbi AbiBoolType)
+                           (LazyByteString.fromStrict out) of
+                      Right (_, _, AbiBool False) ->
+                        putStrLn "ok"
+                      Right (_, _, AbiBool True) ->
+                        putStrLn "test failed"
+                      Right (_, _, _) ->
+                        error "internal error"
+                      Left (_, _, e) ->
+                        error ("ds-test behaving strangely: " ++ e)
+                  VMFailure e ->
+                    error $ "ds-test behaving strangely (" ++ show e ++ ")"
+                  _ ->
                     error "internal error"
-                  Left (_, _, e) ->
-                    error ("ds-test behaving strangely: " ++ e)
-              VMFailure ->
-                error "ds-test behaving strangely"
-              _ ->
+              VMRunning ->
                 error "internal error"
-          VMRunning ->
-            error "internal error"
 
 setupCall :: Addr -> Text -> EVM ()
 setupCall target abi = do

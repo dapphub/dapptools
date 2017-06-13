@@ -184,7 +184,7 @@ initialUiVmStateForTest dapp (theContractName, theTestName) =
      vm0 = initialUnitTestVm testContract (Map.elems (view dappContracts dapp))
      vm2 = case runState exec vm0 of
        (VMRunning, _) -> error "internal error"
-       (VMFailure, _) -> error "creation error"
+       (VMFailure e, _) -> error $ "creation error: " ++ show e
        (VMSuccess targetCode, vm1) ->
          execState (performCreation targetCode) vm1
      target = view (state . contract) vm2
@@ -192,14 +192,14 @@ initialUiVmStateForTest dapp (theContractName, theTestName) =
        setupCall target "setUp()"
      vm = case runState exec vm3 of
        (VMRunning, _) -> error "inetrnal error"
-       (VMFailure, _) -> error "setUp() failed"
+       (VMFailure e, _) -> error $ "setUp() failed: " ++ show e
        (VMSuccess _, vm4) ->
          flip execState vm4 $ do
            setupCall target theTestName
            assign contextTrace (Zipper.fromForest [])
            assign logs mempty
   in
-    mkUiVmState vm dapp
+    mkUiVmState vm3 dapp
 
 myTheme :: [(AttrName, Vty.Attr)]
 myTheme =
@@ -332,7 +332,7 @@ drawStackPane ui =
 
 drawBytecodePane :: UiVmState -> UiWidget
 drawBytecodePane ui =
-  hBorderWithLabel (txt "Bytecode") <=>
+  hBorderWithLabel (txt "Bytecode " <+> str (show (view (uiVm . result) ui))) <=>
     renderList
       (\active x -> if not active
                     then withDefAttr dimAttr (opWidget x)
