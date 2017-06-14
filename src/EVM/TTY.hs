@@ -188,13 +188,14 @@ initialUiVmStateForTest dapp (theContractName, theTestName) =
        (VMSuccess targetCode, vm1) ->
          execState (performCreation targetCode) vm1
      target = view (state . contract) vm2
-     vm3 = flip execState vm2 $ do
+     vm3 = vm2 & env . contracts . ix target . balance +~ 0xffffffffffffffffffffffff
+     vm4 = flip execState vm3 $ do
        setupCall target "setUp()"
-     vm = case runState exec vm3 of
+     vm = case runState exec vm4 of
        (VMRunning, _) -> error "inetrnal error"
        (VMFailure e, _) -> error $ "setUp() failed: " ++ show e
-       (VMSuccess _, vm4) ->
-         flip execState vm4 $ do
+       (VMSuccess _, vm5) ->
+         flip execState vm5 $ do
            setupCall target theTestName
            assign contextTrace (Zipper.fromForest [])
            assign logs mempty
@@ -310,7 +311,7 @@ maybeAbiName solc abi = preview (abiMap . ix abi) solc
 showContext :: VM -> FrameContext -> Text
 showContext vm (CreationContext hash) =
   "CREATE " <> maybeContractName (contractByHash vm hash)
-showContext vm (CallContext _ _ hash abi) =
+showContext vm (CallContext _ _ hash abi _) =
   case contractByHash vm hash of
     Nothing ->
       "CALL [unknown]"

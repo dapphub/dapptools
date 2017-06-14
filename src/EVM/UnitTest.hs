@@ -24,6 +24,9 @@ import System.IO          (hFlush, stdout)
 import qualified Data.Map as Map
 import qualified Data.ByteString.Lazy as LazyByteString
 
+tick :: String -> IO ()
+tick x = putStr x >> hFlush stdout
+
 runUnitTestContract ::
   Mode -> Map Text SolcContract -> SourceCache -> (Text, [Text]) -> IO ()
 runUnitTestContract mode contractMap cache (contractName, testNames) = do
@@ -45,36 +48,39 @@ runUnitTestContract mode contractMap cache (contractName, testNames) = do
         target = view (state . contract) vm2
 
       forM_ testNames $ \testName -> do
-        putStr $ unpack testName ++ ": "
-        hFlush stdout
-        let vm3 = flip execState vm2 $ do
-              setupCall target "setUp()"
-              exec
+        let
+          endowment = 0xffffffffffffffffffffffff
+          vm3 = vm2 & env . contracts . ix target . balance +~ endowment
+          vm4 = flip execState vm3 $ do
+                  setupCall target "setUp()"
+                  exec
 
-        case view result vm3 of
+        case view result vm4 of
           VMFailure e -> do
-            putStrLn ("failure in setUp(): " ++ show e)
-            _ <- debugger (Just cache) (vm3 & state . pc -~ 1)
+            tick "F"
+            -- putStrLn ("failure in setUp(): " ++ show e)
+            _ <- debugger (Just cache) (vm4 & state . pc -~ 1)
             return ()
           VMSuccess _ -> do
-            let vm4 = execState (setupCall target testName >> exec) vm3
-            case vm4 ^. result of
+            let vm5 = execState (setupCall target testName >> exec) vm4
+            case vm5 ^. result of
               VMFailure e ->
                 if "testFail" `isPrefixOf` testName
-                  then putStrLn "ok (failed as expected)"
+                  then tick "."
                   else do
-                    putStrLn ("unexpected failure: " ++ show e)
-                    _ <- debugger (Just cache) vm4
+                    tick "F"
+                    -- putStrLn ("unexpected failure: " ++ show e)
+                    _ <- debugger (Just cache) vm5
                     return ()
               VMSuccess _ -> do
-                case evalState (setupCall target "failed()" >> exec) vm4 of
+                case evalState (setupCall target "failed()" >> exec) vm5 of
                   VMSuccess out ->
                     case runGetOrFail (getAbi AbiBoolType)
                            (LazyByteString.fromStrict out) of
                       Right (_, _, AbiBool False) ->
-                        putStrLn "ok"
+                        tick "."
                       Right (_, _, AbiBool True) ->
-                        putStrLn "test failed"
+                        tick "F"
                       Right (_, _, _) ->
                         error "internal error"
                       Left (_, _, e) ->
@@ -85,6 +91,8 @@ runUnitTestContract mode contractMap cache (contractName, testNames) = do
                     error "internal error"
               VMRunning ->
                 error "internal error"
+
+      tick "\n"
 
 setupCall :: Addr -> Text -> EVM ()
 setupCall target abi = do
