@@ -163,6 +163,7 @@ data FrameContext
     , callContextSize     :: W256
     , callContextCodehash :: W256
     , callContextAbi      :: Maybe Word32
+    , callContextReversion :: Map Addr Contract
     }
   deriving Show
 
@@ -720,7 +721,7 @@ exec1 = do
                       assign state (view frameState nextFrame)
                       push (num (the state contract))
 
-                    CallContext yOffset ySize _ _ -> do
+                    CallContext yOffset ySize _ _ _ -> do
                       assign state (view frameState nextFrame)
                       copyBytesToMemory
                         (readMemory (num xOffset) (num ySize) vm)
@@ -765,6 +766,7 @@ delegateCall xTo xInOffset xInSize xOutOffset xOutSize xs =
               { callContextOffset = xOutOffset
               , callContextSize   = xOutSize
               , callContextCodehash = view codehash target
+              , callContextReversion = view (env . contracts) vm
               , callContextAbi =
                   if xInSize >= 4
                   then Just $! view (state . memory . word32At (num xInOffset)) vm
@@ -850,10 +852,10 @@ underrun = vmError StackUnderrun
 
 vmError :: Error -> EVM ()
 vmError e = do
-  assign result (VMFailure e)
   vm <- get
   case view frames vm of
-    [] -> return ()
+    [] -> assign result (VMFailure e)
+
     (nextFrame : remainingFrames) -> do
       modifying contextTrace $ \t ->
         case Zipper.parent t of
@@ -868,9 +870,10 @@ vmError e = do
           let self = vm ^. state . contract
           assign (env . contracts . at self) Nothing
 
-        CallContext yOffset ySize _ _ -> do
+        CallContext yOffset ySize _ _ reversion -> do
           assign frames remainingFrames
           assign state (view frameState nextFrame)
+          assign (env . contracts) reversion
           push 0
 
 toWord512 :: W256 -> Word512
