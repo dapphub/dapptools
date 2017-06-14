@@ -178,8 +178,9 @@ readSolc fp =
 
 solidity :: Text -> Text -> IO (Maybe ByteString)
 solidity contract src = do
-  Just (solc, _) <- readJSON <$> solidity' src
-  return (solc ^? ix contract . creationCode)
+  (json, path) <- solidity' src
+  let Just (solc, _) = readJSON json
+  return (solc ^? ix (path <> ":" <> contract) . creationCode)
 
 readJSON :: Text -> Maybe (Map Text SolcContract, [Text])
 readJSON json = do
@@ -242,15 +243,16 @@ signature abi =
 toCode :: Text -> ByteString
 toCode = fst . BS16.decode . encodeUtf8
 
-solidity' :: Text -> IO Text
+solidity' :: Text -> IO (Text, Text)
 solidity' src = withSystemTempFile "hsevm.sol" $ \path handle -> do
   hClose handle
   writeFile path ("pragma solidity ^0.4.8;\n" <> src)
-  pack <$>
+  x <- pack <$>
     readProcess
       "solc"
       ["--combined-json=bin-runtime,bin,srcmap,srcmap-runtime,abi", path]
       ""
+  return (x, pack path)
 
 -- When doing CREATE and passing constructor arguments, Solidity loads
 -- the argument data via the creation bytecode, since there is no "calldata"
