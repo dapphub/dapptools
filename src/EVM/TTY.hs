@@ -3,47 +3,31 @@
 module EVM.TTY where
 
 import Brick
-import Brick.BChan
-import Brick.Focus
 import Brick.Widgets.Border
-import Brick.Widgets.Border.Style
 import Brick.Widgets.Center
-import Brick.Widgets.Edit
 import Brick.Widgets.List
-import Brick.Widgets.Dialog
 
 import EVM
-import EVM.ABI
 import EVM.Debug
 import EVM.Exec
-import EVM.Keccak
 import EVM.Solidity
 import EVM.Types
 import EVM.UnitTest
 
 import Control.Lens
-import Control.Lens.TH
-import Control.Monad
 import Control.Monad.State.Strict hiding (state)
 
 import Data.ByteString (ByteString)
-import Data.List (sortBy)
 import Data.Map (Map)
-import Data.Maybe (fromJust, fromMaybe)
+import Data.Maybe (fromJust)
 import Data.Monoid ((<>))
-import Data.Ord (comparing)
-import Data.Text (Text, pack, unpack)
+import Data.Text (Text, unpack)
 import Data.Text.Encoding (decodeUtf8)
-import Data.Text.Format
-import Data.Text.Lazy (toStrict)
 import Data.Tree (drawForest)
 import Data.Foldable (toList)
 import Data.Word (Word32)
 
-import System.Directory (withCurrentDirectory)
-
 import qualified Data.Map as Map
-import qualified Data.Sequence as Seq
 import qualified Data.Text as Text
 import qualified Data.Tree.Zipper as Zipper
 import qualified Data.Vector as Vec
@@ -98,14 +82,8 @@ isUnitTestContract :: Text -> DappInfo -> Bool
 isUnitTestContract name dapp =
   elem name (map fst (view dappUnitTests dapp))
 
-example =
-  withCurrentDirectory "/home/mbrock/dapphub/sai" $
-    EVM.TTY.main
-      "/home/mbrock/dapphub/sai"
-      "/home/mbrock/dapphub/sai/out/tub.t.sol.json"
-
 main :: FilePath -> FilePath -> IO ()
-main dappRoot jsonFilePath = do
+main root jsonFilePath = do
   readSolc jsonFilePath >>=
     \case
       Nothing ->
@@ -120,7 +98,7 @@ main dappRoot jsonFilePath = do
             return vty
 
           dappInfo = DappInfo
-              { _dappRoot      = dappRoot
+              { _dappRoot      = root
               , _dappUnitTests = unitTests
               , _dappContracts = contractMap
               , _dappSources   = sourceCache
@@ -341,6 +319,7 @@ drawBytecodePane ui =
       False
       (view uiVmBytecodeList ui)
 
+withHighlight :: Bool -> Widget n -> Widget n
 withHighlight False = withDefAttr dimAttr
 withHighlight True  = withDefAttr boldAttr
 
@@ -364,8 +343,8 @@ drawSolidityPane :: UiVmState -> UiWidget
 drawSolidityPane ui =
   let
     sm = fromJust $ currentSrcMap (view uiVm ui)
-    lines = fromJust $ view (uiVmDapp . dappSources . sourceLines . at (srcMapFile sm)) ui
-    subrange i = lineSubrange lines (srcMapOffset sm, srcMapLength sm) i
+    rows = fromJust $ view (uiVmDapp . dappSources . sourceLines . at (srcMapFile sm)) ui
+    subrange i = lineSubrange rows (srcMapOffset sm, srcMapLength sm) i
     lineNo =
       (snd . fromJust $
         (srcMapCodePos
@@ -376,8 +355,8 @@ drawSolidityPane ui =
         (txt (maybe "<unknown>" contractNamePart
               (preview (uiVmSolc . _Just . contractName) ui)))
     , renderList
-        (\_ (i, x) ->
-           let s = case decodeUtf8 x of "" -> " "; y -> y
+        (\_ (i, line) ->
+           let s = case decodeUtf8 line of "" -> " "; y -> y
            in case subrange i of
                 Nothing -> withHighlight False (txt s)
                 Just (a, b) ->
@@ -400,7 +379,8 @@ contractNamePart x = Text.split (== ':') x !! 1
 contractPathPart :: Text -> Text
 contractPathPart x = Text.split (== ':') x !! 0
 
-opWidget (i, x) = str (show i ++ " ") <+> case x of
+opWidget :: Show a => (a, Op) -> Widget n
+opWidget (i, o) = str (show i ++ " ") <+> case o of
   OpStop -> txt "STOP"
   OpAdd -> txt "ADD"
   OpMul -> txt "MUL"

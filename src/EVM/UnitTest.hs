@@ -18,7 +18,6 @@ import Data.Text.Encoding (encodeUtf8)
 import Data.Map           (Map)
 import Data.Word          (Word32)
 import Data.List          (sort)
-import IPPrint.Colored    (cpprint)
 import System.IO          (hFlush, stdout)
 
 import qualified Data.Map as Map
@@ -29,12 +28,12 @@ tick x = putStr x >> hFlush stdout
 
 runUnitTestContract ::
   Mode -> Map Text SolcContract -> SourceCache -> (Text, [Text]) -> IO ()
-runUnitTestContract mode contractMap cache (contractName, testNames) = do
+runUnitTestContract _ contractMap cache (name, testNames) = do
   putStrLn $ "Running " ++ show (length testNames) ++ " tests for "
-    ++ unpack contractName
-  case preview (ix contractName) contractMap of
+    ++ unpack name
+  case preview (ix name) contractMap of
     Nothing ->
-      error $ "Contract " ++ unpack contractName ++ " not found"
+      error $ "Contract " ++ unpack name ++ " not found"
     Just theContract -> do
       let
         vm0 = initialUnitTestVm theContract (Map.elems contractMap)
@@ -56,7 +55,8 @@ runUnitTestContract mode contractMap cache (contractName, testNames) = do
                   exec
 
         case view result vm4 of
-          VMFailure e -> do
+          VMRunning -> error "internal error"
+          VMFailure _ -> do
             tick "F"
             -- putStrLn ("failure in setUp(): " ++ show e)
             _ <- debugger (Just cache) (vm4 & state . pc -~ 1)
@@ -64,7 +64,7 @@ runUnitTestContract mode contractMap cache (contractName, testNames) = do
           VMSuccess _ -> do
             let vm5 = execState (setupCall target testName >> exec) vm4
             case vm5 ^. result of
-              VMFailure e ->
+              VMFailure _ ->
                 if "testFail" `isPrefixOf` testName
                   then tick "."
                   else do
@@ -101,10 +101,10 @@ setupCall target abi = do
   assign (state . calldata) (word32Bytes (abiKeccak (encodeUtf8 abi)))
 
 initialUnitTestVm :: SolcContract -> [SolcContract] -> VM
-initialUnitTestVm c theContracts =
+initialUnitTestVm theContract theContracts =
   let
     vm = makeVm $ VMOpts
-           { vmoptCode = view creationCode c
+           { vmoptCode = view creationCode theContract
            , vmoptCalldata = ""
            , vmoptValue = 0
            , vmoptAddress = newContractAddress ethrunAddress 1

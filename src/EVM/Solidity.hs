@@ -9,6 +9,7 @@ module EVM.Solidity
   , SourceCache (..)
   , SrcMap (..)
   , abiMap
+  , eventMap
   , contractName
   , creationCode
   , makeSrcMaps
@@ -30,7 +31,6 @@ import EVM.Keccak
 import EVM.Types
 
 import Control.Applicative
-import Control.DeepSeq
 import Control.Lens         hiding (Indexed)
 import Data.Aeson.Lens
 import Data.ByteString      (ByteString)
@@ -68,27 +68,27 @@ data SolcContract = SolcContract
   , _eventMap         :: Map W256 Event
   , _runtimeSrcmap    :: Seq SrcMap
   , _creationSrcmap   :: Seq SrcMap
-  } deriving (Show, Eq, Ord, Generic, NFData)
+  } deriving (Show, Eq, Ord, Generic)
 
 data SourceCache = SourceCache
   { _snippetCache :: Map (Int, Int) ByteString
   , _sourceFiles  :: Map Int (Text, ByteString)
   , _sourceLines  :: Map Int (Vector ByteString)
-  } deriving (Show, Eq, Ord, Generic, NFData)
+  } deriving (Show, Eq, Ord, Generic)
 
 instance Monoid SourceCache where
   mempty = SourceCache mempty mempty mempty
   mappend (SourceCache _ _ _) (SourceCache _ _ _) = error "lol"
 
 data JumpType = JumpInto | JumpFrom | JumpRegular
-  deriving (Show, Eq, Ord, Generic, NFData)
+  deriving (Show, Eq, Ord, Generic)
 
 data SrcMap = SM {
   srcMapOffset :: {-# UNPACK #-} Int,
   srcMapLength :: {-# UNPACK #-} Int,
   srcMapFile   :: {-# UNPACK #-} Int,
   srcMapJump   :: JumpType
-} deriving (Show, Eq, Ord, Generic, NFData)
+} deriving (Show, Eq, Ord, Generic)
 
 data SrcMapParseState
   = F1 [Int]
@@ -210,7 +210,7 @@ readJSON json = do
               signature abi
             ),
         _eventMap     = Map.fromList $
-          flip map (filter (\x -> "event" == x ^?! key "type" . _String)
+          flip map (filter (\y -> "event" == y ^?! key "type" . _String)
                      . toList $ (x ^?! key "abi" . _String) ^?! _Array) $
             \abi ->
               ( keccak (encodeUtf8 (signature abi))
@@ -219,8 +219,8 @@ readJSON json = do
                   (case abi ^?! key "anonymous" . _Bool of
                      True -> Anonymous
                      False -> NotAnonymous)
-                  (map (\x -> ( fromJust (parseTypeName (x ^?! key "type" . _String))
-                              , if x ^?! key "indexed" . _Bool
+                  (map (\y -> ( fromJust (parseTypeName (y ^?! key "type" . _String))
+                              , if y ^?! key "indexed" . _Bool
                                 then Indexed
                                 else NotIndexed ))
                     (toList $ abi ^?! key "inputs" . _Array))

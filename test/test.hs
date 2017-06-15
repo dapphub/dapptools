@@ -19,26 +19,20 @@ import qualified Data.Vector as Vector
 import Data.String.Here
 
 import Data.Binary.Put (runPut)
-import Data.Binary.Get (runGetState)
-
-import qualified Data.ByteString.Lazy as BSLazy
+import Data.Binary.Get (runGetOrFail)
 
 import EVM
 import EVM.ABI
-import EVM.Keccak
 import EVM.Solidity
 import EVM.Exec
-import EVM.Debug
-
-import IPPrint.Colored (cpprint)
 
 main :: IO ()
 main = defaultMain $ testGroup "hsevm"
   [ testGroup "ABI"
     [ testProperty "Put/get inverse" $ \x ->
-        let bytes = runPut (putAbi x)
-            (x', remaining, _) = runGetState (getAbi (abiValueType x)) bytes 0
-        in x == x' && BSLazy.null remaining
+        case runGetOrFail (getAbi (abiValueType x)) (runPut (putAbi x)) of
+          Right ("", _, x') -> x' == x
+          _ -> False
     ]
 
   , testGroup "Solidity expressions"
@@ -113,6 +107,7 @@ data Invocation
   = SolidityCall Text [AbiValue]
   deriving Show
 
+assertSolidityComputation :: Invocation -> AbiValue -> IO ()
 assertSolidityComputation (SolidityCall s args) x =
   do y <- runStatements s args (abiValueType x)
      assertEqual (Text.unpack s)

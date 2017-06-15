@@ -10,5 +10,7 @@ in rec {
   hsevm = (pkgs.haskellPackages.callPackage ./default.nix {}).overrideAttrs (old: rec {
     buildInputs = [pkgs.solc];
   });
-  # hsevmProfiling = profiling.callPackage ./default.nix {};
+  hsevmProfiling = (profiling.callPackage ./default.nix {}).overrideAttrs (old: rec {
+    buildInputs = [pkgs.solc];
+  });
 }

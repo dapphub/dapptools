@@ -47,7 +47,6 @@ module EVM.ABI
 import EVM.Keccak (abiKeccak)
 import EVM.Types ()
 
-import Control.DeepSeq
 import Control.Monad      (replicateM, replicateM_, forM_)
 import Data.Binary.Get    (Get, label, getWord8, getWord32be, skip)
 import Data.Binary.Put    (Put, runPut, putWord8, putWord32be)
@@ -78,7 +77,7 @@ data AbiValue
   | AbiString       BS.ByteString
   | AbiArrayDynamic AbiType (Vector AbiValue)
   | AbiArray        Int AbiType (Vector AbiValue)
-  deriving (Show, Read, Eq, Ord, Generic, NFData)
+  deriving (Show, Read, Eq, Ord, Generic)
 
 data AbiType
   = AbiUIntType         Int
@@ -90,17 +89,17 @@ data AbiType
   | AbiStringType
   | AbiArrayDynamicType AbiType
   | AbiArrayType        Int AbiType
-  deriving (Show, Read, Eq, Ord, Generic, NFData)
+  deriving (Show, Read, Eq, Ord, Generic)
 
 data AbiKind = Dynamic | Static
-  deriving (Show, Read, Eq, Ord, Generic, NFData)
+  deriving (Show, Read, Eq, Ord, Generic)
 
 data Anonymity = Anonymous | NotAnonymous
-  deriving (Show, Ord, Eq, Generic, NFData)
+  deriving (Show, Ord, Eq, Generic)
 data Indexed   = Indexed   | NotIndexed
-  deriving (Show, Ord, Eq, Generic, NFData)
+  deriving (Show, Ord, Eq, Generic)
 data Event     = Event Text Anonymity [(AbiType, Indexed)]
-  deriving (Show, Ord, Eq, Generic, NFData)
+  deriving (Show, Ord, Eq, Generic)
 
 abiKind :: AbiType -> AbiKind
 abiKind = \case

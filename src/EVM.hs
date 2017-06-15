@@ -4,8 +4,6 @@
 
 module EVM where
 
-import Debug.Trace
-
 import Prelude hiding ((^))
 
 import EVM.Types
@@ -45,7 +43,6 @@ import qualified Data.Vector.Storable as Vector
 import qualified Data.Tree.Zipper     as Zipper
 
 import qualified Data.Vector as RegularVector
-import qualified Data.Vector.Mutable as RegularVector (new, write)
 
 data Op
   = OpStop
@@ -231,14 +228,17 @@ makeLenses ''VM
 
 type EVM a = State VM a
 
+currentContract :: VM -> Maybe Contract
 currentContract vm =
   view (env . contracts . at (view (state . contract) vm)) vm
 
+zipperRootForest :: Zipper.TreePos Zipper.Empty a -> Forest a
 zipperRootForest z =
   case Zipper.parent z of
     Nothing -> Zipper.toForest z
     Just z' -> zipperRootForest (Zipper.nextSpace z')
 
+contextTraceForest :: VM -> Forest FrameContext
 contextTraceForest vm =
   view (contextTrace . to zipperRootForest) vm
 
@@ -648,10 +648,10 @@ exec1 = do
               accessMemoryRange xOffset xSize
 
               let
-                newAddr      = newContractAddress self (view nonce this)
-                creationCode = readMemory (num xOffset) (num xSize) vm
-                newContract  = initialContract creationCode
-                newContext   = CreationContext (view codehash newContract)
+                newAddr     = newContractAddress self (view nonce this)
+                newCode     = readMemory (num xOffset) (num xSize) vm
+                newContract = initialContract newCode
+                newContext  = CreationContext (view codehash newContract)
 
               zoom (env . contracts) $ do
                 assign (at newAddr) (Just newContract)
@@ -670,7 +670,7 @@ exec1 = do
               assign state $
                 blankState
                   & set contract   newAddr
-                  & set code       creationCode
+                  & set code       newCode
                   & set callvalue  xValue
                   & set caller     self
 
@@ -870,7 +870,7 @@ vmError e = do
           let self = vm ^. state . contract
           assign (env . contracts . at self) Nothing
 
-        CallContext yOffset ySize _ _ reversion -> do
+        CallContext _ _ _ _ reversion -> do
           assign frames remainingFrames
           assign state (view frameState nextFrame)
           assign (env . contracts) reversion

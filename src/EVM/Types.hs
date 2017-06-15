@@ -3,7 +3,6 @@
 
 module EVM.Types where
 
-import Control.DeepSeq
 import Data.Aeson ((.:))
 import Data.Aeson (FromJSON (..))
 
@@ -37,26 +36,32 @@ newtype W256 = W256 Word256
 newtype Addr = Addr { addressWord160 :: Word160 }
   deriving (Num, Integral, Real, Ord, Enum, Eq, Bits, Generic)
 
-instance NFData Word128
-instance NFData Word256
-instance NFData Int128
-instance NFData Int256
-instance NFData W256
-instance NFData Word160
-instance NFData Addr
+-- instance NFData Word128
+-- instance NFData Word256
+-- instance NFData Int128
+-- instance NFData Int256
+-- instance NFData W256
+-- instance NFData Word160
+-- instance NFData Addr
 
-instance Read W256 where readsPrec n s = (\(x, r) -> (W256 x, r)) <$> readsPrec n s
-instance Show W256 where showsPrec _ s = ("0x" ++) . showHex s
+instance Read W256 where
+  readsPrec _ "0x" = [(0, "")]
+  readsPrec n s = (\(x, r) -> (W256 x, r)) <$> readsPrec n s
 
-instance Read Addr where readsPrec _ s = readHex s
+instance Show W256 where
+  showsPrec _ s = ("0x" ++) . showHex s
+
+instance Read Addr where
+  readsPrec _ ('0':'x':s) = readHex s
+  readsPrec _ s = readHex s
+
 instance Show Addr where showsPrec _ s = showHex s
 
 instance FromJSON W256 where
   parseJSON v = do
     s <- Text.unpack <$> parseJSON v
     case reads s of
-      [(x, "")]  -> return (W256 x)
-      [(0, "x")] -> return (W256 0)
+      [(x, "")]  -> return x
       _          -> fail $ "invalid hex word (" ++ s ++ ")"
 
 -- instance FromJSON W256 where
@@ -76,7 +81,6 @@ instance FromJSONKey W256 where
   fromJSONKey = FromJSONKeyTextParser $ \s ->
     case reads (Text.unpack s) of
       [(x, "")]  -> return x
-      [(0, "x")] -> return 0
       _          -> fail $ "invalid word (" ++ Text.unpack s ++ ")"
 
 instance FromJSONKey Addr where
@@ -113,12 +117,11 @@ readN :: Integral a => String -> a
 readN s = fromIntegral (read s :: Integer)
 
 wordField :: JSON.Object -> Text -> JSON.Parser W256
-wordField x f = (readN . Text.unpack)
+wordField x f = (read . Text.unpack)
                   <$> (x .: f)
 
 addrField :: JSON.Object -> Text -> JSON.Parser Addr
-addrField x f = (readN . ("0x" ++) . Text.unpack)
-                  <$> (x .: f)
+addrField x f = (read . Text.unpack) <$> (x .: f)
 
 dataField :: JSON.Object -> Text -> JSON.Parser ByteString
 dataField x f = hexText <$> (x .: f)

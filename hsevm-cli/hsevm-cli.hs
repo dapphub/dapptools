@@ -38,7 +38,6 @@ import qualified Options.Generic       as Options
 data Command
   = Exec
       { code       :: ByteString
-      , trace      :: Bool
       , calldata   :: Maybe ByteString
       , address    :: Maybe Addr
       , caller     :: Maybe Addr

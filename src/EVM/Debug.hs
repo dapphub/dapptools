@@ -2,7 +2,6 @@ module EVM.Debug where
 
 import EVM
 import EVM.Types
-import EVM.Exec
 import EVM.Solidity
 
 import Control.Arrow (second)
@@ -19,7 +18,6 @@ import Control.Monad.State.Strict (execState)
 import Control.Lens
 import Control.Monad (join)
 
-import System.Console.Readline
 import IPPrint.Colored (cpprint)
 
 import Text.PrettyPrint.ANSI.Leijen
@@ -54,7 +52,7 @@ prettyContracts x =
 debugger :: Maybe SourceCache -> VM -> IO VM
 debugger maybeCache vm = do
   -- cpprint (view state vm)
-  cpprint ("pc", view (state . pc) vm)
+  cpprint ("pc" :: Text, view (state . pc) vm)
   cpprint (view (state . stack) vm)
   -- cpprint (view logs vm)
   cpprint (vmOp vm)
@@ -68,7 +66,7 @@ debugger maybeCache vm = do
       return ()
     Just cache ->
       case currentSrcMap vm of
-        Nothing -> cpprint "no srcmap"
+        Nothing -> cpprint ("no srcmap" :: Text)
         Just sm -> cpprint (srcMapCode cache sm)
 
   if vm ^. result /= VMRunning
@@ -81,8 +79,8 @@ debugger maybeCache vm = do
       \case
         Nothing ->
           return vm
-        Just line ->
-          case words line of
+        Just cmdline ->
+          case words cmdline of
             [] ->
               debugger maybeCache (execState exec1 vm)
 
