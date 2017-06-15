@@ -1,4 +1,4 @@
-# hsevm
+# hsevm [![Build Status](https://travis-ci.org/dapphub/hsevm.svg?branch=master)](https://travis-ci.org/dapphub/hsevm) [![GitHub (pre-)release](https://img.shields.io/github/release/dapphub/hsevm/all.svg)](https://github.com/dapphub/hsevm/releases)
 
 The `hsevm` project is an implementation of the Ethereum virtual
 machine (EVM) made specifically for unit testing and debugging smart
