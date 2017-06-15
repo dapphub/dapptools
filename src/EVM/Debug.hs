@@ -69,7 +69,7 @@ debugger maybeCache vm = do
         Nothing -> cpprint ("no srcmap" :: Text)
         Just sm -> cpprint (srcMapCode cache sm)
 
-  if vm ^. result /= VMRunning
+  if vm ^. result /= Nothing
     then do
       print (vm ^. result)
       return vm

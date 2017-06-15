@@ -161,7 +161,6 @@ initialUiVmStateForTest dapp (theContractName, theTestName) =
      Just testContract = view (dappContracts . at theContractName) dapp
      vm0 = initialUnitTestVm testContract (Map.elems (view dappContracts dapp))
      vm2 = case runState exec vm0 of
-       (VMRunning, _) -> error "internal error"
        (VMFailure e, _) -> error $ "creation error: " ++ show e
        (VMSuccess targetCode, vm1) ->
          execState (performCreation targetCode) vm1
@@ -170,7 +169,6 @@ initialUiVmStateForTest dapp (theContractName, theTestName) =
      vm4 = flip execState vm3 $ do
        setupCall target "setUp()"
      vm = case runState exec vm4 of
-       (VMRunning, _) -> error "inetrnal error"
        (VMFailure e, _) -> error $ "setUp() failed: " ++ show e
        (VMSuccess _, vm5) ->
          flip execState vm5 $ do

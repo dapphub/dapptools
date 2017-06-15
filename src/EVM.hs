@@ -124,14 +124,13 @@ data Error
 
 -- | The possible result states of a VM
 data VMResult
-  = VMRunning              -- ^ More operations to run
-  | VMFailure Error        -- ^ An operation failed
+  = VMFailure Error        -- ^ An operation failed
   | VMSuccess ByteString   -- ^ Reached STOP, RETURN, or end-of-code
   deriving (Eq, Show)
 
 -- | The state of a stepwise EVM execution
 data VM = VM
-  { _result        :: VMResult
+  { _result        :: Maybe VMResult
   , _state         :: FrameState
   , _frames        :: [Frame]
   , _env           :: Env
@@ -272,7 +271,7 @@ performCreation createdCode = do
 resetState :: EVM ()
 resetState = do
   -- TODO: handle selfdestructs
-  assign result     VMRunning
+  assign result     Nothing
   assign frames     []
   assign state      blankState
 
@@ -310,7 +309,7 @@ exec1 = do
           assign state (view frameState nextFrame)
           push 1
         [] ->
-          assign result (VMSuccess "")
+          assign result (Just (VMSuccess ""))
 
     else do
       let op = BS.index (the state code) (the state pc)
@@ -358,7 +357,7 @@ exec1 = do
         0x00 ->
           case vm ^. frames of
             [] ->
-              assign result (VMSuccess "")
+              assign result (Just (VMSuccess ""))
             (nextFrame : remainingFrames) -> do
               modifying contextTrace $ \t ->
                 case Zipper.parent t of
@@ -705,7 +704,7 @@ exec1 = do
 
               case vm ^. frames of
                 [] ->
-                  assign result (VMSuccess (readMemory (num xOffset) (num xSize) vm))
+                  assign result (Just (VMSuccess (readMemory (num xOffset) (num xSize) vm)))
 
                 (nextFrame : remainingFrames) -> do
                   assign frames remainingFrames
@@ -854,7 +853,7 @@ vmError :: Error -> EVM ()
 vmError e = do
   vm <- get
   case view frames vm of
-    [] -> assign result (VMFailure e)
+    [] -> assign result (Just (VMFailure e))
 
     (nextFrame : remainingFrames) -> do
       modifying contextTrace $ \t ->
@@ -944,7 +943,7 @@ data VMOpts = VMOpts
 
 makeVm :: VMOpts -> VM
 makeVm o = VM
-  { _result = VMRunning
+  { _result = Nothing
   , _frames = mempty
   , _selfdestructs = mempty
   , _logs = mempty

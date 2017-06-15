@@ -32,8 +32,8 @@ vmForEthrunCreation creationCode =
 exec :: State VM VMResult
 exec =
   use EVM.result >>= \case
-    EVM.VMRunning -> exec1 >> exec
-    x -> return x
+    Nothing -> exec1 >> exec
+    Just x  -> return x
 
 execWhile :: (VM -> Bool) -> State VM ()
 execWhile p =

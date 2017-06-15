@@ -38,8 +38,6 @@ runUnitTestContract _ contractMap cache (name, testNames) = do
       let
         vm0 = initialUnitTestVm theContract (Map.elems contractMap)
         vm2 = case runState exec vm0 of
-                (VMRunning, _) ->
-                  error "Internal error"
                 (VMFailure e, _) ->
                   error ("Creation error: " ++ show e)
                 (VMSuccess targetCode, vm1) -> do
@@ -50,21 +48,16 @@ runUnitTestContract _ contractMap cache (name, testNames) = do
         let
           endowment = 0xffffffffffffffffffffffff
           vm3 = vm2 & env . contracts . ix target . balance +~ endowment
-          vm4 = flip execState vm3 $ do
-                  setupCall target "setUp()"
-                  exec
 
-        case view result vm4 of
-          VMRunning -> error "internal error"
-          VMFailure _ -> do
+        case runState (setupCall target "setUp()" >> exec ) vm3 of
+          (VMFailure _, vm4) -> do
             tick "F"
             -- putStrLn ("failure in setUp(): " ++ show e)
             _ <- debugger (Just cache) (vm4 & state . pc -~ 1)
             return ()
-          VMSuccess _ -> do
-            let vm5 = execState (setupCall target testName >> exec) vm4
-            case vm5 ^. result of
-              VMFailure _ ->
+          (VMSuccess _, vm4) -> do
+            case runState (setupCall target testName >> exec) vm4 of
+              (VMFailure _, vm5) ->
                 if "testFail" `isPrefixOf` testName
                   then tick "."
                   else do
@@ -72,7 +65,7 @@ runUnitTestContract _ contractMap cache (name, testNames) = do
                     -- putStrLn ("unexpected failure: " ++ show e)
                     _ <- debugger (Just cache) vm5
                     return ()
-              VMSuccess _ -> do
+              (VMSuccess _, vm5) -> do
                 case evalState (setupCall target "failed()" >> exec) vm5 of
                   VMSuccess out ->
                     case runGetOrFail (getAbi AbiBoolType)
@@ -87,10 +80,6 @@ runUnitTestContract _ contractMap cache (name, testNames) = do
                         error ("ds-test behaving strangely: " ++ e)
                   VMFailure e ->
                     error $ "ds-test behaving strangely (" ++ show e ++ ")"
-                  _ ->
-                    error "internal error"
-              VMRunning ->
-                error "internal error"
 
       tick "\n"
 

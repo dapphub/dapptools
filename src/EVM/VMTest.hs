@@ -49,17 +49,17 @@ data Expectation = Expectation
 checkExpectation :: Case -> EVM.VM -> IO Bool
 checkExpectation x vm =
   case (testExpectation x, view EVM.result vm) of
-    (Just expectation, EVM.VMSuccess output) -> do
+    (Just expectation, Just (EVM.VMSuccess output)) -> do
       (&&) <$> checkExpectedContracts vm (expectedContracts expectation)
            <*> checkExpectedOut output (expectedOut expectation)
-    (Nothing, EVM.VMSuccess _) ->
+    (Nothing, Just (EVM.VMSuccess _)) ->
       return False
-    (Nothing, EVM.VMFailure _) ->
+    (Nothing, Just (EVM.VMFailure _)) ->
       return True
-    (Just _, EVM.VMFailure _) ->
+    (Just _, Just (EVM.VMFailure _)) ->
       return False
-    (_, EVM.VMRunning) ->
-      error "VMRunning?"
+    (_, Nothing) ->
+      error "internal error" -- XXX
 
 checkExpectedOut :: ByteString -> ByteString -> IO Bool
 checkExpectedOut output expected =
