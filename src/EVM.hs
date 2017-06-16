@@ -469,8 +469,13 @@ exec1 = do
         0x30 -> push (num (the state contract))
 
         -- op: BALANCE
-        0x31 -> stackOp1 $ \x ->
-          preview (env . contracts . ix (num x) . balance) vm ?: 0
+        0x31 ->
+          case stk of
+            (x:xs) -> do
+              assign (state . stack) xs
+              touchAccount (num x) >>= push . view balance
+            [] ->
+              underrun
 
         -- op: ORIGIN
         0x32 -> push (num (the env origin))
@@ -514,16 +519,20 @@ exec1 = do
           push 0
 
         -- op: EXTCODESIZE
-        0x3b -> stackOp1 $ \x ->
-          num (preview (env . contracts . ix (num x) . codesize) vm ?: 0)
+        0x3b ->
+          case stk of
+            (x:xs) -> do
+              assign (state . stack) xs
+              touchAccount (num x) >>= push . num . view codesize
+            [] ->
+              underrun
 
         -- op: EXTCODECOPY
         0x3c ->
           case stk of
             (extAccount:memOffset:codeOffset:codeSize:xs) -> do
-              let theCode =
-                    (vm ^? env . contracts . ix (num extAccount) . bytecode)
-                      ?: mempty
+              c <- touchAccount (num (extAccount))
+              let theCode = view bytecode c
               assign (state . stack) xs
               copyBytesToMemory theCode
                 (num codeSize) (num codeOffset) (num memOffset)
@@ -754,7 +763,7 @@ exec1 = do
           vmError (UnrecognizedOpcode xxx)
 
 delegateCall :: Addr -> W256 -> W256 -> W256 -> W256 -> [W256] -> EVM ()
-delegateCall xTo xInOffset xInSize xOutOffset xOutSize xs =
+delegateCall xTo xInOffset xInSize xOutOffset xOutSize xs = do
   preuse (env . contracts . ix xTo) >>=
     \case
       Nothing -> vmError (NoSuchContract xTo)
@@ -926,6 +935,17 @@ insidePushData i = do
   self <- use (state . contract)
   x <- useJust (env . contracts . ix self . opIxMap)
   return (i == 0 || (x Vector.! i) == (x Vector.! (i - 1)))
+
+touchAccount :: Addr -> EVM Contract
+touchAccount a = do
+  use (env . contracts . at a) >>=
+    \case
+      Nothing -> do
+        let c = initialContract ""
+        assign (env . contracts . at a) (Just c)
+        return c
+      Just c ->
+        return c
 
 data VMOpts = VMOpts
   { vmoptCode :: ByteString
