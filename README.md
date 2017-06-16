@@ -18,26 +18,35 @@ Ethereum Foundation's reference test suite is begun but not completed.
 
 ### Static binary
 
-If you don't want to compile anything, and you're on Linux, you can
-download a static binary from the "Releases" tab on GitHub.
-If the static binary complains about a "terminfo"
-file, you have to set the `TERMINFO` environment variable; on Ubuntu,
-you should do
+If you don't want to compile anything, and you're on x86-64 Linux, you
+can download a static binary from the "Releases" tab on GitHub.
+If the static binary complains about a "terminfo" file, you have to
+set the `TERMINFO` environment variable; on Ubuntu, you should do
 
     $ export TERMINFO=/lib/terminfo
     
 (Put that in your `~/.bashrc` for convenience.)
 
-### Building
+### Nix
 
-The fastest way to build and install `hsevm` is usually to use the
-[Nix](https://nixos.org/nix/) package manager, which works on Linux,
-OS X, and other Unix-likes.  This should leave you with a working
-installation:
+DappHub maintains a repository for the [Nix](https://nixos.org/nix/)
+package manager, which works on any Linux distribution, OS X, and
+other Unix-likes.
+
+These commands will install Nix, add the DappHub "channel", and
+install `hsevm`. The channel has cached binaries for Linux and OS X.
 
     $ curl https://nixos.org/nix/install | sh
-    $ git clone https://github.com/dapphub/hsevm
-    $ nix-env -f hsevm/hsevm.nix -i hsevm
+    $ nix-channel --add https://nix.dapphub.com/pkgs/dapphub
+    $ nix-channel --update
+    $ nix-env -i hsevm
+
+This Nix channel can also be used to install
+[`dapp`](https://github.com/dapphub/dapp), our development tool:
+
+    $ nix-env -i dapp
+
+### Building with Stack or Cabal
 
 If you can't or won't use Nix, the easiest way especially if you don't
 have GHC (the Haskell compiler) installed already, is to use
