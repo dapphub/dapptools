@@ -15,11 +15,7 @@ request=$(seth rpc-request -- "$@")
 response=$(seth rpc-curl <<<"$request")
 
 if result=$(rpc-result <<<"$response"); then
-  if [[ $result = null ]]; then
-    seth --fail "${0##*/}: error: null result"
-  else
-    seth --show-json <<<"$result"
-  fi
+  seth --show-json <<<"$result"
 elif error=$(rpc-error <<<"$response"); then
   { echo "$request"
     SETH_KEY_WIDTH=10 seth --show-json <<<"$error" | sed 's/^/error:   /'
