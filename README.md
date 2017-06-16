@@ -16,17 +16,6 @@ Ethereum Foundation's reference test suite is begun but not completed.
 
 ## Installing
 
-### Static binary
-
-If you don't want to compile anything, and you're on x86-64 Linux, you
-can download a static binary from the "Releases" tab on GitHub.
-If the static binary complains about a "terminfo" file, you have to
-set the `TERMINFO` environment variable; on Ubuntu, you should do
-
-    $ export TERMINFO=/lib/terminfo
-    
-(Put that in your `~/.bashrc` for convenience.)
-
 ### Nix
 
 DappHub maintains a repository for the [Nix](https://nixos.org/nix/)
@@ -45,6 +34,17 @@ This Nix channel can also be used to install
 [`dapp`](https://github.com/dapphub/dapp), our development tool:
 
     $ nix-env -i dapp
+
+### Static binary
+
+If you don't want to compile anything, and you're on x86-64 Linux, you
+can download a static binary from the "Releases" tab on GitHub.
+If the static binary complains about a "terminfo" file, you have to
+set the `TERMINFO` environment variable; on Ubuntu, you should do
+
+    $ export TERMINFO=/lib/terminfo
+
+(Put that in your `~/.bashrc` for convenience.)
 
 ### Building with Stack or Cabal
 
