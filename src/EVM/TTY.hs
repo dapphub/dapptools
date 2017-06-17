@@ -444,6 +444,7 @@ opWidget (i, o) = str (show i ++ " ") <+> case o of
   OpSwap x -> txt "SWAP" <+> str (show x)
   OpLog x -> txt "LOG" <+> str (show x)
   OpPush x -> txt "PUSH " <+> withDefAttr wordAttr (str (show x))
+  OpRevert -> txt "REVERT"
   OpUnknown x -> txt "UNKNOWN " <+> str (show x)
 
 selectedAttr :: AttrName; selectedAttr = "selected"

@@ -105,6 +105,7 @@ data Op
   | OpCallcode
   | OpReturn
   | OpDelegatecall
+  | OpRevert
   | OpSelfdestruct
   | OpDup !Word8
   | OpSwap !Word8
@@ -119,6 +120,7 @@ data Error
   | SelfDestruction
   | StackUnderrun
   | BadJumpDestination
+  | Revert
   | NoSuchContract Addr
   deriving (Eq, Show)
 
@@ -759,6 +761,10 @@ exec1 = do
                 (+ (vm ^?! env . contracts . ix self . balance))
               vmError SelfDestruction
 
+        -- op: REVERT
+        0xfe ->
+          vmError Revert
+
         xxx ->
           vmError (UnrecognizedOpcode xxx)
 
@@ -1199,6 +1205,7 @@ readOp x _ = case x of
   0xf2 -> OpCallcode
   0xf3 -> OpReturn
   0xf4 -> OpDelegatecall
+  0xfe -> OpRevert
   0xff -> OpSelfdestruct
   _    -> (OpUnknown x)
 
