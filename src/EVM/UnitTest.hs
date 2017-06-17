@@ -101,7 +101,7 @@ initialUnitTestVm theContract theContracts =
            , vmoptOrigin = ethrunAddress
            , vmoptCoinbase = 0
            , vmoptNumber = 0
-           , vmoptTimestamp = 0
+           , vmoptTimestamp = 1
            , vmoptGaslimit = 0
            , vmoptDifficulty = 0
            }
