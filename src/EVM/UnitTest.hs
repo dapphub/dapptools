@@ -28,7 +28,7 @@ tick x = putStr x >> hFlush stdout
 
 runUnitTestContract ::
   Mode -> Map Text SolcContract -> SourceCache -> (Text, [Text]) -> IO ()
-runUnitTestContract _ contractMap cache (name, testNames) = do
+runUnitTestContract _ contractMap _ (name, testNames) = do
   putStrLn $ "Running " ++ show (length testNames) ++ " tests for "
     ++ unpack name
   case preview (ix name) contractMap of
@@ -50,20 +50,20 @@ runUnitTestContract _ contractMap cache (name, testNames) = do
           vm3 = vm2 & env . contracts . ix target . balance +~ endowment
 
         case runState (setupCall target "setUp()" >> exec ) vm3 of
-          (VMFailure _, vm4) -> do
+          (VMFailure _, _) -> do
             tick "F"
             -- putStrLn ("failure in setUp(): " ++ show e)
-            _ <- debugger (Just cache) (vm4 & state . pc -~ 1)
+            -- _ <- debugger (Just cache) (vm4 & state . pc -~ 1)
             return ()
           (VMSuccess _, vm4) -> do
             case runState (setupCall target testName >> exec) vm4 of
-              (VMFailure _, vm5) ->
+              (VMFailure _, _) ->
                 if "testFail" `isPrefixOf` testName
                   then tick "."
                   else do
                     tick "F"
                     -- putStrLn ("unexpected failure: " ++ show e)
-                    _ <- debugger (Just cache) vm5
+                    -- _ <- debugger (Just cache) vm5
                     return ()
               (VMSuccess _, vm5) -> do
                 case evalState (setupCall target "failed()" >> exec) vm5 of
@@ -90,7 +90,7 @@ setupCall target abi = do
   assign (state . calldata) (word32Bytes (abiKeccak (encodeUtf8 abi)))
 
 initialUnitTestVm :: SolcContract -> [SolcContract] -> VM
-initialUnitTestVm theContract theContracts =
+initialUnitTestVm theContract _ =
   let
     vm = makeVm $ VMOpts
            { vmoptCode = view creationCode theContract
@@ -111,8 +111,8 @@ initialUnitTestVm theContract theContracts =
         & set balance 1000000000000000000000000000
   in vm
     & set (env . contracts . at ethrunAddress) (Just creator)
-    & set (env . solcByCreationHash) (Map.fromList [(view creationCodehash c, c) | c <- theContracts])
-    & set (env . solcByRuntimeHash) (Map.fromList [(view runtimeCodehash c, c) | c <- theContracts])
+    -- & set (env . solcByCreationHash) (Map.fromList [(view creationCodehash c, c) | c <- theContracts])
+    -- & set (env . solcByRuntimeHash) (Map.fromList [(view runtimeCodehash c, c) | c <- theContracts])
 
 unitTestMarkerAbi :: Word32
 unitTestMarkerAbi = abiKeccak (encodeUtf8 "IS_TEST()")

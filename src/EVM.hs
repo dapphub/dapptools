@@ -193,8 +193,6 @@ data Contract = Contract
 -- | Kind of a hodgepodge?
 data Env = Env
   { _contracts          :: Map Addr Contract
-  , _solcByCreationHash :: Map W256 SolcContract
-  , _solcByRuntimeHash  :: Map W256 SolcContract
   , _sha3Crack          :: Map W256 ByteString
   , _origin             :: Addr
   } deriving (Show)
@@ -994,8 +992,6 @@ makeVm o = VM
     }
   , _env = Env
     { _sha3Crack = mempty
-    , _solcByCreationHash = mempty
-    , _solcByRuntimeHash = mempty
     , _origin = vmoptOrigin o
     , _contracts = Map.fromList
       [(vmoptAddress o, initialContract (vmoptCode o))]

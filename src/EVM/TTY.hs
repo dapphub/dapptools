@@ -31,6 +31,7 @@ import qualified Data.Map as Map
 import qualified Data.Text as Text
 import qualified Data.Tree.Zipper as Zipper
 import qualified Data.Vector as Vec
+import qualified Data.Vector.Storable as SVec
 import qualified Graphics.Vty as Vty
 
 data Name
@@ -57,11 +58,15 @@ data UiVmState = UiVmState
   , _uiVmDapp         :: DappInfo
   }
 
+data CodeType = Creation | Runtime
+  deriving (Show, Eq, Ord)
+
 data DappInfo = DappInfo
-  { _dappRoot      :: FilePath
-  , _dappContracts :: Map Text SolcContract
-  , _dappSources   :: SourceCache
-  , _dappUnitTests :: [(Text, [Text])]
+  { _dappRoot       :: FilePath
+  , _dappSolcByName :: Map Text SolcContract
+  , _dappSolcByHash :: Map W256 (CodeType, SolcContract)
+  , _dappSources    :: SourceCache
+  , _dappUnitTests  :: [(Text, [Text])]
   }
 
 data UiTestPickerState = UiTestPickerState
@@ -90,7 +95,8 @@ main root jsonFilePath = do
         error "Failed to read Solidity JSON"
       Just (contractMap, sourceCache) -> do
         let
-          unitTests = findUnitTests (Map.elems contractMap)
+          solcs     = Map.elems contractMap
+          unitTests = findUnitTests solcs
 
           mkVty = do
             vty <- Vty.mkVty Vty.defaultConfig
@@ -98,10 +104,14 @@ main root jsonFilePath = do
             return vty
 
           dappInfo = DappInfo
-              { _dappRoot      = root
-              , _dappUnitTests = unitTests
-              , _dappContracts = contractMap
-              , _dappSources   = sourceCache
+              { _dappRoot       = root
+              , _dappUnitTests  = unitTests
+              , _dappSolcByName = contractMap
+              , _dappSources    = sourceCache
+              , _dappSolcByHash =
+                  mappend
+                    (Map.fromList [(view runtimeCodehash c, (Runtime, c)) | c <- solcs])
+                    (Map.fromList [(view creationCodehash c, (Creation, c)) | c <- solcs])
               }
 
           ui = UiTestPickerScreen $ UiTestPickerState
@@ -158,8 +168,8 @@ app = App
 initialUiVmStateForTest :: DappInfo -> (Text, Text) -> UiVmState
 initialUiVmStateForTest dapp (theContractName, theTestName) =
   let
-     Just testContract = view (dappContracts . at theContractName) dapp
-     vm0 = initialUnitTestVm testContract (Map.elems (view dappContracts dapp))
+     Just testContract = view (dappSolcByName . at theContractName) dapp
+     vm0 = initialUnitTestVm testContract (Map.elems (view dappSolcByName dapp))
      vm2 = case runState exec vm0 of
        (VMFailure e, _) -> error $ "creation error: " ++ show e
        (VMSuccess targetCode, vm1) ->
@@ -228,22 +238,47 @@ stepOneOpcode ui =
 stepOneSourcePosition :: UiVmState -> UiVmState
 stepOneSourcePosition ui =
   let
-    initialPosition = currentSrcMap (view uiVm ui)
-    stillHere s = currentSrcMap s == initialPosition
-    nextVm = execState (execWhile stillHere) (view uiVm ui)
+    vm              = view uiVm ui
+    dapp            = view uiVmDapp ui
+    initialPosition = currentSrcMap dapp vm
+    stillHere s     = currentSrcMap dapp s == initialPosition
+    nextVm          = execState (execWhile stillHere) vm
   in mkUiVmState nextVm (view uiVmDapp ui)
+
+currentSrcMap :: DappInfo -> VM -> Maybe SrcMap
+currentSrcMap dapp vm =
+  let
+    this = vm ^?! env . contracts . ix (view (state . contract) vm)
+    i = (view opIxMap this) SVec.! (view (state . pc) vm)
+    h = view codehash this
+  in
+    case preview (dappSolcByHash . ix h) dapp of
+      Nothing ->
+        Nothing
+      Just (Creation, solc) ->
+        preview (creationSrcmap . ix i) solc
+      Just (Runtime, solc) ->
+        preview (runtimeSrcmap . ix i) solc
+
+currentSolc :: DappInfo -> VM -> Maybe SolcContract
+currentSolc dapp vm =
+  let
+    this = vm ^?! env . contracts . ix (view (state . contract) vm)
+    h = view codehash this
+  in
+    preview (dappSolcByHash . ix h . _2) dapp
 
 mkUiVmState :: VM -> DappInfo -> UiVmState
 mkUiVmState vm dapp =
   let
-    sm = currentSrcMap vm
+    sm = currentSrcMap dapp vm
     move = case vmOpIx vm of
              Nothing -> id
              Just x -> listMoveTo x
   in UiVmState
     { _uiVm = vm
     , _uiVmDapp = dapp
-    , _uiVmSolc = currentSolc vm
+    , _uiVmSolc = currentSolc dapp vm
     , _uiVmStackList =
         list StackPane (Vec.fromList $ view (state . stack) vm) 1
     , _uiVmBytecodeList =
@@ -257,7 +292,7 @@ mkUiVmState vm dapp =
           (Vec.fromList
            . lines
            . drawForest
-           . fmap (fmap (unpack . showContext vm))
+           . fmap (fmap (unpack . showContext dapp))
            $ contextTraceForest vm)
           1
     , _uiVmSolidityList =
@@ -273,10 +308,6 @@ mkUiVmState vm dapp =
           1
     }
 
-contractByHash :: VM -> W256 -> Maybe SolcContract
-contractByHash vm hash =
-  lookupSolc vm hash
-
 maybeContractName :: Maybe SolcContract -> Text
 maybeContractName =
   maybe "<unknown contract>" (view (contractName . to contractNamePart))
@@ -284,11 +315,11 @@ maybeContractName =
 maybeAbiName :: SolcContract -> Word32 -> Maybe Text
 maybeAbiName solc abi = preview (abiMap . ix abi) solc
 
-showContext :: VM -> FrameContext -> Text
-showContext vm (CreationContext hash) =
-  "CREATE " <> maybeContractName (contractByHash vm hash)
-showContext vm (CallContext _ _ hash abi _) =
-  case contractByHash vm hash of
+showContext :: DappInfo -> FrameContext -> Text
+showContext dapp (CreationContext hash) =
+  "CREATE " <> maybeContractName (preview (dappSolcByHash . ix hash . _2) dapp)
+showContext dapp (CallContext _ _ hash abi _) =
+  case preview (dappSolcByHash . ix hash . _2) dapp of
     Nothing ->
       "CALL [unknown]"
     Just solc ->
@@ -340,7 +371,7 @@ drawTracePane ui =
 drawSolidityPane :: UiVmState -> UiWidget
 drawSolidityPane ui =
   let
-    sm = fromJust $ currentSrcMap (view uiVm ui)
+    sm = fromJust $ currentSrcMap (view uiVmDapp ui) (view uiVm ui)
     rows = fromJust $ view (uiVmDapp . dappSources . sourceLines . at (srcMapFile sm)) ui
     subrange i = lineSubrange rows (srcMapOffset sm, srcMapLength sm) i
     lineNo =

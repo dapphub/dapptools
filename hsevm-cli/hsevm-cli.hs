@@ -103,7 +103,7 @@ launchExec opts =
   let vm = vmFromCommand opts in
     case optsMode opts of
       Run -> print (view EVM.result (execState exec vm))
-      Debug -> ignore (debugger Nothing vm)
+      _ -> error "not implemented"
 
 vmFromCommand :: Command -> EVM.VM
 vmFromCommand opts =
@@ -162,9 +162,5 @@ runVMTest mode (name, x) = do
          return ok
 
     Debug ->
-      do _ <- debugger Nothing vm
-         return True -- XXX
+      do error "not implemented"
 #endif
-
-ignore :: Monad m => m a -> m ()
-ignore x = x >> return ()

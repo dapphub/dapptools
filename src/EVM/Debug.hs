@@ -12,13 +12,8 @@ import Data.Text (Text)
 
 import qualified Data.ByteString       as ByteString
 import qualified Data.Map              as Map
-import qualified Data.Vector.Storable   as Vector
 
-import Control.Monad.State.Strict (execState)
 import Control.Lens
-import Control.Monad (join)
-
-import IPPrint.Colored (cpprint)
 
 import Text.PrettyPrint.ANSI.Leijen
 
@@ -49,93 +44,93 @@ prettyContracts x =
     (map (\(a, b) -> (text (show a), prettyContract b))
      (Map.toList x))
 
-debugger :: Maybe SourceCache -> VM -> IO VM
-debugger maybeCache vm = do
-  -- cpprint (view state vm)
-  cpprint ("pc" :: Text, view (state . pc) vm)
-  cpprint (view (state . stack) vm)
-  -- cpprint (view logs vm)
-  cpprint (vmOp vm)
-  cpprint (opParams vm)
-  cpprint (length (view frames vm))
+-- debugger :: Maybe SourceCache -> VM -> IO VM
+-- debugger maybeCache vm = do
+--   -- cpprint (view state vm)
+--   cpprint ("pc" :: Text, view (state . pc) vm)
+--   cpprint (view (state . stack) vm)
+--   -- cpprint (view logs vm)
+--   cpprint (vmOp vm)
+--   cpprint (opParams vm)
+--   cpprint (length (view frames vm))
 
-  -- putDoc (prettyContracts (view (env . contracts) vm))
+--   -- putDoc (prettyContracts (view (env . contracts) vm))
 
-  case maybeCache of
-    Nothing ->
-      return ()
-    Just cache ->
-      case currentSrcMap vm of
-        Nothing -> cpprint ("no srcmap" :: Text)
-        Just sm -> cpprint (srcMapCode cache sm)
+--   case maybeCache of
+--     Nothing ->
+--       return ()
+--     Just cache ->
+--       case currentSrcMap vm of
+--         Nothing -> cpprint ("no srcmap" :: Text)
+--         Just sm -> cpprint (srcMapCode cache sm)
 
-  if vm ^. result /= Nothing
-    then do
-      print (vm ^. result)
-      return vm
-    else
-    -- readline "(evm) " >>=
-    return (Just "") >>=
-      \case
-        Nothing ->
-          return vm
-        Just cmdline ->
-          case words cmdline of
-            [] ->
-              debugger maybeCache (execState exec1 vm)
+--   if vm ^. result /= Nothing
+--     then do
+--       print (vm ^. result)
+--       return vm
+--     else
+--     -- readline "(evm) " >>=
+--     return (Just "") >>=
+--       \case
+--         Nothing ->
+--           return vm
+--         Just cmdline ->
+--           case words cmdline of
+--             [] ->
+--               debugger maybeCache (execState exec1 vm)
 
-            ["block"] ->
-              do cpprint (view block vm)
-                 debugger maybeCache vm
+--             ["block"] ->
+--               do cpprint (view block vm)
+--                  debugger maybeCache vm
 
-            ["storage"] ->
-              do cpprint (view (env . contracts) vm)
-                 debugger maybeCache vm
+--             ["storage"] ->
+--               do cpprint (view (env . contracts) vm)
+--                  debugger maybeCache vm
 
-            ["contracts"] ->
-              do putDoc (prettyContracts (view (env . contracts) vm))
-                 debugger maybeCache vm
+--             ["contracts"] ->
+--               do putDoc (prettyContracts (view (env . contracts) vm))
+--                  debugger maybeCache vm
 
-            -- ["disassemble"] ->
-            --   do cpprint (mkCodeOps (view (state . code) vm))
-            --      debugger maybeCache vm
+--             -- ["disassemble"] ->
+--             --   do cpprint (mkCodeOps (view (state . code) vm))
+--             --      debugger maybeCache vm
 
-            _  -> debugger maybeCache vm
+--             _  -> debugger maybeCache vm
 
-lookupSolc :: VM -> W256 -> Maybe SolcContract
-lookupSolc vm hash =
-  case vm ^? env . solcByRuntimeHash . ix hash of
-    Just x -> Just x
-    Nothing ->
-      vm ^? env . solcByCreationHash . ix hash
+-- lookupSolc :: VM -> W256 -> Maybe SolcContract
+-- lookupSolc vm hash =
+--   case vm ^? env . solcByRuntimeHash . ix hash of
+--     Just x -> Just x
+--     Nothing ->
+--       vm ^? env . solcByCreationHash . ix hash
 
-currentSolc :: VM -> Maybe SolcContract
-currentSolc vm =
-  let
-    c = vm ^?! env . contracts . ix (vm ^. state . contract)
-    theCodehash = view codehash c
-  in
-    case vm ^? env . solcByRuntimeHash . ix theCodehash of
-        Just x ->
-          Just x
-        Nothing ->
-          vm ^? env . solcByCreationHash . ix theCodehash
+-- currentSolc :: VM -> Maybe SolcContract
+-- currentSolc vm =
+--   let
+--     c = vm ^?! env . contracts . ix (vm ^. state . contract)
+--     theCodehash = view codehash c
+--   in
+--     case vm ^? env . solcByRuntimeHash . ix theCodehash of
+--         Just x ->
+--           Just x
+--         Nothing ->
+--           vm ^? env . solcByCreationHash . ix theCodehash
 
-currentSrcMap :: VM -> Maybe SrcMap
-currentSrcMap vm =
-  let
-    c = vm ^?! env . contracts . ix (vm ^. state . contract)
-    theOpIx = (c ^. opIxMap) Vector.! (vm ^. state . pc)
-    theCodehash = view codehash c
-    (isRuntime, solc) =
-      case vm ^? env . solcByRuntimeHash . ix theCodehash of
-        Just x ->
-          (True, Just x)
-        Nothing ->
-          (False, vm ^? env . solcByCreationHash . ix theCodehash)
-    srcmapLens = if isRuntime then runtimeSrcmap else creationSrcmap
-  in
-    join (fmap (preview (srcmapLens . ix theOpIx)) solc)
+-- currentSrcMap :: VM -> Maybe SrcMap
+-- currentSrcMap vm =
+--   let
+--     c = vm ^?! env . contracts . ix (vm ^. state . contract)
+--     theOpIx = (c ^. opIxMap) Vector.! (vm ^. state . pc)
+--     theCodehash = view codehash c
+--     (isRuntime, solc) =
+--       case vm ^? env . solcByRuntimeHash . ix theCodehash of
+--         Just x ->
+--           (True, Just x)
+--         Nothing ->
+--           (False, vm ^? env . solcByCreationHash . ix theCodehash)
+--     srcmapLens = if isRuntime then runtimeSrcmap else creationSrcmap
+--   in
+--     join (fmap (preview (srcmapLens . ix theOpIx)) solc)
 
 srcMapCodePos :: SourceCache -> SrcMap -> Maybe (Text, Int)
 srcMapCodePos cache sm =
