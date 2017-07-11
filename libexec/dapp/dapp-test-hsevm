@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+set -e
+shopt -s nullglob
+
+for x in "${DAPP_OUT?}"/*.t.sol.json; do
+  hsevm dapp-test --json-file="$x" --dapp-root=.
+done
