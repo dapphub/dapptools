@@ -4,7 +4,7 @@
 
 module EVM where
 
-import Prelude hiding ((^))
+import Prelude hiding ((^), log)
 
 import EVM.Types
 import EVM.Solidity
@@ -139,7 +139,7 @@ data VM = VM
   , _block         :: Block
   , _selfdestructs :: [Addr]
   , _logs          :: Seq Log
-  , _contextTrace  :: Zipper.TreePos Zipper.Empty FrameContext
+  , _contextTrace  :: Zipper.TreePos Zipper.Empty (Either Log FrameContext)
   }
 
 -- | A log entry
@@ -237,7 +237,7 @@ zipperRootForest z =
     Nothing -> Zipper.toForest z
     Just z' -> zipperRootForest (Zipper.nextSpace z')
 
-contextTraceForest :: VM -> Forest FrameContext
+contextTraceForest :: VM -> Forest (Either Log FrameContext)
 contextTraceForest vm =
   view (contextTrace . to zipperRootForest) vm
 
@@ -348,8 +348,11 @@ exec1 = do
               else do
                 let (topics, xs') = splitAt n xs
                     bytes         = readMemory (num xOffset) (num xSize) vm
+                    log           = Log self bytes topics
                 assign (state . stack) xs'
-                pushToSequence logs (Log self bytes topics)
+                pushToSequence logs log
+                modifying contextTrace $ \t ->
+                  Zipper.nextSpace (Zipper.insert (Node (Left log) []) t)
             _ ->
               underrun
 
@@ -673,7 +676,7 @@ exec1 = do
                 }
 
               modifying contextTrace $ \t ->
-                Zipper.children $ Zipper.insert (Node newContext []) t
+                Zipper.children $ Zipper.insert (Node (Right newContext) []) t
 
               assign state $
                 blankState
@@ -791,7 +794,7 @@ delegateCall xTo xInOffset xInSize xOutOffset xOutSize xs = do
           }
 
         modifying contextTrace $ \t ->
-          Zipper.children (Zipper.insert (Node newContext []) t)
+          Zipper.children (Zipper.insert (Node (Right newContext) []) t)
 
         zoom state $ do
           assign pc 0

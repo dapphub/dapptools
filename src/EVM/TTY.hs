@@ -21,7 +21,7 @@ import Data.ByteString (ByteString)
 import Data.Map (Map)
 import Data.Maybe (fromJust)
 import Data.Monoid ((<>))
-import Data.Text (Text, unpack)
+import Data.Text (Text, unpack, pack)
 import Data.Text.Encoding (decodeUtf8)
 import Data.Tree (drawForest)
 import Data.Foldable (toList)
@@ -315,10 +315,12 @@ maybeContractName =
 maybeAbiName :: SolcContract -> Word32 -> Maybe Text
 maybeAbiName solc abi = preview (abiMap . ix abi) solc
 
-showContext :: DappInfo -> FrameContext -> Text
-showContext dapp (CreationContext hash) =
+showContext :: DappInfo -> Either Log FrameContext -> Text
+showContext _ (Left (Log _ bytes topics)) =
+  "LOG " <> pack (show bytes) <> " " <> pack (show topics)
+showContext dapp (Right (CreationContext hash)) =
   "CREATE " <> maybeContractName (preview (dappSolcByHash . ix hash . _2) dapp)
-showContext dapp (CallContext _ _ hash abi _) =
+showContext dapp (Right (CallContext _ _ hash abi _)) =
   case preview (dappSolcByHash . ix hash . _2) dapp of
     Nothing ->
       "CALL [unknown]"
