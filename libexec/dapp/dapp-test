@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-have() { which "$1" >/dev/null 2>&1; }
+have() { command -v "$1" >/dev/null; }
 
 dapp build || exit
 
