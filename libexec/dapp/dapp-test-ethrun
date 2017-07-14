@@ -7,7 +7,7 @@ if [[ -d "${DAPP_LIB?}" ]]; then
 
   sources=$(find "${DAPP_SRC?}" "$DAPP_LIB" -name '*.sol')
   libraries=$(
-    grep -EH '^library\s+\w+' $sources \
+    grep -EH '^library\s+\w+' "$sources" \
     | sed -E 's/:library[[:blank:]]+([_[:alnum:]]+)[[:blank:]]+(\{|is).*/:\1/' \
     | sort
   )
@@ -25,4 +25,4 @@ if [[ -d "${DAPP_LIB?}" ]]; then
   deploy=$(echo "$libraries" | sed -E "s/.*:(.*)/$DAPP_OUT\/\1.bin/")
 fi
 
-(set -x; dapp quicktest "$@" "$DAPP_OUT" $deploy)
+(set -x; dapp quicktest "$@" "$DAPP_OUT" "$deploy")
