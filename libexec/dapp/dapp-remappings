@@ -10,7 +10,8 @@ Object.keys(pkg_src).sort((a, b) => a.length - b.length).sort(
     return depth(a) - depth(b)
   }
 ).forEach(name => {
-  console.log(`${name}=${pkg_src[name]}`)
+  console.log(`${name}/=${pkg_src[name]}/`)
+  console.log(`${name}=${pkg_src[name]}/index.sol`)
 })
 
 function findRemappings(prefix) {
