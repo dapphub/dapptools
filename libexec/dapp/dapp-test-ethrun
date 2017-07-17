@@ -25,4 +25,4 @@ if [[ -d "${DAPP_LIB?}" ]]; then
   deploy=$(echo "$libraries" | sed -E "s/.*:(.*)/$DAPP_OUT\/\1.bin/")
 fi
 
-(set -x; dapp quicktest "$@" "$DAPP_OUT" "$deploy")
+(set -x; dapp quicktest "$@" "$DAPP_OUT" $deploy)
