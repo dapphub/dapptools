@@ -10,6 +10,7 @@ unit=$(tr A-Z a-z <<<"$unit")
 
 case $unit in
   wei) scale=0;;
+  gwei) scale=9;;
   eth) scale=18;;
   *) seth --fail "${0##*/}: error: unrecognized monetary value: \`$1'"
 esac
