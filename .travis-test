@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+set -e
+ETHRUN=https://github.com/dapphub/ethrun/releases/download/v0.2.4/ethrun-v0.2.4-linux.tar.gz
+( cd /usr/local; curl -LO "$ETHRUN"; tar xf *.tar.gz; mv ethrun bin )
+nix-env -i shellcheck solc seth nodejs hsevm git
+check() { printf "\nTesting %s\n" "$1"; cd /tmp; dapp clone "$1"; cd "$1"; dapp test; }
+
+make test
+sudo make link
+
+check ds-auth
+check ds-cache
+check ds-exec
+check ds-guard
+check ds-math
+check ds-multisig
+check ds-roles
