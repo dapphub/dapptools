@@ -24,7 +24,7 @@ insert .gitignore <<.
 .
 
 name=$(basename "$(pwd)")
-name=$(<<<"$name" tr A-Z a-z)
+name=$(<<<"$name" tr '[:upper:]' '[:lower:]')
 nouns=(${name//[^a-z]/ })
 noun=${nouns[$((${#nouns[@]} - 1))]}
 type=$(<<<"$name" perl -pe 's/(\w+)/\u$1/g')
