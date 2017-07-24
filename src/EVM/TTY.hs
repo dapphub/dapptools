@@ -19,7 +19,7 @@ import Control.Monad.State.Strict hiding (state)
 
 import Data.ByteString (ByteString)
 import Data.Map (Map)
-import Data.Maybe (fromJust)
+import Data.Maybe (fromJust, isJust)
 import Data.Monoid ((<>))
 import Data.Text (Text, unpack, pack)
 import Data.Text.Encoding (decodeUtf8)
@@ -55,7 +55,7 @@ data UiVmState = UiVmState
   , _uiVmTraceList    :: List Name String
   , _uiVmSolidityList :: List Name (Int, ByteString)
   , _uiVmSolc         :: Maybe SolcContract
-  , _uiVmDapp         :: DappInfo
+  , _uiVmDapp         :: Maybe DappInfo
   }
 
 data CodeType = Creation | Runtime
@@ -186,7 +186,7 @@ initialUiVmStateForTest dapp (theContractName, theTestName) =
            assign contextTrace (Zipper.fromForest [])
            assign logs mempty
   in
-    mkUiVmState vm dapp
+    mkUiVmState vm (Just dapp)
 
 myTheme :: [(AttrName, Vty.Attr)]
 myTheme =
@@ -239,11 +239,11 @@ stepOneSourcePosition :: UiVmState -> UiVmState
 stepOneSourcePosition ui =
   let
     vm              = view uiVm ui
-    dapp            = view uiVmDapp ui
+    Just dapp       = view uiVmDapp ui
     initialPosition = currentSrcMap dapp vm
     stillHere s     = currentSrcMap dapp s == initialPosition
     nextVm          = execState (execWhile stillHere) vm
-  in mkUiVmState nextVm (view uiVmDapp ui)
+  in mkUiVmState nextVm (Just dapp)
 
 currentSrcMap :: DappInfo -> VM -> Maybe SrcMap
 currentSrcMap dapp vm =
@@ -268,8 +268,33 @@ currentSolc dapp vm =
   in
     preview (dappSolcByHash . ix h . _2) dapp
 
-mkUiVmState :: VM -> DappInfo -> UiVmState
-mkUiVmState vm dapp =
+mkUiVmState :: VM -> Maybe DappInfo -> UiVmState
+mkUiVmState vm Nothing =
+  let
+    move = case vmOpIx vm of
+             Nothing -> id
+             Just x -> listMoveTo x
+  in UiVmState
+    { _uiVm = vm
+    , _uiVmDapp = Nothing
+    , _uiVmSolc = Nothing
+    , _uiVmStackList =
+        list StackPane (Vec.fromList $ view (state . stack) vm) 1
+    , _uiVmBytecodeList =
+        move $ list BytecodePane
+          (Vec.imap (,) (view codeOps (fromJust (currentContract vm))))
+          1
+    , _uiVmLogList = list LogPane (Vec.fromList . toList $ view logs vm) 1
+    , _uiVmTraceList =
+        list
+          TracePane
+          mempty
+          1
+    , _uiVmSolidityList =
+        list SolidityPane mempty 1
+    }
+
+mkUiVmState vm (Just dapp) =
   let
     sm = currentSrcMap dapp vm
     move = case vmOpIx vm of
@@ -277,7 +302,7 @@ mkUiVmState vm dapp =
              Just x -> listMoveTo x
   in UiVmState
     { _uiVm = vm
-    , _uiVmDapp = dapp
+    , _uiVmDapp = Just dapp
     , _uiVmSolc = currentSolc dapp vm
     , _uiVmStackList =
         list StackPane (Vec.fromList $ view (state . stack) vm) 1
@@ -371,15 +396,17 @@ drawTracePane ui =
       (view uiVmTraceList ui)
 
 drawSolidityPane :: UiVmState -> UiWidget
+drawSolidityPane ui | not (isJust (view uiVmDapp ui)) = vBox []
 drawSolidityPane ui =
   let
-    sm = fromJust $ currentSrcMap (view uiVmDapp ui) (view uiVm ui)
-    rows = fromJust $ view (uiVmDapp . dappSources . sourceLines . at (srcMapFile sm)) ui
+    Just dapp = view uiVmDapp ui
+    sm = fromJust $ currentSrcMap dapp (view uiVm ui)
+    rows = fromJust $ view (dappSources . sourceLines . at (srcMapFile sm)) dapp
     subrange i = lineSubrange rows (srcMapOffset sm, srcMapLength sm) i
     lineNo =
       (snd . fromJust $
         (srcMapCodePos
-         (view (uiVmDapp . dappSources) ui)
+         (view dappSources dapp)
          sm)) - 1
   in vBox
     [ hBorderWithLabel
