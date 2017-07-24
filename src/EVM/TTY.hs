@@ -47,8 +47,8 @@ data Name
 
 type UiWidget = Widget Name
 
-data UiVmState = UiVmState
-  { _uiVm             :: VM
+data UiVmState e = UiVmState
+  { _uiVm             :: VM e
   , _uiVmStackList    :: List Name W256
   , _uiVmBytecodeList :: List Name (Int, Op)
   , _uiVmLogList      :: List Name Log
@@ -74,8 +74,8 @@ data UiTestPickerState = UiTestPickerState
   , _testPickerDapp :: DappInfo
   }
 
-data UiState
-  = UiVmScreen UiVmState
+data UiState e
+  = UiVmScreen (UiVmState e)
   | UiTestPickerScreen UiTestPickerState
 
 makeLenses ''DappInfo
@@ -126,10 +126,10 @@ main root jsonFilePath = do
             , _testPickerDapp = dappInfo
             }
 
-        _ <- customMain mkVty Nothing app ui
+        _ <- customMain mkVty Nothing app (ui :: UiState Concrete)
         return ()
 
-app :: App UiState () Name
+app :: App (UiState Concrete) () Name
 app = App
   { appDraw = drawUi
   , appChooseCursor = neverShowCursor
@@ -165,7 +165,7 @@ app = App
   , appAttrMap = const (attrMap Vty.defAttr myTheme)
   }
 
-initialUiVmStateForTest :: DappInfo -> (Text, Text) -> UiVmState
+initialUiVmStateForTest :: DappInfo -> (Text, Text) -> UiVmState Concrete
 initialUiVmStateForTest dapp (theContractName, theTestName) =
   let
      Just testContract = view (dappSolcByName . at theContractName) dapp
@@ -198,7 +198,7 @@ myTheme =
   , (activeAttr, Vty.defAttr `Vty.withStyle` Vty.standout)
   ]
 
-drawUi :: UiState -> [UiWidget]
+drawUi :: Machine e => UiState e -> [UiWidget]
 drawUi (UiVmScreen s) = drawVm s
 drawUi (UiTestPickerScreen s) = drawTestPicker s
 
@@ -214,7 +214,7 @@ drawTestPicker ui =
           (view testPickerList ui)
   ]
 
-drawVm :: UiVmState -> [UiWidget]
+drawVm :: Machine e => UiVmState e -> [UiWidget]
 drawVm ui =
   [ vBox
     [ vLimit 20 $ hBox
@@ -229,13 +229,13 @@ drawVm ui =
     ]
   ]
 
-stepOneOpcode :: UiVmState -> UiVmState
+stepOneOpcode :: Machine e => UiVmState e -> UiVmState e
 stepOneOpcode ui =
   let
     nextVm = execState exec1 (view uiVm ui)
   in mkUiVmState nextVm (view uiVmDapp ui)
 
-stepOneSourcePosition :: UiVmState -> UiVmState
+stepOneSourcePosition :: UiVmState Concrete -> UiVmState Concrete
 stepOneSourcePosition ui =
   let
     vm              = view uiVm ui
@@ -245,7 +245,7 @@ stepOneSourcePosition ui =
     nextVm          = execState (execWhile stillHere) vm
   in mkUiVmState nextVm (Just dapp)
 
-currentSrcMap :: DappInfo -> VM -> Maybe SrcMap
+currentSrcMap :: Machine e => DappInfo -> VM e -> Maybe SrcMap
 currentSrcMap dapp vm =
   let
     this = vm ^?! env . contracts . ix (view (state . contract) vm)
@@ -260,7 +260,7 @@ currentSrcMap dapp vm =
       Just (Runtime, solc) ->
         preview (runtimeSrcmap . ix i) solc
 
-currentSolc :: DappInfo -> VM -> Maybe SolcContract
+currentSolc :: Machine e => DappInfo -> VM e -> Maybe SolcContract
 currentSolc dapp vm =
   let
     this = vm ^?! env . contracts . ix (view (state . contract) vm)
@@ -268,7 +268,7 @@ currentSolc dapp vm =
   in
     preview (dappSolcByHash . ix h . _2) dapp
 
-mkUiVmState :: VM -> Maybe DappInfo -> UiVmState
+mkUiVmState :: Machine e => VM e -> Maybe DappInfo -> UiVmState e
 mkUiVmState vm Nothing =
   let
     move = case vmOpIx vm of
@@ -357,7 +357,7 @@ showContext dapp (Right (CallContext _ _ hash abi _)) =
              (\x -> maybe "[unknown method]" id (maybeAbiName solc x))
              abi
 
-drawStackPane :: UiVmState -> UiWidget
+drawStackPane :: Machine e => UiVmState e -> UiWidget
 drawStackPane ui =
   hBorderWithLabel (txt "Stack") <=>
     renderList
@@ -365,7 +365,7 @@ drawStackPane ui =
       False
       (view uiVmStackList ui)
 
-drawBytecodePane :: UiVmState -> UiWidget
+drawBytecodePane :: Machine e => UiVmState e -> UiWidget
 drawBytecodePane ui =
   hBorderWithLabel (txt "Bytecode " <+> str (show (view (uiVm . result) ui))) <=>
     renderList
@@ -379,7 +379,7 @@ withHighlight :: Bool -> Widget n -> Widget n
 withHighlight False = withDefAttr dimAttr
 withHighlight True  = withDefAttr boldAttr
 
-drawLogPane :: UiVmState -> UiWidget
+drawLogPane :: Machine e => UiVmState e -> UiWidget
 drawLogPane ui =
   hBorderWithLabel (txt "Logs") <=>
     renderList
@@ -387,7 +387,7 @@ drawLogPane ui =
       False
       (view uiVmLogList ui)
 
-drawTracePane :: UiVmState -> UiWidget
+drawTracePane :: Machine e => UiVmState e -> UiWidget
 drawTracePane ui =
   hBorderWithLabel (txt "Trace") <=>
     renderList
@@ -395,7 +395,7 @@ drawTracePane ui =
       False
       (view uiVmTraceList ui)
 
-drawSolidityPane :: UiVmState -> UiWidget
+drawSolidityPane :: Machine e => UiVmState e -> UiWidget
 drawSolidityPane ui | not (isJust (view uiVmDapp ui)) = vBox []
 drawSolidityPane ui =
   let

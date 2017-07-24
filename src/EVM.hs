@@ -1,10 +1,11 @@
 {-# Language StrictData #-}
 {-# Language TemplateHaskell #-}
 {-# Language TypeOperators #-}
+{-# Language ScopedTypeVariables #-}
 
 module EVM where
 
-import Prelude hiding ((^), log)
+import Prelude hiding ((^), log, Word)
 
 import EVM.Types
 import EVM.Solidity
@@ -43,6 +44,21 @@ import qualified Data.Vector.Storable as Vector
 import qualified Data.Tree.Zipper     as Zipper
 
 import qualified Data.Vector as RegularVector
+
+data Concrete
+
+class Machine e where
+  data Word e
+  data Blob e
+  w256 :: W256 -> Word e
+  blob :: ByteString -> Blob e
+
+instance Machine Concrete where
+  w256 = C
+  blob = B
+
+  data Word Concrete = C W256
+  data Blob Concrete = B ByteString
 
 data Op
   = OpStop
@@ -124,6 +140,8 @@ data Error
   | NoSuchContract Addr
   deriving (Eq, Show)
 
+-- type Error = Error' Concrete
+
 -- | The possible result states of a VM
 data VMResult
   = VMFailure Error        -- ^ An operation failed
@@ -131,7 +149,7 @@ data VMResult
   deriving (Eq, Show)
 
 -- | The state of a stepwise EVM execution
-data VM = VM
+data VM e = VM
   { _result        :: Maybe VMResult
   , _state         :: FrameState
   , _frames        :: [Frame]
@@ -225,9 +243,9 @@ makeLenses ''Contract
 makeLenses ''Env
 makeLenses ''VM
 
-type EVM a = State VM a
+type EVM e a = State (VM e) a
 
-currentContract :: VM -> Maybe Contract
+currentContract :: Machine e => VM e -> Maybe Contract
 currentContract vm =
   view (env . contracts . at (view (state . contract) vm)) vm
 
@@ -237,7 +255,7 @@ zipperRootForest z =
     Nothing -> Zipper.toForest z
     Just z' -> zipperRootForest (Zipper.nextSpace z')
 
-contextTraceForest :: VM -> Forest (Either Log FrameContext)
+contextTraceForest :: Machine e => VM e -> Forest (Either Log FrameContext)
 contextTraceForest vm =
   view (contextTrace . to zipperRootForest) vm
 
@@ -255,7 +273,7 @@ initialContract theCode = Contract
   , _codeOps  = mkCodeOps theCode
   }
 
-performCreation :: ByteString -> EVM ()
+performCreation :: Machine e => ByteString -> EVM e ()
 performCreation createdCode = do
   self <- use (state . contract)
   zoom (env . contracts . at self) $ do
@@ -268,14 +286,14 @@ performCreation createdCode = do
             & set storage (view storage now)
             & set balance (view balance now)
 
-resetState :: EVM ()
+resetState :: Machine e => EVM e ()
 resetState = do
   -- TODO: handle selfdestructs
   assign result     Nothing
   assign frames     []
   assign state      blankState
 
-loadContract :: Addr -> EVM ()
+loadContract :: Machine e => Addr -> EVM e ()
 loadContract target =
   preuse (env . contracts . ix target . bytecode) >>=
     \case
@@ -285,14 +303,14 @@ loadContract target =
         assign (state . contract) target
         assign (state . code)     targetCode
 
-exec1 :: EVM ()
+exec1 :: forall e. Machine e => EVM e ()
 exec1 = do
   vm <- get
 
   let
     -- Convenience function to access parts of the current VM state.
     -- Arcane type signature needed to avoid monomorphism restriction.
-    the :: ((b -> VM -> Const a VM) -> ((a -> Const a a) -> b) -> a)
+    the :: (b -> VM e -> Const a (VM e)) -> ((a -> Const a a) -> b) -> a
     the f g = view (f . g) vm
 
     -- Convenient aliases
@@ -769,7 +787,7 @@ exec1 = do
         xxx ->
           vmError (UnrecognizedOpcode xxx)
 
-delegateCall :: Addr -> W256 -> W256 -> W256 -> W256 -> [W256] -> EVM ()
+delegateCall :: Machine e => Addr -> W256 -> W256 -> W256 -> W256 -> [W256] -> EVM e ()
 delegateCall xTo xInOffset xInSize xOutOffset xOutSize xs = do
   preuse (env . contracts . ix xTo) >>=
     \case
@@ -806,7 +824,7 @@ delegateCall xTo xInOffset xInSize xOutOffset xOutSize xs = do
         accessMemoryRange xInOffset xInSize
         accessMemoryRange xOutOffset xOutSize
 
-accessMemoryRange :: W256 -> W256 -> EVM ()
+accessMemoryRange :: Machine e => W256 -> W256 -> EVM e ()
 accessMemoryRange _ 0 = return ()
 accessMemoryRange f l =
   state . memorySize %= \n -> max n (ceilDiv (num (f + l)) 32)
@@ -815,11 +833,11 @@ accessMemoryRange f l =
       let (q, r) = quotRem a b
       in q + if r /= 0 then 1 else 0
 
-accessMemoryWord :: W256 -> EVM ()
+accessMemoryWord :: Machine e => W256 -> EVM e ()
 accessMemoryWord x = accessMemoryRange x 32
 
 copyBytesToMemory
-  :: ByteString -> Int -> Int -> Int -> EVM ()
+  :: Machine e => ByteString -> Int -> Int -> Int -> EVM e ()
 copyBytesToMemory bs size xOffset yOffset =
   if size == 0 then return ()
   else do
@@ -828,7 +846,7 @@ copyBytesToMemory bs size xOffset yOffset =
       snd $ BS.foldl' (\(!i, !a) x -> (i + 1, IntMap.insert i x a)) (yOffset, mem)
         (BS.take size (BS.drop xOffset bs))
 
-readMemory :: Int -> Int -> VM -> ByteString
+readMemory :: Machine e => Int -> Int -> VM e -> ByteString
 readMemory offset size vm = readIntMap offset size (view (state . memory) vm)
 
 readIntMap :: Int -> Int -> IntMap Word8 -> ByteString
@@ -853,7 +871,7 @@ readIntMap offset size intmap =
         withForeignPtr (fst (Vector.unsafeToForeignPtr0 vec))
           (\ptr -> BS.packCStringLen (castPtr ptr, size))
 
-push :: W256 -> EVM ()
+push :: Machine e => W256 -> EVM e ()
 push x = state . stack %= (x :)
 
 pushTo :: MonadState s m => ASetter s s [a] [a] -> a -> m ()
@@ -862,10 +880,10 @@ pushTo f x = f %= (x :)
 pushToSequence :: MonadState s m => ASetter s s (Seq a) (Seq a) -> a -> m ()
 pushToSequence f x = f %= (Seq.|> x)
 
-underrun :: EVM ()
+underrun :: Machine e => EVM e ()
 underrun = vmError StackUnderrun
 
-vmError :: Error -> EVM ()
+vmError :: Machine e => Error -> EVM e ()
 vmError e = do
   vm <- get
   case view frames vm of
@@ -897,7 +915,7 @@ toWord512 (W256 x) = fromHiAndLo 0 x
 fromWord512 :: Word512 -> W256
 fromWord512 x = W256 (loWord x)
 
-stackOp1 :: (W256 -> W256) -> EVM ()
+stackOp1 :: Machine e => (W256 -> W256) -> EVM e ()
 stackOp1 f =
   use (state . stack) >>= \case
     (x:xs) ->
@@ -906,7 +924,7 @@ stackOp1 f =
     _ ->
       underrun
 
-stackOp2 :: ((W256, W256) -> W256) -> EVM ()
+stackOp2 :: Machine e => ((W256, W256) -> W256) -> EVM e ()
 stackOp2 f =
   use (state . stack) >>= \case
     (x:y:xs) ->
@@ -914,7 +932,7 @@ stackOp2 f =
     _ ->
       underrun
 
-stackOp3 :: ((W256, W256, W256) -> W256) -> EVM ()
+stackOp3 :: Machine e => ((W256, W256, W256) -> W256) -> EVM e ()
 stackOp3 f =
   use (state . stack) >>= \case
     (x:y:z:xs) ->
@@ -922,7 +940,7 @@ stackOp3 f =
     _ ->
       underrun
 
-checkJump :: Integral n => n -> EVM ()
+checkJump :: (Machine e, Integral n) => n -> EVM e ()
 checkJump x = do
   theCode <- use (state . code)
   if num x < BS.length theCode && BS.index theCode (num x) == 0x5b
@@ -935,7 +953,7 @@ checkJump x = do
             state . pc .= num x
     else vmError BadJumpDestination
 
-insidePushData :: Int -> EVM Bool
+insidePushData :: Machine e => Int -> EVM e Bool
 insidePushData i = do
   -- If the operation index for the code pointer is the same
   -- as for the previous code pointer, then it's inside push data.
@@ -943,7 +961,7 @@ insidePushData i = do
   x <- useJust (env . contracts . ix self . opIxMap)
   return (i == 0 || (x Vector.! i) == (x Vector.! (i - 1)))
 
-touchAccount :: Addr -> EVM Contract
+touchAccount :: Machine e => Addr -> EVM e Contract
 touchAccount a = do
   use (env . contracts . at a) >>=
     \case
@@ -968,7 +986,7 @@ data VMOpts = VMOpts
   , vmoptGaslimit :: W256
   } deriving Show
 
-makeVm :: VMOpts -> VM
+makeVm :: VMOpts -> VM Concrete
 makeVm o = VM
   { _result = Nothing
   , _frames = mempty
@@ -1090,7 +1108,7 @@ byteAt x j = num (x `shiftR` (j * 8)) .&. 0xff
 word32Bytes :: Word32 -> ByteString
 word32Bytes x = BS.pack [byteAt x (3 - i) | i <- [0..3]]
 
-vmOp :: VM -> Maybe Op
+vmOp :: Machine e => VM e -> Maybe Op
 vmOp vm =
   let i  = vm ^. state . pc
       xs = BS.drop i (vm ^. state . code)
@@ -1099,12 +1117,12 @@ vmOp vm =
      then Nothing
      else Just (readOp op (BS.drop 1 xs))
 
-vmOpIx :: VM -> Maybe Int
+vmOpIx :: Machine e => VM e -> Maybe Int
 vmOpIx vm =
   do self <- currentContract vm
      (view opIxMap self) Vector.!? (view (state . pc) vm)
 
-opParams :: VM -> Map String W256
+opParams :: Machine e => VM e -> Map String W256
 opParams vm =
   case vmOp vm of
     Just OpCreate ->

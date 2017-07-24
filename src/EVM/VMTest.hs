@@ -46,7 +46,7 @@ data Expectation = Expectation
   , expectedContracts :: Map Addr Contract
   } deriving Show
 
-checkExpectation :: Case -> EVM.VM -> IO Bool
+checkExpectation :: Case -> EVM.VM EVM.Concrete -> IO Bool
 checkExpectation x vm =
   case (testExpectation x, view EVM.result vm) of
     (Just expectation, Just (EVM.VMSuccess output)) -> do
@@ -70,7 +70,7 @@ checkExpectedOut output expected =
     cpprint ("output mismatch" :: String, output, expected)
     return False
 
-checkExpectedContracts :: EVM.VM -> Map Addr Contract -> IO Bool
+checkExpectedContracts :: EVM.VM EVM.Concrete -> Map Addr Contract -> IO Bool
 checkExpectedContracts vm expected =
   if realizeContracts expected == vm ^. EVM.env . EVM.contracts
   then return True
@@ -151,7 +151,7 @@ realizeContract x =
     & EVM.nonce   .~ contractNonce x
     & EVM.storage .~ contractStorage x
 
-vmForCase :: Case -> EVM.VM
+vmForCase :: Case -> EVM.VM EVM.Concrete
 vmForCase x =
   EVM.makeVm (testVmOpts x)
     & EVM.env . EVM.contracts .~ realizeContracts (testContracts x)

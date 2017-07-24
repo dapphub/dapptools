@@ -12,7 +12,7 @@ import EVM.Keccak (newContractAddress)
 ethrunAddress :: Addr
 ethrunAddress = Addr 0x00a329c0648769a73afac7f9381e08fb43dbea72
 
-vmForEthrunCreation :: ByteString -> VM
+vmForEthrunCreation :: ByteString -> VM Concrete
 vmForEthrunCreation creationCode =
   (makeVm $ VMOpts
     { vmoptCode = creationCode
@@ -29,13 +29,13 @@ vmForEthrunCreation creationCode =
     }) & set (env . contracts . at ethrunAddress)
              (Just (initialContract mempty))
 
-exec :: State VM VMResult
+exec :: State (VM Concrete) VMResult
 exec =
   use EVM.result >>= \case
     Nothing -> exec1 >> exec
     Just x  -> return x
 
-execWhile :: (VM -> Bool) -> State VM ()
+execWhile :: (VM Concrete -> Bool) -> State (VM Concrete) ()
 execWhile p =
   get >>= \x -> if p x then exec1 >> execWhile p else return ()
 

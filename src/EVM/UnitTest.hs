@@ -83,13 +83,13 @@ runUnitTestContract _ contractMap _ (name, testNames) = do
 
       tick "\n"
 
-setupCall :: Addr -> Text -> EVM ()
+setupCall :: Addr -> Text -> EVM Concrete ()
 setupCall target abi = do
   resetState
   loadContract target
   assign (state . calldata) (word32Bytes (abiKeccak (encodeUtf8 abi)))
 
-initialUnitTestVm :: SolcContract -> [SolcContract] -> VM
+initialUnitTestVm :: SolcContract -> [SolcContract] -> VM Concrete
 initialUnitTestVm theContract _ =
   let
     vm = makeVm $ VMOpts
