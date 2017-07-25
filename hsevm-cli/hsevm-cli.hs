@@ -105,7 +105,7 @@ launchExec opts =
       Run -> print (view EVM.result (execState exec vm))
       _ -> error "not implemented"
 
-vmFromCommand :: Command -> EVM.VM
+vmFromCommand :: Command -> EVM.VM EVM.Concrete
 vmFromCommand opts =
   EVM.makeVm $ EVM.VMOpts
     { EVM.vmoptCode       = hexByteString "--code" (code opts)

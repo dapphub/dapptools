@@ -49,7 +49,7 @@ data Expectation = Expectation
 checkExpectation :: Case -> EVM.VM EVM.Concrete -> IO Bool
 checkExpectation x vm =
   case (testExpectation x, view EVM.result vm) of
-    (Just expectation, Just (EVM.VMSuccess output)) -> do
+    (Just expectation, Just (EVM.VMSuccess (EVM.B output))) -> do
       (&&) <$> checkExpectedContracts vm (expectedContracts expectation)
            <*> checkExpectedOut output (expectedOut expectation)
     (Nothing, Just (EVM.VMSuccess _)) ->
@@ -139,17 +139,21 @@ parseSuite = JSON.eitherDecode'
 
 #endif
 
-realizeContracts :: Map Addr Contract -> Map Addr EVM.Contract
+realizeContracts :: Map Addr Contract -> Map Addr (EVM.Contract EVM.Concrete)
 realizeContracts = Map.fromList . map f . Map.toList
   where
     f (a, x) = (a, realizeContract x)
 
-realizeContract :: Contract -> EVM.Contract
+realizeContract :: Contract -> EVM.Contract EVM.Concrete
 realizeContract x =
   EVM.initialContract (contractCode x)
-    & EVM.balance .~ contractBalance x
-    & EVM.nonce   .~ contractNonce x
-    & EVM.storage .~ contractStorage x
+    & EVM.balance .~ EVM.C (contractBalance x)
+    & EVM.nonce   .~ EVM.C (contractNonce x)
+    & EVM.storage .~ (
+        Map.fromList .
+        map (\(k, v) -> (EVM.C k, EVM.C v)) .
+        Map.toList $ contractStorage x
+        )
 
 vmForCase :: Case -> EVM.VM EVM.Concrete
 vmForCase x =

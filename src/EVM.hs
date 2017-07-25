@@ -2,6 +2,9 @@
 {-# Language TemplateHaskell #-}
 {-# Language TypeOperators #-}
 {-# Language ScopedTypeVariables #-}
+{-# Language ConstraintKinds #-}
+{-# Language StandaloneDeriving #-}
+{-# Language FlexibleInstances #-}
 
 module EVM where
 
@@ -26,6 +29,7 @@ import Data.Map.Strict              (Map)
 import Data.Maybe                   (fromMaybe, fromJust)
 import Data.Monoid                  (Endo)
 import Data.Sequence                (Seq)
+import Data.String                  (IsString)
 import Data.Vector.Storable         (Vector)
 import Data.Vector.Storable.Mutable (new, write)
 import Data.Foldable                (toList)
@@ -45,20 +49,229 @@ import qualified Data.Tree.Zipper     as Zipper
 
 import qualified Data.Vector as RegularVector
 
+num :: (Integral a, Num b) => a -> b
+num = fromIntegral
+
 data Concrete
 
-class Machine e where
+class Machine' e where
+  data Byte e
   data Word e
   data Blob e
+  data Memory e
+
   w256 :: W256 -> Word e
   blob :: ByteString -> Blob e
 
-instance Machine Concrete where
+  sdiv :: Word e -> Word e -> Word e
+  slt  :: Word e -> Word e -> Word e
+  sgt  :: Word e -> Word e -> Word e
+  smod :: Word e -> Word e -> Word e
+  addmod :: Word e -> Word e -> Word e -> Word e
+  mulmod :: Word e -> Word e -> Word e -> Word e
+
+  exponentiate :: Word e -> Word e -> Word e
+
+  forceConcreteBlob :: Blob e -> ByteString
+  forceConcreteWord :: Word e -> W256
+
+  sliceMemory :: Word e -> Word e -> Memory e -> Blob e
+  writeMemory :: Blob e -> Word e -> Word e -> Word e -> Memory e -> Memory e
+
+  readMemoryWord :: Word e -> Memory e -> Word e
+  setMemoryWord :: Word e -> Word e -> Memory e -> Memory e
+
+  readBlobWord :: Word e -> Blob e -> Word e
+  blobSize :: Blob e -> Word e
+
+  keccakBlob :: Blob e -> Word e
+
+type Machine e =
+  ( Machine' e
+  , Show (Word e)
+  , Num (Word e)
+  , Num (Byte e)
+  , Integral (Word e)
+  , Bits (Word e)
+  , Monoid (Memory e)
+  , Monoid (Blob e)
+  , IsString (Blob e)
+  , Show (Blob e)
+  , At (Memory e)
+  , Index (Memory e) ~ Word e
+  , IxValue (Memory e) ~ Byte e
+  )
+
+-- Copied from the standard library just to get specialization.
+-- We also use bit operations instead of modulo and multiply.
+-- (This operation was significantly slow.)
+(^) :: W256 -> W256 -> W256
+x0 ^ y0 | y0 < 0    = errorWithoutStackTrace "Negative exponent"
+        | y0 == 0   = 1
+        | otherwise = f x0 y0
+    where
+          f x y | not (testBit y 0) = f (x * x) (y `shiftR` 1)
+                | y == 1      = x
+                | otherwise   = g (x * x) ((y - 1) `shiftR` 1) x
+          g x y z | not (testBit y 0) = g (x * x) (y `shiftR` 1) z
+                  | y == 1      = x * z
+                  | otherwise   = g (x * x) ((y - 1) `shiftR` 1) (x * z)
+
+readIntMap :: Int -> Int -> IntMap Word8 -> ByteString
+readIntMap offset size intmap =
+  if size == 0 then ""
+  else
+    let
+      (_, bigger) =
+        IntMap.split (offset - 1) intmap
+      (range, _) =
+        IntMap.split (offset + size) bigger
+      vec =
+        Vector.create $ do
+          v <- new size
+          IntMap.foldlWithKey'
+            (\m k x -> m >> write v (k - offset) x)
+            (return ())
+            range
+          return v
+    in
+      unsafePerformIO $ do
+        withForeignPtr (fst (Vector.unsafeToForeignPtr0 vec))
+          (\ptr -> BS.packCStringLen (castPtr ptr, size))
+
+byteAt :: (Bits a, Bits b, Integral a, Num b) => a -> Int -> b
+byteAt x j = num (x `shiftR` (j * 8)) .&. 0xff
+
+wordAt :: Int -> ByteString -> W256
+wordAt i bs = word [(bs ^? ix j) ?: 0 | j <- [i..(i+31)]]
+
+(?:) :: Maybe a -> a -> a
+(?:) = flip fromMaybe
+
+word :: Integral a => [a] -> W256
+word xs = sum [ num x `shiftL` (8*n)
+              | (n, x) <- zip [0..] (reverse xs) ]
+
+toWord512 :: W256 -> Word512
+toWord512 (W256 x) = fromHiAndLo 0 x
+
+fromWord512 :: Word512 -> W256
+fromWord512 x = W256 (loWord x)
+
+instance Machine' Concrete where
   w256 = C
   blob = B
 
-  data Word Concrete = C W256
-  data Blob Concrete = B ByteString
+  newtype Word Concrete = C W256
+  newtype Blob Concrete = B ByteString
+  newtype Byte Concrete = ConcreteByte Word8
+  newtype Memory Concrete = ConcreteMemory (IntMap (Byte Concrete))
+
+  exponentiate (C x) (C y) = C (x ^ y)
+
+  sdiv _ (C (W256 0)) = 0
+  sdiv (C (W256 x)) (C (W256 y)) =
+    let sx = signedWord x
+        sy = signedWord y
+        k  = if (sx < 0) /= (sy < 0)
+             then (-1)
+             else 1
+    in C . W256 . unsignedWord $ k * div (abs sx) (abs sy)
+
+  smod _ (C (W256 0)) = 0
+  smod (C (W256 x)) (C (W256 y)) =
+    let sx = signedWord x
+        sy = signedWord y
+        k  = if sx < 0 then (-1) else 1
+    in C . W256 . unsignedWord $ k * mod (abs sx) (abs sy)
+
+  addmod _ _ (C (W256 0)) = 0
+  addmod (C x) (C y) (C z) =
+    C $ fromWord512
+         ((toWord512 x + toWord512 y) `mod` (toWord512 z))
+
+  mulmod _ _ (C (W256 0)) = 0
+  mulmod (C x) (C y) (C z) =
+    C $ fromWord512
+          ((toWord512 x * toWord512 y) `mod` (toWord512 z))
+
+  slt (C (W256 x)) (C (W256 y)) =
+    if signedWord x < signedWord y then 1 else 0
+
+  sgt (C (W256 x)) (C (W256 y)) =
+    if signedWord x > signedWord y then 1 else 0
+
+  forceConcreteBlob (B x) = x
+  forceConcreteWord (C x) = x
+
+  sliceMemory o s (ConcreteMemory m) =
+    B $ readIntMap (num o) (num s) (fmap num m)
+
+  writeMemory (B bs) (C size) (C xOffset) (C yOffset) (ConcreteMemory mem') =
+    let mem = fmap num mem'
+    in ConcreteMemory . fmap num . snd $
+         BS.foldl' (\(i, a) x -> (i + 1, IntMap.insert (num i) x a)) (yOffset, mem)
+           (BS.take (num size) (BS.drop (num xOffset) bs))
+
+  readMemoryWord (C i) (ConcreteMemory m) =
+    let
+      go !a (-1) = a
+      go !a !n = go (a + shiftL (num $ IntMap.findWithDefault 0 (num i + n) m)
+                                (8 * (31 - n))) (n - 1)
+    in {-# SCC word256At_getter #-}
+      C $ go (0 :: W256) (31 :: Int)
+
+  setMemoryWord (C i) (C x) (ConcreteMemory m) =
+    -- known to be relatively slow
+    ConcreteMemory $
+      IntMap.union (IntMap.fromAscList [(num i + 31 - j, byteAt x j) | j <- reverse [0..31]]) m
+
+  readBlobWord (C i) (B x) =
+    C (wordAt (num i) x)
+
+  blobSize (B x) = C (num (BS.length x))
+
+  keccakBlob (B x) = C (keccak x)
+
+type instance Index (Memory Concrete) = Word Concrete
+type instance IxValue (Memory Concrete) = Byte Concrete
+
+deriving instance Bits (Word Concrete)
+deriving instance Enum (Word Concrete)
+deriving instance Eq (Word Concrete)
+deriving instance Integral (Word Concrete)
+deriving instance Num (Word Concrete)
+deriving instance Real (Word Concrete)
+deriving instance Show (Word Concrete)
+
+deriving instance Bits (Byte Concrete)
+deriving instance Enum (Byte Concrete)
+deriving instance Eq (Byte Concrete)
+deriving instance Integral (Byte Concrete)
+deriving instance Num (Byte Concrete)
+deriving instance Ord (Byte Concrete)
+deriving instance Real (Byte Concrete)
+
+-- deriving instance Monoid (Word Concrete)
+deriving instance Monoid (Blob Concrete)
+deriving instance IsString (Blob Concrete)
+deriving instance Show (Blob Concrete)
+
+deriving instance Monoid (Memory Concrete)
+deriving instance Ord (Word Concrete)
+
+instance At (Memory Concrete) where
+  at k f (ConcreteMemory m) =
+    fmap ConcreteMemory $ f mv <&> \r -> case r of
+      Nothing -> maybe m (const (IntMap.delete (num k) m)) mv
+      Just v' -> IntMap.insert (num k) v' m
+      where mv = IntMap.lookup (num k) m
+
+instance Ixed (Memory Concrete) where
+  ix k f (ConcreteMemory m) =
+    fmap ConcreteMemory $ case IntMap.lookup (num k) m of
+     Just v -> f v <&> \v' -> IntMap.insert (num k) v' m
+     Nothing -> pure m
 
 data Op
   = OpStop
@@ -130,100 +343,103 @@ data Op
   | OpUnknown Word8
   deriving (Show, Eq)
 
-data Error
-  = BalanceTooLow W256 W256
+data Error e
+  = BalanceTooLow (Word e) (Word e)
   | UnrecognizedOpcode Word8
   | SelfDestruction
   | StackUnderrun
   | BadJumpDestination
   | Revert
   | NoSuchContract Addr
-  deriving (Eq, Show)
+
+deriving instance Show (Error Concrete)
 
 -- type Error = Error' Concrete
 
 -- | The possible result states of a VM
-data VMResult
-  = VMFailure Error        -- ^ An operation failed
-  | VMSuccess ByteString   -- ^ Reached STOP, RETURN, or end-of-code
-  deriving (Eq, Show)
+data VMResult e
+  = VMFailure (Error e)  -- ^ An operation failed
+  | VMSuccess (Blob e)   -- ^ Reached STOP, RETURN, or end-of-code
+
+deriving instance Show (VMResult Concrete)
 
 -- | The state of a stepwise EVM execution
 data VM e = VM
-  { _result        :: Maybe VMResult
-  , _state         :: FrameState
-  , _frames        :: [Frame]
-  , _env           :: Env
-  , _block         :: Block
+  { _result        :: Maybe (VMResult e)
+  , _state         :: FrameState e
+  , _frames        :: [Frame e]
+  , _env           :: Env e
+  , _block         :: Block e
   , _selfdestructs :: [Addr]
-  , _logs          :: Seq Log
-  , _contextTrace  :: Zipper.TreePos Zipper.Empty (Either Log FrameContext)
+  , _logs          :: Seq (Log e)
+  , _contextTrace  :: Zipper.TreePos Zipper.Empty (Either (Log e) (FrameContext e))
   }
 
 -- | A log entry
-data Log = Log Addr ByteString [W256]
-  deriving Show
+data Log e = Log Addr (Blob e) [Word e]
 
 -- | An entry in the VM's "call/create stack"
-data Frame = Frame
-  { _frameContext   :: FrameContext
-  , _frameState     :: FrameState
-  } deriving Show
+data Frame e = Frame
+  { _frameContext   :: FrameContext e
+  , _frameState     :: FrameState e
+  }
 
 -- | Call/create info
-data FrameContext
+data FrameContext e
   = CreationContext
     { creationContextCodehash :: W256 }
   | CallContext
-    { callContextOffset   :: W256
-    , callContextSize     :: W256
+    { callContextOffset   :: Word e
+    , callContextSize     :: Word e
     , callContextCodehash :: W256
-    , callContextAbi      :: Maybe Word32
-    , callContextReversion :: Map Addr Contract
+    , callContextAbi      :: Maybe (Word e)
+    , callContextReversion :: Map Addr (Contract e)
     }
-  deriving Show
 
 -- | The "registers" of the VM along with memory and data stack
-data FrameState = FrameState
+data FrameState e = FrameState
   { _contract    :: Addr
   , _code        :: ByteString
   , _pc          :: Int
-  , _stack       :: [W256]
-  , _memory      :: IntMap Word8
+  , _stack       :: [Word e]
+  , _memory      :: Memory e
   , _memorySize  :: Int
-  , _calldata    :: ByteString
-  , _callvalue   :: W256
+  , _calldata    :: Blob e
+  , _callvalue   :: Word e
   , _caller      :: Addr
-  } deriving Show
+  }
 
 -- | The state of a contract
-data Contract = Contract
+data Contract e = Contract
   { _bytecode :: ByteString
-  , _storage  :: Map W256 W256
-  , _balance  :: W256
-  , _nonce    :: W256
+  , _storage  :: Map (Word e) (Word e)
+  , _balance  :: Word e
+  , _nonce    :: Word e
   , _codehash :: W256
   , _codesize :: Int -- (redundant?)
   , _opIxMap  :: Vector Int
   , _codeOps  :: RegularVector.Vector Op
-  } deriving (Eq, Show)
+  }
+
+deriving instance Show (Contract Concrete)
+deriving instance Eq (Contract Concrete)
 
 -- | Kind of a hodgepodge?
-data Env = Env
-  { _contracts          :: Map Addr Contract
-  , _sha3Crack          :: Map W256 ByteString
+data Env e = Env
+  { _contracts          :: Map Addr (Contract e)
+  , _sha3Crack          :: Map (Word e) (Blob e)
   , _origin             :: Addr
-  } deriving (Show)
+  }
 
-data Block = Block
+data Block e = Block
   { _coinbase   :: Addr
-  , _timestamp  :: W256
-  , _number     :: W256
-  , _difficulty :: W256
-  , _gaslimit   :: W256
-  } deriving Show
+  , _timestamp  :: Word e
+  , _number     :: Word e
+  , _difficulty :: Word e
+  , _gaslimit   :: Word e
+  }
 
-blankState :: FrameState
+blankState :: Machine e => FrameState e
 blankState = FrameState
   { _contract   = 0
   , _code       = mempty
@@ -245,7 +461,7 @@ makeLenses ''VM
 
 type EVM e a = State (VM e) a
 
-currentContract :: Machine e => VM e -> Maybe Contract
+currentContract :: Machine e => VM e -> Maybe (Contract e)
 currentContract vm =
   view (env . contracts . at (view (state . contract) vm)) vm
 
@@ -255,11 +471,11 @@ zipperRootForest z =
     Nothing -> Zipper.toForest z
     Just z' -> zipperRootForest (Zipper.nextSpace z')
 
-contextTraceForest :: Machine e => VM e -> Forest (Either Log FrameContext)
+contextTraceForest :: Machine e => VM e -> Forest (Either (Log e) (FrameContext e))
 contextTraceForest vm =
   view (contextTrace . to zipperRootForest) vm
 
-initialContract :: ByteString -> Contract
+initialContract :: Machine e => ByteString -> Contract e
 initialContract theCode = Contract
   { _bytecode = theCode
   , _codesize = BS.length theCode
@@ -327,7 +543,7 @@ exec1 = do
           assign state (view frameState nextFrame)
           push 1
         [] ->
-          assign result (Just (VMSuccess ""))
+          assign result (Just (VMSuccess (blob "")))
 
     else do
       let op = BS.index (the state code) (the state pc)
@@ -340,7 +556,7 @@ exec1 = do
           let !n = num x - 0x60 + 1
               !xs = BS.take n (BS.drop (1 + the state pc)
                                        (the state code))
-          in push (word (BS.unpack xs))
+          in push (w256 (word (BS.unpack xs)))
 
         -- op: DUP
         x | x >= 0x80 && x <= 0x8f ->
@@ -402,15 +618,7 @@ exec1 = do
 
         -- op: SDIV
         0x05 ->
-          stackOp2 $ \case
-              (_, 0) -> 0
-              (W256 x, W256 y) ->
-                let sx = signedWord x
-                    sy = signedWord y
-                    k  = if (sx < 0) /= (sy < 0)
-                         then (-1)
-                         else 1
-                in W256 . unsignedWord $ k * div (abs sx) (abs sy)
+          stackOp2 (uncurry (sdiv))
 
         -- op: MOD
         0x06 -> stackOp2 $ \case
@@ -418,44 +626,23 @@ exec1 = do
           (x, y) -> mod x y
 
         -- op: SMOD
-        0x07 -> stackOp2 $ \case
-           (_, 0) -> 0
-           (W256 x, W256 y) ->
-             let sx = signedWord x
-                 sy = signedWord y
-                 k  = if sx < 0 then (-1) else 1
-             in W256 . unsignedWord $ k * mod (abs sx) (abs sy)
-
+        0x07 -> stackOp2 $ uncurry smod
         -- op: ADDMOD
-        0x08 -> stackOp3 $ \case
-          (_, _, 0) -> 0
-          (x, y, z) ->
-            fromWord512
-              ((toWord512 x + toWord512 y) `mod` (toWord512 z))
-
+        0x08 -> stackOp3 $ (\(x, y, z) -> addmod x y z)
         -- op: MULMOD
-        0x09 -> stackOp3 $ \case
-          (_, _, 0) -> 0
-          (x, y, z) ->
-            fromWord512
-              ((toWord512 x * toWord512 y) `mod` (toWord512 z))
+        0x09 -> stackOp3 $ (\(x, y, z) -> mulmod x y z)
 
         -- op: LT
         0x10 -> stackOp2 $ \(x, y) -> if x < y then 1 else 0
         -- op: GT
         0x11 -> stackOp2 $ \(x, y) -> if x > y then 1 else 0
-
         -- op: SLT
-        0x12 -> stackOp2 $ \(W256 x, W256 y) ->
-          if signedWord x < signedWord y then 1 else 0
-
+        0x12 -> stackOp2 $ uncurry slt
         -- op: SGT
-        0x13 -> stackOp2 $ \(W256 x, W256 y) ->
-          if signedWord x > signedWord y then 1 else 0
+        0x13 -> stackOp2 $ uncurry sgt
 
         -- op: EQ
         0x14 -> stackOp2 $ \(x, y) -> if x == y then 1 else 0
-
         -- op: ISZERO
         0x15 -> stackOp1 $ \case 0 -> 1; _ -> 0
 
@@ -480,7 +667,7 @@ exec1 = do
           case stk of
             (xOffset:xSize:xs) -> do
               let bytes = readMemory (num xOffset) (num xSize) vm
-                  hash  = keccak bytes
+                  hash  = keccakBlob bytes
               assign (state . stack) (hash : xs)
               assign (env . sha3Crack . at hash) (Just bytes)
               accessMemoryRange (num xOffset) (num xSize)
@@ -508,10 +695,10 @@ exec1 = do
         0x34 -> push (the state callvalue)
 
         -- op: CALLDATALOAD
-        0x35 -> stackOp1 $ \x -> wordAt (num x) (the state calldata)
+        0x35 -> stackOp1 $ \x -> readBlobWord x (the state calldata)
 
         -- op: CALLDATASIZE
-        0x36 -> push (num (BS.length (the state calldata)))
+        0x36 -> push (blobSize (the state calldata))
 
         -- op: CALLDATACOPY
         0x37 ->
@@ -531,7 +718,7 @@ exec1 = do
           case stk of
             (memOffset:codeOffset:n:xs) -> do
               assign (state . stack) xs
-              copyBytesToMemory (view bytecode this)
+              copyBytesToMemory (blob (view bytecode this))
                 (num n) (num codeOffset) (num memOffset)
             _ -> underrun
 
@@ -553,9 +740,8 @@ exec1 = do
           case stk of
             (extAccount:memOffset:codeOffset:codeSize:xs) -> do
               c <- touchAccount (num (extAccount))
-              let theCode = view bytecode c
               assign (state . stack) xs
-              copyBytesToMemory theCode
+              copyBytesToMemory (blob (view bytecode c))
                 (num codeSize) (num codeOffset) (num memOffset)
             _ -> underrun
 
@@ -649,14 +835,14 @@ exec1 = do
           push (num (the state memorySize))
 
         -- op: GAS
-        0x5a -> push (0xffffffffffffffffff :: W256)
+        0x5a -> push (w256 0xffffffffffffffffff)
 
         -- op: JUMPDEST
         0x5b -> return ()
 
         -- op: EXP
         0x0a ->
-          stackOp2 (uncurry (^))
+          stackOp2 (uncurry exponentiate)
 
         -- op: SIGNEXTEND
         0x0b ->
@@ -677,8 +863,8 @@ exec1 = do
               accessMemoryRange xOffset xSize
 
               let
-                newAddr     = newContractAddress self (view nonce this)
-                newCode     = readMemory (num xOffset) (num xSize) vm
+                newAddr     = newContractAddress self (forceConcreteWord (view nonce this))
+                newCode     = forceConcreteBlob $ readMemory (num xOffset) (num xSize) vm
                 newContract = initialContract newCode
                 newContext  = CreationContext (view codehash newContract)
 
@@ -746,7 +932,7 @@ exec1 = do
 
                   case view frameContext nextFrame of
                     CreationContext _ -> do
-                      performCreation (readMemory (num xOffset) (num xSize) vm)
+                      performCreation (forceConcreteBlob (readMemory (num xOffset) (num xSize) vm))
                       assign state (view frameState nextFrame)
                       push (num (the state contract))
 
@@ -787,7 +973,11 @@ exec1 = do
         xxx ->
           vmError (UnrecognizedOpcode xxx)
 
-delegateCall :: Machine e => Addr -> W256 -> W256 -> W256 -> W256 -> [W256] -> EVM e ()
+delegateCall
+  :: Machine e
+  => Addr
+  -> Word e -> Word e -> Word e -> Word e -> [Word e]
+  -> EVM e ()
 delegateCall xTo xInOffset xInSize xOutOffset xOutSize xs = do
   preuse (env . contracts . ix xTo) >>=
     \case
@@ -800,10 +990,10 @@ delegateCall xTo xInOffset xInSize xOutOffset xOutSize xs = do
               , callContextSize   = xOutSize
               , callContextCodehash = view codehash target
               , callContextReversion = view (env . contracts) vm
-              , callContextAbi =
-                  if xInSize >= 4
-                  then Just $! view (state . memory . word32At (num xInOffset)) vm
-                  else Nothing
+              , callContextAbi = Nothing
+                  -- if xInSize >= 4
+                  -- then Just $! view (state . memory . word32At (num xInOffset)) vm
+                  -- else Nothing
               }
 
         pushTo frames $ Frame
@@ -824,7 +1014,7 @@ delegateCall xTo xInOffset xInSize xOutOffset xOutSize xs = do
         accessMemoryRange xInOffset xInSize
         accessMemoryRange xOutOffset xOutSize
 
-accessMemoryRange :: Machine e => W256 -> W256 -> EVM e ()
+accessMemoryRange :: Machine e => Word e -> Word e -> EVM e ()
 accessMemoryRange _ 0 = return ()
 accessMemoryRange f l =
   state . memorySize %= \n -> max n (ceilDiv (num (f + l)) 32)
@@ -833,45 +1023,22 @@ accessMemoryRange f l =
       let (q, r) = quotRem a b
       in q + if r /= 0 then 1 else 0
 
-accessMemoryWord :: Machine e => W256 -> EVM e ()
+accessMemoryWord :: Machine e => Word e -> EVM e ()
 accessMemoryWord x = accessMemoryRange x 32
 
 copyBytesToMemory
-  :: Machine e => ByteString -> Int -> Int -> Int -> EVM e ()
+  :: Machine e => Blob e -> Word e -> Word e -> Word e -> EVM e ()
 copyBytesToMemory bs size xOffset yOffset =
   if size == 0 then return ()
   else do
     mem <- use (state . memory)
     assign (state . memory) $
-      snd $ BS.foldl' (\(!i, !a) x -> (i + 1, IntMap.insert i x a)) (yOffset, mem)
-        (BS.take size (BS.drop xOffset bs))
+      writeMemory bs size xOffset yOffset mem
 
-readMemory :: Machine e => Int -> Int -> VM e -> ByteString
-readMemory offset size vm = readIntMap offset size (view (state . memory) vm)
+readMemory :: Machine e => Word e -> Word e -> VM e -> Blob e
+readMemory offset size vm = sliceMemory offset size (view (state . memory) vm)
 
-readIntMap :: Int -> Int -> IntMap Word8 -> ByteString
-readIntMap offset size intmap =
-  if size == 0 then ""
-  else
-    let
-      (_, bigger) =
-        IntMap.split (offset - 1) intmap
-      (range, _) =
-        IntMap.split (offset + size) bigger
-      vec =
-        Vector.create $ do
-          v <- new size
-          IntMap.foldlWithKey'
-            (\m k x -> m >> write v (k - offset) x)
-            (return ())
-            range
-          return v
-    in
-      unsafePerformIO $ do
-        withForeignPtr (fst (Vector.unsafeToForeignPtr0 vec))
-          (\ptr -> BS.packCStringLen (castPtr ptr, size))
-
-push :: Machine e => W256 -> EVM e ()
+push :: Machine e => Word e -> EVM e ()
 push x = state . stack %= (x :)
 
 pushTo :: MonadState s m => ASetter s s [a] [a] -> a -> m ()
@@ -883,7 +1050,7 @@ pushToSequence f x = f %= (Seq.|> x)
 underrun :: Machine e => EVM e ()
 underrun = vmError StackUnderrun
 
-vmError :: Machine e => Error -> EVM e ()
+vmError :: Machine e => Error e -> EVM e ()
 vmError e = do
   vm <- get
   case view frames vm of
@@ -909,13 +1076,7 @@ vmError e = do
           assign (env . contracts) reversion
           push 0
 
-toWord512 :: W256 -> Word512
-toWord512 (W256 x) = fromHiAndLo 0 x
-
-fromWord512 :: Word512 -> W256
-fromWord512 x = W256 (loWord x)
-
-stackOp1 :: Machine e => (W256 -> W256) -> EVM e ()
+stackOp1 :: Machine e => (Word e -> Word e) -> EVM e ()
 stackOp1 f =
   use (state . stack) >>= \case
     (x:xs) ->
@@ -924,7 +1085,7 @@ stackOp1 f =
     _ ->
       underrun
 
-stackOp2 :: Machine e => ((W256, W256) -> W256) -> EVM e ()
+stackOp2 :: Machine e => ((Word e, Word e) -> Word e) -> EVM e ()
 stackOp2 f =
   use (state . stack) >>= \case
     (x:y:xs) ->
@@ -932,7 +1093,7 @@ stackOp2 f =
     _ ->
       underrun
 
-stackOp3 :: Machine e => ((W256, W256, W256) -> W256) -> EVM e ()
+stackOp3 :: Machine e => ((Word e, Word e, Word e) -> Word e) -> EVM e ()
 stackOp3 f =
   use (state . stack) >>= \case
     (x:y:z:xs) ->
@@ -961,7 +1122,7 @@ insidePushData i = do
   x <- useJust (env . contracts . ix self . opIxMap)
   return (i == 0 || (x Vector.! i) == (x Vector.! (i - 1)))
 
-touchAccount :: Machine e => Addr -> EVM e Contract
+touchAccount :: Machine e => Addr -> EVM e (Contract e)
 touchAccount a = do
   use (env . contracts . at a) >>=
     \case
@@ -995,10 +1156,10 @@ makeVm o = VM
   , _contextTrace = Zipper.fromForest []
   , _block = Block
     { _coinbase = vmoptCoinbase o
-    , _timestamp = vmoptTimestamp o
-    , _number = vmoptNumber o
-    , _difficulty = vmoptDifficulty o
-    , _gaslimit = vmoptGaslimit o
+    , _timestamp = w256 $ vmoptTimestamp o
+    , _number = w256 $ vmoptNumber o
+    , _difficulty = w256 $ vmoptDifficulty o
+    , _gaslimit = w256 $ vmoptGaslimit o
     }
   , _state = FrameState
     { _pc = 0
@@ -1007,8 +1168,8 @@ makeVm o = VM
     , _memorySize = 0
     , _code = vmoptCode o
     , _contract = vmoptAddress o
-    , _calldata = vmoptCalldata o
-    , _callvalue = vmoptValue o
+    , _calldata = B $ vmoptCalldata o
+    , _callvalue = C $ vmoptValue o
     , _caller = vmoptCaller o
     }
   , _env = Env
@@ -1018,27 +1179,6 @@ makeVm o = VM
       [(vmoptAddress o, initialContract (vmoptCode o))]
     }
   }
-
--- Copied from the standard library just to get specialization.
--- We also use bit operations instead of modulo and multiply.
--- (This operation was significantly slow.)
-(^) :: W256 -> W256 -> W256
-x0 ^ y0 | y0 < 0    = errorWithoutStackTrace "Negative exponent"
-        | y0 == 0   = 1
-        | otherwise = f x0 y0
-    where
-          f x y | not (testBit y 0) = f (x * x) (y `shiftR` 1)
-                | y == 1      = x
-                | otherwise   = g (x * x) ((y - 1) `shiftR` 1) x
-          g x y z | not (testBit y 0) = g (x * x) (y `shiftR` 1) z
-                  | y == 1      = x * z
-                  | otherwise   = g (x * x) ((y - 1) `shiftR` 1) (x * z)
-
-num :: (Integral a, Num b) => a -> b
-num = fromIntegral
-
-(?:) :: Maybe a -> a -> a
-(?:) = flip fromMaybe
 
 viewJust :: Getting (Endo a) s a -> s -> a
 viewJust f x = x ^?! f
@@ -1070,30 +1210,23 @@ mkOpIxMap xs = Vector.create $ new (BS.length xs) >>= \v ->
     go v (n, !i, !j, !m) _ =
       {- PUSH data. -}        (n - 1,        i + 1, j,     m >> write v i j)
 
-word :: Integral a => [a] -> W256
-word xs = sum [ num x `shiftL` (8*n)
-              | (n, x) <- zip [0..] (reverse xs) ]
-
 word32 :: Integral a => [a] -> Word32
 word32 xs = sum [ num x `shiftL` (8*n)
                 | (n, x) <- zip [0..] (reverse xs) ]
 
-wordAt :: Int -> ByteString -> W256
-wordAt i bs = word [(bs ^? ix j) ?: 0 | j <- [i..(i+31)]]
-
-word256At :: Int -> Lens' (IntMap Word8) W256
+word256At :: Machine e => Word e -> Lens' (Memory e) (Word e)
 word256At i = lens getter setter where
-  getter m =
-    let
-      go !a (-1) = a
-      go !a !n = go (a + shiftL (num $ IntMap.findWithDefault 0 (i + n) m)
-                                (8 * (31 - n))) (n - 1)
-    in {-# SCC word256At_getter #-}
-      go (0 :: W256) (31 :: Int)
-  setter m x =
-    {-# SCC word256At_setter #-}
-    -- Optimizing this would help significantly.
-    IntMap.union (IntMap.fromAscList [(i + 31 - j, byteAt x j) | j <- reverse [0..31]]) m
+  getter m = readMemoryWord i m
+    -- let
+    --   go !a (-1) = a
+    --   go !a !n = go (a + shiftL (num $ IntMap.findWithDefault 0 (i + n) m)
+    --                             (8 * (31 - n))) (n - 1)
+    -- in {-# SCC word256At_getter #-}
+    --   go (0 :: W256) (31 :: Int)
+  setter m x = setMemoryWord i x m
+    -- {-# SCC word256At_setter #-}
+    -- -- Optimizing this would help significantly.
+    -- IntMap.union (IntMap.fromAscList [(i + 31 - j, byteAt x j) | j <- reverse [0..31]]) m
 
 word32At :: Int -> Lens' (IntMap Word8) Word32
 word32At i = lens getter setter where
@@ -1101,9 +1234,6 @@ word32At i = lens getter setter where
     word32 [(m ^? ix (i + j)) ?: 0 | j <- [0..3]]
   setter m x =
     IntMap.union (IntMap.fromAscList [(i + 3 - j, byteAt x j) | j <- reverse [0..3]]) m
-
-byteAt :: (Bits a, Bits b, Integral a, Num b) => a -> Int -> b
-byteAt x j = num (x `shiftR` (j * 8)) .&. 0xff
 
 word32Bytes :: Word32 -> ByteString
 word32Bytes x = BS.pack [byteAt x (3 - i) | i <- [0..3]]
@@ -1122,7 +1252,7 @@ vmOpIx vm =
   do self <- currentContract vm
      (view opIxMap self) Vector.!? (view (state . pc) vm)
 
-opParams :: Machine e => VM e -> Map String W256
+opParams :: Machine e => VM e -> Map String (Word e)
 opParams vm =
   case vmOp vm of
     Just OpCreate ->

@@ -29,7 +29,7 @@ vmForEthrunCreation creationCode =
     }) & set (env . contracts . at ethrunAddress)
              (Just (initialContract mempty))
 
-exec :: State (VM Concrete) VMResult
+exec :: State (VM Concrete) (VMResult Concrete)
 exec =
   use EVM.result >>= \case
     Nothing -> exec1 >> exec

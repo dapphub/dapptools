@@ -2,6 +2,8 @@
 
 module EVM.TTY where
 
+import Prelude hiding (Word)
+
 import Brick
 import Brick.Widgets.Border
 import Brick.Widgets.Center
@@ -25,7 +27,6 @@ import Data.Text (Text, unpack, pack)
 import Data.Text.Encoding (decodeUtf8)
 import Data.Tree (drawForest)
 import Data.Foldable (toList)
-import Data.Word (Word32)
 
 import qualified Data.Map as Map
 import qualified Data.Text as Text
@@ -49,9 +50,9 @@ type UiWidget = Widget Name
 
 data UiVmState e = UiVmState
   { _uiVm             :: VM e
-  , _uiVmStackList    :: List Name W256
+  , _uiVmStackList    :: List Name (Word e)
   , _uiVmBytecodeList :: List Name (Int, Op)
-  , _uiVmLogList      :: List Name Log
+  , _uiVmLogList      :: List Name (Log e)
   , _uiVmTraceList    :: List Name String
   , _uiVmSolidityList :: List Name (Int, ByteString)
   , _uiVmSolc         :: Maybe SolcContract
@@ -172,7 +173,7 @@ initialUiVmStateForTest dapp (theContractName, theTestName) =
      vm0 = initialUnitTestVm testContract (Map.elems (view dappSolcByName dapp))
      vm2 = case runState exec vm0 of
        (VMFailure e, _) -> error $ "creation error: " ++ show e
-       (VMSuccess targetCode, vm1) ->
+       (VMSuccess (B targetCode), vm1) ->
          execState (performCreation targetCode) vm1
      target = view (state . contract) vm2
      vm3 = vm2 & env . contracts . ix target . balance +~ 0xffffffffffffffffffffffff
@@ -198,7 +199,7 @@ myTheme =
   , (activeAttr, Vty.defAttr `Vty.withStyle` Vty.standout)
   ]
 
-drawUi :: Machine e => UiState e -> [UiWidget]
+drawUi :: UiState Concrete -> [UiWidget]
 drawUi (UiVmScreen s) = drawVm s
 drawUi (UiTestPickerScreen s) = drawTestPicker s
 
@@ -214,7 +215,7 @@ drawTestPicker ui =
           (view testPickerList ui)
   ]
 
-drawVm :: Machine e => UiVmState e -> [UiWidget]
+drawVm :: UiVmState Concrete -> [UiWidget]
 drawVm ui =
   [ vBox
     [ vLimit 20 $ hBox
@@ -229,7 +230,7 @@ drawVm ui =
     ]
   ]
 
-stepOneOpcode :: Machine e => UiVmState e -> UiVmState e
+stepOneOpcode :: UiVmState Concrete -> UiVmState Concrete
 stepOneOpcode ui =
   let
     nextVm = execState exec1 (view uiVm ui)
@@ -268,7 +269,7 @@ currentSolc dapp vm =
   in
     preview (dappSolcByHash . ix h . _2) dapp
 
-mkUiVmState :: Machine e => VM e -> Maybe DappInfo -> UiVmState e
+mkUiVmState :: VM Concrete -> Maybe DappInfo -> UiVmState Concrete
 mkUiVmState vm Nothing =
   let
     move = case vmOpIx vm of
@@ -337,10 +338,10 @@ maybeContractName :: Maybe SolcContract -> Text
 maybeContractName =
   maybe "<unknown contract>" (view (contractName . to contractNamePart))
 
-maybeAbiName :: SolcContract -> Word32 -> Maybe Text
-maybeAbiName solc abi = preview (abiMap . ix abi) solc
+maybeAbiName :: SolcContract -> Word Concrete -> Maybe Text
+maybeAbiName solc abi = preview (abiMap . ix (fromIntegral abi)) solc
 
-showContext :: DappInfo -> Either Log FrameContext -> Text
+showContext :: DappInfo -> Either (Log Concrete) (FrameContext Concrete) -> Text
 showContext _ (Left (Log _ bytes topics)) =
   "LOG " <> pack (show bytes) <> " " <> pack (show topics)
 showContext dapp (Right (CreationContext hash)) =
@@ -365,7 +366,7 @@ drawStackPane ui =
       False
       (view uiVmStackList ui)
 
-drawBytecodePane :: Machine e => UiVmState e -> UiWidget
+drawBytecodePane :: UiVmState Concrete -> UiWidget
 drawBytecodePane ui =
   hBorderWithLabel (txt "Bytecode " <+> str (show (view (uiVm . result) ui))) <=>
     renderList

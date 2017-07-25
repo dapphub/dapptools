@@ -27,7 +27,7 @@ object xs =
     <> line
     <> rbrace
 
-prettyContract :: Contract -> Doc
+prettyContract :: Contract Concrete -> Doc
 prettyContract c =
   object $
     [ (text "codesize", int (ByteString.length (c ^. bytecode)))
@@ -38,7 +38,7 @@ prettyContract c =
     , (text "storage", text (show (c ^. storage)))
     ]
 
-prettyContracts :: Map Addr Contract -> Doc
+prettyContracts :: Map Addr (Contract Concrete) -> Doc
 prettyContracts x =
   object $
     (map (\(a, b) -> (text (show a), prettyContract b))

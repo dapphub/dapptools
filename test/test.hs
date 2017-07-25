@@ -81,16 +81,16 @@ runStatements stmts args t = do
   |]
 
   case runState exec (vmForEthrunCreation x) of
-    (VMSuccess targetCode, vm1) -> do
+    (VMSuccess (B targetCode), vm1) -> do
       let target = view (state . contract) vm1
           vm2 = execState (performCreation targetCode) vm1
       case flip runState vm2
              (do resetState
                  loadContract target
                  assign (state . calldata)
-                   (abiCalldata sig (Vector.fromList args))
+                   (B (abiCalldata sig (Vector.fromList args)))
                  exec) of
-        (VMSuccess out, _) ->
+        (VMSuccess (B out), _) ->
           return (Just out)
         _ ->
           return Nothing

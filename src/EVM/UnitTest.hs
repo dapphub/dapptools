@@ -40,7 +40,7 @@ runUnitTestContract _ contractMap _ (name, testNames) = do
         vm2 = case runState exec vm0 of
                 (VMFailure e, _) ->
                   error ("Creation error: " ++ show e)
-                (VMSuccess targetCode, vm1) -> do
+                (VMSuccess (B targetCode), vm1) -> do
                   execState (performCreation targetCode) vm1
         target = view (state . contract) vm2
 
@@ -67,7 +67,7 @@ runUnitTestContract _ contractMap _ (name, testNames) = do
                     return ()
               (VMSuccess _, vm5) -> do
                 case evalState (setupCall target "failed()" >> exec) vm5 of
-                  VMSuccess out ->
+                  VMSuccess (B out) ->
                     case runGetOrFail (getAbi AbiBoolType)
                            (LazyByteString.fromStrict out) of
                       Right (_, _, AbiBool False) ->
@@ -87,7 +87,7 @@ setupCall :: Addr -> Text -> EVM Concrete ()
 setupCall target abi = do
   resetState
   loadContract target
-  assign (state . calldata) (word32Bytes (abiKeccak (encodeUtf8 abi)))
+  assign (state . calldata) (blob (word32Bytes (abiKeccak (encodeUtf8 abi))))
 
 initialUnitTestVm :: SolcContract -> [SolcContract] -> VM Concrete
 initialUnitTestVm theContract _ =
