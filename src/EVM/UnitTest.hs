@@ -73,7 +73,13 @@ runUnitTestContract _ contractMap _ (name, testNames) = do
                       Right (_, _, AbiBool False) ->
                         tick "."
                       Right (_, _, AbiBool True) ->
-                        tick "F"
+                        if "testFail" `isPrefixOf` testName
+                          then tick "."
+                          else do
+                            tick "F"
+                            -- putStrLn ("unexpected failure: " ++ show e)
+                            -- _ <- debugger (Just cache) vm5
+                            return ()
                       Right (_, _, _) ->
                         error "internal error"
                       Left (_, _, e) ->
