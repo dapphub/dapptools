@@ -49,6 +49,7 @@ import qualified Data.Tree.Zipper     as Zipper
 
 import qualified Data.Vector as RegularVector
 
+{-# SPECIALIZE num :: Word8 -> W256 #-}
 num :: (Integral a, Num b) => a -> b
 num = fromIntegral
 
@@ -148,6 +149,7 @@ wordAt i bs = word [(bs ^? ix j) ?: 0 | j <- [i..(i+31)]]
 (?:) :: Maybe a -> a -> a
 (?:) = flip fromMaybe
 
+{-# SPECIALIZE word :: [Word8] -> W256 #-}
 word :: Integral a => [a] -> W256
 word xs = sum [ num x `shiftL` (8*n)
               | (n, x) <- zip [0..] (reverse xs) ]
@@ -519,6 +521,7 @@ loadContract target =
         assign (state . contract) target
         assign (state . code)     targetCode
 
+{-# SPECIALIZE exec1 :: EVM Concrete () #-}
 exec1 :: forall e. Machine e => EVM e ()
 exec1 = do
   vm <- get
@@ -1014,6 +1017,10 @@ delegateCall xTo xInOffset xInSize xOutOffset xOutSize xs = do
         accessMemoryRange xInOffset xInSize
         accessMemoryRange xOutOffset xOutSize
 
+{-#
+  SPECIALIZE accessMemoryRange
+    :: Word Concrete -> Word Concrete -> EVM Concrete ()
+ #-}
 accessMemoryRange :: Machine e => Word e -> Word e -> EVM e ()
 accessMemoryRange _ 0 = return ()
 accessMemoryRange f l =
@@ -1023,9 +1030,15 @@ accessMemoryRange f l =
       let (q, r) = quotRem a b
       in q + if r /= 0 then 1 else 0
 
+{-# SPECIALIZE accessMemoryWord :: Word Concrete -> EVM Concrete () #-}
 accessMemoryWord :: Machine e => Word e -> EVM e ()
 accessMemoryWord x = accessMemoryRange x 32
 
+{-#
+  SPECIALIZE copyBytesToMemory
+    :: Blob Concrete -> Word Concrete -> Word Concrete -> Word Concrete
+    -> EVM Concrete ()
+ #-}
 copyBytesToMemory
   :: Machine e => Blob e -> Word e -> Word e -> Word e -> EVM e ()
 copyBytesToMemory bs size xOffset yOffset =
@@ -1035,9 +1048,14 @@ copyBytesToMemory bs size xOffset yOffset =
     assign (state . memory) $
       writeMemory bs size xOffset yOffset mem
 
+{-#
+  SPECIALIZE readMemory
+    :: Word Concrete -> Word Concrete -> VM Concrete -> Blob Concrete
+ #-}
 readMemory :: Machine e => Word e -> Word e -> VM e -> Blob e
 readMemory offset size vm = sliceMemory offset size (view (state . memory) vm)
 
+{-# SPECIALIZE push :: Word Concrete -> EVM Concrete () #-}
 push :: Machine e => Word e -> EVM e ()
 push x = state . stack %= (x :)
 
@@ -1076,6 +1094,11 @@ vmError e = do
           assign (env . contracts) reversion
           push 0
 
+{-#
+  SPECIALIZE stackOp1
+    :: (Word Concrete -> Word Concrete)
+    -> EVM Concrete ()
+ #-}
 stackOp1 :: Machine e => (Word e -> Word e) -> EVM e ()
 stackOp1 f =
   use (state . stack) >>= \case
@@ -1085,6 +1108,11 @@ stackOp1 f =
     _ ->
       underrun
 
+{-#
+  SPECIALIZE stackOp2
+    :: ((Word Concrete, Word Concrete) -> Word Concrete)
+    -> EVM Concrete ()
+ #-}
 stackOp2 :: Machine e => ((Word e, Word e) -> Word e) -> EVM e ()
 stackOp2 f =
   use (state . stack) >>= \case
@@ -1093,6 +1121,11 @@ stackOp2 f =
     _ ->
       underrun
 
+{-#
+  SPECIALIZE stackOp3
+    :: ((Word Concrete, Word Concrete, Word Concrete) -> Word Concrete)
+    -> EVM Concrete ()
+ #-}
 stackOp3 :: Machine e => ((Word e, Word e, Word e) -> Word e) -> EVM e ()
 stackOp3 f =
   use (state . stack) >>= \case
@@ -1101,6 +1134,10 @@ stackOp3 f =
     _ ->
       underrun
 
+{-#
+  SPECIALIZE checkJump
+    :: Integral n => n -> EVM Concrete ()
+ #-}
 checkJump :: (Machine e, Integral n) => n -> EVM e ()
 checkJump x = do
   theCode <- use (state . code)
@@ -1114,6 +1151,10 @@ checkJump x = do
             state . pc .= num x
     else vmError BadJumpDestination
 
+{-#
+  SPECIALIZE insidePushData
+    :: Int -> EVM Concrete Bool
+ #-}
 insidePushData :: Machine e => Int -> EVM e Bool
 insidePushData i = do
   -- If the operation index for the code pointer is the same
@@ -1214,19 +1255,18 @@ word32 :: Integral a => [a] -> Word32
 word32 xs = sum [ num x `shiftL` (8*n)
                 | (n, x) <- zip [0..] (reverse xs) ]
 
-word256At :: Machine e => Word e -> Lens' (Memory e) (Word e)
+{-#
+  SPECIALIZE word256At
+    :: Functor f => Word Concrete -> (Word Concrete -> f (Word Concrete))
+    -> Memory Concrete -> f (Memory Concrete)
+ #-}
+word256At
+  :: (Machine e, Functor f)
+  => Word e -> (Word e -> f (Word e))
+  -> Memory e -> f (Memory e)
 word256At i = lens getter setter where
   getter m = readMemoryWord i m
-    -- let
-    --   go !a (-1) = a
-    --   go !a !n = go (a + shiftL (num $ IntMap.findWithDefault 0 (i + n) m)
-    --                             (8 * (31 - n))) (n - 1)
-    -- in {-# SCC word256At_getter #-}
-    --   go (0 :: W256) (31 :: Int)
   setter m x = setMemoryWord i x m
-    -- {-# SCC word256At_setter #-}
-    -- -- Optimizing this would help significantly.
-    -- IntMap.union (IntMap.fromAscList [(i + 31 - j, byteAt x j) | j <- reverse [0..31]]) m
 
 word32At :: Int -> Lens' (IntMap Word8) Word32
 word32At i = lens getter setter where
@@ -1238,6 +1278,10 @@ word32At i = lens getter setter where
 word32Bytes :: Word32 -> ByteString
 word32Bytes x = BS.pack [byteAt x (3 - i) | i <- [0..3]]
 
+{-#
+  SPECIALIZE vmOp
+    :: VM Concrete -> Maybe Op
+ #-}
 vmOp :: Machine e => VM e -> Maybe Op
 vmOp vm =
   let i  = vm ^. state . pc
@@ -1247,6 +1291,10 @@ vmOp vm =
      then Nothing
      else Just (readOp op (BS.drop 1 xs))
 
+{-#
+  SPECIALIZE vmOpIx
+    :: VM Concrete -> Maybe Int
+ #-}
 vmOpIx :: Machine e => VM e -> Maybe Int
 vmOpIx vm =
   do self <- currentContract vm

@@ -32,7 +32,7 @@ library
     EVM.UnitTest,
     EVM.TTY
   ghc-options:
-    -O2 -Wall -Werror
+    -O2 -Wall -Werror -fprof-auto
   if impl(ghcjs)
     build-depends:
       ghcjs-base
@@ -95,7 +95,7 @@ executable hsevm
   main-is:
     hsevm-cli.hs
   ghc-options:
-    -O2 -Wall -threaded
+    -O2 -Wall -threaded -fprof-auto
   build-depends:
     base >=4.9 && <4.10,
     hsevm,
