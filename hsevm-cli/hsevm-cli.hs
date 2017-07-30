@@ -9,6 +9,7 @@
 {-# Language TemplateHaskell #-}
 
 import qualified EVM as EVM
+import qualified EVM.Concrete as EVM
 import qualified EVM.TTY as EVM.TTY
 
 #if MIN_VERSION_aeson(1, 0, 0)

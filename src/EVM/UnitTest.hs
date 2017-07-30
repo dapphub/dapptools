@@ -7,6 +7,8 @@ import EVM.Exec
 import EVM.Keccak
 import EVM.Solidity
 import EVM.Types
+import EVM.Machine (blob)
+import EVM.Concrete (Concrete, Blob (B), word32Bytes)
 
 import Control.Lens
 import Control.Monad

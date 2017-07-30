@@ -23,14 +23,16 @@ library
   exposed-modules:
     EVM,
     EVM.ABI,
-    EVM.Solidity,
-    EVM.Keccak,
-    EVM.Types,
-    EVM.VMTest,
-    EVM.Exec,
+    EVM.Concrete,
     EVM.Debug,
+    EVM.Exec,
+    EVM.Keccak,
+    EVM.Machine,
+    EVM.Solidity,
+    EVM.TTY,
+    EVM.Types,
     EVM.UnitTest,
-    EVM.TTY
+    EVM.VMTest
   ghc-options:
     -O2 -Wall -Werror
   if impl(ghcjs)

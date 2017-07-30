@@ -1,19 +1,18 @@
 module EVM.Debug where
 
 import EVM
-import EVM.Types
+import EVM.Concrete
 import EVM.Solidity
+import EVM.Types
 
 import Control.Arrow (second)
-
+import Control.Lens
 import Data.ByteString (ByteString)
 import Data.Map (Map)
 import Data.Text (Text)
 
 import qualified Data.ByteString       as ByteString
 import qualified Data.Map              as Map
-
-import Control.Lens
 
 import Text.PrettyPrint.ANSI.Leijen
 

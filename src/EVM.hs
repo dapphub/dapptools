@@ -1,10 +1,10 @@
+{-# Language ConstraintKinds #-}
+{-# Language FlexibleInstances #-}
+{-# Language ScopedTypeVariables #-}
+{-# Language StandaloneDeriving #-}
 {-# Language StrictData #-}
 {-# Language TemplateHaskell #-}
 {-# Language TypeOperators #-}
-{-# Language ScopedTypeVariables #-}
-{-# Language ConstraintKinds #-}
-{-# Language StandaloneDeriving #-}
-{-# Language FlexibleInstances #-}
 
 module EVM where
 
@@ -13,23 +13,22 @@ import Prelude hiding ((^), log, Word)
 import EVM.Types
 import EVM.Solidity
 import EVM.Keccak
+import EVM.Machine
+import EVM.Concrete
 
 import Control.Monad.State.Strict hiding (state)
 
-import Data.Bits (xor, shiftL, shiftR, (.&.), (.|.))
-import Data.Bits (Bits, bit, testBit, complement)
-import Data.DoubleWord (loWord, signedWord, unsignedWord, fromHiAndLo)
-import Data.Word (Word8, Word32)
+import Data.Bits (xor, shiftR, (.&.), (.|.))
+import Data.Bits (bit, testBit, complement)
+import Data.Word (Word8)
 
 import Control.Lens hiding (op, (:<), (|>))
 
 import Data.ByteString              (ByteString)
-import Data.IntMap.Strict           (IntMap)
 import Data.Map.Strict              (Map)
 import Data.Maybe                   (fromMaybe, fromJust)
-import Data.Monoid                  (Endo, (<>))
+import Data.Monoid                  (Endo)
 import Data.Sequence                (Seq)
-import Data.String                  (IsString)
 import Data.Vector.Storable         (Vector)
 import Data.Vector.Storable.Mutable (new, write)
 import Data.Foldable                (toList)
@@ -37,251 +36,12 @@ import Data.Foldable                (toList)
 import Data.Tree
 
 import qualified Data.ByteString      as BS
-import qualified Data.IntMap.Strict   as IntMap
 import qualified Data.Map.Strict      as Map
 import qualified Data.Sequence        as Seq
 import qualified Data.Vector.Storable as Vector
 import qualified Data.Tree.Zipper     as Zipper
-import qualified Data.Serialize.Get   as Cereal
 
 import qualified Data.Vector as RegularVector
-
-{-# SPECIALIZE num :: Word8 -> W256 #-}
-num :: (Integral a, Num b) => a -> b
-num = fromIntegral
-
-data Concrete
-
-class Machine' e where
-  data Byte e
-  data Word e
-  data Blob e
-  data Memory e
-
-  w256 :: W256 -> Word e
-  blob :: ByteString -> Blob e
-  wordToByte :: Word e -> Byte e
-
-  sdiv :: Word e -> Word e -> Word e
-  slt  :: Word e -> Word e -> Word e
-  sgt  :: Word e -> Word e -> Word e
-  smod :: Word e -> Word e -> Word e
-  addmod :: Word e -> Word e -> Word e -> Word e
-  mulmod :: Word e -> Word e -> Word e -> Word e
-
-  exponentiate :: Word e -> Word e -> Word e
-
-  forceConcreteBlob :: Blob e -> ByteString
-  forceConcreteWord :: Word e -> W256
-
-  sliceMemory :: Word e -> Word e -> Memory e -> Blob e
-  writeMemory :: Blob e -> Word e -> Word e -> Word e -> Memory e -> Memory e
-
-  setMemoryByte :: Word e -> Byte e -> Memory e -> Memory e
-
-  readMemoryWord :: Word e -> Memory e -> Word e
-  setMemoryWord :: Word e -> Word e -> Memory e -> Memory e
-
-  readBlobWord :: Word e -> Blob e -> Word e
-  blobSize :: Blob e -> Word e
-
-  keccakBlob :: Blob e -> Word e
-
-type Machine e =
-  ( Machine' e
-  , Show (Word e)
-  , Num (Word e)
-  , Num (Byte e)
-  , Integral (Word e)
-  , Bits (Word e)
-  , Monoid (Memory e)
-  , Monoid (Blob e)
-  , IsString (Blob e)
-  , Show (Blob e)
-  )
-
--- Copied from the standard library just to get specialization.
--- We also use bit operations instead of modulo and multiply.
--- (This operation was significantly slow.)
-(^) :: W256 -> W256 -> W256
-x0 ^ y0 | y0 < 0    = errorWithoutStackTrace "Negative exponent"
-        | y0 == 0   = 1
-        | otherwise = f x0 y0
-    where
-          f x y | not (testBit y 0) = f (x * x) (y `shiftR` 1)
-                | y == 1      = x
-                | otherwise   = g (x * x) ((y - 1) `shiftR` 1) x
-          g x y z | not (testBit y 0) = g (x * x) (y `shiftR` 1) z
-                  | y == 1      = x * z
-                  | otherwise   = g (x * x) ((y - 1) `shiftR` 1) (x * z)
-
-byteStringSliceWithDefaultZeroes :: Int -> Int -> ByteString -> ByteString
-byteStringSliceWithDefaultZeroes offset size bs =
-  if size == 0
-  then ""
-  else
-    let bs' = BS.take size (BS.drop offset bs)
-    in bs' <> BS.replicate (BS.length bs' - size) 0
-
-byteAt :: (Bits a, Bits b, Integral a, Num b) => a -> Int -> b
-byteAt x j = num (x `shiftR` (j * 8)) .&. 0xff
-
-wordAt :: Int -> ByteString -> W256
-wordAt i bs = word (padBig 32 (BS.drop i bs))
-
-(?:) :: Maybe a -> a -> a
-(?:) = flip fromMaybe
-
-pad :: Int -> ByteString -> ByteString
-pad n xs = BS.replicate (n - BS.length xs) 0 <> xs
-
-padBig :: Int -> ByteString -> ByteString
-padBig n xs = xs <> BS.replicate (n - BS.length xs) 0
-
-word :: ByteString -> W256
-word xs = case Cereal.runGet m (pad 32 xs) of
-            Left _ -> error "internal error"
-            Right x -> W256 x
-  where
-    m = do a <- Cereal.getWord64be
-           b <- Cereal.getWord64be
-           c <- Cereal.getWord64be
-           d <- Cereal.getWord64be
-           return $ fromHiAndLo (fromHiAndLo a b) (fromHiAndLo c d)
-
-word256Bytes :: W256 -> ByteString
-word256Bytes x = BS.pack [byteAt x (31 - i) | i <- [0..31]]
-
-toWord512 :: W256 -> Word512
-toWord512 (W256 x) = fromHiAndLo 0 x
-
-fromWord512 :: Word512 -> W256
-fromWord512 x = W256 (loWord x)
-
-readByteOrZero :: Int -> ByteString -> Word8
-readByteOrZero i bs = (bs ^? ix i) ?: 0
-
-instance Machine' Concrete where
-  w256 = C
-  blob = B
-
-  newtype Word Concrete = C W256
-  newtype Blob Concrete = B ByteString
-  newtype Byte Concrete = ConcreteByte Word8
-  newtype Memory Concrete = ConcreteMemory ByteString
-
-  wordToByte (C x) = ConcreteByte (num (x .&. 0xff))
-
-  exponentiate (C x) (C y) = C (x ^ y)
-
-  sdiv _ (C (W256 0)) = 0
-  sdiv (C (W256 x)) (C (W256 y)) =
-    let sx = signedWord x
-        sy = signedWord y
-        k  = if (sx < 0) /= (sy < 0)
-             then (-1)
-             else 1
-    in C . W256 . unsignedWord $ k * div (abs sx) (abs sy)
-
-  smod _ (C (W256 0)) = 0
-  smod (C (W256 x)) (C (W256 y)) =
-    let sx = signedWord x
-        sy = signedWord y
-        k  = if sx < 0 then (-1) else 1
-    in C . W256 . unsignedWord $ k * mod (abs sx) (abs sy)
-
-  addmod _ _ (C (W256 0)) = 0
-  addmod (C x) (C y) (C z) =
-    C $ fromWord512
-         ((toWord512 x + toWord512 y) `mod` (toWord512 z))
-
-  mulmod _ _ (C (W256 0)) = 0
-  mulmod (C x) (C y) (C z) =
-    C $ fromWord512
-          ((toWord512 x * toWord512 y) `mod` (toWord512 z))
-
-  slt (C (W256 x)) (C (W256 y)) =
-    if signedWord x < signedWord y then 1 else 0
-
-  sgt (C (W256 x)) (C (W256 y)) =
-    if signedWord x > signedWord y then 1 else 0
-
-  forceConcreteBlob (B x) = x
-  forceConcreteWord (C x) = x
-
-  sliceMemory o s (ConcreteMemory m) =
-    B $ byteStringSliceWithDefaultZeroes (num o) (num s) m
-
-  writeMemory (B bs1) (C n) (C src) (C dst) (ConcreteMemory bs0) =
-    let
-      (a, b) = BS.splitAt (num dst) bs0
-      c      = BS.take (num n) (BS.drop (num src) bs1)
-      b'     = BS.drop (num n) b
-    in
-      ConcreteMemory $
-        a <> BS.replicate (num dst - BS.length a) 0 <> c <> b'
-
-  readMemoryWord (C i) (ConcreteMemory m) =
-    let
-      go !a (-1) = a
-      go !a !n = go (a + shiftL (num $ readByteOrZero (num i + n) m)
-                                (8 * (31 - n))) (n - 1)
-    in {-# SCC word256At_getter #-}
-      C $ go (0 :: W256) (31 :: Int)
-
-  setMemoryWord (C i) (C x) m =
-    writeMemory (B (word256Bytes x)) 32 0 (num i) m
-
-  setMemoryByte (C i) (ConcreteByte x) m =
-    writeMemory (B (BS.singleton x)) 1 0 (num i) m
-
-  readBlobWord (C i) (B x) =
-    C (wordAt (num i) x)
-
-  blobSize (B x) = C (num (BS.length x))
-
-  keccakBlob (B x) = C (keccak x)
-
-type instance Index (Memory Concrete) = Word Concrete
-type instance IxValue (Memory Concrete) = Byte Concrete
-
-deriving instance Bits (Word Concrete)
-deriving instance Enum (Word Concrete)
-deriving instance Eq (Word Concrete)
-deriving instance Integral (Word Concrete)
-deriving instance Num (Word Concrete)
-deriving instance Real (Word Concrete)
-deriving instance Show (Word Concrete)
-
-deriving instance Bits (Byte Concrete)
-deriving instance Enum (Byte Concrete)
-deriving instance Eq (Byte Concrete)
-deriving instance Integral (Byte Concrete)
-deriving instance Num (Byte Concrete)
-deriving instance Ord (Byte Concrete)
-deriving instance Real (Byte Concrete)
-
--- deriving instance Monoid (Word Concrete)
-deriving instance Monoid (Blob Concrete)
-deriving instance IsString (Blob Concrete)
-deriving instance Show (Blob Concrete)
-
-deriving instance Monoid (Memory Concrete)
-deriving instance Ord (Word Concrete)
-
--- instance At (Memory Concrete) where
---   at (C k) f (ConcreteMemory m) =
---     fmap ConcreteMemory $ f mv <&> \r -> case r of
---       Nothing -> maybe m (const (IntMap.delete (num k) m)) mv
---       Just v' -> IntMap.insert (num k) v' m
---       where mv = IntMap.lookup (num k) m
-
--- instance Ixed (Memory Concrete) where
---   ix (C e) f (ConcreteMemory s) =
---     case BS.splitAt (num e) s of
---       (l, mr) -> case BS.uncons mr of
---         Nothing      -> pure (ConcreteMemory s)
---         Just (c, xs) -> f c <&> \d -> BS.concat [l, BS.singleton d, xs]
 
 data Op
   = OpStop
@@ -810,7 +570,8 @@ exec1 = do
             _ -> underrun
 
         -- op: SLOAD
-        0x54 -> stackOp1 $ \x -> preview (storage . ix x) this ?: 0
+        0x54 -> stackOp1 $ \x ->
+          fromMaybe 0 (preview (storage . ix x) this)
 
         -- op: SSTORE
         0x55 -> do
@@ -1259,33 +1020,6 @@ mkOpIxMap xs = Vector.create $ new (BS.length xs) >>= \v ->
       {- Other op. -}         (0,            i + 1, j + 1, m >> write v i j)
     go v (n, !i, !j, !m) _ =
       {- PUSH data. -}        (n - 1,        i + 1, j,     m >> write v i j)
-
-word32 :: Integral a => [a] -> Word32
-word32 xs = sum [ num x `shiftL` (8*n)
-                | (n, x) <- zip [0..] (reverse xs) ]
-
-{-#
-  SPECIALIZE word256At
-    :: Functor f => Word Concrete -> (Word Concrete -> f (Word Concrete))
-    -> Memory Concrete -> f (Memory Concrete)
- #-}
-word256At
-  :: (Machine e, Functor f)
-  => Word e -> (Word e -> f (Word e))
-  -> Memory e -> f (Memory e)
-word256At i = lens getter setter where
-  getter m = readMemoryWord i m
-  setter m x = setMemoryWord i x m
-
-word32At :: Int -> Lens' (IntMap Word8) Word32
-word32At i = lens getter setter where
-  getter m =
-    word32 [(m ^? ix (i + j)) ?: 0 | j <- [0..3]]
-  setter m x =
-    IntMap.union (IntMap.fromAscList [(i + 3 - j, byteAt x j) | j <- reverse [0..3]]) m
-
-word32Bytes :: Word32 -> ByteString
-word32Bytes x = BS.pack [byteAt x (3 - i) | i <- [0..3]]
 
 {-#
   SPECIALIZE vmOp

@@ -23,8 +23,9 @@ import Data.Binary.Get (runGetOrFail)
 
 import EVM
 import EVM.ABI
-import EVM.Solidity
+import EVM.Concrete
 import EVM.Exec
+import EVM.Solidity
 
 main :: IO ()
 main = defaultMain $ testGroup "hsevm"

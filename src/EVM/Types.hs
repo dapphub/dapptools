@@ -15,6 +15,7 @@ import Data.ByteString (ByteString)
 import Data.ByteString.Base16 as BS16
 import Data.DoubleWord
 import Data.DoubleWord.TH
+import Data.Word (Word8)
 import Numeric (readHex, showHex)
 import Options.Generic
 
@@ -125,3 +126,13 @@ addrField x f = (read . Text.unpack) <$> (x .: f)
 
 dataField :: JSON.Object -> Text -> JSON.Parser ByteString
 dataField x f = hexText <$> (x .: f)
+
+toWord512 :: W256 -> Word512
+toWord512 (W256 x) = fromHiAndLo 0 x
+
+fromWord512 :: Word512 -> W256
+fromWord512 x = W256 (loWord x)
+
+{-# SPECIALIZE num :: Word8 -> W256 #-}
+num :: (Integral a, Num b) => a -> b
+num = fromIntegral

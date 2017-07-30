@@ -11,6 +11,7 @@ module EVM.VMTest
   ) where
 
 import qualified EVM
+import qualified EVM.Concrete as EVM
 
 import EVM.Types
 

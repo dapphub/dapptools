@@ -10,8 +10,10 @@ import Brick.Widgets.Center
 import Brick.Widgets.List
 
 import EVM
+import EVM.Concrete (Concrete, Blob (..))
 import EVM.Debug
 import EVM.Exec
+import EVM.Machine (Machine, Word)
 import EVM.Solidity
 import EVM.Types
 import EVM.UnitTest
