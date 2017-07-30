@@ -1,5 +1,5 @@
 { mkDerivation, aeson, ansi-wl-pprint, base, base16-bytestring
-, base64-bytestring, binary, brick, bytestring, containers
+, base64-bytestring, binary, brick, bytestring, cereal, containers
 , cryptonite, data-dword, deepseq, directory, filepath, ghci-pretty
 , here, HUnit, lens, lens-aeson, memory, mtl, optparse-generic
 , process, QuickCheck, quickcheck-text, readline, rosezipper
@@ -14,8 +14,8 @@ mkDerivation {
   isExecutable = true;
   libraryHaskellDepends = [
     aeson ansi-wl-pprint base base16-bytestring base64-bytestring
-    binary brick bytestring containers cryptonite data-dword deepseq
-    directory filepath ghci-pretty lens lens-aeson memory mtl
+    binary brick bytestring cereal containers cryptonite data-dword
+    deepseq directory filepath ghci-pretty lens lens-aeson memory mtl
     optparse-generic process QuickCheck quickcheck-text readline
     rosezipper temporary text text-format unordered-containers vector
     vty

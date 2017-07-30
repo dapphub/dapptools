@@ -27,7 +27,7 @@ import Data.ByteString              (ByteString)
 import Data.IntMap.Strict           (IntMap)
 import Data.Map.Strict              (Map)
 import Data.Maybe                   (fromMaybe, fromJust)
-import Data.Monoid                  (Endo)
+import Data.Monoid                  (Endo, (<>))
 import Data.Sequence                (Seq)
 import Data.String                  (IsString)
 import Data.Vector.Storable         (Vector)
@@ -36,16 +36,13 @@ import Data.Foldable                (toList)
 
 import Data.Tree
 
-import Foreign.ForeignPtr (withForeignPtr)
-import Foreign            (castPtr)
-import System.IO.Unsafe   (unsafePerformIO)
-
 import qualified Data.ByteString      as BS
 import qualified Data.IntMap.Strict   as IntMap
 import qualified Data.Map.Strict      as Map
 import qualified Data.Sequence        as Seq
 import qualified Data.Vector.Storable as Vector
 import qualified Data.Tree.Zipper     as Zipper
+import qualified Data.Serialize.Get   as Cereal
 
 import qualified Data.Vector as RegularVector
 
@@ -63,6 +60,7 @@ class Machine' e where
 
   w256 :: W256 -> Word e
   blob :: ByteString -> Blob e
+  wordToByte :: Word e -> Byte e
 
   sdiv :: Word e -> Word e -> Word e
   slt  :: Word e -> Word e -> Word e
@@ -78,6 +76,8 @@ class Machine' e where
 
   sliceMemory :: Word e -> Word e -> Memory e -> Blob e
   writeMemory :: Blob e -> Word e -> Word e -> Word e -> Memory e -> Memory e
+
+  setMemoryByte :: Word e -> Byte e -> Memory e -> Memory e
 
   readMemoryWord :: Word e -> Memory e -> Word e
   setMemoryWord :: Word e -> Word e -> Memory e -> Memory e
@@ -98,9 +98,6 @@ type Machine e =
   , Monoid (Blob e)
   , IsString (Blob e)
   , Show (Blob e)
-  , At (Memory e)
-  , Index (Memory e) ~ Word e
-  , IxValue (Memory e) ~ Byte e
   )
 
 -- Copied from the standard library just to get specialization.
@@ -118,47 +115,51 @@ x0 ^ y0 | y0 < 0    = errorWithoutStackTrace "Negative exponent"
                   | y == 1      = x * z
                   | otherwise   = g (x * x) ((y - 1) `shiftR` 1) (x * z)
 
-readIntMap :: Int -> Int -> IntMap Word8 -> ByteString
-readIntMap offset size intmap =
-  if size == 0 then ""
+byteStringSliceWithDefaultZeroes :: Int -> Int -> ByteString -> ByteString
+byteStringSliceWithDefaultZeroes offset size bs =
+  if size == 0
+  then ""
   else
-    let
-      (_, bigger) =
-        IntMap.split (offset - 1) intmap
-      (range, _) =
-        IntMap.split (offset + size) bigger
-      vec =
-        Vector.create $ do
-          v <- new size
-          IntMap.foldlWithKey'
-            (\m k x -> m >> write v (k - offset) x)
-            (return ())
-            range
-          return v
-    in
-      unsafePerformIO $ do
-        withForeignPtr (fst (Vector.unsafeToForeignPtr0 vec))
-          (\ptr -> BS.packCStringLen (castPtr ptr, size))
+    let bs' = BS.take size (BS.drop offset bs)
+    in bs' <> BS.replicate (BS.length bs' - size) 0
 
 byteAt :: (Bits a, Bits b, Integral a, Num b) => a -> Int -> b
 byteAt x j = num (x `shiftR` (j * 8)) .&. 0xff
 
 wordAt :: Int -> ByteString -> W256
-wordAt i bs = word [(bs ^? ix j) ?: 0 | j <- [i..(i+31)]]
+wordAt i bs = word (padBig 32 (BS.drop i bs))
 
 (?:) :: Maybe a -> a -> a
 (?:) = flip fromMaybe
 
-{-# SPECIALIZE word :: [Word8] -> W256 #-}
-word :: Integral a => [a] -> W256
-word xs = sum [ num x `shiftL` (8*n)
-              | (n, x) <- zip [0..] (reverse xs) ]
+pad :: Int -> ByteString -> ByteString
+pad n xs = BS.replicate (n - BS.length xs) 0 <> xs
+
+padBig :: Int -> ByteString -> ByteString
+padBig n xs = xs <> BS.replicate (n - BS.length xs) 0
+
+word :: ByteString -> W256
+word xs = case Cereal.runGet m (pad 32 xs) of
+            Left _ -> error "internal error"
+            Right x -> W256 x
+  where
+    m = do a <- Cereal.getWord64be
+           b <- Cereal.getWord64be
+           c <- Cereal.getWord64be
+           d <- Cereal.getWord64be
+           return $ fromHiAndLo (fromHiAndLo a b) (fromHiAndLo c d)
+
+word256Bytes :: W256 -> ByteString
+word256Bytes x = BS.pack [byteAt x (31 - i) | i <- [0..31]]
 
 toWord512 :: W256 -> Word512
 toWord512 (W256 x) = fromHiAndLo 0 x
 
 fromWord512 :: Word512 -> W256
 fromWord512 x = W256 (loWord x)
+
+readByteOrZero :: Int -> ByteString -> Word8
+readByteOrZero i bs = (bs ^? ix i) ?: 0
 
 instance Machine' Concrete where
   w256 = C
@@ -167,7 +168,9 @@ instance Machine' Concrete where
   newtype Word Concrete = C W256
   newtype Blob Concrete = B ByteString
   newtype Byte Concrete = ConcreteByte Word8
-  newtype Memory Concrete = ConcreteMemory (IntMap (Byte Concrete))
+  newtype Memory Concrete = ConcreteMemory ByteString
+
+  wordToByte (C x) = ConcreteByte (num (x .&. 0xff))
 
   exponentiate (C x) (C y) = C (x ^ y)
 
@@ -207,26 +210,30 @@ instance Machine' Concrete where
   forceConcreteWord (C x) = x
 
   sliceMemory o s (ConcreteMemory m) =
-    B $ readIntMap (num o) (num s) (fmap num m)
+    B $ byteStringSliceWithDefaultZeroes (num o) (num s) m
 
-  writeMemory (B bs) (C size) (C xOffset) (C yOffset) (ConcreteMemory mem') =
-    let mem = fmap num mem'
-    in ConcreteMemory . fmap num . snd $
-         BS.foldl' (\(i, a) x -> (i + 1, IntMap.insert (num i) x a)) (yOffset, mem)
-           (BS.take (num size) (BS.drop (num xOffset) bs))
+  writeMemory (B bs1) (C n) (C src) (C dst) (ConcreteMemory bs0) =
+    let
+      (a, b) = BS.splitAt (num dst) bs0
+      c      = BS.take (num n) (BS.drop (num src) bs1)
+      b'     = BS.drop (num n) b
+    in
+      ConcreteMemory $
+        a <> BS.replicate (num dst - BS.length a) 0 <> c <> b'
 
   readMemoryWord (C i) (ConcreteMemory m) =
     let
       go !a (-1) = a
-      go !a !n = go (a + shiftL (num $ IntMap.findWithDefault 0 (num i + n) m)
+      go !a !n = go (a + shiftL (num $ readByteOrZero (num i + n) m)
                                 (8 * (31 - n))) (n - 1)
     in {-# SCC word256At_getter #-}
       C $ go (0 :: W256) (31 :: Int)
 
-  setMemoryWord (C i) (C x) (ConcreteMemory m) =
-    -- known to be relatively slow
-    ConcreteMemory $
-      IntMap.union (IntMap.fromAscList [(num i + 31 - j, byteAt x j) | j <- reverse [0..31]]) m
+  setMemoryWord (C i) (C x) m =
+    writeMemory (B (word256Bytes x)) 32 0 (num i) m
+
+  setMemoryByte (C i) (ConcreteByte x) m =
+    writeMemory (B (BS.singleton x)) 1 0 (num i) m
 
   readBlobWord (C i) (B x) =
     C (wordAt (num i) x)
@@ -262,18 +269,19 @@ deriving instance Show (Blob Concrete)
 deriving instance Monoid (Memory Concrete)
 deriving instance Ord (Word Concrete)
 
-instance At (Memory Concrete) where
-  at k f (ConcreteMemory m) =
-    fmap ConcreteMemory $ f mv <&> \r -> case r of
-      Nothing -> maybe m (const (IntMap.delete (num k) m)) mv
-      Just v' -> IntMap.insert (num k) v' m
-      where mv = IntMap.lookup (num k) m
+-- instance At (Memory Concrete) where
+--   at (C k) f (ConcreteMemory m) =
+--     fmap ConcreteMemory $ f mv <&> \r -> case r of
+--       Nothing -> maybe m (const (IntMap.delete (num k) m)) mv
+--       Just v' -> IntMap.insert (num k) v' m
+--       where mv = IntMap.lookup (num k) m
 
-instance Ixed (Memory Concrete) where
-  ix k f (ConcreteMemory m) =
-    fmap ConcreteMemory $ case IntMap.lookup (num k) m of
-     Just v -> f v <&> \v' -> IntMap.insert (num k) v' m
-     Nothing -> pure m
+-- instance Ixed (Memory Concrete) where
+--   ix (C e) f (ConcreteMemory s) =
+--     case BS.splitAt (num e) s of
+--       (l, mr) -> case BS.uncons mr of
+--         Nothing      -> pure (ConcreteMemory s)
+--         Just (c, xs) -> f c <&> \d -> BS.concat [l, BS.singleton d, xs]
 
 data Op
   = OpStop
@@ -556,10 +564,11 @@ exec1 = do
 
         -- op: PUSH
         x | x >= 0x60 && x <= 0x7f ->
+          {-# SCC op_push #-}
           let !n = num x - 0x60 + 1
               !xs = BS.take n (BS.drop (1 + the state pc)
                                        (the state code))
-          in push (w256 (word (BS.unpack xs)))
+          in push (w256 (word xs))
 
         -- op: DUP
         x | x >= 0x80 && x <= 0x8f ->
@@ -795,7 +804,7 @@ exec1 = do
         0x53 ->
           case stk of
             (x:y:xs) -> do
-              assign (state . memory . at (num x)) (Just (num (y .&. 0xff)))
+              modifying (state . memory) (setMemoryByte x (wordToByte y))
               assign (state . stack) xs
               accessMemoryRange x 1
             _ -> underrun
@@ -1335,10 +1344,7 @@ readOp x _  | x >= 0xa0 && x <= 0xa4 = OpLog (x - 0xa0)
 readOp x xs | x >= 0x60 && x <= 0x7f =
   let n   = x - 0x60 + 1
       xs' = BS.take (num n) xs
-      len = BS.length xs'
-  in if len == fromIntegral n
-     then OpPush (word (BS.unpack xs'))
-     else OpPush (word (BS.unpack xs' ++ replicate (len - num n) 0))
+  in OpPush (word xs')
 readOp x _ = case x of
   0x00 -> OpStop
   0x01 -> OpAdd
