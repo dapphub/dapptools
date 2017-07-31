@@ -49,10 +49,6 @@ keccakBytes =
 
 keccakBytes :: ByteString -> ByteString
 
-word :: [Int] -> W256
-word xs = sum [ fromIntegral x `shiftL` (8*n)
-              | (n, x) <- zip [0..] (reverse xs) ]
-
 word32 :: [Word8] -> Word32
 word32 xs = sum [ fromIntegral x `shiftL` (8*n)
                 | (n, x) <- zip [0..] (reverse xs) ]
@@ -67,8 +63,6 @@ keccak :: ByteString -> W256
 keccak =
   keccakBytes
     >>> BS.take 32
-    >>> BS.unpack
-    >>> map fromIntegral
     >>> word
 
 abiKeccak :: ByteString -> Word32

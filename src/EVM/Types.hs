@@ -10,6 +10,7 @@ import Data.Aeson (FromJSON (..))
 import Data.Aeson (FromJSONKey (..), FromJSONKeyFunction (..))
 #endif
 
+import Data.Monoid ((<>))
 import Data.Bits
 import Data.ByteString (ByteString)
 import Data.ByteString.Base16 as BS16
@@ -21,6 +22,8 @@ import Options.Generic
 
 import qualified Data.Aeson          as JSON
 import qualified Data.Aeson.Types    as JSON
+import qualified Data.ByteString     as BS
+import qualified Data.Serialize.Get  as Cereal
 import qualified Data.Text           as Text
 import qualified Data.Text.Encoding  as Text
 
@@ -36,14 +39,6 @@ newtype W256 = W256 Word256
 
 newtype Addr = Addr { addressWord160 :: Word160 }
   deriving (Num, Integral, Real, Ord, Enum, Eq, Bits, Generic)
-
--- instance NFData Word128
--- instance NFData Word256
--- instance NFData Int128
--- instance NFData Int256
--- instance NFData W256
--- instance NFData Word160
--- instance NFData Addr
 
 instance Read W256 where
   readsPrec _ "0x" = [(0, "")]
@@ -64,10 +59,6 @@ instance FromJSON W256 where
     case reads s of
       [(x, "")]  -> return x
       _          -> fail $ "invalid hex word (" ++ s ++ ")"
-
--- instance FromJSON W256 where
---   parseJSON v =
---     read . Text.unpack <$> parseJSON v
 
 instance FromJSON Addr where
   parseJSON v = do
@@ -136,3 +127,23 @@ fromWord512 x = W256 (loWord x)
 {-# SPECIALIZE num :: Word8 -> W256 #-}
 num :: (Integral a, Num b) => a -> b
 num = fromIntegral
+
+padLeft :: Int -> ByteString -> ByteString
+padLeft n xs = BS.replicate (n - BS.length xs) 0 <> xs
+
+padRight :: Int -> ByteString -> ByteString
+padRight n xs = xs <> BS.replicate (n - BS.length xs) 0
+
+word :: ByteString -> W256
+word xs = case Cereal.runGet m (padLeft 32 xs) of
+            Left _ -> error "internal error"
+            Right x -> W256 x
+  where
+    m = do a <- Cereal.getWord64be
+           b <- Cereal.getWord64be
+           c <- Cereal.getWord64be
+           d <- Cereal.getWord64be
+           return $ fromHiAndLo (fromHiAndLo a b) (fromHiAndLo c d)
+
+byteAt :: (Bits a, Bits b, Integral a, Num b) => a -> Int -> b
+byteAt x j = num (x `shiftR` (j * 8)) .&. 0xff

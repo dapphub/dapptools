@@ -1,50 +1,35 @@
 {-# Language FlexibleInstances #-}
 {-# Language StandaloneDeriving #-}
 
-module EVM.Concrete where
+module EVM.Concrete
+  ( Concrete
+  , word
+  , Word (..)
+  , Blob (..)
+  ) where
 
 import Prelude hiding (Word, (^))
 
 import EVM.Machine
 import EVM.Types (W256 (..), num, toWord512, fromWord512)
+import EVM.Types (word, padRight, byteAt)
 import EVM.Keccak (keccak)
 
-import Control.Lens    ((^?), ix, lens)
+import Control.Lens    ((^?), ix)
 import Data.Bits       (Bits, testBit, shiftL, shiftR, (.&.))
 import Data.ByteString (ByteString)
-import Data.DoubleWord (signedWord, unsignedWord, fromHiAndLo)
+import Data.DoubleWord (signedWord, unsignedWord)
 import Data.Maybe      (fromMaybe)
 import Data.Monoid     ((<>))
 import Data.String     (IsString)
-import Data.Word       (Word8, Word32)
+import Data.Word       (Word8)
 
-import qualified Data.ByteString    as BS
-import qualified Data.Serialize.Get as Cereal
+import qualified Data.ByteString as BS
 
 data Concrete
 
-pad :: Int -> ByteString -> ByteString
-pad n xs = BS.replicate (n - BS.length xs) 0 <> xs
-
-padBig :: Int -> ByteString -> ByteString
-padBig n xs = xs <> BS.replicate (n - BS.length xs) 0
-
-word :: ByteString -> W256
-word xs = case Cereal.runGet m (pad 32 xs) of
-            Left _ -> error "internal error"
-            Right x -> W256 x
-  where
-    m = do a <- Cereal.getWord64be
-           b <- Cereal.getWord64be
-           c <- Cereal.getWord64be
-           d <- Cereal.getWord64be
-           return $ fromHiAndLo (fromHiAndLo a b) (fromHiAndLo c d)
-
-byteAt :: (Bits a, Bits b, Integral a, Num b) => a -> Int -> b
-byteAt x j = num (x `shiftR` (j * 8)) .&. 0xff
-
 wordAt :: Int -> ByteString -> W256
-wordAt i bs = word (padBig 32 (BS.drop i bs))
+wordAt i bs = word (padRight 32 (BS.drop i bs))
 
 word256Bytes :: W256 -> ByteString
 word256Bytes x = BS.pack [byteAt x (31 - i) | i <- [0..31]]
@@ -59,27 +44,6 @@ byteStringSliceWithDefaultZeroes offset size bs =
   else
     let bs' = BS.take size (BS.drop offset bs)
     in bs' <> BS.replicate (BS.length bs' - size) 0
-
-word32 :: Integral a => [a] -> Word32
-word32 xs = sum [ num x `shiftL` (8*n)
-                | (n, x) <- zip [0..] (reverse xs) ]
-
-{-#
-  SPECIALIZE word256At
-    :: Functor f => Word Concrete -> (Word Concrete -> f (Word Concrete))
-    -> Memory Concrete -> f (Memory Concrete)
- #-}
-
-word256At
-  :: (Machine e, Functor f)
-  => Word e -> (Word e -> f (Word e))
-  -> Memory e -> f (Memory e)
-word256At i = lens getter setter where
-  getter m = readMemoryWord i m
-  setter m x = setMemoryWord i x m
-
-word32Bytes :: Word32 -> ByteString
-word32Bytes x = BS.pack [byteAt x (3 - i) | i <- [0..3]]
 
 instance Machine' Concrete where
   w256 = C

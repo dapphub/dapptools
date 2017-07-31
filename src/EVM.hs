@@ -124,8 +124,6 @@ data Error e
 
 deriving instance Show (Error Concrete)
 
--- type Error = Error' Concrete
-
 -- | The possible result states of a VM
 data VMResult e
   = VMFailure (Error e)  -- ^ An operation failed
@@ -824,6 +822,19 @@ copyBytesToMemory bs size xOffset yOffset =
  #-}
 readMemory :: Machine e => Word e -> Word e -> VM e -> Blob e
 readMemory offset size vm = sliceMemory offset size (view (state . memory) vm)
+
+{-#
+  SPECIALIZE word256At
+    :: Functor f => Word Concrete -> (Word Concrete -> f (Word Concrete))
+    -> Memory Concrete -> f (Memory Concrete)
+ #-}
+word256At
+  :: (Machine e, Functor f)
+  => Word e -> (Word e -> f (Word e))
+  -> Memory e -> f (Memory e)
+word256At i = lens getter setter where
+  getter m = readMemoryWord i m
+  setter m x = setMemoryWord i x m
 
 {-# SPECIALIZE push :: Word Concrete -> EVM Concrete () #-}
 push :: Machine e => Word e -> EVM e ()

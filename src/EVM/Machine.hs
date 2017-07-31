@@ -1,6 +1,9 @@
 {-# Language ConstraintKinds #-}
 
-module EVM.Machine where
+module EVM.Machine
+  ( Machine' (..)
+  , Machine
+  ) where
 
 import Prelude hiding (Word)
 
@@ -10,6 +13,9 @@ import Data.Bits (Bits)
 import Data.ByteString (ByteString)
 import Data.String (IsString)
 
+-- | This abstraction lets us reuse the EVM code with different data
+-- representations.  In particular, we will define "concrete" and
+-- "symbolic" machines.
 class Machine' e where
   data Byte e
   data Word e

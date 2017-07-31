@@ -8,22 +8,24 @@ import EVM.Keccak
 import EVM.Solidity
 import EVM.Types
 import EVM.Machine (blob)
-import EVM.Concrete (Concrete, Blob (B), word32Bytes)
+import EVM.Concrete (Concrete, Blob (B))
 
 import Control.Lens
 import Control.Monad
 import Control.Monad.State.Strict hiding (state)
 
 import Data.Binary.Get    (runGetOrFail)
+import Data.ByteString    (ByteString)
+import Data.List          (sort)
+import Data.Map           (Map)
 import Data.Text          (Text, unpack, isPrefixOf)
 import Data.Text.Encoding (encodeUtf8)
-import Data.Map           (Map)
 import Data.Word          (Word32)
-import Data.List          (sort)
 import System.IO          (hFlush, stdout)
 
-import qualified Data.Map as Map
+import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy as LazyByteString
+import qualified Data.Map as Map
 
 tick :: String -> IO ()
 tick x = putStr x >> hFlush stdout
@@ -90,6 +92,9 @@ runUnitTestContract _ contractMap _ (name, testNames) = do
                     error $ "ds-test behaving strangely (" ++ show e ++ ")"
 
       tick "\n"
+
+word32Bytes :: Word32 -> ByteString
+word32Bytes x = BS.pack [byteAt x (3 - i) | i <- [0..3]]
 
 setupCall :: Addr -> Text -> EVM Concrete ()
 setupCall target abi = do

@@ -5,10 +5,10 @@ import Data.Text (Text)
 import Data.ByteString (ByteString)
 
 import qualified Data.Text as Text
-import qualified Data.ByteString as ByteString
+import qualified Data.ByteString as BS
 
 import Test.Tasty
-import Test.Tasty.QuickCheck (testProperty)
+import Test.Tasty.QuickCheck (testProperty, Arbitrary (..), NonNegative (..))
 import Test.Tasty.HUnit
 
 import Control.Monad.State.Strict (execState, runState)
@@ -26,6 +26,7 @@ import EVM.ABI
 import EVM.Concrete
 import EVM.Exec
 import EVM.Solidity
+import EVM.Types
 
 main :: IO ()
 main = defaultMain $ testGroup "hsevm"
@@ -50,6 +51,21 @@ main = defaultMain $ testGroup "hsevm"
     , testCase "keccak256()" $ do
         SolidityCall "x = uint(keccak256(a));"
           [AbiString ""] ===> AbiUInt 256 0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470
+    ]
+
+  , testGroup "Byte/word manipulations"
+    [ testProperty "padLeft length" $ \n (Bytes bs) ->
+        BS.length (padLeft n bs) == max n (BS.length bs)
+    , testProperty "padLeft identity" $ \(Bytes bs) ->
+        padLeft (BS.length bs) bs == bs
+    , testProperty "padRight length" $ \n (Bytes bs) ->
+        BS.length (padLeft n bs) == max n (BS.length bs)
+    , testProperty "padRight identity" $ \(Bytes bs) ->
+        padLeft (BS.length bs) bs == bs
+    , testProperty "padLeft zeroing" $ \(NonNegative n) (Bytes bs) ->
+        let x = BS.take n (padLeft (BS.length bs + n) bs)
+            y = BS.replicate n 0
+        in x == y
     ]
   ]
 
@@ -102,7 +118,10 @@ newtype Bytes = Bytes ByteString
   deriving Eq
 
 instance Show Bytes where
-  showsPrec _ (Bytes x) _ = show (ByteString.unpack x)
+  showsPrec _ (Bytes x) _ = show (BS.unpack x)
+
+instance Arbitrary Bytes where
+  arbitrary = fmap (Bytes . BS.pack) arbitrary
 
 data Invocation
   = SolidityCall Text [AbiValue]
