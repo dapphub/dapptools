@@ -1,10 +1,11 @@
-{ mkDerivation, aeson, ansi-wl-pprint, base, base16-bytestring
-, base64-bytestring, binary, brick, bytestring, cereal, containers
-, cryptonite, data-dword, deepseq, directory, filepath, ghci-pretty
-, here, HUnit, lens, lens-aeson, memory, mtl, optparse-generic
-, process, QuickCheck, quickcheck-text, readline, rosezipper
-, stdenv, tasty, tasty-hunit, tasty-quickcheck, temporary, text
-, text-format, unordered-containers, vector, vty
+{ mkDerivation, abstract-par, aeson, ansi-wl-pprint, base
+, base16-bytestring, base64-bytestring, binary, brick, bytestring
+, cereal, containers, cryptonite, data-dword, deepseq, directory
+, filepath, ghci-pretty, here, HUnit, lens, lens-aeson, memory
+, monad-par, mtl, optparse-generic, process, QuickCheck
+, quickcheck-text, readline, rosezipper, stdenv, tasty, tasty-hunit
+, tasty-quickcheck, temporary, text, text-format
+, unordered-containers, vector, vty
 }:
 mkDerivation {
   pname = "hsevm";
@@ -13,12 +14,12 @@ mkDerivation {
   isLibrary = true;
   isExecutable = true;
   libraryHaskellDepends = [
-    aeson ansi-wl-pprint base base16-bytestring base64-bytestring
-    binary brick bytestring cereal containers cryptonite data-dword
-    deepseq directory filepath ghci-pretty lens lens-aeson memory mtl
-    optparse-generic process QuickCheck quickcheck-text readline
-    rosezipper temporary text text-format unordered-containers vector
-    vty
+    abstract-par aeson ansi-wl-pprint base base16-bytestring
+    base64-bytestring binary brick bytestring cereal containers
+    cryptonite data-dword deepseq directory filepath ghci-pretty lens
+    lens-aeson memory monad-par mtl optparse-generic process QuickCheck
+    quickcheck-text readline rosezipper temporary text text-format
+    unordered-containers vector vty
   ];
   executableHaskellDepends = [
     aeson ansi-wl-pprint base base16-bytestring base64-bytestring
