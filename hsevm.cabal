@@ -34,7 +34,7 @@ library
     EVM.UnitTest,
     EVM.VMTest
   ghc-options:
-    -O2 -Wall -Werror
+    -O2 -Wall -Werror -Wno-deprecations
   if impl(ghcjs)
     build-depends:
       ghcjs-base

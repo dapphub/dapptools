@@ -12,6 +12,7 @@ module EVM.VMTest
 
 import qualified EVM
 import qualified EVM.Concrete as EVM
+import qualified EVM.Machine as EVM
 
 import EVM.Types
 
@@ -148,11 +149,11 @@ realizeContracts = Map.fromList . map f . Map.toList
 realizeContract :: Contract -> EVM.Contract EVM.Concrete
 realizeContract x =
   EVM.initialContract (contractCode x)
-    & EVM.balance .~ EVM.C (contractBalance x)
-    & EVM.nonce   .~ EVM.C (contractNonce x)
+    & EVM.balance .~ EVM.w256 (contractBalance x)
+    & EVM.nonce   .~ EVM.w256 (contractNonce x)
     & EVM.storage .~ (
         Map.fromList .
-        map (\(k, v) -> (EVM.C k, EVM.C v)) .
+        map (\(k, v) -> (EVM.w256 k, EVM.w256 v)) .
         Map.toList $ contractStorage x
         )
 
