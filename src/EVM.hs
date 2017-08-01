@@ -167,6 +167,7 @@ data FrameContext e
 -- | The "registers" of the VM along with memory and data stack
 data FrameState e = FrameState
   { _contract    :: Addr
+  , _codeContract :: Addr
   , _code        :: ByteString
   , _pc          :: Int
   , _stack       :: [Word e]
@@ -210,6 +211,7 @@ data Block e = Block
 blankState :: Machine e => FrameState e
 blankState = FrameState
   { _contract   = 0
+  , _codeContract = 0
   , _code       = mempty
   , _pc         = 0
   , _stack      = mempty
@@ -231,7 +233,7 @@ type EVM e a = State (VM e) a
 
 currentContract :: Machine e => VM e -> Maybe (Contract e)
 currentContract vm =
-  view (env . contracts . at (view (state . contract) vm)) vm
+  view (env . contracts . at (view (state . codeContract) vm)) vm
 
 zipperRootForest :: Zipper.TreePos Zipper.Empty a -> Forest a
 zipperRootForest z =
@@ -286,6 +288,7 @@ loadContract target =
       Just targetCode -> do
         assign (state . contract) target
         assign (state . code)     targetCode
+        assign (state . codeContract) target
 
 {-# SPECIALIZE exec1 :: EVM Concrete () #-}
 exec1 :: forall e. Machine e => EVM e ()
@@ -656,6 +659,7 @@ exec1 = do
               assign state $
                 blankState
                   & set contract   newAddr
+                  & set codeContract newAddr
                   & set code       newCode
                   & set callvalue  xValue
                   & set caller     self
@@ -738,7 +742,7 @@ exec1 = do
               vmError SelfDestruction
 
         -- op: REVERT
-        0xfe ->
+        0xfd ->
           vmError Revert
 
         xxx ->
@@ -778,6 +782,7 @@ delegateCall xTo xInOffset xInSize xOutOffset xOutSize xs = do
         zoom state $ do
           assign pc 0
           assign code (view bytecode target)
+          assign codeContract xTo
           assign stack mempty
           assign memory mempty
           assign calldata (readMemory (num xInOffset) (num xInSize) vm)
@@ -940,7 +945,7 @@ insidePushData :: Machine e => Int -> EVM e Bool
 insidePushData i = do
   -- If the operation index for the code pointer is the same
   -- as for the previous code pointer, then it's inside push data.
-  self <- use (state . contract)
+  self <- use (state . codeContract)
   x <- useJust (env . contracts . ix self . opIxMap)
   return (i == 0 || (x Vector.! i) == (x Vector.! (i - 1)))
 
@@ -990,6 +995,7 @@ makeVm o = VM
     , _memorySize = 0
     , _code = vmoptCode o
     , _contract = vmoptAddress o
+    , _codeContract = vmoptAddress o
     , _calldata = B $ vmoptCalldata o
     , _callvalue = C $ vmoptValue o
     , _caller = vmoptCaller o
@@ -1151,7 +1157,7 @@ readOp x _ = case x of
   0xf2 -> OpCallcode
   0xf3 -> OpReturn
   0xf4 -> OpDelegatecall
-  0xfe -> OpRevert
+  0xfd -> OpRevert
   0xff -> OpSelfdestruct
   _    -> (OpUnknown x)
 

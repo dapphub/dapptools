@@ -50,8 +50,13 @@ data Name
 
 type UiWidget = Widget Name
 
+data VmContinuation e
+  = Continue (VMResult e -> VM e -> UiVmState e)
+  | Stop
+
 data UiVmState e = UiVmState
   { _uiVm             :: VM e
+  , _uiVmContinuation :: VmContinuation e
   , _uiVmStackList    :: List Name (Word e)
   , _uiVmBytecodeList :: List Name (Int, Op)
   , _uiVmLogList      :: List Name (Log e)
@@ -143,10 +148,12 @@ app = App
           halt s
 
         (UiVmScreen s', VtyEvent (Vty.EvKey (Vty.KChar 'n') [])) ->
-          continue (UiVmScreen (stepOneOpcode s'))
+          useContinuation (halt s) stepOneOpcode s'
+          -- continue (UiVmScreen (stepOneOpcode (useContinuation s')))
 
         (UiVmScreen s', VtyEvent (Vty.EvKey (Vty.KChar 'N') [])) ->
-          continue (UiVmScreen (stepOneSourcePosition s'))
+          useContinuation (halt s) stepOneSourcePosition s'
+          -- continue (UiVmScreen (stepOneSourcePosition (useContinuation s')))
 
         (UiTestPickerScreen s', VtyEvent (Vty.EvKey (Vty.KEnter) [])) -> do
           case listSelectedElement (view testPickerList s') of
@@ -168,28 +175,62 @@ app = App
   , appAttrMap = const (attrMap Vty.defAttr myTheme)
   }
 
+useContinuation
+  :: EventM n (Next (UiState Concrete))
+  -> (UiVmState Concrete -> UiVmState Concrete)
+  -> UiVmState Concrete
+  -> EventM n (Next (UiState Concrete))
+useContinuation onStop f ui =
+  case view (uiVm . result) ui of
+    Nothing ->
+      continue . UiVmScreen . f $ mkUiVmState
+        (view uiVm ui)
+        (view uiVmDapp ui)
+        (view uiVmContinuation ui)
+    Just r ->
+      case view uiVmContinuation ui of
+        Stop -> onStop
+        Continue k ->
+          continue . UiVmScreen $ k r (view uiVm ui)
+
 initialUiVmStateForTest :: DappInfo -> (Text, Text) -> UiVmState Concrete
 initialUiVmStateForTest dapp (theContractName, theTestName) =
-  let
-     Just testContract = view (dappSolcByName . at theContractName) dapp
-     vm0 = initialUnitTestVm testContract (Map.elems (view dappSolcByName dapp))
-     vm2 = case runState exec vm0 of
-       (VMFailure e, _) -> error $ "creation error: " ++ show e
-       (VMSuccess (B targetCode), vm1) ->
-         execState (performCreation targetCode) vm1
-     target = view (state . contract) vm2
-     vm3 = vm2 & env . contracts . ix target . balance +~ 0xffffffffffffffffffffffff
-     vm4 = flip execState vm3 $ do
-       setupCall target "setUp()"
-     vm = case runState exec vm4 of
-       (VMFailure e, _) -> error $ "setUp() failed: " ++ show e
-       (VMSuccess _, vm5) ->
-         flip execState vm5 $ do
-           setupCall target theTestName
-           assign contextTrace (Zipper.fromForest [])
-           assign logs mempty
-  in
-    mkUiVmState vm (Just dapp)
+  mkUiVmState
+    vm0
+    (Just dapp)
+    (Continue k1)
+  where
+    Just testContract =
+      view (dappSolcByName . at theContractName) dapp
+    vm0 =
+      initialUnitTestVm testContract (Map.elems (view dappSolcByName dapp))
+    k1 r1 vm1 =
+      case r1 of
+        VMFailure e ->
+          error $ "creation error: " ++ show e
+        VMSuccess (B targetCode) ->
+          let
+            vm2 = vm1 & env . contracts . ix target . balance +~ 0xffffffffffffffffffffffff
+            target = view (state . contract) vm1
+          in mkUiVmState
+               (flip execState vm2 $ do
+                 performCreation targetCode
+                 setupCall target "setUp()")
+               (Just dapp)
+               (Continue (k2 target))
+    k2 target r2 vm3 =
+      case r2 of
+        VMFailure e ->
+          error $ "setUp() error: " ++ show e
+        VMSuccess _ ->
+          let
+            vm4 = flip execState vm3 $ do
+                    setupCall target theTestName
+                    assign contextTrace (Zipper.fromForest [])
+                    assign logs mempty
+          in
+            mkUiVmState
+              vm4 (Just dapp) Stop
 
 myTheme :: [(AttrName, Vty.Attr)]
 myTheme =
@@ -236,7 +277,7 @@ stepOneOpcode :: UiVmState Concrete -> UiVmState Concrete
 stepOneOpcode ui =
   let
     nextVm = execState exec1 (view uiVm ui)
-  in mkUiVmState nextVm (view uiVmDapp ui)
+  in mkUiVmState nextVm (view uiVmDapp ui) (view uiVmContinuation ui)
 
 stepOneSourcePosition :: UiVmState Concrete -> UiVmState Concrete
 stepOneSourcePosition ui =
@@ -246,12 +287,12 @@ stepOneSourcePosition ui =
     initialPosition = currentSrcMap dapp vm
     stillHere s     = currentSrcMap dapp s == initialPosition
     nextVm          = execState (execWhile stillHere) vm
-  in mkUiVmState nextVm (Just dapp)
+  in mkUiVmState nextVm (Just dapp) (view uiVmContinuation ui)
 
 currentSrcMap :: Machine e => DappInfo -> VM e -> Maybe SrcMap
 currentSrcMap dapp vm =
   let
-    this = vm ^?! env . contracts . ix (view (state . contract) vm)
+    this = vm ^?! env . contracts . ix (view (state . codeContract) vm)
     i = (view opIxMap this) SVec.! (view (state . pc) vm)
     h = view codehash this
   in
@@ -271,14 +312,15 @@ currentSolc dapp vm =
   in
     preview (dappSolcByHash . ix h . _2) dapp
 
-mkUiVmState :: VM Concrete -> Maybe DappInfo -> UiVmState Concrete
-mkUiVmState vm Nothing =
+mkUiVmState :: VM Concrete -> Maybe DappInfo -> VmContinuation Concrete -> UiVmState Concrete
+mkUiVmState vm Nothing k =
   let
     move = case vmOpIx vm of
              Nothing -> id
              Just x -> listMoveTo x
   in UiVmState
     { _uiVm = vm
+    , _uiVmContinuation = k
     , _uiVmDapp = Nothing
     , _uiVmSolc = Nothing
     , _uiVmStackList =
@@ -297,7 +339,7 @@ mkUiVmState vm Nothing =
         list SolidityPane mempty 1
     }
 
-mkUiVmState vm (Just dapp) =
+mkUiVmState vm (Just dapp) k =
   let
     sm = currentSrcMap dapp vm
     move = case vmOpIx vm of
@@ -305,6 +347,7 @@ mkUiVmState vm (Just dapp) =
              Just x -> listMoveTo x
   in UiVmState
     { _uiVm = vm
+    , _uiVmContinuation = k
     , _uiVmDapp = Just dapp
     , _uiVmSolc = currentSolc dapp vm
     , _uiVmStackList =
