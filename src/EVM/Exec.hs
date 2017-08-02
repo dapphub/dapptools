@@ -35,9 +35,17 @@ exec =
     Nothing -> exec1 >> exec
     Just x  -> return x
 
-execWhile :: (VM Concrete -> Bool) -> State (VM Concrete) ()
-execWhile p =
-  get >>= \x -> if p x then exec1 >> execWhile p else return ()
+execWhile :: (VM Concrete -> Bool) -> State (VM Concrete) Int
+execWhile p = go 0
+  where
+    go i = do
+      x <- get
+      if p x
+        then do
+          exec1
+          go $! (i + 1)
+      else
+        return i
 
 -- locateBreakpoint :: UIState -> Text -> Int -> Maybe [(Word256, Vector Bool)]
 -- locateBreakpoint ui fileName lineNo = do
