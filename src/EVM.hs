@@ -997,7 +997,7 @@ makeVm o = VM
     , _contract = vmoptAddress o
     , _codeContract = vmoptAddress o
     , _calldata = B $ vmoptCalldata o
-    , _callvalue = C () $ vmoptValue o
+    , _callvalue = w256 $ vmoptValue o
     , _caller = vmoptCaller o
     }
   , _env = Env

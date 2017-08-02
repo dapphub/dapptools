@@ -46,18 +46,21 @@ byteStringSliceWithDefaultZeroes offset size bs =
     let bs' = BS.take size (BS.drop offset bs)
     in bs' <> BS.replicate (BS.length bs' - size) 0
 
+data Whiff = Dull | FromKeccak ByteString
+  deriving Show
+
 instance Machine' Concrete where
-  w256 = C ()
+  w256 = C Dull
   blob = B
 
-  data Word Concrete = C () W256
+  data Word Concrete = C Whiff W256
   newtype Blob Concrete = B ByteString
   newtype Byte Concrete = ConcreteByte Word8
   newtype Memory Concrete = ConcreteMemory ByteString
 
   wordToByte (C _ x) = ConcreteByte (num (x .&. 0xff))
 
-  exponentiate (C _ x) (C _ y) = C () (x ^ y)
+  exponentiate (C _ x) (C _ y) = w256 (x ^ y)
 
   sdiv _ (C _ (W256 0)) = 0
   sdiv (C _ (W256 x)) (C _ (W256 y)) =
@@ -66,32 +69,32 @@ instance Machine' Concrete where
         k  = if (sx < 0) /= (sy < 0)
              then (-1)
              else 1
-    in C () . W256 . unsignedWord $ k * div (abs sx) (abs sy)
+    in w256 . W256 . unsignedWord $ k * div (abs sx) (abs sy)
 
   smod _ (C _ (W256 0)) = 0
   smod (C _ (W256 x)) (C _ (W256 y)) =
     let sx = signedWord x
         sy = signedWord y
         k  = if sx < 0 then (-1) else 1
-    in C () . W256 . unsignedWord $ k * mod (abs sx) (abs sy)
+    in w256 . W256 . unsignedWord $ k * mod (abs sx) (abs sy)
 
   addmod _ _ (C _ (W256 0)) = 0
   addmod (C _ x) (C _ y) (C _ z) =
-    C () $
+    w256 $
       fromWord512
         ((toWord512 x + toWord512 y) `mod` (toWord512 z))
 
   mulmod _ _ (C _ (W256 0)) = 0
   mulmod (C _ x) (C _ y) (C _ z) =
-    C () $
+    w256 $
       fromWord512
         ((toWord512 x * toWord512 y) `mod` (toWord512 z))
 
   slt (C _ (W256 x)) (C _ (W256 y)) =
-    if signedWord x < signedWord y then C () 1 else C () 0
+    if signedWord x < signedWord y then w256 1 else w256 0
 
   sgt (C _ (W256 x)) (C _ (W256 y)) =
-    if signedWord x > signedWord y then C () 1 else C () 0
+    if signedWord x > signedWord y then w256 1 else w256 0
 
   forceConcreteBlob (B x) = x
   forceConcreteWord (C _ x) = x
@@ -114,7 +117,7 @@ instance Machine' Concrete where
       go !a !n = go (a + shiftL (num $ readByteOrZero (num i + n) m)
                                 (8 * (31 - n))) (n - 1)
     in {-# SCC word256At_getter #-}
-      C () $ go (0 :: W256) (31 :: Int)
+      w256 $ go (0 :: W256) (31 :: Int)
 
   setMemoryWord (C _ i) (C _ x) m =
     writeMemory (B (word256Bytes x)) 32 0 (num i) m
@@ -123,11 +126,11 @@ instance Machine' Concrete where
     writeMemory (B (BS.singleton x)) 1 0 (num i) m
 
   readBlobWord (C _ i) (B x) =
-    C () (wordAt (num i) x)
+    w256 (wordAt (num i) x)
 
-  blobSize (B x) = C () (num (BS.length x))
+  blobSize (B x) = w256 (num (BS.length x))
 
-  keccakBlob (B x) = C () (keccak x)
+  keccakBlob (B x) = C (FromKeccak x) (keccak x)
 
 deriving instance Bits (Byte Concrete)
 deriving instance Enum (Byte Concrete)
@@ -142,42 +145,43 @@ deriving instance Real (Byte Concrete)
 deriving instance Show (Blob Concrete)
 
 instance Show (Word Concrete) where
-  show (C _ x) = show x
+  show (C Dull x) = show x
+  show (C whiff x) = show whiff ++ ": " ++ show x
 
 instance Bits (Word Concrete) where
-  (C _ x) .&. (C _ y) = C () (x .&. y)
-  (C _ x) .|. (C _ y) = C () (x .|. y)
-  (C _ x) `xor` (C _ y) = C () (x `xor` y)
-  complement (C _ x) = C () (complement x)
-  shift (C _ x) i = C () (shift x i)
-  rotate (C _ x) i = C () (rotate x i)
+  (C _ x) .&. (C _ y) = w256 (x .&. y)
+  (C _ x) .|. (C _ y) = w256 (x .|. y)
+  (C _ x) `xor` (C _ y) = w256 (x `xor` y)
+  complement (C _ x) = w256 (complement x)
+  shift (C _ x) i = w256 (shift x i)
+  rotate (C _ x) i = w256 (rotate x i)
   bitSize (C _ x) = bitSize x
   bitSizeMaybe (C _ x) = bitSizeMaybe x
   isSigned (C _ x) = isSigned x
   testBit (C _ x) i = testBit x i
-  bit i = C () (bit i)
+  bit i = w256 (bit i)
   popCount (C _ x) = popCount x
 
 instance Eq (Word Concrete) where
   (C _ x) == (C _ y) = x == y
 
 instance Enum (Word Concrete) where
-  toEnum i = C () (toEnum i)
+  toEnum i = w256 (toEnum i)
   fromEnum (C _ x) = fromEnum x
 
 instance Integral (Word Concrete) where
   quotRem (C _ x) (C _ y) =
     let (a, b) = quotRem x y
-    in (C () a, C () b)
+    in (w256 a, w256 b)
   toInteger (C _ x) = toInteger x
 
 instance Num (Word Concrete) where
-  (C _ x) + (C _ y) = C () (x + y)
-  (C _ x) * (C _ y) = C () (x * y)
-  abs (C _ x) = C () (abs x)
-  signum (C _ x) = C () (signum x)
-  fromInteger x = C () (fromInteger x)
-  negate (C _ x) = C () (negate x)
+  (C _ x) + (C _ y) = w256 (x + y)
+  (C _ x) * (C _ y) = w256 (x * y)
+  abs (C _ x) = w256 (abs x)
+  signum (C _ x) = w256 (signum x)
+  fromInteger x = w256 (fromInteger x)
+  negate (C _ x) = w256 (negate x)
 
 instance Real (Word Concrete) where
   toRational (C _ x) = toRational x

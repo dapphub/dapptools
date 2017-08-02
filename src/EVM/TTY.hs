@@ -149,11 +149,9 @@ app = App
 
         (UiVmScreen s', VtyEvent (Vty.EvKey (Vty.KChar 'n') [])) ->
           useContinuation (halt s) stepOneOpcode s'
-          -- continue (UiVmScreen (stepOneOpcode (useContinuation s')))
 
         (UiVmScreen s', VtyEvent (Vty.EvKey (Vty.KChar 'N') [])) ->
           useContinuation (halt s) stepOneSourcePosition s'
-          -- continue (UiVmScreen (stepOneSourcePosition (useContinuation s')))
 
         (UiTestPickerScreen s', VtyEvent (Vty.EvKey (Vty.KEnter) [])) -> do
           case listSelectedElement (view testPickerList s') of
