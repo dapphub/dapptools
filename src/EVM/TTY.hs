@@ -435,7 +435,7 @@ showDec :: W256 -> String
 showDec (W256 w) =
   if w > 1000000000000
   then
-    Scientific.formatScientific
+    "~" ++ Scientific.formatScientific
        Scientific.Generic
        (Just 8)
        (fromIntegral w)
