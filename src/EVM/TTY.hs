@@ -10,10 +10,10 @@ import Brick.Widgets.Center
 import Brick.Widgets.List
 
 import EVM
-import EVM.Concrete (Concrete, Blob (..))
+import EVM.Concrete (Concrete, Blob (..), Word (C))
 import EVM.Debug
 import EVM.Exec
-import EVM.Machine (Machine, Word)
+import EVM.Machine (Machine)
 import EVM.Solidity
 import EVM.Types
 import EVM.UnitTest
@@ -30,6 +30,7 @@ import Data.Text.Encoding (decodeUtf8)
 import Data.Tree (drawForest)
 
 import qualified Data.Map as Map
+import qualified Data.Scientific as Scientific
 import qualified Data.Text as Text
 import qualified Data.Tree.Zipper as Zipper
 import qualified Data.Vector as Vec
@@ -55,7 +56,7 @@ data VmContinuation e
 data UiVmState e = UiVmState
   { _uiVm             :: VM e
   , _uiVmContinuation :: VmContinuation e
-  , _uiVmStackList    :: List Name (Word e)
+  , _uiVmStackList    :: List Name (Int, Word e)
   , _uiVmBytecodeList :: List Name (Int, Op)
   , _uiVmTraceList    :: List Name String
   , _uiVmSolidityList :: List Name (Int, ByteString)
@@ -359,7 +360,7 @@ updateUiVmState ui vm =
     ui' = ui
       & set uiVm vm
       & set uiVmStackList
-          (list StackPane (Vec.fromList $ view (state . stack) vm) 1)
+          (list StackPane (Vec.fromList $ zip [1..] (view (state . stack) vm)) 2)
       & set uiVmBytecodeList
           (move $ list BytecodePane
              (Vec.imap (,) (view codeOps (fromJust (currentContract vm))))
@@ -417,13 +418,29 @@ showContext dapp (Right (CallContext _ _ hash abi _)) =
              (\x -> maybe "[unknown method]" id (maybeAbiName solc x))
              abi
 
-drawStackPane :: Machine e => UiVmState e -> UiWidget
+drawStackPane :: UiVmState Concrete -> UiWidget
 drawStackPane ui =
   hBorderWithLabel (txt "Stack") <=>
     renderList
-      (\_ x -> str (show x))
+      (\_ (i, x@(C _ w)) ->
+         vBox
+           [ withHighlight True (str ("#" ++ show i ++ " "))
+               <+> str (show x)
+           , dim (str ("   " ++ showDec w))
+           ])
       False
       (view uiVmStackList ui)
+
+showDec :: W256 -> String
+showDec (W256 w) =
+  if w > 1000000000000
+  then
+    Scientific.formatScientific
+       Scientific.Generic
+       (Just 8)
+       (fromIntegral w)
+  else
+    unpack . Text.intercalate "," . reverse . map Text.reverse . Text.chunksOf 3 . Text.reverse . Text.pack . show $ w
 
 drawBytecodePane :: UiVmState Concrete -> UiWidget
 drawBytecodePane ui =
@@ -434,6 +451,9 @@ drawBytecodePane ui =
                     else withDefAttr boldAttr (opWidget x))
       False
       (view uiVmBytecodeList ui)
+
+dim :: Widget n -> Widget n
+dim = withDefAttr dimAttr
 
 withHighlight :: Bool -> Widget n -> Widget n
 withHighlight False = withDefAttr dimAttr
