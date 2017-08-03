@@ -21,6 +21,6 @@ done
 
 # pass the library bin files through to ethrun
 # (needs to be exact same order as above for nonces)
-deploy=($(echo "${libraries[@]}" | sed -E "s/.*:(.*)/$DAPP_OUT\/\1.bin/"))
+deploy=($(printf "%s\n" "${libraries[@]}" | sed -E "s/.*:(.*)/$DAPP_OUT\/\1.bin/"))
 
 (set -x; dapp quicktest "$@" "$DAPP_OUT" "${deploy[@]}")
