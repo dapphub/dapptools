@@ -29,6 +29,7 @@ import Data.Text (Text, unpack, pack)
 import Data.Text.Encoding (decodeUtf8)
 import Data.Tree (drawForest)
 
+import qualified Data.ByteString as BS
 import qualified Data.Map as Map
 import qualified Data.Scientific as Scientific
 import qualified Data.Text as Text
@@ -36,6 +37,8 @@ import qualified Data.Tree.Zipper as Zipper
 import qualified Data.Vector as Vec
 import qualified Data.Vector.Storable as SVec
 import qualified Graphics.Vty as Vty
+
+import qualified EVM.TTYCenteredList as Centered
 
 data Name
   = AbiPane
@@ -153,6 +156,9 @@ app = App
 
         (UiVmScreen s', VtyEvent (Vty.EvKey (Vty.KChar 'N') [])) ->
           useContinuation (halt s) stepOneSourcePosition s'
+
+        (UiVmScreen s', VtyEvent (Vty.EvKey (Vty.KChar 'n') [Vty.MCtrl])) ->
+          useContinuation (halt s) stepOneSourcePosition_over s'
 
         (UiVmScreen s', VtyEvent (Vty.EvKey (Vty.KChar 'p') [])) ->
           let n = view uiVmStepCount s' - 1
@@ -332,6 +338,36 @@ stepOneSourcePosition ui =
     updateUiVmState ui nextVm
       & over uiVmStepCount (+ i)
 
+stepOneSourcePosition_over :: UiVmState Concrete -> UiVmState Concrete
+stepOneSourcePosition_over ui =
+  let
+    vm              = view uiVm ui
+    Just dapp       = view uiVmDapp ui
+    initialPosition = currentSrcMap dapp vm
+    initialHeight   = length (view frames vm)
+
+    predicate x =
+      case currentSrcMap dapp x of
+        Nothing ->
+          True
+        Just sm ->
+          let
+            remain = Just sm == initialPosition
+            deeper = length (view frames x) > initialHeight
+            boring =
+              case srcMapCode (view dappSources dapp) sm of
+                Just bs ->
+                  BS.isPrefixOf "contract " bs
+                Nothing ->
+                  True
+          in
+            remain || deeper || boring
+
+    (i, nextVm)     = runState (execWhile predicate) vm
+  in
+    updateUiVmState ui nextVm
+      & over uiVmStepCount (+ i)
+
 currentSrcMap :: Machine e => DappInfo -> VM e -> Maybe SrcMap
 currentSrcMap dapp vm =
   let
@@ -461,7 +497,7 @@ showWordExplanation w (Just dapp) =
 drawBytecodePane :: UiVmState Concrete -> UiWidget
 drawBytecodePane ui =
   hBorderWithLabel (case view uiVmMessage ui of { Nothing -> str ""; Just s -> str s }) <=>
-    renderList
+    Centered.renderList
       (\active x -> if not active
                     then withDefAttr dimAttr (opWidget x)
                     else withDefAttr boldAttr (opWidget x))
@@ -497,10 +533,11 @@ drawSolidityPane ui =
          (view dappSources dapp)
          sm)) - 1
   in vBox
-    [ hBorderWithLabel
-        (txt (maybe "<unknown>" contractNamePart
-              (preview (uiVmSolc . _Just . contractName) ui)))
-    , renderList
+    [ hBorderWithLabel $
+        txt (maybe "<unknown>" contractNamePart
+              (preview (uiVmSolc . _Just . contractName) ui))
+          <+> str (" " ++ show lineNo)
+    , Centered.renderList
         (\_ (i, line) ->
            let s = case decodeUtf8 line of "" -> " "; y -> y
            in case subrange i of

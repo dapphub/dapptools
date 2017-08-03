@@ -30,6 +30,7 @@ library
     EVM.Machine,
     EVM.Solidity,
     EVM.TTY,
+    EVM.TTYCenteredList,
     EVM.Types,
     EVM.UnitTest,
     EVM.VMTest
