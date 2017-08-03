@@ -64,6 +64,7 @@ data UiVmState e = UiVmState
   , _uiVmDapp         :: Maybe DappInfo
   , _uiVmStepCount    :: Int
   , _uiVmFirstState   :: UiVmState e
+  , _uiVmMessage      :: Maybe String
   }
 
 data CodeType = Creation | Runtime
@@ -233,6 +234,7 @@ initialUiVmStateForTest dapp (theContractName, theTestName) =
         , _uiVmDapp = Just dapp
         , _uiVmStepCount = 0
         , _uiVmFirstState = undefined
+        , _uiVmMessage = Just "Creating unit test contract"
         }
     Just testContract =
       view (dappSolcByName . at theContractName) dapp
@@ -253,6 +255,7 @@ initialUiVmStateForTest dapp (theContractName, theTestName) =
           in
             updateUiVmState ui vm3
               & set uiVmContinuation (Continue (k2 target))
+              & set uiVmMessage (Just "Calling `setUp()' for unit test")
     k2 target r ui =
       case r of
         VMFailure e ->
@@ -267,6 +270,7 @@ initialUiVmStateForTest dapp (theContractName, theTestName) =
           in
             updateUiVmState ui vm4
               & set uiVmContinuation Stop
+              & set uiVmMessage (Just "Running unit test")
 
 myTheme :: [(AttrName, Vty.Attr)]
 myTheme =
@@ -456,7 +460,7 @@ showWordExplanation w (Just dapp) =
 
 drawBytecodePane :: UiVmState Concrete -> UiWidget
 drawBytecodePane ui =
-  hBorderWithLabel ((str (show (view uiVmStepCount ui))) <+> txt " " <+> str (show (view (uiVm . result) ui))) <=>
+  hBorderWithLabel (case view uiVmMessage ui of { Nothing -> str ""; Just s -> str s }) <=>
     renderList
       (\active x -> if not active
                     then withDefAttr dimAttr (opWidget x)
