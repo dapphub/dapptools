@@ -28,7 +28,6 @@ import Data.Monoid ((<>))
 import Data.Text (Text, unpack, pack)
 import Data.Text.Encoding (decodeUtf8)
 import Data.Tree (drawForest)
-import Data.Foldable (toList)
 
 import qualified Data.Map as Map
 import qualified Data.Text as Text
@@ -41,7 +40,6 @@ data Name
   = AbiPane
   | StackPane
   | BytecodePane
-  | LogPane
   | TracePane
   | SolidityPane
   | SolidityViewport
@@ -59,7 +57,6 @@ data UiVmState e = UiVmState
   , _uiVmContinuation :: VmContinuation e
   , _uiVmStackList    :: List Name (Word e)
   , _uiVmBytecodeList :: List Name (Int, Op)
-  , _uiVmLogList      :: List Name (Log e)
   , _uiVmTraceList    :: List Name String
   , _uiVmSolidityList :: List Name (Int, ByteString)
   , _uiVmSolc         :: Maybe SolcContract
@@ -229,7 +226,6 @@ initialUiVmStateForTest dapp (theContractName, theTestName) =
         , _uiVmContinuation = Continue k1
         , _uiVmStackList = undefined
         , _uiVmBytecodeList = undefined
-        , _uiVmLogList = undefined
         , _uiVmTraceList = undefined
         , _uiVmSolidityList = undefined
         , _uiVmSolc = Just testContract
@@ -302,7 +298,6 @@ drawVm ui =
   [ vBox
     [ vLimit 20 $ hBox
       [ drawStackPane ui <+> vBorder
-      , drawLogPane ui <+> vBorder
       , drawTracePane ui
       ]
     , hBox $
@@ -365,8 +360,6 @@ updateUiVmState ui vm =
       & set uiVm vm
       & set uiVmStackList
           (list StackPane (Vec.fromList $ view (state . stack) vm) 1)
-      & set uiVmLogList
-          (list LogPane (Vec.fromList . toList $ view logs vm) 1)
       & set uiVmBytecodeList
           (move $ list BytecodePane
              (Vec.imap (,) (view codeOps (fromJust (currentContract vm))))
@@ -445,14 +438,6 @@ drawBytecodePane ui =
 withHighlight :: Bool -> Widget n -> Widget n
 withHighlight False = withDefAttr dimAttr
 withHighlight True  = withDefAttr boldAttr
-
-drawLogPane :: Machine e => UiVmState e -> UiWidget
-drawLogPane ui =
-  hBorderWithLabel (txt "Logs") <=>
-    renderList
-      (\_ (Log _ bs ws) -> str (show bs) <+> txt " " <+> str (show ws))
-      False
-      (view uiVmLogList ui)
 
 drawTracePane :: Machine e => UiVmState e -> UiWidget
 drawTracePane ui =
