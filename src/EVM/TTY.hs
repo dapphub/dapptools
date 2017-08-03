@@ -426,7 +426,7 @@ drawStackPane ui =
          vBox
            [ withHighlight True (str ("#" ++ show i ++ " "))
                <+> str (show x)
-           , dim (str ("   " ++ showDec w))
+           , dim (str ("   " ++ showWordExplanation w (view uiVmDapp ui)))
            ])
       False
       (view uiVmStackList ui)
@@ -441,6 +441,18 @@ showDec (W256 w) =
        (fromIntegral w)
   else
     unpack . Text.intercalate "," . reverse . map Text.reverse . Text.chunksOf 3 . Text.reverse . Text.pack . show $ w
+
+showWordExplanation :: W256 -> Maybe DappInfo -> String
+showWordExplanation w Nothing = showDec w
+showWordExplanation w _ | w > 0xffffffff = showDec w
+showWordExplanation w (Just dapp) =
+  let
+    fullAbiMap =
+      mconcat (map (view abiMap) (Map.elems (view dappSolcByName dapp)))
+  in
+    case Map.lookup (fromIntegral w) fullAbiMap of
+      Nothing -> showDec w
+      Just x  -> "abi " ++ show (unpack x)
 
 drawBytecodePane :: UiVmState Concrete -> UiWidget
 drawBytecodePane ui =
