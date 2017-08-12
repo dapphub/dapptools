@@ -345,7 +345,7 @@ function formatBinary(x) {
 }
 
 function isPrintable(x) {
-  return !/\0/.test(toString(x))
+  return /^[\u0000-\u007f]*$/.test(x)
 }
 
 function lpad(x, n) {
