@@ -304,7 +304,7 @@ function formatLog(log) {
     )
 
     if (event.name == "log_bytes32") {
-      return toString(args[0]).replace(
+      return formatBytes(args[0]).replace(
         /^Error: /, "\x1b[31;1mError:\x1b[0m "
       )
     } else if (/^log_named_bytes32$/.test(event.name)) {
