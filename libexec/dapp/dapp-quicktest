@@ -325,6 +325,7 @@ function formatLog(log) {
           address : formatBinary,
           bytes32 : formatBytes,
           string  : formatString,
+          bytes   : formatBinary,
         }[params[i].type] || (x => x))(arg)
       }).join(", ")})\x1b[0m`
     }
