@@ -1,7 +1,7 @@
 name:
   hsevm
 version:
-  0.6.1
+  0.6.2
 synopsis:
   Ethereum virtual machine evaluator
 homepage:
@@ -52,7 +52,7 @@ library
     base16-bytestring                 >= 0.1.1 && < 0.2,
     base64-bytestring                 >= 1.0.0 && < 1.1,
     binary                            >= 0.8.3 && < 0.9,
-    brick                             >= 0.17.2 && < 0.18,
+    brick                             >= 0.17.2 && < 0.19,
     bytestring                        >= 0.10.8 && < 0.11,
     cereal                            >= 0.5.4 && < 0.6,
     containers                        >= 0.5.7 && < 0.6,
@@ -78,7 +78,7 @@ library
     text-format                       >= 0.3.1 && < 0.4,
     unordered-containers              >= 0.2.8 && < 0.3,
     vector                            >= 0.11.0 && < 0.13,
-    vty                               >= 5.15 && < 5.16
+    vty                               >= 5.15 && < 5.17
   hs-source-dirs:
     src
   default-language:
@@ -111,7 +111,7 @@ executable hsevm
     base16-bytestring                 >= 0.1.1 && < 0.2,
     base64-bytestring                 >= 1.0.0 && < 1.1,
     binary                            >= 0.8.3 && < 0.9,
-    brick                             >= 0.17.2 && < 0.18,
+    brick                             >= 0.17.2 && < 0.19,
     bytestring                        >= 0.10.8 && < 0.11,
     containers                        >= 0.5.7 && < 0.6,
     cryptonite                        >= 0.21 && < 0.24,
@@ -134,7 +134,7 @@ executable hsevm
     text-format                       >= 0.3.1 && < 0.4,
     unordered-containers              >= 0.2.8 && < 0.3,
     vector                            >= 0.11.0 && < 0.13,
-    vty                               >= 5.15 && < 5.16
+    vty                               >= 5.15 && < 5.17
 
 test-suite test
   default-language:
