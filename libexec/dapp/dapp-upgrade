@@ -10,8 +10,8 @@ if [[ $1 ]]; then
       (set -x; git commit -m "dapp upgrade $x")
     else
       echo "${0##*/}: dependency up-to-date: $x"
-      dapp update "$x"
     fi
+    dapp update "$x"
   done
 else
   for x in lib/*; do libs+=("${x#*/}"); done
