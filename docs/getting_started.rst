@@ -19,11 +19,10 @@ These are the commands to create a brand new project using dapp:
     $ cd dapp-tutorial
     $ dapp init
 
-You will see that dapp does a few things for you:
+You will see that dapp does a couple of things for you:
 
 1. Initializes a git repository if you don't have one.
 2. Creates a ``Makefile`` for convenience.
-3. Creates a ``Dappfile`` for configuration info:
 
 ::
 
