@@ -60,11 +60,11 @@ contract ${type}Test is DSTest {
     }
 
     function testFail_basic_sanity() {
-        assert(false);
+        assertTrue(false);
     }
 
     function test_basic_sanity() {
-        assert(true);
+        assertTrue(true);
     }
 }
 .
