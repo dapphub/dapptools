@@ -22,17 +22,20 @@ import EVM.Solidity
 import EVM.Types
 import EVM.UnitTest
 
+import Control.Lens
 import Control.Monad              (unless)
 import Control.Monad.State.Strict (execState)
-import Control.Lens
 import Data.ByteString            (ByteString)
 import Data.List                  (intercalate)
 import System.Directory           (withCurrentDirectory)
+import System.Exit                (die)
 import System.IO                  (hFlush, stdout)
 
-import qualified Data.ByteString.Lazy  as LazyByteString
-import qualified Data.Map              as Map
-import qualified Options.Generic       as Options
+import qualified Data.ByteString        as ByteString
+import qualified Data.ByteString.Base16 as BS16
+import qualified Data.ByteString.Lazy   as LazyByteString
+import qualified Data.Map               as Map
+import qualified Options.Generic        as Options
 
 -- This record defines the program's command-line options
 -- automatically via the `optparse-generic` package.
@@ -103,7 +106,15 @@ launchExec :: Command -> IO ()
 launchExec opts =
   let vm = vmFromCommand opts in
     case optsMode opts of
-      Run -> print (view EVM.result (execState exec vm))
+      Run ->
+        case view EVM.result (execState exec vm) of
+          Nothing ->
+            error "internal error; no EVM result"
+          Just (EVM.VMFailure e) -> do
+            die (show e)
+          Just (EVM.VMSuccess (EVM.B x)) -> do
+            ByteString.putStr (BS16.encode x)
+            putStrLn ""
       _ -> error "not implemented"
 
 vmFromCommand :: Command -> EVM.VM EVM.Concrete
