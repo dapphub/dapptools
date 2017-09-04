@@ -493,6 +493,7 @@ exec1 = do
               assign (state . stack) xs
               copyBytesToMemory (blob (view bytecode this))
                 (num n) (num codeOffset) (num memOffset)
+              accessMemoryRange (num memOffset) (num n)
             _ -> underrun
 
         -- op: GASPRICE
@@ -516,6 +517,7 @@ exec1 = do
               assign (state . stack) xs
               copyBytesToMemory (blob (view bytecode c))
                 (num codeSize) (num codeOffset) (num memOffset)
+              accessMemoryRange (num memOffset) (num codeSize)
             _ -> underrun
 
         -- op: BLOCKHASH
@@ -796,12 +798,7 @@ delegateCall xTo xInOffset xInSize xOutOffset xOutSize xs = do
  #-}
 accessMemoryRange :: Machine e => Word e -> Word e -> EVM e ()
 accessMemoryRange _ 0 = return ()
-accessMemoryRange f l =
-  state . memorySize %= \n -> max n (ceilDiv (num (f + l)) 32)
-  where
-    ceilDiv a b =
-      let (q, r) = quotRem a b
-      in q + if r /= 0 then 1 else 0
+accessMemoryRange f l = state . memorySize %= \n -> max n (num (f + l))
 
 {-# SPECIALIZE accessMemoryWord :: Word Concrete -> EVM Concrete () #-}
 accessMemoryWord :: Machine e => Word e -> EVM e ()
