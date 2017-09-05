@@ -37,6 +37,8 @@ import qualified Data.ByteString.Lazy   as LazyByteString
 import qualified Data.Map               as Map
 import qualified Options.Generic        as Options
 
+import qualified EVM.TreeDump as TreeDump
+
 -- This record defines the program's command-line options
 -- automatically via the `optparse-generic` package.
 data Command
@@ -53,6 +55,7 @@ data Command
       , gaslimit   :: Maybe W256
       , difficulty :: Maybe W256
       , debug      :: Bool
+      , state      :: Maybe String
       }
   | DappTest
       { jsonFile :: String
@@ -103,20 +106,30 @@ dappTest mode solcFile = do
         error ("Failed to read Solidity JSON for `" ++ solcFile ++ "'")
 
 launchExec :: Command -> IO ()
-launchExec opts =
-  let vm = vmFromCommand opts in
-    case optsMode opts of
-      Run ->
-        case view EVM.result (execState exec vm) of
-          Nothing ->
-            error "internal error; no EVM result"
-          Just (EVM.VMFailure e) -> do
-            die (show e)
-          Just (EVM.VMSuccess (EVM.B x)) -> do
-            ByteString.putStr (BS16.encode x)
-            putStrLn ""
-      Debug ->
-        EVM.TTY.runFromVM vm
+launchExec opts = do
+  let vm = vmFromCommand opts
+  vm1 <- case state opts of
+    Nothing -> pure vm
+    Just path ->
+      TreeDump.applyRepo path vm
+
+  case optsMode opts of
+    Run ->
+      let vm' = execState exec vm1
+      in case view EVM.result vm' of
+        Nothing ->
+          error "internal error; no EVM result"
+        Just (EVM.VMFailure e) -> do
+          die (show e)
+        Just (EVM.VMSuccess (EVM.B x)) -> do
+          ByteString.putStr (BS16.encode x)
+          putStrLn ""
+          case state opts of
+            Nothing -> pure ()
+            Just path ->
+              TreeDump.commitVm (TreeDump.RepoAt path) vm'
+    Debug ->
+      EVM.TTY.runFromVM vm
 
 vmFromCommand :: Command -> EVM.VM EVM.Concrete
 vmFromCommand opts =

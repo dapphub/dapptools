@@ -32,6 +32,7 @@ library
     EVM.TTY,
     EVM.TTYCenteredList,
     EVM.Types,
+    EVM.TreeDump,
     EVM.UnitTest,
     EVM.VMTest
   ghc-options:
@@ -62,6 +63,9 @@ library
     directory                         >= 1.3.0 && < 1.4,
     filepath                          >= 1.4.1 && < 1.5,
     ghci-pretty                       >= 0.0.2 && < 0.1,
+    gitlib,
+    gitlib-libgit2,
+    time,
     lens                              >= 4.15.1 && < 4.16,
     lens-aeson                        >= 1.0.1 && < 1.1,
     memory                            >= 0.14.5 && < 0.15,
