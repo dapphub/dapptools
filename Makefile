@@ -1,3 +1,5 @@
+all: default.nix nix; cabal build
+
 default.nix: hsevm.cabal; cabal2nix . > default.nix
 
 nix: default.nix hsevm.nix
