@@ -115,7 +115,8 @@ launchExec opts =
           Just (EVM.VMSuccess (EVM.B x)) -> do
             ByteString.putStr (BS16.encode x)
             putStrLn ""
-      _ -> error "not implemented"
+      Debug ->
+        EVM.TTY.runFromVM vm
 
 vmFromCommand :: Command -> EVM.VM EVM.Concrete
 vmFromCommand opts =

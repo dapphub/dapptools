@@ -99,6 +99,33 @@ isUnitTestContract :: Text -> DappInfo -> Bool
 isUnitTestContract name dapp =
   elem name (map fst (view dappUnitTests dapp))
 
+mkVty :: IO Vty.Vty
+mkVty = do
+  vty <- Vty.mkVty Vty.defaultConfig
+  Vty.setMode (Vty.outputIface vty) Vty.BracketedPaste True
+  return vty
+
+runFromVM :: VM Concrete -> IO ()
+runFromVM vm = do
+  let
+    ui0 = UiVmState
+           { _uiVm = vm
+           , _uiVmContinuation = Stop
+           , _uiVmStackList = undefined
+           , _uiVmBytecodeList = undefined
+           , _uiVmTraceList = undefined
+           , _uiVmSolidityList = undefined
+           , _uiVmSolc = Nothing
+           , _uiVmDapp = Nothing
+           , _uiVmStepCount = 0
+           , _uiVmFirstState = undefined
+           , _uiVmMessage = Just "Executing EVM code"
+           }
+    ui1 = updateUiVmState ui0 vm & set uiVmFirstState ui1
+
+  _ <- customMain mkVty Nothing app (UiVmScreen ui1)
+  return ()
+
 main :: FilePath -> FilePath -> IO ()
 main root jsonFilePath = do
   readSolc jsonFilePath >>=
@@ -109,11 +136,6 @@ main root jsonFilePath = do
         let
           solcs     = Map.elems contractMap
           unitTests = findUnitTests solcs
-
-          mkVty = do
-            vty <- Vty.mkVty Vty.defaultConfig
-            Vty.setMode (Vty.outputIface vty) Vty.BracketedPaste True
-            return vty
 
           dappInfo = DappInfo
               { _dappRoot       = root
