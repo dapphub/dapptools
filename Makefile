@@ -2,13 +2,12 @@ all: default.nix nix; cabal build
 
 default.nix: hsevm.cabal; cabal2nix . > default.nix
 
-nix: default.nix hsevm.nix
-	nix-shell -A hsevm.env hsevm.nix --command \
-	  'cabal configure --enable-tests'
+nix: default.nix shell.nix
+	nix-shell --command 'cabal configure --enable-tests'
 
-nix-profiling: default.nix hsevm.nix
-	nix-shell -A hsevmProfiling.env hsevm.nix \
-	  --command 'cabal configure --enable-profiling'
+# nix-profiling: default.nix hsevm.nix
+# 	nix-shell -A hsevmProfiling.env hsevm.nix \
+# 	  --command 'cabal configure --enable-profiling'
 
 docker:; docker build -t dapphub/hsevm .
 
@@ -16,3 +15,7 @@ docker:; docker build -t dapphub/hsevm .
 hsevm-linux-x64: docker
 	docker run --rm dapphub/hsevm cat /bin/hsevm > $@
 	chmod +x $@
+
+PORT ?= 8001
+BROWSER ?= chromium
+hoogle-server:; nix-shell --run 'hoogle server --local -p $(PORT)'
