@@ -679,6 +679,7 @@ exec1 = do
                 assign callvalue xValue
                 assign caller (the state contract)
                 assign contract (num xTo)
+                assign memorySize 0
               zoom (env . contracts) $ do
                 ix self      . balance -= xValue
                 ix (num xTo) . balance += xValue
