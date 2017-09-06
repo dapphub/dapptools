@@ -14,8 +14,8 @@
 ###
 ###    -F, --from=<sender>        account to send transaction from
 ###    -G, --gas=<number>         number of gas units to provide
-###        --gas-price=<number>   price (in wei) of each gas unit
-###        --nonce=<number>       nonce value to use for the transaction
+###    -P, --gas-price=<number>   price (in wei) of each gas unit
+###    -N, --nonce=<number>       nonce value to use for the transaction
 ###    -V, --value=<number>       amount (in wei) of ETH to send
 ###
 ### Options for seth-call(1):
@@ -43,8 +43,8 @@ rpc-port=port        JSON-RPC port (default: \`8545')
   Transaction options:
 F,from=address       account to send transaction from
 G,gas=number         number of gas units to provide
-gas-price=number     price (in wei) of each gas unit
-nonce=number         nonce value to use for the transaction
+P,gas-price=number   price (in wei) of each gas unit
+N,nonce=number       nonce value to use for the transaction
 V,value=number       amount (in wei) of ETH to send
 
   Options for seth-call(1):
@@ -85,8 +85,8 @@ while [[ $1 ]]; do
     -B|--block)      shift; export ETH_BLOCK=$1;;
     -F|--from)       shift; export ETH_FROM=$1;;
     -G|--gas)        shift; export ETH_GAS=$1;;
-       --gas-price)  shift; export ETH_GAS_PRICE;;
-       --nonce)      shift; export ETH_NONCE=$1;;
+    -P|--gas-price)  shift; export ETH_GAS_PRICE=$1;;
+    -N|--nonce)      shift; export ETH_NONCE=$1;;
     -V|--value)      shift; export ETH_VALUE=$1;;
 
        --create)            export SETH_CREATE=yes;;

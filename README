@@ -44,8 +44,8 @@ OPTIONS
 
    -F, --from=<sender>        account to send transaction from
    -G, --gas=<number>         number of units of gas to provide
-       --gas-price=<amount>   price of each gas unit (in wei)
-       --nonce=<number>       nonce value to use for the transaction
+   -P, --gas-price=<amount>   price of each gas unit (in wei)
+   -N, --nonce=<number>       nonce value to use for the transaction
    -V, --value=<amount>       amount of ether to send (in wei)
 
        --rpc-host=<host>      RPC endpoint host (default: `localhost')
