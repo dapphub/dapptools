@@ -37,7 +37,8 @@ import qualified Data.ByteString.Lazy   as LazyByteString
 import qualified Data.Map               as Map
 import qualified Options.Generic        as Options
 
-import qualified EVM.TreeDump as TreeDump
+import qualified EVM.Facts     as Facts
+import qualified EVM.Facts.Git as Git
 
 -- This record defines the program's command-line options
 -- automatically via the `optparse-generic` package.
@@ -111,7 +112,7 @@ launchExec opts = do
   vm1 <- case state opts of
     Nothing -> pure vm
     Just path ->
-      TreeDump.applyRepo path vm
+      Facts.apply vm <$> Git.loadFacts (Git.RepoAt path)
 
   case optsMode opts of
     Run ->
@@ -127,7 +128,7 @@ launchExec opts = do
           case state opts of
             Nothing -> pure ()
             Just path ->
-              TreeDump.commitVm (TreeDump.RepoAt path) vm'
+              Git.saveFacts (Git.RepoAt path) (Facts.vmFacts vm')
     Debug ->
       EVM.TTY.runFromVM vm
 

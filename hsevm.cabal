@@ -32,7 +32,8 @@ library
     EVM.TTY,
     EVM.TTYCenteredList,
     EVM.Types,
-    EVM.TreeDump,
+    EVM.Facts,
+    EVM.Facts.Git,
     EVM.UnitTest,
     EVM.VMTest
   ghc-options:

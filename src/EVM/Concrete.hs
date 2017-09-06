@@ -148,6 +148,12 @@ instance Show (Word Concrete) where
   show (C Dull x) = show x
   show (C whiff x) = show whiff ++ ": " ++ show x
 
+instance Read (Word Concrete) where
+  readsPrec n s =
+    case readsPrec n s of
+      [(x, r)] -> [(C Dull x, r)]
+      _ -> []
+
 instance Bits (Word Concrete) where
   (C _ x) .&. (C _ y) = w256 (x .&. y)
   (C _ x) .|. (C _ y) = w256 (x .|. y)
