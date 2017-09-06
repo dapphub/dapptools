@@ -13,17 +13,18 @@ import EVM.Facts (Fact (..), File (..), Path (..), Data (..))
 import EVM.Facts (fileToFact, factToFile)
 
 import Control.Monad.IO.Class (MonadIO, liftIO)
-import Data.Foldable (toList)
-import Data.Maybe (catMaybes)
-import Data.Set (Set)
-import Data.Text (Text)
-import Data.Time.LocalTime (getZonedTime)
-import Git.Libgit2 (lgFactory)
+import Data.Foldable          (toList)
+import Data.Maybe             (catMaybes)
+import Data.Monoid            ((<>))
+import Data.Set               (Set)
+import Data.Text              (Text)
+import Data.Time.LocalTime    (getZonedTime)
+import Git.Libgit2            (lgFactory)
 
-import qualified Data.ByteString as BS
-import qualified Data.Set as Set
-import qualified Git as Git
-import qualified Git.Libgit2 as Git (MonadLg)
+import qualified Data.ByteString  as BS
+import qualified Data.Set         as Set
+import qualified Git              as Git
+import qualified Git.Libgit2      as Git (MonadLg)
 
 newtype RepoAt = RepoAt String
   deriving (Eq, Ord, Show)
@@ -34,7 +35,7 @@ treeFromFiles
 treeFromFiles (toList -> xs) = do
   let names = map (slashPath . filePath) xs
   blobs <-
-    mapM (Git.createBlob . Git.BlobString . dataASCII . fileData) xs
+    mapM (Git.createBlob . Git.BlobString . (<> "\n") . dataASCII . fileData) xs
   Git.createTree (mapM_ (uncurry Git.putBlob) (zip names blobs))
 
 slashPath :: Path -> Git.RawFilePath

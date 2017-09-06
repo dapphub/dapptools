@@ -123,8 +123,11 @@ launchExec opts = do
         Just (EVM.VMFailure e) -> do
           die (show e)
         Just (EVM.VMSuccess (EVM.B x)) -> do
-          ByteString.putStr (BS16.encode x)
-          putStrLn ""
+          let hex = BS16.encode x
+          if ByteString.null hex then pure ()
+            else do
+              ByteString.putStr hex
+              putStrLn ""
           case state opts of
             Nothing -> pure ()
             Just path ->
