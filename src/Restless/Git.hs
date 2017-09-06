@@ -62,7 +62,11 @@ make dst = do
   shelly . silently $ do
     let git xs = run_ "git" (["-C", pack dst] ++ xs)
     git ["init"]
-    git ["commit", "-am", "init", "--allow-empty"]
+    git $
+      [ "-c", "user.email=git@example.com"
+      , "-c", "user.name=Restless Git"
+      , "commit", "-am", "init", "--allow-empty"
+      ]
 
 save
   :: (Monad m, MonadIO m)
