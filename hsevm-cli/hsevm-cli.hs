@@ -11,6 +11,7 @@
 import qualified EVM as EVM
 import qualified EVM.Concrete as EVM
 import qualified EVM.TTY as EVM.TTY
+import EVM.Machine (w256)
 
 #if MIN_VERSION_aeson(1, 0, 0)
 import qualified EVM.VMTest as VMTest
@@ -137,21 +138,24 @@ launchExec opts = do
 
 vmFromCommand :: Command -> EVM.VM EVM.Concrete
 vmFromCommand opts =
-  EVM.makeVm $ EVM.VMOpts
-    { EVM.vmoptCode       = hexByteString "--code" (code opts)
-    , EVM.vmoptCalldata   = maybe "" (hexByteString "--calldata")
-                              (calldata opts)
-    , EVM.vmoptValue      = word value 0
-    , EVM.vmoptAddress    = addr address 1
-    , EVM.vmoptCaller     = addr caller 2
-    , EVM.vmoptOrigin     = addr origin 3
-    , EVM.vmoptCoinbase   = addr coinbase 0
-    , EVM.vmoptNumber     = word number 0
-    , EVM.vmoptTimestamp  = word timestamp 0
-    , EVM.vmoptGaslimit   = word gaslimit 0
-    , EVM.vmoptDifficulty = word difficulty 0
-    }
+  vm1 & EVM.env . EVM.contracts . ix address' . EVM.balance +~ (w256 value')
   where
+    value'   = word value 0
+    address' = addr address 1
+    vm1 = EVM.makeVm $ EVM.VMOpts
+      { EVM.vmoptCode       = hexByteString "--code" (code opts)
+      , EVM.vmoptCalldata   = maybe "" (hexByteString "--calldata")
+                                (calldata opts)
+      , EVM.vmoptValue      = value'
+      , EVM.vmoptAddress    = address'
+      , EVM.vmoptCaller     = addr caller 2
+      , EVM.vmoptOrigin     = addr origin 3
+      , EVM.vmoptCoinbase   = addr coinbase 0
+      , EVM.vmoptNumber     = word number 0
+      , EVM.vmoptTimestamp  = word timestamp 0
+      , EVM.vmoptGaslimit   = word gaslimit 0
+      , EVM.vmoptDifficulty = word difficulty 0
+      }
     word f def = maybe def id (f opts)
     addr f def = maybe def id (f opts)
 
