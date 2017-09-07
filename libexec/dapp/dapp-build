@@ -11,9 +11,12 @@ if [[ $remappings ]]; then
   while read -r line; do opts+=("$line"); done <<<"$remappings"
 fi
 
-shopt -s nullglob
-for x in "${DAPP_SRC}"/*.sol; do
-  (set -x; solc "${opts[@]}" --abi --bin --bin-runtime = -o "$DAPP_OUT" "$x")
-  json_file=$DAPP_OUT/${x#$DAPP_SRC}.json
+find "${DAPP_SRC}" -name '*.sol' | while read -r x; do
+  dir=${x%\/*}
+  dir=${dir#$DAPP_SRC}
+  dir=${dir#/}
+  mkdir -p "$DAPP_OUT/$dir"
+  (set -x; solc "${opts[@]}" --abi --bin --bin-runtime = -o "$DAPP_OUT/$dir" "$x")
+  json_file=$DAPP_OUT/$dir/${x##*/}.json
   (set -x; solc "${opts[@]}" "${json_opts[@]}" = "$x" >"$json_file")
 done

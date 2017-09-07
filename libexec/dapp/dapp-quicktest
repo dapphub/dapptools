@@ -9,6 +9,7 @@ var PROGRAM_ARGS = process.argv.slice(2)
 
 var BigNumber = require("bignumber.js")
 var ethabi = require("ethereumjs-abi")
+var fs = require("fs")
 
 BigNumber.config({ DECIMAL_PLACES: 36 })
 
@@ -49,26 +50,39 @@ for (var i = 0; i < PROGRAM_ARGS.length; i++) {
   }
 }
 
+
+function readdirSyncr(path, files=[]){
+  fs.readdirSync(path).map(file => {
+    var nextpath = path + '/' + file;
+    if (fs.lstatSync(nextpath).isDirectory()) {
+      readdirSyncr(nextpath, files);
+    } else {
+      files.push(nextpath);
+    }
+  });
+  return files;
+}
+
 var classesJSON
 
 if (inputFiles.length >= 1 && (
-  require("fs").lstatSync(inputFiles[0]).isDirectory()
+  fs.lstatSync(inputFiles[0]).isDirectory()
 )) {
   classesJSON = {
     contracts: Object.assign({
-    }, ...require("fs").readdirSync(inputFiles[0]).filter(x => {
+    }, ...readdirSyncr(inputFiles[0]).filter(x => {
       return /\.abi$/.test(x)
     }).map(x => {
-      var filename = `${inputFiles[0]}/${x}`
+      var filename = `${x}`
       return {
         [x.replace(/\.abi$/, "")]: {
-          abi: require("fs").readFileSync(
+          abi: fs.readFileSync(
             filename, { encoding: "utf-8" }
           ),
-          bin: require("fs").readFileSync(
+          bin: fs.readFileSync(
             `${filename.replace(/abi$/, "bin")}`, { encoding: "utf-8" }
           ),
-          "bin-runtime": require("fs").readFileSync(
+          "bin-runtime": fs.readFileSync(
             `${filename.replace(/abi$/, "bin-runtime")}`, {
               encoding: "utf-8"
             }
@@ -84,9 +98,9 @@ if (inputFiles.length >= 1 && (
 // extra bytecode to deploy via ethrun
 var extraBytecode = []
 if (inputFiles.length > 1 && (
-  require("fs").lstatSync(inputFiles[0]).isDirectory()
+  fs.lstatSync(inputFiles[0]).isDirectory()
 )) {
-  const readBytes = f => require("fs").readFileSync(f, { encoding: "utf-8"})
+  const readBytes = f => fs.readFileSync(f, { encoding: "utf-8"})
   extraBytecode = inputFiles.slice(1).map(readBytes)
 }
 
