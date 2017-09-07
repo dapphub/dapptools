@@ -65,6 +65,7 @@ set -e
 if ! [[ $SETH_INIT ]]; then
   export SETH_INIT=1
   [[ -e ~/.sethrc ]] && . ~/.sethrc
+  [[ $(pwd) != ~ && -e .sethrc ]] && . .sethrc
 fi
 
 if [[ $2 = --help ]]; then
