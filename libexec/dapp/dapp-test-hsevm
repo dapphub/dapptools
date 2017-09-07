@@ -2,6 +2,6 @@
 set -e
 shopt -s nullglob
 
-for x in "${DAPP_OUT?}"/*.t.sol.json; do
+find "${DAPP_OUT?}" -name '*.t.sol.json' | while read -r x; do
   hsevm dapp-test --json-file="$x" --dapp-root=.
 done
