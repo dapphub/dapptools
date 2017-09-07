@@ -1,7 +1,7 @@
 name:
   hsevm
 version:
-  0.6.5
+  0.7
 synopsis:
   Ethereum virtual machine evaluator
 homepage:
