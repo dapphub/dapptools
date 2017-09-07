@@ -27,9 +27,9 @@ import Control.Lens
 import Control.Monad              (unless)
 import Control.Monad.State.Strict (execState)
 import Data.ByteString            (ByteString)
-import Data.List                  (intercalate)
+import Data.List                  (intercalate, isSuffixOf)
 import Data.Maybe                 (fromMaybe)
-import System.Directory           (withCurrentDirectory)
+import System.Directory           (withCurrentDirectory, listDirectory)
 import System.Exit                (die)
 import System.IO                  (hFlush, stdout)
 
@@ -61,12 +61,12 @@ data Command
       , state      :: Maybe String
       }
   | DappTest
-      { jsonFile :: String
+      { jsonFile :: Maybe String
       , dappRoot :: Maybe String
       , debug    :: Bool
       }
   | Interactive
-      { jsonFile :: String
+      { jsonFile :: Maybe String
       , dappRoot :: Maybe String
       }
   | VmTest
@@ -93,11 +93,33 @@ main = do
     VmTest {} ->
       launchVMTest opts
     DappTest {} ->
-      withCurrentDirectory root $
-        dappTest (optsMode opts) (jsonFile opts)
+      withCurrentDirectory root $ do
+        testFile <- findTestFile (jsonFile opts)
+        dappTest (optsMode opts) testFile
     Interactive {} ->
-      withCurrentDirectory root $
-        EVM.TTY.main root (jsonFile opts)
+      withCurrentDirectory root $ do
+        testFile <- findTestFile (jsonFile opts)
+        EVM.TTY.main root testFile
+
+findTestFile :: Maybe String -> IO String
+findTestFile (Just s) = pure s
+findTestFile Nothing = do
+  outFiles <- listDirectory "out"
+  case filter (isSuffixOf ".t.sol.json") outFiles of
+    [x] -> pure ("out/" ++ x)
+    [] ->
+      error $ concat
+        [ "No `*.t.sol.json' file found in `./out'.\n"
+        , "Maybe you need to run `dapp build'.\n"
+        , "You can specify a file with `--json-file'."
+        ]
+    xs ->
+      error $ concat
+        [ "Multiple `*.t.sol.json' files found in `./out'.\n"
+        , "Specify one using `--json-file'.\n"
+        , "Files found: "
+        , intercalate ", " xs
+        ]
 
 dappTest :: Mode -> String -> IO ()
 dappTest mode solcFile = do
