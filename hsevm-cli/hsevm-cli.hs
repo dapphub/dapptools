@@ -20,7 +20,7 @@ import qualified EVM.VMTest as VMTest
 import EVM.Debug
 import EVM.Exec
 import EVM.Solidity
-import EVM.Types
+import EVM.Types hiding (word)
 import EVM.UnitTest
 
 import Control.Lens
@@ -28,6 +28,7 @@ import Control.Monad              (unless)
 import Control.Monad.State.Strict (execState)
 import Data.ByteString            (ByteString)
 import Data.List                  (intercalate)
+import Data.Maybe                 (fromMaybe)
 import System.Directory           (withCurrentDirectory)
 import System.Exit                (die)
 import System.IO                  (hFlush, stdout)
@@ -61,12 +62,12 @@ data Command
       }
   | DappTest
       { jsonFile :: String
-      , dappRoot :: String
+      , dappRoot :: Maybe String
       , debug    :: Bool
       }
   | Interactive
       { jsonFile :: String
-      , dappRoot :: String
+      , dappRoot :: Maybe String
       }
   | VmTest
       { file  :: String
@@ -85,17 +86,18 @@ optsMode x = if debug x then Debug else Run
 main :: IO ()
 main = do
   opts <- Options.getRecord "hsevm -- Ethereum evaluator"
+  let root = fromMaybe "." (dappRoot opts)
   case opts of
     Exec {} ->
       launchExec opts
     VmTest {} ->
       launchVMTest opts
     DappTest {} ->
-      withCurrentDirectory (dappRoot opts) $
+      withCurrentDirectory root $
         dappTest (optsMode opts) (jsonFile opts)
     Interactive {} ->
-      withCurrentDirectory (dappRoot opts) $
-        EVM.TTY.main (dappRoot opts) (jsonFile opts)
+      withCurrentDirectory root $
+        EVM.TTY.main root (jsonFile opts)
 
 dappTest :: Mode -> String -> IO ()
 dappTest mode solcFile = do
