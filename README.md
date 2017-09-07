@@ -28,12 +28,12 @@ install `hsevm`. The channel has cached binaries for Linux and OS X.
     $ curl https://nixos.org/nix/install | sh
     $ nix-channel --add https://nix.dapphub.com/pkgs/dapphub
     $ nix-channel --update
-    $ nix-env -i hsevm
+    $ nix-env -iA dapphub.hsevm
 
 This Nix channel can also be used to install
 [`dapp`](https://github.com/dapphub/dapp), our development tool:
 
-    $ nix-env -i dapp
+    $ nix-env -iA dapphub.dapp
 
 ### Static binary
 
