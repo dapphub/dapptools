@@ -19,7 +19,7 @@ import Data.Maybe             (catMaybes)
 import Data.Set               (Set)
 import Data.Text              (Text, pack)
 import Data.Time.LocalTime    (ZonedTime, getZonedTime)
-import Git.Libgit2            (lgFactory)
+import Git.CmdLine            (cliFactory)
 import Shelly                 (shelly, silently, run_)
 
 import qualified Data.ByteString  as BS
@@ -72,7 +72,7 @@ save
   :: (Monad m, MonadIO m)
   => FilePath -> Metadata -> Set File -> m ()
 save dst meta files = do
-  liftIO . Git.withRepository lgFactory dst $ do
+  liftIO . Git.withRepository cliFactory (dst ++ "/.git") $ do
     let sig = signature meta
 
     tree <-
@@ -89,7 +89,7 @@ save dst meta files = do
 
 load :: (Monad m, MonadIO m) => FilePath -> m (Set File)
 load src =
-  liftIO . Git.withRepository lgFactory src $ do
+  liftIO . Git.withRepository cliFactory (src ++ "/.git") $ do
     Just (Git.RefObj root) <- Git.lookupReference "refs/heads/master"
     entries <- treeAtOid root >>= Git.listTreeEntries
     fmap (Set.fromList . catMaybes) (mapM f entries)
