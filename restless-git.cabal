@@ -20,7 +20,7 @@ library
     bytestring,
     containers,
     gitlib,
-    gitlib-cmdline,
+    gitlib-libgit2,
     text,
     time,
     shelly
