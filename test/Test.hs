@@ -9,7 +9,7 @@ import Restless.Git
 
 import Control.Monad.IO.Class (liftIO)
 import Data.ByteString        (ByteString)
-import Data.Set               (Set)
+import Data.Set               (toList)
 import System.IO.Temp         (withSystemTempDirectory)
 import Test.Tasty
 import Test.Tasty.Hedgehog
@@ -27,7 +27,7 @@ main = defaultMain tests
 
 tests :: TestTree
 tests = testGroup "roundtrip"
-  [ testProperty "test 1" prop_roundtrip ]
+  [ testProperty "simple example" prop_roundtrip_example ]
 
 data Example = Example
   { foo :: Int
@@ -40,26 +40,28 @@ readBytesMaybe = readMaybe . C8.unpack
 pattern Reads :: Read a => a -> ByteString
 pattern Reads x <- (readBytesMaybe -> Just x)
 
-fromFiles :: Set File -> Example
-fromFiles = foldl f (Example 0 0)
-  where
-    f :: Example -> File -> Example
-    f x = \case
-      File (Path ["example"] "foo") (Reads foo) ->
-        x { foo }
-      File (Path ["example"] "bar") (Reads bar) ->
-        x { bar }
-      _ ->
-        x
+class Filing a where
+  fromFiles :: [File] -> a
+  toFiles   :: a -> [File]
 
-toFiles :: Example -> Set File
-toFiles Example {..} = Set.fromList
-  [ File (Path ["example"] "foo") (C8.pack (show foo))
-  , File (Path ["example"] "bar") (C8.pack (show bar))
-  ]
+instance Filing Example where
+  fromFiles = foldl f (Example 0 0)
+    where
+      f :: Example -> File -> Example
+      f x = \case
+        File (Path ["example"] "foo") (Reads foo) ->
+          x { foo }
+        File (Path ["example"] "bar") (Reads bar) ->
+          x { bar }
+        _ ->
+          x
+  toFiles Example {..} =
+    [ File (Path ["example"] "foo") (C8.pack (show foo))
+    , File (Path ["example"] "bar") (C8.pack (show bar))
+    ]
 
-prop_roundtrip :: Property
-prop_roundtrip = property $ do
+prop_roundtrip_example :: Property
+prop_roundtrip_example = property $ do
   x <- forAll $
     Example
       <$> Gen.integral (Range.linear 0 100)
@@ -67,6 +69,6 @@ prop_roundtrip = property $ do
   y <- liftIO $ withSystemTempDirectory "restless-git-test" $ \path -> do
     metadata <- Metadata "x" "y" "z" <$> now
     make path
-    save path metadata (toFiles x)
-    fromFiles <$> load path
+    save path metadata (Set.fromList (toFiles x))
+    (fromFiles . toList) <$> load path
   assert (x == y)
