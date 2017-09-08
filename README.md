@@ -37,6 +37,8 @@ This Nix channel can also be used to install
 
 ### Static binary
 
+[This isn't updated; see [issue](https://github.com/dapphub/hsevm/issues/10), will fix soon.]
+
 If you don't want to compile anything, and you're on x86-64 Linux, you
 can download a static binary from the "Releases" tab on GitHub.
 If the static binary complains about a "terminfo" file, you have to
