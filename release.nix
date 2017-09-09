@@ -1,11 +1,11 @@
-{ }:
+{}:
 
 let
   system = (system: (import ./default.nix { config = {}; inherit system; }));
   linux = system "x86_64-linux";
   darwin = system "x86_64-darwin";
 
-{
+in {
   dapphub-linux = {
     linux.pkgs.dapp
     linux.pkgs.hsevm
