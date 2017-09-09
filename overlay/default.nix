@@ -18,7 +18,7 @@ in rec {
 
   hsevm =
     self.pkgs.haskell.lib.justStaticExecutables
-      (self.pkgs.haskellPackages.callPackage ./hsevm.nix {});
+      (self.pkgs.haskellPackages.callPackage ./pkgs/hsevm.nix {});
 
   seth = callPackage ./pkgs/seth.nix {};
   dapp = callPackage ./pkgs/dapp.nix { };
