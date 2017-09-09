@@ -9,10 +9,18 @@ in {
   dapphub-linux = with linux.pkgs; {
     inherit dapp;
     inherit hsevm;
+    inherit keeper;
+    inherit setzer;
+    inherit medianizer;
+    inherit solc-versions;
   };
 
   dapphub-darwin = with darwin.pkgs; {
     inherit dapp;
     inherit hsevm;
+    # inherit keeper;
+    inherit setzer;
+    inherit medianizer;
+    inherit solc-versions;
   };
 }
