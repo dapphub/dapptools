@@ -39,6 +39,6 @@ buildPythonApplication rec {
     homepage = https://github.com/makerdao/keeper;
     license = licenses.agpl3;
     platforms = platforms.unix;
-    maintainers = with maintainers; [ mbrock ];
+    maintainers = with maintainers; [ dbrock ];
   };
 }

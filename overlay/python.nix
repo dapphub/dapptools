@@ -22,7 +22,7 @@ in rec {
       homepage = https://github.com/pipermerriam/web3.py;
       description = "A Python interface for the Ethereum blockchain";
       license = licenses.mit;
-      maintainers = with maintainers; [ mbrock ];
+      maintainers = with maintainers; [ dbrock ];
     };
   };
 
@@ -46,7 +46,7 @@ in rec {
       homepage = https://github.com/ethereum/pyethereum;
       description = "Python core library of the Ethereum project";
       license = licenses.mit;
-      maintainers = with maintainers; [ mbrock ];
+      maintainers = with maintainers; [ dbrock ];
     };
   };
 
@@ -64,7 +64,7 @@ in rec {
       homepage = https://bitbucket.org/mhallin/py-scrypt/src;
       description = "Bindings for the scrypt key derivation function";
       license = licenses.mit;
-      maintainers = with maintainers; [ mbrock ];
+      maintainers = with maintainers; [ dbrock ];
     };
   };
 
@@ -81,7 +81,7 @@ in rec {
       homepage = https://github.com/vbuterin/pybitcointools;
       description = "Bitcoin-themed Python ECC library";
       license = licenses.mit;
-      maintainers = with maintainers; [ mbrock ];
+      maintainers = with maintainers; [ dbrock ];
     };
   };
 
@@ -98,7 +98,7 @@ in rec {
       homepage = https://github.com/ethereum/ethash;
       description = "Python wrappers for the Ethereum PoW hash function";
       license = licenses.mit;
-      maintainers = with maintainers; [ mbrock ];
+      maintainers = with maintainers; [ dbrock ];
     };
   };
 
@@ -118,7 +118,7 @@ in rec {
       homepage = https://github.com/pipermerriam/ethereum-abi-utils;
       description = "Ethereum ABI utilities for Python";
       license = licenses.mit;
-      maintainers = with maintainers; [ mbrock ];
+      maintainers = with maintainers; [ dbrock ];
     };
   };
 
@@ -138,7 +138,7 @@ in rec {
       homepage = https://github.com/pipermerriam/ethereum-utils;
       description = "Ethereum utilities for Python";
       license = licenses.mit;
-      maintainers = with maintainers; [ mbrock ];
+      maintainers = with maintainers; [ dbrock ];
     };
   };
 
@@ -157,7 +157,7 @@ in rec {
       homepage = https://github.com/tiran/pysha3;
       description = "SHA-3 wrapper (Keccak) for Python";
       license = licenses.psfl;
-      maintainers = with maintainers; [ mbrock ];
+      maintainers = with maintainers; [ dbrock ];
     };
   };
 
@@ -177,7 +177,7 @@ in rec {
       homepage = https://github.com/ethereum/pyrlp;
       description = "Recursive length prefix notation for Ethereum";
       license = licenses.mit;
-      maintainers = with maintainers; [ mbrock ];
+      maintainers = with maintainers; [ dbrock ];
     };
   };
 
@@ -197,7 +197,7 @@ in rec {
       homepage = https://github.com/pipermerriam/eth-testrpc;
       description = "Used for testing Ethereum JSON-RPC interactions";
       license = licenses.mit;
-      maintainers = with maintainers; [ mbrock ];
+      maintainers = with maintainers; [ dbrock ];
     };
   };
 
@@ -214,7 +214,7 @@ in rec {
       homepage = https://github.com/pavlov99/json-rpc;
       description = "JSON-RPC2.0 and JSON-RPC1.0 transport specification implementation";
       license = licenses.mit;
-      maintainers = with maintainers; [ mbrock ];
+      maintainers = with maintainers; [ dbrock ];
     };
   };
 
@@ -233,7 +233,7 @@ in rec {
       homepage = https://github.com/msiemens/tinydb;
       description = "Pure Python lightweight document oriented database";
       license = licenses.mit;
-      maintainers = with maintainers; [ mbrock ];
+      maintainers = with maintainers; [ dbrock ];
     };
   };
 }

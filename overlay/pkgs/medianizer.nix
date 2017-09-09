@@ -22,11 +22,11 @@ stdenv.mkDerivation rec {
     wrapProgram "$out/bin/medianizer" --prefix PATH : "${path}"
   '';
 
-  meta = {
+  meta = with lib; {
     description = "Ethereum median tool";
     homepage = https://github.com/makerdao/medianizer;
-    maintainers = [stdenv.lib.maintainers.mbrock];
-    license = lib.licenses.gpl3;
+    maintainers = with maintainers; [dbrock];
+    license = licenses.gpl3;
     inherit version;
   };
 }

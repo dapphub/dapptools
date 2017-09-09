@@ -22,11 +22,11 @@ stdenv.mkDerivation rec {
     wrapProgram "$out/bin/setzer" --prefix PATH : "${path}"
   '';
 
-  meta = {
+  meta = with lib; {
     description = "Ethereum price feed tool";
     homepage = https://github.com/makerdao/setzer;
-    maintainers = [stdenv.lib.maintainers.mbrock];
-    license = lib.licenses.gpl3;
+    maintainers = with maintainers; [dbrock];
+    license = licenses.gpl3;
     inherit version;
   };
 }
