@@ -1,4 +1,4 @@
-{ .. }:
+{ ... }:
 
 let
   system = (system: (import ./default.nix { inherit system; }));
