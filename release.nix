@@ -1,7 +1,7 @@
-{}:
+{ .. }:
 
 let
-  system = (system: (import ./default.nix { config = {}; inherit system; }));
+  system = (system: (import ./default.nix { inherit system; }));
   linux = system "x86_64-linux";
   darwin = system "x86_64-darwin";
 
