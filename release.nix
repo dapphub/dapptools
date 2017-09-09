@@ -6,13 +6,13 @@ let
   darwin = system "x86_64-darwin";
 
 in {
-  dapphub-linux = {
-    linux.pkgs.dapp
-    linux.pkgs.hsevm
+  dapphub-linux = with linux.pkgs; {
+    inherit dapp;
+    inherit hsevm;
   };
 
-  dapphub-darwin = {
-    darwin.pkgs.dapp
-    darwin.pkgs.hsevm
+  dapphub-darwin = with darwin.pkgs; {
+    inherit dapp;
+    inherit hsevm;
   };
 }
