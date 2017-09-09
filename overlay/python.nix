@@ -1,4 +1,10 @@
-{ pkgs }: self: super: with super; rec {
+{ pkgs }: self: super: with super;
+
+let
+  stdenv = pkgs.stdenv;
+  fetchPypi = pkgs.pythonPackages.fetchPypi;
+
+in rec {
 
   web3 = buildPythonPackage rec {
     pname = "web3";
