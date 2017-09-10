@@ -1,23 +1,23 @@
 { stdenv, makeWrapper, lib, fetchFromGitHub
-, seth, curl, jshon
+, seth, curl, jshon, bc, gnused, which, perl
 }:
 
 stdenv.mkDerivation rec {
   name = "setzer-${version}";
-  version = "0.5.0";
+  version = "unstable-20170910";
 
   src = fetchFromGitHub {
     owner = "makerdao";
     repo = "setzer";
-    rev = "5d2d31dcdd48715107412bbd280e51d401344952";
-    sha256 = "164vvnhr5bxgzzmynggr4y3yn7x2wl95hlr95dzvmyc2vn1vk01q";
+    rev = "1d27eed63b2cf636353f39eace3f56880413aa7d";
+    sha256 = "0zfa4jz029g393ra6xr34insfb7gv8z8x8ang4rfxvvmydl2b9nk";
   };
 
   nativeBuildInputs = [makeWrapper];
   buildPhase = "true";
   makeFlags = ["prefix=$(out)"];
   postInstall = let path = lib.makeBinPath [
-    seth curl jshon
+    seth curl jshon bc gnused which perl
   ]; in ''
     wrapProgram "$out/bin/setzer" --prefix PATH : "${path}"
   '';
