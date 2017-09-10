@@ -11,7 +11,6 @@ in {
     inherit hsevm;
     inherit keeper;
     inherit setzer;
-    inherit medianizer;
     inherit solc-versions;
   };
 
@@ -20,7 +19,6 @@ in {
     inherit hsevm;
     # inherit keeper;
     inherit setzer;
-    inherit medianizer;
     inherit solc-versions;
   };
 }

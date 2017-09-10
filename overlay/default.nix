@@ -24,5 +24,4 @@ in rec {
   dapp = callPackage ./pkgs/dapp.nix { };
   setzer = callPackage ./pkgs/setzer.nix { };
   keeper = callPackage ./pkgs/keeper.nix {};
-  medianizer = callPackage ./pkgs/medianizer.nix { };
 }
