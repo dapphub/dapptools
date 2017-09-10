@@ -4,6 +4,10 @@ let mk = import ./solc.nix; in {
   ## 0.3.6 the Solc repository was not standalone and I haven't even
   ## tried getting them to build.
 
+  ## In fact 0.4.5 is the first version that compiles with our build
+  ## script.  Prior versions could probably be made to work, but for
+  ## now I disable them.
+
   ## Also note that in v0.4.9 the compiler started prefixing things
   ## with "filename:", so that's the oldest compiler some things will
   ## work with.
@@ -24,12 +28,13 @@ let mk = import ./solc.nix; in {
   # solc_0_3_4  = mk "v0.3.4" "7dab8902789b15190e39d4fed0bc46418f1ace5e" "11w51phzaac96x9gz7r2ac6wkpry9yhav6a0rahcr76rvyxmhj2b";
   # solc_0_3_5  = mk "v0.3.5" "5f97274a6cc2d9346357d69b2c4a9348cdffa7f9" "147sq3zh1cqhkinxcwv5i1la444y8bgn92fcac7xd84qddn3yd6n";
 
-  solc_0_3_6  = mk "v0.3.6" "988fe5e5aa271d89e0700d36ef0f210ca50051e3" "1lg7knx9a9488yhl2gavaq8g9ywvskp73sd31fc8ql15qf4ay83r";
-  solc_0_4_0  = mk "v0.4.0" "acd334c9d289a7cc4674dde2534d8728450cedde" "0i63bcclcs8i2j90p8l3hvmvjmad9rh8vkfz1l4w1c2501ani971";
-  solc_0_4_1  = mk "v0.4.1" "4fc6fc2ca59579fae2472df319c2d8d31fe5bde5" "0ixrkp2y49lf4av52ik6ywngmg53vigj8pk10jwd94ld1aw2bcpd";
-  solc_0_4_2  = mk "v0.4.2" "af6afb0415761b53721f89c7f65064807f41cbd3" "1086w2hkjlqh73p62nnrkcwxsiiy2q2mz3r4zgppbrn717cq68v5";
-  solc_0_4_3  = mk "v0.4.3" "2353da71c77dd235b35d16e7e024fa62408df610" "06m0zhidnd8vc56247yw7zqg6bk6girgr0cv9fh7avkfcwjpn42g";
-  solc_0_4_4  = mk "v0.4.4" "4633f3def897db0f91237f98cf46e5d84fb05e61" "1z32a9vb6rjxmg5cqpkm45xbjq6nyx9p31m7cjppqw6zljw6zjzs";
+  # solc_0_3_6  = mk "v0.3.6" "988fe5e5aa271d89e0700d36ef0f210ca50051e3" "1lg7knx9a9488yhl2gavaq8g9ywvskp73sd31fc8ql15qf4ay83r";
+  # solc_0_4_0  = mk "v0.4.0" "acd334c9d289a7cc4674dde2534d8728450cedde" "0i63bcclcs8i2j90p8l3hvmvjmad9rh8vkfz1l4w1c2501ani971";
+  # solc_0_4_1  = mk "v0.4.1" "4fc6fc2ca59579fae2472df319c2d8d31fe5bde5" "0ixrkp2y49lf4av52ik6ywngmg53vigj8pk10jwd94ld1aw2bcpd";
+  # solc_0_4_2  = mk "v0.4.2" "af6afb0415761b53721f89c7f65064807f41cbd3" "1086w2hkjlqh73p62nnrkcwxsiiy2q2mz3r4zgppbrn717cq68v5";
+  # solc_0_4_3  = mk "v0.4.3" "2353da71c77dd235b35d16e7e024fa62408df610" "06m0zhidnd8vc56247yw7zqg6bk6girgr0cv9fh7avkfcwjpn42g";
+  # solc_0_4_4  = mk "v0.4.4" "4633f3def897db0f91237f98cf46e5d84fb05e61" "1z32a9vb6rjxmg5cqpkm45xbjq6nyx9p31m7cjppqw6zljw6zjzs";
+
   solc_0_4_5  = mk "v0.4.5" "b318366e6f16ed6a4274247d09badac4affff8d5" "1lnmbqv4qqdc6077i27471mg9sr34d4wd9505w8wj94scjq3mpxm";
   solc_0_4_6  = mk "v0.4.6" "2dabbdf06f414750ef0425c664f861aeb3e470b8" "0q1dvizx60f7l97w8241wra7vpghimc9x7gzb18vn34sxv4bqy9g";
   solc_0_4_7  = mk "v0.4.7" "822622cf5bf23e79a6e2292cb837d1a39ca1c419" "1x2s9gi9y8h03j7nv6wyjjbw74vnzzhr206nik0qasyajgrb0sk2";
