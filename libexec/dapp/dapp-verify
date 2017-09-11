@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+set -e
+bin=$DAPP_OUT/${1?missing contract name}.bin-runtime
+dbin=$(seth code ${2?missing contract address} | cut -c 3-)
+diff -w <(echo $dbin) $bin && echo true && exit
+echo false && exit 1
