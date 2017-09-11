@@ -21,7 +21,7 @@ in rec {
       (self.pkgs.haskellPackages.callPackage ./pkgs/hsevm.nix {});
 
   seth = callPackage ./pkgs/seth.nix {};
-  dapp = callPackage ./pkgs/dapp.nix { };
-  setzer = callPackage ./pkgs/setzer.nix { };
+  dapp = callPackage ./pkgs/dapp.nix {};
+  setzer = callPackage ./pkgs/setzer.nix {};
   keeper = callPackage ./pkgs/keeper.nix {};
 }
