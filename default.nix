@@ -3,7 +3,7 @@
 }:
 mkDerivation {
   pname = "restless-git";
-  version = "1.0";
+  version = "1.1";
   src = ./.;
   libraryHaskellDepends = [
     base bytestring containers HSH text time
