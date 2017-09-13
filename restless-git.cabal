@@ -19,11 +19,9 @@ library
     base == 4.*,
     bytestring,
     containers,
-    gitlib,
-    gitlib-libgit2,
     text,
     time,
-    shelly
+    HSH
 
 test-suite test
   default-language: Haskell2010
@@ -35,9 +33,8 @@ test-suite test
     base,
     bytestring,
     containers,
-    hedgehog,
     restless-git,
     tasty,
-    tasty-hedgehog,
+    tasty-hunit,
     temporary,
     text

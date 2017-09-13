@@ -1,32 +1,85 @@
+{-# Language DeriveFunctor #-}
+{-# Language LambdaCase #-}
+{-# Language OverloadedStrings #-}
 {-# Language RecordWildCards #-}
 {-# Language ViewPatterns #-}
-{-# Language OverloadedStrings #-}
 
 module Restless.Git
   ( Path (..)
   , File (..)
-  , Metadata (..)
-  , now
   , make
   , save
   , load
   ) where
 
+import Control.Monad          (void)
 import Control.Monad.IO.Class (MonadIO, liftIO)
 import Data.ByteString        (ByteString)
 import Data.Foldable          (toList)
-import Data.Maybe             (catMaybes)
+import Data.Map               (Map)
+import Data.Monoid            ((<>))
 import Data.Set               (Set)
-import Data.Text              (Text, pack)
-import Data.Time.LocalTime    (ZonedTime, getZonedTime)
-import Git.Libgit2            (lgFactory)
-import Shelly                 (shelly, silently, run_)
+import Data.Text              (Text, unpack)
+import Data.Text.Encoding     (decodeUtf8)
+import HSH                    (run, (-|-))
 
 import qualified Data.ByteString  as BS
 import qualified Data.Set         as Set
-import qualified Git              as Git
+import qualified Data.Map         as Map
 
-defaultRef :: Text
+data Tree a = Tree (Map ByteString (Tree a)) (Map ByteString a)
+  deriving (Functor, Show)
+
+instance Monoid (Tree a) where
+  mempty =
+    Tree mempty mempty
+  mappend (Tree a b) (Tree c d) =
+    Tree (Map.unionWith mappend a c)
+         (Map.union b d)
+
+treeFromFiles :: Foldable t => t File -> Tree ByteString
+treeFromFiles = foldMap singletonTree . toList
+
+singletonTree :: File -> Tree ByteString
+singletonTree (File {..}) =
+  case filePath of
+    Path [] name ->
+      Tree mempty (Map.singleton name fileData)
+    Path (x:xs) name ->
+      let subtree = singletonTree (File (Path xs name) fileData)
+      in Tree (Map.singleton x subtree) mempty
+
+data ObjectType = TreeObject | BlobObject
+  deriving Show
+
+newtype SHA1 = SHA1 ByteString
+  deriving Show
+
+data MkTree =
+  MkTree (Map ByteString (ObjectType, SHA1))
+  deriving Show
+
+serializeMkTree :: MkTree -> ByteString
+serializeMkTree (MkTree m) =
+  mconcat . map (uncurry mkTreeLine) . Map.toList $ m
+
+mkTreeLine :: ByteString -> (ObjectType, SHA1) -> ByteString
+mkTreeLine name (TreeObject, SHA1 sha1) =
+  "040000 tree " <> sha1 <> "\t" <> name <> "\0"
+mkTreeLine name (BlobObject, SHA1 sha1) =
+  "100644 blob " <> sha1 <> "\t" <> name <> "\0"
+
+saveTree :: FilePath -> Tree ByteString -> IO SHA1
+saveTree dst (Tree folders files) = do
+  trees <- mapM (fmap ((,) TreeObject) . saveTree dst) folders
+  blobs <- mapM (fmap ((,) BlobObject) . createBlob dst) files
+  let input = serializeMkTree (MkTree (trees <> blobs))
+  asSHA1 <$> run ((\() -> input) -|- git' dst "mktree" ["-z"])
+
+asSHA1 :: ByteString -> SHA1
+asSHA1 = SHA1 . fst . BS.break (== 0xa)
+
+defaultRef :: String
 defaultRef = "refs/heads/master"
 
 -- A fact path means something like "/0123...abc/storage/0x1",
@@ -38,94 +91,73 @@ data Path = Path [ByteString] ByteString
 data File = File { filePath :: Path, fileData :: ByteString }
   deriving (Eq, Ord, Show)
 
-data Metadata = Metadata
-  { message :: Text
-  , name    :: Text
-  , email   :: Text
-  , time    :: ZonedTime
-  } deriving (Show, Read)
-
-signature :: Metadata -> Git.Signature
-signature Metadata {..} = Git.Signature
-  { Git.signatureName = name
-  , Git.signatureEmail = email
-  , Git.signatureWhen = time
-  }
-
-now :: MonadIO m => m ZonedTime
-now = liftIO getZonedTime
+git :: String -> String -> [String] -> IO ByteString
+git repo cmd args = do
+  x <- run $ ("git" :: String, ["-C", repo] ++ (cmd : args))
+  return x
 
 make
   :: (Monad m, MonadIO m)
   => FilePath -> m ()
-make dst = do
-  shelly . silently $ do
-    let git xs = run_ "git" (["-C", pack dst] ++ xs)
-    git ["init"]
-    git $
-      [ "-c", "user.email=git@example.com"
-      , "-c", "user.name=Restless Git"
-      , "commit", "-am", "init", "--allow-empty"
-      ]
+make repo = liftIO $ do
+  void $ git repo "init" []
+  void $ git repo "commit" ["-am", "initialize", "--allow-empty"]
 
 save
   :: (Monad m, MonadIO m)
-  => FilePath -> Metadata -> Set File -> m ()
-save dst meta files = do
-  liftIO . Git.withRepository lgFactory dst $ do
-    let sig = signature meta
+  => FilePath -> Text -> Set File -> m ()
+save dst message files = liftIO $ do
+  tree <-
+    saveTree dst (treeFromFiles files)
+  parent <-
+    latestCommitOid dst defaultRef
+  commit <-
+    createCommit dst parent tree (unpack message)
 
-    tree <-
-      treeFromFiles files
-    parent <-
-      latestCommitOid defaultRef
-    commit <-
-      Git.createCommit [parent] tree sig sig (message meta) Nothing
+  updateReference dst defaultRef commit
 
-    let target = Git.commitRefTarget commit
-    Git.updateReference defaultRef target
+  return ()
 
-    return ()
+sha1String :: SHA1 -> String
+sha1String (SHA1 bs) = unpack (decodeUtf8 bs)
 
-load :: (Monad m, MonadIO m) => FilePath -> m (Set File)
-load src =
-  liftIO . Git.withRepository lgFactory src $ do
-    Just (Git.RefObj root) <- Git.lookupReference "refs/heads/master"
-    entries <- treeAtOid root >>= Git.listTreeEntries
-    fmap (Set.fromList . catMaybes) (mapM f entries)
-  where
-    f (k, (Git.BlobEntry oid _)) =
-      case BS.split 0x2f k of
-        [] ->
-          -- Empty file name...
-          return Nothing
-        parts -> do
-          bytes <- Git.catBlob oid
-          return $
-            Just (File (Path (init parts) (last parts)) bytes)
-    f _ =
-      -- Not a git blob...
-      return Nothing
+createCommit :: FilePath -> SHA1 -> SHA1 -> String -> IO SHA1
+createCommit dst parent tree message =
+  asSHA1 <$>
+    git dst "commit-tree"
+      ["-p", sha1String parent, "-m", message, sha1String tree]
 
-treeFromFiles
-  :: (Foldable t, Git.MonadGit r m, MonadIO m, Monad m)
-  => t File -> m (Git.TreeOid r)
-treeFromFiles (toList -> xs) = do
-  let names = map (slashPath . filePath) xs
-  blobs <-
-    mapM (Git.createBlob . Git.BlobString . fileData) xs
-  Git.createTree (mapM_ (uncurry Git.putBlob) (zip names blobs))
+updateReference :: String -> String -> SHA1 -> IO ()
+updateReference dst ref next =
+  void $ git dst "update-ref" [ref, sha1String next]
 
-slashPath :: Path -> Git.RawFilePath
-slashPath (Path xs x) = BS.intercalate "/" (xs ++ [x])
+git' :: FilePath -> String -> [String] -> (String, [String])
+git' repo cmd args =
+  ("git" :: String, ["-C", repo] ++ (cmd : args))
 
-latestCommitOid :: Git.MonadGit r m => Git.RefName -> m (Git.CommitOid r)
-latestCommitOid ref = do
-  Just (Git.RefObj oid) <- Git.lookupReference ref
-  Git.CommitObj commit <- Git.lookupObject oid
-  return (Git.commitOid commit)
+createBlob :: String -> ByteString -> IO SHA1
+createBlob dst bytes =
+  asSHA1 <$> run ((\() -> bytes) -|- git' dst "hash-object" ["--stdin", "-w"])
 
-treeAtOid :: Git.MonadGit r m => Git.Oid r -> m (Git.Tree r)
-treeAtOid oid = do
-  Git.CommitObj commit <- Git.lookupObject oid
-  Git.lookupTree (Git.commitTree commit)
+load :: (Monad m, MonadIO m) => String -> m (Set File)
+load src = liftIO $ do
+  ls <- git src "ls-tree" ["-r", "-z", defaultRef]
+  Set.fromList <$> mapM (loadFile src) (filter (/= "") (BS.split 0 ls))
+
+loadFile :: FilePath -> ByteString -> IO File
+loadFile src line = do
+  let
+    (a, b) = BS.splitAt 52 line
+    sha1   = SHA1 (BS.drop 12 a)
+    name   = BS.take (BS.length b - 1) (BS.drop 1 b)
+    path   =
+      case BS.split 0x2f name of
+        []    -> error "empty file name"
+        parts -> Path (init parts) (last parts)
+
+  bytes <- git src "cat-file" ["blob", sha1String sha1]
+  return (File path bytes)
+
+latestCommitOid :: FilePath -> String -> IO SHA1
+latestCommitOid dst ref =
+  asSHA1 <$> git dst "rev-parse" [ref]
