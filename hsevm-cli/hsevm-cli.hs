@@ -137,6 +137,9 @@ launchExec opts = do
   vm1 <- case state opts of
     Nothing -> pure vm
     Just path ->
+      -- Note: this will load the code, so if you've specified a state
+      -- repository, then you effectively can't change `--code' after
+      -- the first run.
       Facts.apply vm <$> Git.loadFacts (Git.RepoAt path)
 
   case optsMode opts of
