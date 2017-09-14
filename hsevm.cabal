@@ -28,6 +28,8 @@ library
     EVM.Exec,
     EVM.Facts,
     EVM.Facts.Git,
+    EVM.FeeSchedule,
+    EVM.Op,
     EVM.Keccak,
     EVM.Machine,
     EVM.Solidity,

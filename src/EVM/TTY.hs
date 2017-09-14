@@ -14,6 +14,7 @@ import EVM.Concrete (Concrete, Blob (..), Word (C))
 import EVM.Debug
 import EVM.Exec
 import EVM.Machine (Machine)
+import EVM.Op
 import EVM.Solidity
 import EVM.Types
 import EVM.UnitTest
