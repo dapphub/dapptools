@@ -1,3 +1,7 @@
+{-| This module defines a simple way to serialize state as a nested file
+  hierarchy saved in a Git repository.
+-}
+
 {-# Language DeriveFunctor #-}
 {-# Language LambdaCase #-}
 {-# Language OverloadedStrings #-}
@@ -27,6 +31,15 @@ import qualified Data.ByteString  as BS
 import qualified Data.Set         as Set
 import qualified Data.Map         as Map
 
+-- | A fact path is something like "\/0123...abc\/storage\/0x1".
+-- It has some number of directories and a file name.
+data Path = Path [ByteString] ByteString
+  deriving (Eq, Ord, Show)
+
+-- | A file is a serialized value with a path.
+data File = File { filePath :: Path, fileData :: ByteString }
+  deriving (Eq, Ord, Show)
+
 data Tree a = Tree (Map ByteString (Tree a)) (Map ByteString a)
   deriving (Functor, Show)
 
@@ -36,6 +49,40 @@ instance Monoid (Tree a) where
   mappend (Tree a b) (Tree c d) =
     Tree (Map.unionWith mappend a c)
          (Map.union b d)
+
+-- | Initialize an empty repository at the given path.
+make
+  :: (Monad m, MonadIO m)
+  => FilePath -> m ()
+make repo = liftIO $ do
+  void $ git repo "init" []
+  void $ git repo "commit" ["-am", "initialize", "--allow-empty"]
+
+-- | Save a set of files to an initialized repository and commit this
+-- tree to the master branch with a given commit message.
+save
+  :: (Monad m, MonadIO m)
+  => FilePath -> Text -> Set File -> m ()
+save dst message files = liftIO $ do
+  tree <-
+    saveTree dst (treeFromFiles files)
+  parent <-
+    latestCommitOid dst defaultRef
+  commit <-
+    createCommit dst parent tree (unpack message)
+
+  updateReference dst defaultRef commit
+
+  return ()
+
+-- | Load a set of files from a repository's master branch.
+load :: (Monad m, MonadIO m) => FilePath -> m (Set File)
+load src = liftIO $ do
+  ls <- git src "ls-tree" ["-r", "-z", defaultRef]
+  Set.fromList <$> mapM (loadFile src) (filter (/= "") (BS.split 0 ls))
+
+
+-- Internal
 
 treeFromFiles :: Foldable t => t File -> Tree ByteString
 treeFromFiles = foldMap singletonTree . toList
@@ -82,41 +129,10 @@ asSHA1 = SHA1 . fst . BS.break (== 0xa)
 defaultRef :: String
 defaultRef = "refs/heads/master"
 
--- A fact path means something like "/0123...abc/storage/0x1",
--- or alternatively "contracts['0123...abc'].storage['0x1']".
-data Path = Path [ByteString] ByteString
-  deriving (Eq, Ord, Show)
-
--- We use the word "file" to denote a serialized value at a path.
-data File = File { filePath :: Path, fileData :: ByteString }
-  deriving (Eq, Ord, Show)
-
 git :: String -> String -> [String] -> IO ByteString
 git repo cmd args = do
   x <- run $ ("git" :: String, ["-C", repo] ++ (cmd : args))
   return x
-
-make
-  :: (Monad m, MonadIO m)
-  => FilePath -> m ()
-make repo = liftIO $ do
-  void $ git repo "init" []
-  void $ git repo "commit" ["-am", "initialize", "--allow-empty"]
-
-save
-  :: (Monad m, MonadIO m)
-  => FilePath -> Text -> Set File -> m ()
-save dst message files = liftIO $ do
-  tree <-
-    saveTree dst (treeFromFiles files)
-  parent <-
-    latestCommitOid dst defaultRef
-  commit <-
-    createCommit dst parent tree (unpack message)
-
-  updateReference dst defaultRef commit
-
-  return ()
 
 sha1String :: SHA1 -> String
 sha1String (SHA1 bs) = unpack (decodeUtf8 bs)
@@ -138,11 +154,6 @@ git' repo cmd args =
 createBlob :: String -> ByteString -> IO SHA1
 createBlob dst bytes =
   asSHA1 <$> run ((\() -> bytes) -|- git' dst "hash-object" ["--stdin", "-w"])
-
-load :: (Monad m, MonadIO m) => String -> m (Set File)
-load src = liftIO $ do
-  ls <- git src "ls-tree" ["-r", "-z", defaultRef]
-  Set.fromList <$> mapM (loadFile src) (filter (/= "") (BS.split 0 ls))
 
 loadFile :: FilePath -> ByteString -> IO File
 loadFile src line = do
