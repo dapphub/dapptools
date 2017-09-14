@@ -30,7 +30,6 @@ library
     EVM.Facts.Git,
     EVM.Keccak,
     EVM.Machine,
-    EVM.Opcodes,
     EVM.Solidity,
     EVM.TTY,
     EVM.TTYCenteredList,
