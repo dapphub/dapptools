@@ -21,6 +21,6 @@ in {
     # inherit keeper;
     inherit setzer;
     inherit solc-versions;
-    # inherit go-ethereum;
+    inherit go-ethereum;
   };
 }
