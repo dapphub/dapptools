@@ -12,6 +12,7 @@ in {
     inherit keeper;
     inherit setzer;
     inherit solc-versions;
+    inherit go-ethereum;
   };
 
   dapphub-darwin = with darwin.pkgs; {
@@ -20,5 +21,6 @@ in {
     # inherit keeper;
     inherit setzer;
     inherit solc-versions;
+    inherit go-ethereum;
   };
 }
