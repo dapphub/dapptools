@@ -24,4 +24,15 @@ in rec {
   dapp = callPackage ./pkgs/dapp.nix {};
   setzer = callPackage ./pkgs/setzer.nix {};
   keeper = callPackage ./pkgs/keeper.nix {};
+
+  go-ethereum = super.go-ethereum.overrideDerivation (_: rec {
+    name = "go-ethereum-${version}";
+    version = "1.7.0";
+    src = self.pkgs.fetchFromGitHub {
+      owner = "ethereum";
+      repo = "go-ethereum";
+      rev = "v${version}";
+      sha256 = "0ybjaiyrfb320rab6a5r9iiqvkrcd8b2qvixzx0kjmc4a7l1q5zh";
+    };
+  });
 }
