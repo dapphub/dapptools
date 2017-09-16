@@ -32,7 +32,7 @@ import Control.Lens hiding (op, (:<), (|>))
 
 import Data.ByteString              (ByteString)
 import Data.Map.Strict              (Map)
-import Data.Maybe                   (fromMaybe, fromJust)
+import Data.Maybe                   (fromMaybe, fromJust, isNothing)
 import Data.Monoid                  (Endo)
 import Data.Sequence                (Seq)
 import Data.Vector.Storable         (Vector)
@@ -112,6 +112,7 @@ data FrameState e = FrameState
   , _calldata    :: Blob e
   , _callvalue   :: Word e
   , _caller      :: Addr
+  , _gas         :: Word e
   }
 
 -- | The state of a contract
@@ -146,16 +147,17 @@ data Block e = Block
 
 blankState :: Machine e => FrameState e
 blankState = FrameState
-  { _contract   = 0
+  { _contract     = 0
   , _codeContract = 0
-  , _code       = mempty
-  , _pc         = 0
-  , _stack      = mempty
-  , _memory     = mempty
-  , _memorySize = 0
-  , _calldata   = mempty
-  , _callvalue  = 0
-  , _caller     = 0
+  , _code         = mempty
+  , _pc           = 0
+  , _stack        = mempty
+  , _memory       = mempty
+  , _memorySize   = 0
+  , _calldata     = mempty
+  , _callvalue    = 0
+  , _caller       = 0
+  , _gas          = 0
   }
 
 makeLenses ''FrameState
@@ -231,7 +233,7 @@ loadContract target =
         assign (state . code)     targetCode
         assign (state . codeContract) target
 
-burn :: forall e. Machine e => Int -> EVM e () -> EVM e ()
+burn :: (Machine e, Num a) => a -> EVM e () -> EVM e ()
 burn _ m = m
 
 {-# SPECIALIZE exec1 :: EVM Concrete () #-}
@@ -246,7 +248,7 @@ exec1 = do
     the f g = view (f . g) vm
 
     -- Simple for now
-    FeeSchedule {..} = FeeSchedule.metropolis
+    fees@(FeeSchedule {..}) = FeeSchedule.metropolis
 
     -- Convenient aliases
     mem  = the state memory
@@ -547,16 +549,19 @@ exec1 = do
         0x55 -> do
           case stk of
             (x:next:xs) -> do
-              let
-                prev = view (storage . at x) this
-                cost =
-                  if prev == Nothing && next /= 0
-                  then g_sset
-                  else g_sreset
+              let prev = view (storage . at x) this
+
+              -- Gas cost is higher when changing from zero to nonzero.
+              let cost = if prev == Nothing && next /= 0 then g_sset else g_sreset
+
               burn cost $ do
                 assign (state . stack) xs
                 assign (env . contracts . ix (the state contract) . storage . at x)
                   (if next == 0 then Nothing else Just next)
+
+                -- Give gas refund if clearing the storage slot.
+                if prev /= Nothing && next == 0 then refund r_sclear else noop
+
             _ -> underrun
 
         -- op: JUMP
@@ -593,9 +598,7 @@ exec1 = do
             push (w256 0xffffffffffffffffff)
 
         -- op: JUMPDEST
-        0x5b ->
-          burn g_jumpdest $
-            return ()
+        0x5b -> burn g_jumpdest noop
 
         -- op: EXP
         0x0a ->
@@ -658,16 +661,29 @@ exec1 = do
           case stk of
             (_:_:xValue:_:_:_:_:_) | xValue > view balance this -> do
               vmError (BalanceTooLow (view balance this) xValue)
-            (_:xTo:xValue:xInOffset:xInSize:xOutOffset:xOutSize:xs) -> do
-              delegateCall (num xTo) xInOffset xInSize xOutOffset xOutSize xs
-              zoom state $ do
-                assign callvalue xValue
-                assign caller (the state contract)
-                assign contract (num xTo)
-                assign memorySize 0
-              zoom (env . contracts) $ do
-                ix self      . balance -= xValue
-                ix (num xTo) . balance += xValue
+            ( xGas
+              : (num -> xTo)
+              : xValue
+              : xInOffset
+              : xInSize
+              : xOutOffset
+              : xOutSize
+              : xs
+             ) -> do
+              let
+                availableGas = the state gas
+                recipient    = view (env . contracts . at xTo) vm
+                (cost, gas') = costOfCall fees recipient xValue availableGas xGas
+              burn cost $ do
+                delegateCall gas' xTo xInOffset xInSize xOutOffset xOutSize xs
+                zoom state $ do
+                  assign callvalue xValue
+                  assign caller (the state contract)
+                  assign contract xTo
+                  assign memorySize 0
+                zoom (env . contracts) $ do
+                  ix self . balance -= xValue
+                  ix xTo  . balance += xValue
             _ ->
               underrun
 
@@ -713,8 +729,9 @@ exec1 = do
         -- op: DELEGATECALL
         0xf4 ->
           case stk of
-            (_:xTo:xInOffset:xInSize:xOutOffset:xOutSize:xs) ->
-              delegateCall (num xTo) xInOffset xInSize xOutOffset xOutSize xs
+            (xGas:xTo:xInOffset:xInSize:xOutOffset:xOutSize:xs) ->
+              burn (num g_call + xGas) $ do
+                delegateCall xGas (num xTo) xInOffset xInSize xOutOffset xOutSize xs
             _ -> underrun
 
         -- op: SELFDESTRUCT
@@ -738,10 +755,9 @@ exec1 = do
 
 delegateCall
   :: Machine e
-  => Addr
-  -> Word e -> Word e -> Word e -> Word e -> [Word e]
+  => Word e -> Addr -> Word e -> Word e -> Word e -> Word e -> [Word e]
   -> EVM e ()
-delegateCall xTo xInOffset xInSize xOutOffset xOutSize xs = do
+delegateCall xGas xTo xInOffset xInSize xOutOffset xOutSize xs = do
   preuse (env . contracts . ix xTo) >>=
     \case
       Nothing -> vmError (NoSuchContract xTo)
@@ -768,6 +784,7 @@ delegateCall xTo xInOffset xInSize xOutOffset xOutSize xs = do
           Zipper.children (Zipper.insert (Node (Right newContext) []) t)
 
         zoom state $ do
+          assign gas xGas
           assign pc 0
           assign code (view bytecode target)
           assign codeContract xTo
@@ -783,7 +800,7 @@ delegateCall xTo xInOffset xInSize xOutOffset xOutSize xs = do
     :: Word Concrete -> Word Concrete -> EVM Concrete ()
  #-}
 accessMemoryRange :: Machine e => Word e -> Word e -> EVM e ()
-accessMemoryRange _ 0 = return ()
+accessMemoryRange _ 0 = noop
 accessMemoryRange f l = state . memorySize %= \n -> max n (num (f + l))
 
 {-# SPECIALIZE accessMemoryWord :: Word Concrete -> EVM Concrete () #-}
@@ -798,7 +815,7 @@ accessMemoryWord x = accessMemoryRange x 32
 copyBytesToMemory
   :: Machine e => Blob e -> Word e -> Word e -> Word e -> EVM e ()
 copyBytesToMemory bs size xOffset yOffset =
-  if size == 0 then return ()
+  if size == 0 then noop
   else do
     mem <- use (state . memory)
     assign (state . memory) $
@@ -1002,6 +1019,7 @@ makeVm o = VM
     , _calldata = B $ vmoptCalldata o
     , _callvalue = w256 $ vmoptValue o
     , _caller = vmoptCaller o
+    , _gas = 0
     }
   , _env = Env
     { _sha3Crack = mempty
@@ -1175,11 +1193,36 @@ mkCodeOps bytes = RegularVector.fromList . toList $ go 0 bytes
           let j = opSize x
           in readOp x xs' Seq.<| go (i + j) (BS.drop j xs)
 
-{-
-  Unimplemented:
-    callcode
-    delegatecall
--}
-
 ceilDiv :: (Num a, Integral a) => a -> a -> a
 ceilDiv m n = div (m + n - 1) n
+
+noop :: Monad m => m ()
+noop = pure ()
+
+-- Gas cost function for CALL, transliterated from the Yellow Paper.
+costOfCall
+  :: Machine e
+  => FeeSchedule
+  -> Maybe a -> Word e -> Word e -> Word e
+  -> (Word e, Word e)
+costOfCall (FeeSchedule {..}) recipient xValue availableGas xGas =
+  (c_gascap + c_extra, c_callgas)
+  where
+    c_extra =
+      num g_call + c_xfer + c_new
+    c_xfer =
+      if xValue /= 0          then num g_callvalue              else 0
+    c_new =
+      if isNothing recipient  then num g_newaccount             else 0
+    c_callgas =
+      if xValue /= 0          then c_gascap + num g_callstipend else c_gascap
+    c_gascap =
+      if availableGas >= c_extra
+      then min xGas (allButOne64th (availableGas - c_extra))
+      else xGas
+
+allButOne64th :: (Num a, Integral a) => a -> a
+allButOne64th n = n - div n 64
+
+refund :: Machine e => Int -> EVM e ()
+refund _ = pure ()
