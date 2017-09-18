@@ -417,10 +417,10 @@ exec1 = do
             ((num -> xOffset) : (num -> xSize) : xs) -> do
               let bytes = readMemory xOffset xSize vm
                   hash  = keccakBlob bytes
-              burn (g_sha3 + g_sha3word * ceilDiv (num xSize) 32) $ do
-                assign (state . stack) (hash : xs)
-                assign (env . sha3Crack . at hash) (Just bytes)
-                accessMemoryRange xOffset xSize
+              burn (g_sha3 + g_sha3word * ceilDiv (num xSize) 32) $
+                accessMemoryRange fees xOffset xSize $ do
+                  assign (state . stack) (hash : xs)
+                  assign (env . sha3Crack . at hash) (Just bytes)
             _ -> underrun
 
         -- op: ADDRESS
@@ -470,10 +470,10 @@ exec1 = do
           case stk of
             ((num -> memOffset) : (num -> codeOffset) : (num -> n) : xs) -> do
               burn (g_verylow + g_copy * ceilDiv (num n) 32) $ do
-                assign (state . stack) xs
-                copyBytesToMemory (blob (view bytecode this))
-                  n codeOffset memOffset
-                accessMemoryRange memOffset n
+                accessMemoryRange fees memOffset n $ do
+                  assign (state . stack) xs
+                  copyBytesToMemory (blob (view bytecode this))
+                    n codeOffset memOffset
             _ -> underrun
 
         -- op: GASPRICE
@@ -498,12 +498,12 @@ exec1 = do
               : (num -> codeOffset)
               : (num -> codeSize)
               : xs ) -> do
-              burn (g_extcode + g_copy * ceilDiv (num codeSize) 32) $ do
-                c <- touchAccount (num extAccount)
-                assign (state . stack) xs
-                copyBytesToMemory (blob (view bytecode c))
-                  codeSize codeOffset memOffset
-                accessMemoryRange memOffset codeSize
+              burn (g_extcode + g_copy * ceilDiv (num codeSize) 32) $
+                accessMemoryRange fees memOffset codeSize $ do
+                  c <- touchAccount (num extAccount)
+                  assign (state . stack) xs
+                  copyBytesToMemory (blob (view bytecode c))
+                    codeSize codeOffset memOffset
             _ -> underrun
 
         -- op: BLOCKHASH
@@ -536,29 +536,29 @@ exec1 = do
         0x51 ->
           case stk of
             (x:xs) -> do
-              burn g_verylow $ do
-                assign (state . stack) (view (word256At (num x)) mem : xs)
-                accessMemoryWord x
+              burn g_verylow $
+                accessMemoryWord fees x $ do
+                  assign (state . stack) (view (word256At (num x)) mem : xs)
             _ -> underrun
 
         -- op: MSTORE
         0x52 ->
           case stk of
             (x:y:xs) -> do
-              burn g_verylow $ do
-                assign (state . memory . word256At (num x)) y
-                assign (state . stack) xs
-                accessMemoryWord x
+              burn g_verylow $
+                accessMemoryWord fees x $ do
+                  assign (state . memory . word256At (num x)) y
+                  assign (state . stack) xs
             _ -> underrun
 
         -- op: MSTORE8
         0x53 ->
           case stk of
             (x:y:xs) -> do
-              burn g_verylow $ do
-                modifying (state . memory) (setMemoryByte x (wordToByte y))
-                assign (state . stack) xs
-                accessMemoryRange x 1
+              burn g_verylow $
+                accessMemoryRange fees x 1 $ do
+                  modifying (state . memory) (setMemoryByte x (wordToByte y))
+                  assign (state . stack) xs
             _ -> underrun
 
         -- op: SLOAD
@@ -643,36 +643,36 @@ exec1 = do
             (xValue:_:_:_) | xValue > view balance this -> do
               vmError (BalanceTooLow (view balance this) xValue)
 
-            (xValue:xOffset:xSize:xs) -> do
-              accessMemoryRange xOffset xSize
+            (xValue:xOffset:xSize:xs) ->
+              burn g_create $ do
+                accessMemoryRange fees xOffset xSize $ do
+                  let
+                    newAddr     = newContractAddress self (forceConcreteWord (view nonce this))
+                    newCode     = forceConcreteBlob $ readMemory (num xOffset) (num xSize) vm
+                    newContract = initialContract newCode
+                    newContext  = CreationContext (view codehash newContract)
 
-              let
-                newAddr     = newContractAddress self (forceConcreteWord (view nonce this))
-                newCode     = forceConcreteBlob $ readMemory (num xOffset) (num xSize) vm
-                newContract = initialContract newCode
-                newContext  = CreationContext (view codehash newContract)
+                  zoom (env . contracts) $ do
+                    assign (at newAddr) (Just newContract)
+                    modifying (ix self . nonce) succ
+                    modifying (ix self . balance) (flip (-) xValue)
 
-              zoom (env . contracts) $ do
-                assign (at newAddr) (Just newContract)
-                modifying (ix self . nonce) succ
-                modifying (ix self . balance) (flip (-) xValue)
+                  vm' <- get
+                  pushTo frames $ Frame
+                    { _frameContext = newContext
+                    , _frameState   = (set stack xs) (view state vm')
+                    }
 
-              vm' <- get
-              pushTo frames $ Frame
-                { _frameContext = newContext
-                , _frameState   = (set stack xs) (view state vm')
-                }
+                  modifying contextTrace $ \t ->
+                    Zipper.children $ Zipper.insert (Node (Right newContext) []) t
 
-              modifying contextTrace $ \t ->
-                Zipper.children $ Zipper.insert (Node (Right newContext) []) t
-
-              assign state $
-                blankState
-                  & set contract   newAddr
-                  & set codeContract newAddr
-                  & set code       newCode
-                  & set callvalue  xValue
-                  & set caller     self
+                  assign state $
+                    blankState
+                      & set contract   newAddr
+                      & set codeContract newAddr
+                      & set code       newCode
+                      & set callvalue  xValue
+                      & set caller     self
 
             _ -> underrun
 
@@ -694,16 +694,16 @@ exec1 = do
                 availableGas = the state gas
                 recipient    = view (env . contracts . at xTo) vm
                 (cost, gas') = costOfCall fees recipient xValue availableGas xGas
-              burn cost $ do
-                delegateCall gas' xTo xInOffset xInSize xOutOffset xOutSize xs
-                zoom state $ do
-                  assign callvalue xValue
-                  assign caller (the state contract)
-                  assign contract xTo
-                  assign memorySize 0
-                zoom (env . contracts) $ do
-                  ix self . balance -= xValue
-                  ix xTo  . balance += xValue
+              burn cost $
+                delegateCall fees gas' xTo xInOffset xInSize xOutOffset xOutSize xs $ do
+                  zoom state $ do
+                    assign callvalue xValue
+                    assign caller (the state contract)
+                    assign contract xTo
+                    assign memorySize 0
+                  zoom (env . contracts) $ do
+                    ix self . balance -= xValue
+                    ix xTo  . balance += xValue
             _ ->
               underrun
 
@@ -714,35 +714,42 @@ exec1 = do
         -- op: RETURN
         0xf3 ->
           case stk of
-            (xOffset:xSize:_) -> do
-              accessMemoryRange xOffset xSize
+            (xOffset:xSize:_) ->
+              accessMemoryRange fees xOffset xSize $ do
+                case vm ^. frames of
+                  [] ->
+                    assign result (Just (VMSuccess (readMemory (num xOffset) (num xSize) vm)))
 
-              case vm ^. frames of
-                [] ->
-                  assign result (Just (VMSuccess (readMemory (num xOffset) (num xSize) vm)))
+                  (nextFrame : remainingFrames) -> do
+                    assign frames remainingFrames
 
-                (nextFrame : remainingFrames) -> do
-                  assign frames remainingFrames
+                    modifying contextTrace $ \t ->
+                      case Zipper.parent t of
+                        Nothing -> error "internal error (context trace root)"
+                        Just t' -> Zipper.nextSpace t'
 
-                  modifying contextTrace $ \t ->
-                    case Zipper.parent t of
-                      Nothing -> error "internal error (context trace root)"
-                      Just t' -> Zipper.nextSpace t'
+                    case view frameContext nextFrame of
+                      CreationContext _ -> do
+                        performCreation (forceConcreteBlob (readMemory (num xOffset) (num xSize) vm))
+                        assign state (view frameState nextFrame)
 
-                  case view frameContext nextFrame of
-                    CreationContext _ -> do
-                      performCreation (forceConcreteBlob (readMemory (num xOffset) (num xSize) vm))
-                      assign state (view frameState nextFrame)
-                      push (num (the state contract))
+                        -- Move back the gas to the parent context
+                        assign (state . gas) (the state gas)
 
-                    CallContext yOffset ySize _ _ _ -> do
-                      assign state (view frameState nextFrame)
-                      copyBytesToMemory
-                        (readMemory (num xOffset) (num ySize) vm)
-                        (num ySize)
-                        0
-                        (num yOffset)
-                      push 1
+                        push (num (the state contract))
+
+                      CallContext yOffset ySize _ _ _ -> do
+                        assign state (view frameState nextFrame)
+
+                        -- Take back the remaining gas allowance
+                        modifying (state . gas) (+ the state gas)
+
+                        copyBytesToMemory
+                          (readMemory (num xOffset) (num ySize) vm)
+                          (num ySize)
+                          0
+                          (num yOffset)
+                        push 1
 
             _ -> underrun
 
@@ -751,7 +758,8 @@ exec1 = do
           case stk of
             (xGas:xTo:xInOffset:xInSize:xOutOffset:xOutSize:xs) ->
               burn (num g_call + xGas) $ do
-                delegateCall xGas (num xTo) xInOffset xInSize xOutOffset xOutSize xs
+                delegateCall fees xGas (num xTo) xInOffset xInSize xOutOffset xOutSize xs
+                  (return ())
             _ -> underrun
 
         -- op: SELFDESTRUCT
@@ -775,57 +783,82 @@ exec1 = do
 
 delegateCall
   :: Machine e
-  => Word e -> Addr -> Word e -> Word e -> Word e -> Word e -> [Word e]
+  => FeeSchedule (Word e)
+  -> Word e -> Addr -> Word e -> Word e -> Word e -> Word e -> [Word e]
   -> EVM e ()
-delegateCall xGas xTo xInOffset xInSize xOutOffset xOutSize xs = do
+  -> EVM e ()
+delegateCall fees xGas xTo xInOffset xInSize xOutOffset xOutSize xs continue = do
   preuse (env . contracts . ix xTo) >>=
     \case
       Nothing -> vmError (NoSuchContract xTo)
-      Just target -> do
-        vm <- get
+      Just target ->
+        accessMemoryRange fees xInOffset xInSize $ do
+          accessMemoryRange fees xOutOffset xOutSize $ do
+            burn xGas $ do
+              vm <- get
 
-        let newContext = CallContext
-              { callContextOffset = xOutOffset
-              , callContextSize   = xOutSize
-              , callContextCodehash = view codehash target
-              , callContextReversion = view (env . contracts) vm
-              , callContextAbi = Nothing
-                  -- if xInSize >= 4
-                  -- then Just $! view (state . memory . word32At (num xInOffset)) vm
-                  -- else Nothing
-              }
+              let newContext = CallContext
+                    { callContextOffset = xOutOffset
+                    , callContextSize   = xOutSize
+                    , callContextCodehash = view codehash target
+                    , callContextReversion = view (env . contracts) vm
+                    , callContextAbi = Nothing
+                        -- if xInSize >= 4
+                        -- then Just $! view (state . memory . word32At (num xInOffset)) vm
+                        -- else Nothing
+                    }
 
-        pushTo frames $ Frame
-          { _frameState = (set stack xs) (view state vm)
-          , _frameContext = newContext
-          }
+              pushTo frames $ Frame
+                { _frameState = (set stack xs) (view state vm)
+                , _frameContext = newContext
+                }
 
-        modifying contextTrace $ \t ->
-          Zipper.children (Zipper.insert (Node (Right newContext) []) t)
+              modifying contextTrace $ \t ->
+                Zipper.children (Zipper.insert (Node (Right newContext) []) t)
 
-        zoom state $ do
-          assign gas xGas
-          assign pc 0
-          assign code (view bytecode target)
-          assign codeContract xTo
-          assign stack mempty
-          assign memory mempty
-          assign calldata (readMemory (num xInOffset) (num xInSize) vm)
+              zoom state $ do
+                assign gas xGas
+                assign pc 0
+                assign code (view bytecode target)
+                assign codeContract xTo
+                assign stack mempty
+                assign memory mempty
+                assign calldata (readMemory (num xInOffset) (num xInSize) vm)
 
-        accessMemoryRange xInOffset xInSize
-        accessMemoryRange xOutOffset xOutSize
+              continue
 
 {-#
   SPECIALIZE accessMemoryRange
-    :: Word Concrete -> Word Concrete -> EVM Concrete ()
+    :: FeeSchedule (Word Concrete)
+    -> Word Concrete -> Word Concrete
+    -> EVM Concrete () -> EVM Concrete ()
  #-}
-accessMemoryRange :: Machine e => Word e -> Word e -> EVM e ()
-accessMemoryRange _ 0 = noop
-accessMemoryRange f l = state . memorySize %= \n -> max n (num (f + l))
+accessMemoryRange
+  :: Machine e
+  => FeeSchedule (Word e)
+  -> Word e
+  -> Word e
+  -> EVM e ()
+  -> EVM e ()
+accessMemoryRange _ _ 0 continue = continue
+accessMemoryRange fees f l continue = do
+  m0 <- use (state . memorySize)
+  let m1 = max m0 (num (f + l))
+  burn (memoryCost fees m1 - memoryCost fees m0) $ do
+    assign (state . memorySize) m1
+    continue
 
-{-# SPECIALIZE accessMemoryWord :: Word Concrete -> EVM Concrete () #-}
-accessMemoryWord :: Machine e => Word e -> EVM e ()
-accessMemoryWord x = accessMemoryRange x 32
+memoryCost :: Machine e => FeeSchedule (Word e) -> Int -> Word e
+memoryCost FeeSchedule{..} (num -> a) = g_memory * a + div (a * a) 512
+
+{-#
+  SPECIALIZE accessMemoryWord
+    :: FeeSchedule (Word Concrete) -> Word Concrete
+    -> EVM Concrete () -> EVM Concrete ()
+ #-}
+accessMemoryWord
+  :: Machine e => FeeSchedule (Word e) -> Word e -> EVM e () -> EVM e ()
+accessMemoryWord fees x continue = accessMemoryRange fees x 32 continue
 
 {-#
   SPECIALIZE copyBytesToMemory
@@ -890,6 +923,7 @@ vmError e = do
         CreationContext _ -> do
           assign frames remainingFrames
           assign state (view frameState nextFrame)
+          assign (state . gas) 0
           push 0
           let self = vm ^. state . contract
           assign (env . contracts . at self) Nothing
