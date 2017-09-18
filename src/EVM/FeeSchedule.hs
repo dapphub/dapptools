@@ -1,45 +1,43 @@
 module EVM.FeeSchedule where
 
-type N = Int
-
-data FeeSchedule = FeeSchedule
-  { g_zero :: N
-  , g_base :: N
-  , g_verylow :: N
-  , g_low :: N
-  , g_mid :: N
-  , g_high :: N
-  , g_extcode :: N
-  , g_balance :: N
-  , g_sload :: N
-  , g_jumpdest :: N
-  , g_sset :: N
-  , g_sreset :: N
-  , r_sclear :: N
-  , r_selfdestruct :: N
-  , g_create :: N
-  , g_codedeposit :: N
-  , g_call :: N
-  , g_callvalue :: N
-  , g_callstipend :: N
-  , g_newaccount :: N
-  , g_exp :: N
-  , g_expbyte :: N
-  , g_memory :: N
-  , g_txcreate :: N
-  , g_txdatazero :: N
-  , g_txdatanonzero :: N
-  , g_transaction :: N
-  , g_log :: N
-  , g_logdata :: N
-  , g_logtopic :: N
-  , g_sha3 :: N
-  , g_sha3word :: N
-  , g_copy :: N
-  , g_blockhash :: N
+data Num n => FeeSchedule n = FeeSchedule
+  { g_zero :: n
+  , g_base :: n
+  , g_verylow :: n
+  , g_low :: n
+  , g_mid :: n
+  , g_high :: n
+  , g_extcode :: n
+  , g_balance :: n
+  , g_sload :: n
+  , g_jumpdest :: n
+  , g_sset :: n
+  , g_sreset :: n
+  , r_sclear :: n
+  , r_selfdestruct :: n
+  , g_create :: n
+  , g_codedeposit :: n
+  , g_call :: n
+  , g_callvalue :: n
+  , g_callstipend :: n
+  , g_newaccount :: n
+  , g_exp :: n
+  , g_expbyte :: n
+  , g_memory :: n
+  , g_txcreate :: n
+  , g_txdatazero :: n
+  , g_txdatanonzero :: n
+  , g_transaction :: n
+  , g_log :: n
+  , g_logdata :: n
+  , g_logtopic :: n
+  , g_sha3 :: n
+  , g_sha3word :: n
+  , g_copy :: n
+  , g_blockhash :: n
   } deriving Show
 
-metropolis :: FeeSchedule
+metropolis :: Num n => FeeSchedule n
 metropolis = FeeSchedule
   { g_zero = 0
   , g_base = 2

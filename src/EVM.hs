@@ -57,6 +57,7 @@ data Error e
   | BadJumpDestination
   | Revert
   | NoSuchContract Addr
+  | OutOfGas
 
 deriving instance Show (Error Concrete)
 
@@ -74,7 +75,7 @@ data VM e = VM
   , _frames        :: [Frame e]
   , _env           :: Env e
   , _block         :: Block e
-  , _selfdestructs :: [Addr]
+  , _tx            :: TxState e
   , _logs          :: Seq (Log e)
   , _contextTrace  :: Zipper.TreePos Zipper.Empty (Either (Log e) (FrameContext e))
   }
@@ -113,6 +114,12 @@ data FrameState e = FrameState
   , _callvalue   :: Word e
   , _caller      :: Addr
   , _gas         :: Word e
+  }
+
+-- | The state that spans a whole transaction
+data TxState e = TxState
+  { _selfdestructs :: [Addr]
+  , _refunds       :: [(Addr, Word e)]
   }
 
 -- | The state of a contract
@@ -163,6 +170,7 @@ blankState = FrameState
 makeLenses ''FrameState
 makeLenses ''Frame
 makeLenses ''Block
+makeLenses ''TxState
 makeLenses ''Contract
 makeLenses ''Env
 makeLenses ''VM
@@ -233,8 +241,20 @@ loadContract target =
         assign (state . code)     targetCode
         assign (state . codeContract) target
 
-burn :: (Machine e, Num a) => a -> EVM e () -> EVM e ()
-burn _ m = m
+burn :: Machine e => Word e -> EVM e () -> EVM e ()
+burn n continue = do
+  available <- use (state . gas)
+  if n <= available
+    then do
+      state . gas -= n
+      continue
+    else
+      vmError OutOfGas
+
+refund :: Machine e => Word e -> EVM e ()
+refund n = do
+  self <- use (state . contract)
+  pushTo (tx . refunds) (self, n)
 
 {-# SPECIALIZE exec1 :: EVM Concrete () #-}
 exec1 :: forall e. Machine e => EVM e ()
@@ -248,7 +268,7 @@ exec1 = do
     the f g = view (f . g) vm
 
     -- Simple for now
-    fees@(FeeSchedule {..}) = FeeSchedule.metropolis
+    fees@(FeeSchedule {..}) = FeeSchedule.metropolis :: FeeSchedule (Word e)
 
     -- Convenient aliases
     mem  = the state memory
@@ -312,7 +332,7 @@ exec1 = do
                     bytes         = readMemory (num xOffset) (num xSize) vm
                     log           = Log self bytes topics
 
-                burn (g_log + g_logdata * num xSize + n * g_logtopic) $ do
+                burn (g_log + g_logdata * xSize + num n * g_logtopic) $ do
                   assign (state . stack) xs'
                   pushToSequence logs log
                   traceLog log
@@ -605,7 +625,7 @@ exec1 = do
           let cost (x, _) =
                 if x == 0
                 then g_exp
-                else g_exp + ceilDiv (popCount x) 8
+                else g_exp + num (ceilDiv (popCount x) 8)
           in stackOp2 cost (uncurry exponentiate)
 
         -- op: SIGNEXTEND
@@ -739,7 +759,7 @@ exec1 = do
           case stk of
             [] -> underrun
             (x:_) -> do
-              pushTo selfdestructs self
+              pushTo (tx . selfdestructs) self
               assign (env . contracts . ix self . balance) 0
               modifying
                 (env . contracts . ix (num x) . balance)
@@ -880,17 +900,15 @@ vmError e = do
           assign (env . contracts) reversion
           push 0
 
-type GasCost = Int
-
 {-#
   SPECIALIZE stackOp1
-    :: (Word Concrete -> GasCost)
+    :: (Word Concrete -> Word Concrete)
     -> (Word Concrete -> Word Concrete)
     -> EVM Concrete ()
  #-}
 stackOp1
   :: Machine e
-  => (Word e -> GasCost)
+  => (Word e -> Word e)
   -> (Word e -> Word e)
   -> EVM e ()
 stackOp1 cost f =
@@ -904,13 +922,13 @@ stackOp1 cost f =
 
 {-#
   SPECIALIZE stackOp2
-    :: ((Word Concrete, Word Concrete) -> GasCost)
+    :: ((Word Concrete, Word Concrete) -> Word Concrete)
     -> ((Word Concrete, Word Concrete) -> Word Concrete)
     -> EVM Concrete ()
  #-}
 stackOp2
   :: Machine e
-  => ((Word e, Word e) -> GasCost)
+  => ((Word e, Word e) -> Word e)
   -> ((Word e, Word e) -> Word e)
   -> EVM e ()
 stackOp2 cost f =
@@ -923,13 +941,13 @@ stackOp2 cost f =
 
 {-#
   SPECIALIZE stackOp3
-    :: ((Word Concrete, Word Concrete, Word Concrete) -> GasCost)
+    :: ((Word Concrete, Word Concrete, Word Concrete) -> Word Concrete)
     -> ((Word Concrete, Word Concrete, Word Concrete) -> Word Concrete)
     -> EVM Concrete ()
  #-}
 stackOp3
   :: Machine e
-  => ((Word e, Word e, Word e) -> GasCost)
+  => ((Word e, Word e, Word e) -> Word e)
   -> ((Word e, Word e, Word e) -> Word e)
   -> EVM e ()
 stackOp3 cost f =
@@ -987,6 +1005,7 @@ data VMOpts = VMOpts
   , vmoptAddress :: Addr
   , vmoptCaller :: Addr
   , vmoptOrigin :: Addr
+  , vmoptGas :: W256
   , vmoptNumber :: W256
   , vmoptTimestamp :: W256
   , vmoptCoinbase :: Addr
@@ -998,7 +1017,10 @@ makeVm :: VMOpts -> VM Concrete
 makeVm o = VM
   { _result = Nothing
   , _frames = mempty
-  , _selfdestructs = mempty
+  , _tx = TxState
+    { _selfdestructs = mempty
+    , _refunds = mempty
+    }
   , _logs = mempty
   , _contextTrace = Zipper.fromForest []
   , _block = Block
@@ -1019,7 +1041,7 @@ makeVm o = VM
     , _calldata = B $ vmoptCalldata o
     , _callvalue = w256 $ vmoptValue o
     , _caller = vmoptCaller o
-    , _gas = 0
+    , _gas = w256 $ vmoptGas o
     }
   , _env = Env
     { _sha3Crack = mempty
@@ -1202,7 +1224,7 @@ noop = pure ()
 -- Gas cost function for CALL, transliterated from the Yellow Paper.
 costOfCall
   :: Machine e
-  => FeeSchedule
+  => FeeSchedule (Word e)
   -> Maybe a -> Word e -> Word e -> Word e
   -> (Word e, Word e)
 costOfCall (FeeSchedule {..}) recipient xValue availableGas xGas =
@@ -1223,6 +1245,3 @@ costOfCall (FeeSchedule {..}) recipient xValue availableGas xGas =
 
 allButOne64th :: (Num a, Integral a) => a -> a
 allButOne64th n = n - div n 64
-
-refund :: Machine e => Int -> EVM e ()
-refund _ = pure ()

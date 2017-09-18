@@ -112,6 +112,7 @@ parseVmOpts v =
            <*> addrField exec "address"
            <*> addrField exec "caller"
            <*> addrField exec "origin"
+           <*> wordField exec "gas" -- XXX: correct?
            <*> wordField env  "currentNumber"
            <*> wordField env  "currentTimestamp"
            <*> addrField env  "currentCoinbase"

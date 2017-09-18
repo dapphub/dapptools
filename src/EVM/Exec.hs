@@ -27,6 +27,7 @@ vmForEthrunCreation creationCode =
     , vmoptTimestamp = 0
     , vmoptGaslimit = 0
     , vmoptDifficulty = 0
+    , vmoptGas = 0xffffffffffffffff
     }) & set (env . contracts . at ethrunAddress)
              (Just (initialContract mempty))
 

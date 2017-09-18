@@ -53,6 +53,7 @@ data Command
       , origin     :: Maybe Addr
       , coinbase   :: Maybe Addr
       , value      :: Maybe W256
+      , gas        :: Maybe W256
       , number     :: Maybe W256
       , timestamp  :: Maybe W256
       , gaslimit   :: Maybe W256
@@ -177,6 +178,7 @@ vmFromCommand opts =
       , EVM.vmoptAddress    = address'
       , EVM.vmoptCaller     = addr caller 2
       , EVM.vmoptOrigin     = addr origin 3
+      , EVM.vmoptGas        = word gas 0
       , EVM.vmoptCoinbase   = addr coinbase 0
       , EVM.vmoptNumber     = word number 0
       , EVM.vmoptTimestamp  = word timestamp 0

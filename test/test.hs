@@ -88,11 +88,11 @@ runStatements stmts args t = do
                              <> " " <> Text.pack [c])
             (zip args "abcdefg"))
       sig =
-        "x(" <> Text.intercalate ","
-                  (map (abiTypeSolidity . abiValueType) args) <> ")"
+        "foo(" <> Text.intercalate ","
+                    (map (abiTypeSolidity . abiValueType) args) <> ")"
 
   Just x <- singleContract "X" [i|
-    function x(${params}) returns (${abiTypeSolidity t} x) {
+    function foo(${params}) returns (${abiTypeSolidity t} x) {
       ${stmts}
     }
   |]
@@ -103,13 +103,15 @@ runStatements stmts args t = do
           vm2 = execState (performCreation targetCode) vm1
       case flip runState vm2
              (do resetState
+                 assign (state . gas) 0xffffffffffffffff -- kludge
                  loadContract target
                  assign (state . calldata)
                    (B (abiCalldata sig (Vector.fromList args)))
                  exec) of
         (VMSuccess (B out), _) ->
           return (Just out)
-        _ ->
+        (VMFailure problem, _) -> do
+          print problem
           return Nothing
     _ ->
       return Nothing

@@ -105,6 +105,7 @@ initialUnitTestVm theContract _ =
            , vmoptAddress = newContractAddress ethrunAddress 1
            , vmoptCaller = ethrunAddress
            , vmoptOrigin = ethrunAddress
+           , vmoptGas = 100000
            , vmoptCoinbase = 0
            , vmoptNumber = 0
            , vmoptTimestamp = 1
