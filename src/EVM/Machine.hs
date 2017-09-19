@@ -9,7 +9,7 @@ import Prelude hiding (Word)
 
 import EVM.Types (W256)
 
-import Data.Bits (Bits)
+import Data.Bits (Bits, FiniteBits)
 import Data.ByteString (ByteString)
 import Data.String (IsString)
 
@@ -58,6 +58,7 @@ type Machine e =
   , Num (Byte e)
   , Integral (Word e)
   , Bits (Word e)
+  , FiniteBits (Word e)
   , Monoid (Memory e)
   , Monoid (Blob e)
   , IsString (Blob e)

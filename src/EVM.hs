@@ -10,7 +10,7 @@
 
 module EVM where
 
-import Prelude hiding ((^), log, Word)
+import Prelude hiding ((^), log, Word, exponent)
 
 import EVM.Types
 import EVM.Solidity
@@ -24,8 +24,8 @@ import qualified EVM.FeeSchedule as FeeSchedule (metropolis)
 
 import Control.Monad.State.Strict hiding (state)
 
-import Data.Bits (xor, shiftR, (.&.), (.|.))
-import Data.Bits (bit, testBit, complement, popCount)
+import Data.Bits (xor, shiftR, (.&.), (.|.), FiniteBits (..))
+import Data.Bits (bit, testBit, complement)
 import Data.Word (Word8)
 
 import Control.Lens hiding (op, (:<), (|>))
@@ -630,10 +630,10 @@ exec1 = do
 
         -- op: EXP
         0x0a ->
-          let cost (x, _) =
-                if x == 0
+          let cost (_, exponent) =
+                if exponent == 0
                 then g_exp
-                else g_exp + num (ceilDiv (popCount x) 8)
+                else g_exp + g_expbyte * num (ceilDiv (1 + log2 exponent) 8)
           in stackOp2 cost (uncurry exponentiate)
 
         -- op: SIGNEXTEND
@@ -858,7 +858,13 @@ accessMemoryRange fees f l continue = do
     continue
 
 memoryCost :: Machine e => FeeSchedule (Word e) -> Int -> Word e
-memoryCost FeeSchedule{..} (num -> a) = g_memory * a + div (a * a) 512
+memoryCost FeeSchedule{..} (num -> byteCount) =
+  let
+    wordCount = ceilDiv byteCount 32
+    linearCost = g_memory * wordCount
+    quadraticCost = div (wordCount * wordCount) 32
+  in
+    linearCost + quadraticCost
 
 {-#
   SPECIALIZE accessMemoryWord
@@ -1288,3 +1294,6 @@ costOfCall (FeeSchedule {..}) recipient xValue availableGas xGas =
 
 allButOne64th :: (Num a, Integral a) => a -> a
 allButOne64th n = n - div n 64
+
+log2 :: FiniteBits b => b -> Int
+log2 x = finiteBitSize x - 1 - countLeadingZeros x

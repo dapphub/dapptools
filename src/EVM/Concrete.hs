@@ -17,7 +17,7 @@ import EVM.Types (word, padRight, byteAt)
 import EVM.Keccak (keccak)
 
 import Control.Lens    ((^?), ix)
-import Data.Bits       (Bits (..))
+import Data.Bits       (Bits (..), FiniteBits (..))
 import Data.ByteString (ByteString)
 import Data.DoubleWord (signedWord, unsignedWord)
 import Data.Maybe      (fromMaybe)
@@ -133,6 +133,7 @@ instance Machine' Concrete where
   keccakBlob (B x) = C (FromKeccak x) (keccak x)
 
 deriving instance Bits (Byte Concrete)
+deriving instance FiniteBits (Byte Concrete)
 deriving instance Enum (Byte Concrete)
 deriving instance Eq (Byte Concrete)
 deriving instance Integral (Byte Concrete)
@@ -167,6 +168,11 @@ instance Bits (Word Concrete) where
   testBit (C _ x) i = testBit x i
   bit i = w256 (bit i)
   popCount (C _ x) = popCount x
+
+instance FiniteBits (Word Concrete) where
+  finiteBitSize (C _ x) = finiteBitSize x
+  countLeadingZeros (C _ x) = countLeadingZeros x
+  countTrailingZeros (C _ x) = countTrailingZeros x
 
 instance Eq (Word Concrete) where
   (C _ x) == (C _ y) = x == y
