@@ -483,7 +483,10 @@ showContext dapp (Right (CallContext _ _ hash abi _)) =
 
 drawStackPane :: UiVmState Concrete -> UiWidget
 drawStackPane ui =
-  hBorderWithLabel (txt "Stack") <=>
+  let
+    gasText = showWordExact (view (uiVm . state . gas) ui)
+    labelText = txt ("Gas available: " <> gasText <> "; stack:")
+  in hBorderWithLabel labelText <=>
     renderList
       (\_ (i, x@(C _ w)) ->
          vBox
@@ -503,7 +506,24 @@ showDec (W256 w) =
        (Just 8)
        (fromIntegral w)
   else
-    unpack . Text.intercalate "," . reverse . map Text.reverse . Text.chunksOf 3 . Text.reverse . Text.pack . show $ w
+    showDecExact (W256 w)
+
+showDecExact :: W256 -> String
+showDecExact (W256 w) = unpack (humanizeInteger w)
+
+showWordExact :: Word Concrete -> Text
+showWordExact (C _ (W256 w)) = humanizeInteger w
+
+humanizeInteger :: (Num a, Integral a, Show a) => a -> Text
+humanizeInteger =
+  ( Text.intercalate ","
+  . reverse
+  . map Text.reverse
+  . Text.chunksOf 3
+  . Text.reverse
+  . Text.pack
+  . show
+  )
 
 showWordExplanation :: W256 -> Maybe DappInfo -> String
 showWordExplanation w Nothing = showDec w
