@@ -277,10 +277,12 @@ initialUiVmStateForTest dapp (theContractName, theTestName) =
           let
             vm1 = view uiVm ui
             target = view (state . contract) vm1
-            vm2 = vm1 & env . contracts . ix target . balance +~ 0xffffffffffffffffffffffff
+            vm2 =
+              vm1 & env . contracts . ix target . balance +~ 0xffffffffffffffffffffffff
             vm3 = flip execState vm2 $ do
               performCreation targetCode
               setupCall target "setUp()"
+              assign (state . gas) 6000000
           in
             updateUiVmState ui vm3
               & set uiVmContinuation (Continue (k2 target))
@@ -294,6 +296,7 @@ initialUiVmStateForTest dapp (theContractName, theTestName) =
             vm3 = view uiVm ui
             vm4 = flip execState vm3 $ do
                     setupCall target theTestName
+                    assign (state . gas) 6000000
                     assign contextTrace (Zipper.fromForest [])
                     assign logs mempty
           in

@@ -351,6 +351,14 @@ exec1 = do
                   Just t' -> Zipper.nextSpace t'
               assign frames remainingFrames
               assign state (view frameState nextFrame)
+              case view frameContext nextFrame of
+                CreationContext _ -> do
+                  -- Move back the gas to the parent context
+                  assign (state . gas) (the state gas)
+
+                CallContext _ _ _ _ _ -> do
+                  -- Take back the remaining gas allowance
+                  modifying (state . gas) (+ the state gas)
               push 1
 
         -- op: ADD
@@ -615,7 +623,7 @@ exec1 = do
         -- op: GAS
         0x5a ->
           burn g_base $
-            push (w256 0xffffffffffffffffff)
+            push (the state gas - g_base)
 
         -- op: JUMPDEST
         0x5b -> burn g_jumpdest noop
@@ -673,6 +681,7 @@ exec1 = do
                       & set code       newCode
                       & set callvalue  xValue
                       & set caller     self
+                      & set gas        (view (state . gas) vm')
 
             _ -> underrun
 
@@ -694,7 +703,7 @@ exec1 = do
                 availableGas = the state gas
                 recipient    = view (env . contracts . at xTo) vm
                 (cost, gas') = costOfCall fees recipient xValue availableGas xGas
-              burn cost $
+              burn (cost - gas') $
                 delegateCall fees gas' xTo xInOffset xInSize xOutOffset xOutSize xs $ do
                   zoom state $ do
                     assign callvalue xValue

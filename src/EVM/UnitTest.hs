@@ -53,20 +53,20 @@ runUnitTestContract _ contractMap _ (name, testNames) = do
         endowment = 0xffffffffffffffffffffffff
         vm3 = vm2 & env . contracts . ix target . balance +~ endowment
 
-      case runState (setupCall target "setUp()" >> exec) vm3 of
+      case runState (setupCall target "setUp()" >> assign (state . gas) 6000000 >> exec) vm3 of
         (VMFailure _, _) -> do
           putStrLn "error in setUp()"
         (VMSuccess _, vm4) -> do
           let
             runOne testName = spawn_ $ do
-              case runState (setupCall target testName >> exec) vm4 of
+              case runState (setupCall target testName >> assign (state . gas) 600000 >> exec) vm4 of
                 (VMFailure _, _) ->
                   if "testFail" `isPrefixOf` testName
                     then return "."
                     else do
                       return "F"
                 (VMSuccess _, vm5) -> do
-                  case evalState (setupCall target "failed()" >> exec) vm5 of
+                  case evalState (setupCall target "failed()" >> assign (state . gas) 10000 >> exec) vm5 of
                     VMSuccess (B out) ->
                       case runGetOrFail (getAbi AbiBoolType)
                              (LazyByteString.fromStrict out) of
@@ -105,7 +105,7 @@ initialUnitTestVm theContract _ =
            , vmoptAddress = newContractAddress ethrunAddress 1
            , vmoptCaller = ethrunAddress
            , vmoptOrigin = ethrunAddress
-           , vmoptGas = 100000
+           , vmoptGas = 60000000
            , vmoptCoinbase = 0
            , vmoptNumber = 0
            , vmoptTimestamp = 1
