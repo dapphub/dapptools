@@ -10,7 +10,7 @@ buildPythonApplication rec {
     rev = "a316db1dc13288e417a6582eeb10b714863af8d5";
     owner = "makerdao";
     repo = "keeper";
-    sha256 = "1yxgxs5iazxbsq1wlj0vhvplid207590nivga5hrwqr4ahy0cs4y";
+    sha256 = "069q85a3icsnmzhy9ifh9f0x996sagbgwzgam4wnh7avh6z10qmj";
   };
 
   propagatedBuildInputs = [
