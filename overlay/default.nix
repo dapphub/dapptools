@@ -3,10 +3,8 @@ self: super:
 let
 
   # This is a specific revision of Nixpkgs that we use to avoid
-  # rebuilding all the versions of solc when we bump our submodule.
-  #
-  # (Not used right now because we already have a recent rebuild of
-  # solc-versions.)
+  # rebuilding all the versions of solc when we bump our submodule, or
+  # to allow a package to succeed when something breaks in nixpkgs.
   past = import (super.fetchFromGitHub {
     owner = "NixOS";
     repo = "nixpkgs";
@@ -18,11 +16,11 @@ let
   pastPackage = past.pkgs.callPackage;
 
 in rec {
-  solc = solc-versions.solc_0_4_16;
+  solc = callPackage ((import ./solc-versions.nix).solc_0_4_16) {};
 
   solc-versions =
     super.lib.mapAttrs
-      (_: value: callPackage value {})
+      (_: value: pastPackage value {})
       (import ./solc-versions.nix);
 
   python3 = python36;
