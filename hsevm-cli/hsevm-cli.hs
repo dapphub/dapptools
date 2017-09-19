@@ -24,7 +24,7 @@ import EVM.Types hiding (word)
 import EVM.UnitTest
 
 import Control.Lens
-import Control.Monad              (unless)
+import Control.Monad              (unless, void)
 import Control.Monad.State.Strict (execState)
 import Data.ByteString            (ByteString)
 import Data.List                  (intercalate, isSuffixOf)
@@ -162,7 +162,7 @@ launchExec opts = do
             Just path ->
               Git.saveFacts (Git.RepoAt path) (Facts.vmFacts vm')
     Debug ->
-      EVM.TTY.runFromVM vm
+      void (EVM.TTY.runFromVM vm)
 
 vmFromCommand :: Command -> EVM.VM EVM.Concrete
 vmFromCommand opts =
@@ -215,15 +215,14 @@ launchVMTest opts =
 runVMTest :: Mode -> (String, VMTest.Case) -> IO Bool
 runVMTest mode (name, x) = do
   let vm = VMTest.vmForCase x
-  case mode of
-    Run ->
-      do putStr (name ++ ": ")
-         hFlush stdout
-         let vm' = execState exec vm
-         ok <- VMTest.checkExpectation x vm'
-         putStrLn (if ok then "OK" else "FAIL")
-         return ok
+  putStr (name ++ ": ")
+  hFlush stdout
+  vm' <-
+    case mode of
+      Run -> return (execState exec vm)
+      Debug -> EVM.TTY.runFromVM vm
+  ok <- VMTest.checkExpectation x vm'
+  putStrLn (if ok then "OK" else "FAIL")
+  return ok
 
-    Debug ->
-      do error "not implemented"
 #endif

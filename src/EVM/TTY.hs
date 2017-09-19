@@ -106,7 +106,7 @@ mkVty = do
   Vty.setMode (Vty.outputIface vty) Vty.BracketedPaste True
   return vty
 
-runFromVM :: VM Concrete -> IO ()
+runFromVM :: VM Concrete -> IO (VM Concrete)
 runFromVM vm = do
   let
     ui0 = UiVmState
@@ -124,8 +124,10 @@ runFromVM vm = do
            }
     ui1 = updateUiVmState ui0 vm & set uiVmFirstState ui1
 
-  _ <- customMain mkVty Nothing app (UiVmScreen ui1)
-  return ()
+  ui2 <- customMain mkVty Nothing app (UiVmScreen ui1)
+  case ui2 of
+    UiVmScreen ui -> return (view uiVm ui)
+    _ -> error "internal error: customMain returned prematurely"
 
 main :: FilePath -> FilePath -> IO ()
 main root jsonFilePath = do
@@ -175,17 +177,17 @@ app = App
           halt s
 
         (UiVmScreen s', VtyEvent (Vty.EvKey (Vty.KChar 'n') [])) ->
-          useContinuation (halt s) stepOneOpcode s'
+          useContinuation halt stepOneOpcode s'
 
         (UiVmScreen s', VtyEvent (Vty.EvKey (Vty.KChar 'N') [])) ->
-          useContinuation (halt s) stepOneSourcePosition s'
+          useContinuation halt stepOneSourcePosition s'
 
         (UiVmScreen s', VtyEvent (Vty.EvKey (Vty.KChar 'n') [Vty.MCtrl])) ->
-          useContinuation (halt s) stepOneSourcePosition_over s'
+          useContinuation halt stepOneSourcePosition_over s'
 
         (UiVmScreen s', VtyEvent (Vty.EvKey (Vty.KChar 'p') [])) ->
           let n = view uiVmStepCount s' - 1
-          in useContinuationRepeatedly n (halt s) stepOneOpcode
+          in useContinuationRepeatedly n halt stepOneOpcode
                (view uiVmFirstState s')
 
         (UiTestPickerScreen s', VtyEvent (Vty.EvKey (Vty.KEnter) [])) -> do
@@ -209,7 +211,7 @@ app = App
   }
 
 useContinuation
-  :: EventM n (Next (UiState Concrete))
+  :: (UiState Concrete -> EventM n (Next (UiState Concrete)))
   -> (UiVmState Concrete -> UiVmState Concrete)
   -> UiVmState Concrete
   -> EventM n (Next (UiState Concrete))
@@ -220,13 +222,13 @@ useContinuation onStop f ui =
       continue (UiVmScreen ui')
     Just r ->
       case view uiVmContinuation ui' of
-        Stop -> onStop
+        Stop -> onStop (UiVmScreen ui')
         Continue k ->
           continue . UiVmScreen $ k r ui'
 
 useContinuationRepeatedly
   :: Int
-  -> EventM n (Next (UiState Concrete))
+  -> (UiState Concrete -> EventM n (Next (UiState Concrete)))
   -> (UiVmState Concrete -> UiVmState Concrete)
   -> UiVmState Concrete
   -> EventM n (Next (UiState Concrete))
@@ -240,7 +242,7 @@ useContinuationRepeatedly n onStop f ui = go n ui
           go (i - 1) ui''
         Just r ->
           case view uiVmContinuation ui'' of
-            Stop -> onStop
+            Stop -> onStop (UiVmScreen ui'')
             Continue k ->
               go (i - 1) (k r ui'')
 

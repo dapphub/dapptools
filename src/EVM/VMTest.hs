@@ -46,22 +46,26 @@ data Contract = Contract
 data Expectation = Expectation
   { expectedOut :: ByteString
   , expectedContracts :: Map Addr Contract
+  , expectedGas :: W256
   } deriving Show
 
 checkExpectation :: Case -> EVM.VM EVM.Concrete -> IO Bool
 checkExpectation x vm =
   case (testExpectation x, view EVM.result vm) of
     (Just expectation, Just (EVM.VMSuccess (EVM.B output))) -> do
-      (&&) <$> checkExpectedContracts vm (expectedContracts expectation)
-           <*> checkExpectedOut output (expectedOut expectation)
+      t1 <- checkExpectedContracts vm (expectedContracts expectation)
+      t2 <- checkExpectedOut output (expectedOut expectation)
+      t3 <- checkExpectedGas vm (expectedGas expectation)
+      return (t1 && t2 && t3)
     (Nothing, Just (EVM.VMSuccess _)) ->
       return False
     (Nothing, Just (EVM.VMFailure _)) ->
       return True
     (Just _, Just (EVM.VMFailure _)) ->
       return False
-    (_, Nothing) ->
-      error "internal error" -- XXX
+    (_, Nothing) -> do
+      cpprint (view EVM.result vm)
+      error "internal error"
 
 checkExpectedOut :: ByteString -> ByteString -> IO Bool
 checkExpectedOut output expected =
@@ -79,6 +83,14 @@ checkExpectedContracts vm expected =
   else do
     cpprint (realizeContracts expected, vm ^. EVM.env . EVM.contracts)
     return False
+
+checkExpectedGas :: EVM.VM EVM.Concrete -> W256 -> IO Bool
+checkExpectedGas vm expected =
+  case vm ^. EVM.state . EVM.gas of
+    EVM.C _ x | x == expected -> return True
+    y -> do
+      cpprint ("gas mismatch" :: String, expected, y)
+      return False
 
 #if MIN_VERSION_aeson(1, 0, 0)
 
@@ -130,9 +142,10 @@ parseExpectation :: JSON.Object -> JSON.Parser (Maybe Expectation)
 parseExpectation v =
   do out       <- fmap hexText <$> v .:? "out"
      contracts <- v .:? "post"
-     case (out, contracts) of
-       (Just x, Just y) ->
-         return (Just (Expectation x y))
+     gas       <- v .:? "gas"
+     case (out, contracts, gas) of
+       (Just x, Just y, Just z) ->
+         return (Just (Expectation x y z))
        _ ->
          return Nothing
 
