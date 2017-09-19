@@ -3,12 +3,11 @@
 with python3Packages;
 
 buildPythonApplication rec {
-  rev = "mbrock";
-  version = rev;
+  version = "unstable-2017-09-19";
   name = "keeper";
 
   src = fetchFromGitHub {
-    inherit rev;
+    rev = "a316db1dc13288e417a6582eeb10b714863af8d5";
     owner = "makerdao";
     repo = "keeper";
     sha256 = "1yxgxs5iazxbsq1wlj0vhvplid207590nivga5hrwqr4ahy0cs4y";
