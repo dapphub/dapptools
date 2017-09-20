@@ -114,7 +114,7 @@ main = do
     VmTestReport {} ->
       withCurrentDirectory (tests opts) $ do
         dataDir <- Paths.getDataDir
-        callProcess (dataDir ++ "/run-consensus-tests") ["."]
+        callProcess "bash" [dataDir ++ "/run-consensus-tests", "."]
 
 findTestFile :: Maybe String -> IO String
 findTestFile (Just s) = pure s
