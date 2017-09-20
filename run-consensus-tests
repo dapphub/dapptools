@@ -2,7 +2,7 @@
 set -e
 
 if [[ $# != 1 ]]; then
-  echo "usage: $(basename "$0") <tests-dir>"
+  echo >&2 "usage: $(basename "$0") <tests-dir>"
   exit 1
 fi
 
