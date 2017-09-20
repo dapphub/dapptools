@@ -12,6 +12,7 @@
 import qualified EVM as EVM
 import qualified EVM.Concrete as EVM
 import qualified EVM.TTY as EVM.TTY
+import qualified EVM.FeeSchedule as FeeSchedule
 import EVM.Machine (w256)
 
 #if MIN_VERSION_aeson(1, 0, 0)
@@ -198,6 +199,7 @@ vmFromCommand opts =
       , EVM.vmoptTimestamp  = word timestamp 0
       , EVM.vmoptGaslimit   = word gaslimit 0
       , EVM.vmoptDifficulty = word difficulty 0
+      , EVM.vmoptSchedule   = FeeSchedule.metropolis
       }
     word f def = maybe def id (f opts)
     addr f def = maybe def id (f opts)

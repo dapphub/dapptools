@@ -10,6 +10,8 @@ import EVM.Types
 import EVM.Machine (blob)
 import EVM.Concrete (Concrete, Blob (B))
 
+import qualified EVM.FeeSchedule as FeeSchedule
+
 import Control.Lens
 import Control.Monad.State.Strict hiding (state)
 
@@ -111,6 +113,7 @@ initialUnitTestVm theContract _ =
            , vmoptTimestamp = 1
            , vmoptGaslimit = 0
            , vmoptDifficulty = 0
+           , vmoptSchedule = FeeSchedule.metropolis
            }
     creator =
       initialContract mempty

@@ -20,8 +20,6 @@ import EVM.Concrete
 import EVM.Op
 import EVM.FeeSchedule (FeeSchedule (..))
 
-import qualified EVM.FeeSchedule as FeeSchedule (metropolis)
-
 import Control.Monad.State.Strict hiding (state)
 
 import Data.Bits (xor, shiftR, (.&.), (.|.), FiniteBits (..))
@@ -150,6 +148,7 @@ data Block e = Block
   , _number     :: Word e
   , _difficulty :: Word e
   , _gaslimit   :: Word e
+  , _schedule   :: FeeSchedule (Word e)
   }
 
 blankState :: Machine e => FrameState e
@@ -267,14 +266,13 @@ exec1 = do
     the :: (b -> VM e -> Const a (VM e)) -> ((a -> Const a a) -> b) -> a
     the f g = view (f . g) vm
 
-    -- Simple for now
-    fees@(FeeSchedule {..}) = FeeSchedule.metropolis :: FeeSchedule (Word e)
-
     -- Convenient aliases
     mem  = the state memory
     stk  = the state stack
     self = the state contract
     this = fromJust (preview (ix (the state contract)) (the env contracts))
+
+    fees@(FeeSchedule {..}) = the block schedule
 
   if the state pc >= num (BS.length (the state code))
     then
@@ -1060,6 +1058,7 @@ data VMOpts = VMOpts
   , vmoptCoinbase :: Addr
   , vmoptDifficulty :: W256
   , vmoptGaslimit :: W256
+  , vmoptSchedule :: FeeSchedule (Word Concrete)
   } deriving Show
 
 makeVm :: VMOpts -> VM Concrete
@@ -1078,6 +1077,7 @@ makeVm o = VM
     , _number = w256 $ vmoptNumber o
     , _difficulty = w256 $ vmoptDifficulty o
     , _gaslimit = w256 $ vmoptGaslimit o
+    , _schedule = vmoptSchedule o
     }
   , _state = FrameState
     { _pc = 0

@@ -5,6 +5,8 @@ import EVM.Keccak (newContractAddress)
 import EVM.Concrete
 import EVM.Types
 
+import qualified EVM.FeeSchedule as FeeSchedule
+
 import Control.Lens
 import Control.Monad.State.Strict (State, get)
 import Data.ByteString (ByteString)
@@ -28,6 +30,7 @@ vmForEthrunCreation creationCode =
     , vmoptGaslimit = 0
     , vmoptDifficulty = 0
     , vmoptGas = 0xffffffffffffffff
+    , vmoptSchedule = FeeSchedule.metropolis
     }) & set (env . contracts . at ethrunAddress)
              (Just (initialContract mempty))
 

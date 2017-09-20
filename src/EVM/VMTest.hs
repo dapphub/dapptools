@@ -13,6 +13,7 @@ module EVM.VMTest
 import qualified EVM
 import qualified EVM.Concrete as EVM
 import qualified EVM.Machine as EVM
+import qualified EVM.FeeSchedule as EVM.FeeSchedule
 
 import EVM.Types
 
@@ -125,6 +126,7 @@ parseVmOpts v =
            <*> addrField env  "currentCoinbase"
            <*> wordField env  "currentDifficulty"
            <*> wordField env  "currentGasLimit"
+           <*> pure (EVM.FeeSchedule.homestead)
        _ ->
          JSON.typeMismatch "VM test case" (JSON.Object v)
 
