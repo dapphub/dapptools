@@ -1,30 +1,37 @@
-{ mkDerivation, abstract-par, aeson, ansi-wl-pprint, base
+{ mkDerivation, abstract-par, aeson, ansi-wl-pprint, async, base
 , base16-bytestring, base64-bytestring, binary, brick, bytestring
 , cereal, containers, cryptonite, data-dword, deepseq, directory
-, filepath, ghci-pretty, gitlib, gitlib-libgit2, here, HUnit, lens
+, filepath, ghci-pretty, here, HUnit, lens
 , lens-aeson, memory, monad-par, mtl, optparse-generic, process
 , QuickCheck, quickcheck-text, readline, rosezipper, scientific
 , stdenv, tasty, tasty-hunit, tasty-quickcheck, temporary, text
 , text-format, time, unordered-containers, vector, vty
 
+, restless-git
+
 , fetchFromGitHub, lib, makeWrapper
 , ncurses, zlib, bzip2, solc, coreutils
+, bash
 }:
 
 lib.overrideDerivation (mkDerivation rec {
   pname = "hsevm";
-  version = "0.7";
+  version = "unstable-2017-09-20";
 
   src = fetchFromGitHub {
     owner = "dapphub";
     repo = "hsevm";
-    rev = "v${version}";
-    sha256 = "0grsp2dziv6pvwx8y5i2m3079lwc67kccppm0szg5y69g3i2pzy7";
+    rev = "5ed92352dc9019737d555e05be730ec8a97894eb";
+    sha256 = "12yapnaqmlrmwigvmhly6j9cxjbnp2nicv5cgxmzh357i5gigy9x";
   };
 
   postInstall = ''
-    wrapProgram $out/bin/hsevm --add-flags '+RTS -N$((`${coreutils}/bin/nproc` - 1)) -RTS'
+    wrapProgram $out/bin/hsevm \
+       --add-flags '+RTS -N$((`${coreutils}/bin/nproc` - 1)) -RTS' \
+       --suffix PATH : "${lib.makeBinPath [bash coreutils]}"
   '';
+
+  enableSeparateDataOutput = true;
 
   extraLibraries = [
     abstract-par aeson ansi-wl-pprint base base16-bytestring
@@ -32,10 +39,10 @@ lib.overrideDerivation (mkDerivation rec {
     cryptonite data-dword deepseq directory filepath ghci-pretty lens
     lens-aeson memory monad-par mtl optparse-generic process QuickCheck
     quickcheck-text readline rosezipper scientific temporary text text-format
-    unordered-containers vector vty gitlib gitlib-libgit2
+    unordered-containers vector vty restless-git
   ];
   executableHaskellDepends = [
-    readline zlib bzip2
+    async readline zlib bzip2
   ];
   testHaskellDepends = [
     base binary bytestring ghci-pretty here HUnit lens mtl QuickCheck

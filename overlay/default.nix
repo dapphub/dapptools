@@ -15,6 +15,10 @@ let
   callPackage = self.pkgs.callPackage;
   pastPackage = past.pkgs.callPackage;
 
+  haskellPackages = super.pkgs.haskellPackages.override {
+    overrides = (import ./haskell.nix { pkgs = super.pkgs; });
+  };
+
 in rec {
   solc = callPackage ((import ./solc-versions.nix).solc_0_4_16) {};
 
@@ -30,7 +34,7 @@ in rec {
 
   hsevm =
     self.pkgs.haskell.lib.justStaticExecutables
-      (self.pkgs.haskellPackages.callPackage ./pkgs/hsevm.nix {});
+      (haskellPackages.callPackage ./pkgs/hsevm.nix {});
 
   seth   = callPackage ./pkgs/seth.nix {};
   dapp   = callPackage ./pkgs/dapp.nix {};
