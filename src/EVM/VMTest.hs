@@ -24,6 +24,7 @@ import Data.ByteString (ByteString)
 import Data.Aeson ((.:), (.:?))
 import Data.Aeson (FromJSON (..))
 import Data.Map (Map)
+import Data.List (intercalate)
 
 import qualified Data.Map          as Map
 import qualified Data.Aeson        as JSON
@@ -53,44 +54,38 @@ checkExpectation :: Case -> EVM.VM EVM.Concrete -> IO Bool
 checkExpectation x vm =
   case (testExpectation x, view EVM.result vm) of
     (Just expectation, Just (EVM.VMSuccess (EVM.B output))) -> do
-      t1 <- checkExpectedContracts vm (expectedContracts expectation)
-      t2 <- checkExpectedOut output (expectedOut expectation)
-      t3 <- checkExpectedGas vm (expectedGas expectation)
-      return (t1 && t2 && t3)
-    (Nothing, Just (EVM.VMSuccess _)) ->
+      let
+        (s1, b1) = ("bad-state", checkExpectedContracts vm (expectedContracts expectation))
+        (s2, b2) = ("bad-output", checkExpectedOut output (expectedOut expectation))
+        (s3, b3) = ("bad-gas", checkExpectedGas vm (expectedGas expectation))
+        ss = map fst (filter (not . snd) [(s1, b1), (s2, b2), (s3, b3)])
+      putStr (intercalate " " ss)
+      return (b1 && b2 && b3)
+    (Nothing, Just (EVM.VMSuccess _)) -> do
+      putStr "unexpected-success"
       return False
     (Nothing, Just (EVM.VMFailure _)) ->
       return True
-    (Just _, Just (EVM.VMFailure _)) ->
+    (Just _, Just (EVM.VMFailure _)) -> do
+      putStr "unexpected-failure"
       return False
     (_, Nothing) -> do
       cpprint (view EVM.result vm)
       error "internal error"
 
-checkExpectedOut :: ByteString -> ByteString -> IO Bool
+checkExpectedOut :: ByteString -> ByteString -> Bool
 checkExpectedOut output expected =
-  if output == expected
-  then
-    return True
-  else do
-    cpprint ("output mismatch" :: String, output, expected)
-    return False
+  output == expected
 
-checkExpectedContracts :: EVM.VM EVM.Concrete -> Map Addr Contract -> IO Bool
+checkExpectedContracts :: EVM.VM EVM.Concrete -> Map Addr Contract -> Bool
 checkExpectedContracts vm expected =
-  if realizeContracts expected == vm ^. EVM.env . EVM.contracts
-  then return True
-  else do
-    cpprint (realizeContracts expected, vm ^. EVM.env . EVM.contracts)
-    return False
+  realizeContracts expected == vm ^. EVM.env . EVM.contracts
 
-checkExpectedGas :: EVM.VM EVM.Concrete -> W256 -> IO Bool
+checkExpectedGas :: EVM.VM EVM.Concrete -> W256 -> Bool
 checkExpectedGas vm expected =
   case vm ^. EVM.state . EVM.gas of
-    EVM.C _ x | x == expected -> return True
-    y -> do
-      cpprint ("gas mismatch" :: String, expected, y)
-      return False
+    EVM.C _ x | x == expected -> True
+    _ -> False
 
 #if MIN_VERSION_aeson(1, 0, 0)
 

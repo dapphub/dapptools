@@ -1,10 +1,11 @@
 -- Main file of the hsevm CLI program
 
-{-# Language CPP #-}
 {-# Language BangPatterns #-}
+{-# Language CPP #-}
 {-# Language DeriveGeneric #-}
 {-# Language GeneralizedNewtypeDeriving #-}
 {-# Language LambdaCase #-}
+{-# Language NumDecimals #-}
 {-# Language OverloadedStrings #-}
 {-# Language TemplateHaskell #-}
 
@@ -23,8 +24,12 @@ import EVM.Solidity
 import EVM.Types hiding (word)
 import EVM.UnitTest
 
+import qualified Paths_hsevm as Paths
+
+import Control.Concurrent.Async   (async, waitCatch)
+import Control.Exception          (evaluate)
 import Control.Lens
-import Control.Monad              (unless, void)
+import Control.Monad              (void)
 import Control.Monad.State.Strict (execState)
 import Data.ByteString            (ByteString)
 import Data.List                  (intercalate, isSuffixOf)
@@ -32,6 +37,8 @@ import Data.Maybe                 (fromMaybe)
 import System.Directory           (withCurrentDirectory, listDirectory)
 import System.Exit                (die)
 import System.IO                  (hFlush, stdout)
+import System.Process             (callProcess)
+import System.Timeout             (timeout)
 
 import qualified Data.ByteString        as ByteString
 import qualified Data.ByteString.Base16 as BS16
@@ -75,6 +82,9 @@ data Command
       , test  :: [String]
       , debug :: Bool
       }
+  | VmTestReport
+      { tests :: String
+      }
   deriving (Show, Options.Generic, Eq)
 
 instance Options.ParseRecord Command where
@@ -101,6 +111,10 @@ main = do
       withCurrentDirectory root $ do
         testFile <- findTestFile (jsonFile opts)
         EVM.TTY.main root testFile
+    VmTestReport {} ->
+      withCurrentDirectory (tests opts) $ do
+        dataDir <- Paths.getDataDir
+        callProcess (dataDir ++ "/run-consensus-tests") ["."]
 
 findTestFile :: Maybe String -> IO String
 findTestFile (Just s) = pure s
@@ -199,14 +213,9 @@ launchVMTest opts =
              if null (test opts)
              then id
              else filter (\(x, _) -> elem x (test opts))
-       in do
-         let tests = testFilter (Map.toList allTests)
-         putStrLn $ "Running " ++ show (length tests) ++ " tests"
-         results <- mapM (runVMTest (optsMode opts)) tests
-         let failed = [name | (name, False) <- zip (map fst tests) results]
-         unless (null failed) $ do
-           putStrLn ""
-           putStrLn $ "Failed: " ++ intercalate ", " failed
+       in
+         mapM_ (runVMTest (optsMode opts)) $
+           testFilter (Map.toList allTests)
 #else
   putStrLn "Not supported"
 #endif
@@ -215,14 +224,26 @@ launchVMTest opts =
 runVMTest :: Mode -> (String, VMTest.Case) -> IO Bool
 runVMTest mode (name, x) = do
   let vm = VMTest.vmForCase x
-  putStr (name ++ ": ")
+  putStr (name ++ " ")
   hFlush stdout
-  vm' <-
-    case mode of
-      Run -> return (execState exec vm)
-      Debug -> EVM.TTY.runFromVM vm
-  ok <- VMTest.checkExpectation x vm'
-  putStrLn (if ok then "OK" else "FAIL")
-  return ok
+  result <- do
+    action <- async $
+      case mode of
+        Run -> do
+          timeout (1e6) . evaluate $ execState exec vm
+        Debug ->
+          Just <$> EVM.TTY.runFromVM vm
+    waitCatch action
+  case result of
+    Right (Just vm') -> do
+      ok <- VMTest.checkExpectation x vm'
+      putStrLn (if ok then "ok" else "")
+      return ok
+    Right Nothing -> do
+      putStrLn "timeout"
+      return False
+    Left _ -> do
+      putStrLn "error"
+      return False
 
 #endif
