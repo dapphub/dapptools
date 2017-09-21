@@ -23,7 +23,9 @@ import EVM.Debug
 import EVM.Exec
 import EVM.Solidity
 import EVM.Types hiding (word)
-import EVM.UnitTest
+import EVM.UnitTest (UnitTestOptions, findUnitTests, runUnitTestContract)
+
+import qualified EVM.UnitTest as EVM.UnitTest
 
 import qualified Paths_hsevm as Paths
 
@@ -70,13 +72,21 @@ data Command
       , state      :: Maybe String
       }
   | DappTest
-      { jsonFile :: Maybe String
-      , dappRoot :: Maybe String
-      , debug    :: Bool
+      { jsonFile           :: Maybe String
+      , dappRoot           :: Maybe String
+      , debug              :: Bool
+      , gasForCreating     :: Maybe W256
+      , gasForInvoking     :: Maybe W256
+      , balanceForCreator  :: Maybe W256
+      , balanceForCreated  :: Maybe W256
       }
   | Interactive
-      { jsonFile :: Maybe String
-      , dappRoot :: Maybe String
+      { jsonFile           :: Maybe String
+      , dappRoot           :: Maybe String
+      , gasForCreating     :: Maybe W256
+      , gasForInvoking     :: Maybe W256
+      , balanceForCreator  :: Maybe W256
+      , balanceForCreated  :: Maybe W256
       }
   | VmTest
       { file  :: String
@@ -92,28 +102,55 @@ instance Options.ParseRecord Command where
   parseRecord =
     Options.parseRecordWithModifiers Options.lispCaseModifiers
 
+defaultGasForCreating :: W256
+defaultGasForCreating = 6000000
+
+defaultGasForInvoking :: W256
+defaultGasForInvoking = 6000000
+
+defaultBalanceForCreator :: W256
+defaultBalanceForCreator = 0
+
+defaultBalanceForCreated :: W256
+defaultBalanceForCreated = 0
+
 optsMode :: Command -> Mode
 optsMode x = if debug x then Debug else Run
 
+unitTestOptions :: Command -> UnitTestOptions
+unitTestOptions cmd =
+  EVM.UnitTest.UnitTestOptions
+    { EVM.UnitTest.gasForCreating =
+        fromMaybe defaultGasForCreating (gasForCreating cmd)
+    , EVM.UnitTest.gasForInvoking =
+        fromMaybe defaultGasForInvoking (gasForInvoking cmd)
+    , EVM.UnitTest.balanceForCreator =
+        fromMaybe defaultBalanceForCreator (balanceForCreator cmd)
+    , EVM.UnitTest.balanceForCreated =
+        fromMaybe defaultBalanceForCreated (balanceForCreated cmd)
+    }
+
 main :: IO ()
 main = do
-  opts <- Options.getRecord "hsevm -- Ethereum evaluator"
-  let root = fromMaybe "." (dappRoot opts)
-  case opts of
+  cmd <- Options.getRecord "hsevm -- Ethereum evaluator"
+  let
+    root = fromMaybe "." (dappRoot cmd)
+    testOpts = unitTestOptions cmd
+  case cmd of
     Exec {} ->
-      launchExec opts
+      launchExec cmd
     VmTest {} ->
-      launchVMTest opts
+      launchVMTest cmd
     DappTest {} ->
       withCurrentDirectory root $ do
-        testFile <- findTestFile (jsonFile opts)
-        dappTest (optsMode opts) testFile
+        testFile <- findTestFile (jsonFile cmd)
+        dappTest testOpts (optsMode cmd) testFile
     Interactive {} ->
       withCurrentDirectory root $ do
-        testFile <- findTestFile (jsonFile opts)
-        EVM.TTY.main root testFile
+        testFile <- findTestFile (jsonFile cmd)
+        EVM.TTY.main testOpts root testFile
     VmTestReport {} ->
-      withCurrentDirectory (tests opts) $ do
+      withCurrentDirectory (tests cmd) $ do
         dataDir <- Paths.getDataDir
         callProcess "bash" [dataDir ++ "/run-consensus-tests", "."]
 
@@ -137,20 +174,20 @@ findTestFile Nothing = do
         , intercalate ", " xs
         ]
 
-dappTest :: Mode -> String -> IO ()
-dappTest mode solcFile = do
+dappTest :: UnitTestOptions -> Mode -> String -> IO ()
+dappTest opts _ solcFile = do
   readSolc solcFile >>=
     \case
       Just (contractMap, cache) -> do
         let unitTests = findUnitTests (Map.elems contractMap)
-        mapM_ (runUnitTestContract mode contractMap cache) unitTests
+        mapM_ (runUnitTestContract opts contractMap cache) unitTests
       Nothing ->
         error ("Failed to read Solidity JSON for `" ++ solcFile ++ "'")
 
 launchExec :: Command -> IO ()
-launchExec opts = do
-  let vm = vmFromCommand opts
-  vm1 <- case state opts of
+launchExec cmd = do
+  let vm = vmFromCommand cmd
+  vm1 <- case state cmd of
     Nothing -> pure vm
     Just path ->
       -- Note: this will load the code, so if you've specified a state
@@ -158,7 +195,7 @@ launchExec opts = do
       -- the first run.
       Facts.apply vm <$> Git.loadFacts (Git.RepoAt path)
 
-  case optsMode opts of
+  case optsMode cmd of
     Run ->
       let vm' = execState exec vm1
       in case view EVM.result vm' of
@@ -172,7 +209,7 @@ launchExec opts = do
             else do
               ByteString.putStr hex
               putStrLn ""
-          case state opts of
+          case state cmd of
             Nothing -> pure ()
             Just path ->
               Git.saveFacts (Git.RepoAt path) (Facts.vmFacts vm')
@@ -180,15 +217,15 @@ launchExec opts = do
       void (EVM.TTY.runFromVM vm)
 
 vmFromCommand :: Command -> EVM.VM EVM.Concrete
-vmFromCommand opts =
+vmFromCommand cmd =
   vm1 & EVM.env . EVM.contracts . ix address' . EVM.balance +~ (w256 value')
   where
     value'   = word value 0
     address' = addr address 1
     vm1 = EVM.makeVm $ EVM.VMOpts
-      { EVM.vmoptCode       = hexByteString "--code" (code opts)
+      { EVM.vmoptCode       = hexByteString "--code" (code cmd)
       , EVM.vmoptCalldata   = maybe "" (hexByteString "--calldata")
-                                (calldata opts)
+                                (calldata cmd)
       , EVM.vmoptValue      = value'
       , EVM.vmoptAddress    = address'
       , EVM.vmoptCaller     = addr caller 2
@@ -201,22 +238,22 @@ vmFromCommand opts =
       , EVM.vmoptDifficulty = word difficulty 0
       , EVM.vmoptSchedule   = FeeSchedule.metropolis
       }
-    word f def = maybe def id (f opts)
-    addr f def = maybe def id (f opts)
+    word f def = maybe def id (f cmd)
+    addr f def = maybe def id (f cmd)
 
 launchVMTest :: Command -> IO ()
-launchVMTest opts =
+launchVMTest cmd =
 #if MIN_VERSION_aeson(1, 0, 0)
-  VMTest.parseSuite <$> LazyByteString.readFile (file opts) >>=
+  VMTest.parseSuite <$> LazyByteString.readFile (file cmd) >>=
    \case
      Left err -> print err
      Right allTests ->
        let testFilter =
-             if null (test opts)
+             if null (test cmd)
              then id
-             else filter (\(x, _) -> elem x (test opts))
+             else filter (\(x, _) -> elem x (test cmd))
        in
-         mapM_ (runVMTest (optsMode opts)) $
+         mapM_ (runVMTest (optsMode cmd)) $
            testFilter (Map.toList allTests)
 #else
   putStrLn "Not supported"
@@ -249,3 +286,5 @@ runVMTest mode (name, x) = do
       return False
 
 #endif
+
+Haskell finished at Thu Sep 21 12:39:48

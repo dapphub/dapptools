@@ -13,7 +13,7 @@ import EVM
 import EVM.Concrete (Concrete, Blob (..), Word (C))
 import EVM.Debug
 import EVM.Exec
-import EVM.Machine (Machine)
+import EVM.Machine (Machine, w256)
 import EVM.Op
 import EVM.Solidity
 import EVM.Types
@@ -124,13 +124,18 @@ runFromVM vm = do
            }
     ui1 = updateUiVmState ui0 vm & set uiVmFirstState ui1
 
-  ui2 <- customMain mkVty Nothing app (UiVmScreen ui1)
+    testOpts =
+      -- Oops, kludge.  The UI will never use these options,
+      -- because we don't allow starting unit tests from this path.
+      error "internal error: not supposed to use unit test options"
+
+  ui2 <- customMain mkVty Nothing (app testOpts) (UiVmScreen ui1)
   case ui2 of
     UiVmScreen ui -> return (view uiVm ui)
     _ -> error "internal error: customMain returned prematurely"
 
-main :: FilePath -> FilePath -> IO ()
-main root jsonFilePath = do
+main :: UnitTestOptions -> FilePath -> FilePath -> IO ()
+main opts root jsonFilePath = do
   readSolc jsonFilePath >>=
     \case
       Nothing ->
@@ -163,11 +168,11 @@ main root jsonFilePath = do
             , _testPickerDapp = dappInfo
             }
 
-        _ <- customMain mkVty Nothing app (ui :: UiState Concrete)
+        _ <- customMain mkVty Nothing (app opts) (ui :: UiState Concrete)
         return ()
 
-app :: App (UiState Concrete) () Name
-app = App
+app :: UnitTestOptions -> App (UiState Concrete) () Name
+app opts = App
   { appDraw = drawUi
   , appChooseCursor = neverShowCursor
   , appHandleEvent = \s e ->
@@ -195,7 +200,7 @@ app = App
             Nothing -> error "nothing selected"
             Just (_, x) ->
               continue . UiVmScreen $
-                initialUiVmStateForTest (view testPickerDapp s') x
+                initialUiVmStateForTest opts (view testPickerDapp s') x
 
         (UiTestPickerScreen s', VtyEvent e') -> do
           s'' <- handleEventLensed s'
@@ -246,8 +251,12 @@ useContinuationRepeatedly n onStop f ui = go n ui
             Continue k ->
               go (i - 1) (k r ui'')
 
-initialUiVmStateForTest :: DappInfo -> (Text, Text) -> UiVmState Concrete
-initialUiVmStateForTest dapp (theContractName, theTestName) =
+initialUiVmStateForTest
+  :: UnitTestOptions
+  -> DappInfo
+  -> (Text, Text)
+  -> UiVmState Concrete
+initialUiVmStateForTest opts@(UnitTestOptions {..}) dapp (theContractName, theTestName) =
   ui1
   where
     ui1 =
@@ -270,7 +279,7 @@ initialUiVmStateForTest dapp (theContractName, theTestName) =
     Just testContract =
       view (dappSolcByName . at theContractName) dapp
     vm0 =
-      initialUnitTestVm testContract (Map.elems (view dappSolcByName dapp))
+      initialUnitTestVm opts testContract (Map.elems (view dappSolcByName dapp))
     k1 r ui =
       case r of
         VMFailure e ->
@@ -280,11 +289,11 @@ initialUiVmStateForTest dapp (theContractName, theTestName) =
             vm1 = view uiVm ui
             target = view (state . contract) vm1
             vm2 =
-              vm1 & env . contracts . ix target . balance +~ 0xffffffffffffffffffffffff
+              vm1 & env . contracts . ix target . balance +~ w256 balanceForCreated
             vm3 = flip execState vm2 $ do
               performCreation targetCode
               setupCall target "setUp()"
-              assign (state . gas) 6000000
+              assign (state . gas) (w256 gasForInvoking)
           in
             updateUiVmState ui vm3
               & set uiVmContinuation (Continue (k2 target))
@@ -298,7 +307,7 @@ initialUiVmStateForTest dapp (theContractName, theTestName) =
             vm3 = view uiVm ui
             vm4 = flip execState vm3 $ do
                     setupCall target theTestName
-                    assign (state . gas) 6000000
+                    assign (state . gas) (w256 gasForInvoking)
                     assign contextTrace (Zipper.fromForest [])
                     assign logs mempty
           in
