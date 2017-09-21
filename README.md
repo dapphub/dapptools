@@ -9,8 +9,9 @@ command line program can run unit tests, interactively debug contracts
 while showing the Solidity source, or run arbitrary EVM code.
 
 *This software is alpha quality.* It is not yet a 100% complete EVM
-(almost everything is implemented, but e.g. the precompiled contracts are missing). Testing against the
-Ethereum Foundation's reference test suite is begun but not completed.
+(almost everything is implemented, but e.g. the precompiled contracts
+are missing). Testing against the Ethereum Foundation's reference test
+suite is begun but not completed.  See the [hsevm v0.8 test report].
 
 [![asciicast](https://asciinema.org/a/5j8eec71hl55l16hsbrn91j8e.png)](https://asciinema.org/a/5j8eec71hl55l16hsbrn91j8e)
 
@@ -36,8 +37,6 @@ This Nix channel can also be used to install
     $ nix-env -iA dapphub.dapp
 
 ### Static binary
-
-[This isn't updated; see [issue](https://github.com/dapphub/hsevm/issues/10), will fix soon.]
 
 If you don't want to compile anything, and you're on x86-64 Linux, you
 can download a static binary from the "Releases" tab on GitHub.
@@ -74,13 +73,15 @@ with contracts developed using the
 
 After running `dapp build`, you can run your unit test suite with
 
-    $ hsevm dapp-test --json-file ~/my-dapp/out/foo.t.sol.json --dapp-root ~/my-dapp
+    $ hsevm dapp-test
 
 or you can enter the interactive debugger using
 
-    $ hsevm interactive --json-file ~/my-dapp/out/foo.t.sol.json --dapp-root ~/my-dapp
+    $ hsevm interactive
 
 ## Contact
 
 You can find us in the DappHub chat at https://dapphub.chat/,
 especially the `#dev` channel.
+
+[hsevm v0.8 test report]: https://hydra.dapp.tools/build/135/download/1/index.html
