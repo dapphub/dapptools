@@ -24,7 +24,7 @@ import Control.Monad.State.Strict hiding (state)
 
 import Data.ByteString (ByteString)
 import Data.Map (Map)
-import Data.Maybe (fromJust, isJust)
+import Data.Maybe (fromJust)
 import Data.Monoid ((<>))
 import Data.Text (Text, unpack, pack)
 import Data.Text.Encoding (decodeUtf8)
@@ -80,7 +80,7 @@ data DappInfo = DappInfo
   , _dappSolcByHash :: Map W256 (CodeType, SolcContract)
   , _dappSources    :: SourceCache
   , _dappUnitTests  :: [(Text, [Text])]
-  }
+  } deriving Eq
 
 data UiTestPickerState = UiTestPickerState
   { _testPickerList :: List Name (Text, Text)
@@ -334,16 +334,32 @@ drawTestPicker ui =
 
 drawVm :: UiVmState Concrete -> [UiWidget]
 drawVm ui =
-  [ vBox
-    [ vLimit 20 $ hBox
-      [ drawStackPane ui <+> vBorder
-      , drawTracePane ui
-      ]
-    , hBox $
-      [ hLimit 72 $ drawBytecodePane ui
-      , drawSolidityPane ui
-      ]
-    ]
+  -- EVM debugging needs a lot of space because of the 256-bit words
+  -- in both the bytecode and the stack .
+  --
+  -- If on a very tall display, prefer a vertical layout.
+  --
+  -- Actually the horizontal layout would be preferrable if the display
+  -- is both very tall and very wide, but this is okay for now.
+  [ ifTallEnough (20 * 4)
+      ( vBox
+        [ vLimit 20 $ drawBytecodePane ui
+        , vLimit 20 $ drawStackPane ui
+        , drawSolidityPane ui
+        , vLimit 20 $ drawTracePane ui
+        ]
+      )
+      ( vBox
+        [ hBox
+          [ vLimit 20 $ drawBytecodePane ui
+          , vLimit 20 $ drawStackPane ui
+          ]
+        , hBox $
+          [ drawSolidityPane ui
+          , vLimit 20 $ drawTracePane ui
+          ]
+        ]
+      )
   ]
 
 stepOneOpcode :: UiVmState Concrete -> UiVmState Concrete
@@ -568,41 +584,55 @@ drawTracePane ui =
       (view uiVmTraceList ui)
 
 drawSolidityPane :: Machine e => UiVmState e -> UiWidget
-drawSolidityPane ui | not (isJust (view uiVmDapp ui)) = vBox []
-drawSolidityPane ui =
-  let
-    Just dapp = view uiVmDapp ui
-    sm = fromJust $ currentSrcMap dapp (view uiVm ui)
-    rows = fromJust $ view (dappSources . sourceLines . at (srcMapFile sm)) dapp
-    subrange i = lineSubrange rows (srcMapOffset sm, srcMapLength sm) i
-    lineNo =
-      (snd . fromJust $
-        (srcMapCodePos
-         (view dappSources dapp)
-         sm)) - 1
-  in vBox
-    [ hBorderWithLabel $
-        txt (maybe "<unknown>" contractNamePart
-              (preview (uiVmSolc . _Just . contractName) ui))
-          <+> str (" " ++ show lineNo)
-    , Centered.renderList
-        (\_ (i, line) ->
-           let s = case decodeUtf8 line of "" -> " "; y -> y
-           in case subrange i of
-                Nothing -> withHighlight False (txt s)
-                Just (a, b) ->
-                  let (x, y, z) = ( Text.take a s
-                                  , Text.take b (Text.drop a s)
-                                  , Text.drop (a + b) s
-                                  )
-                  in hBox [ withHighlight False (txt x)
-                          , withHighlight True (txt y)
-                          , withHighlight False (txt z)
-                          ])
-        False
-        (listMoveTo lineNo
-          (view uiVmSolidityList ui))
-    ]
+drawSolidityPane ui@(view uiVmDapp -> Just dapp) =
+  case currentSrcMap dapp (view uiVm ui) of
+    Nothing -> hBorderWithLabel (txt "<no source map>")
+    Just sm ->
+      case view (dappSources . sourceLines . at (srcMapFile sm)) dapp of
+        Nothing -> hBorderWithLabel (txt "<source not found>")
+        Just rows ->
+          let
+            subrange i = lineSubrange rows (srcMapOffset sm, srcMapLength sm) i
+            lineNo =
+              (snd . fromJust $
+                (srcMapCodePos
+                 (view dappSources dapp)
+                 sm)) - 1
+          in vBox
+            [ hBorderWithLabel $
+                txt (maybe "<unknown>" contractNamePart
+                      (preview (uiVmSolc . _Just . contractName) ui))
+                  <+> str (" " ++ show lineNo)
+            , Centered.renderList
+                (\_ (i, line) ->
+                   let s = case decodeUtf8 line of "" -> " "; y -> y
+                   in case subrange i of
+                        Nothing -> withHighlight False (txt s)
+                        Just (a, b) ->
+                          let (x, y, z) = ( Text.take a s
+                                          , Text.take b (Text.drop a s)
+                                          , Text.drop (a + b) s
+                                          )
+                          in hBox [ withHighlight False (txt x)
+                                  , withHighlight True (txt y)
+                                  , withHighlight False (txt z)
+                                  ])
+                False
+                (listMoveTo lineNo
+                  (view uiVmSolidityList ui))
+            ]
+drawSolidityPane _ =
+  -- When e.g. debugging raw EVM code without dapp info,
+  -- don't show a Solidity pane.
+  vBox []
+
+ifTallEnough :: Int -> Widget n -> Widget n -> Widget n
+ifTallEnough need w1 w2 =
+  Widget Greedy Greedy $ do
+    c <- getContext
+    if view availHeightL c > need
+      then render w1
+      else render w2
 
 contractNamePart :: Text -> Text
 contractNamePart x = Text.split (== ':') x !! 1

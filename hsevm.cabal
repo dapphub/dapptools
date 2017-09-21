@@ -100,7 +100,8 @@ library
     LambdaCase,
     OverloadedStrings,
     Rank2Types,
-    TypeFamilies
+    TypeFamilies,
+    ViewPatterns
 
 executable hsevm
   default-language:
