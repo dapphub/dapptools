@@ -20,10 +20,11 @@ let
   };
 
   profilingHaskellPackages = haskellPackages.override {
-    overrides = self: super: {
-      mkDerivation = args: super.mkDerivation
-        (args // { enableLibraryProfiling = true; });
-    };
+    overrides = self: super-hs:
+      (import ./haskell.nix { pkgs = super.pkgs; } self super-hs) // {
+        mkDerivation = args: super-hs.mkDerivation
+          (args // { enableLibraryProfiling = true; });
+      };
   };
 
 in rec {
