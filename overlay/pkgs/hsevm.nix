@@ -16,13 +16,13 @@
 
 lib.overrideDerivation (mkDerivation rec {
   pname = "hsevm";
-  version = "unstable-2017-09-20";
+  version = "0.8";
 
   src = fetchFromGitHub {
     owner = "dapphub";
     repo = "hsevm";
-    rev = "dda5a0b1cb07fa32e780977d68aa8667720b3172";
-    sha256 = "1rla1ka5sg426vy7rxc6r7hskipfgp3j6s0g9ypbz375xg24rcfr";
+    rev = "v${version}";
+    sha256 = "1wv6za9z0lgs7xf8pz2szfsr377w3aw3a57j8a05m9j0d1plndsz";
   };
 
   postInstall = ''
