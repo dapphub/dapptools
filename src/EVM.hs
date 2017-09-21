@@ -809,10 +809,14 @@ delegateCall fees xGas xTo xInOffset xInSize xOutOffset xOutSize xs continue = d
                     , callContextSize   = xOutSize
                     , callContextCodehash = view codehash target
                     , callContextReversion = view (env . contracts) vm
-                    , callContextAbi = Nothing
-                        -- if xInSize >= 4
-                        -- then Just $! view (state . memory . word32At (num xInOffset)) vm
-                        -- else Nothing
+                    , callContextAbi =
+                        if xInSize >= 4
+                        then
+                          let
+                            w = forceConcreteWord
+                                  (readMemoryWord32 xInOffset (view (state . memory) vm))
+                          in Just $! num w
+                        else Nothing
                     }
 
               pushTo frames $ Frame

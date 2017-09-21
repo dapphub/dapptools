@@ -116,8 +116,16 @@ instance Machine' Concrete where
       go !a (-1) = a
       go !a !n = go (a + shiftL (num $ readByteOrZero (num i + n) m)
                                 (8 * (31 - n))) (n - 1)
-    in {-# SCC word256At_getter #-}
+    in {-# SCC readMemoryWord #-}
       w256 $ go (0 :: W256) (31 :: Int)
+
+  readMemoryWord32 (C _ i) (ConcreteMemory m) =
+    let
+      go !a (-1) = a
+      go !a !n = go (a + shiftL (num $ readByteOrZero (num i + n) m)
+                                (8 * (3 - n))) (n - 1)
+    in {-# SCC readMemoryWord32 #-}
+      w256 $ go (0 :: W256) (3 :: Int)
 
   setMemoryWord (C _ i) (C _ x) m =
     writeMemory (B (word256Bytes x)) 32 0 (num i) m

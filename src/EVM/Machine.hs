@@ -44,6 +44,7 @@ class Machine' e where
   setMemoryByte :: Word e -> Byte e -> Memory e -> Memory e
 
   readMemoryWord :: Word e -> Memory e -> Word e
+  readMemoryWord32 :: Word e -> Memory e -> Word e
   setMemoryWord :: Word e -> Word e -> Memory e -> Memory e
 
   readBlobWord :: Word e -> Blob e -> Word e
