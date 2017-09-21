@@ -38,7 +38,8 @@ data Num n => FeeSchedule n = FeeSchedule
   , g_blockhash :: n
   } deriving Show
 
--- We define an EIP as a fee schedule endomorphism.
+-- For the purposes of this module, we define an EIP as just a fee
+-- schedule modification.
 type EIP n = Num n => FeeSchedule n -> FeeSchedule n
 
 -- EIP150: Gas cost changes for IO-heavy operations
@@ -59,9 +60,7 @@ eip160 :: EIP n
 eip160 fees = fees
   { g_expbyte = 50 }
 
-type Fees = forall n. Num n => FeeSchedule n
-
-homestead :: Fees
+homestead :: Num n => FeeSchedule n
 homestead = FeeSchedule
   { g_zero = 0
   , g_base = 2
@@ -100,5 +99,5 @@ homestead = FeeSchedule
   , g_blockhash = 20
   }
 
-metropolis :: Fees
+metropolis :: Num n => FeeSchedule n
 metropolis = eip160 . eip150 $ homestead
