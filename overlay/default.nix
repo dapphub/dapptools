@@ -19,6 +19,13 @@ let
     overrides = (import ./haskell.nix { pkgs = super.pkgs; });
   };
 
+  profilingHaskellPackages = haskellPackages.override {
+    overrides = self: super: {
+      mkDerivation = args: super.mkDerivation
+        (args // { enableLibraryProfiling = true; });
+    };
+  };
+
 in rec {
   solc = callPackage ((import ./solc-versions.nix).solc_0_4_16) {};
 
@@ -35,6 +42,9 @@ in rec {
   hsevm =
     self.pkgs.haskell.lib.justStaticExecutables
       (haskellPackages.callPackage ./pkgs/hsevm.nix {});
+
+  hsevm-profiling =
+    profilingHaskellPackages.callPackage ./pkgs/hsevm.nix {};
 
   seth   = callPackage ./pkgs/seth.nix {};
   dapp   = callPackage ./pkgs/dapp.nix {};

@@ -9,6 +9,7 @@ in rec {
   dapphub-linux = with linux.pkgs; {
     inherit dapp;
     inherit hsevm;
+    inherit hsevm-profiling;
     inherit keeper;
     inherit setzer;
     inherit solc-versions;
@@ -18,13 +19,14 @@ in rec {
   dapphub-darwin = with darwin.pkgs; {
     inherit dapp;
     inherit hsevm;
+    # inherit hsevm-profiling;
     # inherit keeper;
     inherit setzer;
     inherit solc-versions;
     inherit go-ethereum;
   };
 
-  hsevm-consensus-test = rec {
+  hsevm-development = rec {
     ethereum-test-suite = linux.pkgs.fetchFromGitHub {
       owner = "ethereum";
       repo = "tests";
