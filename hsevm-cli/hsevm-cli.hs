@@ -286,5 +286,3 @@ runVMTest mode (name, x) = do
       return False
 
 #endif
-
-Haskell finished at Thu Sep 21 12:39:48
