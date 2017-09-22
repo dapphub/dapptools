@@ -10,8 +10,6 @@
 
 module EVM where
 
--- * Imports
-
 import Prelude hiding ((^), log, Word, exponent)
 
 import EVM.Types
