@@ -1,3 +1,5 @@
+-- * Language extension pragmas
+
 {-# Language ConstraintKinds #-}
 {-# Language FlexibleInstances #-}
 {-# Language RecordWildCards #-}
@@ -7,6 +9,8 @@
 {-# Language TemplateHaskell #-}
 {-# Language TypeOperators #-}
 {-# Language ViewPatterns #-}
+
+-- * Module definition
 
 module EVM where
 
@@ -31,7 +35,6 @@ import Control.Lens hiding (op, (:<), (|>))
 import Data.ByteString              (ByteString)
 import Data.Map.Strict              (Map)
 import Data.Maybe                   (fromMaybe, fromJust, isNothing)
-import Data.Monoid                  (Endo)
 import Data.Sequence                (Seq)
 import Data.Vector.Storable         (Vector)
 import Data.Vector.Storable.Mutable (new, write)
@@ -46,6 +49,8 @@ import qualified Data.Vector.Storable as Vector
 import qualified Data.Tree.Zipper     as Zipper
 
 import qualified Data.Vector as RegularVector
+
+-- * Data types
 
 data Error e
   = BalanceTooLow (Word e) (Word e)
@@ -77,6 +82,26 @@ data VM e = VM
   , _logs          :: Seq (Log e)
   , _contextTrace  :: Zipper.TreePos Zipper.Empty (Either (Log e) (FrameContext e))
   }
+
+-- | Alias for the type of e.g. @exec1@.
+type EVM e a = State (VM e) a
+
+-- | A way to specify an initial VM state
+data VMOpts = VMOpts
+  { vmoptCode :: ByteString
+  , vmoptCalldata :: ByteString
+  , vmoptValue :: W256
+  , vmoptAddress :: Addr
+  , vmoptCaller :: Addr
+  , vmoptOrigin :: Addr
+  , vmoptGas :: W256
+  , vmoptNumber :: W256
+  , vmoptTimestamp :: W256
+  , vmoptCoinbase :: Addr
+  , vmoptDifficulty :: W256
+  , vmoptGaslimit :: W256
+  , vmoptSchedule :: FeeSchedule (Word Concrete)
+  } deriving Show
 
 -- | A log entry
 data Log e = Log Addr (Blob e) [Word e]
@@ -135,13 +160,15 @@ data Contract e = Contract
 deriving instance Show (Contract Concrete)
 deriving instance Eq (Contract Concrete)
 
--- | Kind of a hodgepodge?
+-- | Various environmental data
 data Env e = Env
   { _contracts          :: Map Addr (Contract e)
   , _sha3Crack          :: Map (Word e) (Blob e)
   , _origin             :: Addr
   }
 
+
+-- | Data about the block
 data Block e = Block
   { _coinbase   :: Addr
   , _timestamp  :: Word e
@@ -174,26 +201,52 @@ makeLenses ''Contract
 makeLenses ''Env
 makeLenses ''VM
 
-type EVM e a = State (VM e) a
+-- * Data accessors
 
 currentContract :: Machine e => VM e -> Maybe (Contract e)
 currentContract vm =
   view (env . contracts . at (view (state . codeContract) vm)) vm
 
-zipperRootForest :: Zipper.TreePos Zipper.Empty a -> Forest a
-zipperRootForest z =
-  case Zipper.parent z of
-    Nothing -> Zipper.toForest z
-    Just z' -> zipperRootForest (Zipper.nextSpace z')
+-- * Data constructors
 
-contextTraceForest :: Machine e => VM e -> Forest (Either (Log e) (FrameContext e))
-contextTraceForest vm =
-  view (contextTrace . to zipperRootForest) vm
-
-traceLog :: MonadState (VM e) m => Log e -> m ()
-traceLog log =
-  modifying contextTrace $
-    \t -> Zipper.nextSpace (Zipper.insert (Node (Left log) []) t)
+makeVm :: VMOpts -> VM Concrete
+makeVm o = VM
+  { _result = Nothing
+  , _frames = mempty
+  , _tx = TxState
+    { _selfdestructs = mempty
+    , _refunds = mempty
+    }
+  , _logs = mempty
+  , _contextTrace = Zipper.fromForest []
+  , _block = Block
+    { _coinbase = vmoptCoinbase o
+    , _timestamp = w256 $ vmoptTimestamp o
+    , _number = w256 $ vmoptNumber o
+    , _difficulty = w256 $ vmoptDifficulty o
+    , _gaslimit = w256 $ vmoptGaslimit o
+    , _schedule = vmoptSchedule o
+    }
+  , _state = FrameState
+    { _pc = 0
+    , _stack = mempty
+    , _memory = mempty
+    , _memorySize = 0
+    , _code = vmoptCode o
+    , _contract = vmoptAddress o
+    , _codeContract = vmoptAddress o
+    , _calldata = B $ vmoptCalldata o
+    , _callvalue = w256 $ vmoptValue o
+    , _caller = vmoptCaller o
+    , _gas = w256 $ vmoptGas o
+    }
+  , _env = Env
+    { _sha3Crack = mempty
+    , _origin = vmoptOrigin o
+    , _contracts = Map.fromList
+      [(vmoptAddress o, initialContract (vmoptCode o))]
+    }
+  }
 
 initialContract :: Machine e => ByteString -> Contract e
 initialContract theCode = Contract
@@ -209,51 +262,7 @@ initialContract theCode = Contract
   , _codeOps  = mkCodeOps theCode
   }
 
-performCreation :: Machine e => ByteString -> EVM e ()
-performCreation createdCode = do
-  self <- use (state . contract)
-  zoom (env . contracts . at self) $ do
-    if BS.null createdCode
-      then put Nothing
-      else do
-        Just now <- get
-        put . Just $
-          initialContract createdCode
-            & set storage (view storage now)
-            & set balance (view balance now)
-
-resetState :: Machine e => EVM e ()
-resetState = do
-  -- TODO: handle selfdestructs
-  assign result     Nothing
-  assign frames     []
-  assign state      blankState
-
-loadContract :: Machine e => Addr -> EVM e ()
-loadContract target =
-  preuse (env . contracts . ix target . bytecode) >>=
-    \case
-      Nothing ->
-        error "Call target doesn't exist"
-      Just targetCode -> do
-        assign (state . contract) target
-        assign (state . code)     targetCode
-        assign (state . codeContract) target
-
-burn :: Machine e => Word e -> EVM e () -> EVM e ()
-burn n continue = do
-  available <- use (state . gas)
-  if n <= available
-    then do
-      state . gas -= n
-      continue
-    else
-      vmError OutOfGas
-
-refund :: Machine e => Word e -> EVM e ()
-refund n = do
-  self <- use (state . contract)
-  pushTo (tx . refunds) (self, n)
+-- * Opcode dispatch (exec1)
 
 {-# SPECIALIZE exec1 :: EVM Concrete () #-}
 exec1 :: forall e. Machine e => EVM e ()
@@ -788,6 +797,76 @@ exec1 = do
         xxx ->
           vmError (UnrecognizedOpcode xxx)
 
+-- * Opcode helper actions
+
+noop :: Monad m => m ()
+noop = pure ()
+
+pushTo :: MonadState s m => ASetter s s [a] [a] -> a -> m ()
+pushTo f x = f %= (x :)
+
+pushToSequence :: MonadState s m => ASetter s s (Seq a) (Seq a) -> a -> m ()
+pushToSequence f x = f %= (Seq.|> x)
+
+touchAccount :: Machine e => Addr -> EVM e (Contract e)
+touchAccount a = do
+  use (env . contracts . at a) >>=
+    \case
+      Nothing -> do
+        let c = initialContract ""
+        assign (env . contracts . at a) (Just c)
+        return c
+      Just c ->
+        return c
+
+performCreation :: Machine e => ByteString -> EVM e ()
+performCreation createdCode = do
+  self <- use (state . contract)
+  zoom (env . contracts . at self) $ do
+    if BS.null createdCode
+      then put Nothing
+      else do
+        Just now <- get
+        put . Just $
+          initialContract createdCode
+            & set storage (view storage now)
+            & set balance (view balance now)
+
+resetState :: Machine e => EVM e ()
+resetState = do
+  -- TODO: handle selfdestructs
+  assign result     Nothing
+  assign frames     []
+  assign state      blankState
+
+loadContract :: Machine e => Addr -> EVM e ()
+loadContract target =
+  preuse (env . contracts . ix target . bytecode) >>=
+    \case
+      Nothing ->
+        error "Call target doesn't exist"
+      Just targetCode -> do
+        assign (state . contract) target
+        assign (state . code)     targetCode
+        assign (state . codeContract) target
+
+burn :: Machine e => Word e -> EVM e () -> EVM e ()
+burn n continue = do
+  available <- use (state . gas)
+  if n <= available
+    then do
+      state . gas -= n
+      continue
+    else
+      vmError OutOfGas
+
+refund :: Machine e => Word e -> EVM e ()
+refund n = do
+  self <- use (state . contract)
+  pushTo (tx . refunds) (self, n)
+
+-- * General call implementation ("delegateCall")
+
 delegateCall
   :: Machine e
   => FeeSchedule (Word e)
@@ -838,89 +917,8 @@ delegateCall fees xGas xTo xInOffset xInSize xOutOffset xOutSize xs continue = d
 
               continue
 
-{-#
-  SPECIALIZE accessMemoryRange
-    :: FeeSchedule (Word Concrete)
-    -> Word Concrete -> Word Concrete
-    -> EVM Concrete () -> EVM Concrete ()
- #-}
-accessMemoryRange
-  :: Machine e
-  => FeeSchedule (Word e)
-  -> Word e
-  -> Word e
-  -> EVM e ()
-  -> EVM e ()
-accessMemoryRange _ _ 0 continue = continue
-accessMemoryRange fees f l continue = do
-  m0 <- use (state . memorySize)
-  let m1 = max m0 (num (f + l))
-  burn (memoryCost fees m1 - memoryCost fees m0) $ do
-    assign (state . memorySize) m1
-    continue
 
-memoryCost :: Machine e => FeeSchedule (Word e) -> Int -> Word e
-memoryCost FeeSchedule{..} (num -> byteCount) =
-  let
-    wordCount = ceilDiv byteCount 32
-    linearCost = g_memory * wordCount
-    quadraticCost = div (wordCount * wordCount) 32
-  in
-    linearCost + quadraticCost
-
-{-#
-  SPECIALIZE accessMemoryWord
-    :: FeeSchedule (Word Concrete) -> Word Concrete
-    -> EVM Concrete () -> EVM Concrete ()
- #-}
-accessMemoryWord
-  :: Machine e => FeeSchedule (Word e) -> Word e -> EVM e () -> EVM e ()
-accessMemoryWord fees x continue = accessMemoryRange fees x 32 continue
-
-{-#
-  SPECIALIZE copyBytesToMemory
-    :: Blob Concrete -> Word Concrete -> Word Concrete -> Word Concrete
-    -> EVM Concrete ()
- #-}
-copyBytesToMemory
-  :: Machine e => Blob e -> Word e -> Word e -> Word e -> EVM e ()
-copyBytesToMemory bs size xOffset yOffset =
-  if size == 0 then noop
-  else do
-    mem <- use (state . memory)
-    assign (state . memory) $
-      writeMemory bs size xOffset yOffset mem
-
-{-#
-  SPECIALIZE readMemory
-    :: Word Concrete -> Word Concrete -> VM Concrete -> Blob Concrete
- #-}
-readMemory :: Machine e => Word e -> Word e -> VM e -> Blob e
-readMemory offset size vm = sliceMemory offset size (view (state . memory) vm)
-
-{-#
-  SPECIALIZE word256At
-    :: Functor f => Word Concrete -> (Word Concrete -> f (Word Concrete))
-    -> Memory Concrete -> f (Memory Concrete)
- #-}
-word256At
-  :: (Machine e, Functor f)
-  => Word e -> (Word e -> f (Word e))
-  -> Memory e -> f (Memory e)
-word256At i = lens getter setter where
-  getter m = readMemoryWord i m
-  setter m x = setMemoryWord i x m
-
-{-# SPECIALIZE push :: Word Concrete -> EVM Concrete () #-}
-push :: Machine e => Word e -> EVM e ()
-push x = state . stack %= (x :)
-
-pushTo :: MonadState s m => ASetter s s [a] [a] -> a -> m ()
-pushTo f x = f %= (x :)
-
-pushToSequence :: MonadState s m => ASetter s s (Seq a) (Seq a) -> a -> m ()
-pushToSequence f x = f %= (Seq.|> x)
-
+-- * VM error implementation
 underrun :: Machine e => EVM e ()
 underrun = vmError StackUnderrun
 
@@ -951,12 +949,70 @@ vmError e = do
           assign (env . contracts) reversion
           push 0
 
-{-#
-  SPECIALIZE stackOp1
-    :: (Word Concrete -> Word Concrete)
-    -> (Word Concrete -> Word Concrete)
-    -> EVM Concrete ()
- #-}
+
+-- * Memory helpers
+
+accessMemoryRange
+  :: Machine e
+  => FeeSchedule (Word e)
+  -> Word e
+  -> Word e
+  -> EVM e ()
+  -> EVM e ()
+accessMemoryRange _ _ 0 continue = continue
+accessMemoryRange fees f l continue = do
+  m0 <- use (state . memorySize)
+  let m1 = max m0 (num (f + l))
+  burn (memoryCost fees m1 - memoryCost fees m0) $ do
+    assign (state . memorySize) m1
+    continue
+
+accessMemoryWord
+  :: Machine e => FeeSchedule (Word e) -> Word e -> EVM e () -> EVM e ()
+accessMemoryWord fees x continue = accessMemoryRange fees x 32 continue
+
+copyBytesToMemory
+  :: Machine e => Blob e -> Word e -> Word e -> Word e -> EVM e ()
+copyBytesToMemory bs size xOffset yOffset =
+  if size == 0 then noop
+  else do
+    mem <- use (state . memory)
+    assign (state . memory) $
+      writeMemory bs size xOffset yOffset mem
+
+readMemory :: Machine e => Word e -> Word e -> VM e -> Blob e
+readMemory offset size vm = sliceMemory offset size (view (state . memory) vm)
+
+word256At
+  :: (Machine e, Functor f)
+  => Word e -> (Word e -> f (Word e))
+  -> Memory e -> f (Memory e)
+word256At i = lens getter setter where
+  getter m = readMemoryWord i m
+  setter m x = setMemoryWord i x m
+
+-- * Tracing
+
+zipperRootForest :: Zipper.TreePos Zipper.Empty a -> Forest a
+zipperRootForest z =
+  case Zipper.parent z of
+    Nothing -> Zipper.toForest z
+    Just z' -> zipperRootForest (Zipper.nextSpace z')
+
+contextTraceForest :: Machine e => VM e -> Forest (Either (Log e) (FrameContext e))
+contextTraceForest vm =
+  view (contextTrace . to zipperRootForest) vm
+
+traceLog :: MonadState (VM e) m => Log e -> m ()
+traceLog log =
+  modifying contextTrace $
+    \t -> Zipper.nextSpace (Zipper.insert (Node (Left log) []) t)
+
+-- * Stack manipulation
+
+push :: Machine e => Word e -> EVM e ()
+push x = state . stack %= (x :)
+
 stackOp1
   :: Machine e
   => (Word e -> Word e)
@@ -971,12 +1027,6 @@ stackOp1 cost f =
     _ ->
       underrun
 
-{-#
-  SPECIALIZE stackOp2
-    :: ((Word Concrete, Word Concrete) -> Word Concrete)
-    -> ((Word Concrete, Word Concrete) -> Word Concrete)
-    -> EVM Concrete ()
- #-}
 stackOp2
   :: Machine e
   => ((Word e, Word e) -> Word e)
@@ -990,12 +1040,6 @@ stackOp2 cost f =
     _ ->
       underrun
 
-{-#
-  SPECIALIZE stackOp3
-    :: ((Word Concrete, Word Concrete, Word Concrete) -> Word Concrete)
-    -> ((Word Concrete, Word Concrete, Word Concrete) -> Word Concrete)
-    -> EVM Concrete ()
- #-}
 stackOp3
   :: Machine e
   => ((Word e, Word e, Word e) -> Word e)
@@ -1009,10 +1053,8 @@ stackOp3 cost f =
     _ ->
       underrun
 
-{-#
-  SPECIALIZE checkJump
-    :: Integral n => n -> EVM Concrete ()
- #-}
+-- * Bytecode data functions
+
 checkJump :: (Machine e, Integral n) => n -> EVM e ()
 checkJump x = do
   theCode <- use (state . code)
@@ -1026,89 +1068,13 @@ checkJump x = do
             state . pc .= num x
     else vmError BadJumpDestination
 
-{-#
-  SPECIALIZE insidePushData
-    :: Int -> EVM Concrete Bool
- #-}
 insidePushData :: Machine e => Int -> EVM e Bool
 insidePushData i = do
   -- If the operation index for the code pointer is the same
   -- as for the previous code pointer, then it's inside push data.
   self <- use (state . codeContract)
-  x <- useJust (env . contracts . ix self . opIxMap)
+  Just x <- preuse (env . contracts . ix self . opIxMap)
   return (i == 0 || (x Vector.! i) == (x Vector.! (i - 1)))
-
-touchAccount :: Machine e => Addr -> EVM e (Contract e)
-touchAccount a = do
-  use (env . contracts . at a) >>=
-    \case
-      Nothing -> do
-        let c = initialContract ""
-        assign (env . contracts . at a) (Just c)
-        return c
-      Just c ->
-        return c
-
-data VMOpts = VMOpts
-  { vmoptCode :: ByteString
-  , vmoptCalldata :: ByteString
-  , vmoptValue :: W256
-  , vmoptAddress :: Addr
-  , vmoptCaller :: Addr
-  , vmoptOrigin :: Addr
-  , vmoptGas :: W256
-  , vmoptNumber :: W256
-  , vmoptTimestamp :: W256
-  , vmoptCoinbase :: Addr
-  , vmoptDifficulty :: W256
-  , vmoptGaslimit :: W256
-  , vmoptSchedule :: FeeSchedule (Word Concrete)
-  } deriving Show
-
-makeVm :: VMOpts -> VM Concrete
-makeVm o = VM
-  { _result = Nothing
-  , _frames = mempty
-  , _tx = TxState
-    { _selfdestructs = mempty
-    , _refunds = mempty
-    }
-  , _logs = mempty
-  , _contextTrace = Zipper.fromForest []
-  , _block = Block
-    { _coinbase = vmoptCoinbase o
-    , _timestamp = w256 $ vmoptTimestamp o
-    , _number = w256 $ vmoptNumber o
-    , _difficulty = w256 $ vmoptDifficulty o
-    , _gaslimit = w256 $ vmoptGaslimit o
-    , _schedule = vmoptSchedule o
-    }
-  , _state = FrameState
-    { _pc = 0
-    , _stack = mempty
-    , _memory = mempty
-    , _memorySize = 0
-    , _code = vmoptCode o
-    , _contract = vmoptAddress o
-    , _codeContract = vmoptAddress o
-    , _calldata = B $ vmoptCalldata o
-    , _callvalue = w256 $ vmoptValue o
-    , _caller = vmoptCaller o
-    , _gas = w256 $ vmoptGas o
-    }
-  , _env = Env
-    { _sha3Crack = mempty
-    , _origin = vmoptOrigin o
-    , _contracts = Map.fromList
-      [(vmoptAddress o, initialContract (vmoptCode o))]
-    }
-  }
-
-viewJust :: Getting (Endo a) s a -> s -> a
-viewJust f x = x ^?! f
-
-useJust :: MonadState s f => Getting (Endo a) s a -> f a
-useJust f = viewJust f <$> get
 
 opSize :: Word8 -> Int
 opSize x | x >= 0x60 && x <= 0x7f = num x - 0x60 + 2
@@ -1134,10 +1100,6 @@ mkOpIxMap xs = Vector.create $ new (BS.length xs) >>= \v ->
     go v (n, !i, !j, !m) _ =
       {- PUSH data. -}        (n - 1,        i + 1, j,     m >> write v i j)
 
-{-#
-  SPECIALIZE vmOp
-    :: VM Concrete -> Maybe Op
- #-}
 vmOp :: Machine e => VM e -> Maybe Op
 vmOp vm =
   let i  = vm ^. state . pc
@@ -1147,10 +1109,6 @@ vmOp vm =
      then Nothing
      else Just (readOp op (BS.drop 1 xs))
 
-{-#
-  SPECIALIZE vmOpIx
-    :: VM Concrete -> Maybe Int
- #-}
 vmOpIx :: Machine e => VM e -> Maybe Int
 vmOpIx vm =
   do self <- currentContract vm
@@ -1268,11 +1226,7 @@ mkCodeOps bytes = RegularVector.fromList . toList $ go 0 bytes
           let j = opSize x
           in readOp x xs' Seq.<| go (i + j) (BS.drop j xs)
 
-ceilDiv :: (Num a, Integral a) => a -> a -> a
-ceilDiv m n = div (m + n - 1) n
-
-noop :: Monad m => m ()
-noop = pure ()
+-- * Gas cost calculation helpers
 
 -- Gas cost function for CALL, transliterated from the Yellow Paper.
 costOfCall
@@ -1296,8 +1250,32 @@ costOfCall (FeeSchedule {..}) recipient xValue availableGas xGas =
       then min xGas (allButOne64th (availableGas - c_extra))
       else xGas
 
+memoryCost :: Machine e => FeeSchedule (Word e) -> Int -> Word e
+memoryCost FeeSchedule{..} (num -> byteCount) =
+  let
+    wordCount = ceilDiv byteCount 32
+    linearCost = g_memory * wordCount
+    quadraticCost = div (wordCount * wordCount) 32
+  in
+    linearCost + quadraticCost
+
+-- * Arithmetic
+
+ceilDiv :: (Num a, Integral a) => a -> a -> a
+ceilDiv m n = div (m + n - 1) n
+
 allButOne64th :: (Num a, Integral a) => a -> a
 allButOne64th n = n - div n 64
 
 log2 :: FiniteBits b => b -> Int
 log2 x = finiteBitSize x - 1 - countLeadingZeros x
+
+
+-- * Emacs setup
+
+-- Local Variables:
+-- outline-regexp: "-- \\*+\\|data \\|newtype \\|type \\| +-- op: "
+-- outline-heading-alist:
+--   (("-- *" . 1) ("data " . 2) ("newtype " . 2) ("type " . 2))
+-- compile-command: "make"
+-- End:
