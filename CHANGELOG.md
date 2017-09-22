@@ -1,5 +1,8 @@
 # hevm changelog
 
+## [0.8.5] - 2017-09-22
+ - Renames `hevm` from its maiden name `hsevm` :sparkles:
+
 ## [0.8] - 2017-09-21
  - Implements gas metering (Metropolis rules by default)
  - Shows gas counter in the terminal interface
@@ -57,6 +60,7 @@
 
 [0.8 test report]: https://hydra.dapp.tools/build/135/download/1/index.html
 
+[0.8.5]: https://github.com/dapphub/hevm/compare/v0.8...v0.8.5
 [0.8]: https://github.com/dapphub/hevm/compare/v0.7...v0.8
 [0.7]: https://github.com/dapphub/hevm/compare/v0.6.5...v0.7
 [0.6.5]: https://github.com/dapphub/hevm/compare/v0.6.1...v0.6.5
