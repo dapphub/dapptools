@@ -37,6 +37,7 @@ module EVM.ABI
   , Indexed (..)
   , putAbi
   , getAbi
+  , getAbiSeq
   , abiValueType
   , abiTypeSolidity
   , abiCalldata

@@ -529,14 +529,17 @@ drawStackPane ui =
 
 showDec :: W256 -> String
 showDec (W256 w) =
-  if w > 1000000000000
-  then
-    "~" ++ Scientific.formatScientific
-       Scientific.Generic
-       (Just 8)
-       (fromIntegral w)
+  if w == num cheatCode
+  then "<hevm cheat address>"
   else
-    showDecExact (W256 w)
+    if w > 1000000000000
+    then
+      "~" ++ Scientific.formatScientific
+         Scientific.Generic
+         (Just 8)
+         (fromIntegral w)
+    else
+      showDecExact (W256 w)
 
 showDecExact :: W256 -> String
 showDecExact (W256 w) = unpack (humanizeInteger w)

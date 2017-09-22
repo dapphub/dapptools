@@ -12,6 +12,7 @@ module EVM where
 
 import Prelude hiding ((^), log, Word, exponent)
 
+import EVM.ABI
 import EVM.Types
 import EVM.Solidity
 import EVM.Keccak
@@ -24,11 +25,13 @@ import Control.Monad.State.Strict hiding (state)
 
 import Data.Bits (xor, shiftR, (.&.), (.|.), FiniteBits (..))
 import Data.Bits (bit, testBit, complement)
-import Data.Word (Word8)
+import Data.Binary.Get (runGetOrFail)
+import Data.Word (Word8, Word32)
 
 import Control.Lens hiding (op, (:<), (|>))
 
 import Data.ByteString              (ByteString)
+import Data.ByteString.Lazy         (fromStrict)
 import Data.Map.Strict              (Map)
 import Data.Maybe                   (fromMaybe, fromJust, isNothing)
 import Data.Sequence                (Seq)
@@ -57,6 +60,7 @@ data Error e
   | Revert
   | NoSuchContract Addr
   | OutOfGas
+  | BadCheatCode Word32
 
 deriving instance Show (Error Concrete)
 
@@ -495,9 +499,14 @@ exec1 = do
         0x3b ->
           case stk of
             (x:xs) -> do
-              burn g_high $ do
-                assign (state . stack) xs
-                touchAccount (num x) >>= push . num . view codesize
+              if x == num cheatCode
+                then do
+                  assign (state . stack) xs
+                  push (w256 1)
+                else
+                  burn g_high $ do
+                    assign (state . stack) xs
+                    touchAccount (num x) >>= push . num . view codesize
             [] ->
               underrun
 
@@ -769,9 +778,14 @@ exec1 = do
         0xf4 ->
           case stk of
             (xGas:xTo:xInOffset:xInSize:xOutOffset:xOutSize:xs) ->
-              burn (num g_call + xGas) $ do
-                delegateCall fees xGas (num xTo) xInOffset xInSize xOutOffset xOutSize xs
-                  (return ())
+              if num xTo == cheatCode
+              then do
+                assign (state . stack) xs
+                cheat (xInOffset, xInSize) (xOutOffset, xOutSize)
+              else
+                burn (num g_call + xGas) $ do
+                  delegateCall fees xGas (num xTo) xInOffset xInSize xOutOffset xOutSize xs
+                    (return ())
             _ -> underrun
 
         -- op: SELFDESTRUCT
@@ -860,6 +874,55 @@ refund :: Machine e => Word e -> EVM e ()
 refund n = do
   self <- use (state . contract)
   pushTo (tx . refunds) (self, n)
+
+
+-- * Cheat codes
+
+-- The cheat code is 7109709ecfa91a80626ff3989d68f67f5b1dd12d.
+cheatCode :: Addr
+cheatCode = num (keccak "hevm cheat code")
+
+cheat :: Machine e => (Word e, Word e) -> (Word e, Word e) -> EVM e ()
+cheat (inOffset, inSize) (outOffset, outSize) = do
+  mem <- use (state . memory)
+  let
+    abi =
+      num (forceConcreteWord (readMemoryWord32 inOffset mem))
+    input =
+      forceConcreteBlob (sliceMemory (inOffset + 4) (inSize - 4) mem)
+  case Map.lookup abi cheatActions of
+    Nothing ->
+      vmError (BadCheatCode abi)
+    Just (argTypes, action) -> do
+      case runGetOrFail
+             (getAbiSeq (length argTypes) argTypes)
+             (fromStrict input) of
+        Right ("", _, args) -> do
+          action (toList args) >>= \case
+            Nothing ->
+              push 1
+            Just (encodeAbiValue -> bs) -> do
+              modifying (state . memory)
+                (writeMemory (blob bs) outSize 0 outOffset)
+              push 1
+        Left _ ->
+          vmError (BadCheatCode abi)
+        Right _ ->
+          vmError (BadCheatCode abi)
+
+type CheatAction e = ([AbiType], [AbiValue] -> EVM e (Maybe AbiValue))
+
+cheatActions :: Machine e => Map Word32 (CheatAction e)
+cheatActions =
+  Map.fromList
+    [ action "warp(uint256)" [AbiUIntType 256] $
+        \[AbiUInt 256 x] -> do
+          assign (block . timestamp) (w256 (W256 x))
+          return Nothing
+    ]
+  where
+    action s ts f = (abiKeccak s, (ts, f))
+
 
 -- * General call implementation ("delegateCall")
 
@@ -1275,3 +1338,5 @@ log2 x = finiteBitSize x - 1 - countLeadingZeros x
 --   (("-- *" . 1) ("data " . 2) ("newtype " . 2) ("type " . 2))
 -- compile-command: "make"
 -- End:
+
+Haskell finished at Fri Sep 22 18:56:48
