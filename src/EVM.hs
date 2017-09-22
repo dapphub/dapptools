@@ -1338,5 +1338,3 @@ log2 x = finiteBitSize x - 1 - countLeadingZeros x
 --   (("-- *" . 1) ("data " . 2) ("newtype " . 2) ("type " . 2))
 -- compile-command: "make"
 -- End:
-
-Haskell finished at Fri Sep 22 18:56:48
