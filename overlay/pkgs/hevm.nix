@@ -21,8 +21,8 @@ lib.overrideDerivation (mkDerivation rec {
   src = fetchFromGitHub {
     owner = "dapphub";
     repo = "hevm";
-    rev = "c9090d1e74ebaba9509680d78cdd86913da35e9a";
-    sha256 = "07976qv8br4rdbr72b1scq109w52jx616s0m0fwvvm3lkl4dcpz4";
+    rev = "951501c8cf0debc6adbb53d4e41f29900e7d1b8a";
+    sha256 = "10nc1cbnyrpwmdyqq0kvgxwdx5kmpbyx08r5a8afq2nlcs1v58ca";
   };
 
   postInstall = ''
