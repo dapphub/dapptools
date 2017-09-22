@@ -53,6 +53,15 @@ instance Read Addr where
 
 instance Show Addr where showsPrec _ s = showHex s
 
+showAddrWith0x :: Addr -> String
+showAddrWith0x addr = "0x" ++ show addr
+
+showWordWith0x :: W256 -> String
+showWordWith0x addr = show addr
+
+showByteStringWith0x :: ByteString -> String
+showByteStringWith0x bs = Text.unpack (Text.decodeUtf8 (BS16.encode bs))
+
 instance FromJSON W256 where
   parseJSON v = do
     s <- Text.unpack <$> parseJSON v

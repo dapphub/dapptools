@@ -5,7 +5,7 @@
 , monad-par, mtl, optparse-generic, process, QuickCheck
 , quickcheck-text, readline, restless-git, rosezipper, scientific
 , stdenv, tasty, tasty-hunit, tasty-quickcheck, temporary, text
-, text-format, time, unordered-containers, vector, vty
+, text-format, time, unordered-containers, vector, vty, wreq
 }:
 mkDerivation {
   pname = "hevm";
@@ -21,6 +21,7 @@ mkDerivation {
     lens-aeson memory monad-par mtl optparse-generic process QuickCheck
     quickcheck-text readline restless-git rosezipper scientific
     temporary text text-format time unordered-containers vector vty
+    wreq
   ];
   executableHaskellDepends = [
     aeson ansi-wl-pprint async base base16-bytestring base64-bytestring
