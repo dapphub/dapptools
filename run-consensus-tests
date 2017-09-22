@@ -10,7 +10,7 @@ fi
   cd "$1"
   for x in VMTests/*/*; do
     echo >&2 "$x"
-    echo -n "$x " ; hsevm vm-test --file $x
+    echo -n "$x " ; hevm vm-test --file $x
   done
 } | {
   while read path test outcome; do
@@ -26,7 +26,7 @@ fi
   
   cat <<.
 <!doctype html>
-<title>hsevm test results</title>
+<title>hevm test results</title>
 <style>
 * {
   font-family:
@@ -49,7 +49,7 @@ h1, h2 { text-align: center; margin-top: 2rem  }
 #passed .testcase { color: rgb(0, 150, 0) }
 </style>
 <header>
-<h1>hsevm consensus test report</h1>
+<h1>hevm consensus test report</h1>
 <p>
 $(date +%Y-%m-%d)
 <p>

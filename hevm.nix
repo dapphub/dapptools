@@ -7,10 +7,10 @@ let pkgs = import <nixpkgs> {};
       };
     };
 in rec {
-  hsevm = (pkgs.haskellPackages.callPackage ./default.nix {}).overrideAttrs (old: rec {
+  hevm = (pkgs.haskellPackages.callPackage ./default.nix {}).overrideAttrs (old: rec {
     buildInputs = [pkgs.solc];
   });
-  hsevmProfiling = (profiling.callPackage ./default.nix {}).overrideAttrs (old: rec {
+  hevmProfiling = (profiling.callPackage ./default.nix {}).overrideAttrs (old: rec {
     buildInputs = [pkgs.solc];
   });
 }

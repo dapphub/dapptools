@@ -29,7 +29,7 @@ import EVM.Solidity
 import EVM.Types
 
 main :: IO ()
-main = defaultMain $ testGroup "hsevm"
+main = defaultMain $ testGroup "hevm"
   [ testGroup "ABI"
     [ testProperty "Put/get inverse" $ \x ->
         case runGetOrFail (getAbi (abiValueType x)) (runPut (putAbi x)) of

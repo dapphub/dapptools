@@ -1,4 +1,4 @@
--- Main file of the hsevm CLI program
+-- Main file of the hevm CLI program
 
 {-# Language BangPatterns #-}
 {-# Language CPP #-}
@@ -27,7 +27,7 @@ import EVM.UnitTest (UnitTestOptions, findUnitTests, runUnitTestContract)
 
 import qualified EVM.UnitTest as EVM.UnitTest
 
-import qualified Paths_hsevm as Paths
+import qualified Paths_hevm as Paths
 
 import Control.Concurrent.Async   (async, waitCatch)
 import Control.Exception          (evaluate)
@@ -132,7 +132,7 @@ unitTestOptions cmd =
 
 main :: IO ()
 main = do
-  cmd <- Options.getRecord "hsevm -- Ethereum evaluator"
+  cmd <- Options.getRecord "hevm -- Ethereum evaluator"
   let
     root = fromMaybe "." (dappRoot cmd)
     testOpts = unitTestOptions cmd

@@ -38,7 +38,7 @@ fileRepr = iso f g
 
 saveFacts :: RepoAt -> Set Fact -> IO ()
 saveFacts (RepoAt repo) facts =
-  Git.save repo "hsevm execution"
+  Git.save repo "hevm execution"
     (Set.map (view fileRepr . factToFile) facts)
 
 prune :: Ord a => Set (Maybe a) -> Set a

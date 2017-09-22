@@ -10,5 +10,5 @@ flags: {}
 extra-package-dbs: []
 image:
   container:
-    name: mbrock/hsevm
+    name: mbrock/hevm
     base: haskell:8.0.1

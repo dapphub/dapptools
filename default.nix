@@ -8,7 +8,7 @@
 , text-format, time, unordered-containers, vector, vty
 }:
 mkDerivation {
-  pname = "hsevm";
+  pname = "hevm";
   version = "0.8";
   src = ./.;
   isLibrary = true;
@@ -33,7 +33,7 @@ mkDerivation {
     base binary bytestring ghci-pretty here HUnit lens mtl QuickCheck
     tasty tasty-hunit tasty-quickcheck text vector
   ];
-  homepage = "https://github.com/mbrock/hsevm";
+  homepage = "https://github.com/mbrock/hevm";
   description = "Ethereum virtual machine evaluator";
   license = stdenv.lib.licenses.agpl3;
 }
