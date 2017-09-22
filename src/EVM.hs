@@ -1,5 +1,3 @@
--- * Language extension pragmas
-
 {-# Language ConstraintKinds #-}
 {-# Language FlexibleInstances #-}
 {-# Language RecordWildCards #-}
@@ -10,9 +8,9 @@
 {-# Language TypeOperators #-}
 {-# Language ViewPatterns #-}
 
--- * Module definition
-
 module EVM where
+
+-- * Imports
 
 import Prelude hiding ((^), log, Word, exponent)
 
