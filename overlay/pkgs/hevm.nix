@@ -15,18 +15,18 @@
 }:
 
 lib.overrideDerivation (mkDerivation rec {
-  pname = "hsevm";
-  version = "0.8";
+  pname = "hevm";
+  version = "0.8.5";
 
   src = fetchFromGitHub {
     owner = "dapphub";
-    repo = "hsevm";
+    repo = "hevm";
     rev = "v${version}";
-    sha256 = "1wv6za9z0lgs7xf8pz2szfsr377w3aw3a57j8a05m9j0d1plndsz";
+    sha256 = "1a27bh0azf2hdg5hp6s9azv2rhzy7vrlq1kmg688g9nfwwwhgkp0";
   };
 
   postInstall = ''
-    wrapProgram $out/bin/hsevm \
+    wrapProgram $out/bin/hevm \
        --add-flags '+RTS -N$((`${coreutils}/bin/nproc` - 1)) -RTS' \
        --suffix PATH : "${lib.makeBinPath [bash coreutils]}"
   '';
@@ -49,7 +49,7 @@ lib.overrideDerivation (mkDerivation rec {
     tasty tasty-hunit tasty-quickcheck text vector
   ];
 
-  homepage = https://github.com/dapphub/hsevm;
+  homepage = https://github.com/dapphub/hevm;
   description = "Ethereum virtual machine evaluator";
   license = stdenv.lib.licenses.agpl3;
   maintainers = [stdenv.lib.maintainers.dbrock];

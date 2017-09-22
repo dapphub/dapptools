@@ -8,8 +8,8 @@ let
 in rec {
   dapphub-linux = with linux.pkgs; {
     inherit dapp;
-    inherit hsevm;
-    inherit hsevm-profiling;
+    inherit hevm;
+    inherit hevm-profiling;
     inherit keeper;
     inherit setzer;
     inherit solc-versions;
@@ -18,15 +18,15 @@ in rec {
 
   dapphub-darwin = with darwin.pkgs; {
     inherit dapp;
-    inherit hsevm;
-    # inherit hsevm-profiling;
+    inherit hevm;
+    # inherit hevm-profiling;
     # inherit keeper;
     inherit setzer;
     inherit solc-versions;
     inherit go-ethereum;
   };
 
-  hsevm-development = rec {
+  hevm-development = rec {
     ethereum-test-suite = linux.pkgs.fetchFromGitHub {
       owner = "ethereum";
       repo = "tests";
@@ -34,10 +34,10 @@ in rec {
       sha256 = "0l5qalgbscr77vjhyf7b542055wnp4pddpfslnypp5sqws5w940w";
     };
 
-    hsevm-test-report = linux.pkgs.runCommand "hsevm-test-report" {} ''
+    hevm-test-report = linux.pkgs.runCommand "hevm-test-report" {} ''
       mkdir -p $out/nix-support
-      export PATH=${dapphub-linux.hsevm}/bin:$PATH
-      ${dapphub-linux.hsevm}/bin/hsevm vm-test-report \
+      export PATH=${dapphub-linux.hevm}/bin:$PATH
+      ${dapphub-linux.hevm}/bin/hevm vm-test-report \
         --tests ${ethereum-test-suite} > $out/index.html
       echo report testlog $out index.html > $out/nix-support/hydra-build-products
     '';

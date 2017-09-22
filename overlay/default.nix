@@ -40,12 +40,12 @@ in rec {
     packageOverrides = (import ./python.nix { pkgs = super.pkgs; });
   };
 
-  hsevm =
+  hevm =
     self.pkgs.haskell.lib.justStaticExecutables
-      (haskellPackages.callPackage ./pkgs/hsevm.nix {});
+      (haskellPackages.callPackage ./pkgs/hevm.nix {});
 
-  hsevm-profiling =
-    profilingHaskellPackages.callPackage ./pkgs/hsevm.nix {};
+  hevm-profiling =
+    profilingHaskellPackages.callPackage ./pkgs/hevm.nix {};
 
   seth   = callPackage ./pkgs/seth.nix {};
   dapp   = callPackage ./pkgs/dapp.nix {};
