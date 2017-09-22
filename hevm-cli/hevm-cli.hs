@@ -83,6 +83,7 @@ data Command
       , balanceForCreator  :: Maybe W256
       , balanceForCreated  :: Maybe W256
       , rpc                :: Maybe URL
+      , verbose            :: Bool
       }
   | Interactive
       { jsonFile           :: Maybe String
@@ -139,6 +140,7 @@ unitTestOptions cmd =
         case rpc cmd of
          Just url -> EVM.Fetch.http url
          Nothing  -> EVM.Fetch.zero
+    , EVM.UnitTest.verbose = verbose cmd
     }
 
 main :: IO ()

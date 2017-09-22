@@ -7,6 +7,8 @@ module EVM.Concrete
   , word
   , Word (..)
   , Blob (..)
+  , wordAt
+  , word256Bytes
   ) where
 
 import Prelude hiding (Word, (^))

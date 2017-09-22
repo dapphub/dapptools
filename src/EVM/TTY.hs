@@ -20,6 +20,7 @@ import EVM.Types
 import EVM.UnitTest (UnitTestOptions (..))
 import EVM.UnitTest (initializeUnitTest, runUnitTest)
 import EVM.UnitTest (initialUnitTestVm, findUnitTests)
+import EVM.UnitTest (showDec, showWordExact)
 
 import EVM.Stepper (Stepper)
 import qualified EVM.Stepper as Stepper
@@ -41,7 +42,6 @@ import Data.Tree (drawForest)
 
 import qualified Data.ByteString as BS
 import qualified Data.Map as Map
-import qualified Data.Scientific as Scientific
 import qualified Data.Text as Text
 import qualified Data.Vector as Vec
 import qualified Data.Vector.Storable as SVec
@@ -264,6 +264,7 @@ runFromVM vm = do
       , gasForInvoking    = error "irrelevant"
       , balanceForCreator = error "irrelevant"
       , balanceForCreated = error "irrelevant"
+      , verbose           = False
       }
 
   ui2 <- customMain mkVty Nothing (app testOpts) (UiVmScreen ui1)
@@ -651,37 +652,6 @@ drawStackPane ui =
            ])
       False
       (view uiVmStackList ui)
-
-showDec :: W256 -> String
-showDec (W256 w) =
-  if w == num cheatCode
-  then "<hevm cheat address>"
-  else
-    if w > 1000000000000
-    then
-      "~" ++ Scientific.formatScientific
-         Scientific.Generic
-         (Just 8)
-         (fromIntegral w)
-    else
-      showDecExact (W256 w)
-
-showDecExact :: W256 -> String
-showDecExact (W256 w) = unpack (humanizeInteger w)
-
-showWordExact :: Word Concrete -> Text
-showWordExact (C _ (W256 w)) = humanizeInteger w
-
-humanizeInteger :: (Num a, Integral a, Show a) => a -> Text
-humanizeInteger =
-  ( Text.intercalate ","
-  . reverse
-  . map Text.reverse
-  . Text.chunksOf 3
-  . Text.reverse
-  . Text.pack
-  . show
-  )
 
 showWordExplanation :: W256 -> Maybe DappInfo -> String
 showWordExplanation w Nothing = showDec w
