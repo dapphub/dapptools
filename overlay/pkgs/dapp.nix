@@ -9,7 +9,7 @@ stdenv.mkDerivation rec {
     owner = "dapphub";
     repo = "dapp";
     rev = "v${version}";
-    sha256 = "16c42npzb336f1i1z3qxzcr89hmvv5a44f1payv92h06n3jqsncj";
+    sha256 = "128f35hczarihb263as391wr9zbyc1q1p49qbxh30via23r1brb0";
   };
 
   nativeBuildInputs = [makeWrapper shellcheck];
