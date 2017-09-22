@@ -2,7 +2,7 @@
 /// dapp-quicktest -- run EVM tests using ethrun(1)
 
 // Note: This program will likely be rewritten from scratch and
-// replaced with a more robust implementation based on hsevm(1).
+// replaced with a more robust implementation based on hevm(1).
 
 var PROGRAM_NAME = process.argv[1].replace(/.*\//, "")
 var PROGRAM_ARGS = process.argv.slice(2)

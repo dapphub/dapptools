@@ -3,11 +3,11 @@ have() { command -v "$1" >/dev/null; }
 
 dapp build || exit
 
-have hsevm  && ! [[ $DAPP_NO_HSEVM  ]] && dapp test-hsevm  "$@"
+have hevm  && ! [[ $DAPP_NO_HEVM  ]] && dapp test-hevm  "$@"
 have ethrun && ! [[ $DAPP_NO_ETHRUN ]] && dapp test-ethrun "$@"
 
-have ethrun || have hsevm || {
-  echo >&2 "${0##*/}: error: neither \`ethrun' nor \`hsevm' found"
+have ethrun || have hevm || {
+  echo >&2 "${0##*/}: error: neither \`ethrun' nor \`hevm' found"
   echo >&2 "${0##*/}: error: please install one (or both) and try again"
   exit 1
 }
