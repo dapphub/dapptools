@@ -16,13 +16,13 @@
 
 lib.overrideDerivation (mkDerivation rec {
   pname = "hevm";
-  version = "0.8.5";
+  version = "0.8.5-1";
 
   src = fetchFromGitHub {
     owner = "dapphub";
     repo = "hevm";
-    rev = "v${version}";
-    sha256 = "1a27bh0azf2hdg5hp6s9azv2rhzy7vrlq1kmg688g9nfwwwhgkp0";
+    rev = "c9090d1e74ebaba9509680d78cdd86913da35e9a";
+    sha256 = "07976qv8br4rdbr72b1scq109w52jx616s0m0fwvvm3lkl4dcpz4";
   };
 
   postInstall = ''
