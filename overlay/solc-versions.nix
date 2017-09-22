@@ -1,4 +1,7 @@
-let mk = import ./solc.nix; in {
+let
+   mk1 = import ./solc.nix;
+   mk2 = import ./solc-post-0.4.17.nix;
+in {
 
   ## I looked up the hashes for all the older versions, but prior to
   ## 0.3.6 the Solc repository was not standalone and I haven't even
@@ -35,16 +38,17 @@ let mk = import ./solc.nix; in {
   # solc_0_4_3  = mk "v0.4.3" "2353da71c77dd235b35d16e7e024fa62408df610" "06m0zhidnd8vc56247yw7zqg6bk6girgr0cv9fh7avkfcwjpn42g";
   # solc_0_4_4  = mk "v0.4.4" "4633f3def897db0f91237f98cf46e5d84fb05e61" "1z32a9vb6rjxmg5cqpkm45xbjq6nyx9p31m7cjppqw6zljw6zjzs";
 
-  solc_0_4_5  = mk "v0.4.5" "b318366e6f16ed6a4274247d09badac4affff8d5" "1lnmbqv4qqdc6077i27471mg9sr34d4wd9505w8wj94scjq3mpxm";
-  solc_0_4_6  = mk "v0.4.6" "2dabbdf06f414750ef0425c664f861aeb3e470b8" "0q1dvizx60f7l97w8241wra7vpghimc9x7gzb18vn34sxv4bqy9g";
-  solc_0_4_7  = mk "v0.4.7" "822622cf5bf23e79a6e2292cb837d1a39ca1c419" "1x2s9gi9y8h03j7nv6wyjjbw74vnzzhr206nik0qasyajgrb0sk2";
-  solc_0_4_8  = mk "v0.4.8" "60cc1668517f56ce6ca8225555472e7a27eab8b0" "09mwah7c5ca1bgnqp5qgghsi6mbsi7p16z8yxm0aylsn2cjk23na";
-  solc_0_4_9  = mk "v0.4.9" "364da425d3116a4b85863df39a1864340861d71e" "1qlc3isbdvg4llvqxcdfhqx1m4z80jd7iw89sivz2nga4nx06wwz";
-  solc_0_4_10 = mk "v0.4.10" "f0d539ae05739e35336cc9cc8f44bd9798a95c28" "04kmibc4q0sr5qyawbp855iix79di6ynix7vpsfx9gjwdddjk6j8";
-  solc_0_4_11 = mk "v0.4.11" "68ef5810593e7c8092ed41d5f474dd43141624eb" "13zycybf23yvf3hkf9zgw9gbc1y4ifzxaf7sll69bsn24fcyq961";
-  solc_0_4_12 = mk "v0.4.12" "194ff033ae44944ac59aa7bd3da89ba94ec5893c" "0gkg3nay0625qmhxxxax1d1c4dl554ri3pkwd12qfg6g1w6j04w7";
-  solc_0_4_13 = mk "v0.4.13" "0fb4cb1ab9bb4b6cc72e28cc5a1753ad14781f14" "0rhrm0bmk5s2358j40yx7dzr1938q17dchzflrxw6y7yvkhscxrm";
-  solc_0_4_14 = mk "v0.4.14" "c2215d4605d1fbcef1366d6b822ec610fc031b3c" "0pfn0b8nmdp61ig2g1jnhy4sdlxvkrhv4pw237zyvs97sjnll377";
-  solc_0_4_15 = mk "v0.4.15" "8b45bddb559d17250c8a5619efa1a21f296d4e03" "0a1gy4j3yximb7ja7q0ldwg34h6759dmdkfjb87nqfizj05cg5q3";
-  solc_0_4_16 = mk "v0.4.16" "d7661dd97460250b4e1127b9e7ea91e116143780" "1fd69pdhkkkvbkrxipkck1icpqkpdskjzar48a1yzdsx3l8s4lil";
+  solc_0_4_5  = mk1 "v0.4.5" "b318366e6f16ed6a4274247d09badac4affff8d5" "1lnmbqv4qqdc6077i27471mg9sr34d4wd9505w8wj94scjq3mpxm";
+  solc_0_4_6  = mk1 "v0.4.6" "2dabbdf06f414750ef0425c664f861aeb3e470b8" "0q1dvizx60f7l97w8241wra7vpghimc9x7gzb18vn34sxv4bqy9g";
+  solc_0_4_7  = mk1 "v0.4.7" "822622cf5bf23e79a6e2292cb837d1a39ca1c419" "1x2s9gi9y8h03j7nv6wyjjbw74vnzzhr206nik0qasyajgrb0sk2";
+  solc_0_4_8  = mk1 "v0.4.8" "60cc1668517f56ce6ca8225555472e7a27eab8b0" "09mwah7c5ca1bgnqp5qgghsi6mbsi7p16z8yxm0aylsn2cjk23na";
+  solc_0_4_9  = mk1 "v0.4.9" "364da425d3116a4b85863df39a1864340861d71e" "1qlc3isbdvg4llvqxcdfhqx1m4z80jd7iw89sivz2nga4nx06wwz";
+  solc_0_4_10 = mk1 "v0.4.10" "f0d539ae05739e35336cc9cc8f44bd9798a95c28" "04kmibc4q0sr5qyawbp855iix79di6ynix7vpsfx9gjwdddjk6j8";
+  solc_0_4_11 = mk1 "v0.4.11" "68ef5810593e7c8092ed41d5f474dd43141624eb" "13zycybf23yvf3hkf9zgw9gbc1y4ifzxaf7sll69bsn24fcyq961";
+  solc_0_4_12 = mk1 "v0.4.12" "194ff033ae44944ac59aa7bd3da89ba94ec5893c" "0gkg3nay0625qmhxxxax1d1c4dl554ri3pkwd12qfg6g1w6j04w7";
+  solc_0_4_13 = mk1 "v0.4.13" "0fb4cb1ab9bb4b6cc72e28cc5a1753ad14781f14" "0rhrm0bmk5s2358j40yx7dzr1938q17dchzflrxw6y7yvkhscxrm";
+  solc_0_4_14 = mk1 "v0.4.14" "c2215d4605d1fbcef1366d6b822ec610fc031b3c" "0pfn0b8nmdp61ig2g1jnhy4sdlxvkrhv4pw237zyvs97sjnll377";
+  solc_0_4_15 = mk1 "v0.4.15" "8b45bddb559d17250c8a5619efa1a21f296d4e03" "0a1gy4j3yximb7ja7q0ldwg34h6759dmdkfjb87nqfizj05cg5q3";
+  solc_0_4_16 = mk1 "v0.4.16" "d7661dd97460250b4e1127b9e7ea91e116143780" "1fd69pdhkkkvbkrxipkck1icpqkpdskjzar48a1yzdsx3l8s4lil";
+  solc_0_4_17 = mk2 "v0.4.17" "bdeb9e52a2211510644fb53df93fb98258b40a65" "1x6q2rlq6gxggidgsy6li7m4phwr1hcfi65pq9yimz64ddqfiira";
 }

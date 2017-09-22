@@ -28,7 +28,7 @@ let
   };
 
 in rec {
-  solc = callPackage ((import ./solc-versions.nix).solc_0_4_16) {};
+  solc = callPackage ((import ./solc-versions.nix).solc_0_4_17) {};
 
   solc-versions =
     super.lib.mapAttrs
