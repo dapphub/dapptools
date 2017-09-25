@@ -1,22 +1,24 @@
 module EVM.Debug where
 
-import EVM
-import EVM.Concrete
-import EVM.Solidity
-import EVM.Types
+import EVM          (Contract, storage, nonce, balance)
+import EVM          (bytecode, codehash, bytecode)
+import EVM.Concrete (Concrete)
+import EVM.Solidity (SrcMap, srcMapFile, srcMapOffset, srcMapLength)
+import EVM.Solidity (SourceCache, sourceFiles)
+import EVM.Types    (Addr)
 
-import Control.Arrow (second)
+import Control.Arrow   (second)
 import Control.Lens
 import Data.ByteString (ByteString)
-import Data.Map (Map)
-import Data.Text (Text)
+import Data.Map        (Map)
+import Data.Text       (Text)
 
 import qualified Data.ByteString       as ByteString
 import qualified Data.Map              as Map
 
 import Text.PrettyPrint.ANSI.Leijen
 
-data Mode = Debug | Run
+data Mode = Debug | Run deriving (Eq, Show)
 
 object :: [(Doc, Doc)] -> Doc
 object xs =

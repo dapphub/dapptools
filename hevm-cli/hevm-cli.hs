@@ -33,7 +33,7 @@ import Control.Concurrent.Async   (async, waitCatch)
 import Control.Exception          (evaluate)
 import Control.Lens
 import Control.Monad              (void)
-import Control.Monad.State.Strict (execState)
+import Control.Monad.State.Strict (execState, runState)
 import Data.ByteString            (ByteString)
 import Data.List                  (intercalate, isSuffixOf)
 import Data.Maybe                 (fromMaybe)
@@ -79,6 +79,7 @@ data Command
       , gasForInvoking     :: Maybe W256
       , balanceForCreator  :: Maybe W256
       , balanceForCreated  :: Maybe W256
+      , rpc                :: Bool
       }
   | Interactive
       { jsonFile           :: Maybe String
@@ -87,6 +88,7 @@ data Command
       , gasForInvoking     :: Maybe W256
       , balanceForCreator  :: Maybe W256
       , balanceForCreated  :: Maybe W256
+      , rpc                :: Bool
       }
   | VmTest
       { file  :: String
@@ -128,6 +130,14 @@ unitTestOptions cmd =
         fromMaybe defaultBalanceForCreator (balanceForCreator cmd)
     , EVM.UnitTest.balanceForCreated =
         fromMaybe defaultBalanceForCreated (balanceForCreated cmd)
+    , EVM.UnitTest.oracle =
+        if rpc cmd
+        then EVM.UnitTest.httpOracle
+        else EVM.UnitTest.zeroOracle
+    , EVM.UnitTest.onFailure =
+        if optsMode cmd == Debug
+        then void . EVM.TTY.runFromVM
+        else const (pure ())
     }
 
 main :: IO ()
@@ -262,20 +272,30 @@ launchVMTest cmd =
 #if MIN_VERSION_aeson(1, 0, 0)
 runVMTest :: Mode -> (String, VMTest.Case) -> IO Bool
 runVMTest mode (name, x) = do
-  let vm = VMTest.vmForCase x
+  let
+    vm0 = VMTest.vmForCase x
+    oracular
+      :: EVM.VM EVM.Concrete
+      -> (EVM.VMResult EVM.Concrete, EVM.VM EVM.Concrete)
+    oracular vm = do
+      case runState exec vm of
+        (EVM.VMFailure (EVM.Query q), vm') ->
+           oracular (execState (runIdentity (EVM.UnitTest.zeroOracle q)) vm')
+        r -> r
+
   putStr (name ++ " ")
   hFlush stdout
   result <- do
     action <- async $
       case mode of
         Run -> do
-          timeout (1e6) . evaluate $ execState exec vm
+          timeout (1e6) . evaluate $ snd (oracular vm0)
         Debug ->
-          Just <$> EVM.TTY.runFromVM vm
+          Just <$> EVM.TTY.runFromVM vm0
     waitCatch action
   case result of
-    Right (Just vm') -> do
-      ok <- VMTest.checkExpectation x vm'
+    Right (Just vm1) -> do
+      ok <- VMTest.checkExpectation x vm1
       putStrLn (if ok then "ok" else "")
       return ok
     Right Nothing -> do

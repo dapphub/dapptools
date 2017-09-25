@@ -1,4 +1,5 @@
 {-# Language GADTs #-}
+{-# Language StandaloneDeriving #-}
 
 module EVM.Fetch where
 
@@ -7,7 +8,7 @@ import Prelude hiding (Word)
 import EVM.Types    (Addr, W256, showAddrWith0x, showWordWith0x, hexText)
 import EVM.Machine  (Machine, Word, w256)
 import EVM.Concrete (Concrete)
-import EVM          (Contract, initialContract, nonce, balance)
+import EVM          (Contract, initialContract, nonce, balance, external)
 
 import Control.Lens hiding ((.=))
 import Control.Monad.Trans.Maybe
@@ -21,11 +22,13 @@ import Network.Wreq.Session (Session)
 import qualified Network.Wreq.Session as Session
 
 -- | Abstract representation of an RPC fetch request
-data Query a where
-  QueryCode    :: Addr         -> Query ByteString
-  QueryBalance :: Addr         -> Query W256
-  QueryNonce   :: Addr         -> Query W256
-  QuerySlot    :: Addr -> W256 -> Query W256
+data RpcQuery a where
+  QueryCode    :: Addr         -> RpcQuery ByteString
+  QueryBalance :: Addr         -> RpcQuery W256
+  QueryNonce   :: Addr         -> RpcQuery W256
+  QuerySlot    :: Addr -> W256 -> RpcQuery W256
+
+deriving instance Show (RpcQuery a)
 
 -- Will of course allow custom RPC URLs e.g. to include Infura access key
 mainnet :: String
@@ -54,10 +57,11 @@ instance ToRPC W256 where
 readText :: Read a => Text -> a
 readText = read . unpack
 
-fetchQuery :: (Value -> IO (Maybe Text)) -> Query a -> IO (Maybe a)
-fetchQuery f =
-  \case
-    QueryCode addr ->
+fetchQuery :: Show a => (Value -> IO (Maybe Text)) -> RpcQuery a -> IO (Maybe a)
+fetchQuery f q = do
+  print q
+  x <- case q of
+    QueryCode addr -> do
       fmap hexText  <$>
         f (rpc "eth_getCode" [toRPC addr, "latest"])
     QueryNonce addr ->
@@ -69,6 +73,8 @@ fetchQuery f =
     QuerySlot addr slot ->
       fmap readText <$>
         f (rpc "eth_getStorageAt" [toRPC addr, toRPC slot, "latest"])
+  putStrLn (" => " ++ show x)
+  return x
 
 fetchWithSession :: Session -> Value -> IO (Maybe Text)
 fetchWithSession sess x = do
@@ -80,7 +86,7 @@ fetchContractWithSession
   => Session -> Addr -> IO (Maybe (Contract e))
 fetchContractWithSession sess addr = runMaybeT $ do
   let
-    fetch :: Query a -> IO (Maybe a)
+    fetch :: Show a => RpcQuery a -> IO (Maybe a)
     fetch = fetchQuery (fetchWithSession sess)
 
   theCode    <- MaybeT $ fetch (QueryCode addr)
@@ -89,8 +95,9 @@ fetchContractWithSession sess addr = runMaybeT $ do
 
   return $
     initialContract theCode
-      & set nonce   (w256 theNonce)
-      & set balance (w256 theBalance)
+      & set nonce    (w256 theNonce)
+      & set balance  (w256 theBalance)
+      & set external True
 
 fetchSlotWithSession
   :: Machine e

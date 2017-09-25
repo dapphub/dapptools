@@ -80,7 +80,11 @@ checkExpectedOut output expected =
 
 checkExpectedContracts :: EVM.VM EVM.Concrete -> Map Addr Contract -> Bool
 checkExpectedContracts vm expected =
-  realizeContracts expected == vm ^. EVM.env . EVM.contracts
+  realizeContracts expected == vm ^. EVM.env . EVM.contracts . to (fmap clearZeroStorage)
+
+clearZeroStorage :: EVM.Contract EVM.Concrete -> EVM.Contract EVM.Concrete
+clearZeroStorage =
+  over EVM.storage (Map.filterWithKey (\_ x -> x /= 0))
 
 checkExpectedGas :: EVM.VM EVM.Concrete -> W256 -> Bool
 checkExpectedGas vm expected =

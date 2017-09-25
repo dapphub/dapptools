@@ -8,6 +8,7 @@ import EVM.Solidity
 import EVM.Types
 import EVM.Machine (blob, w256)
 import EVM.Concrete (Concrete, Blob (B))
+import EVM.Fetch (testFetchContract, testFetchSlot)
 
 import qualified EVM.FeeSchedule as FeeSchedule
 
@@ -36,14 +37,48 @@ data UnitTestOptions = UnitTestOptions
   , gasForInvoking :: W256
   , balanceForCreator :: W256
   , balanceForCreated :: W256
+  , oracle :: Query Concrete -> IO (EVM Concrete ())
+  , onFailure :: VM Concrete -> IO ()
   }
 
 tick :: String -> IO ()
 tick x = putStr x >> hFlush stdout
 
+httpOracle :: Query Concrete -> IO (EVM Concrete ())
+httpOracle q = do
+  case q of
+    PleaseFetchContract addr continue ->
+      testFetchContract addr >>= \case
+        Just x  -> do
+          return (continue x)
+        Nothing -> error ("oracle error: " ++ show q)
+    PleaseFetchSlot addr slot continue ->
+      testFetchSlot addr (num slot) >>= \case
+        Just x  -> return (continue x)
+        Nothing -> error ("oracle error: " ++ show q)
+
+zeroOracle :: Monad m => Query Concrete -> m (EVM Concrete ())
+zeroOracle q = do
+  case q of
+    PleaseFetchContract _ continue ->
+      return (continue (initialContract ""))
+    PleaseFetchSlot _ _ continue ->
+      return (continue 0)
+
 runUnitTestContract ::
   UnitTestOptions -> Map Text SolcContract -> SourceCache -> (Text, [Text]) -> IO ()
 runUnitTestContract opts@(UnitTestOptions {..}) contractMap _ (name, testNames) = do
+  let
+    oracular
+      :: VM Concrete
+      -> IO (VMResult Concrete, VM Concrete)
+    oracular vm = do
+      case runState exec vm of
+        (VMFailure (Query q), vm') ->
+          do m <- oracle q
+             oracular (execState m vm')
+        x -> return x
+
   putStrLn $ "Running " ++ show (length testNames) ++ " tests for "
     ++ unpack name
   case preview (ix name) contractMap of
@@ -52,29 +87,34 @@ runUnitTestContract opts@(UnitTestOptions {..}) contractMap _ (name, testNames) 
     Just theContract -> do
       let
         vm0 = initialUnitTestVm opts theContract (Map.elems contractMap)
-        vm2 = case runState exec vm0 of
-                (VMFailure e, _) ->
-                  error ("Creation error: " ++ show e)
-                (VMSuccess (B targetCode), vm1) -> do
-                  execState (performCreation targetCode) vm1
+
+      vm2 <-
+        oracular vm0 >>= \case
+          (VMFailure e, _) ->
+            error ("Creation error: " ++ show e)
+          (VMSuccess (B targetCode), vm1) -> do
+            return (execState (performCreation targetCode) vm1)
+
+      let
         target = view (state . contract) vm2
         vm3 = vm2 & env . contracts . ix target . balance +~ w256 balanceForCreated
 
-      case runState (setupCall target "setUp()" >> assign (state . gas) (w256 gasForInvoking) >> exec) vm3 of
-        (VMFailure _, _) -> do
-          putStrLn "error in setUp()"
+      oracular (execState (setupCall target "setUp()"  gasForInvoking) vm3) >>= \case
+        (VMFailure e, _) -> do
+          putStrLn ("error in setUp(): " ++ show e)
         (VMSuccess _, vm4) -> do
           let
-            runOne testName = spawn_ $ do
-              case runState (setupCall target testName >> assign (state . gas) (w256 gasForInvoking) >> exec) vm4 of
-                (VMFailure _, _) ->
+            runOne testName = spawn_ . liftIO $ do
+              oracular (execState (setupCall target testName gasForInvoking) vm4) >>= \case
+                (VMFailure _, vm5) ->
                   if "testFail" `isPrefixOf` testName
                     then return "."
                     else do
+                      onFailure vm5
                       return "F"
                 (VMSuccess _, vm5) -> do
-                  case evalState (setupCall target "failed()" >> assign (state . gas) 10000 >> exec) vm5 of
-                    VMSuccess (B out) ->
+                  oracular (execState (setupCall target "failed()" 10000) vm5) >>= \case
+                    (VMSuccess (B out), _) ->
                       case runGetOrFail (getAbi AbiBoolType)
                              (LazyByteString.fromStrict out) of
                         Right (_, _, AbiBool False) ->
@@ -88,7 +128,7 @@ runUnitTestContract opts@(UnitTestOptions {..}) contractMap _ (name, testNames) 
                           error "internal error"
                         Left (_, _, e) ->
                           error ("ds-test behaving strangely: " ++ e)
-                    VMFailure e ->
+                    (VMFailure e, _) ->
                       error $ "ds-test behaving strangely (" ++ show e ++ ")"
           runParIO (mapM runOne testNames >>= mapM Par.get) >>= mapM_ tick
           tick "\n"
@@ -96,11 +136,12 @@ runUnitTestContract opts@(UnitTestOptions {..}) contractMap _ (name, testNames) 
 word32Bytes :: Word32 -> ByteString
 word32Bytes x = BS.pack [byteAt x (3 - i) | i <- [0..3]]
 
-setupCall :: Addr -> Text -> EVM Concrete ()
-setupCall target abi = do
+setupCall :: Addr -> Text -> W256 -> EVM Concrete ()
+setupCall target abi allowance = do
   resetState
   loadContract target
   assign (state . calldata) (blob (word32Bytes (abiKeccak (encodeUtf8 abi))))
+  assign (state . gas) (w256 allowance)
 
 initialUnitTestVm :: UnitTestOptions -> SolcContract -> [SolcContract] -> VM Concrete
 initialUnitTestVm (UnitTestOptions {..}) theContract _ =

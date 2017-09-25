@@ -292,8 +292,7 @@ initialUiVmStateForTest opts@(UnitTestOptions {..}) dapp (theContractName, theTe
               vm1 & env . contracts . ix target . balance +~ w256 balanceForCreated
             vm3 = flip execState vm2 $ do
               performCreation targetCode
-              setupCall target "setUp()"
-              assign (state . gas) (w256 gasForInvoking)
+              setupCall target "setUp()" gasForInvoking
           in
             updateUiVmState ui vm3
               & set uiVmContinuation (Continue (k2 target))
@@ -306,8 +305,7 @@ initialUiVmStateForTest opts@(UnitTestOptions {..}) dapp (theContractName, theTe
           let
             vm3 = view uiVm ui
             vm4 = flip execState vm3 $ do
-                    setupCall target theTestName
-                    assign (state . gas) (w256 gasForInvoking)
+                    setupCall target theTestName gasForInvoking
                     assign contextTrace (Zipper.fromForest [])
                     assign logs mempty
           in
