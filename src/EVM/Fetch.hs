@@ -2,17 +2,25 @@
 
 module EVM.Fetch where
 
-import EVM.Types (Addr, W256, showAddrWith0x, showWordWith0x, hexText)
+import Prelude hiding (Word)
+
+import EVM.Types    (Addr, W256, showAddrWith0x, showWordWith0x, hexText)
+import EVM.Machine  (Machine, Word, w256)
+import EVM.Concrete (Concrete)
+import EVM          (Contract, initialContract, nonce, balance)
 
 import Control.Lens hiding ((.=))
+import Control.Monad.Trans.Maybe
 import Data.Aeson
 import Data.Aeson.Lens
 import Data.ByteString (ByteString)
 import Data.Text (Text, unpack)
 import Network.Wreq
+import Network.Wreq.Session (Session)
 
 import qualified Network.Wreq.Session as Session
 
+-- | Abstract representation of an RPC fetch request
 data Query a where
   QueryCode    :: Addr         -> Query ByteString
   QueryBalance :: Addr         -> Query W256
@@ -26,8 +34,8 @@ mainnet = "https://mainnet.infura.io"
 mkr :: Addr
 mkr = 0xc66ea802717bfb9833400264dd12c2bceaa34a6d
 
-request :: String -> [String] -> Value
-request method args = object
+rpc :: String -> [String] -> Value
+rpc method args = object
   [ "jsonrpc" .= ("2.0" :: String)
   , "id"      .= Number 1
   , "method"  .= method
@@ -46,29 +54,57 @@ instance ToRPC W256 where
 readText :: Read a => Text -> a
 readText = read . unpack
 
-fetchQuery :: ((Text -> a) -> Value -> IO (Maybe a)) -> Query a -> IO (Maybe a)
-fetchQuery f = do
+fetchQuery :: (Value -> IO (Maybe Text)) -> Query a -> IO (Maybe a)
+fetchQuery f =
   \case
     QueryCode addr ->
-      f hexText (request "eth_getCode" [toRPC addr, "latest"])
+      fmap hexText  <$>
+        f (rpc "eth_getCode" [toRPC addr, "latest"])
     QueryNonce addr ->
-      f readText (request "eth_getTransactionCount" [toRPC addr, "latest"])
+      fmap readText <$>
+        f (rpc "eth_getTransactionCount" [toRPC addr, "latest"])
     QueryBalance addr ->
-      f readText (request "eth_getBalance" [toRPC addr, "latest"])
+      fmap readText <$>
+        f (rpc "eth_getBalance" [toRPC addr, "latest"])
     QuerySlot addr slot ->
-      f readText (request "eth_getStorageAt" [toRPC addr, toRPC slot, "latest"])
+      fmap readText <$>
+        f (rpc "eth_getStorageAt" [toRPC addr, toRPC slot, "latest"])
 
--- demo kludge
-fetch :: IO ()
-fetch = Session.withAPISession $ \sess -> do
+fetchWithSession :: Session -> Value -> IO (Maybe Text)
+fetchWithSession sess x = do
+  r <- asValue =<< Session.post sess mainnet x
+  return (r ^? responseBody . key "result" . _String)
+
+fetchContractWithSession
+  :: Machine e
+  => Session -> Addr -> IO (Maybe (Contract e))
+fetchContractWithSession sess addr = runMaybeT $ do
   let
-    foo :: (Text -> a) -> Value -> IO (Maybe a)
-    foo f x =
-      do
-        r <- asValue =<< Session.post sess mainnet x
-        return (r ^? responseBody . key "result" . _String . to f)
+    fetch :: Query a -> IO (Maybe a)
+    fetch = fetchQuery (fetchWithSession sess)
 
-  print =<< fetchQuery foo (QueryCode mkr)
-  print =<< fetchQuery foo (QueryNonce mkr)
-  print =<< fetchQuery foo (QueryBalance mkr)
-  print =<< fetchQuery foo (QuerySlot mkr 0)
+  theCode    <- MaybeT $ fetch (QueryCode addr)
+  theNonce   <- MaybeT $ fetch (QueryNonce addr)
+  theBalance <- MaybeT $ fetch (QueryBalance addr)
+
+  return $
+    initialContract theCode
+      & set nonce   (w256 theNonce)
+      & set balance (w256 theBalance)
+
+fetchSlotWithSession
+  :: Machine e
+  => Session -> Addr -> W256 -> IO (Maybe (Word e))
+fetchSlotWithSession sess addr slot = do
+  fmap w256 <$>
+    fetchQuery (fetchWithSession sess) (QuerySlot addr slot)
+
+testFetchContract :: Addr -> IO (Maybe (Contract Concrete))
+testFetchContract addr =
+  Session.withAPISession
+    (flip fetchContractWithSession addr)
+
+testFetchSlot :: Addr -> W256 -> IO (Maybe (Word Concrete))
+testFetchSlot addr slot =
+  Session.withAPISession
+    (\s -> fetchSlotWithSession s addr slot)

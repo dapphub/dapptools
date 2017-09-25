@@ -70,6 +70,7 @@ library
     filepath                          >= 1.4.1 && < 1.5,
     ghci-pretty                       >= 0.0.2 && < 0.1,
     time,
+    transformers                      == 0.5.*,
     lens                              >= 4.15.1 && < 4.16,
     lens-aeson                        >= 1.0.1 && < 1.1,
     memory                            >= 0.14.5 && < 0.15,
