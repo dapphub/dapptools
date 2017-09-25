@@ -1,5 +1,9 @@
 # hevm changelog
 
+## 0.9 - Unreleased
+ - Integrates with live chains via RPC (read-only)
+ - Exposes a special contract address with test-related functionality (e.g. time warp)
+
 ## [0.8.5] - 2017-09-22
  - Renames `hevm` from its maiden name `hsevm` :sparkles:
 
