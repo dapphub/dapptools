@@ -291,7 +291,7 @@ initialUiVmStateForTest opts@(UnitTestOptions {..}) dapp (theContractName, theTe
             vm2 =
               vm1 & env . contracts . ix target . balance +~ w256 balanceForCreated
             vm3 = flip execState vm2 $ do
-              performCreation targetCode
+              replaceCodeOfSelf targetCode
               setupCall target "setUp()" gasForInvoking
           in
             updateUiVmState ui vm3

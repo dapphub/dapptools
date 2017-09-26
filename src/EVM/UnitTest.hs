@@ -68,6 +68,8 @@ zeroOracle q = do
 runUnitTestContract ::
   UnitTestOptions -> Map Text SolcContract -> SourceCache -> (Text, [Text]) -> IO ()
 runUnitTestContract opts@(UnitTestOptions {..}) contractMap _ (name, testNames) = do
+  -- Define the driver that executes a VM and
+  -- answers its queries until completion.
   let
     oracular
       :: VM Concrete
@@ -79,58 +81,84 @@ runUnitTestContract opts@(UnitTestOptions {..}) contractMap _ (name, testNames) 
              oracular (execState m vm')
         x -> return x
 
+  -- Print a header
   putStrLn $ "Running " ++ show (length testNames) ++ " tests for "
     ++ unpack name
+
+  -- look for the wanted contract by name from the Solidity info
   case preview (ix name) contractMap of
     Nothing ->
+      -- Fail if there's no such contract
       error $ "Contract " ++ unpack name ++ " not found"
+
     Just theContract -> do
+      -- Construct the initial VM and begin the contract's constructor
       let
         vm0 = initialUnitTestVm opts theContract (Map.elems contractMap)
 
+      -- Run the constructor and use the constructed code, emulating CREATE
       vm2 <-
         oracular vm0 >>= \case
           (VMFailure e, _) ->
             error ("Creation error: " ++ show e)
           (VMSuccess (B targetCode), vm1) -> do
-            return (execState (performCreation targetCode) vm1)
+            return (execState (replaceCodeOfSelf targetCode) vm1)
 
+      -- Provide the requested balance for the test contract
       let
         target = view (state . contract) vm2
         vm3 = vm2 & env . contracts . ix target . balance +~ w256 balanceForCreated
 
+      -- Run the `setUp()' method, and then run all test methods in parallel
       oracular (execState (setupCall target "setUp()"  gasForInvoking) vm3) >>= \case
         (VMFailure e, _) -> do
           putStrLn ("error in setUp(): " ++ show e)
         (VMSuccess _, vm4) -> do
           let
+            -- Define the thread spawner for test cases
             runOne testName = spawn_ . liftIO $ do
+
+              -- Thread will first the test case method
               oracular (execState (setupCall target testName gasForInvoking) vm4) >>= \case
                 (VMFailure _, vm5) ->
+                  -- On failure, decide whether failure is expected, fail otherwise
                   if "testFail" `isPrefixOf` testName
                     then return "."
                     else do
                       onFailure vm5
                       return "F"
+
                 (VMSuccess _, vm5) -> do
+                  -- On success, call the `failed()' method to check assertions
                   oracular (execState (setupCall target "failed()" 10000) vm5) >>= \case
                     (VMSuccess (B out), _) ->
+                      -- Decode the boolean return value using the ABI
                       case runGetOrFail (getAbi AbiBoolType)
                              (LazyByteString.fromStrict out) of
                         Right (_, _, AbiBool False) ->
                           return "."
                         Right (_, _, AbiBool True) ->
+                          -- Decide whether failure is expected, fail otherwise
                           if "testFail" `isPrefixOf` testName
                             then return "."
                             else do
                               return "F"
+
+                        -- The ABI decoder never returns wrong value type
                         Right (_, _, _) ->
                           error "internal error"
+
+                        -- Calling `failed()' returned invalid boolean
                         Left (_, _, e) ->
                           error ("ds-test behaving strangely: " ++ e)
+
+                    -- Calling `failed()' failed
                     (VMFailure e, _) ->
                       error $ "ds-test behaving strangely (" ++ show e ++ ")"
+
+          -- Run all the test cases in parallel and print their status updates
           runParIO (mapM runOne testNames >>= mapM Par.get) >>= mapM_ tick
+
           tick "\n"
 
 word32Bytes :: Word32 -> ByteString

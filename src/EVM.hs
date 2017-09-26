@@ -810,7 +810,7 @@ exec1 = do
 
                     case view frameContext nextFrame of
                       CreationContext _ -> do
-                        performCreation (forceConcreteBlob (readMemory (num xOffset) (num xSize) vm))
+                        replaceCodeOfSelf (forceConcreteBlob (readMemory (num xOffset) (num xSize) vm))
                         assign state (view frameState nextFrame)
 
                         -- Move back the gas to the parent context
@@ -921,8 +921,10 @@ accessStorage addr slot continue =
       touchAccount addr $ \_ ->
         accessStorage addr slot continue
 
-performCreation :: Machine e => ByteString -> EVM e ()
-performCreation createdCode = do
+-- | Replace current contract's code, like when CREATE returns
+-- from the constructor code.
+replaceCodeOfSelf :: Machine e => ByteString -> EVM e ()
+replaceCodeOfSelf createdCode = do
   self <- use (state . contract)
   zoom (env . contracts . at self) $ do
     if BS.null createdCode
