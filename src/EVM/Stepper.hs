@@ -8,12 +8,9 @@ module EVM.Stepper
   , initializeUnitTest
   , runUnitTest
   , exec
-  , step
-  , back
   , fail
   , quiz
   , evm
-  , try
   , note
   )
 where
@@ -51,12 +48,6 @@ data Action e a where
   -- | Keep executing until an intermediate result is reached
   Exec    :: Machine e => Action e        (VMResult e)
   
-  -- | Step forward one instruction
-  Step    :: Machine e => Action e (Maybe (VMResult e))
-  
-  -- | Step backward one instruction
-  Back    :: Machine e => Action e ()
-  
   -- | Short-circuit with a failure
   Fail    :: Machine e => Failure e -> Action e a
   
@@ -65,9 +56,6 @@ data Action e a where
 
   -- | Embed a VM state transformation
   EVM     :: Machine e => EVM e a      -> Action e a
-
-  -- | Run an operational monad action but catching failures
-  Try     :: Machine e => Stepper e () -> Action e (VMResult e)
 
   -- | Write something to the log or terminal
   Note    :: Machine e => Text      -> Action e ()
@@ -85,12 +73,6 @@ type ABIMethod = Text
 
 -- Singleton actions
 
-step :: Machine e => Stepper e (Maybe (VMResult e))
-step = singleton Step
-
-back :: Machine e => Stepper e ()
-back = singleton Back
-
 exec :: Machine e => Stepper e (VMResult e)
 exec = singleton Exec
 
@@ -103,22 +85,22 @@ quiz = singleton . Quiz
 evm :: Machine e => EVM e a -> Stepper e a
 evm = singleton . EVM
 
-try :: Stepper Concrete () -> Stepper Concrete (VMResult Concrete)
-try = singleton . Try
-
 note :: Machine e => Text -> Stepper e ()
 note = singleton . Note
 
 -- | Run the VM until final result, resolving all queries
-execFully :: Machine e => Stepper e (Blob e)
+execFully :: Machine e => Stepper e (Either (Error e) (Blob e))
 execFully =
   exec >>= \case
     VMFailure (Query q) ->
       quiz q >> execFully
     VMFailure x ->
-      fail (VMFailed x)
+      pure (Left x)
     VMSuccess x ->
-      pure x
+      pure (Right x)
+
+execFullyOrFail :: Machine e => Stepper e (Blob e)
+execFullyOrFail = execFully >>= either (fail . VMFailed) pure
 
 -- | Decode a blob as an ABI value, failing if ABI encoding wrong
 decode :: AbiType -> Blob Concrete -> Stepper Concrete AbiValue
@@ -137,7 +119,7 @@ initializeUnitTest :: UnitTestOptions -> Stepper Concrete ()
 initializeUnitTest UnitTestOptions { .. } = do
   
   -- Constructor is loaded; run until it returns code
-  B code <- execFully
+  B code <- execFullyOrFail 
   addr <- evm (use (state . contract))
 
   -- Mutate the current contract to use the new code
@@ -149,8 +131,10 @@ initializeUnitTest UnitTestOptions { .. } = do
   -- Initialize the test contract
   evm $ setupCall addr "setUp()" gasForInvoking
 
+  note "Running `setUp()'"
+
   -- Let `setUp()' run to completion
-  void execFully
+  void execFullyOrFail
 
 -- | Assuming a test contract is loaded and initialized, this stepper
 -- will run the specified test method and return whether it succeeded.
@@ -165,15 +149,17 @@ runUnitTest UnitTestOptions { .. } method = do
 
   -- Set up the call to the test method
   evm $ setupCall addr method gasForInvoking
+  note "Running unit test"
 
   -- Try running the test method
-  bailed <- try (void execFully) >>= \case
-    VMFailure _ -> pure True
-    VMSuccess _ -> pure False
+  bailed <-
+    execFully >>=
+      either (const (pure True)) (const (pure False))
 
   -- Ask whether any assertions failed
   evm $ setupCall addr "failed()" 10000
-  AbiBool failed <- execFully >>= decode AbiBoolType
+  note "Checking whether assertions failed"
+  AbiBool failed <- execFullyOrFail >>= decode AbiBoolType
 
   -- Return true if the test was successful
   pure (shouldFail == bailed || failed)
