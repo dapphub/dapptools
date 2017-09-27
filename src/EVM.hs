@@ -1031,50 +1031,51 @@ delegateCall
   -> Word e -> Addr -> Word e -> Word e -> Word e -> Word e -> [Word e]
   -> EVM e ()
   -> EVM e ()
-delegateCall fees xGas xTo xInOffset xInSize xOutOffset xOutSize xs continue = do
-  preuse (env . contracts . ix xTo) >>=
-    \case
-      Nothing -> vmError (NoSuchContract xTo)
-      Just target ->
-        accessMemoryRange fees xInOffset xInSize $ do
-          accessMemoryRange fees xOutOffset xOutSize $ do
-            burn xGas $ do
-              next
-              vm <- get
+delegateCall fees xGas xTo xInOffset xInSize xOutOffset xOutSize xs continue =
+  touchAccount xTo . const $
+    preuse (env . contracts . ix xTo) >>=
+      \case
+        Nothing -> vmError (NoSuchContract xTo)
+        Just target ->
+          accessMemoryRange fees xInOffset xInSize $ do
+            accessMemoryRange fees xOutOffset xOutSize $ do
+              burn xGas $ do
+                next
+                vm <- get
 
-              let newContext = CallContext
-                    { callContextOffset = xOutOffset
-                    , callContextSize   = xOutSize
-                    , callContextCodehash = view codehash target
-                    , callContextReversion = view (env . contracts) vm
-                    , callContextAbi =
-                        if xInSize >= 4
-                        then
-                          let
-                            w = forceConcreteWord
-                                  (readMemoryWord32 xInOffset (view (state . memory) vm))
-                          in Just $! num w
-                        else Nothing
-                    }
+                let newContext = CallContext
+                      { callContextOffset = xOutOffset
+                      , callContextSize   = xOutSize
+                      , callContextCodehash = view codehash target
+                      , callContextReversion = view (env . contracts) vm
+                      , callContextAbi =
+                          if xInSize >= 4
+                          then
+                            let
+                              w = forceConcreteWord
+                                    (readMemoryWord32 xInOffset (view (state . memory) vm))
+                            in Just $! num w
+                          else Nothing
+                      }
 
-              pushTo frames $ Frame
-                { _frameState = (set stack xs) (view state vm)
-                , _frameContext = newContext
-                }
+                pushTo frames $ Frame
+                  { _frameState = (set stack xs) (view state vm)
+                  , _frameContext = newContext
+                  }
 
-              modifying contextTrace $ \t ->
-                Zipper.children (Zipper.insert (Node (Right newContext) []) t)
+                modifying contextTrace $ \t ->
+                  Zipper.children (Zipper.insert (Node (Right newContext) []) t)
 
-              zoom state $ do
-                assign gas xGas
-                assign pc 0
-                assign code (view bytecode target)
-                assign codeContract xTo
-                assign stack mempty
-                assign memory mempty
-                assign calldata (readMemory (num xInOffset) (num xInSize) vm)
+                zoom state $ do
+                  assign gas xGas
+                  assign pc 0
+                  assign code (view bytecode target)
+                  assign codeContract xTo
+                  assign stack mempty
+                  assign memory mempty
+                  assign calldata (readMemory (num xInOffset) (num xInSize) vm)
 
-              continue
+                continue
 
 
 -- * VM error implementation
