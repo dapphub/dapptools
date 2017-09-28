@@ -117,7 +117,7 @@ interpret opts =
       case action of
         Stepper.Exec ->
           exec >>= interpret opts . k
-        Stepper.Quiz q ->
+        Stepper.Wait q ->
           do m <- liftIO (oracle opts q)
              State.state (runState m) >> interpret opts (k ())
         Stepper.Note _ ->

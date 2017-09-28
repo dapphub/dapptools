@@ -10,7 +10,7 @@ module EVM.Stepper
   , execFullyOrFail
   , decode
   , fail
-  , quiz
+  , wait
   , evm
   , note
   )
@@ -48,7 +48,7 @@ data Action e a where
   Fail    :: Machine e => Failure e -> Action e a
   
   -- | Wait for a query to be resolved
-  Quiz    :: Machine e => Query e   -> Action e ()
+  Wait    :: Machine e => Query e   -> Action e ()
 
   -- | Embed a VM state transformation
   EVM     :: Machine e => EVM e a      -> Action e a
@@ -73,8 +73,8 @@ exec = singleton Exec
 fail :: Machine e => Failure e -> Stepper e a
 fail = singleton . Fail
 
-quiz :: Machine e => Query e -> Stepper e ()
-quiz = singleton . Quiz
+wait :: Machine e => Query e -> Stepper e ()
+wait = singleton . Wait
 
 evm :: Machine e => EVM e a -> Stepper e a
 evm = singleton . EVM
@@ -87,7 +87,7 @@ execFully :: Machine e => Stepper e (Either (Error e) (Blob e))
 execFully =
   exec >>= \case
     VMFailure (Query q) ->
-      quiz q >> execFully
+      wait q >> execFully
     VMFailure x ->
       pure (Left x)
     VMSuccess x ->

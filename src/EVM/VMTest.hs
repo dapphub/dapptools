@@ -204,7 +204,7 @@ interpret =
       case action of
         Stepper.Exec ->
           EVM.Exec.exec >>= interpret . k
-        Stepper.Quiz q ->
+        Stepper.Wait q ->
           do join (Fetch.zero q)
              interpret (k ())
         Stepper.Note _ ->

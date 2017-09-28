@@ -12,7 +12,6 @@ import Brick.Widgets.List
 import EVM
 import EVM.Concrete (Concrete, Word (C))
 import EVM.Debug
-import EVM.Exec
 import EVM.Machine (Machine)
 import EVM.Op
 import EVM.Solidity
@@ -36,9 +35,8 @@ import Data.Maybe (fromJust)
 import Data.Monoid ((<>))
 import Data.Text (Text, unpack, pack)
 import Data.Text.Encoding (decodeUtf8)
--- import Data.Tree (drawForest)
+import Data.Tree (drawForest)
 
-import qualified Data.ByteString as BS
 import qualified Data.Map as Map
 import qualified Data.Scientific as Scientific
 import qualified Data.Text as Text
@@ -59,10 +57,6 @@ data Name
   deriving (Eq, Show, Ord)
 
 type UiWidget = Widget Name
-
-data VmContinuation e
-  = Continue (VMResult e -> UiVmState e -> UiVmState e)
-  | Stop
 
 data UiVmState e = UiVmState
   { _uiVm             :: VM e
@@ -105,9 +99,9 @@ makeLenses ''UiTestPickerState
 makePrisms ''UiState
 
 data StepMode
-  = StepOne   -- ^ Finish after one opcode step
-  | StepMany  -- ^ Continue running until done
-  | StepNone  -- ^ Finish before the next opcode
+  = StepOne        -- ^ Finish after one opcode step
+  | StepMany !Int  -- ^ Run a specific number of steps
+  | StepNone       -- ^ Finish before the next opcode
   deriving Show
 
 -- | Each step command in the terminal should finish immediately
@@ -124,7 +118,12 @@ interpret
   -> Fetch.Fetcher
   -> Stepper Concrete a
   -> State (UiVmState Concrete) (StepOutcome Concrete a)
-interpret mode fetcher = eval . Operational.view
+interpret mode fetcher =
+
+  -- Like the similar interpreters in @EVM.UnitTest@ and @EVM.VMTest@,
+  -- this one is implemented as an "operational monad interpreter".
+
+  eval . Operational.view
   where
     eval
       :: Operational.ProgramView (Stepper.Action Concrete) a
@@ -136,45 +135,75 @@ interpret mode fetcher = eval . Operational.view
     eval (action Operational.:>>= k) =
       case action of
 
+        -- Stepper wants to keep executing?
         Stepper.Exec -> do
           case mode of
             StepNone ->
+              -- We come here when we've continued while stepping,
+              -- either from a query or from a return;
+              -- we should pause here and wait for the user.
               pure (Stepped (Operational.singleton action >>= k))
 
             StepOne -> do
+              -- Run an instruction
               modify stepOneOpcode
+
               use (uiVm . result) >>= \case
                 Nothing ->
+                  -- If instructions remain, then pause & await user.
                   pure (Stepped (Stepper.exec >>= k))
                 Just r ->
-                  interpret mode fetcher (k r)
-            _ ->
-              error "StepMany not supported yet"
+                  -- If returning, proceed directly the continuation,
+                  -- but stopping before the next instruction.
+                  interpret StepNone fetcher (k r)
 
-        Stepper.Quiz q -> do
-          void . interpret mode fetcher $
-            Stepper.note (pack ("Quiz: " ++ show q))
+            StepMany 0 -> do
+              -- Finish the continuation until the next instruction;
+              -- then, pause & await user.
+              interpret StepNone fetcher (Stepper.exec >>= k)
+
+            StepMany i -> do
+              -- Run one instruction.
+              interpret StepOne fetcher (Stepper.exec >>= k) >>=
+                \case
+                  Stepped stepper ->
+                    interpret (StepMany (i - 1)) fetcher stepper
+
+                  -- This shouldn't happen, because re-stepping needs
+                  -- to avoid blocking and halting.
+                  r -> pure r
+
+              -- use (uiVm . result) >>= \case
+              --   Nothing ->
+              --     -- If instructions remain, keep going.
+              --     interpret (StepMany (i - 1)) fetcher (Stepper.exec >>= k)
+              --   Just r  ->
+              --     -- If returning, proceed with the continuation.
+              --     interpret (StepMany (i - 1)) fetcher (k r)
+
+        -- Stepper wants to make a query and wait for the results?
+        Stepper.Wait q -> do
+          -- Tell the TTY to run an I/O action to produce the next stepper.
           pure . Blocked $ do
+            -- First run the fetcher, getting a VM state transition back.
             m <- fetcher q
-            pure $ do
-              Stepper.note "Evaluating post-quiz"
-              Stepper.evm m
-              Stepper.note "Continuing"
-              k ()
+            -- Join that transition with the stepper script's continuation.
+            pure (Stepper.evm m >> k ())
 
+        -- Stepper wants to modify the VM.
         Stepper.EVM m -> do
-          void . interpret mode fetcher $
-            Stepper.note "Lifted EVM step"
           vm0 <- use uiVm
           let (r, vm1) = runState m vm0
           modify (flip updateUiVmState vm1)
           interpret mode fetcher (k r)
 
+        -- Stepper wants to emit a message.
         Stepper.Note s -> do
           assign uiVmMessage (Just (unpack s))
           modifying uiVmNotes (unpack s :)
           interpret mode fetcher (k ())
 
+        -- Stepper wants to exit because of a failure.
         Stepper.Fail _ ->
           error "how to show errors in TTY?"
 
@@ -261,26 +290,26 @@ app :: UnitTestOptions -> App (UiState Concrete) () Name
 app opts = App
   { appDraw = drawUi
   , appChooseCursor = neverShowCursor
-  , appHandleEvent = \s e ->
+  , appHandleEvent = \ui e ->
 
-      case (s, e) of
+      case (ui, e) of
         (_, VtyEvent (Vty.EvKey Vty.KEsc []) )->
-          halt s
+          halt ui
 
-        (UiVmScreen s0, VtyEvent (Vty.EvKey (Vty.KChar 'n') [])) -> do
+        (UiVmScreen s, VtyEvent (Vty.EvKey (Vty.KChar 'n') [])) -> do
           let
             run mode s' = do
               let m = interpret mode (oracle opts) (view uiVmNextStep s')
-              case runState m s' of
-                (Blocked blocker, s1) -> do
+              case runState (m <* modify renderVm) s' of
+                (Blocked blocker, s'') -> do
                   stepper <- liftIO blocker
-                  run StepNone $ execState (assign uiVmNextStep stepper) s1
-                (Stepped stepper, s1) -> do
-                  continue (UiVmScreen (s1 & set uiVmNextStep stepper))
-                (Returned (), s1) ->
-                  halt (UiVmScreen s1)
+                  run StepNone $ execState (assign uiVmNextStep stepper) s''
+                (Stepped stepper, s'') -> do
+                  continue (UiVmScreen (s'' & set uiVmNextStep stepper))
+                (Returned (), s'') ->
+                  halt (UiVmScreen s'')
            in
-            run StepOne s0
+            run StepOne s
 
           --useContinuation halt stepOneOpcode s'
 
@@ -290,10 +319,25 @@ app opts = App
         -- (UiVmScreen s', VtyEvent (Vty.EvKey (Vty.KChar 'n') [Vty.MCtrl])) ->
         --   useContinuation halt stepOneSourcePosition_over s'
 
-        -- (UiVmScreen s', VtyEvent (Vty.EvKey (Vty.KChar 'p') [])) ->
-        --   let n = view uiVmStepCount s' - 1
-        --   in useContinuationRepeatedly n halt stepOneOpcode
-        --        (view uiVmFirstState s')
+        (UiVmScreen s, VtyEvent (Vty.EvKey (Vty.KChar 'p') [])) ->
+          let
+            n  = view uiVmStepCount s - 1
+            s0 = view uiVmFirstState s
+            s1 = set (uiVm . cache) (view (uiVm . cache) s) s0
+            m  = interpret (StepMany n) (oracle opts) (view uiVmNextStep s1)
+          in
+            if n == -1
+            then continue ui
+            else case runState (m <* modify renderVm) s1 of
+              (Stepped stepper, s2) -> do
+                continue (UiVmScreen (s2 & set uiVmNextStep stepper))
+              (Blocked _, _) -> do
+                error "blocked while rewinding"
+              (Returned (), _) ->
+                error "exited while rewinding"
+
+          -- in useContinuationRepeatedly n halt stepOneOpcode
+          --      (view uiVmFirstState s')
 
         (UiTestPickerScreen s', VtyEvent (Vty.EvKey (Vty.KEnter) [])) -> do
           case listSelectedElement (view testPickerList s') of
@@ -309,47 +353,12 @@ app opts = App
             e'
           continue (UiTestPickerScreen s'')
 
-        _ -> continue s
+        _ ->
+          continue ui
 
   , appStartEvent = return
   , appAttrMap = const (attrMap Vty.defAttr myTheme)
   }
-
--- useContinuation
---   :: (UiState Concrete -> EventM n (Next (UiState Concrete)))
---   -> (UiVmState Concrete -> UiVmState Concrete)
---   -> UiVmState Concrete
---   -> EventM n (Next (UiState Concrete))
--- useContinuation onStop f ui =
---   let ui' = f ui
---   in case view (uiVm . result) ui' of
---     Nothing ->
---       continue (UiVmScreen ui')
---     Just r ->
---       case view uiVmContinuation ui' of
---         Stop -> onStop (UiVmScreen ui')
---         Continue k ->
---           continue . UiVmScreen $ k r ui'
-
--- useContinuationRepeatedly
---   :: Int
---   -> (UiState Concrete -> EventM n (Next (UiState Concrete)))
---   -> (UiVmState Concrete -> UiVmState Concrete)
---   -> UiVmState Concrete
---   -> EventM n (Next (UiState Concrete))
--- useContinuationRepeatedly n onStop f ui = go n ui
---   where
---     go 0 ui' = continue (UiVmScreen ui')
---     go i ui' =
---       let ui'' = f ui'
---       in case view (uiVm . result) ui'' of
---         Nothing ->
---           go (i - 1) ui''
---         Just r ->
---           case view uiVmContinuation ui'' of
---             Stop -> onStop (UiVmScreen ui'')
---             Continue k ->
---               go (i - 1) (k r ui'')
 
 initialUiVmStateForTest
   :: UnitTestOptions
@@ -359,64 +368,30 @@ initialUiVmStateForTest
 initialUiVmStateForTest opts@(UnitTestOptions {..}) dapp (theContractName, theTestName) =
   ui1
   where
-    ui1 =
-      updateUiVmState ui0 vm0
-        & set uiVmFirstState ui1
+    script = do
+      initializeUnitTest opts
+      void (runUnitTest opts theTestName)
     ui0 =
       UiVmState
-        { _uiVm = vm0
-
-        , _uiVmNextStep = do
-            initializeUnitTest opts
-            void (runUnitTest opts theTestName)
-
-        , _uiVmStackList = undefined
+        { _uiVm             = vm0
+        , _uiVmNextStep     = script
+        , _uiVmStackList    = undefined
         , _uiVmBytecodeList = undefined
-        , _uiVmTraceList = undefined
+        , _uiVmTraceList    = undefined
         , _uiVmSolidityList = undefined
-        , _uiVmSolc = Just testContract
-        , _uiVmDapp = Just dapp
-        , _uiVmStepCount = 0
-        , _uiVmFirstState = undefined
-        , _uiVmMessage = Just "Creating unit test contract"
-        , _uiVmNotes = []
+        , _uiVmSolc         = Just testContract
+        , _uiVmDapp         = Just dapp
+        , _uiVmStepCount    = 0
+        , _uiVmFirstState   = undefined
+        , _uiVmMessage      = Just "Creating unit test contract"
+        , _uiVmNotes        = []
         }
     Just testContract =
       view (dappSolcByName . at theContractName) dapp
     vm0 =
       initialUnitTestVm opts testContract (Map.elems (view dappSolcByName dapp))
-    -- k1 r ui =
-    --   case r of
-    --     VMFailure e ->
-    --       error $ "creation error: " ++ show e
-    --     VMSuccess (B targetCode) ->
-    --       let
-    --         vm1 = view uiVm ui
-    --         target = view (state . contract) vm1
-    --         vm2 =
-    --           vm1 & env . contracts . ix target . balance +~ w256 balanceForCreated
-    --         vm3 = flip execState vm2 $ do
-    --           replaceCodeOfSelf targetCode
-    --           setupCall target "setUp()" gasForInvoking
-    --       in
-    --         updateUiVmState ui vm3
-    --           & set uiVmContinuation (Continue (k2 target))
-    --           & set uiVmMessage (Just "Calling `setUp()' for unit test")
-    -- k2 target r ui =
-    --   case r of
-    --     VMFailure e ->
-    --       error $ "setUp() error: " ++ show e
-    --     VMSuccess _ ->
-    --       let
-    --         vm3 = view uiVm ui
-    --         vm4 = flip execState vm3 $ do
-    --                 setupCall target theTestName gasForInvoking
-    --                 assign contextTrace (Zipper.fromForest [])
-    --                 assign logs mempty
-    --       in
-    --         updateUiVmState ui vm4
-    --           & set uiVmContinuation Stop
-    --           & set uiVmMessage (Just "Running unit test")
+    ui1 =
+      updateUiVmState ui0 vm0 & set uiVmFirstState ui1
 
 myTheme :: [(AttrName, Vty.Attr)]
 myTheme =
@@ -479,50 +454,49 @@ stepOneOpcode ui =
   let
     nextVm = execState exec1 (view uiVm ui)
   in
-    updateUiVmState ui nextVm
-      & over uiVmStepCount (+ 1)
+    ui & over uiVmStepCount (+ 1)
+       & set uiVm nextVm
 
-stepOneSourcePosition :: UiVmState Concrete -> UiVmState Concrete
-stepOneSourcePosition ui =
-  let
-    vm              = view uiVm ui
-    Just dapp       = view uiVmDapp ui
-    initialPosition = currentSrcMap dapp vm
-    stillHere s     = currentSrcMap dapp s == initialPosition
-    (i, nextVm)     = runState (execWhile stillHere) vm
-  in
-    updateUiVmState ui nextVm
-      & over uiVmStepCount (+ i)
+-- stepOneSourcePosition :: UiVmState Concrete -> UiVmState Concrete
+-- stepOneSourcePosition ui =
+--   let
+--     vm              = view uiVm ui
+--     Just dapp       = view uiVmDapp ui
+--     initialPosition = currentSrcMap dapp vm
+--     stillHere s     = currentSrcMap dapp s == initialPosition
+--     (i, nextVm)     = runState (execWhile stillHere) vm
+--   in
+--     ui & set uiVm nextVm
+--        & over uiVmStepCount (+ i)
 
-stepOneSourcePosition_over :: UiVmState Concrete -> UiVmState Concrete
-stepOneSourcePosition_over ui =
-  let
-    vm              = view uiVm ui
-    Just dapp       = view uiVmDapp ui
-    initialPosition = currentSrcMap dapp vm
-    initialHeight   = length (view frames vm)
+-- stepOneSourcePosition_over :: UiVmState Concrete -> UiVmState Concrete
+-- stepOneSourcePosition_over ui =
+--   let
+--     vm              = view uiVm ui
+--     Just dapp       = view uiVmDapp ui
+--     initialPosition = currentSrcMap dapp vm
+--     initialHeight   = length (view frames vm)
 
-    predicate x =
-      case currentSrcMap dapp x of
-        Nothing ->
-          True
-        Just sm ->
-          let
-            remain = Just sm == initialPosition
-            deeper = length (view frames x) > initialHeight
-            boring =
-              case srcMapCode (view dappSources dapp) sm of
-                Just bs ->
-                  BS.isPrefixOf "contract " bs
-                Nothing ->
-                  True
-          in
-            remain || deeper || boring
+--     predicate x =
+--       case currentSrcMap dapp x of
+--         Nothing ->
+--           True
+--         Just sm ->
+--           let
+--             remain = Just sm == initialPosition
+--             deeper = length (view frames x) > initialHeight
+--             boring =
+--               case srcMapCode (view dappSources dapp) sm of
+--                 Just bs ->
+--                   BS.isPrefixOf "contract " bs
+--                 Nothing ->
+--                   True
+--           in
+--             remain || deeper || boring
 
-    (i, nextVm)     = runState (execWhile predicate) vm
-  in
-    updateUiVmState ui nextVm
-      & over uiVmStepCount (+ i)
+--     (i, nextVm)     = runState (execWhile predicate) vm
+--   in
+--     ui & over uiVmStepCount (+ i)
 
 currentSrcMap :: Machine e => DappInfo -> VM e -> Maybe SrcMap
 currentSrcMap dapp vm =
@@ -546,6 +520,9 @@ currentSolc dapp vm =
     h = view codehash this
   in
     preview (dappSolcByHash . ix h . _2) dapp
+
+renderVm :: UiVmState Concrete -> UiVmState Concrete
+renderVm ui = updateUiVmState ui (view uiVm ui)
 
 updateUiVmState :: UiVmState Concrete -> VM Concrete -> UiVmState Concrete
 updateUiVmState ui vm =
@@ -572,12 +549,11 @@ updateUiVmState ui vm =
           & set uiVmTraceList
               (list
                 TracePane
-                (Vec.fromList (view uiVmNotes ui))
-                -- (Vec.fromList
-                --  . lines
-                --  . drawForest
-                --  . fmap (fmap (unpack . showContext dapp))
-                --  $ contextTraceForest vm)
+                (Vec.fromList
+                 . lines
+                 . drawForest
+                 . fmap (fmap (unpack . showContext dapp))
+                 $ contextTraceForest vm)
                 1)
           & set uiVmSolidityList
               (list SolidityPane
@@ -676,7 +652,7 @@ showWordExplanation w (Just dapp) =
 
 drawBytecodePane :: UiVmState Concrete -> UiWidget
 drawBytecodePane ui =
-  hBorderWithLabel (case view uiVmMessage ui of { Nothing -> str ""; Just s -> str s }) <=>
+  hBorderWithLabel (case view uiVmMessage ui of { Nothing -> str ""; Just s -> str (show (view uiVmStepCount ui) ++ ":" ++ s) }) <=>
     Centered.renderList
       (\active x -> if not active
                     then withDefAttr dimAttr (opWidget x)

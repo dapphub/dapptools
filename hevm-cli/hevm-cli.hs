@@ -293,7 +293,7 @@ runVMTest mode (name, x) = do
     Right Nothing -> do
       putStrLn "timeout"
       return False
-    Left e -> do
+    Left _ -> do
       putStrLn "error"
       return False
 
