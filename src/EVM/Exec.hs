@@ -8,9 +8,12 @@ import EVM.Types
 import qualified EVM.FeeSchedule as FeeSchedule
 
 import Control.Lens
-import Control.Monad.State.Strict (State, get)
+import Control.Monad.State.Class (MonadState)
+import Control.Monad.State.Strict (runState)
 import Data.ByteString (ByteString)
 import Data.Maybe (isNothing)
+
+import qualified Control.Monad.State.Class as State
 
 ethrunAddress :: Addr
 ethrunAddress = Addr 0x00a329c0648769a73afac7f9381e08fb43dbea72
@@ -34,20 +37,20 @@ vmForEthrunCreation creationCode =
     }) & set (env . contracts . at ethrunAddress)
              (Just (initialContract mempty))
 
-exec :: State (VM Concrete) (VMResult Concrete)
+exec :: MonadState (VM Concrete) m => m (VMResult Concrete)
 exec =
   use EVM.result >>= \case
-    Nothing -> exec1 >> exec
+    Nothing -> State.state (runState exec1) >> exec
     Just x  -> return x
 
-execWhile :: (VM Concrete -> Bool) -> State (VM Concrete) Int
+execWhile :: MonadState (VM Concrete) m => (VM Concrete -> Bool) -> m Int
 execWhile p = go 0
   where
     go i = do
-      x <- get
+      x <- State.get
       if p x && isNothing (view result x)
         then do
-          exec1
+          State.state (runState exec1)
           go $! (i + 1)
       else
         return i

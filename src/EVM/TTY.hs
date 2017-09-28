@@ -17,11 +17,15 @@ import EVM.Machine (Machine)
 import EVM.Op
 import EVM.Solidity
 import EVM.Types
-import EVM.UnitTest
+import EVM.UnitTest (UnitTestOptions (..))
+import EVM.UnitTest (initializeUnitTest, runUnitTest)
+import EVM.UnitTest (initialUnitTestVm, findUnitTests)
 
 import EVM.Stepper (Stepper)
 import qualified EVM.Stepper as Stepper
 import qualified Control.Monad.Operational as Operational
+
+import qualified EVM.Fetch as Fetch
 
 import Control.Lens
 import Control.Monad.State.Strict hiding (state)
@@ -117,9 +121,10 @@ data StepOutcome e a
 -- from within the TTY loop, yielding a @StepOutcome@ depending on the @StepMode@.
 interpret
   :: StepMode
+  -> Fetch.Fetcher
   -> Stepper Concrete a
   -> State (UiVmState Concrete) (StepOutcome Concrete a)
-interpret mode = eval . Operational.view
+interpret mode fetcher = eval . Operational.view
   where
     eval
       :: Operational.ProgramView (Stepper.Action Concrete) a
@@ -141,21 +146,16 @@ interpret mode = eval . Operational.view
               use (uiVm . result) >>= \case
                 Nothing ->
                   pure (Stepped (Stepper.exec >>= k))
-
-                Just (VMFailure (Query q)) -> do
-                  interpret mode $ do
-                    Stepper.quiz q
-                    Stepper.exec >>= k
-
                 Just r ->
-                  interpret mode (k r)
+                  interpret mode fetcher (k r)
             _ ->
               error "StepMany not supported yet"
 
         Stepper.Quiz q -> do
-          void $ interpret mode (Stepper.note (pack ("Quiz: " ++ show q)))
+          void . interpret mode fetcher $
+            Stepper.note (pack ("Quiz: " ++ show q))
           pure . Blocked $ do
-            m <- httpOracle q
+            m <- fetcher q
             pure $ do
               Stepper.note "Evaluating post-quiz"
               Stepper.evm m
@@ -163,16 +163,17 @@ interpret mode = eval . Operational.view
               k ()
 
         Stepper.EVM m -> do
-          void $ interpret mode (Stepper.note "Lifted EVM step")
+          void . interpret mode fetcher $
+            Stepper.note "Lifted EVM step"
           vm0 <- use uiVm
           let (r, vm1) = runState m vm0
           modify (flip updateUiVmState vm1)
-          interpret mode (k r)
+          interpret mode fetcher (k r)
 
         Stepper.Note s -> do
           assign uiVmMessage (Just (unpack s))
           modifying uiVmNotes (unpack s :)
-          interpret mode (k ())
+          interpret mode fetcher (k ())
 
         Stepper.Fail _ ->
           error "how to show errors in TTY?"
@@ -192,7 +193,7 @@ runFromVM vm = do
   let
     ui0 = UiVmState
            { _uiVm = vm
-           , _uiVmNextStep = void Stepper.exec
+           , _uiVmNextStep = void Stepper.execFully
            , _uiVmStackList = undefined
            , _uiVmBytecodeList = undefined
            , _uiVmTraceList = undefined
@@ -206,10 +207,13 @@ runFromVM vm = do
            }
     ui1 = updateUiVmState ui0 vm & set uiVmFirstState ui1
 
-    testOpts =
-      -- Oops, kludge.  The UI will never use these options,
-      -- because we don't allow starting unit tests from this path.
-      error "internal error: not supposed to use unit test options"
+    testOpts = UnitTestOptions
+      { oracle            = Fetch.zero
+      , gasForCreating    = error "irrelevant"
+      , gasForInvoking    = error "irrelevant"
+      , balanceForCreator = error "irrelevant"
+      , balanceForCreated = error "irrelevant"
+      }
 
   ui2 <- customMain mkVty Nothing (app testOpts) (UiVmScreen ui1)
   case ui2 of
@@ -265,8 +269,9 @@ app opts = App
 
         (UiVmScreen s0, VtyEvent (Vty.EvKey (Vty.KChar 'n') [])) -> do
           let
-            run mode s' =
-              case runState (interpret mode (view uiVmNextStep s')) s' of
+            run mode s' = do
+              let m = interpret mode (oracle opts) (view uiVmNextStep s')
+              case runState m s' of
                 (Blocked blocker, s1) -> do
                   stepper <- liftIO blocker
                   run StepNone $ execState (assign uiVmNextStep stepper) s1
@@ -362,8 +367,8 @@ initialUiVmStateForTest opts@(UnitTestOptions {..}) dapp (theContractName, theTe
         { _uiVm = vm0
 
         , _uiVmNextStep = do
-            Stepper.initializeUnitTest opts
-            void (Stepper.runUnitTest opts theTestName)
+            initializeUnitTest opts
+            void (runUnitTest opts theTestName)
 
         , _uiVmStackList = undefined
         , _uiVmBytecodeList = undefined
