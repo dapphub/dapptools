@@ -1,8 +1,8 @@
 # hevm changelog
 
-## 0.9 - Unreleased
+## [0.9] - 2017-09-29
  - Integrates with live chains via RPC (read-only)
- - Exposes a special contract address with test-related functionality (e.g. time warp)
+ - Exposes a special contract address with test-related functionality (time warp)
 
 ## [0.8.5] - 2017-09-22
  - Renames `hevm` from its maiden name `hsevm` :sparkles:
@@ -64,6 +64,7 @@
 
 [0.8 test report]: https://hydra.dapp.tools/build/135/download/1/index.html
 
+[0.9]: https://github.com/dapphub/hevm/compare/v0.8.5...v0.9
 [0.8.5]: https://github.com/dapphub/hevm/compare/v0.8...v0.8.5
 [0.8]: https://github.com/dapphub/hevm/compare/v0.7...v0.8
 [0.7]: https://github.com/dapphub/hevm/compare/v0.6.5...v0.7
