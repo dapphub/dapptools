@@ -93,7 +93,7 @@ runUnitTest UnitTestOptions { .. } method = do
   AbiBool failed <- Stepper.execFullyOrFail >>= Stepper.decode AbiBoolType
 
   -- Return true if the test was successful
-  pure (shouldFail == bailed || failed)
+  pure (shouldFail == (bailed || failed))
 
 tick :: String -> IO ()
 tick x = putStr x >> hFlush stdout
