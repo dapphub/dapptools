@@ -32,10 +32,6 @@ data RpcQuery a where
 
 deriving instance Show (RpcQuery a)
 
--- Will of course allow custom RPC URLs e.g. to include Infura access key
-mainnet :: String
-mainnet = "https://mainnet.infura.io"
-
 mkr :: Addr
 mkr = 0xc66ea802717bfb9833400264dd12c2bceaa34a6d
 
@@ -76,18 +72,18 @@ fetchQuery f q = do
         f (rpc "eth_getStorageAt" [toRPC addr, toRPC slot, "latest"])
   return x
 
-fetchWithSession :: Session -> Value -> IO (Maybe Text)
-fetchWithSession sess x = do
-  r <- asValue =<< Session.post sess mainnet x
+fetchWithSession :: Text -> Session -> Value -> IO (Maybe Text)
+fetchWithSession url sess x = do
+  r <- asValue =<< Session.post sess (unpack url) x
   return (r ^? responseBody . key "result" . _String)
 
 fetchContractWithSession
   :: Machine e
-  => Session -> Addr -> IO (Maybe (Contract e))
-fetchContractWithSession sess addr = runMaybeT $ do
+  => Text -> Session -> Addr -> IO (Maybe (Contract e))
+fetchContractWithSession url sess addr = runMaybeT $ do
   let
     fetch :: Show a => RpcQuery a -> IO (Maybe a)
-    fetch = fetchQuery (fetchWithSession sess)
+    fetch = fetchQuery (fetchWithSession url sess)
 
   theCode    <- MaybeT $ fetch (QueryCode addr)
   theNonce   <- MaybeT $ fetch (QueryNonce addr)
@@ -101,31 +97,31 @@ fetchContractWithSession sess addr = runMaybeT $ do
 
 fetchSlotWithSession
   :: Machine e
-  => Session -> Addr -> W256 -> IO (Maybe (Word e))
-fetchSlotWithSession sess addr slot = do
+  => Text -> Session -> Addr -> W256 -> IO (Maybe (Word e))
+fetchSlotWithSession url sess addr slot = do
   fmap w256 <$>
-    fetchQuery (fetchWithSession sess) (QuerySlot addr slot)
+    fetchQuery (fetchWithSession url sess) (QuerySlot addr slot)
 
-testFetchContract :: Addr -> IO (Maybe (Contract Concrete))
-testFetchContract addr =
+fetchContractFrom :: Text -> Addr -> IO (Maybe (Contract Concrete))
+fetchContractFrom url addr =
   Session.withAPISession
-    (flip fetchContractWithSession addr)
+    (flip (fetchContractWithSession url) addr)
 
-testFetchSlot :: Addr -> W256 -> IO (Maybe (Word Concrete))
-testFetchSlot addr slot =
+fetchSlotFrom :: Text -> Addr -> W256 -> IO (Maybe (Word Concrete))
+fetchSlotFrom url addr slot =
   Session.withAPISession
-    (\s -> fetchSlotWithSession s addr slot)
+    (\s -> fetchSlotWithSession url s addr slot)
 
-http :: EVM.Query Concrete -> IO (EVM Concrete ())
-http q = do
+http :: Text -> EVM.Query Concrete -> IO (EVM Concrete ())
+http url q = do
   case q of
     EVM.PleaseFetchContract addr continue ->
-      testFetchContract addr >>= \case
+      fetchContractFrom url addr >>= \case
         Just x  -> do
           return (continue x)
         Nothing -> error ("oracle error: " ++ show q)
     EVM.PleaseFetchSlot addr slot continue ->
-      testFetchSlot addr (fromIntegral slot) >>= \case
+      fetchSlotFrom url addr (fromIntegral slot) >>= \case
         Just x  -> return (continue x)
         Nothing -> error ("oracle error: " ++ show q)
 

@@ -38,6 +38,7 @@ import Control.Monad              (void)
 import Control.Monad.State.Strict (execState)
 import Data.ByteString            (ByteString)
 import Data.List                  (intercalate, isSuffixOf)
+import Data.Text                  (Text)
 import Data.Maybe                 (fromMaybe)
 import System.Directory           (withCurrentDirectory, listDirectory)
 import System.Exit                (die)
@@ -81,7 +82,7 @@ data Command
       , gasForInvoking     :: Maybe W256
       , balanceForCreator  :: Maybe W256
       , balanceForCreated  :: Maybe W256
-      , rpc                :: Bool
+      , rpc                :: Maybe URL
       }
   | Interactive
       { jsonFile           :: Maybe String
@@ -90,7 +91,7 @@ data Command
       , gasForInvoking     :: Maybe W256
       , balanceForCreator  :: Maybe W256
       , balanceForCreated  :: Maybe W256
-      , rpc                :: Bool
+      , rpc                :: Maybe URL
       }
   | VmTest
       { file  :: String
@@ -101,6 +102,8 @@ data Command
       { tests :: String
       }
   deriving (Show, Options.Generic, Eq)
+
+type URL = Text
 
 instance Options.ParseRecord Command where
   parseRecord =
@@ -133,9 +136,9 @@ unitTestOptions cmd =
     , EVM.UnitTest.balanceForCreated =
         fromMaybe defaultBalanceForCreated (balanceForCreated cmd)
     , EVM.UnitTest.oracle =
-        if rpc cmd
-        then EVM.Fetch.http
-        else EVM.Fetch.zero
+        case rpc cmd of
+         Just url -> EVM.Fetch.http url
+         Nothing  -> EVM.Fetch.zero
     }
 
 main :: IO ()
