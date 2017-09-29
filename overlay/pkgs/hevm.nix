@@ -1,28 +1,80 @@
-{ mkDerivation, abstract-par, aeson, ansi-wl-pprint, async, base
-, base16-bytestring, base64-bytestring, binary, brick, bytestring
-, cereal, containers, cryptonite, data-dword, deepseq, directory
-, filepath, ghci-pretty, here, HUnit, lens
-, lens-aeson, memory, monad-par, mtl, optparse-generic, process
-, QuickCheck, quickcheck-text, readline, rosezipper, scientific
-, stdenv, tasty, tasty-hunit, tasty-quickcheck, temporary, text
-, text-format, time, unordered-containers, vector, vty
+{
 
+# Nix dependencies
+  mkDerivation
+, lib
+, stdenv
+, fetchFromGitHub
+, makeWrapper
+
+# Haskell dependencies
+
+, HUnit
+, QuickCheck
+, abstract-par
+, aeson
+, ansi-wl-pprint
+, async
+, base
+, base16-bytestring
+, base64-bytestring
+, binary
+, brick_0_24_2
+, bytestring
+, cereal
+, containers
+, cryptonite
+, data-dword
+, deepseq
+, directory
+, filepath
+, ghci-pretty
+, here
+, lens
+, lens-aeson
+, memory
+, monad-par
+, mtl
+, operational
+, optparse-generic
+, process
+, quickcheck-text
+, readline
 , restless-git
+, rosezipper
+, scientific
+, tasty
+, tasty-hunit
+, tasty-quickcheck
+, temporary
+, text
+, text-format
+, time
+, unordered-containers
+, vector
+, vty
+, wreq
 
-, fetchFromGitHub, lib, makeWrapper
-, ncurses, zlib, bzip2, solc, coreutils
+# Program dependencies
+
 , bash
+, bzip2
+, coreutils
+, ncurses
+, solc
+, zlib
+
 }:
 
 lib.overrideDerivation (mkDerivation rec {
   pname = "hevm";
-  version = "0.8.5-1";
+  version = "0.9";
 
   src = fetchFromGitHub {
     owner = "dapphub";
     repo = "hevm";
-    rev = "951501c8cf0debc6adbb53d4e41f29900e7d1b8a";
-    sha256 = "10nc1cbnyrpwmdyqq0kvgxwdx5kmpbyx08r5a8afq2nlcs1v58ca";
+    rev = "v0.9";
+    sha256 = "15s4qal7i56m9i30i5n9y5wmzv01q1mzxzf4m4k22vmvmcdnc3s3";
   };
 
   postInstall = ''
@@ -35,11 +87,11 @@ lib.overrideDerivation (mkDerivation rec {
 
   extraLibraries = [
     abstract-par aeson ansi-wl-pprint base base16-bytestring
-    base64-bytestring binary brick bytestring cereal containers
+    base64-bytestring binary brick_0_24_2 bytestring cereal containers
     cryptonite data-dword deepseq directory filepath ghci-pretty lens
-    lens-aeson memory monad-par mtl optparse-generic process QuickCheck
+    lens-aeson memory monad-par mtl optparse-generic operational process QuickCheck
     quickcheck-text readline rosezipper scientific temporary text text-format
-    unordered-containers vector vty restless-git
+    unordered-containers vector vty restless-git wreq
   ];
   executableHaskellDepends = [
     async readline zlib bzip2
