@@ -8,7 +8,9 @@ import Prelude hiding (Word)
 import EVM.Types    (Addr, W256, showAddrWith0x, showWordWith0x, hexText)
 import EVM.Machine  (Machine, Word, w256)
 import EVM.Concrete (Concrete)
-import EVM          (Contract, initialContract, nonce, balance, external)
+import EVM          (EVM, Contract, initialContract, nonce, balance, external)
+
+import qualified EVM as EVM
 
 import Control.Lens hiding ((.=))
 import Control.Monad.Trans.Maybe
@@ -59,7 +61,6 @@ readText = read . unpack
 
 fetchQuery :: Show a => (Value -> IO (Maybe Text)) -> RpcQuery a -> IO (Maybe a)
 fetchQuery f q = do
-  print q
   x <- case q of
     QueryCode addr -> do
       fmap hexText  <$>
@@ -73,7 +74,6 @@ fetchQuery f q = do
     QuerySlot addr slot ->
       fmap readText <$>
         f (rpc "eth_getStorageAt" [toRPC addr, toRPC slot, "latest"])
-  putStrLn (" => " ++ show x)
   return x
 
 fetchWithSession :: Session -> Value -> IO (Maybe Text)
@@ -115,3 +115,26 @@ testFetchSlot :: Addr -> W256 -> IO (Maybe (Word Concrete))
 testFetchSlot addr slot =
   Session.withAPISession
     (\s -> fetchSlotWithSession s addr slot)
+
+http :: EVM.Query Concrete -> IO (EVM Concrete ())
+http q = do
+  case q of
+    EVM.PleaseFetchContract addr continue ->
+      testFetchContract addr >>= \case
+        Just x  -> do
+          return (continue x)
+        Nothing -> error ("oracle error: " ++ show q)
+    EVM.PleaseFetchSlot addr slot continue ->
+      testFetchSlot addr (fromIntegral slot) >>= \case
+        Just x  -> return (continue x)
+        Nothing -> error ("oracle error: " ++ show q)
+
+zero :: Monad m => EVM.Query Concrete -> m (EVM Concrete ())
+zero q = do
+  case q of
+    EVM.PleaseFetchContract _ continue ->
+      return (continue (initialContract ""))
+    EVM.PleaseFetchSlot _ _ continue ->
+      return (continue 0)
+
+type Fetcher = EVM.Query Concrete -> IO (EVM Concrete ())

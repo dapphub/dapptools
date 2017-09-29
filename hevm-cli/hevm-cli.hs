@@ -11,6 +11,8 @@
 
 import qualified EVM as EVM
 import qualified EVM.Concrete as EVM
+import qualified EVM.Fetch
+import qualified EVM.Stepper
 import qualified EVM.TTY as EVM.TTY
 import qualified EVM.FeeSchedule as FeeSchedule
 import EVM.Machine (w256)
@@ -33,7 +35,7 @@ import Control.Concurrent.Async   (async, waitCatch)
 import Control.Exception          (evaluate)
 import Control.Lens
 import Control.Monad              (void)
-import Control.Monad.State.Strict (execState, runState)
+import Control.Monad.State.Strict (execState)
 import Data.ByteString            (ByteString)
 import Data.List                  (intercalate, isSuffixOf)
 import Data.Maybe                 (fromMaybe)
@@ -132,12 +134,8 @@ unitTestOptions cmd =
         fromMaybe defaultBalanceForCreated (balanceForCreated cmd)
     , EVM.UnitTest.oracle =
         if rpc cmd
-        then EVM.UnitTest.httpOracle
-        else EVM.UnitTest.zeroOracle
-    , EVM.UnitTest.onFailure =
-        if optsMode cmd == Debug
-        then void . EVM.TTY.runFromVM
-        else const (pure ())
+        then EVM.Fetch.http
+        else EVM.Fetch.zero
     }
 
 main :: IO ()
@@ -274,22 +272,16 @@ runVMTest :: Mode -> (String, VMTest.Case) -> IO Bool
 runVMTest mode (name, x) = do
   let
     vm0 = VMTest.vmForCase x
-    oracular
-      :: EVM.VM EVM.Concrete
-      -> (EVM.VMResult EVM.Concrete, EVM.VM EVM.Concrete)
-    oracular vm = do
-      case runState exec vm of
-        (EVM.VMFailure (EVM.Query q), vm') ->
-           oracular (execState (runIdentity (EVM.UnitTest.zeroOracle q)) vm')
-        r -> r
+    m = void EVM.Stepper.execFully
 
   putStr (name ++ " ")
   hFlush stdout
   result <- do
     action <- async $
       case mode of
-        Run -> do
-          timeout (1e6) . evaluate $ snd (oracular vm0)
+        Run ->
+          timeout (1e6) . evaluate $ do
+            execState (VMTest.interpret m) vm0
         Debug ->
           Just <$> EVM.TTY.runFromVM vm0
     waitCatch action

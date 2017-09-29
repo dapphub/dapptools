@@ -883,7 +883,9 @@ touchAccount addr continue = do
     Just c -> continue c
     Nothing ->
       use (cache . fetched . at addr) >>= \case
-        Just c -> continue c
+        Just c -> do
+          assign (env . contracts . at addr) (Just c)
+          continue c
         Nothing ->
           assign result . Just . VMFailure . Query $
             PleaseFetchContract addr
