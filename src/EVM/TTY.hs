@@ -1,4 +1,5 @@
 {-# Language TemplateHaskell #-}
+{-# Language ImplicitParams #-}
 
 module EVM.TTY where
 
@@ -24,6 +25,7 @@ import EVM.Stepper (Stepper)
 import qualified EVM.Stepper as Stepper
 import qualified Control.Monad.Operational as Operational
 
+import EVM.Fetch (Fetcher)
 import qualified EVM.Fetch as Fetch
 
 import Control.Lens
@@ -37,6 +39,7 @@ import Data.Text (Text, unpack, pack)
 import Data.Text.Encoding (decodeUtf8)
 import Data.Tree (drawForest)
 
+import qualified Data.ByteString as BS
 import qualified Data.Map as Map
 import qualified Data.Scientific as Scientific
 import qualified Data.Text as Text
@@ -98,11 +101,13 @@ makeLenses ''UiVmState
 makeLenses ''UiTestPickerState
 makePrisms ''UiState
 
+type Pred a = a -> Bool
+
 data StepMode
-  = StepOne        -- ^ Finish after one opcode step
-  | StepMany !Int  -- ^ Run a specific number of steps
-  | StepNone       -- ^ Finish before the next opcode
-  deriving Show
+  = StepOne                        -- ^ Finish after one opcode step
+  | StepMany !Int                  -- ^ Run a specific number of steps
+  | StepNone                       -- ^ Finish before the next opcode
+  | StepUntil (Pred (VM Concrete)) -- ^ Finish when a VM predicate holds
 
 -- | Each step command in the terminal should finish immediately
 -- with one of these outcomes.
@@ -114,11 +119,11 @@ data StepOutcome e a
 -- | This turns a @Stepper@ into a state action usable
 -- from within the TTY loop, yielding a @StepOutcome@ depending on the @StepMode@.
 interpret
-  :: StepMode
-  -> Fetch.Fetcher
+  :: (?fetcher :: Fetcher)
+  => StepMode
   -> Stepper Concrete a
   -> State (UiVmState Concrete) (StepOutcome Concrete a)
-interpret mode fetcher =
+interpret mode =
 
   -- Like the similar interpreters in @EVM.UnitTest@ and @EVM.VMTest@,
   -- this one is implemented as an "operational monad interpreter".
@@ -137,6 +142,12 @@ interpret mode fetcher =
 
         -- Stepper wants to keep executing?
         Stepper.Exec -> do
+
+          let
+            -- When pausing during exec, we should later restart
+            -- the exec with the same continuation.
+            restart = Stepper.exec >>= k
+
           case mode of
             StepNone ->
               -- We come here when we've continued while stepping,
@@ -151,42 +162,53 @@ interpret mode fetcher =
               use (uiVm . result) >>= \case
                 Nothing ->
                   -- If instructions remain, then pause & await user.
-                  pure (Stepped (Stepper.exec >>= k))
+                  pure (Stepped restart)
                 Just r ->
                   -- If returning, proceed directly the continuation,
                   -- but stopping before the next instruction.
-                  interpret StepNone fetcher (k r)
+                  interpret StepNone (k r)
 
             StepMany 0 -> do
               -- Finish the continuation until the next instruction;
               -- then, pause & await user.
-              interpret StepNone fetcher (Stepper.exec >>= k)
+              interpret StepNone restart
 
             StepMany i -> do
               -- Run one instruction.
-              interpret StepOne fetcher (Stepper.exec >>= k) >>=
+              interpret StepOne restart >>=
                 \case
                   Stepped stepper ->
-                    interpret (StepMany (i - 1)) fetcher stepper
+                    interpret (StepMany (i - 1)) stepper
 
                   -- This shouldn't happen, because re-stepping needs
                   -- to avoid blocking and halting.
                   r -> pure r
 
-              -- use (uiVm . result) >>= \case
-              --   Nothing ->
-              --     -- If instructions remain, keep going.
-              --     interpret (StepMany (i - 1)) fetcher (Stepper.exec >>= k)
-              --   Just r  ->
-              --     -- If returning, proceed with the continuation.
-              --     interpret (StepMany (i - 1)) fetcher (k r)
+            StepUntil p -> do
+              vm <- use uiVm
+              case p vm of
+                True ->
+                  interpret StepNone restart
+                False ->
+                  interpret StepOne restart >>=
+                    \case
+                      Stepped stepper ->
+                        interpret (StepUntil p) stepper
+
+                      -- This means that if we hit a blocking query
+                      -- or a return, we pause despite the predicate.
+                      --
+                      -- This could be fixed if we allowed query I/O
+                      -- here, instead of only in the TTY event loop;
+                      -- let's do it later.
+                      r -> pure r
 
         -- Stepper wants to make a query and wait for the results?
         Stepper.Wait q -> do
           -- Tell the TTY to run an I/O action to produce the next stepper.
           pure . Blocked $ do
             -- First run the fetcher, getting a VM state transition back.
-            m <- fetcher q
+            m <- ?fetcher q
             -- Join that transition with the stepper script's continuation.
             pure (Stepper.evm m >> k ())
 
@@ -195,13 +217,13 @@ interpret mode fetcher =
           vm0 <- use uiVm
           let (r, vm1) = runState m vm0
           modify (flip updateUiVmState vm1)
-          interpret mode fetcher (k r)
+          interpret mode (k r)
 
         -- Stepper wants to emit a message.
         Stepper.Note s -> do
           assign uiVmMessage (Just (unpack s))
           modifying uiVmNotes (unpack s :)
-          interpret mode fetcher (k ())
+          interpret mode (k ())
 
         -- Stepper wants to exit because of a failure.
         Stepper.Fail _ ->
@@ -286,8 +308,48 @@ main opts root jsonFilePath = do
         _ <- customMain mkVty Nothing (app opts) (ui :: UiState Concrete)
         return ()
 
+-- ^ Specifies whether to do I/O blocking or VM halting while stepping.
+-- When we step backwards, we don't want to allow those things.
+data StepPolicy
+  = StepNormally    -- ^ Allow blocking and returning
+  | StepTimidly     -- ^ Forbid blocking and returning
+
+takeStep
+  :: (?fetcher :: Fetcher)
+  => UiVmState Concrete
+  -> StepPolicy
+  -> StepMode
+  -> EventM n (Next (UiState Concrete))
+takeStep ui policy mode = do
+  let m = interpret mode (view uiVmNextStep ui)
+
+  case runState (m <* modify renderVm) ui of
+
+    (Stepped stepper, ui') -> do
+      continue (UiVmScreen (ui' & set uiVmNextStep stepper))
+
+    (Blocked blocker, ui') ->
+      case policy of
+        StepNormally -> do
+          stepper <- liftIO blocker
+          takeStep
+            (execState (assign uiVmNextStep stepper) ui')
+            StepNormally StepNone
+
+        StepTimidly ->
+          error "step blocked unexpectedly"
+
+    (Returned (), ui') ->
+      case policy of
+        StepNormally ->
+          halt (UiVmScreen ui')
+        StepTimidly ->
+          error "step halted unexpectedly"
+
 app :: UnitTestOptions -> App (UiState Concrete) () Name
-app opts = App
+app opts =
+  let ?fetcher = oracle opts
+  in App
   { appDraw = drawUi
   , appChooseCursor = neverShowCursor
   , appHandleEvent = \ui e ->
@@ -296,48 +358,38 @@ app opts = App
         (_, VtyEvent (Vty.EvKey Vty.KEsc []) )->
           halt ui
 
-        (UiVmScreen s, VtyEvent (Vty.EvKey (Vty.KChar 'n') [])) -> do
-          let
-            run mode s' = do
-              let m = interpret mode (oracle opts) (view uiVmNextStep s')
-              case runState (m <* modify renderVm) s' of
-                (Blocked blocker, s'') -> do
-                  stepper <- liftIO blocker
-                  run StepNone $ execState (assign uiVmNextStep stepper) s''
-                (Stepped stepper, s'') -> do
-                  continue (UiVmScreen (s'' & set uiVmNextStep stepper))
-                (Returned (), s'') ->
-                  halt (UiVmScreen s'')
-           in
-            run StepOne s
+        (UiVmScreen s, VtyEvent (Vty.EvKey (Vty.KChar 'n') [])) ->
+          takeStep s StepNormally StepOne
 
-          --useContinuation halt stepOneOpcode s'
+        (UiVmScreen s, VtyEvent (Vty.EvKey (Vty.KChar 'N') [])) ->
+          takeStep s
+            StepNormally
+            (StepUntil (isNextSourcePosition s))
 
-        -- (UiVmScreen s', VtyEvent (Vty.EvKey (Vty.KChar 'N') [])) ->
-        --   useContinuation halt stepOneSourcePosition s'
-
-        -- (UiVmScreen s', VtyEvent (Vty.EvKey (Vty.KChar 'n') [Vty.MCtrl])) ->
-        --   useContinuation halt stepOneSourcePosition_over s'
+        (UiVmScreen s, VtyEvent (Vty.EvKey (Vty.KChar 'n') [Vty.MCtrl])) ->
+          takeStep s
+            StepNormally
+            (StepUntil (isNextSourcePositionWithoutEntering s))
 
         (UiVmScreen s, VtyEvent (Vty.EvKey (Vty.KChar 'p') [])) ->
-          let
-            n  = view uiVmStepCount s - 1
-            s0 = view uiVmFirstState s
-            s1 = set (uiVm . cache) (view (uiVm . cache) s) s0
-            m  = interpret (StepMany n) (oracle opts) (view uiVmNextStep s1)
-          in
-            if n == -1
-            then continue ui
-            else case runState (m <* modify renderVm) s1 of
-              (Stepped stepper, s2) -> do
-                continue (UiVmScreen (s2 & set uiVmNextStep stepper))
-              (Blocked _, _) -> do
-                error "blocked while rewinding"
-              (Returned (), _) ->
-                error "exited while rewinding"
+          case view uiVmStepCount s of
+            0 ->
+              -- We're already at the first step; ignore command.
+              continue ui
 
-          -- in useContinuationRepeatedly n halt stepOneOpcode
-          --      (view uiVmFirstState s')
+            n -> do
+              -- To step backwards, we revert to the first state
+              -- and execute n - 1 instructions from there.
+              --
+              -- We keep the current cache so we don't have to redo
+              -- any blocking queries.
+              let
+                s0 = view uiVmFirstState s
+                s1 = set (uiVm . cache) (view (uiVm . cache) s) s0
+
+              -- Take n steps; "timidly," because all queries
+              -- ought to be cached.
+              takeStep s1 StepTimidly (StepMany (n - 1))
 
         (UiTestPickerScreen s', VtyEvent (Vty.EvKey (Vty.KEnter) [])) -> do
           case listSelectedElement (view testPickerList s') of
@@ -457,46 +509,39 @@ stepOneOpcode ui =
     ui & over uiVmStepCount (+ 1)
        & set uiVm nextVm
 
--- stepOneSourcePosition :: UiVmState Concrete -> UiVmState Concrete
--- stepOneSourcePosition ui =
---   let
---     vm              = view uiVm ui
---     Just dapp       = view uiVmDapp ui
---     initialPosition = currentSrcMap dapp vm
---     stillHere s     = currentSrcMap dapp s == initialPosition
---     (i, nextVm)     = runState (execWhile stillHere) vm
---   in
---     ui & set uiVm nextVm
---        & over uiVmStepCount (+ i)
+isNextSourcePosition
+  :: UiVmState Concrete -> Pred (VM Concrete)
+isNextSourcePosition ui vm =
+  let
+    Just dapp       = view uiVmDapp ui
+    initialPosition = currentSrcMap dapp (view uiVm ui)
+  in
+    currentSrcMap dapp vm /= initialPosition
 
--- stepOneSourcePosition_over :: UiVmState Concrete -> UiVmState Concrete
--- stepOneSourcePosition_over ui =
---   let
---     vm              = view uiVm ui
---     Just dapp       = view uiVmDapp ui
---     initialPosition = currentSrcMap dapp vm
---     initialHeight   = length (view frames vm)
-
---     predicate x =
---       case currentSrcMap dapp x of
---         Nothing ->
---           True
---         Just sm ->
---           let
---             remain = Just sm == initialPosition
---             deeper = length (view frames x) > initialHeight
---             boring =
---               case srcMapCode (view dappSources dapp) sm of
---                 Just bs ->
---                   BS.isPrefixOf "contract " bs
---                 Nothing ->
---                   True
---           in
---             remain || deeper || boring
-
---     (i, nextVm)     = runState (execWhile predicate) vm
---   in
---     ui & over uiVmStepCount (+ i)
+isNextSourcePositionWithoutEntering
+  :: UiVmState Concrete -> Pred (VM Concrete)
+isNextSourcePositionWithoutEntering ui vm =
+  let
+    vm0             = view uiVm ui
+    Just dapp       = view uiVmDapp ui
+    initialPosition = currentSrcMap dapp vm0
+    initialHeight   = length (view frames vm0)
+  in
+    case currentSrcMap dapp vm of
+      Nothing ->
+        True
+      Just here ->
+        let
+          moved = Just here /= initialPosition
+          deeper = length (view frames vm) > initialHeight
+          boring =
+            case srcMapCode (view dappSources dapp) here of
+              Just bs ->
+                BS.isPrefixOf "contract " bs
+              Nothing ->
+                True
+        in
+           moved && not deeper && not boring
 
 currentSrcMap :: Machine e => DappInfo -> VM e -> Maybe SrcMap
 currentSrcMap dapp vm =
@@ -652,7 +697,7 @@ showWordExplanation w (Just dapp) =
 
 drawBytecodePane :: UiVmState Concrete -> UiWidget
 drawBytecodePane ui =
-  hBorderWithLabel (case view uiVmMessage ui of { Nothing -> str ""; Just s -> str (show (view uiVmStepCount ui) ++ ":" ++ s) }) <=>
+  hBorderWithLabel (case view uiVmMessage ui of { Nothing -> str ""; Just s -> str s }) <=>
     Centered.renderList
       (\active x -> if not active
                     then withDefAttr dimAttr (opWidget x)
