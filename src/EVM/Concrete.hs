@@ -46,7 +46,7 @@ byteStringSliceWithDefaultZeroes offset size bs =
   then ""
   else
     let bs' = BS.take size (BS.drop offset bs)
-    in bs' <> BS.replicate (BS.length bs' - size) 0
+    in bs' <> BS.replicate (size - BS.length bs') 0
 
 data Whiff = Dull | FromKeccak ByteString
   deriving Show
