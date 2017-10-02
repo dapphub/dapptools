@@ -43,6 +43,7 @@ import Data.Foldable                (toList)
 import Data.Tree
 
 import qualified Data.ByteString      as BS
+import qualified Data.ByteString.Char8 as Char8
 import qualified Data.Map.Strict      as Map
 import qualified Data.Sequence        as Seq
 import qualified Data.Vector.Storable as Vector
@@ -85,7 +86,10 @@ data VM e = VM
   , _logs          :: Seq (Log e)
   , _contextTrace  :: Zipper.TreePos Zipper.Empty (Either (Log e) (FrameContext e))
   , _cache         :: Cache e
+  , _execMode      :: ExecMode
   }
+
+data ExecMode = ExecuteNormally | ExecuteAsVMTest
 
 data Query e where
   PleaseFetchContract :: Addr           -> (Contract e -> EVM e ()) -> Query e
@@ -278,6 +282,7 @@ makeVm o = VM
       [(vmoptAddress o, initialContract (vmoptCode o))]
     }
   , _cache = mempty
+  , _execMode = ExecuteNormally
   }
 
 initialContract :: Machine e => ByteString -> Contract e
@@ -576,9 +581,11 @@ exec1 = do
             _ -> underrun
 
         -- op: BLOCKHASH
-        0x40 ->
-          -- fake zero block hashes everywhere
-          stackOp1 (const g_blockhash) (const 0)
+        0x40 -> do
+          -- We adopt the fake block hash scheme of the VMTests,
+          -- so that blockhash(i) is the hash of i as decimal ASCII.
+          let hash = num . keccak . Char8.pack . (show :: Integer -> String) . num
+          stackOp1 (const g_blockhash) hash
 
         -- op: COINBASE
         0x41 -> burn g_base (next >> push (num (the block coinbase)))
@@ -724,35 +731,41 @@ exec1 = do
             (xValue:xOffset:xSize:xs) ->
               burn g_create $ do
                 accessMemoryRange fees xOffset xSize $ do
-                  let
-                    newAddr     = newContractAddress self (forceConcreteWord (view nonce this))
-                    newCode     = forceConcreteBlob $ readMemory (num xOffset) (num xSize) vm
-                    newContract = initialContract newCode
-                    newContext  = CreationContext (view codehash newContract)
+                  let newAddr = newContractAddress self (forceConcreteWord (view nonce this))
+                  case view execMode vm of
+                    ExecuteAsVMTest -> do
+                      assign (state . stack) (num newAddr : xs)
+                      next
 
-                  zoom (env . contracts) $ do
-                    assign (at newAddr) (Just newContract)
-                    modifying (ix self . nonce) succ
-                    modifying (ix self . balance) (flip (-) xValue)
+                    ExecuteNormally -> do
+                      let
+                        newCode     = forceConcreteBlob $ readMemory (num xOffset) (num xSize) vm
+                        newContract = initialContract newCode
+                        newContext  = CreationContext (view codehash newContract)
 
-                  next
-                  vm' <- get
-                  pushTo frames $ Frame
-                    { _frameContext = newContext
-                    , _frameState   = (set stack xs) (view state vm')
-                    }
+                      zoom (env . contracts) $ do
+                        assign (at newAddr) (Just newContract)
+                        modifying (ix self . nonce) succ
+                        modifying (ix self . balance) (flip (-) xValue)
 
-                  modifying contextTrace $ \t ->
-                    Zipper.children $ Zipper.insert (Node (Right newContext) []) t
+                      next
+                      vm' <- get
+                      pushTo frames $ Frame
+                        { _frameContext = newContext
+                        , _frameState   = (set stack xs) (view state vm')
+                        }
 
-                  assign state $
-                    blankState
-                      & set contract   newAddr
-                      & set codeContract newAddr
-                      & set code       newCode
-                      & set callvalue  xValue
-                      & set caller     self
-                      & set gas        (view (state . gas) vm')
+                      modifying contextTrace $ \t ->
+                        Zipper.children $ Zipper.insert (Node (Right newContext) []) t
+
+                      assign state $
+                        blankState
+                          & set contract   newAddr
+                          & set codeContract newAddr
+                          & set code       newCode
+                          & set callvalue  xValue
+                          & set caller     self
+                          & set gas        (view (state . gas) vm')
 
             _ -> underrun
 
@@ -775,15 +788,20 @@ exec1 = do
                 recipient    = view (env . contracts . at xTo) vm
                 (cost, gas') = costOfCall fees recipient xValue availableGas xGas
               burn (cost - gas') $
-                delegateCall fees gas' xTo xInOffset xInSize xOutOffset xOutSize xs $ do
-                  zoom state $ do
-                    assign callvalue xValue
-                    assign caller (the state contract)
-                    assign contract xTo
-                    assign memorySize 0
-                  zoom (env . contracts) $ do
-                    ix self . balance -= xValue
-                    ix xTo  . balance += xValue
+                case view execMode vm of
+                  ExecuteAsVMTest -> do
+                    assign (state . stack) (1 : xs)
+                    next
+                  ExecuteNormally -> do
+                    delegateCall fees gas' xTo xInOffset xInSize xOutOffset xOutSize xs $ do
+                      zoom state $ do
+                        assign callvalue xValue
+                        assign caller (the state contract)
+                        assign contract xTo
+                        assign memorySize 0
+                      zoom (env . contracts) $ do
+                        ix self . balance -= xValue
+                        ix xTo  . balance += xValue
             _ ->
               underrun
 
@@ -857,7 +875,7 @@ exec1 = do
               modifying
                 (env . contracts . ix (num x) . balance)
                 (+ (vm ^?! env . contracts . ix self . balance))
-              vmError SelfDestruction
+              next
 
         -- op: REVERT
         0xfd ->
@@ -940,10 +958,15 @@ replaceCodeOfSelf createdCode = do
 
 resetState :: Machine e => EVM e ()
 resetState = do
-  -- TODO: handle selfdestructs
   assign result     Nothing
   assign frames     []
   assign state      blankState
+
+finalize :: Machine e => EVM e ()
+finalize = do
+  destroyedAddresses <- use (tx . selfdestructs)
+  modifying (env . contracts)
+    (Map.filterWithKey (\k _ -> not (elem k destroyedAddresses)))
 
 loadContract :: Machine e => Addr -> EVM e ()
 loadContract target =
@@ -1124,7 +1147,7 @@ accessMemoryRange
 accessMemoryRange _ _ 0 continue = continue
 accessMemoryRange fees f l continue = do
   m0 <- use (state . memorySize)
-  let m1 = max m0 (num (f + l))
+  let m1 = 32 * ceilDiv (max m0 (num (f + l))) 32
   burn (memoryCost fees m1 - memoryCost fees m0) $ do
     assign (state . memorySize) m1
     continue
@@ -1421,7 +1444,7 @@ memoryCost FeeSchedule{..} (num -> byteCount) =
   let
     wordCount = ceilDiv byteCount 32
     linearCost = g_memory * wordCount
-    quadraticCost = div (wordCount * wordCount) 32
+    quadraticCost = div (wordCount * wordCount) 512
   in
     linearCost + quadraticCost
 

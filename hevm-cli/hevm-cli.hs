@@ -277,7 +277,7 @@ runVMTest :: Mode -> (String, VMTest.Case) -> IO Bool
 runVMTest mode (name, x) = do
   let
     vm0 = VMTest.vmForCase x
-    m = void EVM.Stepper.execFully
+    m = void EVM.Stepper.execFully >> EVM.Stepper.evm EVM.finalize
 
   putStr (name ++ " ")
   hFlush stdout

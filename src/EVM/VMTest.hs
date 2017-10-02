@@ -187,6 +187,7 @@ vmForCase :: Case -> EVM.VM EVM.Concrete
 vmForCase x =
   EVM.makeVm (testVmOpts x)
     & EVM.env . EVM.contracts .~ realizeContracts (testContracts x)
+    & EVM.execMode .~ EVM.ExecuteAsVMTest
 
 interpret :: Stepper Concrete a -> EVM Concrete a
 interpret =
