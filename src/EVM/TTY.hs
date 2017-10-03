@@ -13,14 +13,14 @@ import Brick.Widgets.List
 import EVM
 import EVM.Concrete (Concrete, Word (C))
 import EVM.Debug
+import EVM.Format (Signedness (..), showDec, showWordExact)
 import EVM.Machine (Machine)
 import EVM.Op
 import EVM.Solidity
 import EVM.Types
 import EVM.UnitTest (UnitTestOptions (..))
-import EVM.UnitTest (initializeUnitTest, runUnitTest)
 import EVM.UnitTest (initialUnitTestVm, findUnitTests)
-import EVM.UnitTest (showDec, showWordExact)
+import EVM.UnitTest (initializeUnitTest, runUnitTest)
 
 import EVM.Stepper (Stepper)
 import qualified EVM.Stepper as Stepper
@@ -648,22 +648,22 @@ drawStackPane ui =
          vBox
            [ withHighlight True (str ("#" ++ show i ++ " "))
                <+> str (show x)
-           , dim (str ("   " ++ showWordExplanation w (view uiVmDapp ui)))
+           , dim (txt ("   " <> showWordExplanation w (view uiVmDapp ui)))
            ])
       False
       (view uiVmStackList ui)
 
-showWordExplanation :: W256 -> Maybe DappInfo -> String
-showWordExplanation w Nothing = showDec w
-showWordExplanation w _ | w > 0xffffffff = showDec w
+showWordExplanation :: W256 -> Maybe DappInfo -> Text
+showWordExplanation w Nothing = showDec Unsigned w
+showWordExplanation w _ | w > 0xffffffff = showDec Unsigned w
 showWordExplanation w (Just dapp) =
   let
     fullAbiMap =
       mconcat (map (view abiMap) (Map.elems (view dappSolcByName dapp)))
   in
     case Map.lookup (fromIntegral w) fullAbiMap of
-      Nothing -> showDec w
-      Just x  -> "abi " ++ show (unpack x)
+      Nothing -> showDec Unsigned w
+      Just x  -> "abi " <> pack (show x)
 
 drawBytecodePane :: UiVmState Concrete -> UiWidget
 drawBytecodePane ui =

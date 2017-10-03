@@ -29,6 +29,7 @@ library
     EVM.Exec,
     EVM.Facts,
     EVM.Facts.Git,
+    EVM.Format,
     EVM.Fetch,
     EVM.FeeSchedule,
     EVM.Op,

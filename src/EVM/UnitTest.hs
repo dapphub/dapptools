@@ -7,11 +7,12 @@ import Prelude hiding (Word)
 import EVM
 import EVM.ABI
 import EVM.Exec
+import EVM.Format
 import EVM.Keccak
 import EVM.Solidity
 import EVM.Types
 import EVM.Machine (blob, w256, forceConcreteBlob, forceConcreteWord)
-import EVM.Concrete (Concrete, Blob (B), Word (C), wordAt)
+import EVM.Concrete (Concrete, Blob (B), Word (), wordAt)
 
 import qualified EVM.FeeSchedule as FeeSchedule
 
@@ -28,24 +29,22 @@ import Control.Monad.Par.IO (runParIO)
 
 import Data.Binary.Get    (runGetOrFail)
 import Data.ByteString    (ByteString)
-import Data.ByteString.Builder    (byteStringHex, toLazyByteString)
 import Data.Foldable      (toList)
-import Data.List          (intercalate, sort)
+import Data.List          (sort)
 import Data.Map           (Map)
-import Data.Text          (Text, unpack, isPrefixOf, stripSuffix)
+import Data.Maybe         (fromMaybe)
+import Data.Monoid        ((<>))
+import Data.Text          (Text, unpack, isPrefixOf, stripSuffix, intercalate)
 import Data.Text.Encoding (encodeUtf8, decodeUtf8)
 import Data.Word          (Word32)
-import Numeric            (showHex)
 import System.IO          (hFlush, stdout)
 
 import qualified Control.Monad.Par.Class as Par
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy as LazyByteString
 import qualified Data.Map as Map
-import qualified Data.Scientific as Scientific
 import qualified Data.Sequence as Seq
-import qualified Data.Text as Text
-import qualified Data.Vector as Vector
+import qualified Data.Text.IO as Text
 
 data UnitTestOptions = UnitTestOptions
   { gasForCreating :: W256
@@ -109,8 +108,8 @@ runUnitTest UnitTestOptions { .. } method = do
   -- Return true if the test was successful
   pure (shouldFail == (bailed || failed))
 
-tick :: String -> IO ()
-tick x = putStr x >> hFlush stdout
+tick :: Text -> IO ()
+tick x = Text.putStr x >> hFlush stdout
 
 interpret
   :: UnitTestOptions
@@ -170,7 +169,9 @@ runUnitTestContract opts@(UnitTestOptions {..}) contractMap _ (name, testNames) 
              (Left _, _)       -> pure ("E", "\n")
 
       -- Run all the test cases in parallel and print their status updates
-      details <- runParIO (mapM runOne testNames >>= mapM Par.get) >>= mapM ticktock
+      details <-
+        runParIO (mapM runOne testNames >>= mapM Par.get)
+          >>= mapM (\(x, y) -> tick x >> pure y)
 
       tick "\n"
 
@@ -180,153 +181,105 @@ runUnitTestContract opts@(UnitTestOptions {..}) contractMap _ (name, testNames) 
         tick "\n"
       else pure ()
 
-ticktock :: (String, String) -> IO String
-ticktock (x, y) = do tick x
-                     pure y
+passOutput :: VM Concrete -> Text -> SolcContract -> Text
+passOutput _ testName _ = "[PASS] " <> testName <> "\n"
 
-showDec :: W256 -> String
-showDec (W256 w) =
-  if w == num cheatCode
-  then "<hevm cheat address>"
-  else
-    if w > 1000000000000
-    then
-      "~" ++ Scientific.formatScientific
-         Scientific.Generic
-         (Just 8)
-         (fromIntegral w)
-    else
-      showDecExact (W256 w)
-
-showDecExact :: W256 -> String
-showDecExact (W256 w) = unpack (humanizeInteger w)
-
-showWordExact :: Word Concrete -> Text
-showWordExact (C _ (W256 w)) = humanizeInteger w
-
-humanizeInteger :: (Num a, Integral a, Show a) => a -> Text
-humanizeInteger =
-  ( Text.intercalate ","
-  . reverse
-  . map Text.reverse
-  . Text.chunksOf 3
-  . Text.reverse
-  . Text.pack
-  . show
-  )
-
-unpackm :: Maybe Text -> String
-unpackm (Just text) = unpack text
-unpackm Nothing     = ""
-
-passOutput :: VM Concrete -> Text -> SolcContract -> String
-passOutput _ testName _ = "[PASS] " ++ unpack testName ++ "\n"
-
-failOutput :: VM Concrete -> Text -> SolcContract -> String
-failOutput vm testName theContract =
-  "[FAIL] " ++ unpackm (stripSuffix "()" testName) ++ "\n"
-  ++ formatTestLogs (view eventMap theContract) (view logs vm)
+failOutput :: VM Concrete -> Text -> SolcContract -> Text
+failOutput vm testName theContract = mconcat $
+  [ "[FAIL] "
+  , fromMaybe "" (stripSuffix "()" testName)
+  , "\n"
+  , formatTestLogs (view eventMap theContract) (view logs vm)
+  , "\n"
+  ]
   -- TODO: ++ drawForest (fmap (fmap (formatTrace (view eventMap theContract))) (contextTraceForest vm))
 
-formatTestLogs :: Map W256 Event -> Seq.Seq (Log Concrete) -> String
-formatTestLogs events xs =
-  intercalate "\n" $ toList $ fmap (formatTestLog events) xs
+formatTestLogs :: Map W256 Event -> Seq.Seq (Log Concrete) -> Text
+formatTestLogs events =
+  intercalate "\n" . toList . fmap (formatTestLog events)
 
-formatTestLog :: Map W256 Event -> Log Concrete -> String
+formatTestLog :: Map W256 Event -> Log Concrete -> Text
 formatTestLog _ (Log _ _ [])    = ""
-formatTestLog events (Log _ b (t:_))
-  | name == "log_bytes32" = formatBytes args
-  | name == "log_named_bytes32" = let key = BS.take 32 args
-                                      val = BS.drop 32 args
-                                  in formatString key ++ ": " ++ formatBytes val
-  | name == "log_named_address" = let key = BS.take 32 args
-                                      val = BS.drop 44 args
-                                  in formatString key ++ ": " ++ formatBinary val
+formatTestLog events (Log _ b (t:_)) =
+  let
+    name  = getEventName event
+    args  = forceConcreteBlob b
+    event = getEvent t events
+
+  in case name of
+
+    "log_bytes32" ->
+      formatBytes args
+
+    "log_named_bytes32" ->
+      let key = BS.take 32 args
+          val = BS.drop 32 args
+      in formatString key <> ": " <> formatBytes val
+
+    "log_named_address" ->
+      let key = BS.take 32 args
+          val = BS.drop 44 args
+      in formatString key <> ": " <> formatBinary val
+
   -- TODO: event log_named_decimal_int  (bytes32 key, int val, uint decimals);
   -- TODO: event log_named_decimal_uint (bytes32 key, uint val, uint decimals);
-  | name == "log_named_int" ||
-    name == "log_named_uint"  = let key = BS.take 32 args
-                                    val = wordAt 32 args
-                                in formatString key ++ ": " ++ showDec val
-  | otherwise = formatLog event args
-  where name  = getEventName event
-        args  = forceConcreteBlob b
-        event = getEvent t events
+
+    "log_named_int" ->
+      let key = BS.take 32 args
+          val = wordAt 32 args
+      in formatString key <> ": " <> showDec Signed val
+
+    "log_named_uint" ->
+      let key = BS.take 32 args
+          val = wordAt 32 args
+      in formatString key <> ": " <> showDec Unsigned val
+
+    _ ->
+      formatLog event args
 
 -- TODO: formatTrace equivalent (via printFailure), except allow show trace
 -- when passing as well
-formatTrace :: Map W256 Event -> Either (Log Concrete) (FrameContext Concrete) -> String
+formatTrace :: Map W256 Event -> Either (Log Concrete) (FrameContext Concrete) -> Text
 formatTrace _ trace =
   case trace of
     -- TODO: use formatLog and don't drop tail
     Left _ -> ""
     Right _ -> ""
 
-
 -- TODO: this should take Log
-formatLog :: Maybe Event -> ByteString -> String
+formatLog :: Maybe Event -> ByteString -> Text
 formatLog event args =
   let types = getEventTypes event
       name  = getEventName event
   in
   case runGetOrFail (getAbiSeq (length types) types)
                       (LazyByteString.fromStrict args) of
-                    Right (_, _, abivals) -> "\x1b[36m←" ++ name
-                                            ++ showAbiValues abivals
-                                            ++ "\x1b[0m"
-                    Left (_,_,_) -> error "lol"
-
--- lol, i guess
-toStrict :: LazyByteString.ByteString -> BS.ByteString
-toStrict = BS.concat . LazyByteString.toChunks
-
-showAbiValues :: Vector.Vector AbiValue -> String
-showAbiValues vs = "(" ++ intercalate ", " (Vector.toList (Vector.map showAbiValue vs)) ++ ")"
-
-showAbiValue :: AbiValue -> String
-showAbiValue (AbiUInt _ w)        = unpack $ humanizeInteger w
-showAbiValue (AbiInt _ w)         = unpack $ humanizeInteger w
-showAbiValue (AbiAddress w160)    = "0x" ++ (showHex w160 "")
-showAbiValue (AbiBool b)          = show b
-showAbiValue (AbiBytes _ bs)      = formatBytes bs
-showAbiValue (AbiBytesDynamic bs) = formatBinary bs
-showAbiValue (AbiString bs)       = formatQString bs
--- TODO: arrays
-showAbiValue value = show value
-
-isPrintable :: ByteString -> Bool
-isPrintable _ = True  -- FIXME: should check if all ascii chars
-
--- TODO: make all these W256 -> String?
-formatBytes :: ByteString -> String
-formatBytes b | isPrintable b = formatQString b
-              | otherwise     = formatBinary b
-
-formatQString :: ByteString -> String
-formatQString s = "\"" ++ (formatString s) ++ "\""
-
-formatString :: ByteString -> String
-formatString = unpack . decodeUtf8
-
-formatBinary :: ByteString -> String
-formatBinary = (++) "0x" . unpack . decodeUtf8 . toStrict . toLazyByteString . byteStringHex
+                    Right (_, _, abivals) ->
+                      mconcat
+                        [ "\x1b[36m←"
+                        , name
+                        , showAbiValues abivals
+                        , "\x1b[0m"
+                        ]
+                    Left (_,_,_) ->
+                      error "lol"
 
 getEvent :: EVM.Concrete.Word Concrete -> Map W256 Event -> Maybe Event
 getEvent w events = Map.lookup (forceConcreteWord w) events
 
-getEventName :: Maybe Event -> String
-getEventName (Just (Event name _ _)) = unpack name
-getEventName Nothing = ""
+getEventName :: Maybe Event -> Text
+getEventName (Just (Event name _ _)) = name
+getEventName Nothing = "<unknown-event>"
 
 getEventTypes :: Maybe Event -> [AbiType]
 getEventTypes Nothing = []
 getEventTypes (Just (Event _ _ xs)) = map fst xs
 
-getEventArgs :: Blob Concrete -> String
+getEventArgs :: Blob Concrete -> Text
 getEventArgs b = formatBlob b
 
-formatBlob :: Blob Concrete -> String
-formatBlob b = unpack $ decodeUtf8 $ forceConcreteBlob b
+formatBlob :: Blob Concrete -> Text
+formatBlob b = decodeUtf8 $ forceConcreteBlob b
 
 word32Bytes :: Word32 -> ByteString
 word32Bytes x = BS.pack [byteAt x (3 - i) | i <- [0..3]]
