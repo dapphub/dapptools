@@ -599,7 +599,7 @@ updateUiVmState ui vm =
                  . lines
                  . drawForest
                  . fmap (fmap (unpack . showContext dapp))
-                 $ contextTraceForest vm)
+                 $ traceForest vm)
                 1)
           & set uiVmSolidityList
               (list SolidityPane
@@ -620,17 +620,25 @@ maybeContractName =
 maybeAbiName :: SolcContract -> Word Concrete -> Maybe Text
 maybeAbiName solc abi = preview (abiMap . ix (fromIntegral abi)) solc
 
-showContext :: DappInfo -> Either (Log Concrete) (FrameContext Concrete) -> Text
-showContext _ (Left (Log _ bytes topics)) =
-  "LOG " <> pack (show bytes) <> " " <> pack (show topics)
-showContext dapp (Right (CreationContext hash)) =
-  "CREATE " <> maybeContractName (preview (dappSolcByHash . ix hash . _2) dapp)
-showContext dapp (Right (CallContext _ _ hash abi _)) =
+showContext :: DappInfo -> Trace Concrete -> Text
+showContext _ (EventTrace (Log _ bytes topics)) =
+  "log " <> pack (show bytes) <> " " <> pack (show topics)
+showContext _ (QueryTrace q) =
+  case q of
+    PleaseFetchContract addr _ ->
+      "fetch contract " <> pack (show addr)
+    PleaseFetchSlot addr slot _ ->
+      "fetch storage slot " <> pack (show slot) <> " from " <> pack (show addr)
+showContext _ (ErrorTrace e) =
+  "error " <> pack (show e)
+showContext dapp (FrameTrace (CreationContext hash)) =
+  "create " <> maybeContractName (preview (dappSolcByHash . ix hash . _2) dapp)
+showContext dapp (FrameTrace (CallContext _ _ hash abi _)) =
   case preview (dappSolcByHash . ix hash . _2) dapp of
     Nothing ->
-      "CALL [unknown]"
+      "call [unknown]"
     Just solc ->
-      "CALL "
+      "call "
         <> view (contractName . to contractNamePart) solc
         <> " "
         <> maybe "[fallback function]"

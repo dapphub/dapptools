@@ -84,10 +84,16 @@ data VM e = VM
   , _block         :: Block e
   , _tx            :: TxState e
   , _logs          :: Seq (Log e)
-  , _contextTrace  :: Zipper.TreePos Zipper.Empty (Either (Log e) (FrameContext e))
+  , _traces        :: Zipper.TreePos Zipper.Empty (Trace e)
   , _cache         :: Cache e
   , _execMode      :: ExecMode
   }
+
+data Trace e
+  = EventTrace (Log e)
+  | FrameTrace (FrameContext e)
+  | QueryTrace (Query e)
+  | ErrorTrace (Error e)
 
 data ExecMode = ExecuteNormally | ExecuteAsVMTest
 
@@ -253,7 +259,7 @@ makeVm o = VM
     , _refunds = mempty
     }
   , _logs = mempty
-  , _contextTrace = Zipper.fromForest []
+  , _traces = Zipper.fromForest []
   , _block = Block
     { _coinbase = vmoptCoinbase o
     , _timestamp = w256 $ vmoptTimestamp o
@@ -396,9 +402,9 @@ exec1 = do
             [] ->
               assign result (Just (VMSuccess ""))
             (nextFrame : remainingFrames) -> do
-              modifying contextTrace $ \t ->
+              modifying traces $ \t ->
                 case Zipper.parent t of
-                  Nothing -> error "internal error (context trace root)"
+                  Nothing -> error "internal error (trace root)"
                   Just t' -> Zipper.nextSpace t'
               assign frames remainingFrames
               assign state (view frameState nextFrame)
@@ -755,8 +761,8 @@ exec1 = do
                         , _frameState   = (set stack xs) (view state vm')
                         }
 
-                      modifying contextTrace $ \t ->
-                        Zipper.children $ Zipper.insert (Node (Right newContext) []) t
+                      modifying traces $ \t ->
+                        Zipper.children $ Zipper.insert (Node (FrameTrace newContext) []) t
 
                       assign state $
                         blankState
@@ -821,9 +827,9 @@ exec1 = do
                   (nextFrame : remainingFrames) -> do
                     assign frames remainingFrames
 
-                    modifying contextTrace $ \t ->
+                    modifying traces $ \t ->
                       case Zipper.parent t of
-                        Nothing -> error "internal error (context trace root)"
+                        Nothing -> error "internal error (trace root)"
                         Just t' -> Zipper.nextSpace t'
 
                     case view frameContext nextFrame of
@@ -1088,8 +1094,8 @@ delegateCall fees xGas xTo xInOffset xInSize xOutOffset xOutSize xs continue =
                   , _frameContext = newContext
                   }
 
-                modifying contextTrace $ \t ->
-                  Zipper.children (Zipper.insert (Node (Right newContext) []) t)
+                modifying traces $ \t ->
+                  Zipper.children (Zipper.insert (Node (FrameTrace newContext) []) t)
 
                 zoom state $ do
                   assign gas xGas
@@ -1114,9 +1120,13 @@ vmError e = do
     [] -> assign result (Just (VMFailure e))
 
     (nextFrame : remainingFrames) -> do
-      modifying contextTrace $ \t ->
+
+      modifying traces $ \t ->
+        Zipper.children (Zipper.insert (Node (ErrorTrace e) []) t)
+
+      modifying traces $ \t ->
         case Zipper.parent t of
-          Nothing -> error "internal error (context trace root)"
+          Nothing -> error "internal error (trace root)"
           Just t' -> Zipper.nextSpace t'
 
       case view frameContext nextFrame of
@@ -1184,14 +1194,14 @@ zipperRootForest z =
     Nothing -> Zipper.toForest z
     Just z' -> zipperRootForest (Zipper.nextSpace z')
 
-contextTraceForest :: Machine e => VM e -> Forest (Either (Log e) (FrameContext e))
-contextTraceForest vm =
-  view (contextTrace . to zipperRootForest) vm
+traceForest :: Machine e => VM e -> Forest (Trace e)
+traceForest vm =
+  view (traces . to zipperRootForest) vm
 
 traceLog :: MonadState (VM e) m => Log e -> m ()
 traceLog log =
-  modifying contextTrace $
-    \t -> Zipper.nextSpace (Zipper.insert (Node (Left log) []) t)
+  modifying traces $
+    \t -> Zipper.nextSpace (Zipper.insert (Node (EventTrace log) []) t)
 
 -- * Stack manipulation
 
