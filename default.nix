@@ -5,7 +5,7 @@
 , monad-par, mtl, operational, optparse-generic, process
 , QuickCheck, quickcheck-text, readline, restless-git, rosezipper
 , scientific, stdenv, tasty, tasty-hunit, tasty-quickcheck
-, temporary, text, text-format, time, transformers
+, temporary, text, text-format, time, transformers, tree-view
 , unordered-containers, vector, vty, wreq
 }:
 mkDerivation {
@@ -21,7 +21,7 @@ mkDerivation {
     cryptonite data-dword deepseq directory filepath ghci-pretty lens
     lens-aeson memory monad-par mtl operational optparse-generic
     process QuickCheck quickcheck-text readline restless-git rosezipper
-    scientific temporary text text-format time transformers
+    scientific temporary text text-format time transformers tree-view
     unordered-containers vector vty wreq
   ];
   executableHaskellDepends = [

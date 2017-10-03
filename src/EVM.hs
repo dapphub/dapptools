@@ -25,9 +25,10 @@ import EVM.FeeSchedule (FeeSchedule (..))
 
 import Control.Monad.State.Strict hiding (state)
 
-import Data.Bits (xor, shiftR, (.&.), (.|.), FiniteBits (..))
-import Data.Bits (bit, testBit, complement)
 import Data.Binary.Get (runGetOrFail)
+import Data.Bits (bit, testBit, complement)
+import Data.Bits (xor, shiftR, (.&.), (.|.), FiniteBits (..))
+import Data.Text (Text)
 import Data.Word (Word8, Word32)
 
 import Control.Lens hiding (op, (:<), (|>))
@@ -94,6 +95,7 @@ data Trace e
   | FrameTrace (FrameContext e)
   | QueryTrace (Query e)
   | ErrorTrace (Error e)
+  | EntryTrace Text
 
 data ExecMode = ExecuteNormally | ExecuteAsVMTest
 
@@ -402,10 +404,7 @@ exec1 = do
             [] ->
               assign result (Just (VMSuccess ""))
             (nextFrame : remainingFrames) -> do
-              modifying traces $ \t ->
-                case Zipper.parent t of
-                  Nothing -> error "internal error (trace root)"
-                  Just t' -> Zipper.nextSpace t'
+              popTrace
               assign frames remainingFrames
               assign state (view frameState nextFrame)
               case view frameContext nextFrame of
@@ -761,8 +760,7 @@ exec1 = do
                         , _frameState   = (set stack xs) (view state vm')
                         }
 
-                      modifying traces $ \t ->
-                        Zipper.children $ Zipper.insert (Node (FrameTrace newContext) []) t
+                      pushTrace (FrameTrace newContext)
 
                       assign state $
                         blankState
@@ -826,11 +824,7 @@ exec1 = do
 
                   (nextFrame : remainingFrames) -> do
                     assign frames remainingFrames
-
-                    modifying traces $ \t ->
-                      case Zipper.parent t of
-                        Nothing -> error "internal error (trace root)"
-                        Just t' -> Zipper.nextSpace t'
+                    popTrace
 
                     case view frameContext nextFrame of
                       CreationContext _ -> do
@@ -1094,8 +1088,7 @@ delegateCall fees xGas xTo xInOffset xInSize xOutOffset xOutSize xs continue =
                   , _frameContext = newContext
                   }
 
-                modifying traces $ \t ->
-                  Zipper.children (Zipper.insert (Node (FrameTrace newContext) []) t)
+                pushTrace (FrameTrace newContext)
 
                 zoom state $ do
                   assign gas xGas
@@ -1121,13 +1114,8 @@ vmError e = do
 
     (nextFrame : remainingFrames) -> do
 
-      modifying traces $ \t ->
-        Zipper.children (Zipper.insert (Node (ErrorTrace e) []) t)
-
-      modifying traces $ \t ->
-        case Zipper.parent t of
-          Nothing -> error "internal error (trace root)"
-          Just t' -> Zipper.nextSpace t'
+      insertTrace (ErrorTrace e)
+      popTrace
 
       case view frameContext nextFrame of
         CreationContext _ -> do
@@ -1187,6 +1175,23 @@ word256At i = lens getter setter where
   setter m x = setMemoryWord i x m
 
 -- * Tracing
+
+pushTrace :: Machine e => Trace e -> EVM e ()
+pushTrace x =
+  modifying traces $
+    \t -> Zipper.children $ Zipper.insert (Node x []) t
+
+insertTrace :: Machine e => Trace e -> EVM e ()
+insertTrace x =
+  modifying traces $
+    \t -> Zipper.nextSpace $ Zipper.insert (Node x []) t
+
+popTrace :: Machine e => EVM e ()
+popTrace =
+  modifying traces $
+    \t -> case Zipper.parent t of
+            Nothing -> error "internal error (trace root)"
+            Just t' -> Zipper.nextSpace t'
 
 zipperRootForest :: Zipper.TreePos Zipper.Empty a -> Forest a
 zipperRootForest z =

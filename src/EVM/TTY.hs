@@ -38,7 +38,7 @@ import Data.Maybe (fromJust)
 import Data.Monoid ((<>))
 import Data.Text (Text, unpack, pack)
 import Data.Text.Encoding (decodeUtf8)
-import Data.Tree (drawForest)
+import Data.Tree.View (showTree)
 
 import qualified Data.ByteString as BS
 import qualified Data.Map as Map
@@ -422,6 +422,8 @@ initialUiVmStateForTest opts@(UnitTestOptions {..}) dapp (theContractName, theTe
   ui1
   where
     script = do
+      Stepper.evm . pushTrace . EntryTrace $
+        "test " <> theTestName <> " (" <> theContractName <> ")"
       initializeUnitTest opts
       void (runUnitTest opts theTestName)
     ui0 =
@@ -597,8 +599,8 @@ updateUiVmState ui vm =
                 TracePane
                 (Vec.fromList
                  . lines
-                 . drawForest
-                 . fmap (fmap (unpack . showContext dapp))
+                 . concatMap showTree
+                 . fmap (fmap (unpack . showTrace dapp))
                  $ traceForest vm)
                 1)
           & set uiVmSolidityList
@@ -620,20 +622,22 @@ maybeContractName =
 maybeAbiName :: SolcContract -> Word Concrete -> Maybe Text
 maybeAbiName solc abi = preview (abiMap . ix (fromIntegral abi)) solc
 
-showContext :: DappInfo -> Trace Concrete -> Text
-showContext _ (EventTrace (Log _ bytes topics)) =
+showTrace :: DappInfo -> Trace Concrete -> Text
+showTrace _ (EventTrace (Log _ bytes topics)) =
   "log " <> pack (show bytes) <> " " <> pack (show topics)
-showContext _ (QueryTrace q) =
+showTrace _ (QueryTrace q) =
   case q of
     PleaseFetchContract addr _ ->
       "fetch contract " <> pack (show addr)
     PleaseFetchSlot addr slot _ ->
       "fetch storage slot " <> pack (show slot) <> " from " <> pack (show addr)
-showContext _ (ErrorTrace e) =
+showTrace _ (ErrorTrace e) =
   "error " <> pack (show e)
-showContext dapp (FrameTrace (CreationContext hash)) =
+showTrace _ (EntryTrace t) =
+  t
+showTrace dapp (FrameTrace (CreationContext hash)) =
   "create " <> maybeContractName (preview (dappSolcByHash . ix hash . _2) dapp)
-showContext dapp (FrameTrace (CallContext _ _ hash abi _)) =
+showTrace dapp (FrameTrace (CallContext _ _ hash abi _)) =
   case preview (dappSolcByHash . ix hash . _2) dapp of
     Nothing ->
       "call [unknown]"

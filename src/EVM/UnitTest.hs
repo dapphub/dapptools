@@ -62,6 +62,8 @@ type ABIMethod = Text
 initializeUnitTest :: UnitTestOptions -> Stepper Concrete ()
 initializeUnitTest UnitTestOptions { .. } = do
 
+  Stepper.evm (pushTrace (EntryTrace "constructor"))
+
   -- Constructor is loaded; run until it returns code
   B bytes <- Stepper.execFullyOrFail
   addr <- Stepper.evm (use (state . contract))
@@ -73,12 +75,14 @@ initializeUnitTest UnitTestOptions { .. } = do
   Stepper.evm $ env . contracts . ix addr . balance += w256 balanceForCreated
 
   -- Initialize the test contract
+  Stepper.evm (popTrace >> pushTrace (EntryTrace "initialize test"))
   Stepper.evm $ setupCall addr "setUp()" gasForInvoking
 
   Stepper.note "Running `setUp()'"
 
   -- Let `setUp()' run to completion
   void Stepper.execFullyOrFail
+  Stepper.evm popTrace
 
 -- | Assuming a test contract is loaded and initialized, this stepper
 -- will run the specified test method and return whether it succeeded.
@@ -93,6 +97,7 @@ runUnitTest UnitTestOptions { .. } method = do
 
   -- Set up the call to the test method
   Stepper.evm $ setupCall addr method gasForInvoking
+  Stepper.evm (pushTrace (EntryTrace "run test"))
   Stepper.note "Running unit test"
 
   -- Try running the test method
@@ -101,9 +106,11 @@ runUnitTest UnitTestOptions { .. } method = do
       either (const (pure True)) (const (pure False))
 
   -- Ask whether any assertions failed
+  Stepper.evm $ popTrace >> pushTrace (EntryTrace "check assertion status")
   Stepper.evm $ setupCall addr "failed()" 10000
   Stepper.note "Checking whether assertions failed"
   AbiBool failed <- Stepper.execFullyOrFail >>= Stepper.decode AbiBoolType
+  Stepper.evm popTrace
 
   -- Return true if the test was successful
   pure (shouldFail == (bailed || failed))
