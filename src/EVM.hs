@@ -47,9 +47,9 @@ import qualified Data.ByteString      as BS
 import qualified Data.ByteString.Char8 as Char8
 import qualified Data.Map.Strict      as Map
 import qualified Data.Sequence        as Seq
+import qualified Data.Tree.Zipper     as Zipper
 import qualified Data.Vector.Storable as Vector
 import qualified Data.Vector.Storable.Mutable as Vector
-import qualified Data.Tree.Zipper     as Zipper
 
 import qualified Data.Vector as RegularVector
 
@@ -90,7 +90,13 @@ data VM e = VM
   , _execMode      :: ExecMode
   }
 
-data Trace e
+data Trace e = Trace
+  { _traceCodehash :: W256
+  , _traceOpIx     :: Int
+  , _traceData     :: TraceData e
+  }
+
+data TraceData e
   = EventTrace (Log e)
   | FrameTrace (FrameContext e)
   | QueryTrace (Query e)
@@ -236,6 +242,7 @@ makeLenses ''TxState
 makeLenses ''Contract
 makeLenses ''Env
 makeLenses ''Cache
+makeLenses ''Trace
 makeLenses ''VM
 
 instance Monoid (Cache e) where
@@ -391,10 +398,10 @@ exec1 = do
                     log           = Log self bytes topics
 
                 burn (g_log + g_logdata * xSize + num n * g_logtopic) $ do
+                  traceLog log
                   next
                   assign (state . stack) xs'
                   pushToSequence logs log
-                  traceLog log
             _ ->
               underrun
 
@@ -753,14 +760,13 @@ exec1 = do
                         modifying (ix self . nonce) succ
                         modifying (ix self . balance) (flip (-) xValue)
 
+                      pushTrace (FrameTrace newContext)
                       next
                       vm' <- get
                       pushTo frames $ Frame
                         { _frameContext = newContext
                         , _frameState   = (set stack xs) (view state vm')
                         }
-
-                      pushTrace (FrameTrace newContext)
 
                       assign state $
                         blankState
@@ -1065,30 +1071,31 @@ delegateCall fees xGas xTo xInOffset xInSize xOutOffset xOutSize xs continue =
           accessMemoryRange fees xInOffset xInSize $ do
             accessMemoryRange fees xOutOffset xOutSize $ do
               burn xGas $ do
-                next
-                vm <- get
+                vm0 <- get
 
                 let newContext = CallContext
                       { callContextOffset = xOutOffset
-                      , callContextSize   = xOutSize
+                      , callContextSize = xOutSize
                       , callContextCodehash = view codehash target
-                      , callContextReversion = view (env . contracts) vm
+                      , callContextReversion = view (env . contracts) vm0
                       , callContextAbi =
                           if xInSize >= 4
                           then
                             let
                               w = forceConcreteWord
-                                    (readMemoryWord32 xInOffset (view (state . memory) vm))
+                                    (readMemoryWord32 xInOffset (view (state . memory) vm0))
                             in Just $! num w
                           else Nothing
                       }
 
+                pushTrace (FrameTrace newContext)
+                next
+                vm1 <- get
+
                 pushTo frames $ Frame
-                  { _frameState = (set stack xs) (view state vm)
+                  { _frameState = (set stack xs) (view state vm1)
                   , _frameContext = newContext
                   }
-
-                pushTrace (FrameTrace newContext)
 
                 zoom state $ do
                   assign gas xGas
@@ -1097,7 +1104,7 @@ delegateCall fees xGas xTo xInOffset xInSize xOutOffset xOutSize xs continue =
                   assign codeContract xTo
                   assign stack mempty
                   assign memory mempty
-                  assign calldata (readMemory (num xInOffset) (num xInSize) vm)
+                  assign calldata (readMemory (num xInOffset) (num xInSize) vm0)
 
                 continue
 
@@ -1176,15 +1183,30 @@ word256At i = lens getter setter where
 
 -- * Tracing
 
-pushTrace :: Machine e => Trace e -> EVM e ()
-pushTrace x =
-  modifying traces $
-    \t -> Zipper.children $ Zipper.insert (Node x []) t
+withTraceLocation
+  :: (Machine e, MonadState (VM e) m) => TraceData e -> m (Trace e)
+withTraceLocation x = do
+  vm <- get
+  let
+    Just this =
+      preview (env . contracts . ix (view (state . codeContract) vm)) vm
+  pure Trace
+    { _traceData = x
+    , _traceCodehash = view codehash this
+    , _traceOpIx = (view opIxMap this) Vector.! (view (state . pc) vm)
+    }
 
-insertTrace :: Machine e => Trace e -> EVM e ()
-insertTrace x =
+pushTrace :: Machine e => TraceData e -> EVM e ()
+pushTrace x = do
+  trace <- withTraceLocation x
   modifying traces $
-    \t -> Zipper.nextSpace $ Zipper.insert (Node x []) t
+    \t -> Zipper.children $ Zipper.insert (Node trace []) t
+
+insertTrace :: Machine e => TraceData e -> EVM e ()
+insertTrace x = do
+  trace <- withTraceLocation x
+  modifying traces $
+    \t -> Zipper.nextSpace $ Zipper.insert (Node trace []) t
 
 popTrace :: Machine e => EVM e ()
 popTrace =
@@ -1203,10 +1225,11 @@ traceForest :: Machine e => VM e -> Forest (Trace e)
 traceForest vm =
   view (traces . to zipperRootForest) vm
 
-traceLog :: MonadState (VM e) m => Log e -> m ()
-traceLog log =
+traceLog :: (Machine e, MonadState (VM e) m) => Log e -> m ()
+traceLog log = do
+  trace <- withTraceLocation (EventTrace log)
   modifying traces $
-    \t -> Zipper.nextSpace (Zipper.insert (Node (EventTrace log) []) t)
+    \t -> Zipper.nextSpace (Zipper.insert (Node trace []) t)
 
 -- * Stack manipulation
 

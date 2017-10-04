@@ -196,10 +196,11 @@ runUnitTestContract
       if verbose then do
         tick "\n"
         tick (intercalate "\n" details)
+        tick "\n"
       else pure ()
 
 passOutput :: VM Concrete -> Text -> SolcContract -> Text
-passOutput _ testName _ = "[PASS] " <> testName <> "\n"
+passOutput _ testName _ = "[PASS] " <> testName
 
 failOutput :: VM Concrete -> DappInfo -> Text -> SolcContract -> Text
 failOutput vm dapp testName theContract = mconcat $
@@ -209,7 +210,6 @@ failOutput vm dapp testName theContract = mconcat $
   , formatTestLogs (view eventMap theContract) (view logs vm)
   , "\n"
   , showTraceTree dapp vm
-  , "\n"
   ]
 
 

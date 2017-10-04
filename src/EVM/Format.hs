@@ -2,9 +2,9 @@ module EVM.Format where
 
 import Prelude hiding (Word)
 
-import EVM (VM, cheatCode, traceForest)
-import EVM (Trace (..), Log (..), Query (..), FrameContext (..))
-import EVM.Dapp (DappInfo, dappSolcByHash)
+import EVM (VM, cheatCode, traceForest, traceData)
+import EVM (Trace, TraceData (..), Log (..), Query (..), FrameContext (..))
+import EVM.Dapp (DappInfo, dappSolcByHash, showTraceLocation)
 import EVM.Concrete (Concrete, Word (..))
 import EVM.Types (W256 (..), num)
 import EVM.ABI (AbiValue (..))
@@ -112,31 +112,39 @@ showTraceTree dapp =
     >>> pack
     
 showTrace :: DappInfo -> Trace Concrete -> Text
-showTrace _ (EventTrace (Log _ _bytes _topics)) =
-  "log" -- TODO
-showTrace _ (QueryTrace q) =
-  case q of
-    PleaseFetchContract addr _ ->
-      "fetch contract " <> pack (show addr)
-    PleaseFetchSlot addr slot _ ->
-      "fetch storage slot " <> pack (show slot) <> " from " <> pack (show addr)
-showTrace _ (ErrorTrace e) =
-  "error " <> pack (show e)
-showTrace _ (EntryTrace t) =
-  t
-showTrace dapp (FrameTrace (CreationContext hash)) =
-  "create " <> maybeContractName (preview (dappSolcByHash . ix hash . _2) dapp)
-showTrace dapp (FrameTrace (CallContext _ _ hash abi _)) =
-  case preview (dappSolcByHash . ix hash . _2) dapp of
-    Nothing ->
-      "call [unknown]"
-    Just solc ->
-      "call "
-        <> view (contractName . to contractNamePart) solc
-        <> " "
-        <> maybe "[fallback function]"
-             (\x -> maybe "[unknown method]" id (maybeAbiName solc x))
-             abi
+showTrace dapp trace =
+  let
+    pos =
+      case showTraceLocation dapp trace of
+        Left x -> " \x1b[90mm" <> x <> "\x1b[0m"
+        Right x -> " \x1b[90m(" <> x <> ")\x1b[0m"
+  in case view traceData trace of
+    EventTrace (Log _ _bytes _topics) ->
+      "log" <> pos
+    QueryTrace q ->
+      case q of
+        PleaseFetchContract addr _ ->
+          "fetch contract " <> pack (show addr) <> pos
+        PleaseFetchSlot addr slot _ ->
+          "fetch storage slot " <> pack (show slot) <> " from " <> pack (show addr) <> pos
+    ErrorTrace e ->
+      "error " <> pack (show e) <> pos
+    EntryTrace t ->
+      t
+    FrameTrace (CreationContext hash) ->
+      "create " <> maybeContractName (preview (dappSolcByHash . ix hash . _2) dapp) <> pos
+    FrameTrace (CallContext _ _ hash abi _) ->
+      case preview (dappSolcByHash . ix hash . _2) dapp of
+        Nothing ->
+          "call [unknown]" <> pos
+        Just solc ->
+          "call "
+            <> view (contractName . to contractNamePart) solc
+            <> " "
+            <> maybe "[fallback function]"
+                 (\x -> maybe "[unknown method]" id (maybeAbiName solc x))
+                 abi
+            <> pos
 
 maybeContractName :: Maybe SolcContract -> Text
 maybeContractName =
