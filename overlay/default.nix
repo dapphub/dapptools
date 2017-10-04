@@ -15,6 +15,8 @@ let
   callPackage = self.pkgs.callPackage;
   pastPackage = past.pkgs.callPackage;
 
+  stdenv = self.pkgs.stdenv;
+
   haskellPackages = super.pkgs.haskellPackages.override {
     overrides = (import ./haskell.nix { pkgs = super.pkgs; });
   };
@@ -54,12 +56,19 @@ in rec {
 
   go-ethereum = super.go-ethereum.overrideDerivation (_: rec {
     name = "go-ethereum-${version}";
-    version = "1.7.0";
+    version = "1.7.1";
     src = self.pkgs.fetchFromGitHub {
       owner = "ethereum";
       repo = "go-ethereum";
       rev = "v${version}";
-      sha256 = "0ybjaiyrfb320rab6a5r9iiqvkrcd8b2qvixzx0kjmc4a7l1q5zh";
+      sha256 = "1rhqnqp2d951d4084z7dc07q0my4wd5401968a0nqj030a9vgng2";
     };
+    # (mbrock backported) fix for usb-related segmentation faults on darwin
+    propagatedBuildInputs =
+      stdenv.lib.optionals stdenv.isDarwin (with self.pkgs; [ libobjc IOKit ]);
   });
+
+  pandoc-tangle =
+    self.pkgs.haskell.lib.justStaticExecutables
+      (haskellPackages.callPackage ./pkgs/pandoc-tangle.nix {});
 }
