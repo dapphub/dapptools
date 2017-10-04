@@ -65,7 +65,8 @@ in rec {
     };
     # (mbrock backported) fix for usb-related segmentation faults on darwin
     propagatedBuildInputs =
-      stdenv.lib.optionals stdenv.isDarwin (with self.pkgs; [ libobjc IOKit ]);
+      stdenv.lib.optionals stdenv.isDarwin
+        (with self.pkgs; [ darwin.libobjc darwin.apple_sdk.frameworks.IOKit ]);
   });
 
   pandoc-tangle =
