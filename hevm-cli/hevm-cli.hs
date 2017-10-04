@@ -25,7 +25,8 @@ import EVM.Debug
 import EVM.Exec
 import EVM.Solidity
 import EVM.Types hiding (word)
-import EVM.UnitTest (UnitTestOptions, findUnitTests, runUnitTestContract)
+import EVM.UnitTest (UnitTestOptions, runUnitTestContract)
+import EVM.Dapp (findUnitTests)
 
 import qualified EVM.UnitTest as EVM.UnitTest
 

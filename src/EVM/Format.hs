@@ -2,20 +2,25 @@ module EVM.Format where
 
 import Prelude hiding (Word)
 
-import EVM (cheatCode)
+import EVM (VM, cheatCode, traceForest)
+import EVM (Trace (..), Log (..), Query (..), FrameContext (..))
+import EVM.Dapp (DappInfo, dappSolcByHash)
 import EVM.Concrete (Concrete, Word (..))
 import EVM.Types (W256 (..), num)
 import EVM.ABI (AbiValue (..))
+import EVM.Solidity (SolcContract, contractName, abiMap)
 
 import Control.Arrow ((>>>))
+import Control.Lens (view, preview, ix, _2, to)
 import Data.ByteString (ByteString)
-import Data.ByteString.Builder    (byteStringHex, toLazyByteString)
+import Data.ByteString.Builder (byteStringHex, toLazyByteString)
 import Data.ByteString.Lazy (toStrict)
 import Data.DoubleWord (signedWord)
 import Data.Foldable (toList)
 import Data.Monoid ((<>))
-import Data.Text (Text, pack, intercalate)
+import Data.Text (Text, pack, unpack, intercalate)
 import Data.Text.Encoding (decodeUtf8, decodeUtf8')
+import Data.Tree.View (showTree)
 import Data.Vector (Vector)
 
 import Numeric (showHex)
@@ -98,3 +103,50 @@ formatString = decodeUtf8
 formatBinary :: ByteString -> Text
 formatBinary =
   (<>) "0x" . decodeUtf8 . toStrict . toLazyByteString . byteStringHex
+
+showTraceTree :: DappInfo -> VM Concrete -> Text
+showTraceTree dapp =
+  traceForest
+    >>> fmap (fmap (unpack . showTrace dapp))
+    >>> concatMap showTree
+    >>> pack
+    
+showTrace :: DappInfo -> Trace Concrete -> Text
+showTrace _ (EventTrace (Log _ _bytes _topics)) =
+  "log" -- TODO
+showTrace _ (QueryTrace q) =
+  case q of
+    PleaseFetchContract addr _ ->
+      "fetch contract " <> pack (show addr)
+    PleaseFetchSlot addr slot _ ->
+      "fetch storage slot " <> pack (show slot) <> " from " <> pack (show addr)
+showTrace _ (ErrorTrace e) =
+  "error " <> pack (show e)
+showTrace _ (EntryTrace t) =
+  t
+showTrace dapp (FrameTrace (CreationContext hash)) =
+  "create " <> maybeContractName (preview (dappSolcByHash . ix hash . _2) dapp)
+showTrace dapp (FrameTrace (CallContext _ _ hash abi _)) =
+  case preview (dappSolcByHash . ix hash . _2) dapp of
+    Nothing ->
+      "call [unknown]"
+    Just solc ->
+      "call "
+        <> view (contractName . to contractNamePart) solc
+        <> " "
+        <> maybe "[fallback function]"
+             (\x -> maybe "[unknown method]" id (maybeAbiName solc x))
+             abi
+
+maybeContractName :: Maybe SolcContract -> Text
+maybeContractName =
+  maybe "<unknown contract>" (view (contractName . to contractNamePart))
+
+maybeAbiName :: SolcContract -> Word Concrete -> Maybe Text
+maybeAbiName solc abi = preview (abiMap . ix (fromIntegral abi)) solc
+
+contractNamePart :: Text -> Text
+contractNamePart x = Text.split (== ':') x !! 1
+
+contractPathPart :: Text -> Text
+contractPathPart x = Text.split (== ':') x !! 0

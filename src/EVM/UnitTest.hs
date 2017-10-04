@@ -6,6 +6,7 @@ import Prelude hiding (Word)
 
 import EVM
 import EVM.ABI
+import EVM.Dapp
 import EVM.Exec
 import EVM.Format
 import EVM.Keccak
@@ -30,7 +31,6 @@ import Control.Monad.Par.IO (runParIO)
 import Data.Binary.Get    (runGetOrFail)
 import Data.ByteString    (ByteString)
 import Data.Foldable      (toList)
-import Data.List          (sort)
 import Data.Map           (Map)
 import Data.Maybe         (fromMaybe)
 import Data.Monoid        ((<>))
@@ -97,7 +97,7 @@ runUnitTest UnitTestOptions { .. } method = do
 
   -- Set up the call to the test method
   Stepper.evm $ setupCall addr method gasForInvoking
-  Stepper.evm (pushTrace (EntryTrace "run test"))
+  Stepper.evm (pushTrace (EntryTrace method))
   Stepper.note "Running unit test"
 
   -- Try running the test method
@@ -106,11 +106,10 @@ runUnitTest UnitTestOptions { .. } method = do
       either (const (pure True)) (const (pure False))
 
   -- Ask whether any assertions failed
-  Stepper.evm $ popTrace >> pushTrace (EntryTrace "check assertion status")
+  Stepper.evm $ popTrace
   Stepper.evm $ setupCall addr "failed()" 10000
   Stepper.note "Checking whether assertions failed"
   AbiBool failed <- Stepper.execFullyOrFail >>= Stepper.decode AbiBoolType
-  Stepper.evm popTrace
 
   -- Return true if the test was successful
   pure (shouldFail == (bailed || failed))
@@ -150,7 +149,9 @@ interpret opts =
 
 runUnitTestContract ::
   UnitTestOptions -> Map Text SolcContract -> SourceCache -> (Text, [Text]) -> IO ()
-runUnitTestContract opts@(UnitTestOptions {..}) contractMap _ (name, testNames) = do
+runUnitTestContract
+  opts@(UnitTestOptions {..}) contractMap sources (name, testNames) = do
+
   -- Print a header
   putStrLn $ "Running " ++ show (length testNames) ++ " tests for "
     ++ unpack name
@@ -164,15 +165,25 @@ runUnitTestContract opts@(UnitTestOptions {..}) contractMap _ (name, testNames) 
     Just theContract -> do
       -- Construct the initial VM and begin the contract's constructor
       let vm0 = initialUnitTestVm opts theContract (Map.elems contractMap)
-      vm1 <- execStateT (interpret opts (initializeUnitTest opts)) vm0
+      vm1 <-
+        execStateT
+          (interpret opts
+            (Stepper.enter name >> initializeUnitTest opts))
+          vm0
+
+      -- Gather the dapp-related metadata
+      let dapp = dappInfo "." contractMap sources
 
       -- Define the thread spawner for test cases
       let
-        runOne testName = spawn_ . liftIO $
-          runStateT (interpret opts (runUnitTest opts testName)) vm1 >>=
-           \case
+        runOne testName = spawn_ . liftIO $ do
+          x <-
+            runStateT
+              (interpret opts (runUnitTest opts testName))
+              vm1
+          case x of
              (Right True,  vm) -> pure (".", passOutput vm testName theContract)
-             (Right False, vm) -> pure ("F", failOutput vm testName theContract)
+             (Right False, vm) -> pure ("F", failOutput vm dapp testName theContract)
              (Left _, _)       -> pure ("E", "\n")
 
       -- Run all the test cases in parallel and print their status updates
@@ -185,21 +196,22 @@ runUnitTestContract opts@(UnitTestOptions {..}) contractMap _ (name, testNames) 
       if verbose then do
         tick "\n"
         tick (intercalate "\n" details)
-        tick "\n"
       else pure ()
 
 passOutput :: VM Concrete -> Text -> SolcContract -> Text
 passOutput _ testName _ = "[PASS] " <> testName <> "\n"
 
-failOutput :: VM Concrete -> Text -> SolcContract -> Text
-failOutput vm testName theContract = mconcat $
+failOutput :: VM Concrete -> DappInfo -> Text -> SolcContract -> Text
+failOutput vm dapp testName theContract = mconcat $
   [ "[FAIL] "
   , fromMaybe "" (stripSuffix "()" testName)
   , "\n"
   , formatTestLogs (view eventMap theContract) (view logs vm)
   , "\n"
+  , showTraceTree dapp vm
+  , "\n"
   ]
-  -- TODO: ++ drawForest (fmap (fmap (formatTrace (view eventMap theContract))) (contextTraceForest vm))
+
 
 formatTestLogs :: Map W256 Event -> Seq.Seq (Log Concrete) -> Text
 formatTestLogs events =
@@ -322,23 +334,3 @@ initialUnitTestVm (UnitTestOptions {..}) theContract _ =
         & set balance (w256 balanceForCreator)
   in vm
     & set (env . contracts . at ethrunAddress) (Just creator)
-
-unitTestMarkerAbi :: Word32
-unitTestMarkerAbi = abiKeccak (encodeUtf8 "IS_TEST()")
-
-findUnitTests :: [SolcContract] -> [(Text, [Text])]
-findUnitTests = concatMap f where
-  f c =
-    case c ^? abiMap . ix unitTestMarkerAbi of
-      Nothing -> []
-      Just _  ->
-        let testNames = unitTestMethods c
-        in if null testNames
-           then []
-           else [(view contractName c, testNames)]
-
-unitTestMethods :: SolcContract -> [Text]
-unitTestMethods c = sort (filter (isUnitTestName) (Map.elems (c ^. abiMap)))
-  where
-    isUnitTestName s =
-      "test" `isPrefixOf` s

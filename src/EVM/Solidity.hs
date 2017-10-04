@@ -8,6 +8,7 @@ module EVM.Solidity
   , SolcContract (..)
   , SourceCache (..)
   , SrcMap (..)
+  , CodeType (..)
   , abiMap
   , eventMap
   , contractName
@@ -98,6 +99,9 @@ data SrcMapParseState
   | F5 SrcMap
   | Fe
   deriving Show
+
+data CodeType = Creation | Runtime
+  deriving (Show, Eq, Ord)
 
 makeLenses ''SolcContract
 makeLenses ''SourceCache

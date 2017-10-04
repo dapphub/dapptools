@@ -13,6 +13,8 @@ module EVM.Stepper
   , wait
   , evm
   , note
+  , entering
+  , enter
   )
 where
 
@@ -31,6 +33,7 @@ import Data.Binary.Get (runGetOrFail)
 import Data.Text (Text)
 
 import EVM (EVM, VMResult (VMFailure, VMSuccess), Error (Query), Query)
+import qualified EVM
 
 import EVM.ABI (AbiType, AbiValue, getAbi)
 import EVM.Machine (Machine, Blob)
@@ -106,3 +109,14 @@ decode abiType (B bytes) =
       fail DecodingError
     Left _ ->
       fail DecodingError
+
+entering :: Text -> Stepper Concrete a -> Stepper Concrete a
+entering t stepper = do
+  evm (EVM.pushTrace (EVM.EntryTrace t))
+  x <- stepper
+  evm EVM.popTrace
+  pure x
+
+enter :: Text -> Stepper Concrete ()
+enter t = do
+  evm (EVM.pushTrace (EVM.EntryTrace t))

@@ -12,14 +12,18 @@ import Brick.Widgets.List
 
 import EVM
 import EVM.Concrete (Concrete, Word (C))
+import EVM.Dapp (DappInfo, dappInfo)
+import EVM.Dapp (dappUnitTests, dappSolcByName, dappSolcByHash, dappSources)
 import EVM.Debug
 import EVM.Format (Signedness (..), showDec, showWordExact)
+import EVM.Format (showTraceTree)
+import EVM.Format (contractNamePart)
 import EVM.Machine (Machine)
 import EVM.Op
 import EVM.Solidity
 import EVM.Types
 import EVM.UnitTest (UnitTestOptions (..))
-import EVM.UnitTest (initialUnitTestVm, findUnitTests)
+import EVM.UnitTest (initialUnitTestVm)
 import EVM.UnitTest (initializeUnitTest, runUnitTest)
 
 import EVM.Stepper (Stepper)
@@ -33,12 +37,10 @@ import Control.Lens
 import Control.Monad.State.Strict hiding (state)
 
 import Data.ByteString (ByteString)
-import Data.Map (Map)
 import Data.Maybe (fromJust)
 import Data.Monoid ((<>))
 import Data.Text (Text, unpack, pack)
 import Data.Text.Encoding (decodeUtf8)
-import Data.Tree.View (showTree)
 
 import qualified Data.ByteString as BS
 import qualified Data.Map as Map
@@ -66,7 +68,7 @@ data UiVmState e = UiVmState
   , _uiVmNextStep     :: Stepper Concrete ()
   , _uiVmStackList    :: List Name (Int, Word e)
   , _uiVmBytecodeList :: List Name (Int, Op)
-  , _uiVmTraceList    :: List Name String
+  , _uiVmTraceList    :: List Name Text
   , _uiVmSolidityList :: List Name (Int, ByteString)
   , _uiVmSolc         :: Maybe SolcContract
   , _uiVmDapp         :: Maybe DappInfo
@@ -75,17 +77,6 @@ data UiVmState e = UiVmState
   , _uiVmMessage      :: Maybe String
   , _uiVmNotes        :: [String]
   }
-
-data CodeType = Creation | Runtime
-  deriving (Show, Eq, Ord)
-
-data DappInfo = DappInfo
-  { _dappRoot       :: FilePath
-  , _dappSolcByName :: Map Text SolcContract
-  , _dappSolcByHash :: Map W256 (CodeType, SolcContract)
-  , _dappSources    :: SourceCache
-  , _dappUnitTests  :: [(Text, [Text])]
-  } deriving Eq
 
 data UiTestPickerState = UiTestPickerState
   { _testPickerList :: List Name (Text, Text)
@@ -96,7 +87,6 @@ data UiState e
   = UiVmScreen (UiVmState e)
   | UiTestPickerScreen UiTestPickerState
 
-makeLenses ''DappInfo
 makeLenses ''UiVmState
 makeLenses ''UiTestPickerState
 makePrisms ''UiState
@@ -280,20 +270,7 @@ main opts root jsonFilePath = do
         error "Failed to read Solidity JSON"
       Just (contractMap, sourceCache) -> do
         let
-          solcs     = Map.elems contractMap
-          unitTests = findUnitTests solcs
-
-          dappInfo = DappInfo
-              { _dappRoot       = root
-              , _dappUnitTests  = unitTests
-              , _dappSolcByName = contractMap
-              , _dappSources    = sourceCache
-              , _dappSolcByHash =
-                  mappend
-                    (Map.fromList [(view runtimeCodehash c, (Runtime, c)) | c <- solcs])
-                    (Map.fromList [(view creationCodehash c, (Creation, c)) | c <- solcs])
-              }
-
+          dapp = dappInfo root contractMap sourceCache
           ui = UiTestPickerScreen $ UiTestPickerState
             { _testPickerList =
                 list
@@ -301,9 +278,9 @@ main opts root jsonFilePath = do
                   (Vec.fromList
                    (concatMap
                     (\(a, xs) -> [(a, x) | x <- xs])
-                    unitTests))
+                    (view dappUnitTests dapp)))
                   1
-            , _testPickerDapp = dappInfo
+            , _testPickerDapp = dapp
             }
 
         _ <- customMain mkVty Nothing (app opts) (ui :: UiState Concrete)
@@ -598,10 +575,9 @@ updateUiVmState ui vm =
               (list
                 TracePane
                 (Vec.fromList
-                 . lines
-                 . concatMap showTree
-                 . fmap (fmap (unpack . showTrace dapp))
-                 $ traceForest vm)
+                 . Text.lines
+                 . showTraceTree dapp
+                 $ vm)
                 1)
           & set uiVmSolidityList
               (list SolidityPane
@@ -614,40 +590,6 @@ updateUiVmState ui vm =
                             . to (Vec.imap (,)))
                         dapp)
                  1)
-
-maybeContractName :: Maybe SolcContract -> Text
-maybeContractName =
-  maybe "<unknown contract>" (view (contractName . to contractNamePart))
-
-maybeAbiName :: SolcContract -> Word Concrete -> Maybe Text
-maybeAbiName solc abi = preview (abiMap . ix (fromIntegral abi)) solc
-
-showTrace :: DappInfo -> Trace Concrete -> Text
-showTrace _ (EventTrace (Log _ bytes topics)) =
-  "log " <> pack (show bytes) <> " " <> pack (show topics)
-showTrace _ (QueryTrace q) =
-  case q of
-    PleaseFetchContract addr _ ->
-      "fetch contract " <> pack (show addr)
-    PleaseFetchSlot addr slot _ ->
-      "fetch storage slot " <> pack (show slot) <> " from " <> pack (show addr)
-showTrace _ (ErrorTrace e) =
-  "error " <> pack (show e)
-showTrace _ (EntryTrace t) =
-  t
-showTrace dapp (FrameTrace (CreationContext hash)) =
-  "create " <> maybeContractName (preview (dappSolcByHash . ix hash . _2) dapp)
-showTrace dapp (FrameTrace (CallContext _ _ hash abi _)) =
-  case preview (dappSolcByHash . ix hash . _2) dapp of
-    Nothing ->
-      "call [unknown]"
-    Just solc ->
-      "call "
-        <> view (contractName . to contractNamePart) solc
-        <> " "
-        <> maybe "[fallback function]"
-             (\x -> maybe "[unknown method]" id (maybeAbiName solc x))
-             abi
 
 drawStackPane :: UiVmState Concrete -> UiWidget
 drawStackPane ui =
@@ -698,7 +640,7 @@ drawTracePane :: Machine e => UiVmState e -> UiWidget
 drawTracePane ui =
   hBorderWithLabel (txt "Trace") <=>
     renderList
-      (\_ x -> str x)
+      (\_ x -> txt x)
       False
       (view uiVmTraceList ui)
 
@@ -752,12 +694,6 @@ ifTallEnough need w1 w2 =
     if view availHeightL c > need
       then render w1
       else render w2
-
-contractNamePart :: Text -> Text
-contractNamePart x = Text.split (== ':') x !! 1
-
-contractPathPart :: Text -> Text
-contractPathPart x = Text.split (== ':') x !! 0
 
 opWidget :: Show a => (a, Op) -> Widget n
 opWidget (i, o) = str (show i ++ " ") <+> case o of
