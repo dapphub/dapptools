@@ -60,6 +60,7 @@ type Machine e =
   , Integral (Word e)
   , Bits (Word e)
   , FiniteBits (Word e)
+  , Bounded (Word e)
   , Monoid (Memory e)
   , Monoid (Blob e)
   , IsString (Blob e)

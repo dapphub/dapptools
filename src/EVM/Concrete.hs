@@ -197,6 +197,10 @@ instance FiniteBits (Word Concrete) where
   countLeadingZeros (C _ x) = countLeadingZeros x
   countTrailingZeros (C _ x) = countTrailingZeros x
 
+instance Bounded (Word Concrete) where
+  minBound = w256 minBound
+  maxBound = w256 maxBound
+
 instance Eq (Word Concrete) where
   (C _ x) == (C _ y) = x == y
 

@@ -65,6 +65,7 @@ data Error e
   | OutOfGas
   | BadCheatCode Word32
   | StackLimitExceeded
+  | IllegalOverflow
   | Query (Query e)
 
 deriving instance Show (Error Concrete)
@@ -1191,11 +1192,14 @@ accessMemoryRange
   -> EVM e ()
 accessMemoryRange _ _ 0 continue = continue
 accessMemoryRange fees f l continue = do
-  m0 <- use (state . memorySize)
-  let m1 = 32 * ceilDiv (max m0 (num (f + l))) 32
-  burn (memoryCost fees m1 - memoryCost fees m0) $ do
-    assign (state . memorySize) m1
-    continue
+  m0 <- num <$> use (state . memorySize)
+  if f + l < l
+    then vmError IllegalOverflow
+    else do
+      let m1 = 32 * ceilDiv (max m0 (f + l)) 32
+      burn (memoryCost fees m1 - memoryCost fees m0) $ do
+        assign (state . memorySize) (num m1)
+        continue
 
 accessMemoryWord
   :: Machine e => FeeSchedule (Word e) -> Word e -> EVM e () -> EVM e ()
@@ -1520,14 +1524,16 @@ costOfCall (FeeSchedule {..}) recipient xValue availableGas xGas =
       then min xGas (allButOne64th (availableGas - c_extra))
       else xGas
 
-memoryCost :: Machine e => FeeSchedule (Word e) -> Int -> Word e
-memoryCost FeeSchedule{..} (num -> byteCount) =
+memoryCost :: Machine e => FeeSchedule (Word e) -> Word e -> Word e
+memoryCost FeeSchedule{..} byteCount =
   let
     wordCount = ceilDiv byteCount 32
     linearCost = g_memory * wordCount
     quadraticCost = div (wordCount * wordCount) 512
   in
-    linearCost + quadraticCost
+    if byteCount > exponentiate 2 16
+    then maxBound
+    else linearCost + quadraticCost
 
 -- * Arithmetic
 
