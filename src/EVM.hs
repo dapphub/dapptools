@@ -1292,7 +1292,7 @@ stackOp3 cost f =
 checkJump :: (Machine e, Integral n) => n -> [Word e] -> EVM e ()
 checkJump x xs = do
   theCode <- use (state . code)
-  if num x < BS.length theCode && BS.index theCode (num x) == 0x5b
+  if x < num (BS.length theCode) && BS.index theCode (num x) == 0x5b
     then
       insidePushData (num x) >>=
         \case
