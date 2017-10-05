@@ -567,7 +567,7 @@ exec1 = do
                   assign (state . stack) xs
                   push (w256 1)
                 else
-                  burn g_high $ do
+                  burn g_extcode $ do
                     touchAccount (num x) $ \c -> do
                       next
                       assign (state . stack) xs
