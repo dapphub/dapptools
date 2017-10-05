@@ -68,8 +68,4 @@ in rec {
       stdenv.lib.optionals stdenv.isDarwin
         (with self.pkgs; [ darwin.libobjc darwin.apple_sdk.frameworks.IOKit ]);
   });
-
-  pandoc-tangle =
-    self.pkgs.haskell.lib.justStaticExecutables
-      (haskellPackages.callPackage ./pkgs/pandoc-tangle.nix {});
 }
