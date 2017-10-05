@@ -31,6 +31,7 @@ vmForEthrunCreation creationCode =
     , vmoptNumber = 0
     , vmoptTimestamp = 0
     , vmoptGaslimit = 0
+    , vmoptGasprice = 0
     , vmoptDifficulty = 0
     , vmoptGas = 0xffffffffffffffff
     , vmoptSchedule = FeeSchedule.metropolis

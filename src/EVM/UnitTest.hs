@@ -325,6 +325,7 @@ initialUnitTestVm (UnitTestOptions {..}) theContract _ =
            , vmoptNumber = 0
            , vmoptTimestamp = 1
            , vmoptGaslimit = 0
+           , vmoptGasprice = 0
            , vmoptDifficulty = 0
            , vmoptSchedule = FeeSchedule.metropolis
            }

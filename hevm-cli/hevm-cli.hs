@@ -71,6 +71,7 @@ data Command
       , number     :: Maybe W256
       , timestamp  :: Maybe W256
       , gaslimit   :: Maybe W256
+      , gasprice   :: Maybe W256
       , difficulty :: Maybe W256
       , debug      :: Bool
       , state      :: Maybe String
@@ -249,6 +250,7 @@ vmFromCommand cmd =
       , EVM.vmoptNumber     = word number 0
       , EVM.vmoptTimestamp  = word timestamp 0
       , EVM.vmoptGaslimit   = word gaslimit 0
+      , EVM.vmoptGasprice   = word gasprice 0
       , EVM.vmoptDifficulty = word difficulty 0
       , EVM.vmoptSchedule   = FeeSchedule.metropolis
       }

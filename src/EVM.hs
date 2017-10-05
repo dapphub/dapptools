@@ -140,6 +140,7 @@ data VMOpts = VMOpts
   , vmoptCoinbase :: Addr
   , vmoptDifficulty :: W256
   , vmoptGaslimit :: W256
+  , vmoptGasprice :: W256
   , vmoptSchedule :: FeeSchedule (Word Concrete)
   } deriving Show
 
@@ -216,6 +217,7 @@ data Block e = Block
   , _number     :: Word e
   , _difficulty :: Word e
   , _gaslimit   :: Word e
+  , _gasprice   :: Word e
   , _schedule   :: FeeSchedule (Word e)
   }
 
@@ -274,6 +276,7 @@ makeVm o = VM
     , _number = w256 $ vmoptNumber o
     , _difficulty = w256 $ vmoptDifficulty o
     , _gaslimit = w256 $ vmoptGaslimit o
+    , _gasprice = w256 $ vmoptGasprice o
     , _schedule = vmoptSchedule o
     }
   , _state = FrameState
@@ -555,7 +558,7 @@ exec1 = do
 
         -- op: GASPRICE
         0x3a ->
-          burn g_base (next >> push 0)
+          burn g_base (next >> push (the block gasprice))
 
         -- op: EXTCODESIZE
         0x3b ->
