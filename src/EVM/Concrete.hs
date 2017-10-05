@@ -32,7 +32,8 @@ import qualified Data.ByteString as BS
 data Concrete
 
 wordAt :: Int -> ByteString -> W256
-wordAt i bs = word (padRight 32 (BS.drop i bs))
+wordAt i bs =
+  word (padRight 32 (BS.drop i bs))
 
 word256Bytes :: W256 -> ByteString
 word256Bytes x = BS.pack [byteAt x (31 - i) | i <- [0..31]]
@@ -105,13 +106,23 @@ instance Machine' Concrete where
     B $ byteStringSliceWithDefaultZeroes (num o) (num s) m
 
   writeMemory (B bs1) (C _ n) (C _ src) (C _ dst) (ConcreteMemory bs0) =
-    let
-      (a, b) = BS.splitAt (num dst) bs0
-      c      = BS.take (num n) (BS.drop (num src) bs1)
-      b'     = BS.drop (num n) b
-    in
-      ConcreteMemory $
-        a <> BS.replicate (num dst - BS.length a) 0 <> c <> b'
+    if src > num (BS.length bs1)
+    then
+      let
+        (a, b) = BS.splitAt (num dst) bs0
+        c      = BS.replicate (num n) 0
+        b'     = BS.drop (num n) b
+      in
+        ConcreteMemory $
+          a <> c <> b'
+    else
+      let
+        (a, b) = BS.splitAt (num dst) bs0
+        c      = BS.take (num n) (BS.drop (num src) bs1)
+        b'     = BS.drop (num n) b
+      in
+        ConcreteMemory $
+          a <> BS.replicate (num dst - BS.length a) 0 <> c <> b'
 
   readMemoryWord (C _ i) (ConcreteMemory m) =
     let
@@ -136,7 +147,9 @@ instance Machine' Concrete where
     writeMemory (B (BS.singleton x)) 1 0 (num i) m
 
   readBlobWord (C _ i) (B x) =
-    w256 (wordAt (num i) x)
+    if i > num (BS.length x)
+    then 0
+    else w256 (wordAt (num i) x)
 
   blobSize (B x) = w256 (num (BS.length x))
 

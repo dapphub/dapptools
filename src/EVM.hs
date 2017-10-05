@@ -530,10 +530,11 @@ exec1 = do
         0x37 ->
           case stk of
             ((num -> xTo) : (num -> xFrom) : (num -> xSize) :xs) -> do
-              burn (g_verylow + g_copy * ceilDiv (num xSize) 32) $ do
-                next
-                assign (state . stack) xs
-                copyBytesToMemory (the state calldata) xSize xFrom xTo
+              burn (g_verylow + g_copy * ceilDiv xSize 32) $ do
+                accessMemoryRange fees xTo xSize $ do
+                  next
+                  assign (state . stack) xs
+                  copyBytesToMemory (the state calldata) xSize xFrom xTo
             _ -> underrun
 
         -- op: CODESIZE
