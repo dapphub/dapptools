@@ -234,7 +234,8 @@ runFromVM vm = do
   let
     ui0 = UiVmState
            { _uiVm = vm
-           , _uiVmNextStep = void Stepper.execFully
+           , _uiVmNextStep =
+               void Stepper.execFully >> Stepper.evm finalize
            , _uiVmStackList = undefined
            , _uiVmBytecodeList = undefined
            , _uiVmTraceList = undefined

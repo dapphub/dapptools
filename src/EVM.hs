@@ -343,6 +343,24 @@ exec1 = do
 
     fees@(FeeSchedule {..}) = the block schedule
 
+    doStop =
+      case vm ^. frames of
+        [] ->
+          assign result (Just (VMSuccess ""))
+        (nextFrame : remainingFrames) -> do
+          popTrace
+          assign frames remainingFrames
+          assign state (view frameState nextFrame)
+          case view frameContext nextFrame of
+            CreationContext _ -> do
+              -- Move back the gas to the parent context
+              assign (state . gas) (the state gas)
+
+            CallContext _ _ _ _ _ -> do
+              -- Take back the remaining gas allowance
+              modifying (state . gas) (+ the state gas)
+          push 1
+
   if the state pc >= num (BS.length (the state code))
     then
       case view frames vm of
@@ -413,23 +431,7 @@ exec1 = do
               underrun
 
         -- op: STOP
-        0x00 ->
-          case vm ^. frames of
-            [] ->
-              assign result (Just (VMSuccess ""))
-            (nextFrame : remainingFrames) -> do
-              popTrace
-              assign frames remainingFrames
-              assign state (view frameState nextFrame)
-              case view frameContext nextFrame of
-                CreationContext _ -> do
-                  -- Move back the gas to the parent context
-                  assign (state . gas) (the state gas)
-
-                CallContext _ _ _ _ _ -> do
-                  -- Take back the remaining gas allowance
-                  modifying (state . gas) (+ the state gas)
-              push 1
+        0x00 -> doStop
 
         -- op: ADD
         0x01 -> stackOp2 (const g_verylow) (uncurry (+))
@@ -910,12 +912,13 @@ exec1 = do
           case stk of
             [] -> underrun
             (x:_) -> do
-              pushTo (tx . selfdestructs) self
-              assign (env . contracts . ix self . balance) 0
-              modifying
-                (env . contracts . ix (num x) . balance)
-                (+ (vm ^?! env . contracts . ix self . balance))
-              next
+              touchAccount (num x) $ \_ -> do
+                pushTo (tx . selfdestructs) self
+                assign (env . contracts . ix self . balance) 0
+                modifying
+                  (env . contracts . ix (num x) . balance)
+                  (+ (vm ^?! env . contracts . ix self . balance))
+                doStop
 
         -- op: REVERT
         0xfd ->
@@ -1531,7 +1534,7 @@ memoryCost FeeSchedule{..} byteCount =
     linearCost = g_memory * wordCount
     quadraticCost = div (wordCount * wordCount) 512
   in
-    if byteCount > exponentiate 2 16
+    if byteCount > exponentiate 2 32
     then maxBound
     else linearCost + quadraticCost
 
