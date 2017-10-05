@@ -23,8 +23,6 @@ import EVM.Concrete
 import EVM.Op
 import EVM.FeeSchedule (FeeSchedule (..))
 
-import Control.Monad.State.Strict hiding (state)
-
 import Data.Binary.Get (runGetOrFail)
 import Data.Bits (bit, testBit, complement)
 import Data.Bits (xor, shiftR, (.&.), (.|.), FiniteBits (..))
@@ -32,6 +30,7 @@ import Data.Text (Text)
 import Data.Word (Word8, Word32)
 
 import Control.Lens hiding (op, (:<), (|>))
+import Control.Monad.State.Strict hiding (state)
 
 import Data.ByteString              (ByteString)
 import Data.ByteString.Lazy         (fromStrict)
@@ -596,8 +595,13 @@ exec1 = do
         0x40 -> do
           -- We adopt the fake block hash scheme of the VMTests,
           -- so that blockhash(i) is the hash of i as decimal ASCII.
-          let hash = num . keccak . Char8.pack . (show :: Integer -> String) . num
-          stackOp1 (const g_blockhash) hash
+          stackOp1 (const g_blockhash) $
+            \i ->
+              if i + 256 < the block number || i >= the block number
+              then 0
+              else
+                (num i :: Integer)
+                  & show & Char8.pack & keccak & num
 
         -- op: COINBASE
         0x41 -> burn g_base (next >> push (num (the block coinbase)))
