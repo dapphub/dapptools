@@ -64,6 +64,7 @@ data Error e
   | NoSuchContract Addr
   | OutOfGas
   | BadCheatCode Word32
+  | StackLimitExceeded
   | Query (Query e)
 
 deriving instance Show (Error Concrete)
@@ -361,9 +362,10 @@ exec1 = do
           let !n = num x - 0x60 + 1
               !xs = BS.take n (BS.drop (1 + the state pc)
                                        (the state code))
-          burn g_verylow $ do
-            next
-            push (w256 (word xs))
+          limitStack 1 $
+            burn g_verylow $ do
+              next
+              push (w256 (word xs))
 
         -- op: DUP
         x | x >= 0x80 && x <= 0x8f -> do
@@ -371,9 +373,10 @@ exec1 = do
           case preview (ix (num i - 1)) stk of
             Nothing -> underrun
             Just y -> do
-              burn g_verylow $ do
-                next
-                push y
+              limitStack 1 $
+                burn g_verylow $ do
+                  next
+                  push y
 
         -- op: SWAP
         x | x >= 0x90 && x <= 0x9f -> do
@@ -400,10 +403,11 @@ exec1 = do
                     log           = Log self bytes topics
 
                 burn (g_log + g_logdata * xSize + num n * g_logtopic) $ do
-                  traceLog log
-                  next
-                  assign (state . stack) xs'
-                  pushToSequence logs log
+                  accessMemoryRange fees xOffset xSize $ do
+                    traceLog log
+                    next
+                    assign (state . stack) xs'
+                    pushToSequence logs log
             _ ->
               underrun
 
@@ -499,7 +503,8 @@ exec1 = do
 
         -- op: ADDRESS
         0x30 ->
-          burn g_base (next >> push (num (the state contract)))
+          limitStack 1 $
+            burn g_base (next >> push (num (the state contract)))
 
         -- op: BALANCE
         0x31 ->
@@ -514,20 +519,28 @@ exec1 = do
               underrun
 
         -- op: ORIGIN
-        0x32 -> burn g_base (next >> push (num (the env origin)))
+        0x32 ->
+          limitStack 1 . burn g_base $
+            next >> push (num (the env origin))
 
         -- op: CALLER
-        0x33 -> burn g_base (next >> push (num (the state caller)))
+        0x33 ->
+          limitStack 1 . burn g_base $
+            next >> push (num (the state caller))
 
         -- op: CALLVALUE
-        0x34 -> burn g_base (next >> push (the state callvalue))
+        0x34 ->
+          limitStack 1 . burn g_base $
+            next >> push (the state callvalue)
 
         -- op: CALLDATALOAD
         0x35 -> stackOp1 (const g_verylow) $
           \x -> readBlobWord x (the state calldata)
 
         -- op: CALLDATASIZE
-        0x36 -> burn g_base (next >> push (blobSize (the state calldata)))
+        0x36 ->
+          limitStack 1 . burn g_base $
+            next >> push (blobSize (the state calldata))
 
         -- op: CALLDATACOPY
         0x37 ->
@@ -542,7 +555,8 @@ exec1 = do
 
         -- op: CODESIZE
         0x38 ->
-          burn g_base (next >> push (num (BS.length (the state code))))
+          limitStack 1 . burn g_base $
+            next >> push (num (BS.length (the state code)))
 
         -- op: CODECOPY
         0x39 ->
@@ -558,7 +572,8 @@ exec1 = do
 
         -- op: GASPRICE
         0x3a ->
-          burn g_base (next >> push (the block gasprice))
+          limitStack 1 . burn g_base $
+            next >> push (the block gasprice)
 
         -- op: EXTCODESIZE
         0x3b ->
@@ -608,19 +623,29 @@ exec1 = do
                   & show & Char8.pack & keccak & num
 
         -- op: COINBASE
-        0x41 -> burn g_base (next >> push (num (the block coinbase)))
+        0x41 ->
+          limitStack 1 . burn g_base $
+            next >> push (num (the block coinbase))
 
         -- op: TIMESTAMP
-        0x42 -> burn g_base (next >> push (the block timestamp))
+        0x42 ->
+          limitStack 1 . burn g_base $
+            next >> push (the block timestamp)
 
         -- op: NUMBER
-        0x43 -> burn g_base (next >> push (the block number))
+        0x43 ->
+          limitStack 1 . burn g_base $
+            next >> push (the block number)
 
         -- op: DIFFICULTY
-        0x44 -> burn g_base (next >> push (the block difficulty))
+        0x44 ->
+          limitStack 1 . burn g_base $
+            next >> push (the block difficulty)
 
         -- op: GASLIMIT
-        0x45 -> burn g_base (next >> push (the block gaslimit))
+        0x45 ->
+          limitStack 1 . burn g_base $
+            next >> push (the block gaslimit)
 
         -- op: POP
         0x50 ->
@@ -709,18 +734,18 @@ exec1 = do
 
         -- op: PC
         0x58 ->
-          burn g_base $ next >>
-            push (num (the state pc))
+          limitStack 1 . burn g_base $
+            next >> push (num (the state pc))
 
         -- op: MSIZE
         0x59 ->
-          burn g_base $ next >>
-            push (num (the state memorySize))
+          limitStack 1 . burn g_base $
+            next >> push (num (the state memorySize))
 
         -- op: GAS
         0x5a ->
-          burn g_base $ next >>
-            push (the state gas - g_base)
+          limitStack 1 . burn g_base $
+            next >> push (the state gas - g_base)
 
         -- op: JUMPDEST
         0x5b -> burn g_jumpdest next
@@ -992,6 +1017,13 @@ loadContract target =
         assign (state . contract) target
         assign (state . code)     targetCode
         assign (state . codeContract) target
+
+limitStack :: Machine e => Int -> EVM e () -> EVM e ()
+limitStack n continue = do
+  stk <- use (state . stack)
+  if length stk + n > 1024
+    then vmError StackLimitExceeded
+    else continue
 
 burn :: Machine e => Word e -> EVM e () -> EVM e ()
 burn n continue = do
@@ -1304,12 +1336,15 @@ checkJump x xs = do
     else vmError BadJumpDestination
 
 insidePushData :: Machine e => Int -> EVM e Bool
-insidePushData i = do
+insidePushData i =
   -- If the operation index for the code pointer is the same
   -- as for the previous code pointer, then it's inside push data.
-  self <- use (state . codeContract)
-  Just x <- preuse (env . contracts . ix self . opIxMap)
-  return (i == 0 || (x Vector.! i) == (x Vector.! (i - 1)))
+  if i == 0
+    then pure False
+    else do
+      self <- use (state . codeContract)
+      Just x <- preuse (env . contracts . ix self . opIxMap)
+      pure ((x Vector.! i) == (x Vector.! (i - 1)))
 
 opSize :: Word8 -> Int
 opSize x | x >= 0x60 && x <= 0x7f = num x - 0x60 + 2
