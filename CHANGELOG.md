@@ -1,5 +1,10 @@
 # hevm changelog
 
+## [0.9.5] - 2017-10-06
+ - Prototype of new trace output with `hevm dapp-test --verbose`
+ - Nicer trace tree in the TTY debugger
+ - Many fixes to improve Ethereum test suite compliance
+
 ## [0.9] - 2017-09-29
  - Integrates with live chains via RPC (read-only)
  - Exposes a special contract address with test-related functionality (time warp)
