@@ -42,12 +42,13 @@ in rec {
     packageOverrides = (import ./python.nix { pkgs = super.pkgs; });
   };
 
-  hevm =
-    self.pkgs.haskell.lib.justStaticExecutables
-      (haskellPackages.callPackage ./pkgs/hevm.nix {});
+  hevm = import ./pkgs/hevm.nix {
+    pkgs = self.pkgs // { inherit haskellPackages; };
+  };
 
-  hevm-profiling =
-    profilingHaskellPackages.callPackage ./pkgs/hevm.nix {};
+  hevm-profiling = import ./pkgs/hevm.nix {
+    pkgs = self.pkgs // { haskellPackages = profilingHaskellPackages; };
+  };
 
   seth   = callPackage ./pkgs/seth.nix {};
   dapp   = callPackage ./pkgs/dapp.nix {};
