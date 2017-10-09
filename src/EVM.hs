@@ -773,53 +773,58 @@ exec1 = do
         -- op: CREATE
         0xf0 -> do
           case stk of
-            (xValue:_:_:_) | xValue > view balance this -> do
-              vmError (BalanceTooLow (view balance this) xValue)
-
             (xValue:xOffset:xSize:xs) ->
               burn g_create $ do
                 accessMemoryRange fees xOffset xSize $ do
-                  let newAddr = newContractAddress self (forceConcreteWord (view nonce this))
-                  case view execMode vm of
-                    ExecuteAsVMTest -> do
-                      assign (state . stack) (num newAddr : xs)
+                  if xValue > view balance this
+                    then do
+                      assign (state . stack) (0 : xs)
                       next
-
-                    ExecuteNormally -> do
+                    else do
                       let
-                        newCode     = forceConcreteBlob $ readMemory (num xOffset) (num xSize) vm
-                        newContract = initialContract newCode
-                        newContext  = CreationContext (view codehash newContract)
+                        newAddr =
+                          newContractAddress self (forceConcreteWord (view nonce this))
+                      case view execMode vm of
+                        ExecuteAsVMTest -> do
+                          assign (state . stack) (num newAddr : xs)
+                          next
 
-                      zoom (env . contracts) $ do
-                        assign (at newAddr) (Just newContract)
-                        modifying (ix self . nonce) succ
-                        modifying (ix self . balance) (flip (-) xValue)
+                        ExecuteNormally -> do
+                          let
+                            newCode =
+                              forceConcreteBlob $ readMemory (num xOffset) (num xSize) vm
+                            newContract =
+                              initialContract newCode
+                            newContext  =
+                              CreationContext (view codehash newContract)
 
-                      pushTrace (FrameTrace newContext)
-                      next
-                      vm' <- get
-                      pushTo frames $ Frame
-                        { _frameContext = newContext
-                        , _frameState   = (set stack xs) (view state vm')
-                        }
+                          zoom (env . contracts) $ do
+                            assign (at newAddr) (Just newContract)
+                            modifying (ix self . nonce) succ
+                            modifying (ix self . balance) (flip (-) xValue)
 
-                      assign state $
-                        blankState
-                          & set contract   newAddr
-                          & set codeContract newAddr
-                          & set code       newCode
-                          & set callvalue  xValue
-                          & set caller     self
-                          & set gas        (view (state . gas) vm')
+                          pushTrace (FrameTrace newContext)
+                          next
+                          vm' <- get
+                          pushTo frames $ Frame
+                            { _frameContext = newContext
+                            , _frameState   = (set stack xs) (view state vm')
+                            }
+
+                          assign state $
+                            blankState
+                              & set contract   newAddr
+                              & set codeContract newAddr
+                              & set code       newCode
+                              & set callvalue  xValue
+                              & set caller     self
+                              & set gas        (view (state . gas) vm')
 
             _ -> underrun
 
         -- op: CALL
         0xf1 ->
           case stk of
-            (_:_:xValue:_:_:_:_:_) | xValue > view balance this -> do
-              vmError (BalanceTooLow (view balance this) xValue)
             ( xGas
               : (num -> xTo)
               : xValue
@@ -834,20 +839,25 @@ exec1 = do
                 recipient    = view (env . contracts . at xTo) vm
                 (cost, gas') = costOfCall fees recipient xValue availableGas xGas
               burn (cost - gas') $
-                case view execMode vm of
-                  ExecuteAsVMTest -> do
-                    assign (state . stack) (1 : xs)
-                    next
-                  ExecuteNormally -> do
-                    delegateCall fees gas' xTo xInOffset xInSize xOutOffset xOutSize xs $ do
-                      zoom state $ do
-                        assign callvalue xValue
-                        assign caller (the state contract)
-                        assign contract xTo
-                        assign memorySize 0
-                      zoom (env . contracts) $ do
-                        ix self . balance -= xValue
-                        ix xTo  . balance += xValue
+                if xValue > view balance this
+                then do
+                  assign (state . stack) (0 : xs)
+                  next
+                else
+                  case view execMode vm of
+                    ExecuteAsVMTest -> do
+                      assign (state . stack) (1 : xs)
+                      next
+                    ExecuteNormally -> do
+                      delegateCall fees gas' xTo xInOffset xInSize xOutOffset xOutSize xs $ do
+                        zoom state $ do
+                          assign callvalue xValue
+                          assign caller (the state contract)
+                          assign contract xTo
+                          assign memorySize 0
+                        zoom (env . contracts) $ do
+                          ix self . balance -= xValue
+                          ix xTo  . balance += xValue
             _ ->
               underrun
 
