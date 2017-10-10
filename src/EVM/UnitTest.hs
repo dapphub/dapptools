@@ -147,7 +147,7 @@ interpret opts =
 
 
 runUnitTestContract ::
-  UnitTestOptions -> Map Text SolcContract -> SourceCache -> (Text, [Text]) -> IO ()
+  UnitTestOptions -> Map Text SolcContract -> SourceCache -> (Text, [Text]) -> IO Bool
 runUnitTestContract
   opts@(UnitTestOptions {..}) contractMap sources (name, testNames) = do
 
@@ -190,13 +190,12 @@ runUnitTestContract
         runParIO (mapM runOne testNames >>= mapM Par.get)
           >>= mapM (\(x, y) -> tick x >> pure y)
 
-      tick "\n"
+      let fails = [x | Left x <- details]
 
-      if verbose then do
-        tick "\n"
-        tick (Text.unlines [x | Left x <- details])
-        tick "\n"
-      else pure ()
+      tick "\n\n"
+      tick (Text.unlines fails)
+
+      pure (null fails)
 
 indentLines :: Int -> Text -> Text
 indentLines n s =

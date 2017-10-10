@@ -35,14 +35,14 @@ import qualified Paths_hevm as Paths
 import Control.Concurrent.Async   (async, waitCatch)
 import Control.Exception          (evaluate)
 import Control.Lens
-import Control.Monad              (void)
+import Control.Monad              (void, when)
 import Control.Monad.State.Strict (execState)
 import Data.ByteString            (ByteString)
 import Data.List                  (intercalate, isSuffixOf)
 import Data.Text                  (Text)
 import Data.Maybe                 (fromMaybe)
 import System.Directory           (withCurrentDirectory, listDirectory)
-import System.Exit                (die)
+import System.Exit                (die, exitFailure)
 import System.IO                  (hFlush, stdout)
 import System.Process             (callProcess)
 import System.Timeout             (timeout)
@@ -195,7 +195,8 @@ dappTest opts _ solcFile = do
     \case
       Just (contractMap, cache) -> do
         let unitTests = findUnitTests (Map.elems contractMap)
-        mapM_ (runUnitTestContract opts contractMap cache) unitTests
+        results <- mapM (runUnitTestContract opts contractMap cache) unitTests
+        when (any (== False) results) exitFailure
       Nothing ->
         error ("Failed to read Solidity JSON for `" ++ solcFile ++ "'")
 
