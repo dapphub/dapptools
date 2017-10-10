@@ -12,8 +12,8 @@ import EVM.Format
 import EVM.Keccak
 import EVM.Solidity
 import EVM.Types
-import EVM.Machine (blob, w256, forceConcreteBlob, forceConcreteWord)
-import EVM.Concrete (Concrete, Blob (B), Word (), wordAt)
+import EVM.Machine (blob, w256, forceConcreteBlob)
+import EVM.Concrete (Concrete, Blob (B), wordAt)
 
 import qualified EVM.FeeSchedule as FeeSchedule
 
@@ -21,29 +21,28 @@ import EVM.Stepper (Stepper)
 import qualified EVM.Stepper as Stepper
 import qualified Control.Monad.Operational as Operational
 
-import Control.Lens
+import Control.Lens hiding (Indexed)
 import Control.Monad.State.Strict hiding (state)
 import qualified Control.Monad.State.Strict as State
 
 import Control.Monad.Par.Class (spawn_)
 import Control.Monad.Par.IO (runParIO)
 
-import Data.Binary.Get    (runGetOrFail)
 import Data.ByteString    (ByteString)
 import Data.Foldable      (toList)
 import Data.Map           (Map)
-import Data.Maybe         (fromMaybe)
+import Data.Maybe         (fromMaybe, catMaybes)
 import Data.Monoid        ((<>))
 import Data.Text          (Text, unpack, isPrefixOf, stripSuffix, intercalate)
-import Data.Text.Encoding (encodeUtf8, decodeUtf8)
+import Data.Text.Encoding (encodeUtf8)
 import Data.Word          (Word32)
 import System.IO          (hFlush, stdout)
 
 import qualified Control.Monad.Par.Class as Par
 import qualified Data.ByteString as BS
-import qualified Data.ByteString.Lazy as LazyByteString
 import qualified Data.Map as Map
 import qualified Data.Sequence as Seq
+import qualified Data.Text as Text
 import qualified Data.Text.IO as Text
 
 data UnitTestOptions = UnitTestOptions
@@ -182,9 +181,9 @@ runUnitTestContract
               (interpret opts (runUnitTest opts testName))
               vm1
           case x of
-             (Right True,  vm) -> pure (".", passOutput vm testName theContract)
-             (Right False, vm) -> pure ("F", failOutput vm dapp testName theContract)
-             (Left _, _)       -> pure ("E", "\n")
+             (Right True,  vm) -> pure (".", Right (passOutput vm testName))
+             (Right False, vm) -> pure ("F", Left (failOutput vm dapp testName))
+             (Left _, _)       -> pure ("E", Left "\n")
 
       -- Run all the test cases in parallel and print their status updates
       details <-
@@ -195,30 +194,36 @@ runUnitTestContract
 
       if verbose then do
         tick "\n"
-        tick (intercalate "\n" details)
+        tick (Text.unlines [x | Left x <- details])
         tick "\n"
       else pure ()
 
-passOutput :: VM Concrete -> Text -> SolcContract -> Text
-passOutput _ testName _ = "[PASS] " <> testName
+indentLines :: Int -> Text -> Text
+indentLines n s =
+  let p = Text.replicate n " "
+  in Text.unlines (map (p <>) (Text.lines s))
 
-failOutput :: VM Concrete -> DappInfo -> Text -> SolcContract -> Text
-failOutput vm dapp testName theContract = mconcat $
+passOutput :: VM Concrete -> Text -> Text
+passOutput _ testName = "[PASS] " <> testName
+
+failOutput :: VM Concrete -> DappInfo -> Text -> Text
+failOutput vm dapp testName = mconcat $
   [ "[FAIL] "
   , fromMaybe "" (stripSuffix "()" testName)
   , "\n"
-  , formatTestLogs (view eventMap theContract) (view logs vm)
+  , indentLines 2 (formatTestLogs (view dappEventMap dapp) (view logs vm))
+  , indentLines 2 (showTraceTree dapp vm)
   , "\n"
-  , showTraceTree dapp vm
   ]
 
-
 formatTestLogs :: Map W256 Event -> Seq.Seq (Log Concrete) -> Text
-formatTestLogs events =
-  intercalate "\n" . toList . fmap (formatTestLog events)
+formatTestLogs events xs =
+  case catMaybes (toList (fmap (formatTestLog events) xs)) of
+    [] -> "\n"
+    ys -> "\n" <> intercalate "\n" ys <> "\n\n"
 
-formatTestLog :: Map W256 Event -> Log Concrete -> Text
-formatTestLog _ (Log _ _ [])    = ""
+formatTestLog :: Map W256 Event -> Log Concrete -> Maybe Text
+formatTestLog _ (Log _ _ []) = Nothing
 formatTestLog events (Log _ b (t:_)) =
   let
     name  = getEventName event
@@ -228,17 +233,17 @@ formatTestLog events (Log _ b (t:_)) =
   in case name of
 
     "log_bytes32" ->
-      formatBytes args
+      Just $ formatBytes args
 
     "log_named_bytes32" ->
       let key = BS.take 32 args
           val = BS.drop 32 args
-      in formatString key <> ": " <> formatBytes val
+      in Just $ formatString key <> ": " <> formatBytes val
 
     "log_named_address" ->
       let key = BS.take 32 args
           val = BS.drop 44 args
-      in formatString key <> ": " <> formatBinary val
+      in Just $ formatString key <> ": " <> formatBinary val
 
   -- TODO: event log_named_decimal_int  (bytes32 key, int val, uint decimals);
   -- TODO: event log_named_decimal_uint (bytes32 key, uint val, uint decimals);
@@ -246,59 +251,15 @@ formatTestLog events (Log _ b (t:_)) =
     "log_named_int" ->
       let key = BS.take 32 args
           val = wordAt 32 args
-      in formatString key <> ": " <> showDec Signed val
+      in Just $ formatString key <> ": " <> showDec Signed val
 
     "log_named_uint" ->
       let key = BS.take 32 args
           val = wordAt 32 args
-      in formatString key <> ": " <> showDec Unsigned val
+      in Just $ formatString key <> ": " <> showDec Unsigned val
 
     _ ->
-      formatLog event args
-
--- TODO: formatTrace equivalent (via printFailure), except allow show trace
--- when passing as well
-formatTrace :: Map W256 Event -> Either (Log Concrete) (FrameContext Concrete) -> Text
-formatTrace _ trace =
-  case trace of
-    -- TODO: use formatLog and don't drop tail
-    Left _ -> ""
-    Right _ -> ""
-
--- TODO: this should take Log
-formatLog :: Maybe Event -> ByteString -> Text
-formatLog event args =
-  let types = getEventTypes event
-      name  = getEventName event
-  in
-  case runGetOrFail (getAbiSeq (length types) types)
-                      (LazyByteString.fromStrict args) of
-                    Right (_, _, abivals) ->
-                      mconcat
-                        [ "\x1b[36m←"
-                        , name
-                        , showAbiValues abivals
-                        , "\x1b[0m"
-                        ]
-                    Left (_,_,_) ->
-                      error "lol"
-
-getEvent :: EVM.Concrete.Word Concrete -> Map W256 Event -> Maybe Event
-getEvent w events = Map.lookup (forceConcreteWord w) events
-
-getEventName :: Maybe Event -> Text
-getEventName (Just (Event name _ _)) = name
-getEventName Nothing = "<unknown-event>"
-
-getEventTypes :: Maybe Event -> [AbiType]
-getEventTypes Nothing = []
-getEventTypes (Just (Event _ _ xs)) = map fst xs
-
-getEventArgs :: Blob Concrete -> Text
-getEventArgs b = formatBlob b
-
-formatBlob :: Blob Concrete -> Text
-formatBlob b = decodeUtf8 $ forceConcreteBlob b
+      Nothing
 
 word32Bytes :: Word32 -> ByteString
 word32Bytes x = BS.pack [byteAt x (3 - i) | i <- [0..3]]

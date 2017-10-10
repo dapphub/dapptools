@@ -4,19 +4,23 @@ import Prelude hiding (Word)
 
 import EVM (VM, cheatCode, traceForest, traceData)
 import EVM (Trace, TraceData (..), Log (..), Query (..), FrameContext (..))
-import EVM.Dapp (DappInfo, dappSolcByHash, showTraceLocation)
-import EVM.Concrete (Concrete, Word (..))
+import EVM.Dapp (DappInfo, dappSolcByHash, showTraceLocation, dappEventMap)
+import EVM.Concrete (Concrete, Word (..), Blob (..))
 import EVM.Types (W256 (..), num)
-import EVM.ABI (AbiValue (..))
+import EVM.ABI (AbiValue (..), Event (..), AbiType (..))
+import EVM.ABI (Indexed (Indexed, NotIndexed), getAbiSeq)
 import EVM.Solidity (SolcContract, contractName, abiMap)
+import EVM.Machine (forceConcreteBlob, forceConcreteWord)
 
 import Control.Arrow ((>>>))
 import Control.Lens (view, preview, ix, _2, to)
+import Data.Binary.Get (runGetOrFail)
 import Data.ByteString (ByteString)
 import Data.ByteString.Builder (byteStringHex, toLazyByteString)
-import Data.ByteString.Lazy (toStrict)
+import Data.ByteString.Lazy (toStrict, fromStrict)
 import Data.DoubleWord (signedWord)
 import Data.Foldable (toList)
+import Data.Map (Map)
 import Data.Monoid ((<>))
 import Data.Text (Text, pack, unpack, intercalate)
 import Data.Text.Encoding (decodeUtf8, decodeUtf8')
@@ -25,7 +29,9 @@ import Data.Vector (Vector)
 
 import Numeric (showHex)
 
+import qualified Data.ByteString as BS
 import qualified Data.Char as Char
+import qualified Data.Map as Map
 import qualified Data.Scientific as Scientific
 import qualified Data.Text as Text
 
@@ -91,14 +97,18 @@ isPrintable =
       (Text.all (not . Char.isControl))
 
 formatBytes :: ByteString -> Text
-formatBytes b | isPrintable b = formatQString b
-              | otherwise     = formatBinary b
+formatBytes b =
+  let (s, _) = BS.spanEnd (== 0) b
+  in
+    if isPrintable s
+    then formatQString s
+    else formatBinary b
 
 formatQString :: ByteString -> Text
 formatQString = pack . show
 
 formatString :: ByteString -> Text
-formatString = decodeUtf8
+formatString bs = decodeUtf8 (fst (BS.spanEnd (== 0) bs))
 
 formatBinary :: ByteString -> Text
 formatBinary =
@@ -116,11 +126,17 @@ showTrace dapp trace =
   let
     pos =
       case showTraceLocation dapp trace of
-        Left x -> " \x1b[90mm" <> x <> "\x1b[0m"
+        Left x -> " \x1b[90m" <> x <> "\x1b[0m"
         Right x -> " \x1b[90m(" <> x <> ")\x1b[0m"
   in case view traceData trace of
-    EventTrace (Log _ _bytes _topics) ->
-      "log" <> pos
+    EventTrace (Log _ bytes topics) ->
+      case topics of
+        (t:_) ->
+          formatLog
+            (getEvent t (view dappEventMap dapp))
+            (forceConcreteBlob bytes) <> pos
+        _ ->
+          "log" <> pos
     QueryTrace q ->
       case q of
         PleaseFetchContract addr _ ->
@@ -128,7 +144,7 @@ showTrace dapp trace =
         PleaseFetchSlot addr slot _ ->
           "fetch storage slot " <> pack (show slot) <> " from " <> pack (show addr) <> pos
     ErrorTrace e ->
-      "error " <> pack (show e) <> pos
+      "\x1b[91merror\x1b[0m " <> pack (show e) <> pos
     EntryTrace t ->
       t
     FrameTrace (CreationContext hash) ->
@@ -139,11 +155,13 @@ showTrace dapp trace =
           "call [unknown]" <> pos
         Just solc ->
           "call "
+            <> "\x1b[1m"
             <> view (contractName . to contractNamePart) solc
-            <> " "
+            <> "::"
             <> maybe "[fallback function]"
                  (\x -> maybe "[unknown method]" id (maybeAbiName solc x))
                  abi
+            <> "\x1b[0m"
             <> pos
 
 maybeContractName :: Maybe SolcContract -> Text
@@ -158,3 +176,42 @@ contractNamePart x = Text.split (== ':') x !! 1
 
 contractPathPart :: Text -> Text
 contractPathPart x = Text.split (== ':') x !! 0
+
+-- TODO: this should take Log
+formatLog :: Maybe Event -> ByteString -> Text
+formatLog event args =
+  let types = getEventUnindexedTypes event
+      name  = getEventName event
+  in
+  case runGetOrFail (getAbiSeq (length types) types)
+                      (fromStrict args) of
+                    Right (_, _, abivals) ->
+                      mconcat
+                        [ "\x1b[36m"
+                        , name
+                        , showAbiValues abivals
+                        , "\x1b[0m"
+                        ]
+                    Left (_,_,_) ->
+                      error "lol"
+
+getEvent :: Word Concrete -> Map W256 Event -> Maybe Event
+getEvent w events = Map.lookup (forceConcreteWord w) events
+
+getEventName :: Maybe Event -> Text
+getEventName (Just (Event name _ _)) = name
+getEventName Nothing = "<unknown-event>"
+
+getEventUnindexedTypes :: Maybe Event -> [AbiType]
+getEventUnindexedTypes Nothing = []
+getEventUnindexedTypes (Just (Event _ _ xs)) = [x | (x, NotIndexed) <- xs]
+
+getEventIndexedTypes :: Maybe Event -> [AbiType]
+getEventIndexedTypes Nothing = []
+getEventIndexedTypes (Just (Event _ _ xs)) = [x | (x, Indexed) <- xs]
+
+getEventArgs :: Blob Concrete -> Text
+getEventArgs b = formatBlob b
+
+formatBlob :: Blob Concrete -> Text
+formatBlob b = decodeUtf8 $ forceConcreteBlob b

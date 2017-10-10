@@ -3,13 +3,14 @@
 module EVM.Dapp where
 
 import EVM (Trace, traceCodehash, traceOpIx)
+import EVM.ABI (Event)
 import EVM.Debug (srcMapCodePos)
 import EVM.Keccak (abiKeccak)
 import EVM.Machine (Machine)
 import EVM.Solidity (SolcContract, CodeType (..), SourceCache, SrcMap)
 import EVM.Solidity (contractName)
 import EVM.Solidity (runtimeCodehash, creationCodehash, abiMap)
-import EVM.Solidity (runtimeSrcmap, creationSrcmap)
+import EVM.Solidity (runtimeSrcmap, creationSrcmap, eventMap)
 import EVM.Types (W256)
 
 import Data.Text (Text, isPrefixOf, pack)
@@ -29,6 +30,7 @@ data DappInfo = DappInfo
   , _dappSolcByHash :: Map W256 (CodeType, SolcContract)
   , _dappSources    :: SourceCache
   , _dappUnitTests  :: [(Text, [Text])]
+  , _dappEventMap   :: Map W256 Event
   } deriving Eq
 
 makeLenses ''DappInfo
@@ -51,6 +53,10 @@ dappInfo root solcByName sources =
           mappend
            (f runtimeCodehash  Runtime)
            (f creationCodehash Creation)
+
+    , _dappEventMap =
+        -- Sum up the event ABI maps from all the contracts.
+        mconcat (map (view eventMap) solcs)
     }
 
 unitTestMarkerAbi :: Word32
