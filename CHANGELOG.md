@@ -1,5 +1,10 @@
 # hevm changelog
 
+## [0.10] - 2017-10-10
+ - Enable new trace output by default for failing tests
+ - Exit with failure code from test runner when tests fail
+ - More fixes to improve Ethereum test suite compliance
+
 ## [0.9.5] - 2017-10-06
  - Prototype of new trace output with `hevm dapp-test --verbose`
  - Nicer trace tree in the TTY debugger
