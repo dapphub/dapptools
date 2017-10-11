@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -e
+shopt -s globstar
 
 sender=0x00a329c0648769a73afac7f9381e08fb43dbea72
 nonce=1048576
@@ -17,7 +18,7 @@ for lib in "${libraries[@]}"; do
   ((nonce++))
 done
 
-(set -x; solc --link --libraries "$links" "${DAPP_OUT?}"/*.bin)
+(set -x; solc --link --libraries "$links" "${DAPP_OUT?}"/**/*.bin)
 
 # pass the library bin files through to ethrun
 # (needs to be exact same order as above for nonces)
