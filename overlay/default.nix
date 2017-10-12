@@ -50,6 +50,13 @@ in rec {
     pkgs = self.pkgs // { haskellPackages = profilingHaskellPackages; };
   };
 
+  jays = import ./pkgs/jays.nix {
+    inherit (self) pkgs;
+  };
+
+  # Override buggy jshon program with Haskell-based replacement
+  jshon = jays;
+
   seth   = callPackage ./pkgs/seth.nix {};
   dapp   = callPackage ./pkgs/dapp.nix {};
   setzer = callPackage ./pkgs/setzer.nix {};
