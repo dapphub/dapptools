@@ -59,6 +59,9 @@ tests = testGroup "jays"
   , testCase "Across" $ do
       good "[1,null]" "-a -t" "number\nnull"
 
+  , testCase "Length" $ do
+      good "[1,2]" "-n 3 -i append -l" "3"
+
   , testCase "Errors" $ do
       jays "" ["-n", "2", "-i", "foo"] @?= ("error in -i", False)
       jays "" ["-Q", "-n", "2", "-i", "foo"] @?= ("", False)

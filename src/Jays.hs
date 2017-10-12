@@ -22,6 +22,7 @@ data Op
   | OpKeys
   | OpUnstring
   | OpAcross [Op]
+  | OpLength
 
 parse :: [ByteString] -> Either Text [Op]
 parse =
@@ -89,6 +90,9 @@ parse =
 
     ("-a" : xs) ->
       parse xs >>= \x -> pure [OpAcross x]
+
+    ("-l" : xs) ->
+      (OpLength :) <$> parse xs
 
     _ ->
       Left "unrecognized syntax"
@@ -163,3 +167,8 @@ work stk ops =
       Left "-a only for arrays"
     (_, OpAcross _ : _) ->
       Left "-a only at the end"
+
+    (Array o : xs, OpLength : ops') ->
+      work (Number (fromIntegral (length o)) : xs) ops'
+    (_, OpLength : _) ->
+      Left "error in -l"

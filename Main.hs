@@ -22,7 +22,7 @@ main = do
   if args == ["--version"]
     then
       -- This is just for compatibility with jshon versioning
-      putStrLn "20171012"
+      putStrLn "20171013"
     else
       case jays input (map pack args) of
         (output, succeeded) -> do
