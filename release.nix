@@ -8,6 +8,7 @@ let
 in rec {
   dapphub-linux = with linux.pkgs; {
     inherit dapp;
+    inherit seth;
     inherit hevm;
     inherit hevm-profiling;
     inherit keeper;
@@ -18,6 +19,7 @@ in rec {
 
   dapphub-darwin = with darwin.pkgs; {
     inherit dapp;
+    inherit seth;
     inherit hevm;
     # inherit hevm-profiling;
     # inherit keeper;
