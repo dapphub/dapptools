@@ -3,7 +3,7 @@
 }:
 mkDerivation {
   pname = "jays";
-  version = "0.20171013";
+  version = "0.20171014";
   src = ./.;
   isLibrary = true;
   isExecutable = true;
