@@ -40,6 +40,11 @@ tests = testGroup "jays"
       good "" "-n [] -n 1 -i append" "[1]"
       good "[0,1]" "-n 2 -i append" "[0,1,2]"
 
+  , testCase "Extract from object" $ do
+      good "" "-n {} -n 1 -i a -e a" "1"
+  , testCase "Extract from array" $ do
+      good "[1,2,3]" "-e 1" "2"
+
   , testCase "Get type" $ do
       good "1" "-t" "number"
       good "\"x\"" "-t" "string"

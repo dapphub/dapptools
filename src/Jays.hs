@@ -1,6 +1,7 @@
 {-# Language LambdaCase #-}
-{-# Language ViewPatterns #-}
 {-# Language OverloadedStrings #-}
+{-# Language ScopedTypeVariables #-}
+{-# Language ViewPatterns #-}
 
 module Jays where
 
@@ -8,9 +9,11 @@ import Data.Aeson
 import Data.ByteString.Lazy (ByteString)
 import Data.ByteString.Lazy (fromStrict, toStrict)
 import Data.Foldable (toList)
-import Data.Text (Text)
+import Data.Monoid ((<>))
+import Data.Text (Text, pack, unpack)
 import Data.Text.Encoding (encodeUtf8, decodeUtf8)
-import Data.Vector (snoc)
+import Data.Vector (snoc, (!))
+import Text.Read (readMaybe)
 
 import qualified Data.ByteString.Lazy as BS
 import qualified Data.HashMap.Lazy as Map
@@ -18,6 +21,7 @@ import qualified Data.HashMap.Lazy as Map
 data Op
   = OpNewValue Value
   | OpInsert Text
+  | OpExtract Text
   | OpType
   | OpKeys
   | OpUnstring
@@ -65,6 +69,9 @@ parse =
 
     ("-i" : _) ->
       Left "unrecognized -i argument"
+
+    ("-e" : (decodeUtf8 . toStrict -> t) : xs) ->
+      (OpExtract t :) <$> parse xs
 
     ("-s" : (decodeUtf8 . toStrict -> t) : xs) ->
       (OpNewValue (String t) :) <$> parse xs
@@ -137,6 +144,23 @@ work stk ops =
       Left "error in -i append"
     (_, OpInsert _ : _) ->
       Left "error in -i"
+
+    (Object o : xs, OpExtract k : ops') ->
+      case Map.lookup k o of
+        Nothing ->
+          Left ("error in -e: no such key: " <> k)
+        Just x ->
+          work (x:xs) ops'
+
+    (Array a : xs, OpExtract ((readMaybe . unpack) -> Just (i :: Int)) : ops') ->
+      if i >= length a
+      then
+        Left ("error in -e: array index out of bounds: " <> pack (show i))
+      else
+        work ((a ! i) : xs) ops'
+
+    (_, OpExtract _ : _) ->
+      Left "error in -e"
 
     (v : xs, OpType : ops') ->
       let t = case v of
