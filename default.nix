@@ -1,5 +1,5 @@
 { mkDerivation, aeson, base, bytestring, containers, HUnit, stdenv
-, tasty, tasty-hunit, text, unordered-containers, vector
+, tasty, tasty-hunit, text, unix, unordered-containers, vector
 }:
 mkDerivation {
   pname = "jays";
@@ -10,7 +10,7 @@ mkDerivation {
   libraryHaskellDepends = [
     aeson base bytestring containers text unordered-containers vector
   ];
-  executableHaskellDepends = [ base bytestring text ];
+  executableHaskellDepends = [ base bytestring text unix ];
   testHaskellDepends = [
     aeson base bytestring HUnit tasty tasty-hunit text
   ];

@@ -32,7 +32,8 @@ executable jays
     base == 4.*,
     jays,
     bytestring,
-    text
+    text,
+    unix
     
 test-suite test
   default-language: Haskell2010
