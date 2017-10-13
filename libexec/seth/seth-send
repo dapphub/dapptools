@@ -15,6 +15,7 @@
 ###
 ### With `--async', print the transaction hash and exit immediately.
 ### With `--create', print the address of the newly created object.
+### With `--resend', force current nonce to overwrite a pending transaction.
 ### With <to>, print an educated guess of the call's return value.
 ### Note: The return value will be wrong if other transactions interfere.
 ###
@@ -26,6 +27,7 @@ set -e
 seth --fail "${0##*/}: error: \`ETH_FROM' not set; send from which account?"
 [[ $ETH_GAS ]] ||
 echo >&2 "${0##*/}: warning: \`ETH_GAS' not set; using default gas amount"
+[[ $SETH_RESEND ]] && ETH_NONCE=$(seth nonce "$ETH_FROM")
 
 if [[ $SETH_CREATE ]]; then
   DATA=$(seth --to-hexdata "$1")
