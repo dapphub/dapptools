@@ -55,15 +55,15 @@ import "./$type.sol";
 contract ${type}Test is DSTest {
     $type $noun;
 
-    function setUp() {
+    function setUp() public {
         $noun = new $type();
     }
 
-    function testFail_basic_sanity() {
+    function testFail_basic_sanity() public {
         assertTrue(false);
     }
 
-    function test_basic_sanity() {
+    function test_basic_sanity() public {
         assertTrue(true);
     }
 }
