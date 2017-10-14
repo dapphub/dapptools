@@ -149,7 +149,7 @@ showTrace dapp trace =
       t
     FrameTrace (CreationContext hash) ->
       "create " <> maybeContractName (preview (dappSolcByHash . ix hash . _2) dapp) <> pos
-    FrameTrace (CallContext _ _ hash abi _) ->
+    FrameTrace (CallContext _ _ hash abi _ _) ->
       case preview (dappSolcByHash . ix hash . _2) dapp of
         Nothing ->
           "call [unknown]" <> pos
