@@ -54,8 +54,8 @@ in rec {
     inherit (self) pkgs;
   };
 
-  # Override buggy jshon program with Haskell-based replacement
-  jshon = jays;
+  # # Override buggy jshon program with Haskell-based replacement
+  # jshon = jays;
 
   seth   = callPackage ./pkgs/seth.nix {};
   dapp   = callPackage ./pkgs/dapp.nix {};
