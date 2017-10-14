@@ -11,9 +11,32 @@ while showing the Solidity source, or run arbitrary EVM code.
 *This is not yet a complete EVM*.  For example, the precompiled
 contracts are missing.  We do well on Ethereum's `VMTests` suite (see
 [hevm v0.10 test report]) but we can't guarantee exact
-consensus conformance.
+consensus conformance.  The precompiled contracts are entirely missing
+for now, and we're in the process of implementing the Metropolis EIPs.
 
-[![asciicast](https://asciinema.org/a/5j8eec71hl55l16hsbrn91j8e.png)](https://asciinema.org/a/5j8eec71hl55l16hsbrn91j8e)
+[![asciicast](https://asciinema.org/a/dTPBLV10gixo62ngiSFTK2dVu.png)](https://asciinema.org/a/dTPBLV10gixo62ngiSFTK2dVu)
+
+## Usage
+
+Note: the `hevm` test runner and debugger currently assumes the use of
+the `ds-test` framework for Solidity unit tests and the [`dapp` tool
+suite](https://github.com/dapphub/dapp).
+
+After running `dapp build`, you can run your unit test suite with
+
+    $ hevm dapp-test
+
+or you can enter the interactive debugger using
+
+    $ hevm interactive
+
+### Debugger key bindings
+
+  - `Esc`: exit debugger
+  - `n`: step by one instruction
+  - `p`: step backwards by one instruction
+  - `N`: step to the next source position
+  - `C-n`: step to the next source position and don't enter `CALL` or `CREATE`
 
 ## Installing
 
@@ -63,21 +86,6 @@ Haskell package manager, Cabal, simply run:
 
     $ git clone https://github.com/dapphub/hevm
     $ cd hevm && cabal configure && cabal install
-
-## Running
-
-At this moment, the `hevm` command line interface is mostly useful
-with contracts developed using the
-[`dapp` tool suite](https://github.com/dapphub/dapp) along with the
-`ds-test` unit testing framework.
-
-After running `dapp build`, you can run your unit test suite with
-
-    $ hevm dapp-test
-
-or you can enter the interactive debugger using
-
-    $ hevm interactive
 
 ## Contact
 
