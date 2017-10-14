@@ -9,6 +9,7 @@ import EVM.Concrete (Concrete, Word (..), Blob (..))
 import EVM.Types (W256 (..), num)
 import EVM.ABI (AbiValue (..), Event (..), AbiType (..))
 import EVM.ABI (Indexed (Indexed, NotIndexed), getAbiSeq)
+import EVM.ABI (parseTypeName)
 import EVM.Solidity (SolcContract, contractName, abiMap)
 import EVM.Machine (forceConcreteBlob, forceConcreteWord)
 
@@ -21,8 +22,10 @@ import Data.ByteString.Lazy (toStrict, fromStrict)
 import Data.DoubleWord (signedWord)
 import Data.Foldable (toList)
 import Data.Map (Map)
+import Data.Maybe (catMaybes)
 import Data.Monoid ((<>))
 import Data.Text (Text, pack, unpack, intercalate)
+import Data.Text (dropEnd, splitOn)
 import Data.Text.Encoding (decodeUtf8, decodeUtf8')
 import Data.Tree.View (showTree)
 import Data.Vector (Vector)
@@ -43,7 +46,7 @@ showDec signed (W256 w) =
     i = case signed of
           Signed   -> num (signedWord w)
           Unsigned -> num w
-          
+
   in
     if i == num cheatCode
     then "<hevm cheat address>"
@@ -93,7 +96,7 @@ showAbiValue value = pack $ show value
 isPrintable :: ByteString -> Bool
 isPrintable =
   decodeUtf8' >>>
-    either (const False) 
+    either (const False)
       (Text.all (not . Char.isControl))
 
 formatBytes :: ByteString -> Text
@@ -120,7 +123,7 @@ showTraceTree dapp =
     >>> fmap (fmap (unpack . showTrace dapp))
     >>> concatMap showTree
     >>> pack
-    
+
 showTrace :: DappInfo -> Trace Concrete -> Text
 showTrace dapp trace =
   let
@@ -149,7 +152,7 @@ showTrace dapp trace =
       t
     FrameTrace (CreationContext hash) ->
       "create " <> maybeContractName (preview (dappSolcByHash . ix hash . _2) dapp) <> pos
-    FrameTrace (CallContext _ _ hash abi _ _) ->
+    FrameTrace (CallContext _ _ hash abi calldata _) ->
       case preview (dappSolcByHash . ix hash . _2) dapp of
         Nothing ->
           "call [unknown]" <> pos
@@ -158,11 +161,26 @@ showTrace dapp trace =
             <> "\x1b[1m"
             <> view (contractName . to contractNamePart) solc
             <> "::"
-            <> maybe "[fallback function]"
+            <> maybe ("[fallback function] calldata: " <> formatBinary (forceConcreteBlob calldata))
                  (\x -> maybe "[unknown method]" id (maybeAbiName solc x))
+                 abi
+            <> maybe "[fallback function]"
+                 -- todo: if unknown method, then just show raw calldata
+                 (\x -> showCall (catMaybes (getAbiTypes (maybe "" id (maybeAbiName solc x)))) (forceConcreteBlob calldata))
                  abi
             <> "\x1b[0m"
             <> pos
+
+getAbiTypes :: Text -> [Maybe AbiType]
+getAbiTypes abi = map parseTypeName types
+    where types = splitOn "," (dropEnd 1 (last (splitOn "(" abi)))
+
+showCall :: [AbiType] -> ByteString -> Text
+showCall types calldata =
+    case runGetOrFail (getAbiSeq (length types) types)
+                      (fromStrict (BS.drop 4 calldata)) of
+                 Right (_, _, abivals) -> showAbiValues abivals
+                 Left (_,_,_)          -> error "lol"
 
 maybeContractName :: Maybe SolcContract -> Text
 maybeContractName =
