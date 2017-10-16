@@ -9,6 +9,11 @@ module EVM.Solidity
   , SourceCache (..)
   , SrcMap (..)
   , CodeType (..)
+  , Method (..)
+  , methodName
+  , methodSignature
+  , methodInputs
+  , methodOutput
   , abiMap
   , eventMap
   , contractName
@@ -65,10 +70,17 @@ data SolcContract = SolcContract
   , _runtimeCode      :: ByteString
   , _creationCode     :: ByteString
   , _contractName     :: Text
-  , _abiMap           :: Map Word32 Text
+  , _abiMap           :: Map Word32 Method
   , _eventMap         :: Map W256 Event
   , _runtimeSrcmap    :: Seq SrcMap
   , _creationSrcmap   :: Seq SrcMap
+  } deriving (Show, Eq, Ord, Generic)
+
+data Method = Method
+  { _methodOutput :: Maybe (Text, AbiType)
+  , _methodInputs :: [(Text, AbiType)]
+  , _methodName :: Text
+  , _methodSignature :: Text
   } deriving (Show, Eq, Ord, Generic)
 
 data SourceCache = SourceCache
@@ -105,6 +117,7 @@ data CodeType = Creation | Runtime
 
 makeLenses ''SolcContract
 makeLenses ''SourceCache
+makeLenses ''Method
 
 -- Obscure but efficient parser for the Solidity sourcemap format.
 makeSrcMaps :: Text -> Maybe (Seq SrcMap)
@@ -208,10 +221,24 @@ readJSON json = do
         _creationSrcmap   = fromJust (makeSrcMaps (x ^?! key "srcmap" . _String)),
         _contractName = s,
         _abiMap       = Map.fromList $
-          flip map (toList $ (x ^?! key "abi" . _String) ^?! _Array) $
+          let
+            abis =
+              toList ((x ^?! key "abi" . _String) ^?! _Array)
+            relevant =
+              filter (\y -> "function" == y ^?! key "type" . _String) abis
+          in flip map relevant $
             \abi -> (
               abiKeccak (encodeUtf8 (signature abi)),
-              signature abi
+              Method
+                { _methodName = abi ^?! key "name" . _String
+                , _methodSignature = signature abi
+                , _methodInputs =
+                    map parseMethodInput
+                      (toList (abi ^?! key "inputs" . _Array))
+                , _methodOutput =
+                    fmap parseMethodInput
+                      (abi ^? key "outputs" . _Array . ix 0)
+                }
             ),
         _eventMap     = Map.fromList $
           flip map (filter (\y -> "event" == y ^?! key "type" . _String)
@@ -243,6 +270,13 @@ signature abi =
             (toList $ abi ^?! key "inputs" . _Array)),
         ")"
       ]
+
+-- This actually can also parse a method output! :O
+parseMethodInput :: (Show s, AsValue s) => s -> (Text, AbiType)
+parseMethodInput x =
+  ( x ^?! key "name" . _String
+  , fromJust (parseTypeName (x ^?! key "type" . _String))
+  )
 
 toCode :: Text -> ByteString
 toCode = fst . BS16.decode . encodeUtf8

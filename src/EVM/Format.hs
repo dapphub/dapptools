@@ -8,13 +8,14 @@ import EVM.Dapp (DappInfo, dappSolcByHash, showTraceLocation, dappEventMap)
 import EVM.Concrete (Concrete, Word (..), Blob (..))
 import EVM.Types (W256 (..), num)
 import EVM.ABI (AbiValue (..), Event (..), AbiType (..))
-import EVM.ABI (Indexed (Indexed, NotIndexed), getAbiSeq)
-import EVM.ABI (parseTypeName)
+import EVM.ABI (Indexed (Indexed, NotIndexed), getAbiSeq, getAbi)
+import EVM.ABI (abiTypeSolidity, parseTypeName)
 import EVM.Solidity (SolcContract, contractName, abiMap)
+import EVM.Solidity (methodOutput, methodSignature)
 import EVM.Machine (forceConcreteBlob, forceConcreteWord)
 
 import Control.Arrow ((>>>))
-import Control.Lens (view, preview, ix, _2, to)
+import Control.Lens (view, preview, ix, _2, to, _Just)
 import Data.Binary.Get (runGetOrFail)
 import Data.ByteString (ByteString)
 import Data.ByteString.Builder (byteStringHex, toLazyByteString)
@@ -148,10 +149,18 @@ showTrace dapp trace =
           "fetch storage slot " <> pack (show slot) <> " from " <> pack (show addr) <> pos
     ErrorTrace e ->
       "\x1b[91merror\x1b[0m " <> pack (show e) <> pos
+
+    ReturnTrace output (CallContext _ _ hash (Just abi) _ _) ->
+      case getAbiMethodOutput dapp hash abi of
+        Nothing ->
+          "← " <> formatBinary (forceConcreteBlob output)
+        Just (_, t) ->
+          "← " <> abiTypeSolidity t <> " " <> showValue t (forceConcreteBlob output)
+    ReturnTrace output (CallContext {}) ->
+      "← " <> formatBinary (forceConcreteBlob output)
     ReturnTrace _ (CreationContext {}) ->
       error "internal error: shouldn't show returns for creates"
-    ReturnTrace output _ ->
-      "← " <> formatBinary (forceConcreteBlob output)
+
     EntryTrace t ->
       t
     FrameTrace (CreationContext hash) ->
@@ -175,23 +184,39 @@ showTrace dapp trace =
             <> "\x1b[0m"
             <> pos
 
+getAbiMethodOutput
+  :: DappInfo -> W256 -> Word Concrete -> Maybe (Text, AbiType)
+getAbiMethodOutput dapp hash abi =
+  -- Some typical ugly lens code. :'(
+  preview
+    ( dappSolcByHash . ix hash . _2 . abiMap
+    . ix (fromIntegral abi) . methodOutput . _Just
+    )
+    dapp
+
 getAbiTypes :: Text -> [Maybe AbiType]
 getAbiTypes abi = map parseTypeName types
     where types = splitOn "," (dropEnd 1 (last (splitOn "(" abi)))
 
 showCall :: [AbiType] -> ByteString -> Text
-showCall types calldata =
-    case runGetOrFail (getAbiSeq (length types) types)
-                      (fromStrict (BS.drop 4 calldata)) of
-                 Right (_, _, abivals) -> showAbiValues abivals
-                 Left (_,_,_)          -> error "lol"
+showCall ts bs =
+  case runGetOrFail (getAbiSeq (length ts) ts)
+         (fromStrict (BS.drop 4 bs)) of
+    Right (_, _, xs) -> showAbiValues xs
+    Left (_, _, _)   -> formatBinary bs
+
+showValue :: AbiType -> ByteString -> Text
+showValue t bs =
+  case runGetOrFail (getAbi t) (fromStrict bs) of
+    Right (_, _, x) -> showAbiValue x
+    Left (_, _, _)  -> formatBinary bs
 
 maybeContractName :: Maybe SolcContract -> Text
 maybeContractName =
   maybe "<unknown contract>" (view (contractName . to contractNamePart))
 
 maybeAbiName :: SolcContract -> Word Concrete -> Maybe Text
-maybeAbiName solc abi = preview (abiMap . ix (fromIntegral abi)) solc
+maybeAbiName solc abi = preview (abiMap . ix (fromIntegral abi) . methodSignature) solc
 
 contractNamePart :: Text -> Text
 contractNamePart x = Text.split (== ':') x !! 1

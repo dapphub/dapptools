@@ -11,6 +11,7 @@ import EVM.Solidity (SolcContract, CodeType (..), SourceCache, SrcMap)
 import EVM.Solidity (contractName)
 import EVM.Solidity (runtimeCodehash, creationCodehash, abiMap)
 import EVM.Solidity (runtimeSrcmap, creationSrcmap, eventMap)
+import EVM.Solidity (methodSignature)
 import EVM.Types (W256)
 
 import Data.Text (Text, isPrefixOf, pack)
@@ -20,6 +21,7 @@ import Data.Monoid ((<>))
 import Data.Word (Word32)
 import Data.List (sort)
 
+import Control.Arrow ((>>>))
 import Control.Lens
 
 import qualified Data.Map as Map
@@ -74,8 +76,12 @@ findUnitTests =
            else [(view contractName c, testNames)]
 
 unitTestMethods :: SolcContract -> [Text]
-unitTestMethods c =
-  sort (filter ("test" `isPrefixOf`) (Map.elems (view abiMap c)))
+unitTestMethods =
+  view abiMap
+    >>> Map.elems
+    >>> map (view methodSignature)
+    >>> filter ("test" `isPrefixOf`)
+    >>> sort
 
 traceSrcMap :: Machine e => DappInfo -> Trace e -> Maybe SrcMap
 traceSrcMap dapp trace =
