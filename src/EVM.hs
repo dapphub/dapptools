@@ -103,6 +103,7 @@ data TraceData e
   | QueryTrace (Query e)
   | ErrorTrace (Error e)
   | EntryTrace Text
+  | ReturnTrace (Blob e) (FrameContext e)
 
 data ExecMode = ExecuteNormally | ExecuteAsVMTest
 
@@ -877,7 +878,6 @@ exec1 = do
 
                   (nextFrame : remainingFrames) -> do
                     assign frames remainingFrames
-                    popTrace
 
                     case view frameContext nextFrame of
                       CreationContext _ -> do
@@ -888,19 +888,24 @@ exec1 = do
                         assign (state . gas) (the state gas)
 
                         push (num (the state contract))
+                        popTrace
 
-                      CallContext yOffset ySize _ _ _ _ -> do
+                      ctx@(CallContext yOffset ySize _ _ _ _) -> do
+                        let output = readMemory (num xOffset) (num ySize) vm
                         assign state (view frameState nextFrame)
 
                         -- Take back the remaining gas allowance
                         modifying (state . gas) (+ the state gas)
 
                         copyBytesToMemory
-                          (readMemory (num xOffset) (num ySize) vm)
+                          output
                           (num ySize)
                           0
                           (num yOffset)
                         push 1
+
+                        insertTrace (ReturnTrace output ctx)
+                        popTrace
 
             _ -> underrun
 

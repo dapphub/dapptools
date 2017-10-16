@@ -148,6 +148,10 @@ showTrace dapp trace =
           "fetch storage slot " <> pack (show slot) <> " from " <> pack (show addr) <> pos
     ErrorTrace e ->
       "\x1b[91merror\x1b[0m " <> pack (show e) <> pos
+    ReturnTrace _ (CreationContext {}) ->
+      error "internal error: shouldn't show returns for creates"
+    ReturnTrace output _ ->
+      "return " <> formatBinary (forceConcreteBlob output)
     EntryTrace t ->
       t
     FrameTrace (CreationContext hash) ->
