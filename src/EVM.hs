@@ -164,6 +164,7 @@ data FrameContext e
     , callContextSize     :: Word e
     , callContextCodehash :: W256
     , callContextAbi      :: Maybe (Word e)
+    , callContextData     :: Blob e
     , callContextReversion :: Map Addr (Contract e)
     }
 
@@ -356,7 +357,7 @@ exec1 = do
               -- Move back the gas to the parent context
               assign (state . gas) (the state gas)
 
-            CallContext _ _ _ _ _ -> do
+            CallContext _ _ _ _ _ _ -> do
               -- Take back the remaining gas allowance
               modifying (state . gas) (+ the state gas)
           push 1
@@ -888,7 +889,7 @@ exec1 = do
 
                         push (num (the state contract))
 
-                      CallContext yOffset ySize _ _ _ -> do
+                      CallContext yOffset ySize _ _ _ _ -> do
                         assign state (view frameState nextFrame)
 
                         -- Take back the remaining gas allowance
@@ -1140,6 +1141,7 @@ delegateCall fees xGas xTo xInOffset xInSize xOutOffset xOutSize xs continue =
                                     (readMemoryWord32 xInOffset (view (state . memory) vm0))
                             in Just $! num w
                           else Nothing
+                      , callContextData = (readMemory (num xInOffset) (num xInSize) vm0)
                       }
 
                 pushTrace (FrameTrace newContext)
@@ -1187,7 +1189,7 @@ vmError e = do
           let self = vm ^. state . contract
           assign (env . contracts . at self) Nothing
 
-        CallContext _ _ _ _ reversion -> do
+        CallContext _ _ _ _ _ reversion -> do
           assign frames remainingFrames
           assign state (view frameState nextFrame)
           assign (env . contracts) reversion
