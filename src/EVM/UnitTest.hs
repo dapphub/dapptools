@@ -31,7 +31,7 @@ import Control.Monad.Par.IO (runParIO)
 import Data.ByteString    (ByteString)
 import Data.Foldable      (toList)
 import Data.Map           (Map)
-import Data.Maybe         (fromMaybe, catMaybes)
+import Data.Maybe         (fromMaybe, catMaybes, fromJust)
 import Data.Monoid        ((<>))
 import Data.Text          (Text, unpack, isPrefixOf, stripSuffix, intercalate)
 import Data.Text.Encoding (encodeUtf8)
@@ -44,6 +44,9 @@ import qualified Data.Map as Map
 import qualified Data.Sequence as Seq
 import qualified Data.Text as Text
 import qualified Data.Text.IO as Text
+
+import Data.MultiSet (MultiSet)
+import qualified Data.MultiSet as MultiSet
 
 data UnitTestOptions = UnitTestOptions
   { gasForCreating :: W256
@@ -145,6 +148,108 @@ interpret opts =
         Stepper.EVM m ->
           State.state (runState m) >>= interpret opts . k
 
+-- | This is like an unresolved source mapping.
+data OpLocation = OpLocation
+  { srcCodehash :: !W256
+  , srcOpIx     :: !Int
+  } deriving (Eq, Ord, Show)
+
+type CoverageState = (VM Concrete, MultiSet OpLocation)
+
+currentOpLocation :: VM Concrete -> OpLocation
+currentOpLocation vm =
+  case currentContract vm of
+    Nothing ->
+      error "internal error: why no contract?"
+    Just c ->
+      OpLocation
+        (view codehash c)
+        (fromJust (vmOpIx vm))
+
+execWithCoverage :: StateT CoverageState IO (VMResult Concrete)
+execWithCoverage = do
+  vm0 <- use _1
+  case view result vm0 of
+    Nothing -> do
+      vm1 <- zoom _1 (State.state (runState exec1) >> get)
+      zoom _2 (modify (MultiSet.insert (currentOpLocation vm1)))
+      execWithCoverage
+    Just r ->
+      pure r
+
+interpretWithCoverage
+  :: UnitTestOptions
+  -> Stepper Concrete a
+  -> StateT CoverageState IO (Either (Stepper.Failure Concrete) a)
+interpretWithCoverage opts =
+  eval . Operational.view
+
+  where
+    eval
+      :: Operational.ProgramView (Stepper.Action Concrete) a
+      -> StateT CoverageState IO (Either (Stepper.Failure Concrete) a)
+
+    eval (Operational.Return x) =
+      pure (Right x)
+
+    eval (action Operational.:>>= k) =
+      case action of
+        Stepper.Exec ->
+          execWithCoverage >>= interpretWithCoverage opts . k
+        Stepper.Wait q ->
+          do m <- liftIO (oracle opts q)
+             zoom _1 (State.state (runState m)) >> interpretWithCoverage opts (k ())
+        Stepper.Note _ ->
+          interpretWithCoverage opts (k ())
+        Stepper.Fail e ->
+          pure (Left e)
+        Stepper.EVM m ->
+          zoom _1 (State.state (runState m)) >>= interpretWithCoverage opts . k
+
+
+coverageForUnitTestContract ::
+  UnitTestOptions -> Map Text SolcContract -> (Text, [Text]) -> IO (MultiSet OpLocation)
+coverageForUnitTestContract
+  opts@(UnitTestOptions {..}) contractMap (name, testNames) = do
+
+  -- Print a header
+  putStrLn $ "Coverage analysis " ++ show (length testNames) ++ " for "
+    ++ unpack name
+
+  -- Look for the wanted contract by name from the Solidity info
+  case preview (ix name) contractMap of
+    Nothing ->
+      -- Fail if there's no such contract
+      error $ "Contract " ++ unpack name ++ " not found"
+
+    Just theContract -> do
+      -- Construct the initial VM and begin the contract's constructor
+      let vm0 = initialUnitTestVm opts theContract (Map.elems contractMap)
+      (vm1, cov1) <-
+        execStateT
+          (interpretWithCoverage opts
+            (Stepper.enter name >> initializeUnitTest opts))
+          (vm0, mempty)
+
+      -- Define the thread spawner for test cases
+      let
+        runOne testName = spawn_ . liftIO $ do
+          (x, (_, cov)) <-
+            runStateT
+              (interpretWithCoverage opts (runUnitTest opts testName))
+              (vm1, mempty)
+          case x of
+            Right True -> pure cov
+            _ -> error "test failure during coverage analysis; fix it!"
+
+      -- Run all the test cases in parallel and gather their coverages
+      covs <-
+        runParIO (mapM runOne testNames >>= mapM Par.get)
+
+      -- Sum up all the coverage counts
+      let cov2 = MultiSet.unions (cov1 : covs)
+
+      pure cov2
 
 runUnitTestContract ::
   UnitTestOptions -> Map Text SolcContract -> SourceCache -> (Text, [Text]) -> IO Bool
@@ -155,7 +260,7 @@ runUnitTestContract
   putStrLn $ "Running " ++ show (length testNames) ++ " tests for "
     ++ unpack name
 
-  -- look for the wanted contract by name from the Solidity info
+  -- Look for the wanted contract by name from the Solidity info
   case preview (ix name) contractMap of
     Nothing ->
       -- Fail if there's no such contract

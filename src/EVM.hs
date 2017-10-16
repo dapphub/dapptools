@@ -89,6 +89,7 @@ data VM e = VM
   , _traces        :: Zipper.TreePos Zipper.Empty (Trace e)
   , _cache         :: Cache e
   , _execMode      :: ExecMode
+  , _burned        :: Word e
   }
 
 data Trace e = Trace
@@ -304,6 +305,7 @@ makeVm o = VM
     }
   , _cache = mempty
   , _execMode = ExecuteNormally
+  , _burned = 0
   }
 
 initialContract :: Machine e => ByteString -> Contract e
@@ -1051,6 +1053,7 @@ burn n continue = do
   if n <= available
     then do
       state . gas -= n
+      burned += n
       continue
     else
       vmError OutOfGas

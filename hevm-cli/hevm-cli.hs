@@ -25,7 +25,7 @@ import EVM.Debug
 import EVM.Exec
 import EVM.Solidity
 import EVM.Types hiding (word)
-import EVM.UnitTest (UnitTestOptions, runUnitTestContract)
+import EVM.UnitTest (UnitTestOptions, runUnitTestContract, coverageForUnitTestContract)
 import EVM.Dapp (findUnitTests)
 
 import qualified EVM.UnitTest as EVM.UnitTest
@@ -86,6 +86,7 @@ data Command
       , balanceForCreated  :: Maybe W256
       , rpc                :: Maybe URL
       , verbose            :: Bool
+      , coverage           :: Bool
       }
   | Interactive
       { jsonFile           :: Maybe String
@@ -159,7 +160,11 @@ main = do
     DappTest {} ->
       withCurrentDirectory root $ do
         testFile <- findTestFile (jsonFile cmd)
-        dappTest testOpts (optsMode cmd) testFile
+        case coverage cmd of
+          False ->
+            dappTest testOpts (optsMode cmd) testFile
+          True ->
+            dappCoverage testOpts (optsMode cmd) testFile
     Interactive {} ->
       withCurrentDirectory root $ do
         testFile <- findTestFile (jsonFile cmd)
@@ -197,6 +202,17 @@ dappTest opts _ solcFile = do
         let unitTests = findUnitTests (Map.elems contractMap)
         results <- mapM (runUnitTestContract opts contractMap cache) unitTests
         when (any (== False) results) exitFailure
+      Nothing ->
+        error ("Failed to read Solidity JSON for `" ++ solcFile ++ "'")
+
+dappCoverage :: UnitTestOptions -> Mode -> String -> IO ()
+dappCoverage opts _ solcFile = do
+  readSolc solcFile >>=
+    \case
+      Just (contractMap, cache) -> do
+        let unitTests = findUnitTests (Map.elems contractMap)
+        covs <- mapM (coverageForUnitTestContract opts contractMap) unitTests
+        mapM_ print covs
       Nothing ->
         error ("Failed to read Solidity JSON for `" ++ solcFile ++ "'")
 
