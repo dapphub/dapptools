@@ -151,7 +151,7 @@ showTrace dapp trace =
     ReturnTrace _ (CreationContext {}) ->
       error "internal error: shouldn't show returns for creates"
     ReturnTrace output _ ->
-      "return " <> formatBinary (forceConcreteBlob output)
+      "← " <> formatBinary (forceConcreteBlob output)
     EntryTrace t ->
       t
     FrameTrace (CreationContext hash) ->
