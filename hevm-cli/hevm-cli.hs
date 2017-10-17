@@ -211,8 +211,8 @@ dappCoverage opts _ solcFile = do
     \case
       Just (contractMap, cache) -> do
         let unitTests = findUnitTests (Map.elems contractMap)
-        covs <- mapM (coverageForUnitTestContract opts contractMap) unitTests
-        mapM_ print covs
+        covs <- mapM (coverageForUnitTestContract opts contractMap cache) unitTests
+        print (mconcat covs)
       Nothing ->
         error ("Failed to read Solidity JSON for `" ++ solcFile ++ "'")
 

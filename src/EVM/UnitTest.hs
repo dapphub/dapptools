@@ -7,6 +7,7 @@ import Prelude hiding (Word)
 import EVM
 import EVM.ABI
 import EVM.Dapp
+import EVM.Debug (srcMapCodePos)
 import EVM.Exec
 import EVM.Format
 import EVM.Keccak
@@ -154,6 +155,19 @@ data OpLocation = OpLocation
   , srcOpIx     :: !Int
   } deriving (Eq, Ord, Show)
 
+srcMapForOpLocation :: DappInfo -> OpLocation -> Maybe SrcMap
+srcMapForOpLocation dapp (OpLocation hash opIx) =
+  case preview (dappSolcByHash . ix hash) dapp of
+    Nothing -> Nothing
+    Just (codeType, solc) ->
+      let
+        vec =
+          case codeType of
+            Runtime  -> view runtimeSrcmap solc
+            Creation -> view creationSrcmap solc
+      in
+        preview (ix opIx) vec
+
 type CoverageState = (VM Concrete, MultiSet OpLocation)
 
 currentOpLocation :: VM Concrete -> OpLocation
@@ -168,6 +182,8 @@ currentOpLocation vm =
 
 execWithCoverage :: StateT CoverageState IO (VMResult Concrete)
 execWithCoverage = do
+  -- This is just like `exec` except for every instruction evaluated,
+  -- we also increment a counter indexed by the current code location.
   vm0 <- use _1
   case view result vm0 of
     Nothing -> do
@@ -207,13 +223,17 @@ interpretWithCoverage opts =
           zoom _1 (State.state (runState m)) >>= interpretWithCoverage opts . k
 
 
-coverageForUnitTestContract ::
-  UnitTestOptions -> Map Text SolcContract -> (Text, [Text]) -> IO (MultiSet OpLocation)
 coverageForUnitTestContract
-  opts@(UnitTestOptions {..}) contractMap (name, testNames) = do
+  :: UnitTestOptions
+  -> Map Text SolcContract
+  -> SourceCache
+  -> (Text, [Text])
+  -> IO (MultiSet (Text, Int))
+coverageForUnitTestContract
+  opts@(UnitTestOptions {..}) contractMap sources (name, testNames) = do
 
   -- Print a header
-  putStrLn $ "Coverage analysis " ++ show (length testNames) ++ " for "
+  putStrLn $ "Coverage analysis for "
     ++ unpack name
 
   -- Look for the wanted contract by name from the Solidity info
@@ -249,7 +269,12 @@ coverageForUnitTestContract
       -- Sum up all the coverage counts
       let cov2 = MultiSet.unions (cov1 : covs)
 
-      pure cov2
+      -- Gather the dapp-related metadata
+      let dapp = dappInfo "." contractMap sources
+
+      let f x = srcMapForOpLocation dapp x >>= srcMapCodePos sources
+
+      pure (MultiSet.mapMaybe f cov2)
 
 runUnitTestContract ::
   UnitTestOptions -> Map Text SolcContract -> SourceCache -> (Text, [Text]) -> IO Bool
