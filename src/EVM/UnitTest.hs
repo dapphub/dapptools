@@ -32,7 +32,7 @@ import Control.Monad.Par.IO (runParIO)
 import Data.ByteString    (ByteString)
 import Data.Foldable      (toList)
 import Data.Map           (Map)
-import Data.Maybe         (fromMaybe, catMaybes, fromJust)
+import Data.Maybe         (fromMaybe, catMaybes, fromJust, mapMaybe)
 import Data.Monoid        ((<>))
 import Data.Text          (Text, unpack, isPrefixOf, stripSuffix, intercalate)
 import Data.Text.Encoding (encodeUtf8)
@@ -48,6 +48,12 @@ import qualified Data.Text.IO as Text
 
 import Data.MultiSet (MultiSet)
 import qualified Data.MultiSet as MultiSet
+
+import Data.Set (Set)
+import qualified Data.Set as Set
+
+import Data.Vector (Vector)
+import qualified Data.Vector as Vector
 
 data UnitTestOptions = UnitTestOptions
   { gasForCreating :: W256
@@ -222,13 +228,60 @@ interpretWithCoverage opts =
         Stepper.EVM m ->
           zoom _1 (State.state (runState m)) >>= interpretWithCoverage opts . k
 
+coverageReport
+  :: DappInfo
+  -> MultiSet SrcMap
+  -> Map Text (Vector (Int, ByteString))
+coverageReport dapp cov =
+  let
+    sources :: SourceCache
+    sources = view dappSources dapp
+
+    allPositions :: Set (Text, Int)
+    allPositions =
+      ( Set.fromList
+      . mapMaybe (srcMapCodePos sources)
+      . toList
+      $ mconcat
+        ( view dappSolcByName dapp
+        & Map.elems
+        & map (\x -> view runtimeSrcmap x <> view creationSrcmap x)
+        )
+      )
+
+    srcMapCov :: MultiSet (Text, Int)
+    srcMapCov = MultiSet.mapMaybe (srcMapCodePos sources) cov
+
+    -- linesByName :: Map Text (Vector ByteString)
+    linesByName =
+      ( Map.fromList
+      . map
+          (\(k, v) ->
+             (fst (fromJust (Map.lookup k (view sourceFiles sources))), v))
+      . Map.toList
+      $ view sourceLines sources
+      )
+
+    f :: Text -> Vector ByteString -> Vector (Int, ByteString)
+    f name xs =
+      Vector.imap
+        (\i bs ->
+           let
+             n =
+               if Set.member (name, i + 1) allPositions
+               then MultiSet.occur (name, i + 1) srcMapCov
+               else -1
+           in (n, bs))
+        xs
+  in
+    Map.mapWithKey f linesByName
 
 coverageForUnitTestContract
   :: UnitTestOptions
   -> Map Text SolcContract
   -> SourceCache
   -> (Text, [Text])
-  -> IO (MultiSet (Text, Int))
+  -> IO (MultiSet SrcMap)
 coverageForUnitTestContract
   opts@(UnitTestOptions {..}) contractMap sources (name, testNames) = do
 
@@ -272,9 +325,7 @@ coverageForUnitTestContract
       -- Gather the dapp-related metadata
       let dapp = dappInfo "." contractMap sources
 
-      let f x = srcMapForOpLocation dapp x >>= srcMapCodePos sources
-
-      pure (MultiSet.mapMaybe f cov2)
+      pure (MultiSet.mapMaybe (srcMapForOpLocation dapp) cov2)
 
 runUnitTestContract ::
   UnitTestOptions -> Map Text SolcContract -> SourceCache -> (Text, [Text]) -> IO Bool

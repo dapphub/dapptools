@@ -25,8 +25,8 @@ import EVM.Debug
 import EVM.Exec
 import EVM.Solidity
 import EVM.Types hiding (word)
-import EVM.UnitTest (UnitTestOptions, runUnitTestContract, coverageForUnitTestContract)
-import EVM.Dapp (findUnitTests)
+import EVM.UnitTest (UnitTestOptions, runUnitTestContract, coverageForUnitTestContract, coverageReport)
+import EVM.Dapp (findUnitTests, dappInfo)
 
 import qualified EVM.UnitTest as EVM.UnitTest
 
@@ -35,11 +35,11 @@ import qualified Paths_hevm as Paths
 import Control.Concurrent.Async   (async, waitCatch)
 import Control.Exception          (evaluate)
 import Control.Lens
-import Control.Monad              (void, when)
+import Control.Monad              (void, when, forM_)
 import Control.Monad.State.Strict (execState)
 import Data.ByteString            (ByteString)
 import Data.List                  (intercalate, isSuffixOf)
-import Data.Text                  (Text)
+import Data.Text                  (Text, unpack)
 import Data.Maybe                 (fromMaybe)
 import System.Directory           (withCurrentDirectory, listDirectory)
 import System.Exit                (die, exitFailure)
@@ -49,6 +49,7 @@ import System.Timeout             (timeout)
 
 import qualified Data.ByteString        as ByteString
 import qualified Data.ByteString.Base16 as BS16
+import qualified Data.ByteString.Char8  as Char8
 import qualified Data.ByteString.Lazy   as LazyByteString
 import qualified Data.Map               as Map
 import qualified Options.Generic        as Options
@@ -211,8 +212,22 @@ dappCoverage opts _ solcFile = do
     \case
       Just (contractMap, cache) -> do
         let unitTests = findUnitTests (Map.elems contractMap)
-        covs <- mapM (coverageForUnitTestContract opts contractMap cache) unitTests
-        print (mconcat covs)
+        covs <- mconcat <$> mapM (coverageForUnitTestContract opts contractMap cache) unitTests
+
+        let
+          dapp = dappInfo "." contractMap cache
+          f (k, vs) = do
+            putStr "// hevm coverage for "
+            putStrLn (unpack k)
+            putStrLn ""
+            forM_ vs $ \(n, bs) -> do
+              if n /= 0
+                then putStr "            "
+                else putStr "/* ##### */ "
+              Char8.putStrLn bs
+            putStrLn ""
+
+        mapM_ f (Map.toList (coverageReport dapp covs))
       Nothing ->
         error ("Failed to read Solidity JSON for `" ++ solcFile ++ "'")
 
