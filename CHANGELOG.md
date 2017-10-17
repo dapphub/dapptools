@@ -1,5 +1,9 @@
 # hevm changelog
 
+## [0.10.5] - 2017-10-17
+ - Better trace output including arguments and return values
+ - Proof of concept coverage analysis via `dapp-test --coverage`
+
 ## [0.10] - 2017-10-10
  - Enable new trace output by default for failing tests
  - Exit with failure code from test runner when tests fail
