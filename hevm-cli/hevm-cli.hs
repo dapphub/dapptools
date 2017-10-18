@@ -88,6 +88,7 @@ data Command
       , rpc                :: Maybe URL
       , verbose            :: Bool
       , coverage           :: Bool
+      , state              :: Maybe String
       }
   | Interactive
       { jsonFile           :: Maybe String
@@ -97,6 +98,7 @@ data Command
       , balanceForCreator  :: Maybe W256
       , balanceForCreated  :: Maybe W256
       , rpc                :: Maybe URL
+      , state              :: Maybe String
       }
   | VmTest
       { file  :: String
@@ -129,9 +131,18 @@ defaultBalanceForCreated = 0
 optsMode :: Command -> Mode
 optsMode x = if debug x then Debug else Run
 
-unitTestOptions :: Command -> UnitTestOptions
-unitTestOptions cmd =
-  EVM.UnitTest.UnitTestOptions
+unitTestOptions :: Command -> IO UnitTestOptions
+unitTestOptions cmd = do
+  vmModifier <-
+    case state cmd of
+      Nothing ->
+        pure id
+      Just repoPath -> do
+        facts <- Git.loadFacts (Git.RepoAt repoPath)
+        print ("facts", facts)
+        pure (flip Facts.apply facts)
+
+  pure EVM.UnitTest.UnitTestOptions
     { EVM.UnitTest.gasForCreating =
         fromMaybe defaultGasForCreating (gasForCreating cmd)
     , EVM.UnitTest.gasForInvoking =
@@ -145,6 +156,7 @@ unitTestOptions cmd =
          Just url -> EVM.Fetch.http url
          Nothing  -> EVM.Fetch.zero
     , EVM.UnitTest.verbose = verbose cmd
+    , EVM.UnitTest.vmModifier = vmModifier
     }
 
 main :: IO ()
@@ -152,7 +164,6 @@ main = do
   cmd <- Options.getRecord "hevm -- Ethereum evaluator"
   let
     root = fromMaybe "." (dappRoot cmd)
-    testOpts = unitTestOptions cmd
   case cmd of
     Exec {} ->
       launchExec cmd
@@ -161,6 +172,7 @@ main = do
     DappTest {} ->
       withCurrentDirectory root $ do
         testFile <- findTestFile (jsonFile cmd)
+        testOpts <- unitTestOptions cmd
         case coverage cmd of
           False ->
             dappTest testOpts (optsMode cmd) testFile
@@ -169,6 +181,7 @@ main = do
     Interactive {} ->
       withCurrentDirectory root $ do
         testFile <- findTestFile (jsonFile cmd)
+        testOpts <- unitTestOptions cmd
         EVM.TTY.main testOpts root testFile
     VmTestReport {} ->
       withCurrentDirectory (tests cmd) $ do

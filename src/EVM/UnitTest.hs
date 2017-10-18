@@ -62,6 +62,7 @@ data UnitTestOptions = UnitTestOptions
   , balanceForCreated :: W256
   , oracle :: Query Concrete -> IO (EVM Concrete ())
   , verbose :: Bool
+  , vmModifier :: VM Concrete -> VM Concrete
   }
 
 type ABIMethod = Text
@@ -71,6 +72,10 @@ type ABIMethod = Text
 initializeUnitTest :: UnitTestOptions -> Stepper Concrete ()
 initializeUnitTest UnitTestOptions { .. } = do
 
+  -- Maybe modify the initial VM, e.g. to load library code
+  Stepper.evm (modify vmModifier)
+
+  -- Make a trace entry for running the constructor
   Stepper.evm (pushTrace (EntryTrace "constructor"))
 
   -- Constructor is loaded; run until it returns code

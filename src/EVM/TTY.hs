@@ -256,6 +256,7 @@ runFromVM vm = do
       , balanceForCreator = error "irrelevant"
       , balanceForCreated = error "irrelevant"
       , verbose           = False
+      , vmModifier        = id
       }
 
   ui2 <- customMain mkVty Nothing (app testOpts) (UiVmScreen ui1)
