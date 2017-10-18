@@ -285,10 +285,6 @@ coverageForUnitTestContract
 coverageForUnitTestContract
   opts@(UnitTestOptions {..}) contractMap sources (name, testNames) = do
 
-  -- Print a header
-  putStrLn $ "Coverage analysis for "
-    ++ unpack name
-
   -- Look for the wanted contract by name from the Solidity info
   case preview (ix name) contractMap of
     Nothing ->

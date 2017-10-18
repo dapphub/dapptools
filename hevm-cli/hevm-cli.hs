@@ -217,13 +217,17 @@ dappCoverage opts _ solcFile = do
         let
           dapp = dappInfo "." contractMap cache
           f (k, vs) = do
-            putStr "// hevm coverage for "
+            putStr "***** hevm coverage for "
             putStrLn (unpack k)
             putStrLn ""
             forM_ vs $ \(n, bs) -> do
-              if n /= 0
-                then putStr "            "
-                else putStr "/* ##### */ "
+              case ByteString.find (\x -> x /= 0x9 && x /= 0x20 && x /= 0x7d) bs of
+                Nothing -> putStr "..... "
+                Just _ ->
+                  case n of
+                    -1 -> putStr ";;;;; "
+                    0  -> putStr "##### "
+                    _  -> putStr "      "
               Char8.putStrLn bs
             putStrLn ""
 
