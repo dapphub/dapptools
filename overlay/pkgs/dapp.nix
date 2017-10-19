@@ -3,13 +3,13 @@
 
 stdenv.mkDerivation rec {
   name = "dapp-${version}";
-  version = "0.5.12";
+  version = "0.5.13";
 
   src = fetchFromGitHub {
     owner = "dapphub";
     repo = "dapp";
     rev = "v${version}";
-    sha256 = "07a38bw6sx81n0z38ggjm9g7r4bz8gqbfl8ahp1ac5mf5fmzk1wp";
+    sha256 = "12szj9ny4kyz1mi82biy2y2wg1dwxnsqyc354fsh4m3vw6gn78fn";
   };
 
   nativeBuildInputs = [makeWrapper shellcheck];
