@@ -26,6 +26,7 @@ library
     EVM.ABI,
     EVM.Concrete,
     EVM.Dapp,
+    EVM.Dev,
     EVM.Debug,
     EVM.Exec,
     EVM.Facts,
