@@ -62,7 +62,7 @@ data Error e
   | BadJumpDestination
   | Revert
   | NoSuchContract Addr
-  | OutOfGas
+  | OutOfGas (Word e) (Word e)
   | BadCheatCode Word32
   | StackLimitExceeded
   | IllegalOverflow
@@ -920,7 +920,7 @@ exec1 = do
                 assign (state . stack) xs
                 cheat (xInOffset, xInSize) (xOutOffset, xOutSize)
               else
-                burn (num g_call + xGas) $ do
+                burn (num g_call) $ do
                   delegateCall fees xGas (num xTo) xInOffset xInSize xOutOffset xOutSize xs
                     (return ())
             _ -> underrun
@@ -1056,7 +1056,7 @@ burn n continue = do
       burned += n
       continue
     else
-      vmError OutOfGas
+      vmError (OutOfGas available n)
 
 refund :: Machine e => Word e -> EVM e ()
 refund n = do
