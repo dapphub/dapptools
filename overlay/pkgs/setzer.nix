@@ -4,13 +4,13 @@
 
 stdenv.mkDerivation rec {
   name = "setzer-${version}";
-  version = "unstable-20170910";
+  version = "unstable-20171019";
 
   src = fetchFromGitHub {
     owner = "makerdao";
     repo = "setzer";
-    rev = "1d27eed63b2cf636353f39eace3f56880413aa7d";
-    sha256 = "0zfa4jz029g393ra6xr34insfb7gv8z8x8ang4rfxvvmydl2b9nk";
+    rev = "6a0588f6d4fab502ebc09000cc03711eb5390458";
+    sha256 = "1s6b2skalwsgimlpil9zir1dbciyzzh4ijp0i6x08w0h75afbpp5";
   };
 
   nativeBuildInputs = [makeWrapper];
