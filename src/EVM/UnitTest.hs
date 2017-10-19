@@ -131,6 +131,15 @@ runUnitTest UnitTestOptions { .. } method = do
     Stepper.execFully >>=
       either (const (pure True)) (const (pure False))
 
+  -- If we failed, put the error in the trace.
+  -- It's not clear to me right now why this doesn't happen somewhere else.
+  Just problem <- Stepper.evm $ use result
+  case problem of
+    VMFailure e ->
+      Stepper.evm (pushTrace (ErrorTrace e))
+    _ ->
+      pure ()
+
   -- Ask whether any assertions failed
   Stepper.evm $ popTrace
   Stepper.evm $ setupCall addr "failed()" 10000
