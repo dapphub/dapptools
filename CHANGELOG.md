@@ -1,5 +1,9 @@
 # hevm changelog
 
+## [0.10.6] - 2017-10-19
+ - Enable library linking for unit tests and debugger
+ - Use the same default gas/balance values as `ethrun`
+
 ## [0.10.5] - 2017-10-17
  - Better trace output including arguments and return values
  - Proof of concept coverage analysis via `dapp-test --coverage`
