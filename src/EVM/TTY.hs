@@ -14,10 +14,11 @@ import EVM
 import EVM.Concrete (Concrete, Word (C))
 import EVM.Dapp (DappInfo, dappInfo)
 import EVM.Dapp (dappUnitTests, dappSolcByName, dappSolcByHash, dappSources)
+import EVM.Dapp (dappAstSrcMap)
 import EVM.Debug
 import EVM.Format (Signedness (..), showDec, showWordExact)
 import EVM.Format (showTraceTree)
-import EVM.Format (contractNamePart)
+import EVM.Format (contractNamePart, contractPathPart)
 import EVM.Machine (Machine)
 import EVM.Op
 import EVM.Solidity
@@ -36,8 +37,9 @@ import qualified EVM.Fetch as Fetch
 import Control.Lens
 import Control.Monad.State.Strict hiding (state)
 
+import Data.Aeson.Lens
 import Data.ByteString (ByteString)
-import Data.Maybe (fromJust)
+import Data.Maybe (fromJust, fromMaybe)
 import Data.Monoid ((<>))
 import Data.Text (Text, unpack, pack)
 import Data.Text.Encoding (decodeUtf8)
@@ -663,9 +665,14 @@ drawSolidityPane ui@(view uiVmDapp -> Just dapp) =
                  sm)) - 1
           in vBox
             [ hBorderWithLabel $
-                txt (maybe "<unknown>" contractNamePart
+                txt (maybe "<unknown>" contractPathPart
                       (preview (uiVmSolc . _Just . contractName) ui))
-                  <+> str (" " ++ show lineNo)
+                  <+> str (":" ++ show lineNo)
+
+                  -- Show the AST node type if present
+                  <+> txt (" (" <> fromMaybe "?"
+                                    ((view dappAstSrcMap dapp) sm
+                                       >>= preview (key "name" . _String)) <> ")")
             , Centered.renderList
                 (\_ (i, line) ->
                    let s = case decodeUtf8 line of "" -> " "; y -> y

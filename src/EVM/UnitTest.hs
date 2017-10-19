@@ -65,6 +65,18 @@ data UnitTestOptions = UnitTestOptions
   , vmModifier :: VM Concrete -> VM Concrete
   }
 
+defaultGasForCreating :: W256
+defaultGasForCreating = 6000000
+
+defaultGasForInvoking :: W256
+defaultGasForInvoking = 6000000
+
+defaultBalanceForCreator :: W256
+defaultBalanceForCreator = 0
+
+defaultBalanceForCreated :: W256
+defaultBalanceForCreated = 0
+
 type ABIMethod = Text
 
 -- | Assuming a constructor is loaded, this stepper will run the constructor

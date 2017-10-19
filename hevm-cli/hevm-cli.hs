@@ -25,7 +25,7 @@ import EVM.Debug
 import EVM.Exec
 import EVM.Solidity
 import EVM.Types hiding (word)
-import EVM.UnitTest (UnitTestOptions, runUnitTestContract, coverageForUnitTestContract, coverageReport)
+import EVM.UnitTest
 import EVM.Dapp (findUnitTests, dappInfo)
 
 import qualified EVM.UnitTest as EVM.UnitTest
@@ -115,18 +115,6 @@ type URL = Text
 instance Options.ParseRecord Command where
   parseRecord =
     Options.parseRecordWithModifiers Options.lispCaseModifiers
-
-defaultGasForCreating :: W256
-defaultGasForCreating = 6000000
-
-defaultGasForInvoking :: W256
-defaultGasForInvoking = 6000000
-
-defaultBalanceForCreator :: W256
-defaultBalanceForCreator = 0
-
-defaultBalanceForCreated :: W256
-defaultBalanceForCreated = 0
 
 optsMode :: Command -> Mode
 optsMode x = if debug x then Debug else Run

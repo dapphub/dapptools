@@ -26,10 +26,13 @@ module EVM.Solidity
   , creationCodehash
   , runtimeSrcmap
   , creationSrcmap
+  , contractAst
   , sourceFiles
   , sourceLines
   , stripConstructorArguments
   , lineSubrange
+  , astIdMap
+  , astSrcMap
 ) where
 
 import EVM.ABI
@@ -38,6 +41,7 @@ import EVM.Types
 
 import Control.Applicative
 import Control.Lens         hiding (Indexed)
+import Data.Aeson           (Value (..))
 import Data.Aeson.Lens
 import Data.ByteString      (ByteString)
 import Data.Char            (isDigit, digitToInt)
@@ -56,6 +60,7 @@ import Prelude hiding       (readFile, writeFile)
 import System.IO hiding     (readFile, writeFile)
 import System.IO.Temp
 import System.Process
+import Text.Read            (readMaybe)
 
 import qualified Data.ByteString        as BS
 import qualified Data.ByteString.Base16 as BS16
@@ -74,7 +79,8 @@ data SolcContract = SolcContract
   , _eventMap         :: Map W256 Event
   , _runtimeSrcmap    :: Seq SrcMap
   , _creationSrcmap   :: Seq SrcMap
-  } deriving (Show, Eq, Ord, Generic)
+  , _contractAst      :: Value
+  } deriving (Show, Eq, Generic)
 
 data Method = Method
   { _methodOutput :: Maybe (Text, AbiType)
@@ -207,6 +213,7 @@ readJSON json = do
   sources <- toList . fmap (view _String) <$> json ^? key "sourceList" . _Array
   return (contracts, sources)
   where
+    asts = fromMaybe (error "JSON lacks abstract syntax trees.") (json ^? key "sources")
     f x y = Map.fromList . map (g y) . HMap.toList $ x
     g _ (s, x) =
       let
@@ -220,6 +227,10 @@ readJSON json = do
         _runtimeSrcmap    = fromJust (makeSrcMaps (x ^?! key "srcmap-runtime" . _String)),
         _creationSrcmap   = fromJust (makeSrcMaps (x ^?! key "srcmap" . _String)),
         _contractName = s,
+        _contractAst =
+          fromMaybe
+            (error "JSON lacks abstract syntax trees.")
+            (preview (key (Text.split (== ':') s !! 0) . key "AST") asts),
         _abiMap       = Map.fromList $
           let
             abis =
@@ -309,3 +320,41 @@ bzzrPrefix :: ByteString
 bzzrPrefix =
   -- a1 65 "bzzr0" 0x58 0x20
   BS.reverse $ BS.pack [0xa1, 0x65, 98, 122, 122, 114, 48, 0x58, 0x20]
+
+-- | Every node in the AST has an ID, and other nodes reference those
+-- IDs.  This function recurses through the tree looking for objects
+-- with the "id" key and makes a big map from ID to value.
+astIdMap :: Foldable f => f Value -> Map Int Value
+astIdMap = foldMap f
+  where
+    f :: Value -> Map Int Value
+    f (Array x) = foldMap f x
+    f v@(Object x) =
+      let t = foldMap f (HMap.elems x)
+      in case HMap.lookup "id" x of
+        Nothing         -> t
+        Just (Number i) -> t <> Map.singleton (round i) v
+        Just _          -> t
+    f _ = mempty
+
+astSrcMap :: Map Int Value -> (SrcMap -> Maybe Value)
+astSrcMap astIds =
+  \(SM i n f _)  -> Map.lookup (i, n, f) tmp
+  where
+    tmp :: Map (Int, Int, Int) Value
+    tmp =
+      ( Map.fromList
+      . catMaybes
+      . map (\v ->
+          case preview (key "src" . _String) v of
+            Just src ->
+              case map (readMaybe . Text.unpack) (Text.split (== ':') src) of
+                [Just i, Just n, Just f] ->
+                  Just ((i, n, f), v)
+                _ ->
+                  error "strange formatting of src field"
+            _ ->
+              Nothing)
+      . Map.elems
+      $ astIds
+      )

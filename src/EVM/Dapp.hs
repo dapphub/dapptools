@@ -11,9 +11,10 @@ import EVM.Solidity (SolcContract, CodeType (..), SourceCache, SrcMap)
 import EVM.Solidity (contractName)
 import EVM.Solidity (runtimeCodehash, creationCodehash, abiMap)
 import EVM.Solidity (runtimeSrcmap, creationSrcmap, eventMap)
-import EVM.Solidity (methodSignature)
+import EVM.Solidity (methodSignature, contractAst, astIdMap, astSrcMap)
 import EVM.Types (W256)
 
+import Data.Aeson (Value)
 import Data.Text (Text, isPrefixOf, pack)
 import Data.Text.Encoding (encodeUtf8)
 import Data.Map (Map)
@@ -33,7 +34,9 @@ data DappInfo = DappInfo
   , _dappSources    :: SourceCache
   , _dappUnitTests  :: [(Text, [Text])]
   , _dappEventMap   :: Map W256 Event
-  } deriving Eq
+  , _dappAstIdMap   :: Map Int Value
+  , _dappAstSrcMap  :: (SrcMap -> Maybe Value)
+  }
 
 makeLenses ''DappInfo
 
@@ -42,6 +45,7 @@ dappInfo
 dappInfo root solcByName sources =
   let
     solcs = Map.elems solcByName
+    astIds = astIdMap (map (view contractAst) solcs)
 
   in DappInfo
     { _dappRoot = root
@@ -59,6 +63,9 @@ dappInfo root solcByName sources =
     , _dappEventMap =
         -- Sum up the event ABI maps from all the contracts.
         mconcat (map (view eventMap) solcs)
+
+    , _dappAstIdMap  = astIds
+    , _dappAstSrcMap = astSrcMap astIds
     }
 
 unitTestMarkerAbi :: Word32
