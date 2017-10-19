@@ -61,6 +61,7 @@ data Name
   | SolidityPane
   | SolidityViewport
   | TestPickerPane
+  | BrowserPane
   deriving (Eq, Show, Ord)
 
 type UiWidget = Widget Name
@@ -87,6 +88,7 @@ data UiTestPickerState = UiTestPickerState
 
 data UiState e
   = UiVmScreen (UiVmState e)
+  | UiVmBrowserScreen (UiVmState e)
   | UiTestPickerScreen UiTestPickerState
 
 makeLenses ''UiVmState
@@ -337,8 +339,14 @@ app opts =
   , appHandleEvent = \ui e ->
 
       case (ui, e) of
-        (_, VtyEvent (Vty.EvKey Vty.KEsc []) )->
+        (UiVmBrowserScreen s, VtyEvent (Vty.EvKey Vty.KEsc [])) ->
+          continue (UiVmScreen s)
+
+        (_, VtyEvent (Vty.EvKey Vty.KEsc [])) ->
           halt ui
+
+        (UiVmScreen s, VtyEvent (Vty.EvKey Vty.KEnter [])) ->
+          continue (UiVmBrowserScreen s)
 
         (UiVmScreen s, VtyEvent (Vty.EvKey (Vty.KChar 'n') [])) ->
           takeStep s StepNormally StepOne
@@ -442,6 +450,7 @@ myTheme =
 drawUi :: UiState Concrete -> [UiWidget]
 drawUi (UiVmScreen s) = drawVm s
 drawUi (UiTestPickerScreen s) = drawTestPicker s
+drawUi (UiVmBrowserScreen s) = drawVmBrowser s
 
 drawTestPicker :: UiTestPickerState -> [UiWidget]
 drawTestPicker ui =
@@ -453,6 +462,21 @@ drawTestPicker ui =
                txt " Debug " <+> txt (contractNamePart x) <+> txt "::" <+> txt y)
           True
           (view testPickerList ui)
+  ]
+
+drawVmBrowser :: UiVmState Concrete -> [UiWidget]
+drawVmBrowser ui =
+  [ center . borderWithLabel (txt "Browser (alpha version)") .
+      hLimit 80 $
+        renderList
+          (\selected (k, c) ->
+             withHighlight selected $
+               str (show k <> " (" <> show (BS.length (view bytecode c)) <> ")"))
+          True
+          (list
+             BrowserPane
+             (Vec.fromList (Map.toList (view (uiVm . env . contracts) ui)))
+             1)
   ]
 
 drawVm :: UiVmState Concrete -> [UiWidget]
