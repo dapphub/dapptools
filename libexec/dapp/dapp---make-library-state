@@ -25,11 +25,11 @@ state=$(mktemp --tmpdir= -d hevm.libs.XXXXX)
 
 for lib in "${libraries[@]}"; do
   address=$(dapp address "$sender" "$nonce")
-  echo >&2 "dapp: Predeploying test library $lib at $address"
   links+=" $lib:$address"
-  mkdir -p "$state/$address"
   binpath=$(sed -E "s/.*:(.*)/$DAPP_OUT\/\1.bin/" <<<"$lib")
-  cp "$binpath" "$state/$address/code"
+  echo >&2 "dapp: Predeploying test library $lib at $address"
+  mkdir -p "$state/$address"
+  hevm exec --code "$(cat "$binpath")" > "$state/$address/code" --gas 1000000000
   ((nonce++))
 done
 
