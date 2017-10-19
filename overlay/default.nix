@@ -62,6 +62,8 @@ in rec {
   setzer = callPackage ./pkgs/setzer.nix {};
   keeper = callPackage ./pkgs/keeper.nix {};
 
+  seth-jays = seth.override { jshon = jays; };
+
   go-ethereum = super.go-ethereum.overrideDerivation (_: rec {
     name = "go-ethereum-${version}";
     version = "1.7.2";
