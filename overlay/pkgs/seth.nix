@@ -3,7 +3,7 @@
 
 stdenv.mkDerivation rec {
   name = "seth-${version}";
-  version = "v0.5.6.20171018";
+  version = "0.5.6.20171018";
 
   src = fetchFromGitHub {
     owner = "dapphub";
