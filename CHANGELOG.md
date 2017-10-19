@@ -1,5 +1,11 @@
 # hevm changelog
 
+## [0.10.7] - 2017-10-19
+ - Fix library linking bug
+ - Fix gas consumption of DELEGATECALL
+ - Better error tracing
+ - Experimental "contract browser" (stupid list of addresses)
+
 ## [0.10.6] - 2017-10-19
  - Enable library linking for unit tests and debugger
  - Use the same default gas/balance values as `ethrun`
