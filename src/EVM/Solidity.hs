@@ -299,7 +299,7 @@ solidity' src = withSystemTempFile "hevm.sol" $ \path handle -> do
   x <- pack <$>
     readProcess
       "solc"
-      ["--combined-json=bin-runtime,bin,srcmap,srcmap-runtime,abi", path]
+      ["--combined-json=bin-runtime,bin,srcmap,srcmap-runtime,abi,ast", path]
       ""
   return (x, pack path)
 

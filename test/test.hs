@@ -92,7 +92,7 @@ runStatements stmts args t = do
                     (map (abiTypeSolidity . abiValueType) args) <> ")"
 
   Just x <- singleContract "X" [i|
-    function foo(${params}) returns (${abiTypeSolidity t} x) {
+    function foo(${params}) public pure returns (${abiTypeSolidity t} x) {
       ${stmts}
     }
   |]
