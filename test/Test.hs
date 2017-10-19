@@ -3,6 +3,9 @@
 import Test.Tasty
 import Test.Tasty.HUnit
 
+import Data.ByteString.Lazy (ByteString)
+import Data.Text (Text)
+
 import qualified Data.Text as Text
 
 import Jays (jays)
@@ -10,6 +13,7 @@ import Jays (jays)
 main :: IO ()
 main = defaultMain tests
 
+good :: ByteString -> Text -> ByteString -> Assertion
 good a b c = jays a (Text.words b) @?= (c, True)
 
 tests :: TestTree
@@ -60,6 +64,10 @@ tests = testGroup "jays"
       good "" "-s hey" "\"hey\""
   , testCase "Unstring" $ do
       good "" "-s hey -u" "hey"
+      good "" "-n 3 -u" "3"
+      good "" "-n 3.14159 -u" "3.14159"
+      good "" "-n null -u" "null"
+      good "" "-n true -u" "true"
 
   , testCase "Across" $ do
       good "[1,null]" "-a -t" "number\nnull"

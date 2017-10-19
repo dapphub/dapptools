@@ -181,8 +181,14 @@ work stk ops =
 
     (String t : xs, OpUnstring : ops') ->
       (fromStrict (encodeUtf8 t) :) <$> work xs ops'
-    (_, OpUnstring : _) ->
-      Left "error in -u"
+    (Object _ : _, OpUnstring : _) ->
+      Left "error in -u: only simple types allowed"
+    (Array _ : _, OpUnstring : _) ->
+      Left "error in -u: only simple types allowed"
+    (t : xs, OpUnstring : ops') ->
+      (encode t :) <$> work xs ops'
+    ([], OpUnstring : _) ->
+      Left "error in -u: stack underrun"
 
     (Array o : xs, OpAcross ops' : []) -> do
       rs <- mapM (\v -> work (v:xs) ops') (toList o)
