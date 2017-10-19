@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-set -e
+set -ex
 (set -x; dapp clean)
 
 opts=($SOLC_FLAGS)

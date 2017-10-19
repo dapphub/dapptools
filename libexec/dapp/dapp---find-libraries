@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
 set -e
-shopt -s nullglob
 
 # Find (heuristically) all the libraries defined in the source
 # hierarchy and print them like ``src/Foo.sol:FooLib'' (appropriate
