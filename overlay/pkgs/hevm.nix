@@ -6,8 +6,8 @@ let
     import (pkgs.fetchFromGitHub {
       owner = "dapphub";
       repo = "hevm";
-      rev = "v0.10.7";
-      sha256 = "0d3ynjixjddm5vq07l25bwixy8a6b4r24jrhc9msk427aqv9iim8";
+      rev = "v0.10.8";
+      sha256 = "0wfy32c28fkf1g4lm4rsgw1z8i3xhg82c1ccsb5ipd4lm0bad8i1";
     });
   drv =
     pkgs.haskell.lib.justStaticExecutables
