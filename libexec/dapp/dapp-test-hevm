@@ -3,7 +3,7 @@ set -e
 shopt -s nullglob
 shopt -s globstar
 
-if [ $DAPP_VERBOSE ]; then set -x; fi
+if [ "$DAPP_VERBOSE" ]; then set -x; fi
 
 # This script invokes hevm to run the dapp's unit tests.
 
@@ -29,16 +29,16 @@ state=$(mktemp -d hevm.libs.XXXXX)
 function clean() { rm -rf "$state"; }
 trap clean EXIT
 
-if [[ "${#libraries[@]}" > 0 ]]; then
+if [[ "${#libraries[@]}" -gt 0 ]]; then
   echo Predeploying test libraries: "${libraries[@]}"
 fi
 
 for lib in "${libraries[@]}"; do
   address=$(dapp address "$sender" "$nonce")
   links+=" $lib:$address"
-  mkdir -p "$state"/$address
+  mkdir -p "$state/$address"
   binpath=$(sed -E "s/.*:(.*)/$DAPP_OUT\/\1.bin/" <<<"$lib")
-  cp "$binpath" "$state"/$address/code
+  cp "$binpath" "$state/$address/code"
   ((nonce++))
 done
 
