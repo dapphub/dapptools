@@ -3,7 +3,7 @@ set -e
 (set -x; dapp clean)
 
 opts=($SOLC_FLAGS)
-json_opts=--combined-json=abi,bin,bin-runtime,srcmap,srcmap-runtime
+json_opts=--combined-json=abi,bin,bin-runtime,srcmap,srcmap-runtime,ast
 solc --help | grep -q -- --overwrite && opts+=(--overwrite)
 
 remappings=$(dapp remappings)
