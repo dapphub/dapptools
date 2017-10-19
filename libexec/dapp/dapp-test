@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 have() { command -v "$1" >/dev/null; }
 
-dapp build || exit
+DAPP_LINK_TEST_LIBRARIES=1 dapp build || exit
 
-have hevm  && ! [[ $DAPP_NO_HEVM  ]] && dapp test-hevm  "$@"
+have hevm   && ! [[ $DAPP_NO_HEVM   ]] && dapp test-hevm   "$@"
 have ethrun && ! [[ $DAPP_NO_ETHRUN ]] && dapp test-ethrun "$@"
 
 have ethrun || have hevm || {
