@@ -25,7 +25,10 @@ import EVM.Debug
 import EVM.Exec
 import EVM.Solidity
 import EVM.Types hiding (word)
-import EVM.UnitTest
+import EVM.UnitTest (UnitTestOptions, coverageReport, coverageForUnitTestContract)
+import EVM.UnitTest (runUnitTestContract)
+import EVM.UnitTest (defaultGasForCreating, defaultGasForInvoking)
+import EVM.UnitTest (defaultBalanceForCreator, defaultBalanceForCreated)
 import EVM.Dapp (findUnitTests, dappInfo)
 
 import qualified EVM.UnitTest as EVM.UnitTest
@@ -127,7 +130,6 @@ unitTestOptions cmd = do
         pure id
       Just repoPath -> do
         facts <- Git.loadFacts (Git.RepoAt repoPath)
-        print ("facts", facts)
         pure (flip Facts.apply facts)
 
   pure EVM.UnitTest.UnitTestOptions
