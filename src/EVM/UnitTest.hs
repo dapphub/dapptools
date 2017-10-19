@@ -66,16 +66,16 @@ data UnitTestOptions = UnitTestOptions
   }
 
 defaultGasForCreating :: W256
-defaultGasForCreating = 6000000
+defaultGasForCreating = 0xffffffffffff
 
 defaultGasForInvoking :: W256
-defaultGasForInvoking = 6000000
+defaultGasForInvoking = 0xffffffffffff
 
 defaultBalanceForCreator :: W256
-defaultBalanceForCreator = 0
+defaultBalanceForCreator = 0xffffffffffffffffffffffff
 
 defaultBalanceForCreated :: W256
-defaultBalanceForCreated = 0
+defaultBalanceForCreated = 0xffffffffffffffffffffffff
 
 type ABIMethod = Text
 
