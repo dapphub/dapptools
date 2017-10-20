@@ -54,15 +54,13 @@ in rec {
     inherit (self) pkgs;
   };
 
-  # # Override buggy jshon program with Haskell-based replacement
-  # jshon = jays;
+  # Override buggy jshon program with Haskell-based replacement.
+  jshon = jays;
 
   seth   = callPackage ./pkgs/seth.nix {};
   dapp   = callPackage ./pkgs/dapp.nix {};
   setzer = callPackage ./pkgs/setzer.nix {};
   keeper = callPackage ./pkgs/keeper.nix {};
-
-  seth-jays = seth.override { jshon = jays; };
 
   go-ethereum = super.go-ethereum.overrideDerivation (_: rec {
     name = "go-ethereum-${version}";
