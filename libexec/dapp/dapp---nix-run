@@ -6,13 +6,12 @@
 # Runs a command with the binaries from a named Nix package in PATH.
 
 # It's basically an implementation of nix-shell(1) but simpler and
-# without actually starting a subshell, and using ~/.dapp/nix as an
-# "indirect GC root."
+# without actually starting a subshell.
 
 set -e
 
 have() { command -v "$1" >/dev/null; }
-{ have nix-channel && have nix-env && have nix-shell; } || {
+{ have nix-channel && have nix-build; } || {
   echo >&2 "${0##*/}: error: The Nix package manager is required."
   echo >&2 "${0##*/}: error: See https://dapp.tools for installation instructions."
   exit 1
@@ -26,47 +25,10 @@ if [[ ! -d "$channel" ]]; then
   ( set -x; nix-channel --update )
 fi
 
-joinpaths() { printf "%s" "$*" | sed 's/ /:/g' ; }
+expr="$1"; shift
+path=$(nix-build \
+  -Q --no-out-link \
+  -I dapphub="$channel" -E "with import <dapphub> {}; $expr" \
+  2> >(sed 's/^/nix: /' >&2))
 
-# Let's have a custom directory for semi-temporary files related to
-# Nix packages.  It will contain symlinks to store paths.
-pkgs=$HOME/.dapp/nix/pkgs
-mkdir -p "$pkgs"
-
-attr="$1"; shift
-
-# First step in Nix jargon: instantiate the package as a
-# derivation file.
-#
-# A package is a fully evaluated Nix expression which describes a
-# build product -- a "derivation" which is then saved as a file in
-# the store.
-drvpath=$(nix-instantiate --indirect --add-root "$pkgs"/"$attr".drv \
-                          "$channel" -A "$attr")
-drvpath=$(sed 's/!.*$//' <<<"$drvpath")
-
-# The derivation will have a number of output paths, either of which
-# might contain the ./bin that we're interested in, so we'll accumulate
-# an array of PATH entries to use.
-paths=()
-
-# This while loop gets its stdin from a Nix command; see below.
-while read -r output; do
-
-  name=$(basename "$output")
-  path="$HOME/.dapp/nix/pkgs/$name"
-  paths+=("$path"/bin)
-
-  if [[ ! -d "$path" ]]; then
-    # The derivation's output paths must be "realised", which in our
-    # case should mean downloading them from the binary cache.
-    echo >&2 "${0##*/}: Need Nix package: $name"
-    nix-store \
-      -Q --indirect --add-root ~/.dapp/nix/pkgs/"$name" \
-      --realise "$output" >/dev/null \
-      2> >(sed 's/^/nix: /' >&2)
-  fi
-
-done < <(nix-store --query "$drvpath")
-
-PATH=$(joinpaths "${paths[@]}"):$PATH "$@"
+PATH="$path/bin":$PATH "$@"
