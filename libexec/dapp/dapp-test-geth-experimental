@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+set -e
+shopt -s nullglob
+
+export ETH_GAS=100000000
+
+tmp=$(mktemp -d)
+clean() { set -x; rm -rf "$tmp"; }
+trap clean EXIT
+
+for x in $DAPP_OUT/*Test.abi; do
+  contract=$(sed <<<"$(basename "$x")" s/\.abi$//)
+  mkdir "$tmp/$contract"
+  echo >&2 "dapp-test-geth: deploying test copies for $contract"
+  while read -r method; do
+    { dapp create "$contract" >> "$tmp/$contract/$method" 2>/dev/null; } &
+  done < <(dapp --make-test-bytecode "$x")
+  wait
+  if compgen -G "$tmp/$contract/*" >/dev/null; then
+    grep '.' "$tmp/$contract"/*
+  fi
+done
