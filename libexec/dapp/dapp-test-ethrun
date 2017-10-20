@@ -5,12 +5,7 @@ shopt -s globstar
 sender=0x00a329c0648769a73afac7f9381e08fb43dbea72
 nonce=1048576
 
-sources=($(find "${DAPP_SRC?}" "$DAPP_LIB" -name '*.sol'))
-libraries=($(
-  grep -EH '^library\s+\w+' "${sources[@]}" \
-  | sed -E 's/:library[[:blank:]]+([_[:alnum:]]+)[[:blank:]]+(\{|is).*/:\1/' \
-  | sort
-))
+libraries=($(dapp --find-libraries))
 
 for lib in "${libraries[@]}"; do
   address=$(dapp address "$sender" "$nonce")
@@ -22,6 +17,7 @@ done
 
 # pass the library bin files through to ethrun
 # (needs to be exact same order as above for nonces)
-deploy=($(printf "%s\n" "${libraries[@]}" | sed -E "s/.*:(.*)/$DAPP_OUT\/\1.bin/"))
+function binfile() { sed -E "s/.*:(.*)/$DAPP_OUT\/\1.bin/"; }
+deploy=($(printf "%s\n" "${libraries[@]}" | binfile))
 
 (set -x; dapp quicktest "$@" "$DAPP_OUT" "${deploy[@]}")
