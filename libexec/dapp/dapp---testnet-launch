@@ -1,0 +1,51 @@
+#!/usr/bin/env bash
+set -e
+
+gethdir=$HOME/.dapp/testnet
+chainid=2000
+while true; do
+  if [[ ! -d "$gethdir/$chainid" ]]; then break; fi
+  chainid=$((chainid + 1))
+done
+
+chaindir="$gethdir/$chainid"
+
+echo >&2 "dapp-testnet: Chain ID: $chainid"
+echo >&2 "dapp-testnet: Database: $chaindir"
+
+mkdir -p "$chaindir"
+
+function clean() { rm -rf "$chaindir"; }
+trap clean EXIT
+
+address=$(
+  geth 2>/dev/null account new --datadir "$chaindir" --password=<(exit) 2>/dev/null \
+    | grep Address | sed 's/Address: {\(.*\)}/\1/')
+
+echo >&2 "dapp-testnet: Whale address: $address"
+echo >&2 "dapp-testnet: RPC URL: http://127.0.0.1:$chainid"
+
+jshon >"$chaindir/genesis.json" \
+  -n {} \
+  -n {} \
+    -n "$chainid" -i chainId \
+    -n 0 -i homesteadBlock \
+    -n 0 -i eip155Block \
+    -n 0 -i eip158Block \
+    -n 0 -i byzantiumBlock \
+    -n {} -n 5 -i period -n 3000 -i epoch -i clique \
+    -i config \
+  -s "0x1" -i difficulty \
+  -s "0x3938700" -i gaslimit \
+  -s "0x3132333400000000000000000000000000000000000000000000000000000000""$address""0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000" -i extraData \
+  -n {} \
+    -n {} -s "0x21e19e0c9bab2400000" -i balance \
+    -i "$address" \
+  -i alloc
+
+geth 2>/dev/null --datadir "$chaindir" init "$chaindir/genesis.json"
+
+geth \
+  --datadir "$chaindir" --mine --rpc --networkid "$chainid" \
+  --minerthreads=1 \
+  --rpcport="$chainid" --unlock="$address" --password=<(exit)
