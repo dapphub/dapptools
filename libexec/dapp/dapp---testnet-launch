@@ -12,18 +12,20 @@ chaindir="$gethdir/$chainid"
 
 echo >&2 "dapp-testnet: Chain ID: $chainid"
 echo >&2 "dapp-testnet: Database: $chaindir"
+echo >&2 "dapp-testnet: Geth log: $chaindir/geth.log"
 
 mkdir -p "$chaindir"
 
-function clean() { rm -rf "$chaindir"; }
+function clean() { ( echo; set -x; rm -rf "$chaindir" ); }
 trap clean EXIT
 
 address=$(
   geth 2>/dev/null account new --datadir "$chaindir" --password=<(exit) 2>/dev/null \
     | grep Address | sed 's/Address: {\(.*\)}/\1/')
 
-echo >&2 "dapp-testnet: Whale address: $address"
-echo >&2 "dapp-testnet: RPC URL: http://127.0.0.1:$chainid"
+echo >&2 "dapp-testnet:  Account: $address"
+echo >&2 "dapp-testnet:  RPC URL: http://127.0.0.1:$chainid"
+echo >&2
 
 jshon >"$chaindir/genesis.json" \
   -n {} \
@@ -45,7 +47,7 @@ jshon >"$chaindir/genesis.json" \
 
 geth 2>/dev/null --datadir "$chaindir" init "$chaindir/genesis.json"
 
-geth \
+geth 2> >(tee "$chaindir/geth.log" | grep sealed >&2) \
   --datadir "$chaindir" --mine --rpc --networkid "$chainid" \
-  --minerthreads=1 \
+  --minerthreads=1 --rpccorsdomain '*' \
   --rpcport="$chainid" --unlock="$address" --password=<(exit)
