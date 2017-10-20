@@ -1,5 +1,5 @@
 { lib, stdenv, fetchFromGitHub, makeWrapper
-, seth, git, solc, shellcheck, nodejs, hevm }:
+, seth, git, solc, shellcheck, nodejs, hevm, jshon, nix }:
 
 stdenv.mkDerivation rec {
   name = "dapp-${version}";
@@ -18,7 +18,7 @@ stdenv.mkDerivation rec {
   checkPhase = "make test";
   makeFlags = ["prefix=$(out)"];
   postInstall = let path = lib.makeBinPath [
-    nodejs solc git seth hevm
+    nodejs solc git seth hevm jshon nix
   ]; in ''
     wrapProgram "$out/bin/dapp" --prefix PATH : "${path}"
   '';
