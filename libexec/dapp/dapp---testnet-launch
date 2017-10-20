@@ -9,12 +9,9 @@ while true; do
 done
 
 chaindir="$gethdir/$chainid"
+port=$(($chainid + 30000))
 
-echo >&2 "dapp-testnet: Chain ID: $chainid"
-echo >&2 "dapp-testnet: Database: $chaindir"
-echo >&2 "dapp-testnet: Geth log: $chaindir/geth.log"
-
-mkdir -p "$chaindir"
+mkdir -p "$chaindir/config"
 
 function clean() { ( echo; set -x; rm -rf "$chaindir" ); }
 trap clean EXIT
@@ -23,11 +20,19 @@ address=$(
   geth 2>/dev/null account new --datadir "$chaindir" --password=<(exit) 2>/dev/null \
     | grep Address | sed 's/Address: {\(.*\)}/\1/')
 
-echo >&2 "dapp-testnet:  Account: $address"
-echo >&2 "dapp-testnet:  RPC URL: http://127.0.0.1:$chainid"
-echo >&2
+echo >&2 "dapp-testnet:   Account: $address"
+echo >&2 "dapp-testnet:   RPC URL: http://127.0.0.1:$chainid"
+echo >&2 "dapp-testnet:   Genesis: $chaindir/config/genesis.json"
+echo >&2 "dapp-testnet:  TCP port: $port"
+echo >&2 "dapp-testnet:  Chain ID: $chainid"
+echo >&2 "dapp-testnet:  Database: $chaindir"
+echo >&2 "dapp-testnet:  Geth log: $chaindir/geth.log"
 
-jshon >"$chaindir/genesis.json" \
+echo "$address"                  > "$chaindir/config/account"
+echo "http://127.0.0.1:$chainid" > "$chaindir/config/rpc-url"
+echo "$port"                     > "$chaindir/config/node-port"
+
+jshon >"$chaindir/config/genesis.json" \
   -n {} \
   -n {} \
     -n "$chainid" -i chainId \
@@ -45,9 +50,10 @@ jshon >"$chaindir/genesis.json" \
     -i "$address" \
   -i alloc
 
-geth 2>/dev/null --datadir "$chaindir" init "$chaindir/genesis.json"
+geth 2>/dev/null --datadir "$chaindir" init "$chaindir/config/genesis.json"
 
-geth 2> >(tee "$chaindir/geth.log" | grep sealed >&2) \
+geth \
+  2> >(tee "$chaindir/geth.log" | grep --line-buffered Success | sed 's/^/geth: /' >&2) \
   --datadir "$chaindir" --mine --rpc --networkid "$chainid" \
-  --minerthreads=1 --rpccorsdomain '*' \
+  --minerthreads=1 --rpccorsdomain '*' --nodiscover --port="$port" \
   --rpcport="$chainid" --unlock="$address" --password=<(exit)
