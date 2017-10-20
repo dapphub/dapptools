@@ -1,5 +1,5 @@
 name: jays
-version: 0.20171019
+version: 1.20171020
 synopsis: Rewrite of jshon
 homepage: https://github.com/mbrock/jays
 license: GPL-3
@@ -12,7 +12,7 @@ cabal-version: >=1.10
 library
   hs-source-dirs: src
   default-language: Haskell2010
-  ghc-options: -Wall
+  ghc-options: -Wall -O2
   exposed-modules: Jays
   build-depends:
     base == 4.*,
@@ -27,7 +27,7 @@ executable jays
   main-is: Main.hs
   hs-source-dirs: .
   default-language: Haskell2010
-  ghc-options: -Wall -threaded
+  ghc-options: -Wall -threaded -O2
   build-depends:
     base == 4.*,
     jays,

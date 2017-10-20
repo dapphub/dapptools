@@ -76,18 +76,18 @@ tests = testGroup "jays"
       good "[1,2]" "-n 3 -i append -l" "3"
 
   , testCase "Errors" $ do
-      jays "" ["-n", "2", "-i", "foo"] @?= ("error in -i", False)
+      jays "" ["-n", "2", "-i", "foo"] @?= ("jays: error in -i", False)
       jays "" ["-Q", "-n", "2", "-i", "foo"] @?= ("", False)
   ]
 
--- Summary of jshon used by seth:
+-- Summary of jshon keywords:
 --
---  [ ]   -Q  (quiet)      no error output
---  [ ]   -a  (across)     maps remaining actions
---  [x]   -e  (extract)    index into objects/arrays
---  [x]   -i  (insert)     inserts into objects/arrays
---  [x]   -j  (literal)    returns encoded JSON
---  [x]   -k  (keys)       prints keys
---  [x]   -n  (nonstring)  makes a JSON element
---  [x]   -s  (string)     makes a JSON string
---  [x]   -u  (unstring)   returns decoded string
+--     -Q  (quiet)      no error output
+--     -a  (across)     maps remaining actions
+--     -e  (extract)    index into objects/arrays
+--     -i  (insert)     inserts into objects/arrays
+--     -j  (literal)    prints encoded JSON
+--     -k  (keys)       prints keys
+--     -n  (nonstring)  makes a JSON element
+--     -s  (string)     makes a JSON string
+--     -u  (unstring)   prints unquoted string or simple type

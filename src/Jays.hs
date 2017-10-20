@@ -124,15 +124,14 @@ jays input args =
   in
     case (result, quiet) of
       (Left _, True)  -> ("", False)
-      (Left x, False) -> (fromStrict (encodeUtf8 x), False)
+      (Left x, False) -> (fromStrict (encodeUtf8 ("jays: " <> x)), False)
       (Right x, _)    -> (BS.intercalate "\n" x, True)
 
 work :: [Value] -> [Op] -> Either Text [ByteString]
 work stk ops =
   case (stk, ops) of
-    ([], [])  -> pure []
-    ([x], []) -> pure [encode x]
-    (_, [])   -> Left "more than 1 stack element left"
+    (x:xs, []) -> pure [encode x]
+    ([], [])   -> pure []
 
     (xs, OpNewValue v : ops') -> work (v : xs) ops'
 
@@ -194,9 +193,9 @@ work stk ops =
       rs <- mapM (\v -> work (v:xs) ops') (toList o)
       pure (concat rs)
     (_, OpAcross _ : []) ->
-      Left "-a only for arrays"
+      Left "error in -a: only allowed for arrays"
     (_, OpAcross _ : _) ->
-      Left "-a only at the end"
+      Left "error in -a: only at the end (internal error)"
 
     (Array o : xs, OpLength : ops') ->
       work (Number (fromIntegral (length o)) : xs) ops'
