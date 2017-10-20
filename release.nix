@@ -15,6 +15,7 @@ in rec {
     inherit setzer;
     inherit solc-versions;
     inherit go-ethereum;
+    inherit go-ethereum-unlimited;
   };
 
   dapphub-darwin = with darwin.pkgs; {
@@ -26,6 +27,7 @@ in rec {
     inherit setzer;
     inherit solc-versions;
     inherit go-ethereum;
+    inherit go-ethereum-unlimited;
   };
 
   hevm-development = rec {

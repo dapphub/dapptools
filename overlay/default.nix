@@ -76,4 +76,13 @@ in rec {
       stdenv.lib.optionals stdenv.isDarwin
         (with self.pkgs; [ darwin.libobjc darwin.apple_sdk.frameworks.IOKit ]);
   });
+
+  # We use this to run private testnets without
+  # the pesky transaction size limit.
+  go-ethereum-unlimited = go-ethereum.overrideDerivation (this: rec {
+    name = "go-ethereum-unlimited-${this.version}";
+    preConfigure = ''
+      substituteInPlace core/tx_pool.go --replace 'return ErrOversizedData' ""
+    '';
+  });
 }
