@@ -9,7 +9,7 @@ while true; do
 done
 
 chaindir="$gethdir/$chainid"
-port=$(($chainid + 30000))
+port=$((chainid + 30000))
 
 mkdir -p "$chaindir/config"
 
