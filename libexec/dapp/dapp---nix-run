@@ -51,7 +51,7 @@ drvpath=$(sed 's/!.*$//' <<<"$drvpath")
 paths=()
 
 # This while loop gets its stdin from a Nix command; see below.
-while read output; do
+while read -r output; do
 
   name=$(basename "$output")
   path="$HOME/.dapp/nix/pkgs/$name"
