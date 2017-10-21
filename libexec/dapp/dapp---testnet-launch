@@ -54,6 +54,7 @@ geth 2>/dev/null --datadir "$chaindir" init "$chaindir/config/genesis.json"
 
 geth \
   2> >(tee "$chaindir/geth.log" | grep --line-buffered Success | sed 's/^/geth: /' >&2) \
-  --datadir "$chaindir" --mine --rpc --networkid "$chainid" \
+  --datadir "$chaindir" --mine --networkid "$chainid" \
+  --rpc --rpcapi "web3,eth,debug" \
   --minerthreads=1 --rpccorsdomain '*' --nodiscover --port="$port" \
   --rpcport="$chainid" --unlock="$address" --password=<(exit)

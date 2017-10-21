@@ -2,21 +2,146 @@
 set -e
 shopt -s nullglob
 
-export ETH_GAS=100000000
+# To run the unit tests as fast as possible, we need to avoid serial
+# blockchain interactions.  Preferrably we would be done in two
+# blocks, one for creating contracts, one for running the tests
+# against them.
+#
+# We need to run the tests on-chain because they fail by setting the
+# `failed` storage slot.  So we need to call the test method and
+# then check that slot.
+#
+# Because we also want a clean slate before every test method, we
+# create many copies of the same test contract, one for each
+# test method.
 
+testnets=($HOME/.dapp/testnet/*)
+
+if [[ ${#testnets[@]} -gt 1 ]]; then
+  echo >&2 "dapp-test-geth: Several dapp testnets running: ${testnets[*]}"
+  echo >&2 "dapp-test-geth: I can only handle one, sorry."
+  exit 1
+elif [[ ${#testnets[@]} -eq 0 ]]; then
+  echo >&2 "dapp-test-geth: Please run 'dapp testnet' in another terminal."
+  exit 1
+fi
+
+testnet=${testnets[0]}
+
+ETH_FROM=$(cat "$testnet/config/account")
+ETH_RPC_PORT=$(sed 's/^.*://' "$testnet/config/rpc-url")
+ETH_RPC_HOST=127.0.0.1
+ETH_GAS=100000000
+export ETH_FROM ETH_RPC_PORT ETH_RPC_HOST ETH_GAS
+
+# We use a temporary directory as a little database.
 tmp=$(mktemp -d)
 clean() { set -x; rm -rf "$tmp"; }
 trap clean EXIT
 
-for x in $DAPP_OUT/*Test.abi; do
+# Go through all the contract ABIs and look for ds-test suites.
+for x in $DAPP_OUT/*.abi; do
   contract=$(sed <<<"$(basename "$x")" s/\.abi$//)
   mkdir "$tmp/$contract"
-  echo >&2 "dapp-test-geth: deploying test copies for $contract"
+
+  # Deploy one instance per test method.
+  shutup=0
   while read -r method; do
-    { dapp create "$contract" >> "$tmp/$contract/$method" 2>/dev/null; } &
-  done < <(dapp --make-test-bytecode "$x")
+    if [[ $shutup -eq 0 ]]; then
+      echo >&2 "dapp-test-geth: deploying test copies for $contract"
+      shutup=1
+    fi
+    { dapp create "$contract" > "$tmp/$contract/$method" 2>/dev/null ; } &
+  done < <(dapp --find-test-methods "$x")
   wait
-  if compgen -G "$tmp/$contract/*" >/dev/null; then
-    grep '.' "$tmp/$contract"/*
-  fi
+done
+
+mkdir "$tmp/results"
+
+no0x() { echo "${1#0x}"; }
+setUp=$(no0x "$(seth calldata "setUp()")")
+assemble() { tr -d '\n '; }
+mkruntime() {
+  assemble <<.
+  60 00
+  60 00
+  60 20
+  60 00
+  60 00
+  73 $1
+  5a
+  61 02 00
+  03
+
+  63 $setUp
+  60 e0
+  60 02
+  0a
+  02
+  60 00
+  52
+  f1
+  15
+  60 6e
+  57
+  60 00
+  60 00
+  60 20
+  60 00
+  60 00
+  73 $1
+  5a
+  61 02 00
+  03
+  63 $2
+  60 e0
+  60 02
+  0a
+  02
+  60 00
+  52
+  f1
+  15
+  60 6e
+  57
+  00
+  fd
+.
+}
+
+mkcreation() {
+  address=$(no0x "$1")
+  method=$(no0x "$(seth calldata "$2()")")
+  runtime=$(mkruntime "$address" "$method")
+  codesize=${#runtime}
+  codesize=$((codesize / 2))
+  assemble <<.
+  61 $(printf "%04x" "$codesize")
+  60 00
+  81
+  60 0c
+  60 00
+  39
+  f3
+  $runtime
+.
+}
+
+for contract in "$tmp"/*; do
+  for method in "$contract"/*; do
+    address=$(cat "$method")
+    contract=$(basename "$contract")
+    method=$(basename "$method")
+    creation=$(mkcreation "$address" "$method")
+    testaddress=$(seth send --create "$creation" --status 2>/dev/null)
+    if seth send "$testaddress" --status 2>/dev/null; then
+      if [[ $(seth call "$address" 'failed()(bool)') == true ]]; then
+        echo "FAIL $contract $method"
+      else
+        echo "PASS $contract $method"
+      fi
+    else
+      echo "FAIL $contract $method"
+    fi
+  done
 done
