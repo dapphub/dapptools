@@ -26,6 +26,7 @@
 ###
 ###    --create                   use the calldata to create a new object
 ###    --guess                    guess the return value of the call
+###    --status                   exit failure on failed tx (Byzantium)
 ###    --resend                   force current nonce to overwrite tx
 ###
 ### Other options:
@@ -54,6 +55,7 @@ B,block=number       block number (default: \`latest')
   Options for seth-send(1):
 create               use the calldata to create a new object
 guess                guess the return value of the call
+status               exit failure on failed tx (Byzantium)
 resend               force current nonce to overwrite tx
 
   Other options:
@@ -94,6 +96,7 @@ while [[ $1 ]]; do
 
        --create)            export SETH_CREATE=yes;;
        --guess)             export SETH_GUESS=yes;;
+       --status)            export SETH_STATUS=yes;;
        --resend)            export SETH_RESEND=yes;;
 
        --async)             export SETH_ASYNC=yes;;
