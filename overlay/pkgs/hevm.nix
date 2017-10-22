@@ -18,7 +18,6 @@ in
     (attrs: {
       postInstall = ''
         wrapProgram $out/bin/hevm \
-           --add-flags '+RTS -N$((`${pkgs.coreutils}/bin/nproc` - 1)) -RTS' \
            --suffix PATH : "${lib.makeBinPath [pkgs.bash pkgs.coreutils pkgs.git]}"
       '';
 
