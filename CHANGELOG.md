@@ -1,5 +1,8 @@
 # hevm changelog
 
+## [0.10.9] - 2017-10-23
+ - Fix bugs in ABI formatting
+
 ## [0.10.7] - 2017-10-19
  - Fix library linking bug
  - Fix gas consumption of DELEGATECALL
