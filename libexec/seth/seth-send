@@ -55,7 +55,7 @@ seth --fail "${0##*/}: error: bad tx hash: $tx; account locked?"
 
 [[ $SETH_ASYNC = yes ]] && exec echo "$tx"
 
-[[ $DATA ]] && bytes=$((${#DATA} - 2)) || bytes=0
+[[ $DATA ]] && bytes=$((${#DATA} / 2 - 1)) || bytes=0
 echo >&2 "${0##*/}: Published transaction with $bytes bytes of calldata."
 echo >&2 "${0##*/}: $tx"
 echo >&2 -n "${0##*/}: Waiting for transaction receipt..."
