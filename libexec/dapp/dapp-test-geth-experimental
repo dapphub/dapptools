@@ -51,10 +51,17 @@ for x in $DAPP_OUT/*.abi; do
       mkdir "$tmp/$contract"
       shutup=1
     fi
-    dapp create "$contract" >"$tmp/$contract/$method" 2>/dev/null &
+    {
+      dapp create "$contract" >"$tmp/$contract/$method" 2>/dev/null
+      if [[ ! $? ]]; then touch "$tmp/fail"; fi
+    } &
   done < <(dapp --find-test-methods "$x" 2>/dev/null)
-  wait
 done
+
+wait
+if [ -e "$tmp/fail" ]; then
+  echo >&2 "dapp-test-geth: error: some contract creations failed"
+fi
 
 mkdir "$tmp/results"
 
@@ -147,6 +154,7 @@ testcase() {
   fi
 }
 
+# Run all test cases in parallel...
 for contract in "$tmp"/*; do
   for method in $(printf "%s\n" "$contract"/*); do
     address=$(cat "$method")
@@ -158,4 +166,7 @@ done
 
 wait
 
-if [ -e "$tmp/fail" ]; then exit 1; else exit 0; fi
+if [ -e "$tmp/fail" ]; then
+  echo >&2 "dapp-test-geth: some unit tests failed"
+  exit 1
+fi
