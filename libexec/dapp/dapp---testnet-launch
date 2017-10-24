@@ -43,10 +43,10 @@ jshon >"$chaindir/config/genesis.json" \
     -n {} -n 1 -i period -n 3000 -i epoch -i clique \
     -i config \
   -s "0x1" -i difficulty \
-  -s "0x393870000" -i gaslimit \
+  -s "0xffffffffffffffff" -i gaslimit \
   -s "0x3132333400000000000000000000000000000000000000000000000000000000""$address""0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000" -i extraData \
   -n {} \
-    -n {} -s "0x21e19e0c9bab2400000" -i balance \
+    -n {} -s "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff" -i balance \
     -i "$address" \
   -i alloc
 
