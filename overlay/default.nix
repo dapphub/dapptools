@@ -83,6 +83,9 @@ in rec {
     name = "go-ethereum-unlimited-${this.version}";
     preConfigure = ''
       substituteInPlace core/tx_pool.go --replace 'return ErrOversizedData' ""
+      substituteInPlace params/protocol_params.go --replace \
+        'MaxCodeSize = 24576' \
+        'MaxCodeSize = 1000000'
     '';
   });
 }
