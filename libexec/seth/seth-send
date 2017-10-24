@@ -62,12 +62,17 @@ echo >&2 -n "${0##*/}: Waiting for transaction receipt..."
 number=$(SETH_TICK=true seth receipt "$tx" blockNumber)
 echo >&2
 
-echo >&2 "${0##*/}: Transaction included in block $number."
+if [[ $SETH_STATUS && ($(seth receipt "$tx" status) -eq 0) ]]; then
+  echo >&2 "${0##*/}: Transaction failed."
+  seth >&2 receipt "$tx"
+  exit 1
+else
+  echo >&2 "${0##*/}: Transaction included in block $number."
+fi
+
 [[ $TO ]] || exec seth receipt "$tx" contractAddress
 
-if [[ $SETH_STATUS ]]; then
-  [[ $(seth receipt "$tx" status) -eq 1 ]]
-elif [[ $SETH_GUESS ]]; then
+if [[ $SETH_GUESS ]]; then
   echo >&2 "${0##*/}: warning: return value may be inaccurate"
   seth -B "$((number - 1))" call "$TO" "${@:2}"
 fi
