@@ -50,9 +50,9 @@ in rec {
     pkgs = self.pkgs // { haskellPackages = profilingHaskellPackages; };
   };
 
-  jays = import ./pkgs/jays.nix {
-    inherit (self) pkgs;
-  };
+  jays =
+    self.pkgs.haskell.lib.justStaticExecutables
+      (haskellPackages.callPackage (import ./pkgs/jays.nix) {});
 
   # Override buggy jshon program with Haskell-based replacement.
   jshon = jays;
