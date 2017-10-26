@@ -44,15 +44,15 @@ in rec {
 
   hevm = import ./pkgs/hevm.nix {
     pkgs = self.pkgs // { inherit haskellPackages; };
+    stdenv = self.stdenv;
   };
 
   hevm-profiling = import ./pkgs/hevm.nix {
     pkgs = self.pkgs // { haskellPackages = profilingHaskellPackages; };
+    stdenv = self.stdenv;
   };
 
-  jays =
-    self.pkgs.haskell.lib.justStaticExecutables
-      (haskellPackages.callPackage (import ./pkgs/jays.nix) {});
+  jays = (import ./pkgs/jays.nix) { inherit (self) pkgs stdenv; };
 
   # Override buggy jshon program with Haskell-based replacement.
   jshon = jays;
