@@ -1,0 +1,47 @@
+{
+  "dapp": {
+    "version": "0.7.2",
+    "src": {
+      "rev": "79a19a25f6e30ae72a815fa3ef1021c5d3c7b38f",
+      "sha256": "1lmabws80y6bzyff2swldaijkd0pndwvw3qqxhrysprfi4a70iky",
+      "owner": "dapphub",
+      "repo": "dapp"
+    }
+  },
+  "hevm": {
+    "version": "0.10.9",
+    "src": {
+      "rev": "06c1f651c1c27b95fe1f3d29550d713311ef4410",
+      "sha256": "00yvajyfkkhz1df7rd5ib343pdfid4qf3c61pph22jb2hhzas96b",
+      "owner": "dapphub",
+      "repo": "hevm"
+    }
+  },
+  "seth": {
+    "version": "0.5.8",
+    "src": {
+      "rev": "0bfaf53a5b3daeb476e312014e91ceff6e5b23a1",
+      "sha256": "0id1z07mghnmvj3kjs5psxj3zipl2vnna53jzlhyx1m4rfliz8qb",
+      "owner": "dapphub",
+      "repo": "seth"
+    }
+  },
+  "restless-git": {
+    "version": "0.5.0",
+    "src": {
+      "rev": "9b208c944b61dc6cb4b32e7a5b90cffe643fcfc5",
+      "sha256": "0l2n556fzgkgnw7rhwfsj7438qyid8y9sghlhd3is154dspg0p9v",
+      "owner": "lessrest",
+      "repo": "restless-git"
+    }
+  },
+  "jays": {
+    "version": "1.20171020",
+    "src": {
+      "rev": "00bc7e2c8259e0ed73858129e085bf65e6f36878",
+      "sha256": "1d83zvv55gm417pxzzbfl2s2f80mia0fxidqs0lahfppb6zb09fp",
+      "owner": "mbrock",
+      "repo": "jays"
+    }
+  }
+}

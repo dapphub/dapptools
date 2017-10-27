@@ -10,7 +10,6 @@ in rec {
     inherit dapp;
     inherit seth;
     inherit hevm;
-    inherit hevm-profiling;
     inherit keeper;
     inherit setzer;
     inherit solc-versions;
@@ -22,7 +21,6 @@ in rec {
     inherit dapp;
     inherit seth;
     inherit hevm;
-    # inherit hevm-profiling;
     # inherit keeper;
     inherit setzer;
     inherit solc-versions;

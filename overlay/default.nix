@@ -2,6 +2,11 @@ self: super:
 
 let
 
+  versions = self.lib.importJSON ./versions.json;
+  versioned = v: pkg: pkg.overrideAttrs (_: {
+    src = self.pkgs.fetchFromGitHub v.src;
+  });
+
   # This is a specific revision of Nixpkgs that we use to avoid
   # rebuilding all the versions of solc when we bump our submodule, or
   # to allow a package to succeed when something breaks in nixpkgs.
@@ -15,19 +20,25 @@ let
   callPackage = self.pkgs.callPackage;
   pastPackage = past.pkgs.callPackage;
 
+  lib = self.pkgs.lib;
   stdenv = self.pkgs.stdenv;
 
   haskellPackages = super.pkgs.haskellPackages.override {
-    overrides = (import ./haskell.nix { pkgs = super.pkgs; });
+    overrides = _: super-hs: {
+      restless-git = versioned versions.restless-git (
+        self.pkgs.haskell.lib.dontCheck
+          (super-hs.callPackage ./upstream/restless-git.nix {})
+      );
+    };
   };
 
-  profilingHaskellPackages = haskellPackages.override {
-    overrides = self: super-hs:
-      (import ./haskell.nix { pkgs = super.pkgs; } self super-hs) // {
-        mkDerivation = args: super-hs.mkDerivation
-          (args // { enableLibraryProfiling = true; });
-      };
-  };
+  # profilingHaskellPackages = haskellPackages.override {
+  #   overrides = self: super-hs:
+  #     (import ./haskell.nix { pkgs = super.pkgs; } self super-hs) // {
+  #       mkDerivation = args: super-hs.mkDerivation
+  #         (args // { enableLibraryProfiling = true; });
+  #     };
+  # };
 
 in rec {
   solc = callPackage ((import ./solc-versions.nix).solc_0_4_18) {};
@@ -42,25 +53,37 @@ in rec {
     packageOverrides = (import ./python.nix { pkgs = super.pkgs; });
   };
 
-  hevm = import ./pkgs/hevm.nix {
-    pkgs = self.pkgs // { inherit haskellPackages; };
-    stdenv = self.stdenv;
-  };
+  hevm = (
+    versioned versions.hevm (
+      self.pkgs.haskell.lib.justStaticExecutables
+        (haskellPackages.callPackage ./upstream/hevm.nix {})
+    )
+  ).overrideAttrs (attrs: {
+    postInstall = ''
+      wrapProgram $out/bin/hevm \
+         --suffix PATH : "${lib.makeBinPath (with self.pkgs; [bash coreutils git])}"
+    '';
 
-  hevm-profiling = import ./pkgs/hevm.nix {
-    pkgs = self.pkgs // { haskellPackages = profilingHaskellPackages; };
-    stdenv = self.stdenv;
-  };
+    enableSeparateDataOutput = true;
+    buildInputs = attrs.buildInputs ++ [self.pkgs.solc];
+    nativeBuildInputs = attrs.nativeBuildInputs ++ [self.pkgs.makeWrapper];
+  });
 
-  jays = (import ./pkgs/jays.nix) { inherit (self) pkgs stdenv; };
+  jays = (
+    versioned versions.jays (
+      self.pkgs.haskell.lib.justStaticExecutables
+        (haskellPackages.callPackage ./upstream/jays.nix {})
+    )
+  ).overrideAttrs (_: { postInstall = "cp $out/bin/{jays,jshon}"; });
 
   # Override buggy jshon program with Haskell-based replacement.
   jshon = jays;
 
-  seth   = callPackage ./pkgs/seth.nix {};
-  dapp   = callPackage ./pkgs/dapp.nix {};
-  setzer = callPackage ./pkgs/setzer.nix {};
-  keeper = callPackage ./pkgs/keeper.nix {};
+  seth = versioned versions.seth (callPackage ./upstream/seth.nix {});
+  dapp = versioned versions.dapp (callPackage ./upstream/dapp.nix {});
+
+  setzer = callPackage ./setzer.nix {};
+  keeper = callPackage ./keeper.nix {};
 
   go-ethereum = super.go-ethereum.overrideDerivation (_: rec {
     name = "go-ethereum-${version}";
