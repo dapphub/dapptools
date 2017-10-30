@@ -18,7 +18,6 @@ import EVM.ABI
 import EVM.Types
 import EVM.Solidity
 import EVM.Keccak
-import EVM.Machine
 import EVM.Concrete
 import EVM.Op
 import EVM.FeeSchedule (FeeSchedule (..))
@@ -54,65 +53,65 @@ import qualified Data.Vector as RegularVector
 
 -- * Data types
 
-data Error e
-  = BalanceTooLow (Word e) (Word e)
+data Error
+  = BalanceTooLow Word Word
   | UnrecognizedOpcode Word8
   | SelfDestruction
   | StackUnderrun
   | BadJumpDestination
   | Revert
   | NoSuchContract Addr
-  | OutOfGas (Word e) (Word e)
+  | OutOfGas Word Word
   | BadCheatCode Word32
   | StackLimitExceeded
   | IllegalOverflow
-  | Query (Query e)
+  | Query Query
 
-deriving instance Show (Error Concrete)
+deriving instance Show Error
 
 -- | The possible result states of a VM
-data VMResult e
-  = VMFailure (Error e)  -- ^ An operation failed
-  | VMSuccess (Blob e)   -- ^ Reached STOP, RETURN, or end-of-code
+data VMResult
+  = VMFailure Error  -- ^ An operation failed
+  | VMSuccess Blob   -- ^ Reached STOP, RETURN, or end-of-code
 
-deriving instance Show (VMResult Concrete)
+deriving instance Show VMResult
 
 -- | The state of a stepwise EVM execution
-data VM e = VM
-  { _result        :: Maybe (VMResult e)
-  , _state         :: FrameState e
-  , _frames        :: [Frame e]
-  , _env           :: Env e
-  , _block         :: Block e
-  , _tx            :: TxState e
-  , _logs          :: Seq (Log e)
-  , _traces        :: Zipper.TreePos Zipper.Empty (Trace e)
-  , _cache         :: Cache e
+data VM = VM
+  { _result        :: Maybe VMResult
+  , _state         :: FrameState
+  , _frames        :: [Frame]
+  , _env           :: Env
+  , _block         :: Block
+  , _tx            :: TxState
+  , _logs          :: Seq Log
+  , _traces        :: Zipper.TreePos Zipper.Empty Trace
+  , _cache         :: Cache
   , _execMode      :: ExecMode
-  , _burned        :: Word e
+  , _burned        :: Word
   }
 
-data Trace e = Trace
+data Trace = Trace
   { _traceCodehash :: W256
   , _traceOpIx     :: Int
-  , _traceData     :: TraceData e
+  , _traceData     :: TraceData
   }
 
-data TraceData e
-  = EventTrace (Log e)
-  | FrameTrace (FrameContext e)
-  | QueryTrace (Query e)
-  | ErrorTrace (Error e)
+data TraceData
+  = EventTrace Log
+  | FrameTrace FrameContext
+  | QueryTrace Query
+  | ErrorTrace Error
   | EntryTrace Text
-  | ReturnTrace (Blob e) (FrameContext e)
+  | ReturnTrace Blob FrameContext
 
 data ExecMode = ExecuteNormally | ExecuteAsVMTest
 
-data Query e where
-  PleaseFetchContract :: Addr           -> (Contract e -> EVM e ()) -> Query e
-  PleaseFetchSlot     :: Addr -> Word e -> (Word e     -> EVM e ()) -> Query e
+data Query where
+  PleaseFetchContract :: Addr         -> (Contract -> EVM ()) -> Query
+  PleaseFetchSlot     :: Addr -> Word -> (Word     -> EVM ()) -> Query
 
-instance Show (Query Concrete) where
+instance Show Query where
   showsPrec _ = \case
     PleaseFetchContract addr _ ->
       (("<EVM.Query: fetch contract " ++ show addr ++ ">") ++)
@@ -122,12 +121,12 @@ instance Show (Query Concrete) where
         ++ show addr ++ ">") ++)
 
 -- | Alias for the type of e.g. @exec1@.
-type EVM e a = State (VM e) a
+type EVM a = State VM a
 
 -- | The cache is data that can be persisted for efficiency:
 -- any expensive query that is constant at least within a block.
-data Cache e = Cache
-  { _fetched :: Map Addr (Contract e)
+data Cache = Cache
+  { _fetched :: Map Addr Contract
   }
 
 -- | A way to specify an initial VM state
@@ -145,58 +144,58 @@ data VMOpts = VMOpts
   , vmoptDifficulty :: W256
   , vmoptGaslimit :: W256
   , vmoptGasprice :: W256
-  , vmoptSchedule :: FeeSchedule (Word Concrete)
+  , vmoptSchedule :: FeeSchedule Word
   } deriving Show
 
 -- | A log entry
-data Log e = Log Addr (Blob e) [Word e]
+data Log = Log Addr Blob [Word]
 
 -- | An entry in the VM's "call/create stack"
-data Frame e = Frame
-  { _frameContext   :: FrameContext e
-  , _frameState     :: FrameState e
+data Frame = Frame
+  { _frameContext   :: FrameContext
+  , _frameState     :: FrameState
   }
 
 -- | Call/create info
-data FrameContext e
+data FrameContext
   = CreationContext
     { creationContextCodehash :: W256 }
   | CallContext
-    { callContextOffset   :: Word e
-    , callContextSize     :: Word e
+    { callContextOffset   :: Word
+    , callContextSize     :: Word
     , callContextCodehash :: W256
-    , callContextAbi      :: Maybe (Word e)
-    , callContextData     :: Blob e
-    , callContextReversion :: Map Addr (Contract e)
+    , callContextAbi      :: Maybe Word
+    , callContextData     :: Blob
+    , callContextReversion :: Map Addr Contract
     }
 
 -- | The "registers" of the VM along with memory and data stack
-data FrameState e = FrameState
-  { _contract    :: Addr
+data FrameState = FrameState
+  { _contract     :: Addr
   , _codeContract :: Addr
-  , _code        :: ByteString
-  , _pc          :: Int
-  , _stack       :: [Word e]
-  , _memory      :: Memory e
-  , _memorySize  :: Int
-  , _calldata    :: Blob e
-  , _callvalue   :: Word e
-  , _caller      :: Addr
-  , _gas         :: Word e
+  , _code         :: ByteString
+  , _pc           :: Int
+  , _stack        :: [Word]
+  , _memory       :: Memory
+  , _memorySize   :: Int
+  , _calldata     :: Blob
+  , _callvalue    :: Word
+  , _caller       :: Addr
+  , _gas          :: Word
   }
 
 -- | The state that spans a whole transaction
-data TxState e = TxState
+data TxState = TxState
   { _selfdestructs :: [Addr]
-  , _refunds       :: [(Addr, Word e)]
+  , _refunds       :: [(Addr, Word)]
   }
 
 -- | The state of a contract
-data Contract e = Contract
+data Contract = Contract
   { _bytecode :: ByteString
-  , _storage  :: Map (Word e) (Word e)
-  , _balance  :: Word e
-  , _nonce    :: Word e
+  , _storage  :: Map Word Word
+  , _balance  :: Word
+  , _nonce    :: Word
   , _codehash :: W256
   , _codesize :: Int -- (redundant?)
   , _opIxMap  :: Vector Int
@@ -204,29 +203,29 @@ data Contract e = Contract
   , _external :: Bool
   }
 
-deriving instance Show (Contract Concrete)
-deriving instance Eq (Contract Concrete)
+deriving instance Show Contract
+deriving instance Eq Contract
 
 -- | Various environmental data
-data Env e = Env
-  { _contracts          :: Map Addr (Contract e)
-  , _sha3Crack          :: Map (Word e) (Blob e)
-  , _origin             :: Addr
+data Env = Env
+  { _contracts :: Map Addr Contract
+  , _sha3Crack :: Map Word Blob
+  , _origin    :: Addr
   }
 
 
 -- | Data about the block
-data Block e = Block
+data Block = Block
   { _coinbase   :: Addr
-  , _timestamp  :: Word e
-  , _number     :: Word e
-  , _difficulty :: Word e
-  , _gaslimit   :: Word e
-  , _gasprice   :: Word e
-  , _schedule   :: FeeSchedule (Word e)
+  , _timestamp  :: Word
+  , _number     :: Word
+  , _difficulty :: Word
+  , _gaslimit   :: Word
+  , _gasprice   :: Word
+  , _schedule   :: FeeSchedule Word
   }
 
-blankState :: Machine e => FrameState e
+blankState :: FrameState
 blankState = FrameState
   { _contract     = 0
   , _codeContract = 0
@@ -251,7 +250,7 @@ makeLenses ''Cache
 makeLenses ''Trace
 makeLenses ''VM
 
-instance Monoid (Cache e) where
+instance Monoid Cache where
   mempty = Cache { _fetched = mempty }
   mappend a b = Cache
     { _fetched = mappend (view fetched a) (view fetched b)
@@ -259,13 +258,13 @@ instance Monoid (Cache e) where
 
 -- * Data accessors
 
-currentContract :: Machine e => VM e -> Maybe (Contract e)
+currentContract :: VM -> Maybe Contract
 currentContract vm =
   view (env . contracts . at (view (state . codeContract) vm)) vm
 
 -- * Data constructors
 
-makeVm :: VMOpts -> VM Concrete
+makeVm :: VMOpts -> VM
 makeVm o = VM
   { _result = Nothing
   , _frames = mempty
@@ -308,7 +307,7 @@ makeVm o = VM
   , _burned = 0
   }
 
-initialContract :: Machine e => ByteString -> Contract e
+initialContract :: ByteString -> Contract
 initialContract theCode = Contract
   { _bytecode = theCode
   , _codesize = BS.length theCode
@@ -325,18 +324,17 @@ initialContract theCode = Contract
 
 -- * Opcode dispatch (exec1)
 
-next :: (?op :: Word8) => EVM e ()
+next :: (?op :: Word8) => EVM ()
 next = modifying (state . pc) (+ (opSize ?op))
 
-{-# SPECIALIZE exec1 :: EVM Concrete () #-}
-exec1 :: forall e. Machine e => EVM e ()
+exec1 :: EVM ()
 exec1 = do
   vm <- get
 
   let
     -- Convenience function to access parts of the current VM state.
     -- Arcane type signature needed to avoid monomorphism restriction.
-    the :: (b -> VM e -> Const a (VM e)) -> ((a -> Const a a) -> b) -> a
+    the :: (b -> VM -> Const a VM) -> ((a -> Const a a) -> b) -> a
     the f g = view (f . g) vm
 
     -- Convenient aliases
@@ -956,7 +954,7 @@ pushTo f x = f %= (x :)
 pushToSequence :: MonadState s m => ASetter s s (Seq a) (Seq a) -> a -> m ()
 pushToSequence f x = f %= (Seq.|> x)
 
-touchAccount :: Machine e => Addr -> (Contract e -> EVM e ()) -> EVM e ()
+touchAccount :: Addr -> (Contract -> EVM ()) -> EVM ()
 touchAccount addr continue = do
   use (env . contracts . at addr) >>= \case
     Just c -> continue c
@@ -974,11 +972,10 @@ touchAccount addr continue = do
                         continue c)
 
 accessStorage
-  :: Machine e
-  => Addr                 -- ^ Contract address
-  -> Word e               -- ^ Storage slot key
-  -> (Word e -> EVM e ()) -- ^ Continuation
-  -> EVM e ()
+  :: Addr             -- ^ Contract address
+  -> Word             -- ^ Storage slot key
+  -> (Word -> EVM ()) -- ^ Continuation
+  -> EVM ()
 accessStorage addr slot continue =
   use (env . contracts . at addr) >>= \case
     Just c ->
@@ -1004,7 +1001,7 @@ accessStorage addr slot continue =
 
 -- | Replace current contract's code, like when CREATE returns
 -- from the constructor code.
-replaceCodeOfSelf :: Machine e => ByteString -> EVM e ()
+replaceCodeOfSelf :: ByteString -> EVM ()
 replaceCodeOfSelf createdCode = do
   self <- use (state . contract)
   zoom (env . contracts . at self) $ do
@@ -1017,19 +1014,19 @@ replaceCodeOfSelf createdCode = do
             & set storage (view storage now)
             & set balance (view balance now)
 
-resetState :: Machine e => EVM e ()
+resetState :: EVM ()
 resetState = do
   assign result     Nothing
   assign frames     []
   assign state      blankState
 
-finalize :: Machine e => EVM e ()
+finalize :: EVM ()
 finalize = do
   destroyedAddresses <- use (tx . selfdestructs)
   modifying (env . contracts)
     (Map.filterWithKey (\k _ -> not (elem k destroyedAddresses)))
 
-loadContract :: Machine e => Addr -> EVM e ()
+loadContract :: Addr -> EVM ()
 loadContract target =
   preuse (env . contracts . ix target . bytecode) >>=
     \case
@@ -1040,14 +1037,14 @@ loadContract target =
         assign (state . code)     targetCode
         assign (state . codeContract) target
 
-limitStack :: Machine e => Int -> EVM e () -> EVM e ()
+limitStack :: Int -> EVM () -> EVM ()
 limitStack n continue = do
   stk <- use (state . stack)
   if length stk + n > 1024
     then vmError StackLimitExceeded
     else continue
 
-burn :: Machine e => Word e -> EVM e () -> EVM e ()
+burn :: Word -> EVM () -> EVM ()
 burn n continue = do
   available <- use (state . gas)
   if n <= available
@@ -1058,7 +1055,7 @@ burn n continue = do
     else
       vmError (OutOfGas available n)
 
-refund :: Machine e => Word e -> EVM e ()
+refund :: Word -> EVM ()
 refund n = do
   self <- use (state . contract)
   pushTo (tx . refunds) (self, n)
@@ -1071,9 +1068,9 @@ cheatCode :: Addr
 cheatCode = num (keccak "hevm cheat code")
 
 cheat
-  :: (?op :: Word8, Machine e)
-  => (Word e, Word e) -> (Word e, Word e)
-  -> EVM e ()
+  :: (?op :: Word8)
+  => (Word, Word) -> (Word, Word)
+  -> EVM ()
 cheat (inOffset, inSize) (outOffset, outSize) = do
   mem <- use (state . memory)
   let
@@ -1103,9 +1100,9 @@ cheat (inOffset, inSize) (outOffset, outSize) = do
         Right _ ->
           vmError (BadCheatCode abi)
 
-type CheatAction e = ([AbiType], [AbiValue] -> EVM e (Maybe AbiValue))
+type CheatAction = ([AbiType], [AbiValue] -> EVM (Maybe AbiValue))
 
-cheatActions :: Machine e => Map Word32 (CheatAction e)
+cheatActions :: Map Word32 CheatAction
 cheatActions =
   Map.fromList
     [ action "warp(uint256)" [AbiUIntType 256] $
@@ -1120,11 +1117,11 @@ cheatActions =
 -- * General call implementation ("delegateCall")
 
 delegateCall
-  :: (Machine e, ?op :: Word8)
-  => FeeSchedule (Word e)
-  -> Word e -> Addr -> Word e -> Word e -> Word e -> Word e -> [Word e]
-  -> EVM e ()
-  -> EVM e ()
+  :: (?op :: Word8)
+  => FeeSchedule Word
+  -> Word -> Addr -> Word -> Word -> Word -> Word -> [Word]
+  -> EVM ()
+  -> EVM ()
 delegateCall fees xGas xTo xInOffset xInSize xOutOffset xOutSize xs continue =
   touchAccount xTo . const $
     preuse (env . contracts . ix xTo) >>=
@@ -1174,10 +1171,10 @@ delegateCall fees xGas xTo xInOffset xInSize xOutOffset xOutSize xs continue =
 
 
 -- * VM error implementation
-underrun :: Machine e => EVM e ()
+underrun :: EVM ()
 underrun = vmError StackUnderrun
 
-vmError :: Machine e => Error e -> EVM e ()
+vmError :: Error -> EVM ()
 vmError e = do
   vm <- get
   case view frames vm of
@@ -1207,12 +1204,11 @@ vmError e = do
 -- * Memory helpers
 
 accessMemoryRange
-  :: Machine e
-  => FeeSchedule (Word e)
-  -> Word e
-  -> Word e
-  -> EVM e ()
-  -> EVM e ()
+  :: FeeSchedule Word
+  -> Word
+  -> Word
+  -> EVM ()
+  -> EVM ()
 accessMemoryRange _ _ 0 continue = continue
 accessMemoryRange fees f l continue = do
   m0 <- num <$> use (state . memorySize)
@@ -1225,11 +1221,11 @@ accessMemoryRange fees f l continue = do
         continue
 
 accessMemoryWord
-  :: Machine e => FeeSchedule (Word e) -> Word e -> EVM e () -> EVM e ()
+  :: FeeSchedule Word -> Word -> EVM () -> EVM ()
 accessMemoryWord fees x continue = accessMemoryRange fees x 32 continue
 
 copyBytesToMemory
-  :: Machine e => Blob e -> Word e -> Word e -> Word e -> EVM e ()
+  :: Blob -> Word -> Word -> Word -> EVM ()
 copyBytesToMemory bs size xOffset yOffset =
   if size == 0 then noop
   else do
@@ -1237,13 +1233,13 @@ copyBytesToMemory bs size xOffset yOffset =
     assign (state . memory) $
       writeMemory bs size xOffset yOffset mem
 
-readMemory :: Machine e => Word e -> Word e -> VM e -> Blob e
+readMemory :: Word -> Word -> VM -> Blob
 readMemory offset size vm = sliceMemory offset size (view (state . memory) vm)
 
 word256At
-  :: (Machine e, Functor f)
-  => Word e -> (Word e -> f (Word e))
-  -> Memory e -> f (Memory e)
+  :: Functor f
+  => Word -> (Word -> f Word)
+  -> Memory -> f Memory
 word256At i = lens getter setter where
   getter m = readMemoryWord i m
   setter m x = setMemoryWord i x m
@@ -1251,7 +1247,7 @@ word256At i = lens getter setter where
 -- * Tracing
 
 withTraceLocation
-  :: (Machine e, MonadState (VM e) m) => TraceData e -> m (Trace e)
+  :: (MonadState VM m) => TraceData -> m Trace
 withTraceLocation x = do
   vm <- get
   let
@@ -1263,19 +1259,19 @@ withTraceLocation x = do
     , _traceOpIx = (view opIxMap this) Vector.! (view (state . pc) vm)
     }
 
-pushTrace :: Machine e => TraceData e -> EVM e ()
+pushTrace :: TraceData -> EVM ()
 pushTrace x = do
   trace <- withTraceLocation x
   modifying traces $
     \t -> Zipper.children $ Zipper.insert (Node trace []) t
 
-insertTrace :: Machine e => TraceData e -> EVM e ()
+insertTrace :: TraceData -> EVM ()
 insertTrace x = do
   trace <- withTraceLocation x
   modifying traces $
     \t -> Zipper.nextSpace $ Zipper.insert (Node trace []) t
 
-popTrace :: Machine e => EVM e ()
+popTrace :: EVM ()
 popTrace =
   modifying traces $
     \t -> case Zipper.parent t of
@@ -1288,11 +1284,11 @@ zipperRootForest z =
     Nothing -> Zipper.toForest z
     Just z' -> zipperRootForest (Zipper.nextSpace z')
 
-traceForest :: Machine e => VM e -> Forest (Trace e)
+traceForest :: VM -> Forest Trace
 traceForest vm =
   view (traces . to zipperRootForest) vm
 
-traceLog :: (Machine e, MonadState (VM e) m) => Log e -> m ()
+traceLog :: (MonadState VM m) => Log -> m ()
 traceLog log = do
   trace <- withTraceLocation (EventTrace log)
   modifying traces $
@@ -1300,14 +1296,14 @@ traceLog log = do
 
 -- * Stack manipulation
 
-push :: Machine e => Word e -> EVM e ()
+push :: Word -> EVM ()
 push x = state . stack %= (x :)
 
 stackOp1
-  :: (Machine e, ?op :: Word8)
-  => (Word e -> Word e)
-  -> (Word e -> Word e)
-  -> EVM e ()
+  :: (?op :: Word8)
+  => (Word -> Word)
+  -> (Word -> Word)
+  -> EVM ()
 stackOp1 cost f =
   use (state . stack) >>= \case
     (x:xs) ->
@@ -1319,10 +1315,10 @@ stackOp1 cost f =
       underrun
 
 stackOp2
-  :: (Machine e, ?op :: Word8)
-  => ((Word e, Word e) -> Word e)
-  -> ((Word e, Word e) -> Word e)
-  -> EVM e ()
+  :: (?op :: Word8)
+  => ((Word, Word) -> Word)
+  -> ((Word, Word) -> Word)
+  -> EVM ()
 stackOp2 cost f =
   use (state . stack) >>= \case
     (x:y:xs) ->
@@ -1333,10 +1329,10 @@ stackOp2 cost f =
       underrun
 
 stackOp3
-  :: (Machine e, ?op :: Word8)
-  => ((Word e, Word e, Word e) -> Word e)
-  -> ((Word e, Word e, Word e) -> Word e)
-  -> EVM e ()
+  :: (?op :: Word8)
+  => ((Word, Word, Word) -> Word)
+  -> ((Word, Word, Word) -> Word)
+  -> EVM ()
 stackOp3 cost f =
   use (state . stack) >>= \case
     (x:y:z:xs) ->
@@ -1348,7 +1344,7 @@ stackOp3 cost f =
 
 -- * Bytecode data functions
 
-checkJump :: (Machine e, Integral n) => n -> [Word e] -> EVM e ()
+checkJump :: (Integral n) => n -> [Word] -> EVM ()
 checkJump x xs = do
   theCode <- use (state . code)
   if x < num (BS.length theCode) && BS.index theCode (num x) == 0x5b
@@ -1362,7 +1358,7 @@ checkJump x xs = do
             state . pc .= num x
     else vmError BadJumpDestination
 
-insidePushData :: Machine e => Int -> EVM e Bool
+insidePushData :: Int -> EVM Bool
 insidePushData i =
   -- If the operation index for the code pointer is the same
   -- as for the previous code pointer, then it's inside push data.
@@ -1397,7 +1393,7 @@ mkOpIxMap xs = Vector.create $ Vector.new (BS.length xs) >>= \v ->
     go v (n, !i, !j, !m) _ =
       {- PUSH data. -}        (n - 1,        i + 1, j,     m >> Vector.write v i j)
 
-vmOp :: Machine e => VM e -> Maybe Op
+vmOp :: VM -> Maybe Op
 vmOp vm =
   let i  = vm ^. state . pc
       xs = BS.drop i (vm ^. state . code)
@@ -1406,12 +1402,12 @@ vmOp vm =
      then Nothing
      else Just (readOp op (BS.drop 1 xs))
 
-vmOpIx :: Machine e => VM e -> Maybe Int
+vmOpIx :: VM -> Maybe Int
 vmOpIx vm =
   do self <- currentContract vm
      (view opIxMap self) Vector.!? (view (state . pc) vm)
 
-opParams :: Machine e => VM e -> Map String (Word e)
+opParams :: VM -> Map String Word
 opParams vm =
   case vmOp vm of
     Just OpCreate ->
@@ -1527,10 +1523,9 @@ mkCodeOps bytes = RegularVector.fromList . toList $ go 0 bytes
 
 -- Gas cost function for CALL, transliterated from the Yellow Paper.
 costOfCall
-  :: Machine e
-  => FeeSchedule (Word e)
-  -> Maybe a -> Word e -> Word e -> Word e
-  -> (Word e, Word e)
+  :: FeeSchedule Word
+  -> Maybe a -> Word -> Word -> Word
+  -> (Word, Word)
 costOfCall (FeeSchedule {..}) recipient xValue availableGas xGas =
   (c_gascap + c_extra, c_callgas)
   where
@@ -1547,7 +1542,7 @@ costOfCall (FeeSchedule {..}) recipient xValue availableGas xGas =
       then min xGas (allButOne64th (availableGas - c_extra))
       else xGas
 
-memoryCost :: Machine e => FeeSchedule (Word e) -> Word e -> Word e
+memoryCost :: FeeSchedule Word -> Word -> Word
 memoryCost FeeSchedule{..} byteCount =
   let
     wordCount = ceilDiv byteCount 32

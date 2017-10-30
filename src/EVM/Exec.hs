@@ -2,7 +2,6 @@ module EVM.Exec where
 
 import EVM
 import EVM.Keccak (newContractAddress)
-import EVM.Concrete
 import EVM.Types
 
 import qualified EVM.FeeSchedule as FeeSchedule
@@ -18,7 +17,7 @@ import qualified Control.Monad.State.Class as State
 ethrunAddress :: Addr
 ethrunAddress = Addr 0x00a329c0648769a73afac7f9381e08fb43dbea72
 
-vmForEthrunCreation :: ByteString -> VM Concrete
+vmForEthrunCreation :: ByteString -> VM
 vmForEthrunCreation creationCode =
   (makeVm $ VMOpts
     { vmoptCode = creationCode
@@ -38,13 +37,13 @@ vmForEthrunCreation creationCode =
     }) & set (env . contracts . at ethrunAddress)
              (Just (initialContract mempty))
 
-exec :: MonadState (VM Concrete) m => m (VMResult Concrete)
+exec :: MonadState VM m => m VMResult
 exec =
   use EVM.result >>= \case
     Nothing -> State.state (runState exec1) >> exec
     Just x  -> return x
 
-execWhile :: MonadState (VM Concrete) m => (VM Concrete -> Bool) -> m Int
+execWhile :: MonadState VM m => (VM -> Bool) -> m Int
 execWhile p = go 0
   where
     go i = do

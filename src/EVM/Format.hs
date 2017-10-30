@@ -7,14 +7,14 @@ import Debug.Trace (traceShow)
 import EVM (VM, cheatCode, traceForest, traceData)
 import EVM (Trace, TraceData (..), Log (..), Query (..), FrameContext (..))
 import EVM.Dapp (DappInfo, dappSolcByHash, showTraceLocation, dappEventMap)
-import EVM.Concrete (Concrete, Word (..), Blob (..))
+import EVM.Concrete (Word (..), Blob (..))
 import EVM.Types (W256 (..), num)
 import EVM.ABI (AbiValue (..), Event (..), AbiType (..))
 import EVM.ABI (Indexed (Indexed, NotIndexed), getAbiSeq, getAbi)
 import EVM.ABI (abiTypeSolidity, parseTypeName)
 import EVM.Solidity (SolcContract, contractName, abiMap)
 import EVM.Solidity (methodOutput, methodSignature)
-import EVM.Machine (forceConcreteBlob, forceConcreteWord)
+import EVM.Concrete (forceConcreteBlob, forceConcreteWord)
 
 import Control.Arrow ((>>>))
 import Control.Lens (view, preview, ix, _2, to, _Just)
@@ -66,7 +66,7 @@ showDec signed (W256 w) =
 showDecExact :: Integer -> Text
 showDecExact = humanizeInteger
 
-showWordExact :: Word Concrete -> Text
+showWordExact :: Word -> Text
 showWordExact (C _ (W256 w)) = humanizeInteger w
 
 humanizeInteger :: (Num a, Integral a, Show a) => a -> Text
@@ -120,14 +120,14 @@ formatBinary :: ByteString -> Text
 formatBinary =
   (<>) "0x" . decodeUtf8 . toStrict . toLazyByteString . byteStringHex
 
-showTraceTree :: DappInfo -> VM Concrete -> Text
+showTraceTree :: DappInfo -> VM -> Text
 showTraceTree dapp =
   traceForest
     >>> fmap (fmap (unpack . showTrace dapp))
     >>> concatMap showTree
     >>> pack
 
-showTrace :: DappInfo -> Trace Concrete -> Text
+showTrace :: DappInfo -> Trace -> Text
 showTrace dapp trace =
   let
     pos =
@@ -187,7 +187,7 @@ showTrace dapp trace =
             <> pos
 
 getAbiMethodOutput
-  :: DappInfo -> W256 -> Word Concrete -> Maybe (Text, AbiType)
+  :: DappInfo -> W256 -> Word -> Maybe (Text, AbiType)
 getAbiMethodOutput dapp hash abi =
   -- Some typical ugly lens code. :'(
   preview
@@ -217,7 +217,7 @@ maybeContractName :: Maybe SolcContract -> Text
 maybeContractName =
   maybe "<unknown contract>" (view (contractName . to contractNamePart))
 
-maybeAbiName :: SolcContract -> Word Concrete -> Maybe Text
+maybeAbiName :: SolcContract -> Word -> Maybe Text
 maybeAbiName solc abi = preview (abiMap . ix (fromIntegral abi) . methodSignature) solc
 
 contractNamePart :: Text -> Text
@@ -244,7 +244,7 @@ formatLog event args =
                     Left (_,_,_) ->
                       error "lol"
 
-getEvent :: Word Concrete -> Map W256 Event -> Maybe Event
+getEvent :: Word -> Map W256 Event -> Maybe Event
 getEvent w events = Map.lookup (forceConcreteWord w) events
 
 getEventName :: Maybe Event -> Text
@@ -259,8 +259,8 @@ getEventIndexedTypes :: Maybe Event -> [AbiType]
 getEventIndexedTypes Nothing = []
 getEventIndexedTypes (Just (Event _ _ xs)) = [x | (x, Indexed) <- xs]
 
-getEventArgs :: Blob Concrete -> Text
+getEventArgs :: Blob -> Text
 getEventArgs b = formatBlob b
 
-formatBlob :: Blob Concrete -> Text
+formatBlob :: Blob -> Text
 formatBlob b = decodeUtf8 $ forceConcreteBlob b

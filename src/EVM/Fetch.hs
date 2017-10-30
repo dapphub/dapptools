@@ -6,8 +6,7 @@ module EVM.Fetch where
 import Prelude hiding (Word)
 
 import EVM.Types    (Addr, W256, showAddrWith0x, showWordWith0x, hexText)
-import EVM.Machine  (Machine, Word, w256)
-import EVM.Concrete (Concrete)
+import EVM.Concrete (Word, w256)
 import EVM          (EVM, Contract, initialContract, nonce, balance, external)
 
 import qualified EVM as EVM
@@ -78,8 +77,7 @@ fetchWithSession url sess x = do
   return (r ^? responseBody . key "result" . _String)
 
 fetchContractWithSession
-  :: Machine e
-  => Text -> Session -> Addr -> IO (Maybe (Contract e))
+  :: Text -> Session -> Addr -> IO (Maybe Contract)
 fetchContractWithSession url sess addr = runMaybeT $ do
   let
     fetch :: Show a => RpcQuery a -> IO (Maybe a)
@@ -96,23 +94,22 @@ fetchContractWithSession url sess addr = runMaybeT $ do
       & set external True
 
 fetchSlotWithSession
-  :: Machine e
-  => Text -> Session -> Addr -> W256 -> IO (Maybe (Word e))
+  :: Text -> Session -> Addr -> W256 -> IO (Maybe Word)
 fetchSlotWithSession url sess addr slot = do
   fmap w256 <$>
     fetchQuery (fetchWithSession url sess) (QuerySlot addr slot)
 
-fetchContractFrom :: Text -> Addr -> IO (Maybe (Contract Concrete))
+fetchContractFrom :: Text -> Addr -> IO (Maybe Contract)
 fetchContractFrom url addr =
   Session.withAPISession
     (flip (fetchContractWithSession url) addr)
 
-fetchSlotFrom :: Text -> Addr -> W256 -> IO (Maybe (Word Concrete))
+fetchSlotFrom :: Text -> Addr -> W256 -> IO (Maybe Word)
 fetchSlotFrom url addr slot =
   Session.withAPISession
     (\s -> fetchSlotWithSession url s addr slot)
 
-http :: Text -> EVM.Query Concrete -> IO (EVM Concrete ())
+http :: Text -> EVM.Query -> IO (EVM ())
 http url q = do
   case q of
     EVM.PleaseFetchContract addr continue ->
@@ -125,7 +122,7 @@ http url q = do
         Just x  -> return (continue x)
         Nothing -> error ("oracle error: " ++ show q)
 
-zero :: Monad m => EVM.Query Concrete -> m (EVM Concrete ())
+zero :: Monad m => EVM.Query -> m (EVM ())
 zero q = do
   case q of
     EVM.PleaseFetchContract _ continue ->
@@ -133,4 +130,4 @@ zero q = do
     EVM.PleaseFetchSlot _ _ continue ->
       return (continue 0)
 
-type Fetcher = EVM.Query Concrete -> IO (EVM Concrete ())
+type Fetcher = EVM.Query -> IO (EVM ())

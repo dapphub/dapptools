@@ -2,7 +2,6 @@ all: default.nix nix; cabal build
 
 default.nix: hevm.cabal
 	cabal2nix . > default.nix
-	sed -i 's/brick/brick_0_24_2/' default.nix
 
 nix: default.nix shell.nix
 	nix-shell --command 'cabal configure --enable-tests'

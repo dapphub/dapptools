@@ -35,12 +35,11 @@ module EVM.Facts
   ) where
 
 import EVM          (VM, Contract)
+import EVM.Concrete (Word)
 import EVM          (balance, nonce, storage, bytecode, env, contracts)
-import EVM.Concrete (Concrete)
 import EVM.Types    (Addr)
 
 import qualified EVM as EVM
-import qualified EVM.Machine as EVM
 
 import Prelude hiding (Word)
 
@@ -56,8 +55,6 @@ import qualified Data.ByteString as BS
 import qualified Data.ByteString.Char8 as Char8
 import qualified Data.Map as Map
 import qualified Data.Set as Set
-
-type Word = EVM.Word Concrete
 
 -- We treat everything as ASCII byte strings because
 -- we only use hex digits (and the letter 'x').
@@ -101,7 +98,7 @@ instance AsASCII Addr where
   dump = Char8.pack . show
   load = readMaybe . Char8.unpack
 
-instance AsASCII (EVM.Word Concrete) where
+instance AsASCII Word where
   dump = Char8.pack . show
   load = readMaybe . Char8.unpack
 
@@ -112,14 +109,14 @@ instance AsASCII ByteString where
       (y, "") -> Just y
       _       -> Nothing
 
-contractFacts :: Addr -> Contract Concrete -> [Fact]
+contractFacts :: Addr -> Contract -> [Fact]
 contractFacts a x = storageFacts a x ++
   [ BalanceFact a (view balance x)
   , NonceFact   a (view nonce x)
   , CodeFact    a (view bytecode x)
   ]
 
-storageFacts :: Addr -> Contract Concrete -> [Fact]
+storageFacts :: Addr -> Contract -> [Fact]
 storageFacts a x = map f (Map.toList (view storage x))
   where
     f :: (Word, Word) -> Fact
@@ -129,7 +126,7 @@ storageFacts a x = map f (Map.toList (view storage x))
       , which = fromIntegral k
       }
 
-vmFacts :: VM Concrete -> Set Fact
+vmFacts :: VM -> Set Fact
 vmFacts vm = Set.fromList $ do
   (k, v) <- Map.toList (view (env . contracts) vm)
   contractFacts k v
@@ -141,7 +138,7 @@ vmFacts vm = Set.fromList $ do
 -- the code hash and so on).
 --
 -- Therefore, we need to make sure to sort the fact set in such a way.
-apply1 :: VM Concrete -> Fact -> VM Concrete
+apply1 :: VM -> Fact -> VM
 apply1 vm fact =
   case fact of
     CodeFact    {..} ->
@@ -164,7 +161,7 @@ instance Ord Fact where
     f (StorageFact a _ x) = (3, a, x)
 
 -- Applies a set of facts to a VM.
-apply :: VM Concrete -> Set Fact -> VM Concrete
+apply :: VM -> Set Fact -> VM
 apply vm =
   -- The set's ordering is relevant; see `apply1`.
   foldl apply1 vm

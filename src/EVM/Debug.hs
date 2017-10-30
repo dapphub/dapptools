@@ -2,7 +2,6 @@ module EVM.Debug where
 
 import EVM          (Contract, storage, nonce, balance)
 import EVM          (bytecode, codehash, bytecode)
-import EVM.Concrete (Concrete)
 import EVM.Solidity (SrcMap, srcMapFile, srcMapOffset, srcMapLength)
 import EVM.Solidity (SourceCache, sourceFiles)
 import EVM.Types    (Addr)
@@ -28,7 +27,7 @@ object xs =
     <> line
     <> rbrace
 
-prettyContract :: Contract Concrete -> Doc
+prettyContract :: Contract -> Doc
 prettyContract c =
   object $
     [ (text "codesize", int (ByteString.length (c ^. bytecode)))
@@ -39,7 +38,7 @@ prettyContract c =
     , (text "storage", text (show (c ^. storage)))
     ]
 
-prettyContracts :: Map Addr (Contract Concrete) -> Doc
+prettyContracts :: Map Addr Contract -> Doc
 prettyContracts x =
   object $
     (map (\(a, b) -> (text (show a), prettyContract b))

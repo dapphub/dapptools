@@ -2,18 +2,10 @@
 {-# Language StandaloneDeriving #-}
 {-# Language StrictData #-}
 
-module EVM.Concrete
-  ( Concrete
-  , word
-  , Word (..)
-  , Blob (..)
-  , wordAt
-  , word256Bytes
-  ) where
+module EVM.Concrete where
 
 import Prelude hiding (Word, (^))
 
-import EVM.Machine
 import EVM.Types (W256 (..), num, toWord512, fromWord512)
 import EVM.Types (word, padRight, byteAt)
 import EVM.Keccak (keccak)
@@ -28,8 +20,6 @@ import Data.String     (IsString)
 import Data.Word       (Word8)
 
 import qualified Data.ByteString as BS
-
-data Concrete
 
 wordAt :: Int -> ByteString -> W256
 wordAt i bs =
@@ -52,133 +42,155 @@ byteStringSliceWithDefaultZeroes offset size bs =
 data Whiff = Dull | FromKeccak ByteString
   deriving Show
 
-instance Machine' Concrete where
-  w256 = C Dull
-  blob = B
+w256 :: W256 -> Word
+w256 = C Dull
 
-  data Word Concrete = C Whiff W256
-  newtype Blob Concrete = B ByteString
-  newtype Byte Concrete = ConcreteByte Word8
-  newtype Memory Concrete = ConcreteMemory ByteString
+blob :: ByteString -> Blob
+blob = B
 
-  wordToByte (C _ x) = ConcreteByte (num (x .&. 0xff))
+data Word = C Whiff W256
+newtype Blob = B ByteString
+newtype Byte = ConcreteByte Word8
+newtype Memory = ConcreteMemory ByteString
 
-  exponentiate (C _ x) (C _ y) = w256 (x ^ y)
+wordToByte :: Word -> Byte
+wordToByte (C _ x) = ConcreteByte (num (x .&. 0xff))
 
-  sdiv _ (C _ (W256 0)) = 0
-  sdiv (C _ (W256 x)) (C _ (W256 y)) =
-    let sx = signedWord x
-        sy = signedWord y
-        k  = if (sx < 0) /= (sy < 0)
-             then (-1)
-             else 1
-    in w256 . W256 . unsignedWord $ k * div (abs sx) (abs sy)
+exponentiate :: Word -> Word -> Word
+exponentiate (C _ x) (C _ y) = w256 (x ^ y)
 
-  smod _ (C _ (W256 0)) = 0
-  smod (C _ (W256 x)) (C _ (W256 y)) =
-    let sx = signedWord x
-        sy = signedWord y
-        k  = if sx < 0 then (-1) else 1
-    in w256 . W256 . unsignedWord $ k * mod (abs sx) (abs sy)
+sdiv :: Word -> Word -> Word
+sdiv _ (C _ (W256 0)) = 0
+sdiv (C _ (W256 x)) (C _ (W256 y)) =
+  let sx = signedWord x
+      sy = signedWord y
+      k  = if (sx < 0) /= (sy < 0)
+           then (-1)
+           else 1
+  in w256 . W256 . unsignedWord $ k * div (abs sx) (abs sy)
 
-  addmod _ _ (C _ (W256 0)) = 0
-  addmod (C _ x) (C _ y) (C _ z) =
-    w256 $
-      fromWord512
-        ((toWord512 x + toWord512 y) `mod` (toWord512 z))
+smod :: Word -> Word -> Word
+smod _ (C _ (W256 0)) = 0
+smod (C _ (W256 x)) (C _ (W256 y)) =
+  let sx = signedWord x
+      sy = signedWord y
+      k  = if sx < 0 then (-1) else 1
+  in w256 . W256 . unsignedWord $ k * mod (abs sx) (abs sy)
 
-  mulmod _ _ (C _ (W256 0)) = 0
-  mulmod (C _ x) (C _ y) (C _ z) =
-    w256 $
-      fromWord512
-        ((toWord512 x * toWord512 y) `mod` (toWord512 z))
+addmod :: Word -> Word -> Word -> Word
+addmod _ _ (C _ (W256 0)) = 0
+addmod (C _ x) (C _ y) (C _ z) =
+  w256 $
+    fromWord512
+      ((toWord512 x + toWord512 y) `mod` (toWord512 z))
 
-  slt (C _ (W256 x)) (C _ (W256 y)) =
-    if signedWord x < signedWord y then w256 1 else w256 0
+mulmod :: Word -> Word -> Word -> Word
+mulmod _ _ (C _ (W256 0)) = 0
+mulmod (C _ x) (C _ y) (C _ z) =
+  w256 $
+    fromWord512
+      ((toWord512 x * toWord512 y) `mod` (toWord512 z))
 
-  sgt (C _ (W256 x)) (C _ (W256 y)) =
-    if signedWord x > signedWord y then w256 1 else w256 0
+slt :: Word -> Word -> Word
+slt (C _ (W256 x)) (C _ (W256 y)) =
+  if signedWord x < signedWord y then w256 1 else w256 0
 
-  forceConcreteBlob (B x) = x
-  forceConcreteWord (C _ x) = x
+sgt :: Word -> Word -> Word
+sgt (C _ (W256 x)) (C _ (W256 y)) =
+  if signedWord x > signedWord y then w256 1 else w256 0
 
-  sliceMemory o s (ConcreteMemory m) =
-    B $ byteStringSliceWithDefaultZeroes (num o) (num s) m
+forceConcreteBlob :: Blob -> ByteString
+forceConcreteBlob (B x) = x
 
-  writeMemory (B bs1) (C _ n) (C _ src) (C _ dst) (ConcreteMemory bs0) =
-    if src > num (BS.length bs1)
-    then
-      let
-        (a, b) = BS.splitAt (num dst) bs0
-        c      = BS.replicate (num n) 0
-        b'     = BS.drop (num n) b
-      in
-        ConcreteMemory $
-          a <> c <> b'
-    else
-      let
-        (a, b) = BS.splitAt (num dst) bs0
-        c      = BS.take (num n) (BS.drop (num src) bs1)
-        b'     = BS.drop (num n) b
-      in
-        ConcreteMemory $
-          a <> BS.replicate (num dst - BS.length a) 0 <> c <> b'
+forceConcreteWord :: Word -> W256
+forceConcreteWord (C _ x) = x
 
-  readMemoryWord (C _ i) (ConcreteMemory m) =
+sliceMemory :: (Integral a, Integral b) => a -> b -> Memory -> Blob
+sliceMemory o s (ConcreteMemory m) =
+  B $ byteStringSliceWithDefaultZeroes (num o) (num s) m
+
+writeMemory :: Blob -> Word -> Word -> Word -> Memory -> Memory
+writeMemory (B bs1) (C _ n) (C _ src) (C _ dst) (ConcreteMemory bs0) =
+  if src > num (BS.length bs1)
+  then
     let
-      go !a (-1) = a
-      go !a !n = go (a + shiftL (num $ readByteOrZero (num i + n) m)
-                                (8 * (31 - n))) (n - 1)
-    in {-# SCC readMemoryWord #-}
-      w256 $ go (0 :: W256) (31 :: Int)
-
-  readMemoryWord32 (C _ i) (ConcreteMemory m) =
+      (a, b) = BS.splitAt (num dst) bs0
+      c      = BS.replicate (num n) 0
+      b'     = BS.drop (num n) b
+    in
+      ConcreteMemory $
+        a <> c <> b'
+  else
     let
-      go !a (-1) = a
-      go !a !n = go (a + shiftL (num $ readByteOrZero (num i + n) m)
-                                (8 * (3 - n))) (n - 1)
-    in {-# SCC readMemoryWord32 #-}
-      w256 $ go (0 :: W256) (3 :: Int)
+      (a, b) = BS.splitAt (num dst) bs0
+      c      = BS.take (num n) (BS.drop (num src) bs1)
+      b'     = BS.drop (num n) b
+    in
+      ConcreteMemory $
+        a <> BS.replicate (num dst - BS.length a) 0 <> c <> b'
 
-  setMemoryWord (C _ i) (C _ x) m =
-    writeMemory (B (word256Bytes x)) 32 0 (num i) m
+readMemoryWord :: Word -> Memory -> Word
+readMemoryWord (C _ i) (ConcreteMemory m) =
+  let
+    go !a (-1) = a
+    go !a !n = go (a + shiftL (num $ readByteOrZero (num i + n) m)
+                              (8 * (31 - n))) (n - 1)
+  in {-# SCC readMemoryWord #-}
+    w256 $ go (0 :: W256) (31 :: Int)
 
-  setMemoryByte (C _ i) (ConcreteByte x) m =
-    writeMemory (B (BS.singleton x)) 1 0 (num i) m
+readMemoryWord32 :: Word -> Memory -> Word
+readMemoryWord32 (C _ i) (ConcreteMemory m) =
+  let
+    go !a (-1) = a
+    go !a !n = go (a + shiftL (num $ readByteOrZero (num i + n) m)
+                              (8 * (3 - n))) (n - 1)
+  in {-# SCC readMemoryWord32 #-}
+    w256 $ go (0 :: W256) (3 :: Int)
 
-  readBlobWord (C _ i) (B x) =
-    if i > num (BS.length x)
-    then 0
-    else w256 (wordAt (num i) x)
+setMemoryWord :: Word -> Word -> Memory -> Memory
+setMemoryWord (C _ i) (C _ x) m =
+  writeMemory (B (word256Bytes x)) 32 0 (num i) m
 
-  blobSize (B x) = w256 (num (BS.length x))
+setMemoryByte :: Word -> Byte -> Memory -> Memory
+setMemoryByte (C _ i) (ConcreteByte x) m =
+  writeMemory (B (BS.singleton x)) 1 0 (num i) m
 
-  keccakBlob (B x) = C (FromKeccak x) (keccak x)
+readBlobWord :: Word -> Blob -> Word
+readBlobWord (C _ i) (B x) =
+  if i > num (BS.length x)
+  then 0
+  else w256 (wordAt (num i) x)
 
-deriving instance Bits (Byte Concrete)
-deriving instance FiniteBits (Byte Concrete)
-deriving instance Enum (Byte Concrete)
-deriving instance Eq (Byte Concrete)
-deriving instance Integral (Byte Concrete)
-deriving instance IsString (Blob Concrete)
-deriving instance Monoid (Blob Concrete)
-deriving instance Monoid (Memory Concrete)
-deriving instance Num (Byte Concrete)
-deriving instance Ord (Byte Concrete)
-deriving instance Real (Byte Concrete)
-deriving instance Show (Blob Concrete)
+blobSize :: Blob -> Word
+blobSize (B x) = w256 (num (BS.length x))
 
-instance Show (Word Concrete) where
+keccakBlob :: Blob -> Word
+keccakBlob (B x) = C (FromKeccak x) (keccak x)
+
+deriving instance Bits Byte
+deriving instance FiniteBits Byte
+deriving instance Enum Byte
+deriving instance Eq Byte
+deriving instance Integral Byte
+deriving instance IsString Blob
+deriving instance Monoid Blob
+deriving instance Monoid Memory
+deriving instance Num Byte
+deriving instance Ord Byte
+deriving instance Real Byte
+deriving instance Show Blob
+
+instance Show Word where
   show (C Dull x) = show x
   show (C whiff x) = show whiff ++ ": " ++ show x
 
-instance Read (Word Concrete) where
+instance Read Word where
   readsPrec n s =
     case readsPrec n s of
       [(x, r)] -> [(C Dull x, r)]
       _ -> []
 
-instance Bits (Word Concrete) where
+instance Bits Word where
   (C _ x) .&. (C _ y) = w256 (x .&. y)
   (C _ x) .|. (C _ y) = w256 (x .|. y)
   (C _ x) `xor` (C _ y) = w256 (x `xor` y)
@@ -192,29 +204,29 @@ instance Bits (Word Concrete) where
   bit i = w256 (bit i)
   popCount (C _ x) = popCount x
 
-instance FiniteBits (Word Concrete) where
+instance FiniteBits Word where
   finiteBitSize (C _ x) = finiteBitSize x
   countLeadingZeros (C _ x) = countLeadingZeros x
   countTrailingZeros (C _ x) = countTrailingZeros x
 
-instance Bounded (Word Concrete) where
+instance Bounded Word where
   minBound = w256 minBound
   maxBound = w256 maxBound
 
-instance Eq (Word Concrete) where
+instance Eq Word where
   (C _ x) == (C _ y) = x == y
 
-instance Enum (Word Concrete) where
+instance Enum Word where
   toEnum i = w256 (toEnum i)
   fromEnum (C _ x) = fromEnum x
 
-instance Integral (Word Concrete) where
+instance Integral Word where
   quotRem (C _ x) (C _ y) =
     let (a, b) = quotRem x y
     in (w256 a, w256 b)
   toInteger (C _ x) = toInteger x
 
-instance Num (Word Concrete) where
+instance Num Word where
   (C _ x) + (C _ y) = w256 (x + y)
   (C _ x) * (C _ y) = w256 (x * y)
   abs (C _ x) = w256 (abs x)
@@ -222,10 +234,10 @@ instance Num (Word Concrete) where
   fromInteger x = w256 (fromInteger x)
   negate (C _ x) = w256 (negate x)
 
-instance Real (Word Concrete) where
+instance Real Word where
   toRational (C _ x) = toRational x
 
-instance Ord (Word Concrete) where
+instance Ord Word where
   compare (C _ x) (C _ y) = compare x y
 
 -- Copied from the standard library just to get specialization.

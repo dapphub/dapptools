@@ -36,57 +36,56 @@ import EVM (EVM, VMResult (VMFailure, VMSuccess), Error (Query), Query)
 import qualified EVM
 
 import EVM.ABI (AbiType, AbiValue, getAbi)
-import EVM.Machine (Machine, Blob)
-import EVM.Concrete (Concrete, Blob (B))
+import EVM.Concrete (Blob (B))
 
 import qualified Data.ByteString.Lazy as LazyByteString
 
 -- | The instruction type of the operational monad
-data Action e a where
+data Action a where
 
   -- | Keep executing until an intermediate result is reached
-  Exec    :: Machine e => Action e        (VMResult e)
+  Exec ::            Action VMResult
   
   -- | Short-circuit with a failure
-  Fail    :: Machine e => Failure e -> Action e a
+  Fail :: Failure -> Action a
   
   -- | Wait for a query to be resolved
-  Wait    :: Machine e => Query e   -> Action e ()
+  Wait :: Query   -> Action ()
 
   -- | Embed a VM state transformation
-  EVM     :: Machine e => EVM e a      -> Action e a
+  EVM  :: EVM a   -> Action a
 
   -- | Write something to the log or terminal
-  Note    :: Machine e => Text      -> Action e ()
+  Note :: Text    -> Action ()
 
 -- | Some failure raised by a stepper
-data Failure e where
-  ContractNotFound :: Failure e
-  DecodingError    :: Failure e
-  VMFailed         :: Error e -> Failure e
+data Failure where
+  ContractNotFound :: Failure
+  DecodingError    :: Failure
+  VMFailed         :: Error -> Failure
 
 -- | Type alias for an operational monad of @Action@
-type Stepper e a = Program (Action e) a
+type Stepper a = Program Action a
 
 -- Singleton actions
 
-exec :: Machine e => Stepper e (VMResult e)
+exec :: Stepper VMResult
 exec = singleton Exec
 
-fail :: Machine e => Failure e -> Stepper e a
+fail :: Failure -> Stepper a
 fail = singleton . Fail
 
-wait :: Machine e => Query e -> Stepper e ()
+wait :: Query -> Stepper ()
 wait = singleton . Wait
 
-evm :: Machine e => EVM e a -> Stepper e a
+evm :: EVM a -> Stepper a
 evm = singleton . EVM
 
-note :: Machine e => Text -> Stepper e ()
+note :: Text -> Stepper ()
 note = singleton . Note
 
 -- | Run the VM until final result, resolving all queries
-execFully :: Machine e => Stepper e (Either (Error e) (Blob e))
+execFully :: Stepper (Either Error Blob)
 execFully =
   exec >>= \case
     VMFailure (Query q) ->
@@ -96,11 +95,11 @@ execFully =
     VMSuccess x ->
       pure (Right x)
 
-execFullyOrFail :: Machine e => Stepper e (Blob e)
+execFullyOrFail :: Stepper Blob
 execFullyOrFail = execFully >>= either (fail . VMFailed) pure
 
 -- | Decode a blob as an ABI value, failing if ABI encoding wrong
-decode :: AbiType -> Blob Concrete -> Stepper Concrete AbiValue
+decode :: AbiType -> Blob -> Stepper AbiValue
 decode abiType (B bytes) =
   case runGetOrFail (getAbi abiType) (LazyByteString.fromStrict bytes) of
     Right ("", _, x) ->
@@ -110,13 +109,13 @@ decode abiType (B bytes) =
     Left _ ->
       fail DecodingError
 
-entering :: Text -> Stepper Concrete a -> Stepper Concrete a
+entering :: Text -> Stepper a -> Stepper a
 entering t stepper = do
   evm (EVM.pushTrace (EVM.EntryTrace t))
   x <- stepper
   evm EVM.popTrace
   pure x
 
-enter :: Text -> Stepper Concrete ()
+enter :: Text -> Stepper ()
 enter t = do
   evm (EVM.pushTrace (EVM.EntryTrace t))

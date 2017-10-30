@@ -11,7 +11,7 @@ import Brick.Widgets.Center
 import Brick.Widgets.List
 
 import EVM
-import EVM.Concrete (Concrete, Word (C))
+import EVM.Concrete (Word (C))
 import EVM.Dapp (DappInfo, dappInfo)
 import EVM.Dapp (dappUnitTests, dappSolcByName, dappSolcByHash, dappSources)
 import EVM.Dapp (dappAstSrcMap)
@@ -19,7 +19,6 @@ import EVM.Debug
 import EVM.Format (Signedness (..), showDec, showWordExact)
 import EVM.Format (showTraceTree)
 import EVM.Format (contractNamePart, contractPathPart)
-import EVM.Machine (Machine)
 import EVM.Op
 import EVM.Solidity
 import EVM.Types
@@ -66,17 +65,17 @@ data Name
 
 type UiWidget = Widget Name
 
-data UiVmState e = UiVmState
-  { _uiVm             :: VM e
-  , _uiVmNextStep     :: Stepper Concrete ()
-  , _uiVmStackList    :: List Name (Int, Word e)
+data UiVmState = UiVmState
+  { _uiVm             :: VM
+  , _uiVmNextStep     :: Stepper ()
+  , _uiVmStackList    :: List Name (Int, Word)
   , _uiVmBytecodeList :: List Name (Int, Op)
   , _uiVmTraceList    :: List Name Text
   , _uiVmSolidityList :: List Name (Int, ByteString)
   , _uiVmSolc         :: Maybe SolcContract
   , _uiVmDapp         :: Maybe DappInfo
   , _uiVmStepCount    :: Int
-  , _uiVmFirstState   :: UiVmState e
+  , _uiVmFirstState   :: UiVmState
   , _uiVmMessage      :: Maybe String
   , _uiVmNotes        :: [String]
   }
@@ -86,9 +85,9 @@ data UiTestPickerState = UiTestPickerState
   , _testPickerDapp :: DappInfo
   }
 
-data UiState e
-  = UiVmScreen (UiVmState e)
-  | UiVmBrowserScreen (UiVmState e)
+data UiState
+  = UiVmScreen UiVmState
+  | UiVmBrowserScreen UiVmState
   | UiTestPickerScreen UiTestPickerState
 
 makeLenses ''UiVmState
@@ -101,22 +100,22 @@ data StepMode
   = StepOne                        -- ^ Finish after one opcode step
   | StepMany !Int                  -- ^ Run a specific number of steps
   | StepNone                       -- ^ Finish before the next opcode
-  | StepUntil (Pred (VM Concrete)) -- ^ Finish when a VM predicate holds
+  | StepUntil (Pred VM)            -- ^ Finish when a VM predicate holds
 
 -- | Each step command in the terminal should finish immediately
 -- with one of these outcomes.
-data StepOutcome e a
-  = Returned a                         -- ^ Program finished
-  | Stepped  (Stepper Concrete a)      -- ^ Took one step; more steps to go
-  | Blocked  (IO (Stepper Concrete a)) -- ^ Came across blocking request
+data StepOutcome a
+  = Returned a                -- ^ Program finished
+  | Stepped  (Stepper a)      -- ^ Took one step; more steps to go
+  | Blocked  (IO (Stepper a)) -- ^ Came across blocking request
 
 -- | This turns a @Stepper@ into a state action usable
 -- from within the TTY loop, yielding a @StepOutcome@ depending on the @StepMode@.
 interpret
   :: (?fetcher :: Fetcher)
   => StepMode
-  -> Stepper Concrete a
-  -> State (UiVmState Concrete) (StepOutcome Concrete a)
+  -> Stepper a
+  -> State UiVmState (StepOutcome a)
 interpret mode =
 
   -- Like the similar interpreters in @EVM.UnitTest@ and @EVM.VMTest@,
@@ -125,8 +124,8 @@ interpret mode =
   eval . Operational.view
   where
     eval
-      :: Operational.ProgramView (Stepper.Action Concrete) a
-      -> State (UiVmState Concrete) (StepOutcome Concrete a)
+      :: Operational.ProgramView Stepper.Action a
+      -> State UiVmState (StepOutcome a)
 
     eval (Operational.Return x) =
       pure (Returned x)
@@ -233,7 +232,7 @@ mkVty = do
   Vty.setMode (Vty.outputIface vty) Vty.BracketedPaste True
   return vty
 
-runFromVM :: VM Concrete -> IO (VM Concrete)
+runFromVM :: VM -> IO VM
 runFromVM vm = do
   let
     ui0 = UiVmState
@@ -289,7 +288,7 @@ main opts root jsonFilePath = do
             , _testPickerDapp = dapp
             }
 
-        _ <- customMain mkVty Nothing (app opts) (ui :: UiState Concrete)
+        _ <- customMain mkVty Nothing (app opts) (ui :: UiState)
         return ()
 
 -- ^ Specifies whether to do I/O blocking or VM halting while stepping.
@@ -300,10 +299,10 @@ data StepPolicy
 
 takeStep
   :: (?fetcher :: Fetcher)
-  => UiVmState Concrete
+  => UiVmState
   -> StepPolicy
   -> StepMode
-  -> EventM n (Next (UiState Concrete))
+  -> EventM n (Next UiState)
 takeStep ui policy mode = do
   let m = interpret mode (view uiVmNextStep ui)
 
@@ -330,7 +329,7 @@ takeStep ui policy mode = do
         StepTimidly ->
           error "step halted unexpectedly"
 
-app :: UnitTestOptions -> App (UiState Concrete) () Name
+app :: UnitTestOptions -> App UiState () Name
 app opts =
   let ?fetcher = oracle opts
   in App
@@ -406,7 +405,7 @@ initialUiVmStateForTest
   :: UnitTestOptions
   -> DappInfo
   -> (Text, Text)
-  -> UiVmState Concrete
+  -> UiVmState
 initialUiVmStateForTest opts@(UnitTestOptions {..}) dapp (theContractName, theTestName) =
   ui1
   where
@@ -447,7 +446,7 @@ myTheme =
   , (activeAttr, Vty.defAttr `Vty.withStyle` Vty.standout)
   ]
 
-drawUi :: UiState Concrete -> [UiWidget]
+drawUi :: UiState -> [UiWidget]
 drawUi (UiVmScreen s) = drawVm s
 drawUi (UiTestPickerScreen s) = drawTestPicker s
 drawUi (UiVmBrowserScreen s) = drawVmBrowser s
@@ -464,7 +463,7 @@ drawTestPicker ui =
           (view testPickerList ui)
   ]
 
-drawVmBrowser :: UiVmState Concrete -> [UiWidget]
+drawVmBrowser :: UiVmState -> [UiWidget]
 drawVmBrowser ui =
   [ center . borderWithLabel (txt "Browser (alpha version)") .
       hLimit 80 $
@@ -479,7 +478,7 @@ drawVmBrowser ui =
              1)
   ]
 
-drawVm :: UiVmState Concrete -> [UiWidget]
+drawVm :: UiVmState -> [UiWidget]
 drawVm ui =
   -- EVM debugging needs a lot of space because of the 256-bit words
   -- in both the bytecode and the stack .
@@ -509,7 +508,7 @@ drawVm ui =
       )
   ]
 
-stepOneOpcode :: UiVmState Concrete -> UiVmState Concrete
+stepOneOpcode :: UiVmState -> UiVmState
 stepOneOpcode ui =
   let
     nextVm = execState exec1 (view uiVm ui)
@@ -518,7 +517,7 @@ stepOneOpcode ui =
        & set uiVm nextVm
 
 isNextSourcePosition
-  :: UiVmState Concrete -> Pred (VM Concrete)
+  :: UiVmState -> Pred VM
 isNextSourcePosition ui vm =
   let
     Just dapp       = view uiVmDapp ui
@@ -527,7 +526,7 @@ isNextSourcePosition ui vm =
     currentSrcMap dapp vm /= initialPosition
 
 isNextSourcePositionWithoutEntering
-  :: UiVmState Concrete -> Pred (VM Concrete)
+  :: UiVmState -> Pred VM
 isNextSourcePositionWithoutEntering ui vm =
   let
     vm0             = view uiVm ui
@@ -551,7 +550,7 @@ isNextSourcePositionWithoutEntering ui vm =
         in
            moved && not deeper && not boring
 
-currentSrcMap :: Machine e => DappInfo -> VM e -> Maybe SrcMap
+currentSrcMap :: DappInfo -> VM -> Maybe SrcMap
 currentSrcMap dapp vm =
   let
     this = vm ^?! env . contracts . ix (view (state . codeContract) vm)
@@ -566,7 +565,7 @@ currentSrcMap dapp vm =
       Just (Runtime, solc) ->
         preview (runtimeSrcmap . ix i) solc
 
-currentSolc :: Machine e => DappInfo -> VM e -> Maybe SolcContract
+currentSolc :: DappInfo -> VM -> Maybe SolcContract
 currentSolc dapp vm =
   let
     this = vm ^?! env . contracts . ix (view (state . contract) vm)
@@ -574,10 +573,10 @@ currentSolc dapp vm =
   in
     preview (dappSolcByHash . ix h . _2) dapp
 
-renderVm :: UiVmState Concrete -> UiVmState Concrete
+renderVm :: UiVmState -> UiVmState
 renderVm ui = updateUiVmState ui (view uiVm ui)
 
-updateUiVmState :: UiVmState Concrete -> VM Concrete -> UiVmState Concrete
+updateUiVmState :: UiVmState -> VM -> UiVmState
 updateUiVmState ui vm =
   let
     move = case vmOpIx vm of
@@ -619,7 +618,7 @@ updateUiVmState ui vm =
                         dapp)
                  1)
 
-drawStackPane :: UiVmState Concrete -> UiWidget
+drawStackPane :: UiVmState -> UiWidget
 drawStackPane ui =
   let
     gasText = showWordExact (view (uiVm . state . gas) ui)
@@ -647,7 +646,7 @@ showWordExplanation w (Just dapp) =
       Nothing -> showDec Unsigned w
       Just x  -> "abi " <> pack (show x)
 
-drawBytecodePane :: UiVmState Concrete -> UiWidget
+drawBytecodePane :: UiVmState -> UiWidget
 drawBytecodePane ui =
   hBorderWithLabel (case view uiVmMessage ui of { Nothing -> str ""; Just s -> str s }) <=>
     Centered.renderList
@@ -664,7 +663,7 @@ withHighlight :: Bool -> Widget n -> Widget n
 withHighlight False = withDefAttr dimAttr
 withHighlight True  = withDefAttr boldAttr
 
-drawTracePane :: Machine e => UiVmState e -> UiWidget
+drawTracePane :: UiVmState -> UiWidget
 drawTracePane ui =
   hBorderWithLabel (txt "Trace") <=>
     renderList
@@ -672,7 +671,7 @@ drawTracePane ui =
       False
       (view uiVmTraceList ui)
 
-drawSolidityPane :: Machine e => UiVmState e -> UiWidget
+drawSolidityPane :: UiVmState -> UiWidget
 drawSolidityPane ui@(view uiVmDapp -> Just dapp) =
   case currentSrcMap dapp (view uiVm ui) of
     Nothing -> hBorderWithLabel (txt "<no source map>")

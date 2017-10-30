@@ -15,7 +15,7 @@ import qualified EVM.Fetch
 import qualified EVM.Stepper
 import qualified EVM.TTY as EVM.TTY
 import qualified EVM.FeeSchedule as FeeSchedule
-import EVM.Machine (w256)
+import EVM.Concrete (w256)
 
 #if MIN_VERSION_aeson(1, 0, 0)
 import qualified EVM.VMTest as VMTest
@@ -270,7 +270,7 @@ launchExec cmd = do
     Debug ->
       void (EVM.TTY.runFromVM vm)
 
-vmFromCommand :: Command -> EVM.VM EVM.Concrete
+vmFromCommand :: Command -> EVM.VM
 vmFromCommand cmd =
   vm1 & EVM.env . EVM.contracts . ix address' . EVM.balance +~ (w256 value')
   where

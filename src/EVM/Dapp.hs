@@ -6,7 +6,6 @@ import EVM (Trace, traceCodehash, traceOpIx)
 import EVM.ABI (Event)
 import EVM.Debug (srcMapCodePos)
 import EVM.Keccak (abiKeccak)
-import EVM.Machine (Machine)
 import EVM.Solidity (SolcContract, CodeType (..), SourceCache, SrcMap)
 import EVM.Solidity (contractName)
 import EVM.Solidity (runtimeCodehash, creationCodehash, abiMap)
@@ -90,7 +89,7 @@ unitTestMethods =
     >>> filter ("test" `isPrefixOf`)
     >>> sort
 
-traceSrcMap :: Machine e => DappInfo -> Trace e -> Maybe SrcMap
+traceSrcMap :: DappInfo -> Trace -> Maybe SrcMap
 traceSrcMap dapp trace =
   let
     h = view traceCodehash trace
@@ -103,7 +102,7 @@ traceSrcMap dapp trace =
     Just (Runtime, solc) ->
       preview (runtimeSrcmap . ix i) solc
 
-showTraceLocation :: Machine e => DappInfo -> Trace e -> Either Text Text
+showTraceLocation :: DappInfo -> Trace -> Either Text Text
 showTraceLocation dapp trace =
   case traceSrcMap dapp trace of
     Nothing -> Left "<no source map>"

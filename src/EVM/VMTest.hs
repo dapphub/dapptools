@@ -14,7 +14,6 @@ module EVM.VMTest
 import qualified EVM
 import qualified EVM.Concrete as EVM
 import qualified EVM.Exec
-import qualified EVM.Machine as EVM
 import qualified EVM.FeeSchedule as EVM.FeeSchedule
 import qualified EVM.Stepper as Stepper
 import qualified EVM.Fetch as Fetch
@@ -24,7 +23,6 @@ import qualified Control.Monad.Operational as Operational
 import qualified Control.Monad.State.Class as State
 
 import EVM (EVM)
-import EVM.Concrete (Concrete)
 import EVM.Stepper (Stepper)
 import EVM.Types
 
@@ -62,7 +60,7 @@ data Expectation = Expectation
   , expectedGas :: W256
   } deriving Show
 
-checkExpectation :: Case -> EVM.VM EVM.Concrete -> IO Bool
+checkExpectation :: Case -> EVM.VM -> IO Bool
 checkExpectation x vm =
   case (testExpectation x, view EVM.result vm) of
     (Just expectation, Just (EVM.VMSuccess (EVM.B output))) -> do
@@ -89,15 +87,15 @@ checkExpectedOut :: ByteString -> ByteString -> Bool
 checkExpectedOut output expected =
   output == expected
 
-checkExpectedContracts :: EVM.VM EVM.Concrete -> Map Addr Contract -> Bool
+checkExpectedContracts :: EVM.VM -> Map Addr Contract -> Bool
 checkExpectedContracts vm expected =
   realizeContracts expected == vm ^. EVM.env . EVM.contracts . to (fmap clearZeroStorage)
 
-clearZeroStorage :: EVM.Contract EVM.Concrete -> EVM.Contract EVM.Concrete
+clearZeroStorage :: EVM.Contract -> EVM.Contract
 clearZeroStorage =
   over EVM.storage (Map.filterWithKey (\_ x -> x /= 0))
 
-checkExpectedGas :: EVM.VM EVM.Concrete -> W256 -> Bool
+checkExpectedGas :: EVM.VM -> W256 -> Bool
 checkExpectedGas vm expected =
   case vm ^. EVM.state . EVM.gas of
     EVM.C _ x | x == expected -> True
@@ -168,12 +166,12 @@ parseSuite = JSON.eitherDecode'
 
 #endif
 
-realizeContracts :: Map Addr Contract -> Map Addr (EVM.Contract EVM.Concrete)
+realizeContracts :: Map Addr Contract -> Map Addr EVM.Contract
 realizeContracts = Map.fromList . map f . Map.toList
   where
     f (a, x) = (a, realizeContract x)
 
-realizeContract :: Contract -> EVM.Contract EVM.Concrete
+realizeContract :: Contract -> EVM.Contract
 realizeContract x =
   EVM.initialContract (contractCode x)
     & EVM.balance .~ EVM.w256 (contractBalance x)
@@ -184,20 +182,20 @@ realizeContract x =
         Map.toList $ contractStorage x
         )
 
-vmForCase :: Case -> EVM.VM EVM.Concrete
+vmForCase :: Case -> EVM.VM
 vmForCase x =
   EVM.makeVm (testVmOpts x)
     & EVM.env . EVM.contracts .~ realizeContracts (testContracts x)
     & EVM.execMode .~ EVM.ExecuteAsVMTest
 
-interpret :: Stepper Concrete a -> EVM Concrete a
+interpret :: Stepper a -> EVM a
 interpret =
   eval . Operational.view
 
   where
     eval
-      :: Operational.ProgramView (Stepper.Action Concrete) a
-      -> EVM Concrete a
+      :: Operational.ProgramView Stepper.Action a
+      -> EVM a
 
     eval (Operational.Return x) =
       pure x

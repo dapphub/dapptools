@@ -13,8 +13,7 @@ import EVM.Format
 import EVM.Keccak
 import EVM.Solidity
 import EVM.Types
-import EVM.Machine (blob, w256, forceConcreteBlob)
-import EVM.Concrete (Concrete, Blob (B), wordAt)
+import EVM.Concrete (blob, w256, forceConcreteBlob, Blob (B), wordAt)
 
 import qualified EVM.FeeSchedule as FeeSchedule
 
@@ -60,9 +59,9 @@ data UnitTestOptions = UnitTestOptions
   , gasForInvoking :: W256
   , balanceForCreator :: W256
   , balanceForCreated :: W256
-  , oracle :: Query Concrete -> IO (EVM Concrete ())
+  , oracle :: Query -> IO (EVM ())
   , verbose :: Bool
-  , vmModifier :: VM Concrete -> VM Concrete
+  , vmModifier :: VM -> VM
   }
 
 defaultGasForCreating :: W256
@@ -81,7 +80,7 @@ type ABIMethod = Text
 
 -- | Assuming a constructor is loaded, this stepper will run the constructor
 -- to create the test contract, give it an initial balance, and run `setUp()'.
-initializeUnitTest :: UnitTestOptions -> Stepper Concrete ()
+initializeUnitTest :: UnitTestOptions -> Stepper ()
 initializeUnitTest UnitTestOptions { .. } = do
 
   -- Maybe modify the initial VM, e.g. to load library code
@@ -112,7 +111,7 @@ initializeUnitTest UnitTestOptions { .. } = do
 
 -- | Assuming a test contract is loaded and initialized, this stepper
 -- will run the specified test method and return whether it succeeded.
-runUnitTest :: UnitTestOptions -> ABIMethod -> Stepper Concrete Bool
+runUnitTest :: UnitTestOptions -> ABIMethod -> Stepper Bool
 runUnitTest UnitTestOptions { .. } method = do
 
   -- Decide whether the test is supposed to fail or succeed
@@ -154,15 +153,15 @@ tick x = Text.putStr x >> hFlush stdout
 
 interpret
   :: UnitTestOptions
-  -> Stepper Concrete a
-  -> StateT (VM Concrete) IO (Either (Stepper.Failure Concrete) a)
+  -> Stepper a
+  -> StateT VM IO (Either Stepper.Failure a)
 interpret opts =
   eval . Operational.view
 
   where
     eval
-      :: Operational.ProgramView (Stepper.Action Concrete) a
-      -> StateT (VM Concrete) IO (Either (Stepper.Failure Concrete) a)
+      :: Operational.ProgramView Stepper.Action a
+      -> StateT VM IO (Either Stepper.Failure a)
 
     eval (Operational.Return x) =
       pure (Right x)
@@ -200,9 +199,9 @@ srcMapForOpLocation dapp (OpLocation hash opIx) =
       in
         preview (ix opIx) vec
 
-type CoverageState = (VM Concrete, MultiSet OpLocation)
+type CoverageState = (VM, MultiSet OpLocation)
 
-currentOpLocation :: VM Concrete -> OpLocation
+currentOpLocation :: VM -> OpLocation
 currentOpLocation vm =
   case currentContract vm of
     Nothing ->
@@ -212,7 +211,7 @@ currentOpLocation vm =
         (view codehash c)
         (fromJust (vmOpIx vm))
 
-execWithCoverage :: StateT CoverageState IO (VMResult Concrete)
+execWithCoverage :: StateT CoverageState IO VMResult
 execWithCoverage = do
   -- This is just like `exec` except for every instruction evaluated,
   -- we also increment a counter indexed by the current code location.
@@ -227,15 +226,15 @@ execWithCoverage = do
 
 interpretWithCoverage
   :: UnitTestOptions
-  -> Stepper Concrete a
-  -> StateT CoverageState IO (Either (Stepper.Failure Concrete) a)
+  -> Stepper a
+  -> StateT CoverageState IO (Either Stepper.Failure a)
 interpretWithCoverage opts =
   eval . Operational.view
 
   where
     eval
-      :: Operational.ProgramView (Stepper.Action Concrete) a
-      -> StateT CoverageState IO (Either (Stepper.Failure Concrete) a)
+      :: Operational.ProgramView Stepper.Action a
+      -> StateT CoverageState IO (Either Stepper.Failure a)
 
     eval (Operational.Return x) =
       pure (Right x)
@@ -405,10 +404,10 @@ indentLines n s =
   let p = Text.replicate n " "
   in Text.unlines (map (p <>) (Text.lines s))
 
-passOutput :: VM Concrete -> Text -> Text
+passOutput :: VM -> Text -> Text
 passOutput _ testName = "[PASS] " <> testName
 
-failOutput :: VM Concrete -> DappInfo -> Text -> Text
+failOutput :: VM -> DappInfo -> Text -> Text
 failOutput vm dapp testName = mconcat $
   [ "[FAIL] "
   , fromMaybe "" (stripSuffix "()" testName)
@@ -418,13 +417,13 @@ failOutput vm dapp testName = mconcat $
   , "\n"
   ]
 
-formatTestLogs :: Map W256 Event -> Seq.Seq (Log Concrete) -> Text
+formatTestLogs :: Map W256 Event -> Seq.Seq Log -> Text
 formatTestLogs events xs =
   case catMaybes (toList (fmap (formatTestLog events) xs)) of
     [] -> "\n"
     ys -> "\n" <> intercalate "\n" ys <> "\n\n"
 
-formatTestLog :: Map W256 Event -> Log Concrete -> Maybe Text
+formatTestLog :: Map W256 Event -> Log -> Maybe Text
 formatTestLog _ (Log _ _ []) = Nothing
 formatTestLog events (Log _ b (t:_)) =
   let
@@ -466,14 +465,14 @@ formatTestLog events (Log _ b (t:_)) =
 word32Bytes :: Word32 -> ByteString
 word32Bytes x = BS.pack [byteAt x (3 - i) | i <- [0..3]]
 
-setupCall :: Addr -> Text -> W256 -> EVM Concrete ()
+setupCall :: Addr -> Text -> W256 -> EVM ()
 setupCall target abi allowance = do
   resetState
   loadContract target
   assign (state . calldata) (blob (word32Bytes (abiKeccak (encodeUtf8 abi))))
   assign (state . gas) (w256 allowance)
 
-initialUnitTestVm :: UnitTestOptions -> SolcContract -> [SolcContract] -> VM Concrete
+initialUnitTestVm :: UnitTestOptions -> SolcContract -> [SolcContract] -> VM
 initialUnitTestVm (UnitTestOptions {..}) theContract _ =
   let
     vm = makeVm $ VMOpts
