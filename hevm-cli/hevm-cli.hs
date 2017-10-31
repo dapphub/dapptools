@@ -9,13 +9,15 @@
 {-# Language OverloadedStrings #-}
 {-# Language TemplateHaskell #-}
 
+import EVM.Concrete (w256)
+
 import qualified EVM as EVM
 import qualified EVM.Concrete as EVM
+import qualified EVM.FeeSchedule as FeeSchedule
 import qualified EVM.Fetch
+import qualified EVM.Flatten
 import qualified EVM.Stepper
 import qualified EVM.TTY as EVM.TTY
-import qualified EVM.FeeSchedule as FeeSchedule
-import EVM.Concrete (w256)
 
 #if MIN_VERSION_aeson(1, 0, 0)
 import qualified EVM.VMTest as VMTest
@@ -42,7 +44,7 @@ import Control.Monad              (void, when, forM_)
 import Control.Monad.State.Strict (execState)
 import Data.ByteString            (ByteString)
 import Data.List                  (intercalate, isSuffixOf)
-import Data.Text                  (Text, unpack)
+import Data.Text                  (Text, unpack, pack)
 import Data.Maybe                 (fromMaybe)
 import System.Directory           (withCurrentDirectory, listDirectory)
 import System.Exit                (die, exitFailure)
@@ -111,6 +113,11 @@ data Command
   | VmTestReport
       { tests :: String
       }
+  | Flatten
+    { sourceFile :: String
+    , jsonFile   :: Maybe String
+    , dappRoot   :: Maybe String
+    }
   deriving (Show, Options.Generic, Eq)
 
 type URL = Text
@@ -161,7 +168,7 @@ main = do
       launchVMTest cmd
     DappTest {} ->
       withCurrentDirectory root $ do
-        testFile <- findTestFile (jsonFile cmd)
+        testFile <- findJsonFile (jsonFile cmd)
         testOpts <- unitTestOptions cmd
         case coverage cmd of
           False ->
@@ -170,29 +177,39 @@ main = do
             dappCoverage testOpts (optsMode cmd) testFile
     Interactive {} ->
       withCurrentDirectory root $ do
-        testFile <- findTestFile (jsonFile cmd)
+        testFile <- findJsonFile (jsonFile cmd)
         testOpts <- unitTestOptions cmd
         EVM.TTY.main testOpts root testFile
     VmTestReport {} ->
       withCurrentDirectory (tests cmd) $ do
         dataDir <- Paths.getDataDir
         callProcess "bash" [dataDir ++ "/run-consensus-tests", "."]
+    Flatten {} ->
+      withCurrentDirectory root $ do
+        theJson <- findJsonFile (jsonFile cmd)
+        readSolc theJson >>=
+          \case
+            Just (contractMap, cache) -> do
+              let dapp = dappInfo "." contractMap cache
+              EVM.Flatten.flatten dapp (pack (sourceFile cmd))
+            Nothing ->
+              error ("Failed to read Solidity JSON for `" ++ theJson ++ "'")
 
-findTestFile :: Maybe String -> IO String
-findTestFile (Just s) = pure s
-findTestFile Nothing = do
+findJsonFile :: Maybe String -> IO String
+findJsonFile (Just s) = pure s
+findJsonFile Nothing = do
   outFiles <- listDirectory "out"
-  case filter (isSuffixOf ".t.sol.json") outFiles of
+  case filter (isSuffixOf ".sol.json") outFiles of
     [x] -> pure ("out/" ++ x)
     [] ->
       error $ concat
-        [ "No `*.t.sol.json' file found in `./out'.\n"
+        [ "No `*.sol.json' file found in `./out'.\n"
         , "Maybe you need to run `dapp build'.\n"
         , "You can specify a file with `--json-file'."
         ]
     xs ->
       error $ concat
-        [ "Multiple `*.t.sol.json' files found in `./out'.\n"
+        [ "Multiple `*.sol.json' files found in `./out'.\n"
         , "Specify one using `--json-file'.\n"
         , "Files found: "
         , intercalate ", " xs
