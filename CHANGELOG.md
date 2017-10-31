@@ -1,5 +1,9 @@
 # hevm changelog
 
+## [0.11] - 2017-10-31
+ - Add "hevm flatten" for Etherscan-ish source code concatenation
+ - Simplify code by removing concrete/symbolic machine abstraction
+
 ## [0.10.9] - 2017-10-23
  - Fix bugs in ABI formatting
 
@@ -91,6 +95,13 @@
 
 [0.8 test report]: https://hydra.dapp.tools/build/135/download/1/index.html
 
+[0.11]: https://github.com/dapphub/hevm/compare/0.10.9...0.11
+[0.10.9]: https://github.com/dapphub/hevm/compare/0.10.7...0.10.9
+[0.10.7]: https://github.com/dapphub/hevm/compare/0.10.6...0.10.7
+[0.10.6]: https://github.com/dapphub/hevm/compare/0.10.5...0.10.6
+[0.10.5]: https://github.com/dapphub/hevm/compare/0.10...0.10.5
+[0.10]: https://github.com/dapphub/hevm/compare/0.9.5...0.10
+[0.9.5]: https://github.com/dapphub/hevm/compare/0.9...0.9.5
 [0.9]: https://github.com/dapphub/hevm/compare/v0.8.5...v0.9
 [0.8.5]: https://github.com/dapphub/hevm/compare/v0.8...v0.8.5
 [0.8]: https://github.com/dapphub/hevm/compare/v0.7...v0.8
