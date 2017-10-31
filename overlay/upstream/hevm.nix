@@ -1,7 +1,7 @@
 { mkDerivation, abstract-par, aeson, ansi-wl-pprint, async, base
-, base16-bytestring, base64-bytestring, binary, brick_0_24_2, bytestring
+, base16-bytestring, base64-bytestring, binary, brick, bytestring
 , cereal, containers, cryptonite, data-dword, deepseq, directory
-, filepath, ghci-pretty, here, HUnit, lens, lens-aeson, memory
+, fgl, filepath, ghci-pretty, here, HUnit, lens, lens-aeson, memory
 , monad-par, mtl, multiset, operational, optparse-generic, process
 , QuickCheck, quickcheck-text, readline, restless-git, rosezipper
 , scientific, stdenv, tasty, tasty-hunit, tasty-quickcheck
@@ -10,23 +10,23 @@
 }:
 mkDerivation {
   pname = "hevm";
-  version = "0.10.9";
+  version = "0.11";
   src = ./.;
   isLibrary = true;
   isExecutable = true;
   enableSeparateDataOutput = true;
   libraryHaskellDepends = [
     abstract-par aeson ansi-wl-pprint base base16-bytestring
-    base64-bytestring binary brick_0_24_2 bytestring cereal containers
-    cryptonite data-dword deepseq directory filepath ghci-pretty lens
-    lens-aeson memory monad-par mtl multiset operational
+    base64-bytestring binary brick bytestring cereal containers
+    cryptonite data-dword deepseq directory fgl filepath ghci-pretty
+    lens lens-aeson memory monad-par mtl multiset operational
     optparse-generic process QuickCheck quickcheck-text readline
     restless-git rosezipper scientific temporary text text-format time
     transformers tree-view unordered-containers vector vty wreq
   ];
   executableHaskellDepends = [
     aeson ansi-wl-pprint async base base16-bytestring base64-bytestring
-    binary brick_0_24_2 bytestring containers cryptonite data-dword deepseq
+    binary brick bytestring containers cryptonite data-dword deepseq
     directory filepath ghci-pretty lens lens-aeson memory mtl
     optparse-generic process QuickCheck quickcheck-text readline
     temporary text text-format unordered-containers vector vty
