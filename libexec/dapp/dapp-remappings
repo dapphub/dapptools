@@ -17,6 +17,13 @@ Object.keys(pkg_src).sort((a, b) => a.length - b.length).sort(
 function findRemappings(prefix) {
   return ls(`${prefix}/${process.env.DAPP_LIB}`).forEach(name => {
     var lib = `${prefix}/${process.env.DAPP_LIB}`
+
+    if (ls(`${lib}/${name}`).includes(".git") != true) {
+      console.error(`${PROGRAM_NAME}: error: ${lib}/${name} is not a Git repository`)
+      console.error(`${PROGRAM_NAME}: error: try "dapp update" to initialize submodules`)
+      process.exit(1)
+    }
+    
     var src = `${lib}/${name}/${process.env.DAPP_SRC}`.replace(/^.\//, "")
     var hash = run("git", ["-C", src, "rev-parse", "HEAD"])
   
