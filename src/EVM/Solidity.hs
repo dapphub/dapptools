@@ -29,6 +29,7 @@ module EVM.Solidity
   , contractAst
   , sourceFiles
   , sourceLines
+  , sourceAsts
   , stripConstructorArguments
   , lineSubrange
   , astIdMap
@@ -93,11 +94,12 @@ data SourceCache = SourceCache
   { _snippetCache :: Map (Int, Int) ByteString
   , _sourceFiles  :: Map Int (Text, ByteString)
   , _sourceLines  :: Map Int (Vector ByteString)
-  } deriving (Show, Eq, Ord, Generic)
+  , _sourceAsts   :: Map Text Value
+  } deriving (Show, Eq, Generic)
 
 instance Monoid SourceCache where
-  mempty = SourceCache mempty mempty mempty
-  mappend (SourceCache _ _ _) (SourceCache _ _ _) = error "lol"
+  mempty = SourceCache mempty mempty mempty mempty
+  mappend (SourceCache _ _ _ _) (SourceCache _ _ _ _) = error "lol"
 
 data JumpType = JumpInto | JumpFrom | JumpRegular
   deriving (Show, Eq, Ord, Generic)
@@ -165,18 +167,19 @@ makeSrcMaps = (\case (_, Fe, _) -> Nothing; x -> Just (done x))
 
     go _ (xs, _, p)                          = (xs, Fe, p)
 
-makeSourceCache :: [Text] -> IO SourceCache
-makeSourceCache paths = do
+makeSourceCache :: [Text] -> Map Text Value -> IO SourceCache
+makeSourceCache paths asts = do
   xs <- mapM (BS.readFile . Text.unpack) paths
-  return $! SourceCache {
-    _snippetCache = mempty,
-    _sourceFiles =
-      Map.fromList (zip [0..] (zip paths xs)),
-    _sourceLines =
-      Map.fromList (zip [0 .. length paths - 1]
-                     (map (Vector.fromList . BS.split 0xa) xs))
-
-  }
+  return $! SourceCache
+    { _snippetCache = mempty
+    , _sourceFiles =
+        Map.fromList (zip [0..] (zip paths xs))
+    , _sourceLines =
+        Map.fromList (zip [0 .. length paths - 1]
+                       (map (Vector.fromList . BS.split 0xa) xs))
+    , _sourceAsts =
+        asts
+    }
 
 lineSubrange ::
   Vector ByteString -> (Int, Int) -> Int -> Maybe (Int, Int)
@@ -195,25 +198,25 @@ readSolc fp =
   (readJSON <$> readFile fp) >>=
     \case
       Nothing -> return Nothing
-      Just (contracts, sources) -> do
-        sourceCache <- makeSourceCache sources
+      Just (contracts, asts, sources) -> do
+        sourceCache <- makeSourceCache sources asts
         return $! Just (contracts, sourceCache)
 
 solidity :: Text -> Text -> IO (Maybe ByteString)
 solidity contract src = do
   (json, path) <- solidity' src
-  let Just (solc, _) = readJSON json
+  let Just (solc, _, _) = readJSON json
   return (solc ^? ix (path <> ":" <> contract) . creationCode)
 
-readJSON :: Text -> Maybe (Map Text SolcContract, [Text])
+readJSON :: Text -> Maybe (Map Text SolcContract, Map Text Value, [Text])
 readJSON json = do
   contracts <-
     f <$> (json ^? key "contracts" . _Object)
       <*> (fmap (fmap (^. _String)) $ json ^? key "sourceList" . _Array)
   sources <- toList . fmap (view _String) <$> json ^? key "sourceList" . _Array
-  return (contracts, sources)
+  return (contracts, Map.fromList (HMap.toList asts), sources)
   where
-    asts = fromMaybe (error "JSON lacks abstract syntax trees.") (json ^? key "sources")
+    asts = fromMaybe (error "JSON lacks abstract syntax trees.") (json ^? key "sources" . _Object)
     f x y = Map.fromList . map (g y) . HMap.toList $ x
     g _ (s, x) =
       let
@@ -230,7 +233,7 @@ readJSON json = do
         _contractAst =
           fromMaybe
             (error "JSON lacks abstract syntax trees.")
-            (preview (key (Text.split (== ':') s !! 0) . key "AST") asts),
+            (preview (ix (Text.split (== ':') s !! 0) . key "AST") asts),
         _abiMap       = Map.fromList $
           let
             abis =
