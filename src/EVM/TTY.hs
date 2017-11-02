@@ -40,7 +40,7 @@ import Data.Aeson.Lens
 import Data.ByteString (ByteString)
 import Data.Maybe (fromJust, fromMaybe)
 import Data.Monoid ((<>))
-import Data.Text (Text, unpack, pack)
+import Data.Text (Text, unpack)
 import Data.Text.Encoding (decodeUtf8)
 
 import qualified Data.ByteString as BS
@@ -644,7 +644,7 @@ showWordExplanation w (Just dapp) =
   in
     case Map.lookup (fromIntegral w) fullAbiMap of
       Nothing -> showDec Unsigned w
-      Just x  -> "abi " <> pack (show x)
+      Just x  -> "keccak(\"" <> view methodSignature x <> "\")"
 
 drawBytecodePane :: UiVmState -> UiWidget
 drawBytecodePane ui =
