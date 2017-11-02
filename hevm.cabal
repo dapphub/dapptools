@@ -39,6 +39,7 @@ library
     EVM.Keccak,
     EVM.Solidity,
     EVM.Stepper,
+    EVM.StorageLayout,
     EVM.TTY,
     EVM.TTYCenteredList,
     EVM.Types,

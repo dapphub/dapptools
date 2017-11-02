@@ -25,6 +25,7 @@ import EVM.Types hiding (padRight)
 import EVM.UnitTest (UnitTestOptions (..))
 import EVM.UnitTest (initialUnitTestVm)
 import EVM.UnitTest (initializeUnitTest, runUnitTest)
+import EVM.StorageLayout
 
 import EVM.Stepper (Stepper)
 import qualified EVM.Stepper as Stepper
@@ -506,18 +507,24 @@ drawVmBrowser ui =
                    ])
               True
               (view browserContractList ui)
-      , borderWithLabel (txt "Contract information") $
-          let Just (_, (_, c)) = listSelectedElement (view browserContractList ui)
-          in case flip preview ui (browserVm . uiVmDapp . _Just . dappSolcByHash . ix (view codehash c) . _2) of
-            Nothing -> txt "<n/a>"
-            Just solc -> padRight Max . padBottom Max $ vBox
-              [ txt "Name: " <+> txt (contractNamePart (view contractName solc))
-              , txt "File: " <+> txt (contractPathPart (view contractName solc))
-              , txt ""
-              , txt "Methods:"
-              , vBox . flip map (sort (Map.elems (view abiMap solc))) $
-                  \method -> txt ("  " <> view methodSignature method)
-              ]
+      , let
+          Just (_, (_, c)) = listSelectedElement (view browserContractList ui)
+          Just dapp = view (browserVm . uiVmDapp) ui
+        in case flip preview ui (browserVm . uiVmDapp . _Just . dappSolcByHash . ix (view codehash c) . _2) of
+          Nothing -> txt "<n/a>"
+          Just solc ->
+            hBox
+              [ borderWithLabel (txt "Contract information") . padBottom Max . padRight (Pad 2) $ vBox
+                  [ txt "Name: " <+> txt (contractNamePart (view contractName solc))
+                  , txt "File: " <+> txt (contractPathPart (view contractName solc))
+                    , txt " "
+                    , txt "Public methods:"
+                    , vBox . flip map (sort (Map.elems (view abiMap solc))) $
+                        \method -> txt ("  " <> view methodSignature method)
+                    ]
+                , borderWithLabel (txt "Storage slots") . padBottom Max . padRight Max $ vBox
+                    (map txt (storageLayout dapp solc))
+                ]
       ]
   ]
 
