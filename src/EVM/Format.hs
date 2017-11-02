@@ -2,8 +2,6 @@ module EVM.Format where
 
 import Prelude hiding (Word)
 
-import Debug.Trace (traceShow)
-
 import EVM (VM, cheatCode, traceForest, traceData)
 import EVM (Trace, TraceData (..), Log (..), Query (..), FrameContext (..))
 import EVM.Dapp (DappInfo, dappSolcByHash, showTraceLocation, dappEventMap)
@@ -197,8 +195,11 @@ getAbiMethodOutput dapp hash abi =
     dapp
 
 getAbiTypes :: Text -> [Maybe AbiType]
-getAbiTypes abi = map parseTypeName (traceShow abi types)
-    where types = filter (/= "") (splitOn "," (dropEnd 1 (last (splitOn "(" abi))))
+getAbiTypes abi = map parseTypeName types
+  where
+    types =
+      filter (/= "") $
+        splitOn "," (dropEnd 1 (last (splitOn "(" abi)))
 
 showCall :: [AbiType] -> ByteString -> Text
 showCall ts bs =
