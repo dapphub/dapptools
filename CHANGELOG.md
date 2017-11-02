@@ -1,5 +1,9 @@
 # hevm changelog
 
+## [0.11.1] - 2017-11-02
+ - TTY: fix a display glitch
+ - TTY: improve display of ABI hashes on the stack
+
 ## [0.11] - 2017-10-31
  - Add "hevm flatten" for Etherscan-ish source code concatenation
  - Simplify code by removing concrete/symbolic machine abstraction
@@ -95,6 +99,7 @@
 
 [0.8 test report]: https://hydra.dapp.tools/build/135/download/1/index.html
 
+[0.11.1]: https://github.com/dapphub/hevm/compare/0.11...0.11.1
 [0.11]: https://github.com/dapphub/hevm/compare/0.10.9...0.11
 [0.10.9]: https://github.com/dapphub/hevm/compare/0.10.7...0.10.9
 [0.10.7]: https://github.com/dapphub/hevm/compare/0.10.6...0.10.7
