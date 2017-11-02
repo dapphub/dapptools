@@ -21,7 +21,7 @@ import EVM.Format (showTraceTree)
 import EVM.Format (contractNamePart, contractPathPart)
 import EVM.Op
 import EVM.Solidity
-import EVM.Types
+import EVM.Types hiding (padRight)
 import EVM.UnitTest (UnitTestOptions (..))
 import EVM.UnitTest (initialUnitTestVm)
 import EVM.UnitTest (initializeUnitTest, runUnitTest)
@@ -40,8 +40,9 @@ import Data.Aeson.Lens
 import Data.ByteString (ByteString)
 import Data.Maybe (fromJust, fromMaybe)
 import Data.Monoid ((<>))
-import Data.Text (Text, unpack)
+import Data.Text (Text, unpack, pack)
 import Data.Text.Encoding (decodeUtf8)
+import Data.List (sort)
 
 import qualified Data.ByteString as BS
 import qualified Data.Map as Map
@@ -85,13 +86,19 @@ data UiTestPickerState = UiTestPickerState
   , _testPickerDapp :: DappInfo
   }
 
+data UiBrowserState = UiBrowserState
+  { _browserContractList :: List Name (Addr, Contract)
+  , _browserVm :: UiVmState
+  }
+
 data UiState
   = UiVmScreen UiVmState
-  | UiVmBrowserScreen UiVmState
+  | UiVmBrowserScreen UiBrowserState
   | UiTestPickerScreen UiTestPickerState
 
 makeLenses ''UiVmState
 makeLenses ''UiTestPickerState
+makeLenses ''UiBrowserState
 makePrisms ''UiState
 
 type Pred a = a -> Bool
@@ -339,14 +346,34 @@ app opts =
 
       case (ui, e) of
         (UiVmBrowserScreen s, VtyEvent (Vty.EvKey Vty.KEsc [])) ->
-          continue (UiVmScreen s)
+          continue (UiVmScreen (view browserVm s))
+
+        (UiVmBrowserScreen s, VtyEvent e'@(Vty.EvKey Vty.KDown [])) -> do
+          s' <- handleEventLensed s
+            browserContractList
+            handleListEvent
+            e'
+          continue (UiVmBrowserScreen s')
+
+        (UiVmBrowserScreen s, VtyEvent e'@(Vty.EvKey Vty.KUp [])) -> do
+          s' <- handleEventLensed s
+            browserContractList
+            handleListEvent
+            e'
+          continue (UiVmBrowserScreen s')
 
         (_, VtyEvent (Vty.EvKey Vty.KEsc [])) ->
           halt ui
 
         (UiVmScreen s, VtyEvent (Vty.EvKey Vty.KEnter [])) ->
-          continue (UiVmBrowserScreen s)
-
+            continue . UiVmBrowserScreen $ UiBrowserState
+              { _browserContractList =
+                  list
+                    BrowserPane
+                    (Vec.fromList (Map.toList (view (uiVm . env . contracts) s)))
+                    2
+              , _browserVm = s
+              }
         (UiVmScreen s, VtyEvent (Vty.EvKey (Vty.KChar 'n') [])) ->
           takeStep s StepNormally StepOne
 
@@ -463,19 +490,35 @@ drawTestPicker ui =
           (view testPickerList ui)
   ]
 
-drawVmBrowser :: UiVmState -> [UiWidget]
+drawVmBrowser :: UiBrowserState -> [UiWidget]
 drawVmBrowser ui =
-  [ center . borderWithLabel (txt "Browser (alpha version)") .
-      hLimit 80 $
-        renderList
-          (\selected (k, c) ->
-             withHighlight selected $
-               str (show k <> " (" <> show (BS.length (view bytecode c)) <> ")"))
-          True
-          (list
-             BrowserPane
-             (Vec.fromList (Map.toList (view (uiVm . env . contracts) ui)))
-             1)
+  [ hBox
+      [ borderWithLabel (txt "Contracts") .
+          hLimit 60 $
+            renderList
+              (\selected (k, c) ->
+                 withHighlight selected . txt . mconcat $
+                   [ fromMaybe "<unknown contract>" . flip preview ui $
+                       ( browserVm . uiVmDapp . _Just . dappSolcByHash . ix (view codehash c)
+                       . _2 . contractName )
+                   , "\n"
+                   , "  ", pack (show k)
+                   ])
+              True
+              (view browserContractList ui)
+      , borderWithLabel (txt "Contract information") $
+          let Just (_, (_, c)) = listSelectedElement (view browserContractList ui)
+          in case flip preview ui (browserVm . uiVmDapp . _Just . dappSolcByHash . ix (view codehash c) . _2) of
+            Nothing -> txt "<n/a>"
+            Just solc -> padRight Max . padBottom Max $ vBox
+              [ txt "Name: " <+> txt (contractNamePart (view contractName solc))
+              , txt "File: " <+> txt (contractPathPart (view contractName solc))
+              , txt ""
+              , txt "Methods:"
+              , vBox . flip map (sort (Map.elems (view abiMap solc))) $
+                  \method -> txt ("  " <> view methodSignature method)
+              ]
+      ]
   ]
 
 drawVm :: UiVmState -> [UiWidget]
