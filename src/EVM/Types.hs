@@ -54,7 +54,10 @@ instance Read Addr where
   readsPrec _ ('0':'x':s) = readHex s
   readsPrec _ s = readHex s
 
-instance Show Addr where showsPrec _ s = showHex s
+instance Show Addr where
+  showsPrec _ s a =
+    let h = showHex s a
+    in replicate (40 - length h) '0' ++ h
 
 showAddrWith0x :: Addr -> String
 showAddrWith0x addr = "0x" ++ show addr
