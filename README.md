@@ -10,7 +10,7 @@ while showing the Solidity source, or run arbitrary EVM code.
 
 *This is not yet a complete EVM*.  For example, the precompiled
 contracts are missing.  We do well on Ethereum's `VMTests` suite (see
-[hevm v0.10 test report]) but we can't guarantee exact
+[hevm v0.11.1 test report]) but we can't guarantee exact
 consensus conformance.  The precompiled contracts are entirely missing
 for now, and we're in the process of implementing the Metropolis EIPs.
 
@@ -92,4 +92,4 @@ Haskell package manager, Cabal, simply run:
 You can find us in the DappHub chat at https://dapphub.chat/,
 especially the `#dev` channel.
 
-[hevm v0.10 test report]: https://hydra.dapp.tools/build/183/download/1/index.html
+[hevm v0.11.1 test report]: https://hydra.dapp.tools/build/357/download/1/index.html
