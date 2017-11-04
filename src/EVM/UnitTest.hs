@@ -348,8 +348,12 @@ coverageForUnitTestContract
 
       pure (MultiSet.mapMaybe (srcMapForOpLocation dapp) cov2)
 
-runUnitTestContract ::
-  UnitTestOptions -> Map Text SolcContract -> SourceCache -> (Text, [Text]) -> IO Bool
+runUnitTestContract
+  :: UnitTestOptions
+  -> Map Text SolcContract
+  -> SourceCache
+  -> (Text, [Text])
+  -> IO Bool
 runUnitTestContract
   opts@(UnitTestOptions {..}) contractMap sources (name, testNames) = do
 
@@ -377,24 +381,27 @@ runUnitTestContract
 
       -- Define the thread spawner for test cases
       let
-        runOne testName = spawn_ . liftIO $ do
+        runOne testName = do
           x <-
             runStateT
               (interpret opts (runUnitTest opts testName))
               vm1
           case x of
-             (Right True,  vm) -> pure (".", Right (passOutput vm testName))
-             (Right False, vm) -> pure ("F", Left (failOutput vm dapp testName))
-             (Left _, _)       -> pure ("E", Left "\n")
+             (Right True,  vm) ->
+               pure ("PASS " <> testName, Right (passOutput vm testName))
+             (Right False, vm) ->
+               pure ("FAIL " <> testName, Left (failOutput vm dapp testName))
+             (Left _, _)       ->
+               pure ("OOPS " <> testName, Left ("VM error for " <> testName))
+        inform = \(x, y) -> Text.putStrLn x >> pure y
 
-      -- Run all the test cases in parallel and print their status updates
+      -- Run all the test cases and print their status updates
       details <-
-        runParIO (mapM runOne testNames >>= mapM Par.get)
-          >>= mapM (\(x, y) -> tick x >> pure y)
+        mapM (\x -> runOne x >>= inform) testNames
 
       let fails = [x | Left x <- details]
 
-      tick "\n\n"
+      tick "\n"
       tick (Text.unlines fails)
 
       pure (null fails)
@@ -405,11 +412,11 @@ indentLines n s =
   in Text.unlines (map (p <>) (Text.lines s))
 
 passOutput :: VM -> Text -> Text
-passOutput _ testName = "[PASS] " <> testName
+passOutput _ testName = "PASS " <> testName
 
 failOutput :: VM -> DappInfo -> Text -> Text
 failOutput vm dapp testName = mconcat $
-  [ "[FAIL] "
+  [ "Failure: "
   , fromMaybe "" (stripSuffix "()" testName)
   , "\n"
   , indentLines 2 (formatTestLogs (view dappEventMap dapp) (view logs vm))
