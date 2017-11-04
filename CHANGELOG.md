@@ -1,5 +1,8 @@
 # hevm changelog
 
+## [0.11.2] - 2017-11-04
+ - TTY: show a help bar with key bindings at the bottom
+
 ## [0.11.1] - 2017-11-02
  - TTY: fix a display glitch
  - TTY: improve display of ABI hashes on the stack
@@ -99,6 +102,7 @@
 
 [0.8 test report]: https://hydra.dapp.tools/build/135/download/1/index.html
 
+[0.11.2]: https://github.com/dapphub/hevm/compare/0.11.1...0.11.2
 [0.11.1]: https://github.com/dapphub/hevm/compare/0.11...0.11.1
 [0.11]: https://github.com/dapphub/hevm/compare/0.10.9...0.11
 [0.10.9]: https://github.com/dapphub/hevm/compare/0.10.7...0.10.9
