@@ -543,6 +543,7 @@ drawVm ui =
         , vLimit 20 $ drawStackPane ui
         , drawSolidityPane ui
         , vLimit 20 $ drawTracePane ui
+        , vLimit 2 $ drawHelpBar
         ]
       )
       ( vBox
@@ -554,9 +555,26 @@ drawVm ui =
           [ drawSolidityPane ui
           , vLimit 20 $ drawTracePane ui
           ]
+        , vLimit 2 $ drawHelpBar
         ]
       )
   ]
+
+drawHelpBar :: UiWidget
+drawHelpBar = hBorder <=> hCenter help
+  where
+    help =
+      hBox (map (\(k, v) -> txt k <+> dim (txt (" (" <> v <> ")  "))) helps)
+
+    helps =
+      [
+        ("n", "step")
+      , ("p", "step back")
+      , ("N", "step more")
+      , ("C-n", "step over")
+--      , ("  Enter", "browse")
+      , ("  Esc", "exit")
+      ]
 
 stepOneOpcode :: UiVmState -> UiVmState
 stepOneOpcode ui =
