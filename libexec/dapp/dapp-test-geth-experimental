@@ -52,7 +52,7 @@ for x in $DAPP_OUT/*.abi; do
       shutup=1
     fi
     {
-      dapp create "$contract" >"$tmp/$contract/$method" 2>/dev/null
+      SETH_STATUS=1 dapp create "$contract" >"$tmp/$contract/$method" 2>/dev/null
       if [[ ! $? ]]; then touch "$tmp/fail"; fi
     } &
   done < <(dapp --find-test-methods "$x" 2>/dev/null)
