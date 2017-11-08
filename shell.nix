@@ -25,6 +25,7 @@ let
       restless-git =
         with pkgs.haskell.lib;
           dontCheck (self.callPackage restless-git {});
+      megaparsec = super.megaparsec_6_2_0;
     });
   };
 

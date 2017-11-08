@@ -48,14 +48,14 @@ module EVM.ABI
 import EVM.Keccak (abiKeccak)
 import EVM.Types ()
 
-import Control.Monad      (replicateM, replicateM_, forM_)
+import Control.Monad      (replicateM, replicateM_, forM_, void)
 import Data.Binary.Get    (Get, label, getWord8, getWord32be, skip)
 import Data.Binary.Put    (Put, runPut, putWord8, putWord32be)
 import Data.Bits          (shiftL, shiftR, (.&.))
 import Data.ByteString    (ByteString)
 import Data.DoubleWord    (Word256, Int256, Word160, signedWord)
 import Data.Monoid        ((<>))
-import Data.Text          (Text, pack, unpack, isPrefixOf)
+import Data.Text          (Text, pack)
 import Data.Text.Encoding (encodeUtf8)
 import Data.Vector        (Vector)
 import Data.Word          (Word32, Word8)
@@ -67,6 +67,9 @@ import qualified Data.ByteString      as BS
 import qualified Data.ByteString.Lazy as BSLazy
 import qualified Data.Text            as Text
 import qualified Data.Vector          as Vector
+
+import qualified Text.Megaparsec      as P
+import qualified Text.Megaparsec.Char as P
 
 data AbiValue
   = AbiUInt         Int Word256
@@ -286,22 +289,43 @@ abiCalldata s xs = BSLazy.toStrict . runPut $ do
   putAbiSeq xs
 
 parseTypeName :: Text -> Maybe AbiType
-parseTypeName = \case
-  "address" ->
-    Just AbiAddressType
-  "bool" ->
-    Just AbiBoolType
-  "bytes" ->
-    Just AbiBytesDynamicType
-  "string" ->
-    Just AbiStringType
-  x | "uint" `isPrefixOf` x ->
-    Just . AbiUIntType . read . unpack $ Text.drop 4 x
-  x | "int" `isPrefixOf` x ->
-    Just . AbiIntType . read . unpack $ Text.drop 3 x
-  x | "bytes" `isPrefixOf` x ->
-    Just . AbiBytesType . read . unpack $ Text.drop 5 x
-  x -> error (show x)
+parseTypeName = P.parseMaybe typeWithArraySuffix
+
+typeWithArraySuffix :: P.Parsec () Text AbiType
+typeWithArraySuffix = do
+  base <- basicType
+  sizes <-
+    P.many $
+      P.between
+        (P.char '[') (P.char ']')
+        (P.many P.digitChar)
+
+  let
+    parseSize :: AbiType -> [Char] -> AbiType
+    parseSize t "" = AbiArrayDynamicType t
+    parseSize t s  = AbiArrayType (read s) t
+
+  pure (foldl parseSize base sizes)
+
+basicType :: P.Parsec () Text AbiType
+basicType =
+  P.choice
+    [ P.string "address" *> pure AbiAddressType
+    , P.string "bool"    *> pure AbiBoolType
+    , P.string "string"  *> pure AbiStringType
+
+    , sizedType "uint" AbiUIntType
+    , sizedType "int"  AbiIntType
+    , sizedType "bytes" AbiBytesType
+
+    , P.string "bytes" *> pure AbiBytesDynamicType
+    ]
+
+  where
+    sizedType :: Text -> (Int -> AbiType) -> P.Parsec () Text AbiType
+    sizedType s f = P.try $ do
+      void (P.string s)
+      fmap (f . read) (P.some P.digitChar)
 
 pack32 :: Int -> [Word32] -> Word256
 pack32 n xs =

@@ -83,16 +83,29 @@ showAbiValues :: Vector AbiValue -> Text
 showAbiValues vs =
   "(" <> intercalate ", " (toList (fmap showAbiValue vs)) <> ")"
 
+showAbiArray :: Vector AbiValue -> Text
+showAbiArray vs =
+  "[" <> intercalate ", " (toList (fmap showAbiValue vs)) <> "]"
+
 showAbiValue :: AbiValue -> Text
-showAbiValue (AbiUInt _ w)        = humanizeInteger w
-showAbiValue (AbiInt _ w)         = humanizeInteger w
-showAbiValue (AbiAddress w160)    = pack $ "0x" ++ (showHex w160 "")
-showAbiValue (AbiBool b)          = pack $ show b
-showAbiValue (AbiBytes _ bs)      = formatBytes bs
-showAbiValue (AbiBytesDynamic bs) = formatBinary bs
-showAbiValue (AbiString bs)       = formatQString bs
--- TODO: arrays
-showAbiValue value = pack $ show value
+showAbiValue (AbiUInt _ w) =
+  pack $ show w
+showAbiValue (AbiInt _ w) =
+  pack $ show w
+showAbiValue (AbiBool b) =
+  pack $ show b
+showAbiValue (AbiAddress w160) =
+  pack $ "0x" ++ (showHex w160 "")
+showAbiValue (AbiBytes _ bs) =
+  formatBytes bs
+showAbiValue (AbiBytesDynamic bs) =
+  formatBinary bs
+showAbiValue (AbiString bs) =
+  formatQString bs
+showAbiValue (AbiArray _ _ xs) =
+  showAbiArray xs
+showAbiValue (AbiArrayDynamic _ xs) =
+  showAbiArray xs
 
 isPrintable :: ByteString -> Bool
 isPrintable =

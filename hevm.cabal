@@ -79,6 +79,7 @@ library
     transformers                      == 0.5.*,
     lens                              >= 4.15.1 && < 4.16,
     lens-aeson                        >= 1.0.1 && < 1.1,
+    megaparsec                        == 6.*,
     memory                            >= 0.14.5 && < 0.15,
     monad-par                         >= 0.3 && < 0.4,
     mtl                               >= 2.2.1 && < 2.3,
