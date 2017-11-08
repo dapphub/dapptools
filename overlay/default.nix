@@ -29,6 +29,9 @@ let
         self.pkgs.haskell.lib.dontCheck
           (super-hs.callPackage ./upstream/restless-git.nix {})
       );
+
+      # We don't want Megaparsec 5!
+      megaparsec = super.pkgs.haskellPackages.megaparsec_6_1_1;
     };
   };
 
