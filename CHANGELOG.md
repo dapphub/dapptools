@@ -1,5 +1,8 @@
 # hevm changelog
 
+## [0.11.3] - 2017-11-08
+ - Fix array support in ABI module
+
 ## [0.11.2] - 2017-11-04
  - TTY: show a help bar with key bindings at the bottom
 
