@@ -2,4 +2,4 @@
 set -e
 bin=$DAPP_OUT/${1?missing contract name}.bin
 type=$(seth --abi-constructor <"$DAPP_OUT/$1.abi")
-(set -x; seth send --create "$bin" "${type/constructor/$1}" "${@:2}")
+(set -x; seth send --create "$bin" "${type/constructor/${1##*/}}" "${@:2}")
