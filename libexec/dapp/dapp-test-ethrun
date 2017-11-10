@@ -10,10 +10,10 @@ libraries=($(dapp --find-libraries))
 for lib in "${libraries[@]}"; do
   address=$(dapp address "$sender" "$nonce")
   links+=" $lib:$address"
-  ((nonce++))
+  ((++nonce))
 done
 
-(set -x; solc --link --libraries "$links" "${DAPP_OUT?}"/**/*.bin)
+(set -x; find "${DAPP_OUT?}" -name "*.bin" -exec solc --link --libraries "$links" {} +)
 
 # pass the library bin files through to ethrun
 # (needs to be exact same order as above for nonces)
