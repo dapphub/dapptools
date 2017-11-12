@@ -1,18 +1,18 @@
 {
   "dapp": {
-    "version": "0.7.4",
+    "version": "0.7.5",
     "src": {
-      "rev": "0ddd05df29503a0ecc4255b939447afc6fe8e35e",
-      "sha256": "006bsvh2qikzakq6fc9gr3rmgrhd6sic3k285dmj6c7mv0mblc05",
+      "rev": "63eed7f8c46cbc6e9b3e664105a7a52acfde631e",
+      "sha256": "185j1kdjamdc1ndj2wicv1ry0f52rmhr6915rrzldwjjs9yvrz4r",
       "owner": "dapphub",
       "repo": "dapp"
     }
   },
   "hevm": {
-    "version": "0.11.3",
+    "version": "0.11.4",
     "src": {
-      "rev": "09d100fb91b735a24bacce291698b4f3f5d1cda3",
-      "sha256": "0zh42gbkbxbfvyfpf09dz2slyd5kqjvcrx38ksskszi0adhqn5d2",
+      "rev": "92771233d76e68f88ad559c29f2358cb6750512d",
+      "sha256": "153nfgab49z41nvpsi5qhnycla03g7vfrp0kflaxvpd0hfz78ihn",
       "owner": "dapphub",
       "repo": "hevm"
     }
