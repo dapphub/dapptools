@@ -9,13 +9,18 @@ dappsys() {
   git clone https://github.com/dapphub/"$1" --recursive
   ( cd "$1" && dapp test )
 }
+
 dappsys ds-auth
+# dappsys ds-cache # No test suite
 dappsys ds-exec
 dappsys ds-guard
 dappsys ds-math
+dappsys ds-multisig
+dappsys ds-note
+dappsys ds-proxy
 dappsys ds-roles
-# dappsys ds-cache
-# dappsys ds-multisig
-# dappsys ds-token
-# dappsys ds-value
-# dappsys ds-vault
+dappsys ds-stop
+dappsys ds-thing
+dappsys ds-token
+# dappsys ds-value # No test suite
+dappsys ds-vault
