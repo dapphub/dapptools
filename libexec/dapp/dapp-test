@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+set -e
 have() { command -v "$1" >/dev/null; }
 
 DAPP_LINK_TEST_LIBRARIES=1 dapp build || exit
