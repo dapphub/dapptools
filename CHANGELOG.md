@@ -1,5 +1,8 @@
 # hevm changelog
 
+## [0.11.4] - 2017-11-12
+ - Fix bug when unit test contract has creations in constructor
+
 ## [0.11.3] - 2017-11-08
  - Fix array support in ABI module
 

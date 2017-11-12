@@ -96,6 +96,10 @@ initializeUnitTest UnitTestOptions { .. } = do
   -- Mutate the current contract to use the new code
   Stepper.evm $ replaceCodeOfSelf bytes
 
+  -- Increase the nonce, in case the constructor created contracts
+  Just n <- Stepper.evm (preuse (env . contracts . ix ethrunAddress . nonce))
+  Stepper.evm $ assign (env . contracts . ix addr . nonce) n
+
   -- Give a balance to the test target
   Stepper.evm $ env . contracts . ix addr . balance += w256 balanceForCreated
 
