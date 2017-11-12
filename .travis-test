@@ -5,7 +5,7 @@ ETHRUN=https://github.com/dapphub/ethrun/releases/download/v0.2.4/ethrun-v0.2.4-
 
 nix-channel --add https://nix.dapphub.com/pkgs/dapphub
 nix-channel --update
-nix-env -i ShellCheck solc seth nodejs hsevm git
+nix-env -i ShellCheck solc seth nodejs hevm git
 
 make test
 sudo make link
