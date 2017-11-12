@@ -108,6 +108,8 @@
 
 [0.8 test report]: https://hydra.dapp.tools/build/135/download/1/index.html
 
+[0.11.4]: https://github.com/dapphub/hevm/compare/0.11.3...0.11.4
+[0.11.3]: https://github.com/dapphub/hevm/compare/0.11.2...0.11.3
 [0.11.2]: https://github.com/dapphub/hevm/compare/0.11.1...0.11.2
 [0.11.1]: https://github.com/dapphub/hevm/compare/0.11...0.11.1
 [0.11]: https://github.com/dapphub/hevm/compare/0.10.9...0.11
