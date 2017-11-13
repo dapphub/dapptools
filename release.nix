@@ -28,6 +28,8 @@ in rec {
     inherit go-ethereum-unlimited;
   };
 
+  dappsys = linux.pkgs.dappsys;
+
   hevm-development = rec {
     ethereum-test-suite = linux.pkgs.fetchFromGitHub {
       owner = "ethereum";

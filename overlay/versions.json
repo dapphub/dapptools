@@ -1,9 +1,9 @@
 {
   "dapp": {
-    "version": "0.7.5",
+    "version": "0.7.6",
     "src": {
-      "rev": "63eed7f8c46cbc6e9b3e664105a7a52acfde631e",
-      "sha256": "185j1kdjamdc1ndj2wicv1ry0f52rmhr6915rrzldwjjs9yvrz4r",
+      "rev": "10faf4e6efa1d5d740cf975106ec1a67577be6d9",
+      "sha256": "0khm470qw3gnskr1wfm23mwygkr24ny8fwpah86cj67nfw80nb8g",
       "owner": "dapphub",
       "repo": "dapp"
     }

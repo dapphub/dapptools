@@ -7,6 +7,10 @@ let
     src = self.pkgs.fetchFromGitHub v.src;
   });
 
+  local = src: pkg: pkg.overrideAttrs (_: {
+    inherit src;
+  });
+
   # This is a specific revision of Nixpkgs that we use to avoid
   # rebuilding all the versions of solc when we bump our submodule, or
   # to allow a package to succeed when something breaks in nixpkgs.
@@ -84,6 +88,8 @@ in rec {
 
   seth = versioned versions.seth (callPackage ./upstream/seth.nix {});
   dapp = versioned versions.dapp (callPackage ./upstream/dapp.nix {});
+
+  dappsys = (import ./dappsys.nix { inherit (self) pkgs; }).dappsys;
 
   setzer = callPackage ./setzer.nix {};
   keeper = callPackage ./keeper.nix {};
