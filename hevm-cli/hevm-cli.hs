@@ -285,7 +285,7 @@ launchExec cmd = do
             Just path ->
               Git.saveFacts (Git.RepoAt path) (Facts.vmFacts vm')
     Debug ->
-      void (EVM.TTY.runFromVM vm)
+      void (EVM.TTY.runFromVM vm1)
 
 vmFromCommand :: Command -> EVM.VM
 vmFromCommand cmd =
