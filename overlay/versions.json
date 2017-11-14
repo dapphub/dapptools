@@ -9,10 +9,10 @@
     }
   },
   "hevm": {
-    "version": "0.11.5",
+    "version": "0.12",
     "src": {
-      "rev": "0faafb4d6ad5e0e37b829d2b897584f02ac72fe5",
-      "sha256": "01s8ds98r14rd4w0ipx9wyyr0xgkydqp39z3qdy37yz2v9kbqpxp",
+      "rev": "b4d48035b8e90d6ff71e9e32939d805ca960b252",
+      "sha256": "0y3iahn7djghcj9byjgzam0g7gs511vi3jp4503mrj9i9xx74k6f",
       "owner": "dapphub",
       "repo": "hevm"
     }
