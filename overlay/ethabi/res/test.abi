@@ -1,0 +1,13 @@
+[
+    {
+        "inputs": [
+            {
+                "name": "a",
+                "type": "bool"
+            }
+        ],
+        "name": "foo",
+        "outputs": [],
+        "type": "function"
+    }
+]

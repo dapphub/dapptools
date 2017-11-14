@@ -1,0 +1,10 @@
+[package]
+name = "ethabi-tests"
+version = "0.1.0"
+authors = ["debris <marek.kotewicz@gmail.com>"]
+
+[dependencies]
+ethabi = { path = "../ethabi" }
+ethabi-derive = { path = "../derive" }
+ethabi-contract = { path = "../contract" }
+rustc-hex = "1.0"

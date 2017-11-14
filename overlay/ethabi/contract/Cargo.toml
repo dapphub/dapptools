@@ -1,0 +1,8 @@
+[package]
+name = "ethabi-contract"
+version = "4.1.0"
+authors = ["Parity Technologies <admin@parity.io>"]
+homepage = "https://github.com/paritytech/ethabi"
+license = "MIT"
+keywords = ["ethereum", "eth", "abi", "solidity", "derive"]
+description = "Easy to use conversion of ethereum contract calls to bytecode."

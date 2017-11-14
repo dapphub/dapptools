@@ -35,7 +35,7 @@ let
       );
 
       # We don't want Megaparsec 5!
-      megaparsec = super.pkgs.haskellPackages.megaparsec_6_1_1;
+      megaparsec = super.pkgs.haskellPackages.megaparsec_6_2_0;
     };
   };
 
@@ -120,4 +120,7 @@ in rec {
         'MaxCodeSize = 1000000'
     '';
   });
+
+  # Use unreleased ethabi that fixes empty array encoding.
+  ethabi = ((import ./ethabi { pkgs = super; }).ethabi_cli_4_0_0);
 }

@@ -1,0 +1,2 @@
+[workspace]
+members = ["ethabi", "cli", "derive", "contract", "tests"]

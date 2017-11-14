@@ -1,0 +1,11 @@
+[
+    {
+        "inputs": [
+            {
+                "name": "a",
+                "type": "address"
+            }
+        ],
+        "type": "constructor"
+    }
+]
