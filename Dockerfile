@@ -1,7 +1,7 @@
 FROM node:7.10.0
 
 RUN apt-get update && \
-    apt-get install -y sudo git wget curl make && \
+    apt-get install -y sudo git wget curl make bc && \
 	git clone https://github.com/dapphub/seth && \
 	git clone https://github.com/dapphub/dapp && \
 	make link -C seth && \
