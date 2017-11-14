@@ -1,5 +1,8 @@
 # hevm changelog
 
+## [0.11.5] - 2017-11-14
+ - Use --state with --exec --debug
+ 
 ## [0.11.4] - 2017-11-12
  - Fix bug when unit test contract has creations in constructor
 
