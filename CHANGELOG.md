@@ -1,5 +1,25 @@
 # hevm changelog
 
+## [0.12] - 2017-11-14
+ - Use 13 different environment variables to control block parameters
+   for unit testing, e.g. block number, timestamp, initial balance, etc.
+
+   Full list:
+
+     - `DAPP_TEST_ADDRESS`
+     - `DAPP_TEST_CALLER`
+     - `DAPP_TEST_ORIGIN`
+     - `DAPP_TEST_GAS_CREATE`
+     - `DAPP_TEST_GAS_CALL`
+     - `DAPP_TEST_BALANCE_CREATE`
+     - `DAPP_TEST_BALANCE_CALL`
+     - `DAPP_TEST_COINBASE`
+     - `DAPP_TEST_NUMBER`
+     - `DAPP_TEST_TIMESTAMP`
+     - `DAPP_TEST_GAS_LIMIT`
+     - `DAPP_TEST_GAS_PRICE`
+     - `DAPP_TEST_DIFFICULTY`
+
 ## [0.11.5] - 2017-11-14
  - Use --state with --exec --debug
  
