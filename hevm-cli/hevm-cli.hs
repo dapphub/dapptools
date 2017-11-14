@@ -29,8 +29,7 @@ import EVM.Solidity
 import EVM.Types hiding (word)
 import EVM.UnitTest (UnitTestOptions, coverageReport, coverageForUnitTestContract)
 import EVM.UnitTest (runUnitTestContract)
-import EVM.UnitTest (defaultGasForCreating, defaultGasForInvoking)
-import EVM.UnitTest (defaultBalanceForCreator, defaultBalanceForCreated)
+import EVM.UnitTest (getParametersFromEnvironmentVariables)
 import EVM.Dapp (findUnitTests, dappInfo)
 
 import qualified EVM.UnitTest as EVM.UnitTest
@@ -86,10 +85,6 @@ data Command
       { jsonFile           :: Maybe String
       , dappRoot           :: Maybe String
       , debug              :: Bool
-      , gasForCreating     :: Maybe W256
-      , gasForInvoking     :: Maybe W256
-      , balanceForCreator  :: Maybe W256
-      , balanceForCreated  :: Maybe W256
       , rpc                :: Maybe URL
       , verbose            :: Bool
       , coverage           :: Bool
@@ -98,10 +93,6 @@ data Command
   | Interactive
       { jsonFile           :: Maybe String
       , dappRoot           :: Maybe String
-      , gasForCreating     :: Maybe W256
-      , gasForInvoking     :: Maybe W256
-      , balanceForCreator  :: Maybe W256
-      , balanceForCreated  :: Maybe W256
       , rpc                :: Maybe URL
       , state              :: Maybe String
       }
@@ -139,21 +130,16 @@ unitTestOptions cmd = do
         facts <- Git.loadFacts (Git.RepoAt repoPath)
         pure (flip Facts.apply facts)
 
+  params <- getParametersFromEnvironmentVariables
+
   pure EVM.UnitTest.UnitTestOptions
-    { EVM.UnitTest.gasForCreating =
-        fromMaybe defaultGasForCreating (gasForCreating cmd)
-    , EVM.UnitTest.gasForInvoking =
-        fromMaybe defaultGasForInvoking (gasForInvoking cmd)
-    , EVM.UnitTest.balanceForCreator =
-        fromMaybe defaultBalanceForCreator (balanceForCreator cmd)
-    , EVM.UnitTest.balanceForCreated =
-        fromMaybe defaultBalanceForCreated (balanceForCreated cmd)
-    , EVM.UnitTest.oracle =
+    { EVM.UnitTest.oracle =
         case rpc cmd of
          Just url -> EVM.Fetch.http url
          Nothing  -> EVM.Fetch.zero
     , EVM.UnitTest.verbose = verbose cmd
     , EVM.UnitTest.vmModifier = vmModifier
+    , EVM.UnitTest.testParams = params
     }
 
 main :: IO ()

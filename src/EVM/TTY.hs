@@ -262,12 +262,9 @@ runFromVM vm = do
 
     testOpts = UnitTestOptions
       { oracle            = Fetch.zero
-      , gasForCreating    = error "irrelevant"
-      , gasForInvoking    = error "irrelevant"
-      , balanceForCreator = error "irrelevant"
-      , balanceForCreated = error "irrelevant"
       , verbose           = False
       , vmModifier        = id
+      , testParams        = error "irrelevant"
       }
 
   ui2 <- customMain mkVty Nothing (app testOpts) (UiVmScreen ui1)

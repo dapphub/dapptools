@@ -36,6 +36,7 @@ import Data.Monoid        ((<>))
 import Data.Text          (Text, unpack, isPrefixOf, stripSuffix, intercalate)
 import Data.Text.Encoding (encodeUtf8)
 import Data.Word          (Word32)
+import System.Environment (lookupEnv)
 import System.IO          (hFlush, stdout)
 
 import qualified Control.Monad.Par.Class as Par
@@ -55,13 +56,27 @@ import Data.Vector (Vector)
 import qualified Data.Vector as Vector
 
 data UnitTestOptions = UnitTestOptions
-  { gasForCreating :: W256
-  , gasForInvoking :: W256
-  , balanceForCreator :: W256
-  , balanceForCreated :: W256
-  , oracle :: Query -> IO (EVM ())
-  , verbose :: Bool
+  {
+    oracle     :: Query -> IO (EVM ())
+  , verbose    :: Bool
   , vmModifier :: VM -> VM
+  , testParams :: TestVMParams
+  }
+
+data TestVMParams = TestVMParams
+  { testAddress       :: Addr
+  , testCaller        :: Addr
+  , testOrigin        :: Addr
+  , testGasCreate     :: W256
+  , testGasCall       :: W256
+  , testBalanceCreate :: W256
+  , testBalanceCall   :: W256
+  , testCoinbase      :: Addr
+  , testNumber        :: W256
+  , testTimestamp     :: W256
+  , testGaslimit      :: W256
+  , testGasprice      :: W256
+  , testDifficulty    :: W256
   }
 
 defaultGasForCreating :: W256
@@ -101,11 +116,13 @@ initializeUnitTest UnitTestOptions { .. } = do
   Stepper.evm $ assign (env . contracts . ix addr . nonce) n
 
   -- Give a balance to the test target
-  Stepper.evm $ env . contracts . ix addr . balance += w256 balanceForCreated
+  Stepper.evm $
+    env . contracts . ix addr . balance += w256 (testBalanceCreate testParams)
 
   -- Initialize the test contract
   Stepper.evm (popTrace >> pushTrace (EntryTrace "initialize test"))
-  Stepper.evm $ setupCall addr "setUp()" gasForInvoking
+  Stepper.evm $
+    setupCall addr "setUp()" (testBalanceCall testParams)
 
   Stepper.note "Running `setUp()'"
 
@@ -125,7 +142,8 @@ runUnitTest UnitTestOptions { .. } method = do
   addr <- Stepper.evm $ use (state . contract)
 
   -- Set up the call to the test method
-  Stepper.evm $ setupCall addr method gasForInvoking
+  Stepper.evm $
+    setupCall addr method (testGasCall testParams)
   Stepper.evm (pushTrace (EntryTrace method))
   Stepper.note "Running unit test"
 
@@ -486,25 +504,47 @@ setupCall target abi allowance = do
 initialUnitTestVm :: UnitTestOptions -> SolcContract -> [SolcContract] -> VM
 initialUnitTestVm (UnitTestOptions {..}) theContract _ =
   let
+    TestVMParams {..} = testParams
     vm = makeVm $ VMOpts
            { vmoptCode = view creationCode theContract
            , vmoptCalldata = ""
            , vmoptValue = 0
-           , vmoptAddress = newContractAddress ethrunAddress 1
-           , vmoptCaller = ethrunAddress
-           , vmoptOrigin = ethrunAddress
-           , vmoptGas = gasForCreating
-           , vmoptCoinbase = 0
-           , vmoptNumber = 0
-           , vmoptTimestamp = 1
-           , vmoptGaslimit = 0
-           , vmoptGasprice = 0
-           , vmoptDifficulty = 0
+           , vmoptAddress = testAddress
+           , vmoptCaller = testCaller
+           , vmoptOrigin = testOrigin
+           , vmoptGas = testGasCreate
+           , vmoptCoinbase = testCoinbase
+           , vmoptNumber = testNumber
+           , vmoptTimestamp = testTimestamp
+           , vmoptGaslimit = testGaslimit
+           , vmoptGasprice = testGasprice
+           , vmoptDifficulty = testDifficulty
            , vmoptSchedule = FeeSchedule.metropolis
            }
     creator =
       initialContract mempty
         & set nonce 1
-        & set balance (w256 balanceForCreator)
+        & set balance (w256 testBalanceCreate)
   in vm
     & set (env . contracts . at ethrunAddress) (Just creator)
+
+getParametersFromEnvironmentVariables :: IO TestVMParams
+getParametersFromEnvironmentVariables = do
+  let
+    getWord s def = maybe def read <$> lookupEnv s
+    getAddr s def = maybe def read <$> lookupEnv s
+
+  TestVMParams
+    <$> getAddr "DAPP_TEST_ADDRESS" (newContractAddress ethrunAddress 1)
+    <*> getAddr "DAPP_TEST_CALLER" ethrunAddress
+    <*> getAddr "DAPP_TEST_ORIGIN" ethrunAddress
+    <*> getWord "DAPP_TEST_GAS_CREATE" defaultGasForCreating
+    <*> getWord "DAPP_TEST_GAS_CALL" defaultGasForInvoking
+    <*> getWord "DAPP_TEST_BALANCE_CREATE" defaultBalanceForCreator
+    <*> getWord "DAPP_TEST_BALANCE_CALL" defaultBalanceForCreated
+    <*> getAddr "DAPP_TEST_COINBASE" 0
+    <*> getWord "DAPP_TEST_NUMBER" 512
+    <*> getWord "DAPP_TEST_TIMESTAMP" 1
+    <*> getWord "DAPP_TEST_GAS_LIMIT" 0
+    <*> getWord "DAPP_TEST_GAS_PRICE" 0
+    <*> getWord "DAPP_TEST_DIFFICULTY" 0

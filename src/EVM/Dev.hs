@@ -33,15 +33,13 @@ ghciTest root path state =
         Just repoPath -> do
           facts <- Git.loadFacts (Git.RepoAt repoPath)
           pure (flip Facts.apply facts)
+    params <- getParametersFromEnvironmentVariables
     let
       opts = UnitTestOptions
-        { gasForCreating = defaultGasForCreating
-        , gasForInvoking = defaultGasForInvoking
-        , balanceForCreator = defaultBalanceForCreator
-        , balanceForCreated = defaultBalanceForCreated
-        , oracle = EVM.Fetch.zero
+        { oracle = EVM.Fetch.zero
         , verbose = False
         , vmModifier = loadFacts
+        , testParams = params
         }
     readSolc path >>=
       \case
@@ -61,14 +59,12 @@ ghciTty root path state =
         Just repoPath -> do
           facts <- Git.loadFacts (Git.RepoAt repoPath)
           pure (flip Facts.apply facts)
+    params <- getParametersFromEnvironmentVariables
     let
       testOpts = UnitTestOptions
-        { gasForCreating = defaultGasForCreating
-        , gasForInvoking = defaultGasForInvoking
-        , balanceForCreator = defaultBalanceForCreator
-        , balanceForCreated = defaultBalanceForCreated
-        , oracle = EVM.Fetch.zero
+        { oracle = EVM.Fetch.zero
         , verbose = False
         , vmModifier = loadFacts
+        , testParams = params
         }
     EVM.TTY.main testOpts root path
