@@ -48,8 +48,15 @@ let
   # };
 
 in rec {
-  solc = callPackage ((import ./solc-versions.nix).solc_0_4_18) {};
+  dappsys = import ../dappsys {
+    inherit (self.pkgs) dappsys solidityPackage;
+  };
 
+  solidityPackage = import ./solidity-package.nix {
+    inherit (self) pkgs;
+  };
+
+  solc = callPackage ((import ./solc-versions.nix).solc_0_4_18) {};
   solc-versions =
     super.lib.mapAttrs
       (_: value: pastPackage value {})
@@ -89,7 +96,7 @@ in rec {
   seth = versioned versions.seth (callPackage ./upstream/seth.nix {});
   dapp = versioned versions.dapp (callPackage ./upstream/dapp.nix {});
 
-  dappsys = (import ./dappsys.nix { inherit (self) pkgs; }).dappsys;
+  dappsys-legacy = (import ./dappsys.nix { inherit (self) pkgs; }).dappsys;
 
   setzer = callPackage ./setzer.nix {};
   keeper = callPackage ./keeper.nix {};

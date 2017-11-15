@@ -29,6 +29,7 @@ in rec {
   };
 
   dappsys = linux.pkgs.dappsys;
+  dappsys-legacy = linux.pkgs.dappsys-legacy;
 
   hevm-development = rec {
     ethereum-test-suite = linux.pkgs.fetchFromGitHub {
