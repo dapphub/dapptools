@@ -1,3 +1,4 @@
 [submodule "nixpkgs"]
 	path = nixpkgs
-	url = https://github.com/NixOS/nixpkgs
+	url = https://github.com/dapphub/nixpkgs
+  branch = carnix
