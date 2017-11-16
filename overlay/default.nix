@@ -56,6 +56,27 @@ in rec {
     inherit (self) pkgs;
   };
 
+  bashScript = { name, deps ? [], text } :
+    self.pkgs.writeTextFile {
+      inherit name;
+      executable = true;
+      destination = "/bin/${name}";
+      text = ''
+        #!${self.pkgs.bash}/bin/bash
+        set -e
+        export PATH="${lib.makeBinPath deps}"
+        ${text}
+        '';
+      checkPhase = ''
+        ${self.pkgs.bash}/bin/bash -n $out/bin/${name}
+        ${self.pkgs.shellcheck}/bin/shellcheck $out/bin/${name}
+      '';
+    };
+
+  dapp2 = {
+    test-hevm = import ./dapp/dapp-test-hevm.nix { pkgs = self.pkgs; };
+  };
+
   solc = callPackage ((import ./solc-versions.nix).solc_0_4_18) {};
   solc-versions =
     super.lib.mapAttrs

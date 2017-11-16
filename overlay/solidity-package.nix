@@ -16,7 +16,7 @@
 in
   attrs @ { deps ? [], ... }:
     pkgs.stdenv.mkDerivation (rec {
-      buildInputs = [pkgs.dapp pkgs.solc];
+      buildInputs = [pkgs.dapp2.test-hevm pkgs.solc];
       passthru = {
         remappings = remappings deps;
         libPaths = libPaths deps;

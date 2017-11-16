@@ -20,7 +20,7 @@ mkdir lib
 echo "$LIBSCRIPT" > setup.sh
 source setup.sh
 export DAPP_LIB=lib
-dapp test-hevm
+dapp2-test-hevm
 
 mkdir -p $out/{dapp-src,dapp-lib,dapp-out}
 cp -r $src $out/dapp-src/$name
