@@ -59,6 +59,7 @@ data UnitTestOptions = UnitTestOptions
   {
     oracle     :: Query -> IO (EVM ())
   , verbose    :: Bool
+  , match      :: Text
   , vmModifier :: VM -> VM
   , testParams :: TestVMParams
   }

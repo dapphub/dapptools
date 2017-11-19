@@ -43,7 +43,7 @@ import Control.Monad              (void, when, forM_)
 import Control.Monad.State.Strict (execState)
 import Data.ByteString            (ByteString)
 import Data.List                  (intercalate, isSuffixOf)
-import Data.Text                  (Text, unpack, pack)
+import Data.Text                  (Text, unpack, pack, isPrefixOf)
 import Data.Maybe                 (fromMaybe)
 import System.Directory           (withCurrentDirectory, listDirectory)
 import System.Exit                (die, exitFailure)
@@ -89,6 +89,7 @@ data Command
       , verbose            :: Bool
       , coverage           :: Bool
       , state              :: Maybe String
+      , match              :: Maybe String
       }
   | Interactive
       { jsonFile           :: Maybe String
@@ -138,6 +139,7 @@ unitTestOptions cmd = do
          Just url -> EVM.Fetch.http url
          Nothing  -> EVM.Fetch.zero
     , EVM.UnitTest.verbose = verbose cmd
+    , EVM.UnitTest.match   = pack $ fromMaybe "test" (match cmd)
     , EVM.UnitTest.vmModifier = vmModifier
     , EVM.UnitTest.testParams = params
     }
@@ -206,7 +208,8 @@ dappTest opts _ solcFile = do
   readSolc solcFile >>=
     \case
       Just (contractMap, cache) -> do
-        let unitTests = findUnitTests (Map.elems contractMap)
+        let matcher = isPrefixOf (EVM.UnitTest.match opts)
+        let unitTests = (findUnitTests matcher) (Map.elems contractMap)
         results <- mapM (runUnitTestContract opts contractMap cache) unitTests
         when (any (== False) results) exitFailure
       Nothing ->
@@ -217,7 +220,8 @@ dappCoverage opts _ solcFile = do
   readSolc solcFile >>=
     \case
       Just (contractMap, cache) -> do
-        let unitTests = findUnitTests (Map.elems contractMap)
+        let matcher = isPrefixOf (EVM.UnitTest.match opts)
+        let unitTests = (findUnitTests matcher) (Map.elems contractMap)
         covs <- mconcat <$> mapM (coverageForUnitTestContract opts contractMap cache) unitTests
 
         let

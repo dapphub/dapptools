@@ -48,7 +48,7 @@ dappInfo root solcByName sources =
 
   in DappInfo
     { _dappRoot = root
-    , _dappUnitTests = findUnitTests solcs
+    , _dappUnitTests = findUnitTests ("test" `isPrefixOf`) solcs
     , _dappSources = sources
     , _dappSolcByName = solcByName
     , _dappSolcByHash =
@@ -70,23 +70,23 @@ dappInfo root solcByName sources =
 unitTestMarkerAbi :: Word32
 unitTestMarkerAbi = abiKeccak (encodeUtf8 "IS_TEST()")
 
-findUnitTests :: [SolcContract] -> [(Text, [Text])]
-findUnitTests =
+findUnitTests :: (Text -> Bool) -> ([SolcContract] -> [(Text, [Text])])
+findUnitTests matcher =
   concatMap $ \c ->
     case preview (abiMap . ix unitTestMarkerAbi) c of
       Nothing -> []
       Just _  ->
-        let testNames = unitTestMethods c
+        let testNames = (unitTestMethods matcher) c
         in if null testNames
            then []
            else [(view contractName c, testNames)]
 
-unitTestMethods :: SolcContract -> [Text]
-unitTestMethods =
+unitTestMethods :: (Text -> Bool) -> (SolcContract -> [Text])
+unitTestMethods matcher =
   view abiMap
     >>> Map.elems
     >>> map (view methodSignature)
-    >>> filter ("test" `isPrefixOf`)
+    >>> filter matcher
     >>> sort
 
 traceSrcMap :: DappInfo -> Trace -> Maybe SrcMap

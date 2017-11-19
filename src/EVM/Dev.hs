@@ -11,6 +11,8 @@ import qualified EVM.TTY
 import qualified EVM.Facts     as Facts
 import qualified EVM.Facts.Git as Git
 
+import Data.Text (isPrefixOf)
+
 import qualified Data.Map as Map
 
 loadDappInfo :: String -> String -> IO DappInfo
@@ -38,13 +40,14 @@ ghciTest root path state =
       opts = UnitTestOptions
         { oracle = EVM.Fetch.zero
         , verbose = False
+        , match = ""
         , vmModifier = loadFacts
         , testParams = params
         }
     readSolc path >>=
       \case
         Just (contractMap, cache) -> do
-          let unitTests = findUnitTests (Map.elems contractMap)
+          let unitTests = findUnitTests ("test" `isPrefixOf`) (Map.elems contractMap)
           mapM (runUnitTestContract opts contractMap cache) unitTests
         Nothing ->
           error ("Failed to read Solidity JSON for `" ++ path ++ "'")
@@ -64,6 +67,7 @@ ghciTty root path state =
       testOpts = UnitTestOptions
         { oracle = EVM.Fetch.zero
         , verbose = False
+        , match = ""
         , vmModifier = loadFacts
         , testParams = params
         }
