@@ -1,7 +1,13 @@
 {
   "dapp": {
     "version": "0.7.7",
-    "src": {
+    "master": {
+      "rev": "44c1b051edfbd995d3c80585599854ec7844484b",
+      "sha256": "16ql266vvd1jc5ak087x9xhaxyj1n2fx5mp2ki36fs43p28rrjqd",
+      "owner": "dapphub",
+      "repo": "dapp"
+    },
+    "stable": {
       "rev": "44c1b051edfbd995d3c80585599854ec7844484b",
       "sha256": "16ql266vvd1jc5ak087x9xhaxyj1n2fx5mp2ki36fs43p28rrjqd",
       "owner": "dapphub",
@@ -10,7 +16,13 @@
   },
   "hevm": {
     "version": "0.12",
-    "src": {
+    "master": {
+      "rev": "cc2add9408c9736071c2085e95ce8801c0a89f0e",
+      "sha256": "1qi22q19bwxfyifv85vvjyca09bjy89bqzpiklzd78xr1ygangby",
+      "owner": "dapphub",
+      "repo": "hevm"
+    },
+    "stable": {
       "rev": "b4d48035b8e90d6ff71e9e32939d805ca960b252",
       "sha256": "0y3iahn7djghcj9byjgzam0g7gs511vi3jp4503mrj9i9xx74k6f",
       "owner": "dapphub",
@@ -19,7 +31,13 @@
   },
   "seth": {
     "version": "0.5.8",
-    "src": {
+    "master": {
+      "rev": "fc8d9b221bac220da5987cfdc8a075d187b96975",
+      "sha256": "01rhpf1p3rymidyx6cj6w4d3i51xfsx1mqz7c82s9z3vxdciv0zb",
+      "owner": "dapphub",
+      "repo": "seth"
+    },
+    "stable": {
       "rev": "0bfaf53a5b3daeb476e312014e91ceff6e5b23a1",
       "sha256": "0id1z07mghnmvj3kjs5psxj3zipl2vnna53jzlhyx1m4rfliz8qb",
       "owner": "dapphub",
@@ -28,7 +46,13 @@
   },
   "restless-git": {
     "version": "0.5.0",
-    "src": {
+    "master": {
+      "rev": "2ff25ea30660ac9db3fb0ed80d44e6ca30bc1461",
+      "sha256": "1s7p1pcw1xaqbrn6p6ysgx9hbc31xilvdbnl3vzzqyl1wka7iyc1",
+      "owner": "lessrest",
+      "repo": "restless-git"
+    },
+    "stable": {
       "rev": "9b208c944b61dc6cb4b32e7a5b90cffe643fcfc5",
       "sha256": "0l2n556fzgkgnw7rhwfsj7438qyid8y9sghlhd3is154dspg0p9v",
       "owner": "lessrest",
@@ -37,7 +61,13 @@
   },
   "jays": {
     "version": "1.20171121",
-    "src": {
+    "master": {
+      "rev": "7b8ec3fa1a8489764c01db89d5aa2f2a200cc79b",
+      "sha256": "0f1f0r1336cyl9l0y0a5147zhp3x5zlfsxkspwbkf3v57kynvazw",
+      "owner": "mbrock",
+      "repo": "jays"
+    },
+    "stable": {
       "rev": "7b8ec3fa1a8489764c01db89d5aa2f2a200cc79b",
       "sha256": "0f1f0r1336cyl9l0y0a5147zhp3x5zlfsxkspwbkf3v57kynvazw",
       "owner": "mbrock",
