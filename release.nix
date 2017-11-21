@@ -5,18 +5,18 @@ let
   linux = system "x86_64-linux";
   darwin = system "x86_64-darwin";
 
-  ethereum-test-suite = pkgs: pkgs.fetchFromGitHub {
+  ethereum-test-suite = x: x.fetchFromGitHub {
     owner = "ethereum";
     repo = "tests";
     rev = "7e361956bd68f5cac72fe41f29e5734ee94ae2de";
     sha256 = "0l5qalgbscr77vjhyf7b542055wnp4pddpfslnypp5sqws5w940w";
   };
 
-  hevmTestReport = pkgs: pkgs.runCommand "hevm-test-report" {} ''
+  hevmTestReport = x: x.runCommand "hevm-test-report" {} ''
     mkdir -p $out/nix-support
-    export PATH=${pkgs.hevm}/bin:$PATH
-    ${pkgs.hevm}/bin/hevm vm-test-report \
-      --tests ${ethereum-test-suite pkgs} > $out/index.html
+    export PATH=${x.pkgs.hevm}/bin:$PATH
+    ${x.pkgs.hevm}/bin/hevm vm-test-report \
+      --tests ${ethereum-test-suite x} > $out/index.html
     echo report testlog $out index.html > $out/nix-support/hydra-build-products
   '';
 
@@ -31,7 +31,7 @@ in rec {
     inherit go-ethereum;
     inherit go-ethereum-unlimited;
 
-    hevm-test-report = hevmTestReport linux.pkgs;
+    hevm-test-report = hevmTestReport linux;
   };
 
   dapphub.linux.master = with linux.pkgs.master; {
@@ -39,7 +39,7 @@ in rec {
     inherit seth;
     inherit hevm;
 
-    hevm-test-report = hevmTestReport linux.pkgs.master;
+    hevm-test-report = hevmTestReport (linux // { pkgs = linux.pkgs.master; });
   };
 
   dapphub.darwin.stable = with darwin.pkgs; {
