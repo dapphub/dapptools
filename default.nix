@@ -1,18 +1,18 @@
 { lib, stdenv, fetchFromGitHub, makeWrapper
-, seth, git, solc, shellcheck, nodejs, hevm, jshon, nix }:
+, seth, git, solc, shellcheck, nodejs, hevm, jshon, nix, coreutils }:
 
 stdenv.mkDerivation rec {
   name = "dapp-${version}";
   version = "0.7.4";
   src = ./.;
 
-  nativeBuildInputs = [makeWrapper shellcheck];
+  nativeBuildInputs = [makeWrapper shellcheck coreutils];
   buildPhase = "true";
   doCheck = true;
   checkPhase = "make test";
   makeFlags = ["prefix=$(out)"];
   postInstall = let path = lib.makeBinPath [
-    nodejs solc git seth hevm jshon nix
+    nodejs solc git seth hevm jshon nix coreutils
   ]; in ''
     wrapProgram "$out/bin/dapp" --prefix PATH : "${path}"
   '';
