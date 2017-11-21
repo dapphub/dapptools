@@ -1,5 +1,5 @@
 name: jays
-version: 1.20171020
+version: 1.20171121
 synopsis: Rewrite of jshon
 homepage: https://github.com/mbrock/jays
 license: GPL-3
@@ -20,6 +20,7 @@ library
     containers,
     text,
     aeson,
+    aeson-pretty,
     unordered-containers,
     vector
 

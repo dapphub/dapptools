@@ -9,12 +9,14 @@ import Data.Aeson
 import Data.ByteString.Lazy (ByteString)
 import Data.ByteString.Lazy (fromStrict, toStrict)
 import Data.Foldable (toList)
+import Data.List (sort)
 import Data.Monoid ((<>))
 import Data.Text (Text, pack, unpack)
 import Data.Text.Encoding (encodeUtf8, decodeUtf8)
 import Data.Vector (snoc, (!))
 import Text.Read (readMaybe)
 
+import qualified Data.Aeson.Encode.Pretty as Encode
 import qualified Data.ByteString.Lazy as BS
 import qualified Data.HashMap.Lazy as Map
 
@@ -127,10 +129,19 @@ jays input args =
       (Left x, False) -> (fromStrict (encodeUtf8 ("jays: " <> x)), False)
       (Right x, _)    -> (BS.intercalate "\n" x, True)
 
+-- Make sure to sort keys, otherwise we get pseudo-nondeterministic behavior
+-- due to Aeson using hashmaps for JSON objects.
+encodeOrdered :: Value -> ByteString
+encodeOrdered =
+  Encode.encodePretty' Encode.defConfig
+    { Encode.confCompare = compare
+    , Encode.confIndent = Encode.Spaces 0
+    }
+
 work :: [Value] -> [Op] -> Either Text [ByteString]
 work stk ops =
   case (stk, ops) of
-    (x:xs, []) -> pure [encode x]
+    (x:xs, []) -> pure [encodeOrdered x]
     ([], [])   -> pure []
 
     (xs, OpNewValue v : ops') -> work (v : xs) ops'
@@ -174,7 +185,7 @@ work stk ops =
       Left "error in -t"
 
     (Object o : xs, OpKeys : ops') ->
-      (map (fromStrict . encodeUtf8) (Map.keys o) ++) <$> work xs ops'
+      (map (fromStrict . encodeUtf8) (sort (Map.keys o)) ++) <$> work xs ops'
     (_, OpKeys : _) ->
       Left "error in -k"
 
