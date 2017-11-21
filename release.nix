@@ -34,12 +34,12 @@ in rec {
     hevm-test-report = hevmTestReport linux;
   };
 
-  dapphub.linux.master = with linux.pkgs.master; {
+  dapphub.linux.master = with linux.master.pkgs; {
     inherit dapp;
     inherit seth;
     inherit hevm;
 
-    hevm-test-report = hevmTestReport (linux // { pkgs = linux.pkgs.master; });
+    hevm-test-report = hevmTestReport linux.master;
   };
 
   dapphub.darwin.stable = with darwin.pkgs; {
@@ -53,7 +53,7 @@ in rec {
     inherit go-ethereum-unlimited;
   };
 
-  dapphub.darwin.master = with darwin.pkgs.master; {
+  dapphub.darwin.master = with darwin.master.pkgs; {
     inherit dapp;
     inherit seth;
     inherit hevm;

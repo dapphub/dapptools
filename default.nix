@@ -9,8 +9,16 @@
 , system ? null
 }:
 
-(import ./nixpkgs) ({
-  overlays = [(import ./overlay)];
-} // (
-  if system != null then { inherit system; } else {}
-))
+(
+  (import ./nixpkgs) ({
+    overlays = [(import ./overlay { flavor = "stable"; })];
+  } // (
+    if system != null then { inherit system; } else {}
+  ))
+) // {
+  master = (import ./nixpkgs) ({
+    overlays = [(import ./overlay { flavor = "master"; })];
+  } // (
+    if system != null then { inherit system; } else {}
+  ));
+}
