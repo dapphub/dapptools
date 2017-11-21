@@ -14,25 +14,29 @@
          } // x.libPaths)
          xs);
 in
-  attrs @ { deps ? [], ... }:
-    pkgs.stdenv.mkDerivation (rec {
-      buildInputs = [pkgs.dapp2.test-hevm pkgs.solc];
-      passthru = {
-        remappings = remappings deps;
-        libPaths = libPaths deps;
-      };
+  pkgs.lib.makeOverridable (
+    attrs @ { test ? true, deps ? [], ... }:
+      pkgs.stdenv.mkDerivation (rec {
+        buildInputs = [pkgs.dapp2.test-hevm pkgs.solc];
+        passthru = {
+          remappings = remappings deps;
+          libPaths = libPaths deps;
+        };
 
-      REMAPPINGS =
-        pkgs.lib.mapAttrsToList
-          (k: v: k + "=" + v)
-          passthru.remappings;
+        TEST = test;
 
-      LIBSCRIPT =
-        pkgs.lib.mapAttrsToList
-          (k: v: ''
-            ln -s ${v} lib/${k}
-          '')
-          passthru.libPaths;
+        REMAPPINGS =
+          pkgs.lib.mapAttrsToList
+            (k: v: k + "=" + v)
+            passthru.remappings;
 
-      builder = ./solidity-package.sh;
-    } // attrs)
+        LIBSCRIPT =
+          pkgs.lib.mapAttrsToList
+            (k: v: ''
+              ln -s ${v} lib/${k}
+            '')
+            passthru.libPaths;
+
+        builder = ./solidity-package.sh;
+      } // attrs)
+    )
