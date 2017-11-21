@@ -1,9 +1,9 @@
 {
   "dapp": {
-    "version": "0.7.6",
+    "version": "0.7.7",
     "src": {
-      "rev": "10faf4e6efa1d5d740cf975106ec1a67577be6d9",
-      "sha256": "0khm470qw3gnskr1wfm23mwygkr24ny8fwpah86cj67nfw80nb8g",
+      "rev": "44c1b051edfbd995d3c80585599854ec7844484b",
+      "sha256": "16ql266vvd1jc5ak087x9xhaxyj1n2fx5mp2ki36fs43p28rrjqd",
       "owner": "dapphub",
       "repo": "dapp"
     }
@@ -36,10 +36,10 @@
     }
   },
   "jays": {
-    "version": "1.20171020",
+    "version": "1.20171121",
     "src": {
-      "rev": "00bc7e2c8259e0ed73858129e085bf65e6f36878",
-      "sha256": "1d83zvv55gm417pxzzbfl2s2f80mia0fxidqs0lahfppb6zb09fp",
+      "rev": "7b8ec3fa1a8489764c01db89d5aa2f2a200cc79b",
+      "sha256": "0f1f0r1336cyl9l0y0a5147zhp3x5zlfsxkspwbkf3v57kynvazw",
       "owner": "mbrock",
       "repo": "jays"
     }
