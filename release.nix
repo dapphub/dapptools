@@ -25,6 +25,7 @@ in rec {
     inherit dapp;
     inherit seth;
     inherit hevm;
+    inherit evmdis;
     inherit keeper;
     inherit setzer;
     inherit solc-versions;
@@ -46,6 +47,7 @@ in rec {
     inherit dapp;
     inherit seth;
     inherit hevm;
+    inherit evmdis;
     # inherit keeper;
     inherit setzer;
     inherit solc-versions;
