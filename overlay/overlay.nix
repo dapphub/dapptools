@@ -126,6 +126,8 @@ in rec {
   setzer = callPackage ./setzer.nix {};
   keeper = callPackage ./keeper.nix {};
 
+  evmdis = callPackage ./evmdis.nix {};
+
   go-ethereum = super.go-ethereum.overrideDerivation (_: rec {
     name = "go-ethereum-${version}";
     version = "1.7.3";
