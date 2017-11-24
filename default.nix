@@ -4,10 +4,10 @@
 , fgl, filepath, ghci-pretty, haskeline, here, HUnit, lens
 , lens-aeson, megaparsec, memory, monad-par, mtl, multiset
 , operational, optparse-generic, process, QuickCheck
-, quickcheck-text, readline, restless-git, rosezipper, scientific
-, stdenv, tasty, tasty-hunit, tasty-quickcheck, temporary, text
-, text-format, time, transformers, tree-view, unordered-containers
-, vector, vty, wreq
+, quickcheck-text, readline, regex-tdfa, restless-git, rosezipper
+, scientific, stdenv, tasty, tasty-hunit, tasty-quickcheck
+, temporary, text, text-format, time, transformers, tree-view
+, unordered-containers, vector, vty, wreq
 }:
 mkDerivation {
   pname = "hevm";
@@ -31,7 +31,8 @@ mkDerivation {
     binary brick bytestring containers cryptonite data-dword deepseq
     directory filepath ghci-pretty lens lens-aeson memory mtl
     optparse-generic process QuickCheck quickcheck-text readline
-    temporary text text-format unordered-containers vector vty
+    regex-tdfa temporary text text-format unordered-containers vector
+    vty
   ];
   testHaskellDepends = [
     base binary bytestring ghci-pretty here HUnit lens mtl QuickCheck

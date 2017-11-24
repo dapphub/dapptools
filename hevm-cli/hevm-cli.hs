@@ -61,6 +61,9 @@ import qualified Options.Generic        as Options
 import qualified EVM.Facts     as Facts
 import qualified EVM.Facts.Git as Git
 
+import qualified Text.Regex.TDFA as Regex
+import qualified Data.Sequence as Seq
+
 -- This record defines the program's command-line options
 -- automatically via the `optparse-generic` package.
 data Command
@@ -139,7 +142,7 @@ unitTestOptions cmd = do
          Just url -> EVM.Fetch.http url
          Nothing  -> EVM.Fetch.zero
     , EVM.UnitTest.verbose = verbose cmd
-    , EVM.UnitTest.match   = pack $ fromMaybe "test" (match cmd)
+    , EVM.UnitTest.match   = pack $ fromMaybe "^test" (match cmd)
     , EVM.UnitTest.vmModifier = vmModifier
     , EVM.UnitTest.testParams = params
     }
@@ -208,19 +211,30 @@ dappTest opts _ solcFile = do
   readSolc solcFile >>=
     \case
       Just (contractMap, cache) -> do
-        let matcher = isPrefixOf (EVM.UnitTest.match opts)
+        let matcher = regexMatches (EVM.UnitTest.match opts)
         let unitTests = (findUnitTests matcher) (Map.elems contractMap)
         results <- mapM (runUnitTestContract opts contractMap cache) unitTests
         when (any (== False) results) exitFailure
       Nothing ->
         error ("Failed to read Solidity JSON for `" ++ solcFile ++ "'")
 
+regexMatches :: Text -> Text -> Bool
+regexMatches regexSource =
+  let
+    compOpts =
+      Regex.defaultCompOpt { Regex.lastStarGreedy = True }
+    execOpts =
+      Regex.defaultExecOpt { Regex.captureGroups = False }
+    regex = Regex.makeRegexOpts compOpts execOpts (unpack regexSource)
+  in
+    Regex.matchTest regex . Seq.fromList . unpack
+
 dappCoverage :: UnitTestOptions -> Mode -> String -> IO ()
 dappCoverage opts _ solcFile = do
   readSolc solcFile >>=
     \case
       Just (contractMap, cache) -> do
-        let matcher = isPrefixOf (EVM.UnitTest.match opts)
+        let matcher = regexMatches (EVM.UnitTest.match opts)
         let unitTests = (findUnitTests matcher) (Map.elems contractMap)
         covs <- mconcat <$> mapM (coverageForUnitTestContract opts contractMap cache) unitTests
 
