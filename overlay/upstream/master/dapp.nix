@@ -3,7 +3,7 @@
 
 stdenv.mkDerivation rec {
   name = "dapp-${version}";
-  version = "0.7.4";
+  version = "0.7.8";
   src = ./.;
 
   nativeBuildInputs = [makeWrapper shellcheck coreutils];

@@ -1,15 +1,15 @@
 {
   "dapp": {
-    "version": "0.7.7",
+    "version": "0.7.8",
     "master": {
-      "rev": "44c1b051edfbd995d3c80585599854ec7844484b",
-      "sha256": "16ql266vvd1jc5ak087x9xhaxyj1n2fx5mp2ki36fs43p28rrjqd",
+      "rev": "8232808b3a3d69a5503e8b94c7968df571d4c4aa",
+      "sha256": "1k8j3508h5rkgh0jrnk9hsij8gpgzx3s34qxprm6cf9kws36nbds",
       "owner": "dapphub",
       "repo": "dapp"
     },
     "stable": {
-      "rev": "44c1b051edfbd995d3c80585599854ec7844484b",
-      "sha256": "16ql266vvd1jc5ak087x9xhaxyj1n2fx5mp2ki36fs43p28rrjqd",
+      "rev": "8232808b3a3d69a5503e8b94c7968df571d4c4aa",
+      "sha256": "1k8j3508h5rkgh0jrnk9hsij8gpgzx3s34qxprm6cf9kws36nbds",
       "owner": "dapphub",
       "repo": "dapp"
     }
