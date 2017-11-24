@@ -51,6 +51,7 @@ import qualified Data.Text as Text
 import qualified Data.Vector as Vec
 import qualified Data.Vector.Storable as SVec
 import qualified Graphics.Vty as Vty
+import qualified System.Console.Haskeline as Readline
 
 import qualified EVM.TTYCenteredList as Centered
 
@@ -227,8 +228,8 @@ interpret mode =
           interpret mode (k ())
 
         -- Stepper wants to exit because of a failure.
-        Stepper.Fail _ ->
-          error "how to show errors in TTY?"
+        Stepper.Fail e ->
+          error ("VM error: " ++ show e)
 
 isUnitTestContract :: Text -> DappInfo -> Bool
 isUnitTestContract name dapp =
@@ -373,6 +374,20 @@ app opts =
                     2
               , _browserVm = s
               }
+
+        (UiVmScreen s, VtyEvent (Vty.EvKey (Vty.KChar ' ') [])) ->
+          let
+            loop = do
+              Just hey <- Readline.getInputLine "% "
+              Readline.outputStrLn hey
+              Just hey' <- Readline.getInputLine "% "
+              Readline.outputStrLn hey'
+              return (UiVmScreen s)
+          in
+            suspendAndResume $
+              Readline.runInputT Readline.defaultSettings loop
+
+
         (UiVmScreen s, VtyEvent (Vty.EvKey (Vty.KChar 'n') [])) ->
           takeStep s StepNormally StepOne
 

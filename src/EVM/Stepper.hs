@@ -59,10 +59,11 @@ data Action a where
   Note :: Text    -> Action ()
 
 -- | Some failure raised by a stepper
-data Failure where
-  ContractNotFound :: Failure
-  DecodingError    :: Failure
-  VMFailed         :: Error -> Failure
+data Failure
+  = ContractNotFound
+  | DecodingError
+  | VMFailed Error
+  deriving Show
 
 -- | Type alias for an operational monad of @Action@
 type Stepper a = Program Action a
