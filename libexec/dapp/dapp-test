@@ -2,7 +2,7 @@
 set -e
 have() { command -v "$1" >/dev/null; }
 
-if ! [[ $DAPP_NO_PRETEST_BUILD ]] ; then
+if ! [[ $DAPP_SKIP_BUILD ]] ; then
   DAPP_LINK_TEST_LIBRARIES=1 dapp build || exit
 fi
 
