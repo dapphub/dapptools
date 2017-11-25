@@ -148,10 +148,18 @@ in rec {
   go-ethereum-unlimited = go-ethereum.overrideDerivation (this: rec {
     name = "go-ethereum-unlimited-${this.version}";
     preConfigure = ''
+      # Huge transaction calldata
       substituteInPlace core/tx_pool.go --replace 'return ErrOversizedData' ""
+
+      # Huge contracts
       substituteInPlace params/protocol_params.go --replace \
         'MaxCodeSize = 24576' \
         'MaxCodeSize = 1000000'
+
+      # Huge block gas limit in --dev mode
+      substituteInPlace core/genesis.go --replace \
+        'GasLimit:   6283185,' \
+        'GasLimit:   0xffffffffffffffff,'
     '';
   });
 

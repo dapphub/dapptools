@@ -2,8 +2,8 @@
   "dapp": {
     "version": "0.7.8",
     "master": {
-      "rev": "e86b4c5d208f8da0d02231707f894a731087529b",
-      "sha256": "1p5ja6nhclirhm9ylb9wlkbnaik9n9dklhik04ccsmdkcwb7yy6j",
+      "rev": "d4f7ba9cfabb2ab567b0de72a446e4ecbb2a0844",
+      "sha256": "1lwqq8pdydlarz6b6wri4mydvm01dysd2pib03mcqz9l09rnsifc",
       "owner": "dapphub",
       "repo": "dapp"
     },
