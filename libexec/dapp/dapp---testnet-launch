@@ -22,7 +22,6 @@ address=$(
 
 echo >&2 "dapp-testnet:   Account: $address"
 echo >&2 "dapp-testnet:   RPC URL: http://127.0.0.1:$chainid"
-echo >&2 "dapp-testnet:   Genesis: $chaindir/config/genesis.json"
 echo >&2 "dapp-testnet:  TCP port: $port"
 echo >&2 "dapp-testnet:  Chain ID: $chainid"
 echo >&2 "dapp-testnet:  Database: $chaindir"
@@ -32,29 +31,8 @@ echo "$address"                  > "$chaindir/config/account"
 echo "http://127.0.0.1:$chainid" > "$chaindir/config/rpc-url"
 echo "$port"                     > "$chaindir/config/node-port"
 
-jshon >"$chaindir/config/genesis.json" \
-  -n {} \
-  -n {} \
-    -n "$chainid" -i chainId \
-    -n 0 -i homesteadBlock \
-    -n 0 -i eip155Block \
-    -n 0 -i eip158Block \
-    -n 0 -i byzantiumBlock \
-    -n {} -n 1 -i period -n 3000 -i epoch -i clique \
-    -i config \
-  -s "0x1" -i difficulty \
-  -s "0xffffffffffffffff" -i gaslimit \
-  -s "0x3132333400000000000000000000000000000000000000000000000000000000""$address""0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000" -i extraData \
-  -n {} \
-    -n {} -s "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff" -i balance \
-    -i "$address" \
-  -i alloc
-
-geth 2>/dev/null --datadir "$chaindir" init "$chaindir/config/genesis.json"
-
 geth \
   2> >(tee "$chaindir/geth.log" | grep --line-buffered Success | sed 's/^/geth: /' >&2) \
-  --datadir "$chaindir" --mine --networkid "$chainid" \
-  --rpc --rpcapi "web3,eth,debug" \
-  --minerthreads=1 --rpccorsdomain '*' --nodiscover --port="$port" \
+  --datadir "$chaindir" --dev --networkid "$chainid" --port="$port" \
+  --rpc --rpcapi "web3,eth,debug" --rpccorsdomain '*' --nodiscover \
   --rpcport="$chainid" --unlock="$address" --password=<(exit)
