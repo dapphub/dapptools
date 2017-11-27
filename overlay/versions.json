@@ -30,16 +30,16 @@
     }
   },
   "seth": {
-    "version": "0.5.8",
+    "version": "0.5.10",
     "master": {
-      "rev": "fc8d9b221bac220da5987cfdc8a075d187b96975",
-      "sha256": "01rhpf1p3rymidyx6cj6w4d3i51xfsx1mqz7c82s9z3vxdciv0zb",
+      "rev": "e11161e86bccb3b808edce27af549d69713e1921",
+      "sha256": "0jfnxwzy624gh56ky14krxrjj292bpabnmr47pqph0182yingy0g",
       "owner": "dapphub",
       "repo": "seth"
     },
     "stable": {
-      "rev": "0bfaf53a5b3daeb476e312014e91ceff6e5b23a1",
-      "sha256": "0id1z07mghnmvj3kjs5psxj3zipl2vnna53jzlhyx1m4rfliz8qb",
+      "rev": "e11161e86bccb3b808edce27af549d69713e1921",
+      "sha256": "0jfnxwzy624gh56ky14krxrjj292bpabnmr47pqph0182yingy0g",
       "owner": "dapphub",
       "repo": "seth"
     }
@@ -72,6 +72,21 @@
       "sha256": "0f1f0r1336cyl9l0y0a5147zhp3x5zlfsxkspwbkf3v57kynvazw",
       "owner": "mbrock",
       "repo": "jays"
+    }
+  },
+  "symbex": {
+    "version": "0.5.0",
+    "master": {
+      "rev": "4abd01bd71fa65c6dfbd4a636838feea5ef25a50",
+      "sha256": "0fbiaqgrg8840269sachy76wm5snzglib87qqg81psizh89ym267",
+      "owner": "mbrock",
+      "repo": "symbex"
+    },
+    "stable": {
+      "rev": "4abd01bd71fa65c6dfbd4a636838feea5ef25a50",
+      "sha256": "0fbiaqgrg8840269sachy76wm5snzglib87qqg81psizh89ym267",
+      "owner": "mbrock",
+      "repo": "symbex"
     }
   }
 }

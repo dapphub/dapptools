@@ -61,5 +61,6 @@ package dapphub/hevm
 package dapphub/seth
 package lessrest/restless-git
 package mbrock/jays
+package mbrock/symbex
 
 echo "$json" | jq . > overlay/versions.json
