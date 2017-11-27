@@ -34,11 +34,11 @@ let
   stdenv = self.pkgs.stdenv;
 
   haskellPackages = super.pkgs.haskellPackages.override {
-    overrides = _: super-hs: {
-      restless-git =
-        versioned "restless-git" (x:
-          self.pkgs.haskell.lib.dontCheck (super-hs.callPackage x {})
-        );
+    overrides = _: super-hs: let
+      dontCheck = x: self.pkgs.haskell.lib.dontCheck (super-hs.callPackage x {});
+    in {
+      restless-git = versioned "restless-git" dontCheck;
+      symbex = versioned "symbex" dontCheck;
 
       # We don't want Megaparsec 5!
       megaparsec = super.pkgs.haskellPackages.megaparsec_6_2_0;
@@ -94,13 +94,44 @@ in rec {
     packageOverrides = (import ./python.nix { pkgs = super.pkgs; });
   };
 
+  symbex-mueval = let
+    env = haskellPackages.ghcWithPackages (self: with self; [
+      symbex QuickCheck show simple-reflect
+    ]);
+  in (haskellPackages.mueval.override {
+    hint = haskellPackages.hint.override {
+      ghc = env;
+    };
+  }).overrideAttrs (attrs: {
+    preConfigure = ''
+      substituteInPlace Mueval/Context.hs --replace '"Test.QuickCheck",' "-- no quickcheck"
+    '';
+    postInstall = ''
+      wrapProgram $out/bin/mueval \
+        --set NIX_GHC ${env}/bin/ghc \
+        --set NIX_GHCPKG ${env}/bin/ghc-pkg \
+        --set NIX_GHC_LIBDIR $(${env}/bin/ghc --print-libdir)
+    '';
+    nativeBuildInputs = attrs.nativeBuildInputs ++ [self.pkgs.makeWrapper];
+  });
+
+  hevmas = self.pkgs.bashScript {
+    name = "hevmas";
+    deps = with self.pkgs; [symbex-mueval gnused];
+    text = ''
+      mueval -XRecursiveDo -m EVM.Assembly \
+        -e "$(echo "bytecode $ mdo"; sed 's/^/  /')" \
+        | sed -e 's/^"//' -e 's/"$//'
+    '';
+  };
+
   hevm = (
     versioned "hevm"
       (x: self.pkgs.haskell.lib.justStaticExecutables (haskellPackages.callPackage x {}))
   ).overrideAttrs (attrs: {
     postInstall = ''
       wrapProgram $out/bin/hevm \
-         --suffix PATH : "${lib.makeBinPath (with self.pkgs; [bash coreutils git])}"
+         --suffix PATH : "${lib.makeBinPath (with self.pkgs; [bash coreutils git])}" \
     '';
 
     enableSeparateDataOutput = true;
