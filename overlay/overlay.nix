@@ -131,7 +131,7 @@ in rec {
   ).overrideAttrs (attrs: {
     postInstall = ''
       wrapProgram $out/bin/hevm \
-         --suffix PATH : "${lib.makeBinPath (with self.pkgs; [bash coreutils git])}" \
+         --suffix PATH : "${lib.makeBinPath (with self.pkgs; [bash coreutils git])}"
     '';
 
     enableSeparateDataOutput = true;
