@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 set -e
 data=$(cat)
-url=${ETH_RPC_HOST:-localhost}:${ETH_RPC_PORT:-8545}
+: ${ETH_RPC_URL:=${ETH_RPC_HOST:-localhost}:${ETH_RPC_PORT:-8545}}
 [[ $SETH_DEBUG_CURL ]] && set -x
-curl -sS -H "Content-Type: application/json" "$url" -d "$data"
+curl -sS -H "Content-Type: application/json" "$ETH_RPC_URL" -d "$data"

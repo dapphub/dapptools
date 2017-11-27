@@ -9,6 +9,7 @@
 ###
 ###    --rpc-host=<host>          JSON-RPC host (default: `localhost')
 ###    --rpc-port=<port>          JSON-RPC port (default: `8545')
+###    --rpc-url=<url>            JSON-RPC URL (overrides host and port)
 ###
 ### Transaction options:
 ###
@@ -41,6 +42,7 @@ seth <command> --help
   Connection options:
 rpc-host=host        JSON-RPC host (default: \`localhost')
 rpc-port=port        JSON-RPC port (default: \`8545')
+rpc-url=url          JSON-RPC URL (overrides host and port)
 
   Transaction options:
 F,from=address       account to send transaction from
@@ -86,6 +88,7 @@ while [[ $1 ]]; do
 
     --rpc-host)      shift; export ETH_RPC_HOST=$1;;
     --rpc-port)      shift; export ETH_RPC_PORT=$1;;
+    --rpc-url)       shift; export ETH_RPC_URL=$1;;
 
     -B|--block)      shift; export ETH_BLOCK=$1;;
     -F|--from)       shift; export ETH_FROM=$1;;
