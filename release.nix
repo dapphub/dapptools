@@ -31,6 +31,7 @@ in rec {
     inherit solc-versions;
     inherit go-ethereum;
     inherit go-ethereum-unlimited;
+    inherit hevmas;
 
     hevm-test-report = hevmTestReport linux;
   };
@@ -39,6 +40,7 @@ in rec {
     inherit dapp;
     inherit seth;
     inherit hevm;
+    inherit hevmas;
 
     hevm-test-report = hevmTestReport linux.master;
   };
@@ -53,6 +55,7 @@ in rec {
     inherit solc-versions;
     inherit go-ethereum;
     inherit go-ethereum-unlimited;
+    inherit hevmas;
   };
 
   dapphub.darwin.master = with darwin.master.pkgs; {
@@ -61,5 +64,6 @@ in rec {
     inherit hevm;
     inherit dappsys;
     inherit dappsys-legacy;
+    inherit hevmas;
   };
 }
