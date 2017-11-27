@@ -165,7 +165,7 @@ makeSrcMaps = (\case (_, Fe, _) -> Nothing; x -> Just (done x))
     go '-' (xs, F4 a b c, p)                 = (xs, F5 (SM a b c JumpRegular), p)
     go ';' (xs, F5 s, _)                     = (xs |> s, F1 [], s)
 
-    go _ (xs, _, p)                          = (xs, Fe, p)
+    go c (xs, _, p)                          = (xs, error ("srcmap: y u " ++ show c ++ "?!?"), p)
 
 makeSourceCache :: [Text] -> Map Text Value -> IO SourceCache
 makeSourceCache paths asts = do
