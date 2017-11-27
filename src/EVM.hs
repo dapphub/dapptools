@@ -34,7 +34,7 @@ import Control.Monad.State.Strict hiding (state)
 import Data.ByteString              (ByteString)
 import Data.ByteString.Lazy         (fromStrict)
 import Data.Map.Strict              (Map)
-import Data.Maybe                   (fromJust, isNothing)
+import Data.Maybe                   (fromMaybe, isNothing)
 import Data.Sequence                (Seq)
 import Data.Vector.Storable         (Vector)
 import Data.Foldable                (toList)
@@ -341,7 +341,7 @@ exec1 = do
     mem  = the state memory
     stk  = the state stack
     self = the state contract
-    this = fromJust (preview (ix (the state contract)) (the env contracts))
+    this = fromMaybe (error "internal error: state contract") (preview (ix (the state contract)) (the env contracts))
 
     fees@(FeeSchedule {..}) = the block schedule
 
@@ -361,6 +361,7 @@ exec1 = do
             CallContext _ _ _ _ _ _ -> do
               -- Take back the remaining gas allowance
               modifying (state . gas) (+ the state gas)
+              modifying burned (subtract (the state gas))
           push 1
 
   if the state pc >= num (BS.length (the state code))
@@ -896,6 +897,7 @@ exec1 = do
 
                         -- Take back the remaining gas allowance
                         modifying (state . gas) (+ the state gas)
+                        modifying burned (subtract (the state gas))
 
                         copyBytesToMemory
                           output

@@ -31,9 +31,10 @@ import Control.Monad.Par.IO (runParIO)
 import Data.ByteString    (ByteString)
 import Data.Foldable      (toList)
 import Data.Map           (Map)
-import Data.Maybe         (fromMaybe, catMaybes, fromJust, mapMaybe)
+import Data.Maybe         (fromMaybe, catMaybes, fromJust, fromMaybe, mapMaybe)
 import Data.Monoid        ((<>))
-import Data.Text          (Text, unpack, isPrefixOf, stripSuffix, intercalate)
+import Data.Text          (Text, pack, unpack)
+import Data.Text          (isPrefixOf, stripSuffix, intercalate)
 import Data.Text.Encoding (encodeUtf8)
 import Data.Word          (Word32)
 import System.Environment (lookupEnv)
@@ -232,7 +233,7 @@ currentOpLocation vm =
     Just c ->
       OpLocation
         (view codehash c)
-        (fromJust (vmOpIx vm))
+        (fromMaybe (error "internal error: op ix") (vmOpIx vm))
 
 execWithCoverage :: StateT CoverageState IO VMResult
 execWithCoverage = do
@@ -411,7 +412,17 @@ runUnitTestContract
               vm1
           case x of
              (Right True,  vm) ->
-               pure ("PASS " <> testName, Right (passOutput vm testName))
+               let
+                 gasSpent =
+                   view burned vm - view burned vm1
+                 gasText =
+                   pack . show $
+                     (fromIntegral gasSpent :: Integer)
+               in
+                 pure
+                   ( "PASS " <> testName <> " (gas: " <> gasText <> ")"
+                   , Right (passOutput vm testName)
+                   )
              (Right False, vm) ->
                pure ("FAIL " <> testName, Left (failOutput vm dapp testName))
              (Left _, _)       ->

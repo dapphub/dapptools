@@ -208,6 +208,9 @@ solidity contract src = do
   let Just (solc, _, _) = readJSON json
   return (solc ^? ix (path <> ":" <> contract) . creationCode)
 
+force :: String -> Maybe a -> a
+force s = fromMaybe (error s)
+
 readJSON :: Text -> Maybe (Map Text SolcContract, Map Text Value, [Text])
 readJSON json = do
   contracts <-
@@ -227,8 +230,8 @@ readJSON json = do
         _creationCode     = theCreationCode,
         _runtimeCodehash  = keccak theRuntimeCode,
         _creationCodehash = keccak theCreationCode,
-        _runtimeSrcmap    = fromJust (makeSrcMaps (x ^?! key "srcmap-runtime" . _String)),
-        _creationSrcmap   = fromJust (makeSrcMaps (x ^?! key "srcmap" . _String)),
+        _runtimeSrcmap    = force "internal error: srcmap-runtime" (makeSrcMaps (x ^?! key "srcmap-runtime" . _String)),
+        _creationSrcmap   = force "internal error: srcmap" (makeSrcMaps (x ^?! key "srcmap" . _String)),
         _contractName = s,
         _contractAst =
           fromMaybe
@@ -264,7 +267,7 @@ readJSON json = do
                   (case abi ^?! key "anonymous" . _Bool of
                      True -> Anonymous
                      False -> NotAnonymous)
-                  (map (\y -> ( fromJust (parseTypeName (y ^?! key "type" . _String))
+                  (map (\y -> ( force "internal error: type" (parseTypeName (y ^?! key "type" . _String))
                               , if y ^?! key "indexed" . _Bool
                                 then Indexed
                                 else NotIndexed ))
@@ -289,7 +292,7 @@ signature abi =
 parseMethodInput :: (Show s, AsValue s) => s -> (Text, AbiType)
 parseMethodInput x =
   ( x ^?! key "name" . _String
-  , fromJust (parseTypeName (x ^?! key "type" . _String))
+  , force "internal error: method type" (parseTypeName (x ^?! key "type" . _String))
   )
 
 toCode :: Text -> ByteString
