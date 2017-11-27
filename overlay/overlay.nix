@@ -45,13 +45,12 @@ let
     };
   };
 
-  # profilingHaskellPackages = haskellPackages.override {
-  #   overrides = self: super-hs:
-  #     (import ./haskell.nix { pkgs = super.pkgs; } self super-hs) // {
-  #       mkDerivation = args: super-hs.mkDerivation
-  #         (args // { enableLibraryProfiling = true; });
-  #     };
-  # };
+  profilingHaskellPackages = haskellPackages.override {
+    overrides = self: super-hs: {
+      mkDerivation = args: super-hs.mkDerivation
+        (args // { enableLibraryProfiling = true; });
+    };
+  };
 
 in rec {
   dappsys = import ../dappsys {
@@ -139,6 +138,20 @@ in rec {
     nativeBuildInputs = attrs.nativeBuildInputs ++ [self.pkgs.makeWrapper];
   });
 
+  hevm-prof = (
+    versioned "hevm"
+      (x: self.pkgs.haskell.lib.justStaticExecutables (profilingHaskellPackages.callPackage x {}))
+  ).overrideAttrs (attrs: {
+    postInstall = ''
+      wrapProgram $out/bin/hevm \
+         --suffix PATH : "${lib.makeBinPath (with self.pkgs; [bash coreutils git])}"
+    '';
+
+    enableSeparateDataOutput = true;
+    buildInputs = attrs.buildInputs ++ [self.pkgs.solc];
+    nativeBuildInputs = attrs.nativeBuildInputs ++ [self.pkgs.makeWrapper];
+  });
+
   jays = (
     versioned "jays" (x:
       self.pkgs.haskell.lib.justStaticExecutables
@@ -151,6 +164,16 @@ in rec {
 
   seth = versioned "seth" (x: callPackage x {});
   dapp = versioned "dapp" (x: callPackage x {});
+
+  dapp-prof = (
+    (versioned "dapp" (x: callPackage x {})).override { hevm = hevm-prof; }
+  ).overrideAttrs (_: {
+    preConfigure = ''
+      substituteInPlace libexec/dapp/dapp-test-hevm \
+        --replace 'hevm ' 'hevm +RTS -xc -RTS '
+    '';
+  });
+
 
   dappsys-legacy = (import ./dappsys.nix { inherit (self) pkgs; }).dappsys;
 
