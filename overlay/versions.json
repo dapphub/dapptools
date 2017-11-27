@@ -75,16 +75,16 @@
     }
   },
   "symbex": {
-    "version": "0.5.0",
+    "version": "0.5.1",
     "master": {
-      "rev": "4abd01bd71fa65c6dfbd4a636838feea5ef25a50",
-      "sha256": "0fbiaqgrg8840269sachy76wm5snzglib87qqg81psizh89ym267",
+      "rev": "76f1c9648cf067bb96b12ad4850a597e0e43f8ce",
+      "sha256": "0q833p9dfryzbhiw42m4jy4xwqb758ac3n9vv7nqwqaih9rq5g7s",
       "owner": "mbrock",
       "repo": "symbex"
     },
     "stable": {
-      "rev": "4abd01bd71fa65c6dfbd4a636838feea5ef25a50",
-      "sha256": "0fbiaqgrg8840269sachy76wm5snzglib87qqg81psizh89ym267",
+      "rev": "76f1c9648cf067bb96b12ad4850a597e0e43f8ce",
+      "sha256": "0q833p9dfryzbhiw42m4jy4xwqb758ac3n9vv7nqwqaih9rq5g7s",
       "owner": "mbrock",
       "repo": "symbex"
     }
