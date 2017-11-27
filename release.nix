@@ -55,7 +55,7 @@ in rec {
     inherit solc-versions;
     inherit go-ethereum;
     inherit go-ethereum-unlimited;
-    inherit hevmas;
+    # inherit hevmas;
   };
 
   dapphub.darwin.master = with darwin.master.pkgs; {
@@ -64,6 +64,6 @@ in rec {
     inherit hevm;
     inherit dappsys;
     inherit dappsys-legacy;
-    inherit hevmas;
+    # inherit hevmas;
   };
 }
