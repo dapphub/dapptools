@@ -17,8 +17,8 @@
   "hevm": {
     "version": "0.12",
     "master": {
-      "rev": "7fa51341b9a0b753d379b34ff995a80cbe2960ed",
-      "sha256": "1i59fymm6nm0dlmrcbfx9f0p0ywvicwygvlskqipp4bxjxiancyy",
+      "rev": "fd50d1b962660d4d215a34535ad16482eeb555b1",
+      "sha256": "0k21ws50l7d9lqxz4ycm3fvcnqdj2ghccy7g2nl6wvi6hilyni68",
       "owner": "dapphub",
       "repo": "hevm"
     },
