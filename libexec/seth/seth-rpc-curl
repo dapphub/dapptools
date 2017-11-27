@@ -3,4 +3,14 @@ set -e
 data=$(cat)
 : ${ETH_RPC_URL:=${ETH_RPC_HOST:-localhost}:${ETH_RPC_PORT:-8545}}
 [[ $SETH_DEBUG_CURL ]] && set -x
-curl -sS -H "Content-Type: application/json" "$ETH_RPC_URL" -d "$data"
+curl -sS -H "Content-Type: application/json" "$ETH_RPC_URL" -d "$data" || {
+  code=$?
+  if [[ $code = 7 ]]; then
+    echo >&2 "${0##*/}: Please make sure that you are running a local Ethereum node:"
+    echo >&2 "${0##*/}:   For example, try running either \`parity' or \`geth --rpc'."
+    echo >&2 "${0##*/}: You could also try connecting to an external Ethereum node:"
+    echo >&2 "${0##*/}:   For example, try \`export ETH_RPC_URL=https://mainnet.infura.io'."
+    echo >&2 "${0##*/}:   If you have an Infura API key, add it to the end of the URL."
+  fi
+  exit $code
+}
