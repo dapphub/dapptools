@@ -755,10 +755,10 @@ drawTracePane ui =
 drawSolidityPane :: UiVmState -> UiWidget
 drawSolidityPane ui@(view uiVmDapp -> Just dapp) =
   case currentSrcMap dapp (view uiVm ui) of
-    Nothing -> hBorderWithLabel (txt "<no source map>")
+    Nothing -> padBottom Max (hBorderWithLabel (txt "<no source map>"))
     Just sm ->
       case view (dappSources . sourceLines . at (srcMapFile sm)) dapp of
-        Nothing -> hBorderWithLabel (txt "<source not found>")
+        Nothing -> padBottom Max (hBorderWithLabel (txt "<source not found>"))
         Just rows ->
           let
             subrange i = lineSubrange rows (srcMapOffset sm, srcMapLength sm) i
