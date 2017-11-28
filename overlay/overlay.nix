@@ -103,7 +103,8 @@ in rec {
     };
   }).overrideAttrs (attrs: {
     preConfigure = ''
-      substituteInPlace Mueval/Context.hs --replace '"Test.QuickCheck",' "-- no quickcheck"
+      substituteInPlace Mueval/ArgsParse.hs \
+        --replace 'Just defaultModules' 'Just []'
     '';
     postInstall = ''
       wrapProgram $out/bin/mueval \
@@ -121,6 +122,22 @@ in rec {
       mueval -XRecursiveDo -m EVM.Assembly \
         -e "$(echo "bytecode $ mdo"; sed 's/^/  /')" \
         | sed -e 's/^"//' -e 's/"$//'
+    '';
+  };
+
+  hevml = self.pkgs.bashScript {
+    name = "hevml";
+    deps = with self.pkgs; [
+      coreutils
+      (haskellPackages.ghcWithPackages (x: with x; [symbex]))
+    ];
+    text = ''
+      { echo "import qualified Prelude"
+        cat
+        echo
+        echo "main :: Prelude.IO ()"
+        echo "main = Prelude.putStrLn (bytecode contract)"
+      } | runghc --ghc-arg=-XNoImplicitPrelude --ghc-arg=-XRecursiveDo
     '';
   };
 

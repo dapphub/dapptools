@@ -25,6 +25,7 @@ in rec {
     inherit dapp;
     inherit seth;
     inherit hevm;
+    inherit hevml;
     inherit evmdis;
     inherit keeper;
     inherit setzer;
@@ -50,6 +51,7 @@ in rec {
     inherit dapp;
     inherit seth;
     inherit hevm;
+    inherit hevml;
     inherit evmdis;
     # inherit keeper;
     inherit setzer;
