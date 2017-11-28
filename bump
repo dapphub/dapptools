@@ -56,12 +56,16 @@ package() {
   echo
 }
 
-package dapphub/dapp
+package mbrock/jays
+package mbrock/symbex
+package makerdao/setzer
+package lessrest/restless-git
+
 package dapphub/hevm
 package dapphub/seth
 package dapphub/ethsign
-package lessrest/restless-git
-package mbrock/jays
-package mbrock/symbex
+
+# This one is slow because of node_modules, lol.
+package dapphub/dapp
 
 echo "$json" | jq . > overlay/versions.json
