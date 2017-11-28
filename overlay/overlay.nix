@@ -196,9 +196,9 @@ in rec {
 
   dappsys-legacy = (import ./dappsys.nix { inherit (self) pkgs; }).dappsys;
 
-  setzer = callPackage ./setzer.nix {};
-  keeper = callPackage ./keeper.nix {};
+  setzer = versioned "setzer" (x: callPackage x {});
 
+  keeper = callPackage ./keeper.nix {};
   evmdis = callPackage ./evmdis.nix {};
 
   go-ethereum = super.go-ethereum.overrideDerivation (_: rec {
