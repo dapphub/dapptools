@@ -44,6 +44,21 @@
       "repo": "seth"
     }
   },
+  "ethsign": {
+    "version": "0.5.0",
+    "master": {
+      "rev": "06426d36ef5c807ae756000b150b30995c72a434",
+      "sha256": "0rv2jz5fxzpwr5iljdxs18mp32530mdngg39hzqg45f4cjmxs38c",
+      "owner": "dapphub",
+      "repo": "ethsign"
+    },
+    "stable": {
+      "rev": "06426d36ef5c807ae756000b150b30995c72a434",
+      "sha256": "0rv2jz5fxzpwr5iljdxs18mp32530mdngg39hzqg45f4cjmxs38c",
+      "owner": "dapphub",
+      "repo": "ethsign"
+    }
+  },
   "restless-git": {
     "version": "0.5.0",
     "master": {

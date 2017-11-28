@@ -59,6 +59,7 @@ package() {
 package dapphub/dapp
 package dapphub/hevm
 package dapphub/seth
+package dapphub/ethsign
 package lessrest/restless-git
 package mbrock/jays
 package mbrock/symbex
