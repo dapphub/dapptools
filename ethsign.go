@@ -10,6 +10,7 @@ import (
   "os"
 	"fmt"
 	"io/ioutil"
+	"strings"
 	
 	"gopkg.in/urfave/cli.v1"
 )
@@ -67,12 +68,14 @@ func main() {
 			return cli.NewExitError("ethsign: failed to read key file", 1)
 		}
 
-		passphrase, err := ioutil.ReadFile(c.String("passphrase-file"))
+		passphraseFile, err := ioutil.ReadFile(c.String("passphrase-file"))
 		if err != nil {
 			return cli.NewExitError("ethsign: failed to read passphrase file", 1)
 		}
-		
-		key, err := keystore.DecryptKey(keyjson, string(passphrase))
+
+		passphrase := strings.TrimSuffix(string(passphraseFile), "\n")
+
+		key, err := keystore.DecryptKey(keyjson, passphrase)
 		if err != nil {
 			return cli.NewExitError("ethsign: failed to decrypt key", 1)
 		}
