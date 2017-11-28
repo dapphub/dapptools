@@ -112,9 +112,9 @@ data SrcMap = SM {
 } deriving (Show, Eq, Ord, Generic)
 
 data SrcMapParseState
-  = F1 [Int]
-  | F2 Int [Int]
-  | F3 Int Int [Int] !Int
+  = F1 [Int] Int
+  | F2 Int [Int] Int
+  | F3 Int Int [Int] Int
   | F4 Int Int Int
   | F5 SrcMap
   | Fe
@@ -130,7 +130,7 @@ makeLenses ''Method
 -- Obscure but efficient parser for the Solidity sourcemap format.
 makeSrcMaps :: Text -> Maybe (Seq SrcMap)
 makeSrcMaps = (\case (_, Fe, _) -> Nothing; x -> Just (done x))
-             . Text.foldl' (\x y -> go y x) (mempty, F1 [], SM 0 0 0 JumpRegular)
+             . Text.foldl' (\x y -> go y x) (mempty, F1 [] 1, SM 0 0 0 JumpRegular)
   where
     digits ds = digits' (0 :: Int) (0 :: Int) ds
     digits' !x _ []      = x
@@ -138,32 +138,34 @@ makeSrcMaps = (\case (_, Fe, _) -> Nothing; x -> Just (done x))
 
     done (xs, s, p) = let (xs', _, _) = go ';' (xs, s, p) in xs'
 
-    go ':' (xs, F1 [], p@(SM a _ _ _))       = (xs, F2 a [], p)
-    go ':' (xs, F1 ds, p)                    = (xs, F2 (digits ds) [], p)
-    go d   (xs, F1 ds, p) | isDigit d        = (xs, F1 (digitToInt d : ds), p)
-    go ';' (xs, F1 [], p)                    = (xs |> p, F1 [], p)
-    go ';' (xs, F1 ds, SM _ b c d)           = let p' = SM (digits ds) b c d in
-                                               (xs |> p', F1 [], p')
+    go ':' (xs, F1 [] _, p@(SM a _ _ _))       = (xs, F2 a [] 1, p)
+    go ':' (xs, F1 ds k, p)                    = (xs, F2 (k * digits ds) [] 1, p)
+    go '-' (xs, F1 [] _, p)                    = (xs, F1 [] (-1), p)
+    go d   (xs, F1 ds k, p) | isDigit d        = (xs, F1 (digitToInt d : ds) k, p)
+    go ';' (xs, F1 [] k, p)                    = (xs |> p, F1 [] k, p)
+    go ';' (xs, F1 ds k, SM _ b c d)           = let p' = SM (k * digits ds) b c d in
+                                                 (xs |> p', F1 [] 1, p')
 
-    go d   (xs, F2 a ds, p) | isDigit d      = (xs, F2 a (digitToInt d : ds), p)
-    go ':' (xs, F2 a [], p@(SM _ b _ _))     = (xs, F3 a b [] 1, p)
-    go ':' (xs, F2 a ds, p)                  = (xs, F3 a (digits ds) [] 1, p)
-    go ';' (xs, F2 a [], SM _ b c d)         = let p' = SM a b c d in (xs |> p', F1 [], p')
-    go ';' (xs, F2 a ds, SM _ _ c d)         = let p' = SM a (digits ds) c d in
-                                               (xs |> p', F1 [], p')
+    go '-' (xs, F2 a [] _, p)                  = (xs, F2 a [] (-1), p)
+    go d   (xs, F2 a ds k, p) | isDigit d      = (xs, F2 a (digitToInt d : ds) k, p)
+    go ':' (xs, F2 a [] _, p@(SM _ b _ _))     = (xs, F3 a b [] 1, p)
+    go ':' (xs, F2 a ds k, p)                  = (xs, F3 a (k * digits ds) [] 1, p)
+    go ';' (xs, F2 a [] _, SM _ b c d)         = let p' = SM a b c d in (xs |> p', F1 [] 1, p')
+    go ';' (xs, F2 a ds k, SM _ _ c d)         = let p' = SM a (k * digits ds) c d in
+                                                 (xs |> p', F1 [] 1, p')
 
     go d   (xs, F3 a b ds k, p) | isDigit d  = (xs, F3 a b (digitToInt d : ds) k, p)
     go '-' (xs, F3 a b [] _, p)              = (xs, F3 a b [] (-1), p)
     go ':' (xs, F3 a b [] _, p@(SM _ _ c _)) = (xs, F4 a b c, p)
     go ':' (xs, F3 a b ds k, p)              = (xs, F4 a b (k * digits ds), p)
-    go ';' (xs, F3 a b [] _, SM _ _ c d)     = let p' = SM a b c d in (xs |> p', F1 [], p')
+    go ';' (xs, F3 a b [] _, SM _ _ c d)     = let p' = SM a b c d in (xs |> p', F1 [] 1, p')
     go ';' (xs, F3 a b ds k, SM _ _ _ d)     = let p' = SM a b (k * digits ds) d in
-                                               (xs |> p', F1 [], p')
+                                               (xs |> p', F1 [] 1, p')
 
     go 'i' (xs, F4 a b c, p)                 = (xs, F5 (SM a b c JumpInto), p)
     go 'o' (xs, F4 a b c, p)                 = (xs, F5 (SM a b c JumpFrom), p)
     go '-' (xs, F4 a b c, p)                 = (xs, F5 (SM a b c JumpRegular), p)
-    go ';' (xs, F5 s, _)                     = (xs |> s, F1 [], s)
+    go ';' (xs, F5 s, _)                     = (xs |> s, F1 [] 1, s)
 
     go c (xs, _, p)                          = (xs, error ("srcmap: y u " ++ show c ++ "?!?"), p)
 
