@@ -11,7 +11,7 @@
 }:
 mkDerivation {
   pname = "hevm";
-  version = "0.12";
+  version = "0.12.1";
   src = ./.;
   isLibrary = true;
   isExecutable = true;
