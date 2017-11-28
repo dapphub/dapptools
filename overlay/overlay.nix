@@ -165,6 +165,8 @@ in rec {
   seth = versioned "seth" (x: callPackage x {});
   dapp = versioned "dapp" (x: callPackage x {});
 
+  ethsign = versioned "ethsign" (x: callPackage x {});
+
   dapp-prof = (
     (versioned "dapp" (x: callPackage x {})).override { hevm = hevm-prof; }
   ).overrideAttrs (_: {
