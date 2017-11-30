@@ -3,7 +3,7 @@
 
 buildGoPackage rec {
   name = "ethsign-${version}";
-  version = "0.5.1";
+  version = "0.6";
 
   goPackagePath = "github.com/dapphub/ethsign";
 
