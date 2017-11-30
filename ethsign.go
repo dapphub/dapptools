@@ -6,6 +6,7 @@ import (
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/accounts"
 	"github.com/ethereum/go-ethereum/accounts/keystore"
+	"github.com/ethereum/go-ethereum/accounts/usbwallet"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/rlp"
 
@@ -26,31 +27,57 @@ func main() {
 		cli.Command {
 			Name: "list-accounts",
 			Aliases: []string{"ls"},
-			Usage: "list accounts in keystore",
+			Usage: "list accounts in keystore and USB wallets",
 			Flags: []cli.Flag{
 				cli.StringFlag{
 					Name: "key-store",
+					Value: os.Getenv("HOME") + "/.ethereum/keystore",
 					Usage: "path to key store",
 				},
 			},
 			Action: func(c *cli.Context) error {
-				requireds := []string{
-					"key-store",
-				}
-		
-				for _, required := range(requireds) {
-					if c.String(required) == "" {
-						return cli.NewExitError("ethsign: missing required parameter --" + required, 1)
-					}
-				}
 				ks := keystore.NewKeyStore(
 					c.String("key-store"), keystore.StandardScryptN, keystore.StandardScryptP)
 				
-				accts := ks.Accounts()
-				for _, x := range(accts) {
-					fmt.Println(x.Address.Hex())
+				backends := []accounts.Backend{ ks }
+
+				if ledgerhub, err := usbwallet.NewLedgerHub(); err != nil {
+					fmt.Fprintf(os.Stderr, "ethsign: failed to look for USB Ledgers")
+				} else {
+					backends = append(backends, ledgerhub)
+				}
+				if trezorhub, err := usbwallet.NewTrezorHub(); err != nil {
+					fmt.Fprintf(os.Stderr, "ethsign: failed to look for USB Trezors")
+				} else {
+					backends = append(backends, trezorhub)
 				}
 
+				manager := accounts.NewManager(backends...)
+				wallets := manager.Wallets()
+				for _, x := range(wallets) {
+					if x.URL().Scheme == "keystore" {
+						for _, y := range(x.Accounts()) {
+							fmt.Printf("keystore %s\n", y.Address.Hex())
+						}
+					} else if x.URL().Scheme == "ledger" {
+						x.Open("")
+						for i := 0; i <= 3; i++ {
+							pathstr := fmt.Sprintf("m/44'/60'/0'/%d", i)
+							path, _ := accounts.ParseDerivationPath(pathstr)
+							z, err := x.Derive(path, false)
+							if err != nil {
+								fmt.Fprintf(
+									os.Stderr,
+									"couldn't use Ledger: needs to be in Ethereum app with browser support off",
+								)
+								break
+							} else {
+								fmt.Printf("ledger \"%s\" %s\n", pathstr, z.Address.Hex())
+							}
+						}
+					}
+				}
+				
 				return nil
 			},
 		},
@@ -62,7 +89,12 @@ func main() {
 			Flags: []cli.Flag{
 				cli.StringFlag{
 					Name: "key-store",
+					Value: os.Getenv("HOME") + "/.ethereum/keystore",
 					Usage: "path to key store",
+				},
+				cli.StringFlag{
+					Name: "derivation-path",
+					Usage: "BIP44 derivation path for USB wallet account",
 				},
 				cli.BoolFlag{
 					Name: "create",
@@ -107,8 +139,7 @@ func main() {
 			},
 			Action: func(c *cli.Context) error {
 				requireds := []string{
-					"nonce", "value", "gas-price", "gas-limit",
-					"chain-id", "key-store", "passphrase-file",
+					"nonce", "value", "gas-price", "gas-limit", "chain-id", "from",
 				}
 
 				for _, required := range(requireds) {
@@ -126,6 +157,17 @@ func main() {
 				if (create && c.String("data") == "") {
 					return cli.NewExitError("ethsign: need --data when doing --create", 1)
 				}
+
+				if (c.String("passphrase-file") == "" && c.String("derivation-path") == "") {
+					return cli.NewExitError(
+						"ethsign: need either --passphrase-file or --derivation-path", 1,
+					)
+				}
+				if (c.String("passphrase-file") != "" && c.String("derivation-path") != "") {
+					return cli.NewExitError(
+						"ethsign: cannot use both --passphrase-file and --derivation-path", 1,
+					)
+				}
 				
 				to := common.HexToAddress(c.String("to"))
 				from := common.HexToAddress(c.String("from"))
@@ -134,7 +176,8 @@ func main() {
 				gasLimit := math.MustParseBig256(c.String("gas-limit"))
 				value := math.MustParseBig256(c.String("value"))
 				chainID := math.MustParseBig256(c.String("chain-id"))
-
+				derivationPathString := c.String("derivation-path")
+				
 				dataString := c.String("data")
 				if dataString == "" {
 					dataString = "0x"
@@ -143,35 +186,88 @@ func main() {
 				
 				ks := keystore.NewKeyStore(
 					c.String("key-store"), keystore.StandardScryptN, keystore.StandardScryptP)
-
-				accts := ks.Accounts()
 				
+				backends := []accounts.Backend{ ks }
+
+				if ledgerhub, err := usbwallet.NewLedgerHub(); err != nil {
+					fmt.Fprintf(os.Stderr, "ethsign: failed to look for USB Ledgers")
+				} else {
+					backends = append(backends, ledgerhub)
+				}
+				if trezorhub, err := usbwallet.NewTrezorHub(); err != nil {
+					fmt.Fprintf(os.Stderr, "ethsign: failed to look for USB Trezors")
+				} else {
+					backends = append(backends, trezorhub)
+				}
+
+				manager := accounts.NewManager(backends...)
+				wallets := manager.Wallets()
+				var wallet accounts.Wallet
+				var acct *accounts.Account
+
+				Scan:
+				for _, x := range(wallets) {
+					if x.URL().Scheme == "keystore" {
+						for _, y := range(x.Accounts()) {
+							if (y.Address == from) {
+								wallet = x
+								acct = &y
+								break Scan
+							}
+						}
+					} else if x.URL().Scheme == "ledger" {
+						if derivationPathString == "" {
+							return cli.NewExitError("ethsign: Ledger found but no --derivation-path given", 1)
+						}
+						
+						x.Open("")
+						path, _ := accounts.ParseDerivationPath(derivationPathString)
+						y, err := x.Derive(path, true)
+						if err != nil {
+							return cli.NewExitError(
+								"ethsign: Ledger needs to be in Ethereum app with browser support off",
+								1,
+							)
+						} else {
+							if y.Address == from {
+								wallet = x
+								acct = &y
+								break Scan
+							}
+						}
+					}
+				}
+
+				if acct == nil {
+					return cli.NewExitError(
+						"ethsign: account not found",
+						1,
+					)
+				}
+
 				if c.String("from") == "" {
-					for _, x := range(accts) {
-						fmt.Fprintf(os.Stderr, "ethsign: found account %s\n", x.Address.Hex())
-					}
-					return cli.NewExitError("ethsign: choose a signing account with --from", 1)
+					return cli.NewExitError(
+						"ethsign: choose a signing account with --from (try `ethsign ls')",
+						1,
+					)
 				}
 
-				acct, err := ks.Find(accounts.Account { Address: from })
-				if err != nil {
-					for _, x := range(accts) {
-						fmt.Fprintf(os.Stderr, "ethsign: available account: %s\n", x.Address.Hex())
-					}
-					return cli.NewExitError("ethsign: failed to open " + from.Hex() + " in keystore", 1)
-				}
+				passphrase := ""
 				
-				passphraseFile, err := ioutil.ReadFile(c.String("passphrase-file"))
-				if err != nil {
-					return cli.NewExitError("ethsign: failed to read passphrase file", 1)
+				if (c.String("passphrase-file") != "") {
+					passphraseFile, err := ioutil.ReadFile(c.String("passphrase-file"))
+					if err != nil {
+						return cli.NewExitError("ethsign: failed to read passphrase file", 1)
+					}
+					
+					passphrase = strings.TrimSuffix(string(passphraseFile), "\n")
 				}
-
-				passphrase := strings.TrimSuffix(string(passphraseFile), "\n")
 
 				tx := types.NewTransaction(nonce, to, value, gasLimit, gasPrice, data)
 				
-				signed, err := ks.SignTxWithPassphrase(acct, passphrase, tx, chainID)
+				signed, err := wallet.SignTxWithPassphrase(*acct, passphrase, tx, chainID)
 				if err != nil {
+					fmt.Fprintf(os.Stderr, "%s\n%s\n%s\n", wallet, *acct, err)
 					return cli.NewExitError("ethsign: failed to sign tx", 1)
 				}
 
