@@ -17,8 +17,8 @@
   "symbex": {
     "version": "0.5.1",
     "master": {
-      "rev": "76f1c9648cf067bb96b12ad4850a597e0e43f8ce",
-      "sha256": "0q833p9dfryzbhiw42m4jy4xwqb758ac3n9vv7nqwqaih9rq5g7s",
+      "rev": "e3d09606d3601541bed9881cb63257bfdae7946e",
+      "sha256": "0cfab3njbabxg81hj6gmnxv505lpf4f3l6r7ywjwdjchcipdggzx",
       "owner": "mbrock",
       "repo": "symbex"
     },
@@ -30,16 +30,16 @@
     }
   },
   "setzer": {
-    "version": "0.1.2",
+    "version": "0.1.4",
     "master": {
-      "rev": "7546c14a952a037ed43ffd9dddbc24c623f52737",
-      "sha256": "1n9lxgv5cvy1fida1pj49j7mzs6skjgz17sb8b8ld11m3fykvm3s",
+      "rev": "9f4ae149d32cf33e026aa8cb46ed86b245579cc9",
+      "sha256": "1r6qh47iy6zq4kjh5fjkyviak2z9lhkli2x99cj6lbiksl94jdgc",
       "owner": "makerdao",
       "repo": "setzer"
     },
     "stable": {
-      "rev": "7546c14a952a037ed43ffd9dddbc24c623f52737",
-      "sha256": "1n9lxgv5cvy1fida1pj49j7mzs6skjgz17sb8b8ld11m3fykvm3s",
+      "rev": "9f4ae149d32cf33e026aa8cb46ed86b245579cc9",
+      "sha256": "1r6qh47iy6zq4kjh5fjkyviak2z9lhkli2x99cj6lbiksl94jdgc",
       "owner": "makerdao",
       "repo": "setzer"
     }
