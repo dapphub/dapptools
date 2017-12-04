@@ -71,7 +71,7 @@ in rec {
         set -e
         export PATH="${lib.makeBinPath deps}"
         ${text}
-        '';
+      '';
       checkPhase = ''
         ${self.pkgs.bash}/bin/bash -n $out/bin/${name}
         ${self.pkgs.shellcheck}/bin/shellcheck $out/bin/${name}
