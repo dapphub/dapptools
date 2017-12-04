@@ -15,7 +15,7 @@ Commands:
 Use `make install' to install token(1) into `/usr/local'.
 Use `make link' to link token(1) into `/usr/local' from this directory.
 
-This program depends on Seth (see <https://github.com/dapphub/seth>).
+This program depends on Seth (see https://github.com/dapphub/seth).
 
 Example usage:
 
