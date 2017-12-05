@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+set -e -o pipefail
+jshon+=(-n {})
+jshon+=(-s "$1" -i address)
+jshon+=(-s "$2" -i fromBlock)
+jshon+=(-i append)
+id=$(seth rpc eth_newFilter -- "${jshon[@]}")
+trap 'seth rpc eth_uninstallFilter -- -s "$id" -i append >/dev/null' EXIT
+seth rpc -j eth_getFilterLogs -- -s "$id" -i append | jshon -a -j
+[[ $SETH_FOLLOW ]] && seth logs-follow "$id"

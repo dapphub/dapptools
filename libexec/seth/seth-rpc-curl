@@ -2,11 +2,8 @@
 set -e
 data=$(cat)
 : ${ETH_RPC_URL:=${ETH_RPC_HOST:-localhost}:${ETH_RPC_PORT:-8545}}
-[[ $SETH_DEBUG_CURL ]] && set -x
-command=(curl -fsS -H "Content-Type: application/json" "$ETH_RPC_URL" -d "$data")
-"${command[@]}" || {
+seth curl "$ETH_RPC_URL" -- -d "$data" -H "Content-Type: application/json" || {
   code=$?
-  [[ $code = 22 ]] && (set -x; : "${command[@]}")
   [[ $code = 7 ]] && sed >&2 <<. "s/^/${0##*/}: /"
 Please make sure that you are running a local Ethereum node:
   For example, try running either \`parity' or \`geth --rpc'.

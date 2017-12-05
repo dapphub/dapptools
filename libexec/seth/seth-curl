@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+set -e
+[[ $SETH_DEBUG_CURL ]] && set -x
+curl -fsS "$@" || {
+  code=$?
+  [[ $code = 22 ]] && (set -x; : "${command[@]}")
+  exit $code
+}
