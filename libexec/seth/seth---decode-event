@@ -6,7 +6,7 @@ data=$(jshon -e data -u <<<"$1")
 event=$(seth --event-name "${topics[0]}")
 if [[ $event ]]; then
   for x in "${topics[@]}"; do ethabi+=(-l "${x#0x}"); done
-  ethabi decode log <(echo "$SETH_ABI") \
+  ethabi decode log <(echo "${SETH_ABI?}") \
   "$event" "${ethabi[@]}" "${data#0x}" | {
     while read -r param _ value; do
       jshon+=(-s "$value" -i "$param")

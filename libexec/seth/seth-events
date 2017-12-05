@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+### seth-events -- print the decoded events of some contract
+### Usage: seth events [-B <block>] [--follow] <address>
+set -e -o pipefail
+[[ $1 ]] || seth --fail-usage "$0"
+seth logs "$@" | seth --decode-events
