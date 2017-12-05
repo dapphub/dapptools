@@ -1,5 +1,9 @@
 #!/usr/bin/env bash
 set -e
+[[ $SETH_FOLLOW ]] && {
+  echo >&2 "${0##*/}: error: \`--follow' not supported"
+  exit 1
+}
 params=(
   module=logs action=getLogs
   address="$1" fromBlock="$2" toBlock=latest
