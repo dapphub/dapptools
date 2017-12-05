@@ -10,7 +10,7 @@ params=(
   apikey="$ETHERSCAN_API_KEY"
 )
 query=$(printf "&%s" "${params[@]}")
-response=$(seth curl https://api.etherscan.io/api${query/&/?})
+response=$(seth curl ${ETHERSCAN_API_URL?}${query/&/?})
 message=$(jshon <<<"$response" -e message -u)
 result=$(jshon <<<"$response" -e result -j)
 if [[ $message = OK || $result = "[]" ]]; then
