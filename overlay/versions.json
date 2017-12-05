@@ -30,16 +30,16 @@
     }
   },
   "setzer": {
-    "version": "0.1.5",
+    "version": "0.1.6",
     "master": {
-      "rev": "a5974206b1756666137b6e882c5160db2c09275c",
-      "sha256": "0377278qgrykwsvrhwz40hxxiqqhxgy44xljisd1hjyfszwk4hfi",
+      "rev": "b90f02ae181aadfa84969da06f2114f1e4aa8044",
+      "sha256": "1dnj8hrr0vczha31l9m70cmqabwv81n757g6nxc9j6i11g8acwwp",
       "owner": "makerdao",
       "repo": "setzer"
     },
     "stable": {
-      "rev": "a5974206b1756666137b6e882c5160db2c09275c",
-      "sha256": "0377278qgrykwsvrhwz40hxxiqqhxgy44xljisd1hjyfszwk4hfi",
+      "rev": "b90f02ae181aadfa84969da06f2114f1e4aa8044",
+      "sha256": "1dnj8hrr0vczha31l9m70cmqabwv81n757g6nxc9j6i11g8acwwp",
       "owner": "makerdao",
       "repo": "setzer"
     }
@@ -77,8 +77,8 @@
   "seth": {
     "version": "0.5.10",
     "master": {
-      "rev": "e11161e86bccb3b808edce27af549d69713e1921",
-      "sha256": "0jfnxwzy624gh56ky14krxrjj292bpabnmr47pqph0182yingy0g",
+      "rev": "0bfa988040492be468736a7271bec922175e6fb0",
+      "sha256": "0c48h7j7k4aw25lhv22s4h4ggwkal9dx6isw19xq6w2br0dn7nr9",
       "owner": "dapphub",
       "repo": "seth"
     },
