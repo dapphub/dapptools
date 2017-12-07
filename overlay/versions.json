@@ -75,16 +75,16 @@
     }
   },
   "seth": {
-    "version": "0.5.10",
+    "version": "0.5.11",
     "master": {
-      "rev": "0bfa988040492be468736a7271bec922175e6fb0",
-      "sha256": "0c48h7j7k4aw25lhv22s4h4ggwkal9dx6isw19xq6w2br0dn7nr9",
+      "rev": "290090498f205b5a87ea2b83f487e9b23dd952a9",
+      "sha256": "1gikj7azsv86xmh9k5h3yblnbg5ch2kg7q4rb9ywg77ffkjjkb2c",
       "owner": "dapphub",
       "repo": "seth"
     },
     "stable": {
-      "rev": "e11161e86bccb3b808edce27af549d69713e1921",
-      "sha256": "0jfnxwzy624gh56ky14krxrjj292bpabnmr47pqph0182yingy0g",
+      "rev": "290090498f205b5a87ea2b83f487e9b23dd952a9",
+      "sha256": "1gikj7azsv86xmh9k5h3yblnbg5ch2kg7q4rb9ywg77ffkjjkb2c",
       "owner": "dapphub",
       "repo": "seth"
     }
