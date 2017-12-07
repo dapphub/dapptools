@@ -20,7 +20,19 @@ let
     echo report testlog $out index.html > $out/nix-support/hydra-build-products
   '';
 
+  makeIso = { module, name }:
+    linux.pkgs.lib.hydraJob ((import ./nixpkgs/nixos/lib/eval-config.nix {
+      system = "x86_64-linux";
+      modules = [ module { isoImage.isoBaseName = name; } ];
+      pkgs = linux.pkgs;
+    }).config.system.build.isoImage);
+
 in rec {
+  dapphub.ethos = makeIso {
+    module = ./ethos.nix;
+    name = "ethos";
+  };
+
   dapphub.linux.stable = with linux.pkgs; {
     inherit dapp;
     inherit seth;
