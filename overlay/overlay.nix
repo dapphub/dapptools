@@ -238,4 +238,21 @@ in rec {
 
   # Use unreleased ethabi that fixes empty array encoding.
   ethabi = ((import ./ethabi { pkgs = super; }).ethabi_cli_4_0_0);
+
+  iosevka = let version = "1.13.3"; in self.pkgs.fetchzip rec {
+    name = "iosevka-ss09-${version}";
+    url = "https://github.com/be5invis/Iosevka/releases/download/v${version}/iosevka-ss09-${version}.zip";
+    sha256 = "1ca1hzq4g8yxi9aj12z0habwfvzihv73ywldhx0ismf2df9bnrcc";
+    postFetch = ''
+      mkdir -p $out/share/fonts
+      unzip -j $downloadedFile \*.ttf -d $out/share/fonts/truetype
+    '';
+    meta = with stdenv.lib; {
+      homepage = https://github.com/be5invis/iosevka;
+      description = "Iosevka font, Source Code Pro style";
+      license = licenses.ofl;
+      platforms = platforms.all;
+    };
+  };
+
 }

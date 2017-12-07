@@ -3,6 +3,9 @@
     ./nixpkgs/nixos/modules/installer/cd-dvd/installation-cd-minimal.nix
   ];
 
+  networking.hostName = "ethos";
+  i18n.consoleFont = "sun12x22";
+
   environment.systemPackages = with pkgs; [
     seth
     ethsign
@@ -29,17 +32,44 @@
     session = [{
       name = "ethos";
       start = ''
-        ${pkgs.xorg.xsetroot}/bin/xsetroot -solid black
         ${pkgs.ratpoison}/bin/ratpoison &
-        ${pkgs.xterm}/bin/xterm -r -fn 10x20 &
+        ${pkgs.xterm}/bin/xterm -r -fa Iosevka -fs 16 &
         wait
       '';
     }];
   };
 
+  environment.etc."ratpoisonrc".text = ''
+set startupmessage off
+set bargravity c
+set padding 10 10 10 10
+set border 6
+set fwcolor black
+set barpadding 8 4
+exec xsetroot -solid indigo
+echo Welcome to Ethos.
+  '';
+
   environment.etc."bashrc.local".text = ''
 HISTCONTROL=erasedups
 HISTSIZE=99999
+[[ $PS1 ]] || return
 PS1=$'\[\e[1m\]\h\[\e[0m\]:\$ '
+cat /etc/ethos-help
+  '';
+
+  environment.etc."ethos-help".text = ''
+
+            ████████ ██████████ ██      ██   ███████    ████████
+           ░██░░░░░ ░░░░░██░░░ ░██     ░██  ██░░░░░██  ██░░░░░░
+           ░██          ░██    ░██     ░██ ██     ░░██░██
+           ░███████     ░██    ░██████████░██      ░██░█████████
+           ░██░░░░      ░██    ░██░░░░░░██░██      ░██░░░░░░░░██
+           ░██          ░██    ░██     ░██░░██     ██        ░██
+           ░████████    ░██    ░██     ░██ ░░███████   ████████
+           ░░░░░░░░     ░░     ░░      ░░   ░░░░░░░   ░░░░░░░░
+
+                 Ethereum distribution (NixOS) by DappHub.
+
   '';
 }
