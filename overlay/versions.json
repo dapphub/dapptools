@@ -30,16 +30,16 @@
     }
   },
   "setzer": {
-    "version": "0.1.6",
+    "version": "0.1.7",
     "master": {
-      "rev": "b90f02ae181aadfa84969da06f2114f1e4aa8044",
-      "sha256": "1dnj8hrr0vczha31l9m70cmqabwv81n757g6nxc9j6i11g8acwwp",
+      "rev": "757a843ac9c758e374b3d79d0c60734c65dedacd",
+      "sha256": "0idxw3avai9z4kkj0l0vljqpbbxwb5zd5678h8f6hfq234z76l0z",
       "owner": "makerdao",
       "repo": "setzer"
     },
     "stable": {
-      "rev": "b90f02ae181aadfa84969da06f2114f1e4aa8044",
-      "sha256": "1dnj8hrr0vczha31l9m70cmqabwv81n757g6nxc9j6i11g8acwwp",
+      "rev": "bc483d4558ec93f1eba9c42f950a51eec852f534",
+      "sha256": "07jn5f3shs0gg0f1nwx4fq2w7b8s7jypsizr42j151v6l8hzqhi6",
       "owner": "makerdao",
       "repo": "setzer"
     }
