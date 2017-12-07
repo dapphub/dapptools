@@ -32,7 +32,7 @@
     session = [{
       name = "ethos";
       start = ''
-        ${pkgs.ratpoison}/bin/ratpoison &
+        ${pkgs.ratpoison}/bin/ratpoison -f /etc/ratpoisonrc &
         ${pkgs.xterm}/bin/xterm -r -fa Iosevka -fs 16 &
         wait
       '';
