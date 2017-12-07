@@ -36,4 +36,10 @@
       '';
     }];
   };
+
+  environment.etc."bashrc.local".text = ''
+HISTCONTROL=erasedups
+HISTSIZE=99999
+PS1=$'\[\e[1m\]\h\[\e[0m\]:\$ '
+  '';
 }

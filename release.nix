@@ -31,9 +31,7 @@ in rec {
   dapphub.ethos = makeIso {
     module = ./ethos.nix;
     config = {
-      isoImage.isoBaseName = "ethos";
-      isoImage.splashImage = null;
-      isoImage.appendToMenuLabel = "Ethos";
+      isoImage.appendToMenuLabel = " (Ethos by DappHub)";
     };
   };
 
