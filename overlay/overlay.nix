@@ -254,5 +254,4 @@ in rec {
       platforms = platforms.all;
     };
   };
-
 }

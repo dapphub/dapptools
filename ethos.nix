@@ -20,6 +20,8 @@
   environment.systemPackages = with pkgs; [
     ethsign
     seth
+    minimodem
+    ncurses
 
     # A script for showing QR codes from hex e.g. "0xabcd"
     (bashScript {
@@ -29,13 +31,6 @@
         sed 's/^0x//' | tr -d '[:space:]' | xxd -r -p | base64 -w0 | \
           qrencode -s 1 -o - | feh -ZB white --force-aliasing -
       '';
-    })
-
-    # Script for starting a nice xterm
-    (bashScript {
-      name = "ethos-terminal";
-      deps = [xterm];
-      text = "xterm -fa 'Iosevka Term' -fs 16";
     })
   ];
 
@@ -83,9 +78,10 @@
     set fwcolor black
     set barpadding 8 4
     bind d exec setxkbmap dvorak
-    bind c exec ethos-terminal
     exec xsetroot -solid indigo
     echo Welcome to Ethos.
+    bind c exec xterm -fa "Iosevka Term" -fs 16
+    exec xterm -fa "Iosevka Term" -fs 16
   '';
 
   environment.etc."bashrc.local".text = ''
@@ -93,7 +89,10 @@ HISTCONTROL=erasedups
 HISTSIZE=99999
 [[ $PS1 ]] || return
 PS1=$'\[\e[1m\]\h\[\e[0m\]:\$ '
-cat /etc/ethos-help | sed 's/^/              /'
+x=$(tput width)
+x=$((w - 53) / 2)
+spaces=$(head -c "$x" < /dev/zero | tr '\0' ' ')
+cat /etc/ethos-help | sed "s/^/$spaces/"
   '';
 
   environment.etc."ethos-help".text = ''
