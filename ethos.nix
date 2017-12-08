@@ -89,8 +89,8 @@ HISTCONTROL=erasedups
 HISTSIZE=99999
 [[ $PS1 ]] || return
 PS1=$'\[\e[1m\]\h\[\e[0m\]:\$ '
-x=$(tput width)
-x=$((w - 53) / 2)
+x=$(tput cols)
+x=$(((w - 53) / 2))
 spaces=$(head -c "$x" < /dev/zero | tr '\0' ' ')
 cat /etc/ethos-help | sed "s/^/$spaces/"
   '';
