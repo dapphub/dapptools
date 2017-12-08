@@ -113,6 +113,11 @@ in {
         fi
         ${pkgs.ratpoison}/bin/ratpoison -f /etc/ratpoisonrc &
         ${pkgs.sxhkd}/bin/sxhkd -c /etc/sxhkdrc &
+        if ${pkgs.usbutils}/bin/lsusb -d ${usb.ledger.vendor}: ; then
+          xsetroot -solid gold
+        else
+          xsetroot -solid indigo
+        fi
         wait
       '';
     }];
