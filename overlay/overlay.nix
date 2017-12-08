@@ -241,8 +241,8 @@ in rec {
 
   iosevka-term = let version = "1.13.3"; in self.pkgs.fetchzip rec {
     name = "iosevka-ss02-term-${version}";
-    url = "https://github.com/be5invis/Iosevka/releases/download/v${version}/iosevka-ss02-term-${version}.zip";
-    sha256 = "1ca1hzq4g8yxi9aj12z0habwfvzihv73ywldhx0ismf2df9bnrcc";
+    url = "https://github.com/be5invis/Iosevka/releases/download/v${version}/iosevka-term-ss02-${version}.zip";
+    sha256 = "03hcmqjbm4rvy1ydar07p7a7vfr2mpfjrr8sbrs5y6z07vdml3xd";
     postFetch = ''
       mkdir -p $out/share/fonts
       unzip -j $downloadedFile \*.ttf -d $out/share/fonts/truetype

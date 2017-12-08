@@ -26,7 +26,8 @@
       name = "qr";
       deps = [qrencode feh vim gnused coreutils];
       text = ''
-        sed 's/^0x//' | tr -d '[:space:]' | xxd -r -p | qrencode -t ANSI256 -o -
+        sed 's/^0x//' | tr -d '[:space:]' | xxd -r -p | base64 -w0 | \
+          qrencode -s 1 -o - | feh -ZB white --force-aliasing -
       '';
     })
 
