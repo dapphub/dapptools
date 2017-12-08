@@ -1,7 +1,23 @@
-{ config, pkgs, ... }: {
+{ hidpi ? false } :
+
+{ config, pkgs, ... }: let
+
+  usb = { ledger.vendor = "2c97"; };
+
+  # usb = { ledger.vendor = "05ac"; }; # iPhone ID, for testing w/o Ledger
+
+in {
   imports = [
-    ./nixpkgs/nixos/modules/installer/cd-dvd/installation-cd-minimal.nix
+    ./ethos-iso-image.nix
+    ./nixpkgs/nixos/modules/profiles/all-hardware.nix
   ];
+
+  fonts.fontconfig.dpi = if hidpi then 200 else 96;
+
+  isoImage.isoName = if hidpi then "ethos-hidpi.iso" else "ethos.iso";
+  isoImage.volumeID = pkgs.lib.substring 0 11 "NIXOS_ISO";
+  isoImage.makeEfiBootable = true;
+  isoImage.makeUsbBootable = true;
 
   networking.hostName = "ethos";
 
@@ -14,10 +30,8 @@
   i18n.consoleFont = "sun12x22";
 
   environment.systemPackages = with pkgs; [
-    ethsign
-    seth
-    minimodem
-    ncurses
+    ethsign seth bc ethabi
+    xorg.xsetroot
 
     (bashScript {
       name = "qr";
@@ -27,23 +41,51 @@
           qrencode -s 1 -o - | feh -ZB white --force-aliasing -
       '';
     })
+
+    (bashScript {
+      name = "battery";
+      deps = [upower gnugrep gnused];
+      check = false;
+      text = ''
+        exec < <(upower -i `upower -e | grep BAT` | grep :. | sed 's/^ *//')
+        declare -A BAT; while IFS=: read k v; do BAT[$k]=`echo $v`; done
+        time=(''${BAT['time to full']}''${BAT['time to empty']})
+        time=''${time[0]}''${time[1]:0:1}
+        rate=(''${BAT[energy-rate]}) rate=''${rate[0]%.*}''${rate[1]}
+        percent=''${BAT[percentage]}
+        state=''${BAT[state]}
+        echo $percent $state $rate $time
+      '';
+    })
   ];
+
+  security.sudo.enable = true;
+  services.upower.enable = true;
 
   # Enable Ledger Nano S support.
   services.udev.extraRules = let
     usbHook = pkgs.bashScript {
       name = "usb-hook";
-      deps = [pkgs.ratpoison pkgs.coreutils];
+      deps = [pkgs.ratpoison pkgs.coreutils pkgs.xorg.xsetroot];
       text = ''
+        export DISPLAY=:0
         if [ -v ID_VENDOR_ID ]; then
-          text="echo USB $ACTION $ID_VENDOR_ID:$ID_MODEL_ID"
-          DISPLAY=:0 sudo -u ethos ratpoison -c "$text"
+          if [ "$ID_VENDOR_ID" = ${usb.ledger.vendor} ]; then
+            if [ "$ACTION" = add ]; then
+              text="Ledger device connected"
+              sudo -u ethos xsetroot -solid gold
+            else
+              text="Ledger device unplugged"
+              sudo -u ethos xsetroot -solid indigo
+            fi
+            sudo -u ethos ratpoison -c "echo $text"
+          fi
         fi
       '';
     };
   in ''
-    SUBSYSTEM=="usb",    ATTRS{idVendor}=="2c97", ATTRS{idProduct}=="0001", MODE="0660", GROUP="usb"
-    SUBSYSTEM=="hidraw", ATTRS{idVendor}=="2c97", KERNEL=="hidraw*",        MODE="0660", GROUP="usb"
+    SUBSYSTEM=="usb",    ATTRS{idVendor}=="${usb.ledger.vendor}", ATTRS{idProduct}=="0001", MODE="0660", GROUP="usb"
+    SUBSYSTEM=="hidraw", ATTRS{idVendor}=="${usb.ledger.vendor}", KERNEL=="hidraw*",        MODE="0660", GROUP="usb"
     SUBSYSTEM=="usb",    RUN+="${usbHook}/bin/usb-hook"
   '';
 
@@ -65,36 +107,61 @@
     session = [{
       name = "ethos";
       start = ''
+        if ${pkgs.usbutils}/bin/lsusb -d ${usb.ledger.vendor}: ; then
+          xsetroot -solid gold
+          echo
+        fi
         ${pkgs.ratpoison}/bin/ratpoison -f /etc/ratpoisonrc &
-        ethos-terminal &
+        ${pkgs.sxhkd}/bin/sxhkd -c /etc/sxhkdrc &
         wait
       '';
     }];
   };
 
+  environment.etc.sxhkdrc.text = ''
+    XF86MonBrightnessUp
+      ${pkgs.xlibs.xbacklight}/bin/xbacklight +20
+    XF86MonBrightnessDown
+      ${pkgs.xlibs.xbacklight}/bin/xbacklight =1
+    Print
+      ${pkgs.ratpoison}/bin/ratpoison -c "echo `battery`"
+  '';
+
   environment.etc."ratpoisonrc".text = ''
     set font "Iosevka Term-16"
-    set startupmessage off
+    set startupmessage 0
     set bargravity c
-    set padding 10 10 10 10
+    set wingravity center
+    set padding 30 30 30 30
     set border 6
     set fwcolor black
     set barpadding 8 4
     bind d exec setxkbmap dvorak
-    exec xsetroot -solid indigo
     echo Welcome to Ethos.
     bind c exec xterm -fa "Iosevka Term" -fs 16
     exec xterm -fa "Iosevka Term" -fs 16
   '';
 
   environment.etc."bashrc.local".text = ''
-HISTCONTROL=erasedups
-HISTSIZE=99999
-[[ $PS1 ]] || return
-PS1=$'\[\e[1m\]\h\[\e[0m\]:\$ '
-spaces=$(head -c 16 < /dev/zero | tr '\0' ' ')
-cat /etc/ethos-help | sed "s/^/$spaces/"
+    HISTCONTROL=erasedups
+    HISTSIZE=99999
+    [[ $PS1 ]] || return
+    PS1=$'\[\e[1m\]\h\[\e[0m\]:\$ '
+    spaces=$(head -c 16 < /dev/zero | tr '\0' ' ')
+    cat /etc/ethos-help | sed "s/^/$spaces/"
+
+    if ${pkgs.usbutils}/bin/lsusb -d ${usb.ledger.vendor}: ; then
+      echo
+    fi
+
+    set -u # fail on missing variables
   '';
+
+  environment.variables = {
+    OLD_MKR_TOKEN_ADDRESS = "0xC66eA802717bFb9833400264Dd12c2bCeAa34a6d";
+    MKR_REDEEMER_ADDRESS = "0x642AE78FAfBB8032Da552D619aD43F1D81E4DD7C";
+    DAI_MULTISIG_ADDRESS = "0x7Bb0b08587b8a6B8945e09F1Baca426558B0f06a";
+  };
 
   environment.etc."ethos-help".text = ''
 
@@ -107,7 +174,8 @@ cat /etc/ethos-help | sed "s/^/$spaces/"
            ░████████    ░██    ░██     ░██ ░░███████   ████████
            ░░░░░░░░     ░░     ░░      ░░   ░░░░░░░   ░░░░░░░░
 
-                 Ethereum distribution (NixOS) by DappHub.
+          Version 1 ("At Least It's An ETHOS"; signature edition)
+           Ethereum distribution of GNU/Linux/NixOS by DappHub
 
   '';
 }

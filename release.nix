@@ -29,9 +29,16 @@ let
 
 in rec {
   dapphub.ethos = makeIso {
-    module = ./ethos.nix;
+    module = import ./ethos.nix { hidpi = false; };
     config = {
       isoImage.appendToMenuLabel = " (Ethos by DappHub)";
+    };
+  };
+
+  dapphub.ethos-hidpi = makeIso {
+    module = import ./ethos.nix { hidpi = true; };
+    config = {
+      isoImage.appendToMenuLabel = " (Ethos by DappHub, HiDPI)";
     };
   };
 

@@ -61,7 +61,7 @@ in rec {
     inherit (self) pkgs;
   };
 
-  bashScript = { name, deps ? [], text } :
+  bashScript = { name, deps ? [], text, check ? true } :
     self.pkgs.writeTextFile {
       inherit name;
       executable = true;
@@ -69,13 +69,14 @@ in rec {
       text = ''
         #!${self.pkgs.bash}/bin/bash
         set -e
-        export PATH="${lib.makeBinPath deps}"
+        export PATH="${lib.makeBinPath deps}:/run/wrappers/bin"
         ${text}
       '';
       checkPhase = ''
         ${self.pkgs.bash}/bin/bash -n $out/bin/${name}
+      '' + (if check then ''
         ${self.pkgs.shellcheck}/bin/shellcheck $out/bin/${name}
-      '';
+      '' else "");
     };
 
   dapp2 = {
