@@ -3,27 +3,22 @@
     ./nixpkgs/nixos/modules/installer/cd-dvd/installation-cd-minimal.nix
   ];
 
-  # Set the hostname, mostly just for the bash prompt.
   networking.hostName = "ethos";
 
-  # Make an `ethos' user with access to the USB group.
   users.extraUsers.ethos = {
     isNormalUser = true;
     uid = 1000;
     extraGroups = ["usb"];
   };
 
-  # Use a bigger TTY font.
   i18n.consoleFont = "sun12x22";
 
-  # Make relevant programs available in the system $PATH.
   environment.systemPackages = with pkgs; [
     ethsign
     seth
     minimodem
     ncurses
 
-    # A script for showing QR codes from hex e.g. "0xabcd"
     (bashScript {
       name = "qr";
       deps = [qrencode feh vim gnused coreutils];
@@ -35,17 +30,27 @@
   ];
 
   # Enable Ledger Nano S support.
-  services.udev.extraRules = ''
+  services.udev.extraRules = let
+    usbHook = pkgs.bashScript {
+      name = "usb-hook";
+      deps = [pkgs.ratpoison pkgs.coreutils];
+      text = ''
+        if [ -v ID_VENDOR_ID ]; then
+          text="echo USB $ACTION $ID_VENDOR_ID:$ID_MODEL_ID"
+          DISPLAY=:0 sudo -u ethos ratpoison -c "$text"
+        fi
+      '';
+    };
+  in ''
     SUBSYSTEM=="usb",    ATTRS{idVendor}=="2c97", ATTRS{idProduct}=="0001", MODE="0660", GROUP="usb"
     SUBSYSTEM=="hidraw", ATTRS{idVendor}=="2c97", KERNEL=="hidraw*",        MODE="0660", GROUP="usb"
+    SUBSYSTEM=="usb",    RUN+="${usbHook}/bin/usb-hook"
   '';
 
-  # Font configuration
   fonts.fontconfig.hinting.enable = false;
   fonts.fontconfig.subpixel.rgba = "none";
   fonts.fonts = [pkgs.iosevka-term];
 
-  # Set up the X server
   services.xserver.enable = true;
   services.xserver.libinput.enable = true;
   services.xserver.xkbOptions = "ctrl:nocaps";
@@ -55,7 +60,6 @@
     autoLogin = true;
   };
 
-  # Start Ratpoison as the default window manager
   services.xserver.desktopManager = {
     default = "ethos";
     session = [{
@@ -68,7 +72,6 @@
     }];
   };
 
-  # Ratpoison configuration
   environment.etc."ratpoisonrc".text = ''
     set font "Iosevka Term-16"
     set startupmessage off
@@ -89,9 +92,7 @@ HISTCONTROL=erasedups
 HISTSIZE=99999
 [[ $PS1 ]] || return
 PS1=$'\[\e[1m\]\h\[\e[0m\]:\$ '
-x=$(tput cols)
-x=$(((w - 53) / 2))
-spaces=$(head -c "$x" < /dev/zero | tr '\0' ' ')
+spaces=$(head -c 16 < /dev/zero | tr '\0' ' ')
 cat /etc/ethos-help | sed "s/^/$spaces/"
   '';
 
