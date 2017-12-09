@@ -32,8 +32,8 @@
   "setzer": {
     "version": "0.1.8",
     "master": {
-      "rev": "274a1d61f4f04d60750599476f3543cc2bf2ca81",
-      "sha256": "16drxmkwcbfmy31xrb45xy52f6f56fpnr6qqwpr46h25z763g2nx",
+      "rev": "c4268cb51ba5b1963664a5f5723c75c6df073b37",
+      "sha256": "0lw3hfcr8441xw9p0zg14kqi7bhaflkwfixmjjp62vnbsn9dvj3j",
       "owner": "makerdao",
       "repo": "setzer"
     },
