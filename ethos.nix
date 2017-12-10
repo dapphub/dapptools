@@ -30,17 +30,8 @@ in {
   i18n.consoleFont = "sun12x22";
 
   environment.systemPackages = with pkgs; [
-    ethsign seth bc ethabi
+    ethsign seth bc ethabi qrtx
     xorg.xsetroot
-
-    (bashScript {
-      name = "qr";
-      deps = [qrencode feh vim gnused coreutils];
-      text = ''
-        sed 's/^0x//' | tr -d '[:space:]' | xxd -r -p | base64 -w0 | \
-          qrencode -s 1 -o - | feh -ZB white --force-aliasing -
-      '';
-    })
 
     (bashScript {
       name = "battery";

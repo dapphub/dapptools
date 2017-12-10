@@ -61,9 +61,9 @@ in rec {
     inherit (self) pkgs;
   };
 
-  bashScript = { name, deps ? [], text, check ? true } :
+  bashScript = { name, version ? "0", deps ? [], text, check ? true } :
     self.pkgs.writeTextFile {
-      inherit name;
+      name = "${name}-${version}";
       executable = true;
       destination = "/bin/${name}";
       text = ''
@@ -118,6 +118,7 @@ in rec {
 
   hevmas = self.pkgs.bashScript {
     name = "hevmas";
+    version = "0";
     deps = with self.pkgs; [symbex-mueval gnused];
     text = ''
       mueval -XRecursiveDo -m EVM.Assembly \
@@ -128,6 +129,7 @@ in rec {
 
   hevml = self.pkgs.bashScript {
     name = "hevml";
+    version = "0";
     deps = with self.pkgs; [
       coreutils
       (haskellPackages.ghcWithPackages (x: with x; [symbex]))
@@ -254,5 +256,25 @@ in rec {
       license = licenses.ofl;
       platforms = platforms.all;
     };
+  };
+
+  qrtx = bashScript {
+    name = "qrtx";
+    version = "0";
+    deps = with self.pkgs; [qrencode feh vim gnused coreutils];
+    text = ''
+      sed 's/^0x//' | tr -d '[:space:]' | xxd -r -p | base64 -w0 |
+        qrencode -s 1 -o - | feh -ZB white --force-aliasing -
+    '';
+  };
+
+  qrtx-term = bashScript {
+    name = "qrtx-term";
+    version = "0";
+    deps = with self.pkgs; [qrencode vim gnused coreutils];
+    text = ''
+      sed 's/^0x//' | tr -d '[:space:]' | xxd -r -p | base64 -w0 |
+        qrencode -t ANSIUTF8;
+    '';
   };
 }

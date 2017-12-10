@@ -55,6 +55,8 @@ in rec {
     inherit go-ethereum-unlimited;
     inherit hevmas;
     inherit ethsign;
+    inherit qrtx;
+    inherit qrtx-term;
 
     hevm-test-report = hevmTestReport linux;
   };
@@ -81,6 +83,7 @@ in rec {
     inherit go-ethereum-unlimited;
     # inherit hevmas;
     inherit ethsign;
+    inherit qrtx-term;
   };
 
   dapphub.darwin.master = with darwin.master.pkgs; {
