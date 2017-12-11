@@ -32,8 +32,8 @@
   "setzer": {
     "version": "0.1.9",
     "master": {
-      "rev": "4082a599f3e15f362cdc51383bd5bb0f8fc5c2f2",
-      "sha256": "1lrvn2i5mbipx36ailrlfyl58gh1bgjqzc75ccyll41rbfqmxlva",
+      "rev": "3a8d63ab7f74027a8d20aded24f64b80378d5d6b",
+      "sha256": "17qn1kk5506bvn4p4bamn3a5il1a284j1j3zm17cdx4ig8bb9shr",
       "owner": "makerdao",
       "repo": "setzer"
     },
@@ -77,8 +77,8 @@
   "seth": {
     "version": "0.5.11",
     "master": {
-      "rev": "290090498f205b5a87ea2b83f487e9b23dd952a9",
-      "sha256": "1gikj7azsv86xmh9k5h3yblnbg5ch2kg7q4rb9ywg77ffkjjkb2c",
+      "rev": "6cae0b6527506f836ad70c2f9079a0fbad3f84e6",
+      "sha256": "13nyldfvv7yfblp5y0mlrd0f3nm0rp57shhkpxxmz7anrxiazsww",
       "owner": "dapphub",
       "repo": "seth"
     },
@@ -104,11 +104,41 @@
       "repo": "ethsign"
     }
   },
+  "libethjet": {
+    "version": "0.5",
+    "master": {
+      "rev": "3629a8c9e4243a0a6353f7c0541bebe723568c3b",
+      "sha256": "0hr9mmi5h07zfd3ik9cqwbylv9krj4zzgvfhardpn0zzn911ic02",
+      "owner": "dapphub",
+      "repo": "libethjet"
+    },
+    "stable": {
+      "rev": "3629a8c9e4243a0a6353f7c0541bebe723568c3b",
+      "sha256": "0hr9mmi5h07zfd3ik9cqwbylv9krj4zzgvfhardpn0zzn911ic02",
+      "owner": "dapphub",
+      "repo": "libethjet"
+    }
+  },
+  "libethjet-haskell": {
+    "version": "0.5",
+    "master": {
+      "rev": "b524330106862b518d055adc697f0774c3267d25",
+      "sha256": "1clbddc6z3qrxsf47x2gz30xj5rm8v9va69032sab0vjpb88shjg",
+      "owner": "dapphub",
+      "repo": "libethjet-haskell"
+    },
+    "stable": {
+      "rev": "b524330106862b518d055adc697f0774c3267d25",
+      "sha256": "1clbddc6z3qrxsf47x2gz30xj5rm8v9va69032sab0vjpb88shjg",
+      "owner": "dapphub",
+      "repo": "libethjet-haskell"
+    }
+  },
   "dapp": {
     "version": "0.7.9",
     "master": {
-      "rev": "6df80882170a066c5a00d9ef4300cc51193bd976",
-      "sha256": "1idf5ihlqn0x3swnlyl3kswkd418r8hiynha3n8kdaxyc42jlkx6",
+      "rev": "4d2270da25be87c42666705e57c53651e4c6a3cf",
+      "sha256": "1vggdd9lm71sjszyb3hwar84bhq5vq6yymqvzr6wz5jklpwgsfbp",
       "owner": "dapphub",
       "repo": "dapp"
     },

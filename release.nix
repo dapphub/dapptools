@@ -57,6 +57,7 @@ in rec {
     inherit ethsign;
     inherit qrtx;
     inherit qrtx-term;
+    inherit libethjet;
 
     hevm-test-report = hevmTestReport linux;
   };
@@ -84,6 +85,7 @@ in rec {
     # inherit hevmas;
     inherit ethsign;
     inherit qrtx-term;
+    inherit libethjet;
   };
 
   dapphub.darwin.master = with darwin.master.pkgs; {

@@ -64,6 +64,9 @@ package dapphub/hevm
 package dapphub/seth
 package dapphub/ethsign
 
+package dapphub/libethjet
+package dapphub/libethjet-haskell
+
 # This one is slow because of node_modules, lol.
 package dapphub/dapp
 
