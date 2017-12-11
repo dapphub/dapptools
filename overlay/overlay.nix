@@ -2,7 +2,7 @@
 
 let
 
-  versions = self.lib.importJSON ./versions.json;
+  versions = super.lib.importJSON ./versions.json;
   versioned = pkg: caller: (caller (import (./upstream + "/${flavor}/${pkg}.nix"))).overrideAttrs (x: {
     src = self.pkgs.fetchFromGitHub versions.${pkg}.${flavor};
   } // (if flavor == "stable" then rec {
@@ -33,28 +33,33 @@ let
   lib = self.pkgs.lib;
   stdenv = self.pkgs.stdenv;
 
-  haskellPackages = super.pkgs.haskellPackages.override {
-    overrides = _: super-hs: let
-      dontCheck = x: self.pkgs.haskell.lib.dontCheck (super-hs.callPackage x {});
+in rec {
+  haskellPackages = super.haskellPackages.extend (
+    _: super-hs: let
+      dontCheck = x: super.haskell.lib.dontCheck (super-hs.callPackage x {});
     in {
       restless-git = versioned "restless-git" dontCheck;
       symbex = versioned "symbex" dontCheck;
       ethjet = versioned "libethjet-haskell"
-        (x: super-hs.callPackage x { secp256k1 = self.pkgs.secp256k1; });
+        (x: super-hs.callPackage x {
+          # Haskell libs with the same names as C libs...
+          # Depend on the C libs, not the Haskell libs.
+          # These are system deps, not Cabal deps.
+          inherit (self.pkgs) secp256k1 ethjet;
+        });
 
       # We don't want Megaparsec 5!
-      megaparsec = super.pkgs.haskellPackages.megaparsec_6_2_0;
-    };
-  };
+      megaparsec = super-hs.megaparsec_6_2_0;
+    }
+  );
 
-  profilingHaskellPackages = haskellPackages.override {
-    overrides = self: super-hs: {
+  profilingHaskellPackages = haskellPackages.extend (
+    self: super-hs: {
       mkDerivation = args: super-hs.mkDerivation
         (args // { enableLibraryProfiling = true; });
-    };
-  };
+    }
+  );
 
-in rec {
   dappsys = import ../dappsys {
     inherit (self.pkgs) dappsys solidityPackage;
   };
@@ -197,7 +202,6 @@ in rec {
         --replace 'hevm ' 'hevm +RTS -xc -RTS '
     '';
   });
-
 
   dappsys-legacy = (import ./dappsys.nix { inherit (self) pkgs; }).dappsys;
 
