@@ -7,6 +7,8 @@ let
         ghcWithPackages = self.ghc.withPackages;
     });
   };
-  drv = haskellPackages.callPackage (import ./default.nix) {};
+  drv = haskellPackages.callPackage (import ./default.nix) {
+    inherit (pkgs) secp256k1;
+  };
 in
   if pkgs.lib.inNixShell then drv.env else drv
