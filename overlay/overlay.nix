@@ -39,7 +39,8 @@ let
     in {
       restless-git = versioned "restless-git" dontCheck;
       symbex = versioned "symbex" dontCheck;
-      ethjet = versioned "libethjet-haskell" (x: super-hs.callPackage x {});
+      ethjet = versioned "libethjet-haskell"
+        (x: super-hs.callPackage x { secp256k1 = self.pkgs.secp256k1; });
 
       # We don't want Megaparsec 5!
       megaparsec = super.pkgs.haskellPackages.megaparsec_6_2_0;
@@ -278,6 +279,10 @@ in rec {
         qrencode -t ANSIUTF8;
     '';
   };
+
+  secp256k1 = super.secp256k1.overrideDerivation (_: {
+    dontDisableStatic = true;
+  });
 
   ethjet = versioned "libethjet" (x: callPackage x {});
 }
