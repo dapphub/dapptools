@@ -105,16 +105,16 @@
     }
   },
   "libethjet": {
-    "version": "0.5",
+    "version": "0.5.1",
     "master": {
-      "rev": "3629a8c9e4243a0a6353f7c0541bebe723568c3b",
-      "sha256": "0hr9mmi5h07zfd3ik9cqwbylv9krj4zzgvfhardpn0zzn911ic02",
+      "rev": "d1273ec622648492c4ac46fe209369148b6c6153",
+      "sha256": "1skcmrrcv4nbcd4ljpgk9yjr95gwgcff0yrq9viyg3fgkvda8jz1",
       "owner": "dapphub",
       "repo": "libethjet"
     },
     "stable": {
-      "rev": "3629a8c9e4243a0a6353f7c0541bebe723568c3b",
-      "sha256": "0hr9mmi5h07zfd3ik9cqwbylv9krj4zzgvfhardpn0zzn911ic02",
+      "rev": "d1273ec622648492c4ac46fe209369148b6c6153",
+      "sha256": "1skcmrrcv4nbcd4ljpgk9yjr95gwgcff0yrq9viyg3fgkvda8jz1",
       "owner": "dapphub",
       "repo": "libethjet"
     }
