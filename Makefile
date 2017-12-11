@@ -1,4 +1,4 @@
-all: default.nix nix; cabal build
+all: default.nix nix; nix-shell --command 'cabal build'
 
 default.nix: hevm.cabal
 	cabal2nix . > default.nix

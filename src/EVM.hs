@@ -22,6 +22,8 @@ import EVM.Concrete
 import EVM.Op
 import EVM.FeeSchedule (FeeSchedule (..))
 
+import qualified EVM.Precompiled
+
 import Data.Binary.Get (runGetOrFail)
 import Data.Bits (bit, testBit, complement)
 import Data.Bits (xor, shiftR, (.&.), (.|.), FiniteBits (..))
@@ -66,6 +68,7 @@ data Error
   | StackLimitExceeded
   | IllegalOverflow
   | Query Query
+  | PrecompiledContractError Int
 
 deriving instance Show Error
 
@@ -836,31 +839,34 @@ exec1 = do
               : xOutOffset
               : xOutSize
               : xs
-             ) -> do
-              let
-                availableGas = the state gas
-                recipient    = view (env . contracts . at xTo) vm
-                (cost, gas') = costOfCall fees recipient xValue availableGas xGas
-              burn (cost - gas') $
-                if xValue > view balance this
-                then do
-                  assign (state . stack) (0 : xs)
-                  next
-                else
-                  case view execMode vm of
-                    ExecuteAsVMTest -> do
-                      assign (state . stack) (1 : xs)
+             ) ->
+              case xTo of
+                n | n > 0 && n <= 8 -> precompiledContract
+                _ ->
+                  let
+                    availableGas = the state gas
+                    recipient    = view (env . contracts . at xTo) vm
+                    (cost, gas') = costOfCall fees recipient xValue availableGas xGas
+                  in burn (cost - gas') $
+                    if xValue > view balance this
+                    then do
+                      assign (state . stack) (0 : xs)
                       next
-                    ExecuteNormally -> do
-                      delegateCall fees gas' xTo xInOffset xInSize xOutOffset xOutSize xs $ do
-                        zoom state $ do
-                          assign callvalue xValue
-                          assign caller (the state contract)
-                          assign contract xTo
-                          assign memorySize 0
-                        zoom (env . contracts) $ do
-                          ix self . balance -= xValue
-                          ix xTo  . balance += xValue
+                    else
+                      case view execMode vm of
+                        ExecuteAsVMTest -> do
+                          assign (state . stack) (1 : xs)
+                          next
+                        ExecuteNormally -> do
+                          delegateCall fees gas' xTo xInOffset xInSize xOutOffset xOutSize xs $ do
+                            zoom state $ do
+                              assign callvalue xValue
+                              assign caller (the state contract)
+                              assign contract xTo
+                              assign memorySize 0
+                            zoom (env . contracts) $ do
+                              ix self . balance -= xValue
+                              ix xTo  . balance += xValue
             _ ->
               underrun
 
@@ -944,6 +950,36 @@ exec1 = do
 
         xxx ->
           vmError (UnrecognizedOpcode xxx)
+
+precompiledContract :: (?op :: Word8) => EVM ()
+precompiledContract = do
+  vm <- get
+  fees <- use (block . schedule)
+
+  use (state . stack) >>= \case
+    (_:(num -> op):_:inOffset:inSize:outOffset:outSize:xs) ->
+      let
+        input = forceConcreteBlob (readMemory (num inOffset) (num inSize) vm)
+      in
+        case EVM.Precompiled.execute op input (num outSize) of
+          Nothing -> do
+            assign (state . stack) (0 : xs)
+            vmError (PrecompiledContractError op)
+          Just output -> do
+            let
+              cost =
+                case op of
+                  1 -> 3000
+                  _ -> error ("unimplemented precompiled contract " ++ show op)
+            accessMemoryRange fees inOffset inSize $
+              accessMemoryRange fees outOffset outSize $
+                burn cost $ do
+                  assign (state . stack) (1 : xs)
+                  modifying (state . memory)
+                    (writeMemory (blob output) outSize 0 outOffset)
+                  next
+    _ ->
+      underrun
 
 -- * Opcode helper actions
 

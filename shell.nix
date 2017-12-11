@@ -22,15 +22,15 @@ let
         super.ghc // { withPackages = super.ghc.withHoogle; };
       ghcWithPackages =
         self.ghc.withPackages;
-      restless-git =
-        with pkgs.haskell.lib;
-          dontCheck (self.callPackage restless-git {});
+      # restless-git =
+      #   with pkgs.haskell.lib;
+      #     dontCheck (self.callPackage restless-git {});
       megaparsec = super.megaparsec_6_2_0;
     });
   };
 
   drv = pkgs.haskell.lib.addBuildTool (
-    haskellPackages.callPackage (import ./default.nix) {}
+    pkgs.haskellPackages.callPackage (import ./default.nix) {}
   ) [pkgs.git];
 
 in if pkgs.lib.inNixShell then drv.env else drv
