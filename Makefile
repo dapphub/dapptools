@@ -1,4 +1,4 @@
-CFLAGS = -O2 -g -Wall -Werror -fPIC -lsecp256k1
+CFLAGS = -O2 -g -Wall -Werror -fPIC
 all: libethjet.a
 %.a: ethjet.o tinykeccak.o; ar r $@ $^
 install: libethjet.a ethjet.h
