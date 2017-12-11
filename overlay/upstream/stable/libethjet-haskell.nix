@@ -1,12 +1,12 @@
 { mkDerivation, base, base16-bytestring, bytestring, ethjet, HUnit
-, stdenv, tasty, tasty-hunit
+, secp256k1, stdenv, tasty, tasty-hunit
 }:
 mkDerivation {
   pname = "ethjet";
   version = "0.5";
   src = ./.;
   libraryHaskellDepends = [ base bytestring ];
-  librarySystemDepends = [ ethjet ];
+  librarySystemDepends = [ ethjet secp256k1 ];
   testHaskellDepends = [
     base base16-bytestring bytestring HUnit tasty tasty-hunit
   ];

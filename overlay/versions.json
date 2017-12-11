@@ -105,31 +105,31 @@
     }
   },
   "libethjet": {
-    "version": "0.5.1",
+    "version": "0.5.2",
     "master": {
-      "rev": "d1273ec622648492c4ac46fe209369148b6c6153",
-      "sha256": "1skcmrrcv4nbcd4ljpgk9yjr95gwgcff0yrq9viyg3fgkvda8jz1",
+      "rev": "6b0b519e276a8b73cdfd8200a8c226a9403745b3",
+      "sha256": "1f3ixnbk7ib36z4266m2qir62v09lcajdlmk3ccr7f4b0ncxlslb",
       "owner": "dapphub",
       "repo": "libethjet"
     },
     "stable": {
-      "rev": "d1273ec622648492c4ac46fe209369148b6c6153",
-      "sha256": "1skcmrrcv4nbcd4ljpgk9yjr95gwgcff0yrq9viyg3fgkvda8jz1",
+      "rev": "6b0b519e276a8b73cdfd8200a8c226a9403745b3",
+      "sha256": "1f3ixnbk7ib36z4266m2qir62v09lcajdlmk3ccr7f4b0ncxlslb",
       "owner": "dapphub",
       "repo": "libethjet"
     }
   },
   "libethjet-haskell": {
-    "version": "0.5",
+    "version": "0.5.1",
     "master": {
-      "rev": "b524330106862b518d055adc697f0774c3267d25",
-      "sha256": "1clbddc6z3qrxsf47x2gz30xj5rm8v9va69032sab0vjpb88shjg",
+      "rev": "a1f13e95ec7619ebac60497c15b7f86449bf1d2a",
+      "sha256": "01mf0gh301x043npjj3kzxa35rbbazx6s768f7jaz8rzhm0qz7pm",
       "owner": "dapphub",
       "repo": "libethjet-haskell"
     },
     "stable": {
-      "rev": "b524330106862b518d055adc697f0774c3267d25",
-      "sha256": "1clbddc6z3qrxsf47x2gz30xj5rm8v9va69032sab0vjpb88shjg",
+      "rev": "a1f13e95ec7619ebac60497c15b7f86449bf1d2a",
+      "sha256": "01mf0gh301x043npjj3kzxa35rbbazx6s768f7jaz8rzhm0qz7pm",
       "owner": "dapphub",
       "repo": "libethjet-haskell"
     }
