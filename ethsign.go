@@ -14,15 +14,18 @@ import (
 	"fmt"
 	"io/ioutil"
 	"strings"
+	"syscall"
 	
 	"gopkg.in/urfave/cli.v1"
+
+	"golang.org/x/crypto/ssh/terminal"
 )
 
 func main() {
 	app := cli.NewApp()
 	app.Name = "ethsign"
 	app.Usage = "sign Ethereum transactions using a JSON keyfile"
-	app.Version = "0.7.1"
+	app.Version = "0.8"
 	app.Commands = []cli.Command {
 		cli.Command {
 			Name: "list-accounts",
@@ -88,10 +91,6 @@ func main() {
 					Value: os.Getenv("HOME") + "/.ethereum/keystore",
 					Usage: "path to key store",
 				},
-				cli.StringFlag{
-					Name: "derivation-path",
-					Usage: "BIP44 derivation path for USB wallet account",
-				},
 				cli.BoolFlag{
 					Name: "create",
 					Usage: "make a contract creation transaction",
@@ -154,17 +153,6 @@ func main() {
 					return cli.NewExitError("ethsign: need --data when doing --create", 1)
 				}
 
-				if (c.String("passphrase-file") == "" && c.String("derivation-path") == "") {
-					return cli.NewExitError(
-						"ethsign: need either --passphrase-file or --derivation-path", 1,
-					)
-				}
-				if (c.String("passphrase-file") != "" && c.String("derivation-path") != "") {
-					return cli.NewExitError(
-						"ethsign: cannot use both --passphrase-file and --derivation-path", 1,
-					)
-				}
-				
 				to := common.HexToAddress(c.String("to"))
 				from := common.HexToAddress(c.String("from"))
 				nonce := math.MustParseUint64(c.String("nonce"))
@@ -172,7 +160,6 @@ func main() {
 				gasLimit := math.MustParseBig256(c.String("gas-limit"))
 				value := math.MustParseBig256(c.String("value"))
 				chainID := math.MustParseBig256(c.String("chain-id"))
-				derivationPathString := c.String("derivation-path")
 				
 				dataString := c.String("data")
 				if dataString == "" {
@@ -201,6 +188,8 @@ func main() {
 				var wallet accounts.Wallet
 				var acct *accounts.Account
 
+				needPassphrase := true
+
 				Scan:
 				for _, x := range(wallets) {
 					if x.URL().Scheme == "keystore" {
@@ -212,23 +201,20 @@ func main() {
 							}
 						}
 					} else if x.URL().Scheme == "ledger" {
-						if derivationPathString == "" {
-							return cli.NewExitError("ethsign: Ledger found but no --derivation-path given", 1)
-						}
-						
 						x.Open("")
-						path, _ := accounts.ParseDerivationPath(derivationPathString)
-						y, err := x.Derive(path, true)
-						if err != nil {
-							return cli.NewExitError(
-								"ethsign: Ledger needs to be in Ethereum app with browser support off",
-								1,
-							)
-						} else {
-							if y.Address == from {
-								wallet = x
-								acct = &y
-								break Scan
+						for j := 0; j <= 3; j++ {
+							pathstr := fmt.Sprintf("m/44'/60'/0'/%d", j)
+							path, _ := accounts.ParseDerivationPath(pathstr)
+							y, err := x.Derive(path, true)
+							if err != nil {
+								return cli.NewExitError("ethsign: Ledger needs to be in Ethereum app with browser support off", 1)
+							} else {
+								if y.Address == from {
+									wallet = x
+									acct = &y
+									needPassphrase = false
+									break Scan
+								}
 							}
 						}
 					}
@@ -243,14 +229,26 @@ func main() {
 
 
 				passphrase := ""
-				
-				if (c.String("passphrase-file") != "") {
-					passphraseFile, err := ioutil.ReadFile(c.String("passphrase-file"))
-					if err != nil {
-						return cli.NewExitError("ethsign: failed to read passphrase file", 1)
+
+				if needPassphrase {
+					if c.String("passphrase-file") != "" {
+						passphraseFile, err := ioutil.ReadFile(c.String("passphrase-file"))
+						if err != nil {
+							return cli.NewExitError("ethsign: failed to read passphrase file", 1)
+						}
+						
+						passphrase = strings.TrimSuffix(string(passphraseFile), "\n")
+					} else {
+						fmt.Fprintf(os.Stderr, "Ethereum account passphrase (not echoed): ")
+						bytes, err := terminal.ReadPassword(int(syscall.Stdin))
+						if err != nil {
+							return cli.NewExitError("ethsign: failed to read passphrase", 1)
+						} else {
+							passphrase = string(bytes)
+						}
 					}
-					
-					passphrase = strings.TrimSuffix(string(passphraseFile), "\n")
+				} else {
+					fmt.Fprintf(os.Stderr, "Waiting for hardware wallet confirmation...\n")
 				}
 
 				var tx *types.Transaction
@@ -262,7 +260,6 @@ func main() {
 				
 				signed, err := wallet.SignTxWithPassphrase(*acct, passphrase, tx, chainID)
 				if err != nil {
-					fmt.Fprintf(os.Stderr, "%s\n%s\n%s\n", wallet, *acct, err)
 					return cli.NewExitError("ethsign: failed to sign tx", 1)
 				}
 
