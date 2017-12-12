@@ -35,7 +35,7 @@ let
 
   makeIso = { module, config }:
     self.pkgs.lib.hydraJob (
-      (import ./nixpkgs/nixos/lib/eval-config.nix {
+      (import ../nixpkgs/nixos/lib/eval-config.nix {
         inherit (self) pkgs;
         system = "x86_64-linux";
         modules = [module config];
