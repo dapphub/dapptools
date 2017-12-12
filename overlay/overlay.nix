@@ -84,7 +84,7 @@ in rec {
       destination = "/bin/${name}";
       text = ''
         #!${self.pkgs.bash}/bin/bash
-        set -eu
+        set -euo pipefail
         shopt -s lastpipe
         export PATH="${lib.makeBinPath deps}:/run/wrappers/bin"
         ${text}
@@ -368,11 +368,10 @@ in rec {
         echo "Call data: $calldata"
         echo
         echo "After authentication, signed transaction will be shown as QR code."
-        read -ersp "Passphrase (not echoed): " passphrase
 
         ethsign tx --from "$acct" --to 0x0 --nonce "$nonce" --gas-price "$gasprice" \
           --gas-limit "$gaslimit" --data "$calldata" \
-          --value 0 --chain-id 1  --passphrase-file <(echo "$passphrase") | qrtx
+          --value 0 --chain-id 1 | qrtx
         echo
       '';
     };
