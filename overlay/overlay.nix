@@ -321,7 +321,8 @@ in rec {
     text = ''
       accts=()
       while read -r x y; do accts+=("$x" "$y"); done < <(ethsign ls 2>/dev/null)
-      dialog-to-file "$1" --ok-label "Use account" --menu "Pick an Ethereum account" \
+      dialog-to-file "$1" --ok-label "Use account" \
+         --menu "Pick an Ethereum account:" \
           20 80 10 "''${accts[@]}"
     '';
   };
@@ -338,8 +339,9 @@ in rec {
         txfile=$(mktemp)
         eth-pick-account "$acctfile"
         acct=$(cat "$acctfile")
-        dialog-to-file "$txfile" --backtitle "ds-chief transaction" --ok-label "Sign" \
-          --title "ds-chief" --form "Vote for a slate" 15 60 0 \
+        dialog-to-file "$txfile" --ok-label "Sign" \
+          --title "Make a signed transaction without publishing" \
+          --form "ds-chief vote -- set your approval to an existing slate" 10 60 4 \
            "Slate ID" 1 1 "" 1 12 32 0 \
            "Nonce" 2 1 "1" 2 12 10 0 \
            "Gas price" 3 1 50 3 12 10 0 \
@@ -353,19 +355,20 @@ in rec {
           read -r gaslimit
         } < "$txfile"
 
-        echo "ds-chief vote transaction"
+        slate=$(seth --to-bytes32 "$(seth --from-ascii "$slate")")
+        calldata=$(seth calldata 'vote(bytes32)' "$slate")
+
+        echo "Offline ds-chief vote transaction creation"
         echo
         echo "Account:   $acct"
         echo "Slate ID:  $slate"
         echo "Nonce:     $nonce"
         echo "Gas price: $gasprice"
         echo "Gas limit: $gaslimit"
+        echo "Call data: $calldata"
         echo
-
         echo "After authentication, signed transaction will be shown as QR code."
         read -ersp "Passphrase (not echoed): " passphrase
-
-        calldata=$(seth calldata 'vote(bytes32)' "$(seth --from-ascii "$slate")")
 
         ethsign tx --from "$acct" --to 0x0 --nonce "$nonce" --gas-price "$gasprice" \
           --gas-limit "$gaslimit" --data "$calldata" \
