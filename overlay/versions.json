@@ -90,16 +90,16 @@
     }
   },
   "ethsign": {
-    "version": "0.7.1",
+    "version": "0.8",
     "master": {
-      "rev": "298090107f57d4a861d34d56ec28f5318fab92c4",
-      "sha256": "1vxc4pnriywjq7z9br7ngj2mmdkpihbkgnlnbr3hiw7bsbrkn635",
+      "rev": "667c39bcc6c6efff4955dc629e9da98eff355965",
+      "sha256": "1k8a5xhc5q1cgpvfsy4ribjnariy4lwmrfh7n2lkpgnn434j4hw6",
       "owner": "dapphub",
       "repo": "ethsign"
     },
     "stable": {
-      "rev": "298090107f57d4a861d34d56ec28f5318fab92c4",
-      "sha256": "1vxc4pnriywjq7z9br7ngj2mmdkpihbkgnlnbr3hiw7bsbrkn635",
+      "rev": "667c39bcc6c6efff4955dc629e9da98eff355965",
+      "sha256": "1k8a5xhc5q1cgpvfsy4ribjnariy4lwmrfh7n2lkpgnn434j4hw6",
       "owner": "dapphub",
       "repo": "ethsign"
     }
