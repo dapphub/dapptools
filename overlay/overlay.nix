@@ -75,7 +75,8 @@ in rec {
       destination = "/bin/${name}";
       text = ''
         #!${self.pkgs.bash}/bin/bash
-        set -e
+        set -eu
+        shopt -s lastpipe
         export PATH="${lib.makeBinPath deps}:/run/wrappers/bin"
         ${text}
       '';
@@ -193,6 +194,7 @@ in rec {
   dapp = versioned "dapp" (x: callPackage x {});
 
   ethsign = versioned "ethsign" (x: (callPackage x {}).bin);
+  # ethsign = (callPackage (import ~/dapphub/ethsign) {}).bin;
 
   dapp-prof = (
     (versioned "dapp" (x: callPackage x {})).override { hevm = hevm-prof; }
@@ -289,4 +291,78 @@ in rec {
   });
 
   ethjet = versioned "libethjet" (x: callPackage x {});
+
+  dialog-to-file = bashScript {
+    name = "dialog-to-file";
+    version = "0";
+    deps = with self.pkgs; [dialog ncurses];
+    text = ''
+      set +e
+      file=$1; shift
+      exec 3>&1; x=$(dialog "$@" 2>&1 1>&3)
+      status=$?; exec 3>&-; clear
+      if [ "$status" -eq 0 ]; then echo >"$file" "$x"; else exit 1; fi
+    '';
+  };
+
+  eth-pick-account = bashScript {
+    name = "eth-pick-account";
+    version = "0";
+    deps = with self.pkgs; [ethsign dialog-to-file];
+    text = ''
+      accts=()
+      while read -r x y; do accts+=("$x" "$y"); done < <(ethsign ls 2>/dev/null)
+      dialog-to-file "$1" --ok-label "Use account" --menu "Pick an Ethereum account" \
+          20 80 10 "''${accts[@]}"
+    '';
+  };
+
+  ds-chief = {
+    vote = bashScript {
+      name = "ds-chief-vote";
+      version = "0";
+      deps = with self.pkgs; [
+        seth eth-pick-account ethsign dialog-to-file ncurses coreutils qrtx readline
+      ];
+      text = ''
+        acctfile=$(mktemp)
+        txfile=$(mktemp)
+        eth-pick-account "$acctfile"
+        acct=$(cat "$acctfile")
+        dialog-to-file "$txfile" --backtitle "ds-chief transaction" --ok-label "Sign" \
+          --title "ds-chief" --form "Vote for a slate" 15 60 0 \
+           "Slate ID" 1 1 "" 1 12 10 0 \
+           "Nonce" 2 1 "1" 2 12 10 0 \
+           "Gas price" 3 1 50 3 12 10 0 \
+           "Gas limit" 4 1 10000 4 12 10 0 \
+           "Account" 5 1 "$acct" 5 12 0 0
+
+        {
+          read -r slate
+          read -r nonce
+          read -r gasprice
+          read -r gaslimit
+        } < "$txfile"
+
+        echo "ds-chief vote transaction"
+        echo
+        echo "Account:   $acct"
+        echo "Slate ID:  $slate"
+        echo "Nonce:     $nonce"
+        echo "Gas price: $gasprice"
+        echo "Gas limit: $gaslimit"
+        echo
+
+        echo "After authentication, signed transaction will be shown as QR code."
+        read -ersp "Passphrase (not echoed): " passphrase
+
+        calldata=$(seth calldata 'vote(bytes32)' "$(seth --from-ascii "$slate")")
+
+        ethsign tx --from "$acct" --to 0x0 --nonce "$nonce" --gas-price "$gasprice" \
+          --gas-limit "$gaslimit" --data "$calldata" \
+          --value 0 --chain-id 1  --passphrase-file <(echo "$passphrase") | qrtx
+        echo
+      '';
+    };
+  };
 }
