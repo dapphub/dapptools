@@ -20,27 +20,10 @@ let
     echo report testlog $out index.html > $out/nix-support/hydra-build-products
   '';
 
-  makeIso = { module, config }:
-    linux.pkgs.lib.hydraJob ((import ./nixpkgs/nixos/lib/eval-config.nix {
-      system = "x86_64-linux";
-      modules = [module config];
-      pkgs = linux.pkgs;
-    }).config.system.build.isoImage);
-
 in rec {
-  dapphub.ethos = makeIso {
-    module = import ./ethos.nix { hidpi = false; };
-    config = {
-      isoImage.appendToMenuLabel = " (Ethos by DappHub)";
-    };
-  };
 
-  dapphub.ethos-hidpi = makeIso {
-    module = import ./ethos.nix { hidpi = true; };
-    config = {
-      isoImage.appendToMenuLabel = " (Ethos by DappHub, HiDPI)";
-    };
-  };
+  dapphub.ethos-iso = linux.pkgs.ethos-iso;
+  dapphub.ethos-iso-hidpi = linux.pkgs.ethos-iso-hidpi;
 
   dapphub.linux.stable = with linux.pkgs; {
     inherit dapp;
@@ -58,6 +41,7 @@ in rec {
     inherit qrtx;
     inherit qrtx-term;
     inherit ethjet;
+    inherit ds-chief;
 
     hevm-test-report = hevmTestReport linux;
   };
@@ -86,6 +70,7 @@ in rec {
     inherit ethsign;
     inherit qrtx-term;
     inherit ethjet;
+    inherit ds-chief;
   };
 
   dapphub.darwin.master = with darwin.master.pkgs; {

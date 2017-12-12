@@ -33,6 +33,15 @@ let
   lib = self.pkgs.lib;
   stdenv = self.pkgs.stdenv;
 
+  makeIso = { module, config }:
+    self.pkgs.lib.hydraJob (
+      (import ./nixpkgs/nixos/lib/eval-config.nix {
+        inherit (self) pkgs;
+        system = "x86_64-linux";
+        modules = [module config];
+      }).config.system.build.isoImage
+    );
+
 in rec {
   haskellPackages = super.haskellPackages.extend (
     _: super-hs: let
@@ -282,7 +291,7 @@ in rec {
     deps = with self.pkgs; [qrencode vim gnused coreutils];
     text = ''
       sed 's/^0x//' | tr -d '[:space:]' | xxd -r -p | base64 -w0 |
-        qrencode -t ANSIUTF8;
+        qrencode -t ANSIUTF8
     '';
   };
 
@@ -331,7 +340,7 @@ in rec {
         acct=$(cat "$acctfile")
         dialog-to-file "$txfile" --backtitle "ds-chief transaction" --ok-label "Sign" \
           --title "ds-chief" --form "Vote for a slate" 15 60 0 \
-           "Slate ID" 1 1 "" 1 12 10 0 \
+           "Slate ID" 1 1 "" 1 12 32 0 \
            "Nonce" 2 1 "1" 2 12 10 0 \
            "Gas price" 3 1 50 3 12 10 0 \
            "Gas limit" 4 1 10000 4 12 10 0 \
@@ -364,5 +373,15 @@ in rec {
         echo
       '';
     };
+  };
+
+  ethos-iso = makeIso {
+    module = import ../ethos.nix { hidpi = false; };
+    config.isoImage.appendToMenuLabel = " (Ethos by DappHub)";
+  };
+
+  ethos-iso-hidpi = makeIso {
+    module = import ../ethos.nix { hidpi = true; };
+    config.isoImage.appendToMenuLabel = " (Ethos by DappHub, HiDPI)";
   };
 }
