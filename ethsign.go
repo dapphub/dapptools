@@ -22,7 +22,7 @@ func main() {
 	app := cli.NewApp()
 	app.Name = "ethsign"
 	app.Usage = "sign Ethereum transactions using a JSON keyfile"
-	app.Version = "0.7"
+	app.Version = "0.7.1"
 	app.Commands = []cli.Command {
 		cli.Command {
 			Name: "list-accounts",
@@ -253,7 +253,12 @@ func main() {
 					passphrase = strings.TrimSuffix(string(passphraseFile), "\n")
 				}
 
-				tx := types.NewTransaction(nonce, to, value, gasLimit, gasPrice, data)
+				var tx *types.Transaction
+				if create {
+					tx = types.NewContractCreation(nonce, value, gasLimit, gasPrice, data)
+				} else {
+					tx = types.NewTransaction(nonce, to, value, gasLimit, gasPrice, data)
+				}
 				
 				signed, err := wallet.SignTxWithPassphrase(*acct, passphrase, tx, chainID)
 				if err != nil {
