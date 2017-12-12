@@ -22,7 +22,7 @@ func main() {
 	app := cli.NewApp()
 	app.Name = "ethsign"
 	app.Usage = "sign Ethereum transactions using a JSON keyfile"
-	app.Version = "0.5.1"
+	app.Version = "0.7"
 	app.Commands = []cli.Command {
 		cli.Command {
 			Name: "list-accounts",
@@ -57,22 +57,18 @@ func main() {
 				for _, x := range(wallets) {
 					if x.URL().Scheme == "keystore" {
 						for _, y := range(x.Accounts()) {
-							fmt.Printf("keystore %s\n", y.Address.Hex())
+							fmt.Printf("%s keystore\n", y.Address.Hex())
 						}
 					} else if x.URL().Scheme == "ledger" {
 						x.Open("")
-						for i := 0; i <= 3; i++ {
-							pathstr := fmt.Sprintf("m/44'/60'/0'/%d", i)
+						for j := 0; j <= 3; j++ {
+							pathstr := fmt.Sprintf("m/44'/60'/0'/%d", j)
 							path, _ := accounts.ParseDerivationPath(pathstr)
 							z, err := x.Derive(path, false)
 							if err != nil {
-								fmt.Fprintf(
-									os.Stderr,
-									"couldn't use Ledger: needs to be in Ethereum app with browser support off",
-								)
-								break
+								return cli.NewExitError("ethsign: couldn't use Ledger: needs to be in Ethereum app with browser support off", 1)
 							} else {
-								fmt.Printf("ledger \"%s\" %s\n", pathstr, z.Address.Hex())
+								fmt.Printf("%s ledger-%s\n", z.Address.Hex(), pathstr)
 							}
 						}
 					}
@@ -245,12 +241,6 @@ func main() {
 					)
 				}
 
-				if c.String("from") == "" {
-					return cli.NewExitError(
-						"ethsign: choose a signing account with --from (try `ethsign ls')",
-						1,
-					)
-				}
 
 				passphrase := ""
 				
