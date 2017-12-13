@@ -32,6 +32,8 @@ in {
   environment.systemPackages = with pkgs; [
     ethsign seth bc ethabi qrtx
     xorg.xsetroot
+    ds-chief
+    mkbip39
 
     (bashScript {
       name = "battery";
