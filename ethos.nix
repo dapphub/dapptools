@@ -2,9 +2,7 @@
 
 { config, pkgs, ... }: let
 
-  usb = { ledger.vendor = "2c97"; };
-
-  # usb = { ledger.vendor = "05ac"; }; # iPhone ID, for testing w/o Ledger
+  usb.ledger.vendor = "2c97";
 
 in {
   imports = [
@@ -24,7 +22,6 @@ in {
   users.extraUsers.ethos = {
     isNormalUser = true;
     uid = 1000;
-    extraGroups = ["usb"];
   };
 
   i18n.consoleFont = "sun12x22";
@@ -65,10 +62,10 @@ in {
         if [ -v ID_VENDOR_ID ]; then
           if [ "$ID_VENDOR_ID" = ${usb.ledger.vendor} ]; then
             if [ "$ACTION" = add ]; then
-              text="Ledger device connected"
+              text="Ledger device connected."
               sudo -u ethos xsetroot -solid gold
             else
-              text="Ledger device unplugged"
+              text="Ledger device disconnected."
               sudo -u ethos xsetroot -solid indigo
             fi
             sudo -u ethos ratpoison -c "echo $text"
@@ -77,8 +74,8 @@ in {
       '';
     };
   in ''
-    SUBSYSTEM=="usb",    ATTRS{idVendor}=="${usb.ledger.vendor}", ATTRS{idProduct}=="0001", MODE="0660", GROUP="usb"
-    SUBSYSTEM=="hidraw", ATTRS{idVendor}=="${usb.ledger.vendor}", KERNEL=="hidraw*",        MODE="0660", GROUP="usb"
+    SUBSYSTEM=="usb",    ATTRS{idVendor}=="${usb.ledger.vendor}", ATTRS{idProduct}=="0001", MODE="0600", OWNER="ethos"
+    SUBSYSTEM=="hidraw", ATTRS{idVendor}=="${usb.ledger.vendor}", KERNEL=="hidraw*",        MODE="0600", OWNER="ethos"
     SUBSYSTEM=="usb",    RUN+="${usbHook}/bin/usb-hook"
   '';
 
