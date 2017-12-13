@@ -32,7 +32,7 @@ in {
   environment.systemPackages = with pkgs; [
     ethsign seth bc ethabi qrtx
     xorg.xsetroot
-    ds-chief
+    ds-chief.vote
     mkbip39
 
     (bashScript {
