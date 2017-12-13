@@ -376,4 +376,11 @@ in rec {
     module = import ../ethos.nix { hidpi = true; };
     config.isoImage.appendToMenuLabel = " (Ethos by DappHub, HiDPI)";
   };
+
+  mkbip39 = with self.pkgs.python3Packages; buildPythonApplication rec {
+    version = "0.5";
+    name = "mkbip39";
+    src = ./mkbip39;
+    propagatedBuildInputs = [mnemonic];
+  };
 }
