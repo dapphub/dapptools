@@ -4,7 +4,7 @@
 }:
 mkDerivation {
   pname = "oasis-orders";
-  version = "0.6";
+  version = "0.7";
   src = ./.;
   isLibrary = false;
   isExecutable = true;
@@ -13,7 +13,7 @@ mkDerivation {
     data-dword directory hevm lens lens-aeson pipes pipes-text text
     vector
   ];
-  homepage = "https://github.com/dapphub/libethjet";
+  homepage = "https://github.com/mbrock/oasis";
   description = "Parse order books from OasisDEX JSON logs";
   license = stdenv.lib.licenses.gpl3;
 }
