@@ -43,6 +43,7 @@ in rec {
     inherit ethjet;
     inherit ds-chief;
     inherit mkbip39;
+    inherit oasis-orders;
 
     hevm-test-report = hevmTestReport linux;
   };
@@ -73,6 +74,7 @@ in rec {
     inherit ethjet;
     inherit ds-chief;
     inherit mkbip39;
+    inherit oasis-orders;
   };
 
   dapphub.darwin.master = with darwin.master.pkgs; {
