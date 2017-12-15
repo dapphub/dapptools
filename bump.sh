@@ -67,6 +67,8 @@ package dapphub/ethsign
 package dapphub/libethjet
 package dapphub/libethjet-haskell
 
+package mbrock/oasis-orders
+
 # This one is slow because of node_modules, lol.
 package dapphub/dapp
 
