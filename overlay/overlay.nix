@@ -429,4 +429,8 @@ in rec {
     src = ./mkbip39;
     propagatedBuildInputs = [mnemonic];
   };
+
+  oasis-orders = versioned "oasis-orders"
+    (x: self.pkgs.haskell.lib.justStaticExecutables
+      (haskellPackages.callPackage x {}));
 }
