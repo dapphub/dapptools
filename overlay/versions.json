@@ -134,6 +134,21 @@
       "repo": "libethjet-haskell"
     }
   },
+  "oasis-orders": {
+    "version": "0.6",
+    "master": {
+      "rev": "75580e13c8e05238cffcc80bbdd322ffeea51cfd",
+      "sha256": "0h70sdpakmlyya3dasib1bbb8hfq656029nhmbhmar40jqw2lbfd",
+      "owner": "mbrock",
+      "repo": "oasis-orders"
+    },
+    "stable": {
+      "rev": "75580e13c8e05238cffcc80bbdd322ffeea51cfd",
+      "sha256": "0h70sdpakmlyya3dasib1bbb8hfq656029nhmbhmar40jqw2lbfd",
+      "owner": "mbrock",
+      "repo": "oasis-orders"
+    }
+  },
   "dapp": {
     "version": "0.7.9",
     "master": {

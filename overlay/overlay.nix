@@ -430,7 +430,15 @@ in rec {
     propagatedBuildInputs = [mnemonic];
   };
 
-  oasis-orders = versioned "oasis-orders"
-    (x: self.pkgs.haskell.lib.justStaticExecutables
-      (haskellPackages.callPackage x {}));
+  oasis-orders = (
+    versioned "oasis-orders"
+      (x: self.pkgs.haskell.lib.justStaticExecutables
+        (haskellPackages.callPackage x {}))
+  ).overrideAttrs (attrs: {
+    postInstall = ''
+      wrapProgram $out/bin/oasis-orders \
+        --set OASIS_DAPP_PATH ${dapps.maker-otc}/dapp/maker-otc
+    '';
+    nativeBuildInputs = attrs.nativeBuildInputs ++ [self.pkgs.makeWrapper];
+  });
 }
