@@ -79,6 +79,15 @@ in rec {
     inherit (self) pkgs;
   };
 
+  dapps = {
+    maker-otc = import (self.pkgs.fetchFromGitHub {
+      owner = "makerdao";
+      repo = "maker-otc";
+      rev = "513f102ad20129ea76e5c9b79afaa18693f63b88";
+      sha256 = "0jpdanhihv94yw3ay8dfcbv7l1dg30rfbdxq9lshm0hg94mblb6l";
+    }) self.pkgs;
+  };
+
   bashScript = { name, version ? "0", deps ? [], text, check ? true } :
     self.pkgs.writeTextFile {
       name = "${name}-${version}";
