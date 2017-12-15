@@ -4,7 +4,7 @@
 }:
 mkDerivation {
   pname = "oasis-orders";
-  version = "0.7";
+  version = "0.7.1";
   src = ./.;
   isLibrary = false;
   isExecutable = true;

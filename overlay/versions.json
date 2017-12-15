@@ -135,16 +135,16 @@
     }
   },
   "oasis-orders": {
-    "version": "0.7",
+    "version": "0.7.1",
     "master": {
-      "rev": "3336e96692934577cea02e23a27d193290904441",
-      "sha256": "1vimjc6lfixpz1cqvv8jlgjivqxapvld7hm499rrvmd6fmdsm2lh",
+      "rev": "62d474cabc5b74e6c785f9f70a9bd75a184e8a72",
+      "sha256": "1zra5gmaifp78rfqr5wcl6k2ldwp4farb9n9jalbkd6xzr87gv2j",
       "owner": "mbrock",
       "repo": "oasis-orders"
     },
     "stable": {
-      "rev": "3336e96692934577cea02e23a27d193290904441",
-      "sha256": "1vimjc6lfixpz1cqvv8jlgjivqxapvld7hm499rrvmd6fmdsm2lh",
+      "rev": "62d474cabc5b74e6c785f9f70a9bd75a184e8a72",
+      "sha256": "1zra5gmaifp78rfqr5wcl6k2ldwp4farb9n9jalbkd6xzr87gv2j",
       "owner": "mbrock",
       "repo": "oasis-orders"
     }
