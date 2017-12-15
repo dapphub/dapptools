@@ -3,14 +3,14 @@
     builtins.foldl' pkgs.lib.mergeAttrs {}
       (builtins.map
         (x: {
-          "${x.name}/" = "${x}/dapp-src/${x.name}/";
+          "${x.name}/" = "${x}/dapp/${x.name}/src/";
          } // x.remappings)
          xs);
   libPaths = xs:
     builtins.foldl' pkgs.lib.mergeAttrs {}
       (builtins.map
         (x: {
-          "${x.name}" = "${x}/dapp-src/${x.name}";
+          "${x.name}" = "${x}/dapp/${x.name}/src";
          } // x.libPaths)
          xs);
 in

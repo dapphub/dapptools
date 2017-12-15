@@ -22,7 +22,7 @@ source setup.sh
 export DAPP_LIB=lib
 dapp2-test-hevm
 
-mkdir -p $out/{dapp-src,dapp-lib,dapp-out}
-cp -r $src $out/dapp-src/$name
-cp -r lib $out/dapp-lib/$name
-cp -r out $out/dapp-out/$name
+mkdir -p $out/dapp/$name
+cp -r $src $out/dapp/$name/src
+cp -r lib $out/dapp/$name/lib
+cp -r out $out/dapp/$name/out
