@@ -239,16 +239,6 @@ in rec {
   dapp = versioned "dapp" (x: callPackage x {});
 
   ethsign = versioned "ethsign" (x: (callPackage x {}).bin);
-  # ethsign = (callPackage (import ~/dapphub/ethsign) {}).bin;
-
-  # dapp-prof = (
-  #   (versioned "dapp" (x: callPackage x {})).override { hevm = hevm-prof; }
-  # ).overrideAttrs (_: {
-  #   preConfigure = ''
-  #     substituteInPlace libexec/dapp/dapp-test-hevm \
-  #       --replace 'hevm ' 'hevm +RTS -xc -RTS '
-  #   '';
-  # });
 
   dappsys-legacy = (import ./dappsys.nix { inherit (self) pkgs; }).dappsys;
 
