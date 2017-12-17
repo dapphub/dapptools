@@ -44,6 +44,8 @@ in rec {
     inherit ds-chief;
     inherit mkbip39;
     inherit oasis-orders;
+    inherit token;
+    inherit dai;
 
     hevm-test-report = hevmTestReport linux;
   };
@@ -75,6 +77,8 @@ in rec {
     inherit ds-chief;
     inherit mkbip39;
     inherit oasis-orders;
+    inherit token;
+    inherit dai;
   };
 
   dapphub.darwin.master = with darwin.master.pkgs; {
