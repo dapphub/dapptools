@@ -1,5 +1,14 @@
 # hevm changelog
 
+## [0.12.2] - 2017-12-17
+ - Experimental new ecrecover implementation via libethjet
+ - Correct error checking for setUp() invocations
+
+## [0.12.1] - 2017-11-28
+ - Test name regex matching via --match
+ - Fixed source map parsing bug when used with solc --optimize
+ - TTY: fix a padding-related display glitch
+
 ## [0.12] - 2017-11-14
  - Use 13 different environment variables to control block parameters
    for unit testing, e.g. block number, timestamp, initial balance, etc.

@@ -136,41 +136,48 @@ initializeUnitTest UnitTestOptions { .. } = do
 -- will run the specified test method and return whether it succeeded.
 runUnitTest :: UnitTestOptions -> ABIMethod -> Stepper Bool
 runUnitTest UnitTestOptions { .. } method = do
+  -- Fail immediately if there was a failure in the setUp() phase
+  Stepper.evm (use result) >>=
+    \case
+      Just (VMFailure e) -> do
+        Stepper.evm (pushTrace (ErrorTrace e))
+        pure False
 
-  -- Decide whether the test is supposed to fail or succeed
-  let shouldFail = "testFail" `isPrefixOf` method
+      _ -> do
+        -- Decide whether the test is supposed to fail or succeed
+        let shouldFail = "testFail" `isPrefixOf` method
 
-  -- The test subject should be loaded and initialized already
-  addr <- Stepper.evm $ use (state . contract)
+        -- The test subject should be loaded and initialized already
+        addr <- Stepper.evm $ use (state . contract)
 
-  -- Set up the call to the test method
-  Stepper.evm $
-    setupCall addr method (testGasCall testParams)
-  Stepper.evm (pushTrace (EntryTrace method))
-  Stepper.note "Running unit test"
+        -- Set up the call to the test method
+        Stepper.evm $
+          setupCall addr method (testGasCall testParams)
+        Stepper.evm (pushTrace (EntryTrace method))
+        Stepper.note "Running unit test"
 
-  -- Try running the test method
-  bailed <-
-    Stepper.execFully >>=
-      either (const (pure True)) (const (pure False))
+        -- Try running the test method
+        bailed <-
+          Stepper.execFully >>=
+            either (const (pure True)) (const (pure False))
 
-  -- If we failed, put the error in the trace.
-  -- It's not clear to me right now why this doesn't happen somewhere else.
-  Just problem <- Stepper.evm $ use result
-  case problem of
-    VMFailure e ->
-      Stepper.evm (pushTrace (ErrorTrace e))
-    _ ->
-      pure ()
+        -- If we failed, put the error in the trace.
+        -- It's not clear to me right now why this doesn't happen somewhere else.
+        Just problem <- Stepper.evm $ use result
+        case problem of
+          VMFailure e ->
+            Stepper.evm (pushTrace (ErrorTrace e))
+          _ ->
+            pure ()
 
-  -- Ask whether any assertions failed
-  Stepper.evm $ popTrace
-  Stepper.evm $ setupCall addr "failed()" 10000
-  Stepper.note "Checking whether assertions failed"
-  AbiBool failed <- Stepper.execFullyOrFail >>= Stepper.decode AbiBoolType
+        -- Ask whether any assertions failed
+        Stepper.evm $ popTrace
+        Stepper.evm $ setupCall addr "failed()" 10000
+        Stepper.note "Checking whether assertions failed"
+        AbiBool failed <- Stepper.execFullyOrFail >>= Stepper.decode AbiBoolType
 
-  -- Return true if the test was successful
-  pure (shouldFail == (bailed || failed))
+        -- Return true if the test was successful
+        pure (shouldFail == (bailed || failed))
 
 tick :: Text -> IO ()
 tick x = Text.putStr x >> hFlush stdout
