@@ -247,6 +247,9 @@ in rec {
   keeper = callPackage ./keeper.nix {};
   evmdis = callPackage ./evmdis.nix {};
 
+  token = versioned "token" (x: callPackage x {});
+  dai = versioned "dai-cli" (x: callPackage x {});
+
   go-ethereum = super.go-ethereum.overrideDerivation (_: rec {
     name = "go-ethereum-${version}";
     version = "1.7.3";

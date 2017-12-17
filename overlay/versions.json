@@ -1,4 +1,19 @@
 {
+  "dai-cli": {
+    "master": {
+      "owner": "makerdao",
+      "repo": "dai-cli",
+      "rev": "1fcd4466db26379f95eee03ba43e15c89d754420",
+      "sha256": "1qgfznwxdqfinangvff65chb4zcrmbcakzjdq8wwkp2mlyasmzwy"
+    },
+    "stable": {
+      "owner": "makerdao",
+      "repo": "dai-cli",
+      "rev": "1fcd4466db26379f95eee03ba43e15c89d754420",
+      "sha256": "1qgfznwxdqfinangvff65chb4zcrmbcakzjdq8wwkp2mlyasmzwy"
+    },
+    "version": "0.5"
+  },
   "dapp": {
     "master": {
       "owner": "dapphub",
@@ -163,5 +178,20 @@
       "sha256": "0q833p9dfryzbhiw42m4jy4xwqb758ac3n9vv7nqwqaih9rq5g7s"
     },
     "version": "0.5.1"
+  },
+  "token": {
+    "master": {
+      "owner": "dapphub",
+      "repo": "token",
+      "rev": "8cb91c1c24c10f6bb45dea3e110f571c422f7b81",
+      "sha256": "0s7g5vfz3xwappbagzsxn6v59421hzpqq7gygk2hdlp2099aj07l"
+    },
+    "stable": {
+      "owner": "dapphub",
+      "repo": "token",
+      "rev": "8cb91c1c24c10f6bb45dea3e110f571c422f7b81",
+      "sha256": "0s7g5vfz3xwappbagzsxn6v59421hzpqq7gygk2hdlp2099aj07l"
+    },
+    "version": "0.5"
   }
 }

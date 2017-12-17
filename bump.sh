@@ -10,12 +10,13 @@ pkgs=(
   dapphub/hevm
   dapphub/seth
   dapphub/ethsign
+  dapphub/token
   lessrest/restless-git
   dapphub/libethjet
   dapphub/libethjet-haskell
   mbrock/symbex
   makerdao/setzer
-#  makerdao/dai-cli
+  makerdao/dai-cli
   mbrock/oasis-orders
 )
 
