@@ -21,5 +21,5 @@ pkgs=(
 
 printf "%s\n" "${pkgs[@]}" | xargs -L 1 --max-procs=8 ./bump-one.sh
 
-jq . < ./bump.json > overlay/versions.json
+jq --sort-keys . < ./bump.json > overlay/versions.json
 rm bump.json
