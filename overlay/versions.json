@@ -1,167 +1,167 @@
 {
-  "jays": {
-    "version": "1.20171121",
+  "dapp": {
     "master": {
-      "rev": "7b8ec3fa1a8489764c01db89d5aa2f2a200cc79b",
-      "sha256": "0f1f0r1336cyl9l0y0a5147zhp3x5zlfsxkspwbkf3v57kynvazw",
-      "owner": "mbrock",
-      "repo": "jays"
-    },
-    "stable": {
-      "rev": "7b8ec3fa1a8489764c01db89d5aa2f2a200cc79b",
-      "sha256": "0f1f0r1336cyl9l0y0a5147zhp3x5zlfsxkspwbkf3v57kynvazw",
-      "owner": "mbrock",
-      "repo": "jays"
-    }
-  },
-  "symbex": {
-    "version": "0.5.1",
-    "master": {
-      "rev": "e3d09606d3601541bed9881cb63257bfdae7946e",
-      "sha256": "0cfab3njbabxg81hj6gmnxv505lpf4f3l6r7ywjwdjchcipdggzx",
-      "owner": "mbrock",
-      "repo": "symbex"
-    },
-    "stable": {
-      "rev": "76f1c9648cf067bb96b12ad4850a597e0e43f8ce",
-      "sha256": "0q833p9dfryzbhiw42m4jy4xwqb758ac3n9vv7nqwqaih9rq5g7s",
-      "owner": "mbrock",
-      "repo": "symbex"
-    }
-  },
-  "setzer": {
-    "version": "0.1.10",
-    "master": {
-      "rev": "8747598f7411e37bdef9f4992fdb8866d66ffc77",
-      "sha256": "10j4pwi47r4zbzz3j4n11l4kj4li9bnv1p0hxnpn559267iv1ybc",
-      "owner": "makerdao",
-      "repo": "setzer"
-    },
-    "stable": {
-      "rev": "8747598f7411e37bdef9f4992fdb8866d66ffc77",
-      "sha256": "10j4pwi47r4zbzz3j4n11l4kj4li9bnv1p0hxnpn559267iv1ybc",
-      "owner": "makerdao",
-      "repo": "setzer"
-    }
-  },
-  "restless-git": {
-    "version": "0.5.0",
-    "master": {
-      "rev": "2ff25ea30660ac9db3fb0ed80d44e6ca30bc1461",
-      "sha256": "1s7p1pcw1xaqbrn6p6ysgx9hbc31xilvdbnl3vzzqyl1wka7iyc1",
-      "owner": "lessrest",
-      "repo": "restless-git"
-    },
-    "stable": {
-      "rev": "9b208c944b61dc6cb4b32e7a5b90cffe643fcfc5",
-      "sha256": "0l2n556fzgkgnw7rhwfsj7438qyid8y9sghlhd3is154dspg0p9v",
-      "owner": "lessrest",
-      "repo": "restless-git"
-    }
-  },
-  "hevm": {
-    "version": "0.12.1",
-    "master": {
-      "rev": "c4822ce84f5bb4b680371a881de0afe9c7bae8f0",
-      "sha256": "1vz9axd1am4k67fppflvbfnyxszbq529p1plx3mznjx4dj67q60b",
       "owner": "dapphub",
-      "repo": "hevm"
+      "repo": "dapp",
+      "rev": "4d2270da25be87c42666705e57c53651e4c6a3cf",
+      "sha256": "1vggdd9lm71sjszyb3hwar84bhq5vq6yymqvzr6wz5jklpwgsfbp"
     },
     "stable": {
-      "rev": "40b4ce9d38ed711ffd6065e697807100b3f0a3c3",
-      "sha256": "10f1d44yy0xqx1drjadna824sswnpva1irqb66r5sw4n6jdqa7sp",
       "owner": "dapphub",
-      "repo": "hevm"
-    }
-  },
-  "seth": {
-    "version": "0.5.11",
-    "master": {
-      "rev": "6cae0b6527506f836ad70c2f9079a0fbad3f84e6",
-      "sha256": "13nyldfvv7yfblp5y0mlrd0f3nm0rp57shhkpxxmz7anrxiazsww",
-      "owner": "dapphub",
-      "repo": "seth"
+      "repo": "dapp",
+      "rev": "6df80882170a066c5a00d9ef4300cc51193bd976",
+      "sha256": "1idf5ihlqn0x3swnlyl3kswkd418r8hiynha3n8kdaxyc42jlkx6"
     },
-    "stable": {
-      "rev": "290090498f205b5a87ea2b83f487e9b23dd952a9",
-      "sha256": "1gikj7azsv86xmh9k5h3yblnbg5ch2kg7q4rb9ywg77ffkjjkb2c",
-      "owner": "dapphub",
-      "repo": "seth"
-    }
+    "version": "0.7.9"
   },
   "ethsign": {
-    "version": "0.8",
     "master": {
-      "rev": "667c39bcc6c6efff4955dc629e9da98eff355965",
-      "sha256": "1k8a5xhc5q1cgpvfsy4ribjnariy4lwmrfh7n2lkpgnn434j4hw6",
       "owner": "dapphub",
-      "repo": "ethsign"
+      "repo": "ethsign",
+      "rev": "667c39bcc6c6efff4955dc629e9da98eff355965",
+      "sha256": "1k8a5xhc5q1cgpvfsy4ribjnariy4lwmrfh7n2lkpgnn434j4hw6"
     },
     "stable": {
-      "rev": "667c39bcc6c6efff4955dc629e9da98eff355965",
-      "sha256": "1k8a5xhc5q1cgpvfsy4ribjnariy4lwmrfh7n2lkpgnn434j4hw6",
       "owner": "dapphub",
-      "repo": "ethsign"
-    }
+      "repo": "ethsign",
+      "rev": "667c39bcc6c6efff4955dc629e9da98eff355965",
+      "sha256": "1k8a5xhc5q1cgpvfsy4ribjnariy4lwmrfh7n2lkpgnn434j4hw6"
+    },
+    "version": "0.8"
+  },
+  "hevm": {
+    "master": {
+      "owner": "dapphub",
+      "repo": "hevm",
+      "rev": "c4822ce84f5bb4b680371a881de0afe9c7bae8f0",
+      "sha256": "1vz9axd1am4k67fppflvbfnyxszbq529p1plx3mznjx4dj67q60b"
+    },
+    "stable": {
+      "owner": "dapphub",
+      "repo": "hevm",
+      "rev": "40b4ce9d38ed711ffd6065e697807100b3f0a3c3",
+      "sha256": "10f1d44yy0xqx1drjadna824sswnpva1irqb66r5sw4n6jdqa7sp"
+    },
+    "version": "0.12.1"
+  },
+  "jays": {
+    "master": {
+      "owner": "mbrock",
+      "repo": "jays",
+      "rev": "7b8ec3fa1a8489764c01db89d5aa2f2a200cc79b",
+      "sha256": "0f1f0r1336cyl9l0y0a5147zhp3x5zlfsxkspwbkf3v57kynvazw"
+    },
+    "stable": {
+      "owner": "mbrock",
+      "repo": "jays",
+      "rev": "7b8ec3fa1a8489764c01db89d5aa2f2a200cc79b",
+      "sha256": "0f1f0r1336cyl9l0y0a5147zhp3x5zlfsxkspwbkf3v57kynvazw"
+    },
+    "version": "1.20171121"
   },
   "libethjet": {
-    "version": "0.5.2",
     "master": {
-      "rev": "6b0b519e276a8b73cdfd8200a8c226a9403745b3",
-      "sha256": "1f3ixnbk7ib36z4266m2qir62v09lcajdlmk3ccr7f4b0ncxlslb",
       "owner": "dapphub",
-      "repo": "libethjet"
+      "repo": "libethjet",
+      "rev": "6b0b519e276a8b73cdfd8200a8c226a9403745b3",
+      "sha256": "1f3ixnbk7ib36z4266m2qir62v09lcajdlmk3ccr7f4b0ncxlslb"
     },
     "stable": {
-      "rev": "6b0b519e276a8b73cdfd8200a8c226a9403745b3",
-      "sha256": "1f3ixnbk7ib36z4266m2qir62v09lcajdlmk3ccr7f4b0ncxlslb",
       "owner": "dapphub",
-      "repo": "libethjet"
-    }
+      "repo": "libethjet",
+      "rev": "6b0b519e276a8b73cdfd8200a8c226a9403745b3",
+      "sha256": "1f3ixnbk7ib36z4266m2qir62v09lcajdlmk3ccr7f4b0ncxlslb"
+    },
+    "version": "0.5.2"
   },
   "libethjet-haskell": {
-    "version": "0.5.1",
     "master": {
-      "rev": "a1f13e95ec7619ebac60497c15b7f86449bf1d2a",
-      "sha256": "01mf0gh301x043npjj3kzxa35rbbazx6s768f7jaz8rzhm0qz7pm",
       "owner": "dapphub",
-      "repo": "libethjet-haskell"
+      "repo": "libethjet-haskell",
+      "rev": "a1f13e95ec7619ebac60497c15b7f86449bf1d2a",
+      "sha256": "01mf0gh301x043npjj3kzxa35rbbazx6s768f7jaz8rzhm0qz7pm"
     },
     "stable": {
-      "rev": "a1f13e95ec7619ebac60497c15b7f86449bf1d2a",
-      "sha256": "01mf0gh301x043npjj3kzxa35rbbazx6s768f7jaz8rzhm0qz7pm",
       "owner": "dapphub",
-      "repo": "libethjet-haskell"
-    }
+      "repo": "libethjet-haskell",
+      "rev": "a1f13e95ec7619ebac60497c15b7f86449bf1d2a",
+      "sha256": "01mf0gh301x043npjj3kzxa35rbbazx6s768f7jaz8rzhm0qz7pm"
+    },
+    "version": "0.5.1"
   },
   "oasis-orders": {
-    "version": "0.7.1",
     "master": {
-      "rev": "62d474cabc5b74e6c785f9f70a9bd75a184e8a72",
-      "sha256": "1zra5gmaifp78rfqr5wcl6k2ldwp4farb9n9jalbkd6xzr87gv2j",
       "owner": "mbrock",
-      "repo": "oasis-orders"
+      "repo": "oasis-orders",
+      "rev": "62d474cabc5b74e6c785f9f70a9bd75a184e8a72",
+      "sha256": "1zra5gmaifp78rfqr5wcl6k2ldwp4farb9n9jalbkd6xzr87gv2j"
     },
     "stable": {
-      "rev": "62d474cabc5b74e6c785f9f70a9bd75a184e8a72",
-      "sha256": "1zra5gmaifp78rfqr5wcl6k2ldwp4farb9n9jalbkd6xzr87gv2j",
       "owner": "mbrock",
-      "repo": "oasis-orders"
-    }
+      "repo": "oasis-orders",
+      "rev": "62d474cabc5b74e6c785f9f70a9bd75a184e8a72",
+      "sha256": "1zra5gmaifp78rfqr5wcl6k2ldwp4farb9n9jalbkd6xzr87gv2j"
+    },
+    "version": "0.7.1"
   },
-  "dapp": {
-    "version": "0.7.9",
+  "restless-git": {
     "master": {
-      "rev": "4d2270da25be87c42666705e57c53651e4c6a3cf",
-      "sha256": "1vggdd9lm71sjszyb3hwar84bhq5vq6yymqvzr6wz5jklpwgsfbp",
-      "owner": "dapphub",
-      "repo": "dapp"
+      "owner": "lessrest",
+      "repo": "restless-git",
+      "rev": "2ff25ea30660ac9db3fb0ed80d44e6ca30bc1461",
+      "sha256": "1s7p1pcw1xaqbrn6p6ysgx9hbc31xilvdbnl3vzzqyl1wka7iyc1"
     },
     "stable": {
-      "rev": "6df80882170a066c5a00d9ef4300cc51193bd976",
-      "sha256": "1idf5ihlqn0x3swnlyl3kswkd418r8hiynha3n8kdaxyc42jlkx6",
+      "owner": "lessrest",
+      "repo": "restless-git",
+      "rev": "9b208c944b61dc6cb4b32e7a5b90cffe643fcfc5",
+      "sha256": "0l2n556fzgkgnw7rhwfsj7438qyid8y9sghlhd3is154dspg0p9v"
+    },
+    "version": "0.5.0"
+  },
+  "seth": {
+    "master": {
       "owner": "dapphub",
-      "repo": "dapp"
-    }
+      "repo": "seth",
+      "rev": "6cae0b6527506f836ad70c2f9079a0fbad3f84e6",
+      "sha256": "13nyldfvv7yfblp5y0mlrd0f3nm0rp57shhkpxxmz7anrxiazsww"
+    },
+    "stable": {
+      "owner": "dapphub",
+      "repo": "seth",
+      "rev": "290090498f205b5a87ea2b83f487e9b23dd952a9",
+      "sha256": "1gikj7azsv86xmh9k5h3yblnbg5ch2kg7q4rb9ywg77ffkjjkb2c"
+    },
+    "version": "0.5.11"
+  },
+  "setzer": {
+    "master": {
+      "owner": "makerdao",
+      "repo": "setzer",
+      "rev": "a45d0bd86afb630198834efa092aa6a62beed182",
+      "sha256": "0qa6y8qp3v13vvrl8d5j3rg67cp0yfzc55hkwb5kqw1fq5pmx7fr"
+    },
+    "stable": {
+      "owner": "makerdao",
+      "repo": "setzer",
+      "rev": "8747598f7411e37bdef9f4992fdb8866d66ffc77",
+      "sha256": "10j4pwi47r4zbzz3j4n11l4kj4li9bnv1p0hxnpn559267iv1ybc"
+    },
+    "version": "0.1.10"
+  },
+  "symbex": {
+    "master": {
+      "owner": "mbrock",
+      "repo": "symbex",
+      "rev": "e3d09606d3601541bed9881cb63257bfdae7946e",
+      "sha256": "0cfab3njbabxg81hj6gmnxv505lpf4f3l6r7ywjwdjchcipdggzx"
+    },
+    "stable": {
+      "owner": "mbrock",
+      "repo": "symbex",
+      "rev": "76f1c9648cf067bb96b12ad4850a597e0e43f8ce",
+      "sha256": "0q833p9dfryzbhiw42m4jy4xwqb758ac3n9vv7nqwqaih9rq5g7s"
+    },
+    "version": "0.5.1"
   }
 }
