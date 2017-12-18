@@ -46,6 +46,7 @@ in rec {
     inherit oasis-orders;
     inherit token;
     inherit dai;
+    inherit dapp-which;
 
     hevm-test-report = hevmTestReport linux;
   };
@@ -79,6 +80,7 @@ in rec {
     inherit oasis-orders;
     inherit token;
     inherit dai;
+    inherit dapp-which;
   };
 
   dapphub.darwin.master = with darwin.master.pkgs; {
