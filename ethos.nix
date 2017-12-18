@@ -22,6 +22,7 @@ in {
   users.extraUsers.ethos = {
     isNormalUser = true;
     uid = 1000;
+    extraGroups = ["wheel"];
   };
 
   i18n.consoleFont = "sun12x22";
@@ -50,6 +51,7 @@ in {
   ];
 
   security.sudo.enable = true;
+  security.sudo.wheelNeedsPassword = false;
   services.upower.enable = true;
 
   # Enable Ledger Nano S support.
