@@ -114,6 +114,13 @@ in rec {
       sha256 = "11yhgv0vz4wgypdqax2cv2v4njwabnrji3iy33hq5aich892krfi";
     };
 
+    ds-spell = dappsysPackage {
+      name = "ds-spell";
+      deps = [ds-exec ds-note ds-test];
+      rev = "1af739014d6b9ab3bd782ba09b23d2f10521c55b";
+      sha256 = "0vzl8786plm33aihdkp8acq9ki5v9pglqiqhjjgwlbmq332l5ww9";
+    };
+
     ds-thing = dappsysPackage {
       name = "ds-thing";
       deps = [ds-auth ds-math ds-note ds-test];
@@ -124,8 +131,8 @@ in rec {
     ds-token = dappsysPackage {
       name = "ds-token";
       deps = [ds-test erc20 ds-math ds-stop];
-      rev = "07a68ed271ea051f23dc063bd78a4966dc04ae5b";
-      sha256 = "1k3rhxvll5p1lq251z6fdnla0pr72kh7ncl4hlm3a42hbb8qx66i";
+      rev = "e637e3f3aff929ca4e72966015c16df0b235ea2a";
+      sha256 = "0s6w0s5yx426w2qfnl6skasy08bncdxg76qxhrc1i6ym6rarwv79";
     };
 
     ds-value = dappsysPackage {
