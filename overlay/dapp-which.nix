@@ -1,11 +1,11 @@
-{ lib, bashScript, coreutils, utillinux }:
+{ lib, bashScript, coreutils, gawk }:
 
 let contracts = import ../known-contracts.nix;
 
 in bashScript {
   name = "dapp-which";
   version = "0";
-  deps = [coreutils utillinux];
+  deps = [coreutils gawk];
   text = ''
     declare -A table
 
@@ -15,7 +15,7 @@ in bashScript {
     if [ "$#" -eq 0 ]; then
       for k in "''${!table[@]}"; do
         echo "$k" "''${table[$k]}"
-      done | sort | column -t
+      done | sort | awk '{ printf("%32s  %s\n", $1, $2) }'
     elif [ "$#" -eq 1 ]; then
       if [ ''${table[$1]+_} ]; then
         echo "''${table[$1]}"
