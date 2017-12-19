@@ -88,6 +88,7 @@ in rec {
     }) self.pkgs;
   };
 
+  known-contracts = import ../known-contracts.nix;
   dapp-which = callPackage ./dapp-which.nix {};
 
   bashScript = { name, version ? "0", deps ? [], text, check ? true } :
