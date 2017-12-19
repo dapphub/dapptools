@@ -22,9 +22,6 @@ let
 
 in rec {
 
-  dapphub.ethos-iso = linux.pkgs.ethos-iso;
-  dapphub.ethos-iso-hidpi = linux.pkgs.ethos-iso-hidpi;
-
   dapphub.linux.stable = with linux.pkgs; {
     inherit dapp;
     inherit seth;
