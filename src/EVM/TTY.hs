@@ -524,7 +524,7 @@ drawVmBrowser ui =
           Just (_, (_, c)) = listSelectedElement (view browserContractList ui)
           Just dapp = view (browserVm . uiVmDapp) ui
         in case flip preview ui (browserVm . uiVmDapp . _Just . dappSolcByHash . ix (view codehash c) . _2) of
-          Nothing -> txt "<n/a>"
+          Nothing -> txt ("n/a; codehash " <> pack (show (view codehash c)))
           Just solc ->
             hBox
               [ borderWithLabel (txt "Contract information") . padBottom Max . padRight (Pad 2) $ vBox

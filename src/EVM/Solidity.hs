@@ -30,7 +30,7 @@ module EVM.Solidity
   , sourceFiles
   , sourceLines
   , sourceAsts
-  , stripConstructorArguments
+  , stripBytecodeMetadata
   , lineSubrange
   , astIdMap
   , astSrcMap
@@ -230,8 +230,8 @@ readJSON json = do
       in (s, SolcContract {
         _runtimeCode      = theRuntimeCode,
         _creationCode     = theCreationCode,
-        _runtimeCodehash  = keccak theRuntimeCode,
-        _creationCodehash = keccak theCreationCode,
+        _runtimeCodehash  = keccak (stripBytecodeMetadata theRuntimeCode),
+        _creationCodehash = keccak (stripBytecodeMetadata theCreationCode),
         _runtimeSrcmap    = force "internal error: srcmap-runtime" (makeSrcMaps (x ^?! key "srcmap-runtime" . _String)),
         _creationSrcmap   = force "internal error: srcmap" (makeSrcMaps (x ^?! key "srcmap" . _String)),
         _contractName = s,
@@ -319,10 +319,14 @@ solidity' src = withSystemTempFile "hevm.sol" $ \path handle -> do
 -- codehash, so we must somehow strip away this extra suffix. Luckily
 -- we can detect the end of the actual bytecode by looking for the
 -- "metadata hash". (Not 100% correct, but works in practice.)
-stripConstructorArguments :: ByteString -> ByteString
-stripConstructorArguments bs =
-  let (a, b) = BS.breakSubstring bzzrPrefix (BS.reverse bs)
-  in BS.reverse b <> BS.take (32 + 2) (BS.reverse a)
+--
+-- Actually, we strip away the entire BZZR suffix too, because as long
+-- as the codehash matches otherwise, we don't care if there is some
+-- difference there.
+stripBytecodeMetadata :: ByteString -> ByteString
+stripBytecodeMetadata bs =
+  let (_, b) = BS.breakSubstring bzzrPrefix (BS.reverse bs)
+  in BS.reverse b
 
 bzzrPrefix :: ByteString
 bzzrPrefix =

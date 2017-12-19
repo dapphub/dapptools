@@ -316,7 +316,7 @@ initialContract theCode = Contract
   , _codesize = BS.length theCode
   , _codehash =
     if BS.null theCode then 0 else
-      keccak (stripConstructorArguments theCode)
+      keccak (stripBytecodeMetadata theCode)
   , _storage  = mempty
   , _balance  = 0
   , _nonce    = 0
