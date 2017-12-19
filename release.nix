@@ -84,8 +84,6 @@ in rec {
     inherit dapp;
     inherit seth;
     inherit hevm;
-    inherit dappsys;
-    inherit dappsys-legacy;
     # inherit hevmas;
   };
 }
