@@ -103,6 +103,7 @@ in rec {
       table[oasis-2017-09]=0x3Aa927a97594c3ab7d7bf0d47C71c3877D1DE4A1
       table[oasis-2017-12]=0x14FBCA95be7e99C15Cc2996c6C9d841e54B79425
       table[sai-2017-07]=0x59aDCF176ED2f6788A41B8eA4c4904518e62B6A4
+      table[dai-2017-12]=0x89d24A6b4CcB1B6fAA2625fE562bDD9a23260359
 
       if [ "$#" -eq 0 ]; then
         for k in "''${!table[@]}"; do
