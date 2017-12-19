@@ -1,5 +1,8 @@
 # hevm changelog
 
+## [0.12.3] - 2017-12-19
+ - More useful RPC debugging because we strip the entire BZZR metadata
+
 ## [0.12.2] - 2017-12-17
  - Experimental new ecrecover implementation via libethjet
  - Correct error checking for setUp() invocations
