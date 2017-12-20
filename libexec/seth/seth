@@ -120,6 +120,11 @@ while [[ $1 ]]; do
   esac; shift
 done
 
+keystores=(
+  ~/{.ethereum,Library/Ethereum}/keystore/
+  ~/{.local/share,Library/Application\ Support}/io.parity.ethereum/keys/
+)
+
 if [[ $SETH_CHAIN ]]; then
   export ETH_RPC_URL ETHERSCAN_API_URL
   export SETH_LOGS_API=${SETH_LOGS_API:-etherscan}
@@ -129,9 +134,20 @@ if [[ $SETH_CHAIN ]]; then
       ETH_RPC_URL=https://mainnet.infura.io
       ETHERSCAN_API_URL=https://api.etherscan.io/api
       ;;
-    ropsten|kovan|rinkeby)
+    ropsten)
       ETH_RPC_URL=https://$SETH_CHAIN.infura.io
       ETHERSCAN_API_URL=https://$SETH_CHAIN.etherscan.io/api
+      keystores=(
+        ~/{.ethereum,Library/Ethereum}/testnet/keystore/
+      )
+      ;;
+    kovan|rinkeby)
+      ETH_RPC_URL=https://$SETH_CHAIN.infura.io
+      ETHERSCAN_API_URL=https://$SETH_CHAIN.etherscan.io/api
+      keystores=(
+        ~/{.ethereum,Library/Ethereum}/$SETH_CHAIN/keystore/
+        ~/{.local/share,Library/Application\ Support}/io.parity.ethereum/keys/$SETH_CHAIN/
+      )
       ;;
     *)
       echo >&2 "${0##*/}: error: unknown chain: \'$SETH_CHAIN'"
@@ -139,12 +155,6 @@ if [[ $SETH_CHAIN ]]; then
   esac
 fi
 
-keystores=(
-  ~/.ethereum/keystore/
-  ~/.local/share/io.parity.ethereum/keys/
-  ~/Library/Application\ Support/io.parity.ethereum/keys/
-  ~/Library/Ethereum/keystore/
-)
 for dir in "${keystores[@]}"; do
   [[ -d "$dir" ]] && export ETH_KEYSTORE=$dir
 done
