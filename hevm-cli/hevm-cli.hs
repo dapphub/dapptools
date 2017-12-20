@@ -29,7 +29,7 @@ import EVM.Solidity
 import EVM.Types hiding (word)
 import EVM.UnitTest (UnitTestOptions, coverageReport, coverageForUnitTestContract)
 import EVM.UnitTest (runUnitTestContract)
-import EVM.UnitTest (getParametersFromEnvironmentVariables)
+import EVM.UnitTest (getParametersFromEnvironmentVariables, testNumber)
 import EVM.Dapp (findUnitTests, dappInfo)
 
 import qualified EVM.UnitTest as EVM.UnitTest
@@ -139,7 +139,7 @@ unitTestOptions cmd = do
   pure EVM.UnitTest.UnitTestOptions
     { EVM.UnitTest.oracle =
         case rpc cmd of
-         Just url -> EVM.Fetch.http EVM.Fetch.Latest url
+         Just url -> EVM.Fetch.http (EVM.Fetch.BlockNumber (testNumber params)) url
          Nothing  -> EVM.Fetch.zero
     , EVM.UnitTest.verbose = verbose cmd
     , EVM.UnitTest.match   = pack $ fromMaybe "^test" (match cmd)
