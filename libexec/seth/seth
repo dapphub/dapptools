@@ -11,6 +11,7 @@
 ###    --rpc-port=<port>          JSON-RPC port (default: `8545')
 ###    --rpc-url=<url>            JSON-RPC URL (overrides host and port)
 ###    -C, --chain=<chain>        remote node configuration preset
+###    --keystore=<dir>           local keystore directory
 ###
 ### Transaction options:
 ###
@@ -19,6 +20,7 @@
 ###    -P, --gas-price=<number>   price (in wei) of each gas unit
 ###    -N, --nonce=<number>       nonce value to use for the transaction
 ###    -V, --value=<number>       amount (in wei) of ETH to send
+###    -S, --password=<file>      password for non-interactive signing
 ###
 ### Options for seth-call(1):
 ###
@@ -45,6 +47,7 @@ rpc-host=host        JSON-RPC host (default: \`localhost')
 rpc-port=port        JSON-RPC port (default: \`8545')
 rpc-url=url          JSON-RPC URL (overrides host and port)
 C,chain=chain        remote node configuration preset
+keystore=dir         local keystore directory
 
   Transaction options:
 F,from=address       account to send transaction from
@@ -52,6 +55,7 @@ G,gas=number         number of gas units to provide
 P,gas-price=number   price (in wei) of each gas unit
 N,nonce=number       nonce value to use for the transaction
 V,value=number       amount (in wei) of ETH to send
+S,password=file      password for non-interactive signing
 
   Options for seth-call(1):
 B,block=number       block number (default: \`latest')
@@ -91,6 +95,7 @@ while [[ $1 ]]; do
     --rpc-host)      shift; export ETH_RPC_HOST=$1;;
     --rpc-port)      shift; export ETH_RPC_PORT=$1;;
     --rpc-url)       shift; export ETH_RPC_URL=$1;;
+    --keystore)      shift; export ETH_KEYSTORE=$1;;
 
     -C|--chain)      shift; export SETH_CHAIN=$1;;
 
@@ -100,6 +105,7 @@ while [[ $1 ]]; do
     -P|--gas-price)  shift; export ETH_GAS_PRICE=$1;;
     -N|--nonce)      shift; export ETH_NONCE=$1;;
     -V|--value)      shift; export ETH_VALUE=$1;;
+    -S|--password)   shift; export ETH_PASSWORD=$1;;
 
        --create)            export SETH_CREATE=yes;;
        --guess)             export SETH_GUESS=yes;;
@@ -132,5 +138,15 @@ if [[ $SETH_CHAIN ]]; then
       exit 1
   esac
 fi
+
+keystores=(
+  ~/.ethereum/keystore/
+  ~/.local/share/io.parity.ethereum/keys/
+  ~/Library/Application\ Support/io.parity.ethereum/keys/
+  ~/Library/Ethereum/keystore/
+)
+for dir in "${keystores[@]}"; do
+  [[ -d "$dir" ]] && export ETH_KEYSTORE=$dir
+done
 
 "${0##*/}-${1-help}" "${@:2}"

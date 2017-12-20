@@ -1,3 +1,7 @@
 #!/usr/bin/env bash
 set -e
-seth rpc eth_accounts
+if [[ $ETH_KEYSTORE ]]; then
+  ethsign ls --key-store $ETH_KEYSTORE
+else
+  seth rpc eth_accounts
+fi

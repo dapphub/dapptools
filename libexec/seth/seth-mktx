@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+### seth-mktx -- construct a signed transaction using ethsign
+### Usage: seth mktx [<opts>] [-F <from>] <to> <sig> [<args>]
+set -e
+[[ $ETH_KEYSTORE ]] ||
+seth --fail "${0##*/}: error: \`ETH_KEYSTORE' not set"
+[[ -f $ETH_PASSWORD ]] ||
+seth --fail "${0##*/}: error: \`ETH_PASSWORD' file not present"
+
+[[ $1 ]] && [[ $ETH_FROM ]] || seth --fail-usage "$0"
+
+args=(
+  --key-store $ETH_KEYSTORE
+  --from $(seth --to-address $ETH_FROM)
+  --passphrase-file $ETH_PASSWORD
+  --nonce $(seth nonce $ETH_FROM)
+  --chain-id $(seth rpc net_version)
+  --to $(seth --to-address "$1")
+  --gas-price ${ETH_GAS_PRICE:-$(seth gas-price)}
+  --gas-limit ${ETH_GAS:-90000}
+  --value ${ETH_VALUE:-0}
+  --data $(seth calldata ${2:-0x})
+)
+tx=$(ethsign tx "${args[@]}")
+echo $tx
+
