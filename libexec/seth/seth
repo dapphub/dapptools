@@ -122,7 +122,7 @@ done
 
 keystores=(
   ~/{.ethereum,Library/Ethereum}/keystore/
-  ~/{.local/share,Library/Application\ Support}/io.parity.ethereum/keys/
+  ~/{.local/share,Library/Application\ Support}/io.parity.ethereum/keys/ethereum/
 )
 
 if [[ $SETH_CHAIN ]]; then
@@ -156,7 +156,11 @@ if [[ $SETH_CHAIN ]]; then
 fi
 
 for dir in "${keystores[@]}"; do
-  [[ -d "$dir" ]] && export ETH_KEYSTORE=$dir
+  [[ -d "$dir" ]] &&
+  grep -Ri "${ETH_FROM#0x}" $dir &> /dev/null &&
+  keystore=$dir
 done
+
+export ETH_KEYSTORE=${ETH_KEYSTORE:-$keystore}
 
 "${0##*/}-${1-help}" "${@:2}"
