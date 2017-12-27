@@ -1,2 +1,3 @@
 #!/usr/bin/env bash
+export DAPP_PERIOD="${1:-0}"
 dapp --nix-run go-ethereum-unlimited dapp --testnet-launch

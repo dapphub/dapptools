@@ -33,6 +33,6 @@ echo "$port"                     > "$chaindir/config/node-port"
 
 geth \
   2> >(tee "$chaindir/geth.log" | grep --line-buffered Success | sed 's/^/geth: /' >&2) \
-  --datadir "$chaindir" --dev --networkid "$chainid" --port="$port" \
+  --datadir "$chaindir" --dev --dev.period "$DAPP_PERIOD" --networkid "$chainid" --port="$port" \
   --rpc --rpcapi "web3,eth,debug" --rpccorsdomain '*' --nodiscover \
   --rpcport="$chainid" --unlock="$address" --password=<(exit)
