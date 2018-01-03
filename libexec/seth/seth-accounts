@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 set -e
-if [[ $ETH_KEYSTORE ]]; then
+if [ ! -z $ETH_SIGN_OFFLINE ]; then
   ethsign ls --key-store $ETH_KEYSTORE
 else
   seth rpc eth_accounts

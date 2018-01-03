@@ -11,6 +11,7 @@
 ###    --rpc-port=<port>          JSON-RPC port (default: `8545')
 ###    --rpc-url=<url>            JSON-RPC URL (overrides host and port)
 ###    -C, --chain=<chain>        remote node configuration preset
+###    --sign-offline             sign with local keystore or hardware wallet
 ###    --keystore=<dir>           local keystore directory
 ###
 ### Transaction options:
@@ -47,6 +48,7 @@ rpc-host=host        JSON-RPC host (default: \`localhost')
 rpc-port=port        JSON-RPC port (default: \`8545')
 rpc-url=url          JSON-RPC URL (overrides host and port)
 C,chain=chain        remote node configuration preset
+sign-offline         sign with local keystore or hardware wallet
 keystore=dir         local keystore directory
 
   Transaction options:
@@ -96,6 +98,7 @@ while [[ $1 ]]; do
     --rpc-port)      shift; export ETH_RPC_PORT=$1;;
     --rpc-url)       shift; export ETH_RPC_URL=$1;;
     --keystore)      shift; export ETH_KEYSTORE=$1;;
+    --sign-offline)         export ETH_SIGN_OFFLINE=yes;;
 
     -C|--chain)      shift; export SETH_CHAIN=$1;;
 
