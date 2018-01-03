@@ -49,7 +49,7 @@ jshon+=(-n {})
 jshon+=($(seth --send-params))
 jshon+=(-i append)
 
-if [[ $ETH_RPC_URL ]] && [[ $ETH_SIGN_OFFLINE ]]; then
+if [[ -z $ETH_RPC_ACCOUNTS ]]; then
   tx=$(seth mktx $TO $DATA)
   tx=$(seth publish $tx)
 else

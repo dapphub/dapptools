@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 set -e
-if [ ! -z $ETH_SIGN_OFFLINE ]; then
+if [[ -z $ETH_RPC_ACCOUNTS ]]; then
   ethsign ls --key-store $ETH_KEYSTORE
 else
   : ${ETH_RPC_URL:=${ETH_RPC_HOST:-localhost}:${ETH_RPC_PORT:-8545}}
