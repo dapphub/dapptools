@@ -3,5 +3,6 @@ set -e
 if [ ! -z $ETH_SIGN_OFFLINE ]; then
   ethsign ls --key-store $ETH_KEYSTORE
 else
-  seth rpc eth_accounts
+  : ${ETH_RPC_URL:=${ETH_RPC_HOST:-localhost}:${ETH_RPC_PORT:-8545}}
+  seth rpc eth_accounts | awk "{print \$1 \" $ETH_RPC_URL\"}"
 fi
