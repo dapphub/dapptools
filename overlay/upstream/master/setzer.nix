@@ -1,17 +1,18 @@
 { stdenv, makeWrapper, lib, fetchFromGitHub
 , seth, curl, jshon, bc, gnused, which, perl
+, datamash
 }:
 
 stdenv.mkDerivation rec {
   name = "setzer-${version}";
-  version = "0.1.10";
+  version = "0.1.16";
   src = ./.;
 
   nativeBuildInputs = [makeWrapper];
   buildPhase = "true";
   makeFlags = ["prefix=$(out)"];
   postInstall = let path = lib.makeBinPath [
-    seth curl jshon bc gnused which perl
+    seth curl jshon bc gnused which perl datamash
   ]; in ''
     wrapProgram "$out/bin/setzer" --prefix PATH : "${path}"
   '';
