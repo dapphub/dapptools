@@ -10,7 +10,9 @@
 ###    --rpc-host=<host>          JSON-RPC host (default: `localhost')
 ###    --rpc-port=<port>          JSON-RPC port (default: `8545')
 ###    --rpc-url=<url>            JSON-RPC URL (overrides host and port)
+###    --rpc-accounts             use JSON-RPC node for accounts and signing
 ###    -C, --chain=<chain>        remote node configuration preset
+###    --keystore=<dir>           local keystore directory
 ###
 ### Transaction options:
 ###
@@ -19,6 +21,7 @@
 ###    -P, --gas-price=<number>   price (in wei) of each gas unit
 ###    -N, --nonce=<number>       nonce value to use for the transaction
 ###    -V, --value=<number>       amount (in wei) of ETH to send
+###    -S, --password=<file>      password for non-interactive signing
 ###
 ### Options for seth-call(1):
 ###
@@ -44,7 +47,9 @@ seth <command> --help
 rpc-host=host        JSON-RPC host (default: \`localhost')
 rpc-port=port        JSON-RPC port (default: \`8545')
 rpc-url=url          JSON-RPC URL (overrides host and port)
+rpc-accounts         use JSON-RPC node for accounts and signing
 C,chain=chain        remote node configuration preset
+keystore=dir         local keystore directory
 
   Transaction options:
 F,from=address       account to send transaction from
@@ -52,6 +57,7 @@ G,gas=number         number of gas units to provide
 P,gas-price=number   price (in wei) of each gas unit
 N,nonce=number       nonce value to use for the transaction
 V,value=number       amount (in wei) of ETH to send
+S,password=file      password for non-interactive signing
 
   Options for seth-call(1):
 B,block=number       block number (default: \`latest')
@@ -91,6 +97,8 @@ while [[ $1 ]]; do
     --rpc-host)      shift; export ETH_RPC_HOST=$1;;
     --rpc-port)      shift; export ETH_RPC_PORT=$1;;
     --rpc-url)       shift; export ETH_RPC_URL=$1;;
+    --rpc-accounts)         export ETH_RPC_ACCOUNTS=yes;;
+    --keystore)      shift; export ETH_KEYSTORE=$1;;
 
     -C|--chain)      shift; export SETH_CHAIN=$1;;
 
@@ -100,6 +108,7 @@ while [[ $1 ]]; do
     -P|--gas-price)  shift; export ETH_GAS_PRICE=$1;;
     -N|--nonce)      shift; export ETH_NONCE=$1;;
     -V|--value)      shift; export ETH_VALUE=$1;;
+    -S|--password)   shift; export ETH_PASSWORD=$1;;
 
        --create)            export SETH_CREATE=yes;;
        --guess)             export SETH_GUESS=yes;;
@@ -114,23 +123,47 @@ while [[ $1 ]]; do
   esac; shift
 done
 
+keystores=(
+  ~/{.ethereum,Library/Ethereum}/keystore/
+  ~/{.local/share,Library/Application\ Support}/io.parity.ethereum/keys/ethereum/
+)
+
 if [[ $SETH_CHAIN ]]; then
-  export ETH_RPC_URL ETHERSCAN_API_URL
-  export SETH_LOGS_API=${SETH_LOGS_API:-etherscan}
+  export ETH_LOGS_API=${SETH_LOGS_API:-etherscan}
 
   case "$SETH_CHAIN" in
-    ethlive)
-      ETH_RPC_URL=https://mainnet.infura.io
+    ethlive|mainnet)
+      eth_rpc_url=https://mainnet.infura.io/$INFURA_KEY
       ETHERSCAN_API_URL=https://api.etherscan.io/api
       ;;
-    ropsten|kovan|rinkeby)
-      ETH_RPC_URL=https://$SETH_CHAIN.infura.io
+    ropsten)
+      eth_rpc_url=https://$SETH_CHAIN.infura.io/$INFURA_KEY
       ETHERSCAN_API_URL=https://$SETH_CHAIN.etherscan.io/api
+      keystores=(
+        ~/{.ethereum,Library/Ethereum}/testnet/keystore/
+      )
+      ;;
+    kovan|rinkeby)
+      eth_rpc_url=https://$SETH_CHAIN.infura.io/$INFURA_KEY
+      ETHERSCAN_API_URL=https://$SETH_CHAIN.etherscan.io/api
+      keystores=(
+        ~/{.ethereum,Library/Ethereum}/$SETH_CHAIN/keystore/
+        ~/{.local/share,Library/Application\ Support}/io.parity.ethereum/keys/$SETH_CHAIN/
+      )
       ;;
     *)
       echo >&2 "${0##*/}: error: unknown chain: \'$SETH_CHAIN'"
       exit 1
   esac
 fi
+
+for dir in "${keystores[@]}"; do
+  [[ -d "$dir" ]] &&
+  grep -Ri "${ETH_FROM#0x}" $dir &> /dev/null &&
+  keystore=$dir
+done
+
+export ETH_KEYSTORE=${ETH_KEYSTORE:-$keystore}
+export ETH_RPC_URL=${ETH_RPC_URL:-$eth_rpc_url}
 
 "${0##*/}-${1-help}" "${@:2}"
