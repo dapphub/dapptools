@@ -138,8 +138,8 @@
     "master": {
       "owner": "dapphub",
       "repo": "seth",
-      "rev": "6cae0b6527506f836ad70c2f9079a0fbad3f84e6",
-      "sha256": "13nyldfvv7yfblp5y0mlrd0f3nm0rp57shhkpxxmz7anrxiazsww"
+      "rev": "aee99e9b8634573ef18ef233777297465634999f",
+      "sha256": "1q49m31dn4g1dzqniada9iqzyf6i34jzwxrxi4khv058p0dbjza3"
     },
     "stable": {
       "owner": "dapphub",
