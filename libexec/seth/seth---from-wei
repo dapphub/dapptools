@@ -15,4 +15,6 @@ case $unit in
   *) seth --fail "${0##*/}: error: unrecognized monetary value: \`$1'"
 esac
 
-bc <<<"scale=$scale;$number * 10 ^ -$scale"
+number=${number/[eE]/*10^}
+number=${number/^+/^}
+bc <<<"scale=$scale; $number * 10^-$scale"
