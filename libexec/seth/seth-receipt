@@ -14,5 +14,7 @@ receipt=$(seth rpc eth_getTransactionReceipt -- "${jshon[@]}")
 [[ ${number-null} != null && $2 ]] && exec seth --field "$2" <<<"$receipt"
 [[ ${number-null} != null ]] && exec echo "$receipt"
 [[ $SETH_ASYNC = yes ]] && seth --fail "${0##*/}: error: not found: $tx"
-sleep 1; [[ $SETH_TICK ]] && printf . >&2
+sleep_seconds=1
+[[ $SETH_CHAIN ]] && sleep_seconds=5
+sleep "$sleep_seconds"; [[ $SETH_TICK ]] && printf . >&2
 exec "$0" "$@"
