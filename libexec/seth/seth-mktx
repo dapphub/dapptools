@@ -16,12 +16,17 @@ args=(
   --from $(seth --to-address $ETH_FROM)
   --nonce $(seth nonce $ETH_FROM)
   --chain-id $(seth rpc net_version)
-  --to $(seth --to-address "$1")
   --gas-price ${ETH_GAS_PRICE:-$(seth gas-price)}
   --gas-limit ${ETH_GAS:-200000}
   --value $value
   --data ${data:-0x}
 )
+
+if [[ $SETH_CREATE ]]; then
+  args+=(--create)
+else
+  args+=(--to $(seth --to-address "$1"))
+fi
 
 if [ ! -z "$ETH_KEYSTORE" ]; then args+=(--key-store "$ETH_KEYSTORE"); fi
 if [ ! -z "$ETH_PASSWORD" ]; then args+=(--passphrase-file "$ETH_PASSWORD"); fi
