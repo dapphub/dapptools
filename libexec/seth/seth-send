@@ -27,7 +27,10 @@ set -e
 seth --fail "${0##*/}: error: \`ETH_FROM' not set; send from which account?"
 [[ $ETH_GAS ]] ||
 echo >&2 "${0##*/}: warning: \`ETH_GAS' not set; using default gas amount"
-[[ $SETH_RESEND ]] && ETH_NONCE=$(seth nonce "$ETH_FROM")
+if [[ $SETH_RESEND ]]; then
+  nonce=$(seth nonce "$ETH_FROM")
+  export ETH_NONCE=$nonce
+fi
 
 if [[ $SETH_CREATE ]]; then
   DATA=$(seth --to-hexdata "$1")
@@ -50,8 +53,8 @@ jshon+=($(seth --send-params))
 jshon+=(-i append)
 
 if [[ -z $ETH_RPC_ACCOUNTS ]]; then
-  tx=$(seth mktx $TO $DATA)
-  tx=$(seth publish $tx)
+  tx=$(seth mktx "$TO" "$DATA")
+  tx=$(seth publish "$tx")
 else
   tx=$(seth rpc eth_sendTransaction -- "${jshon[@]}")
 fi
