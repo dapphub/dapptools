@@ -27,7 +27,7 @@ while [[ $1 ]]; do
     --period)    shift; PERIOD=$1;;
     --save)      shift; SAVE=$1;;
     --load)      shift; LOAD=$1;;
-    *) printf "${0##*/}: internal error: $q\n" "$1"; exit 1
+    *) printf "${0##*/}: internal error: %q\n" "$1"; exit 1
   esac; shift
 done
 
@@ -111,7 +111,8 @@ trap clean EXIT
 
 until curl -s "$ETH_RPC_URL"; do sleep 1; done
 
-export ETH_FROM=$(seth rpc eth_coinbase)
+ETH_FROM=$(seth rpc eth_coinbase)
+export ETH_FROM
 export ETH_KEYSTORE=$chaindir/keystore
 export ETH_PASSWORD=/dev/null
 echo >&2 "dapp-testnet:   Account: $ETH_FROM"
