@@ -400,4 +400,38 @@ in rec {
     '';
     nativeBuildInputs = attrs.nativeBuildInputs ++ [self.pkgs.makeWrapper];
   });
+
+  dapphub-emacs-experiment = let
+    version = "1";
+    dapphub-elisp = self.pkgs.writeTextFile {
+      name = "dapphub-el-${version}";
+      destination = "/dapphub.el";
+      text = ''
+        (package-initialize)
+        (load-theme 'solarized-dark t)
+        (set-face-attribute 'default (selected-frame) :height 180)
+        (menu-bar-mode -1)
+        (tool-bar-mode -1)
+        (setq initial-buffer-choice
+              (lambda ()
+                (with-current-buffer (get-buffer-create "*DappHub*")
+                  (insert ";; Hello, and welcome to DappHub!")
+                  (current-buffer))))
+      '';
+    };
+  in bashScript {
+    inherit version;
+    name = "dapphub-emacs-experiment";
+    deps = with self.pkgs; [
+      coreutils
+      (emacsWithPackages (e: with e; [
+        solarized-theme
+      ]))
+      ethsign
+      seth
+    ];
+    text = ''
+      emacs -q --no-splash --load=${dapphub-elisp}/dapphub.el
+    '';
+  };
 }
