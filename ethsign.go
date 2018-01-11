@@ -15,6 +15,7 @@ import (
 	"io/ioutil"
 	"strings"
 	"syscall"
+	"runtime"
 	
 	"gopkg.in/urfave/cli.v1"
 
@@ -22,27 +23,48 @@ import (
 )
 
 func main() {
+	var defaultKeyStores cli.StringSlice
+	if runtime.GOOS == "darwin" {
+		defaultKeyStores = cli.StringSlice{
+			os.Getenv("HOME") + "/Library/Ethereum/keystore",
+			os.Getenv("HOME") + "/Library/Application Support/io.parity.ethereum/keys/ethereum",
+		}
+	} else if runtime.GOOS == "windows" {
+		// XXX: I'm not sure these paths are correct, but they are from geth/parity wikis.
+		defaultKeyStores = cli.StringSlice{
+			os.Getenv("APPDATA") + "/Ethereum/keystore",
+			os.Getenv("APPDATA") + "/Parity/Ethereum/keys",
+		}
+	} else {
+		defaultKeyStores = cli.StringSlice{
+			os.Getenv("HOME") + "/.ethereum/keystore",
+			os.Getenv("HOME") + "/.local/share/io.parity.ethereum/keys/ethereum",
+		}
+	}
+	
 	app := cli.NewApp()
 	app.Name = "ethsign"
 	app.Usage = "sign Ethereum transactions using a JSON keyfile"
-	app.Version = "0.8"
+	app.Version = "0.8.1"
 	app.Commands = []cli.Command {
 		cli.Command {
 			Name: "list-accounts",
 			Aliases: []string{"ls"},
 			Usage: "list accounts in keystore and USB wallets",
 			Flags: []cli.Flag{
-				cli.StringFlag{
+				cli.StringSliceFlag{
 					Name: "key-store",
-					Value: os.Getenv("HOME") + "/.ethereum/keystore",
+					Value: &defaultKeyStores,
 					Usage: "path to key store",
 				},
 			},
 			Action: func(c *cli.Context) error {
-				ks := keystore.NewKeyStore(
-					c.String("key-store"), keystore.StandardScryptN, keystore.StandardScryptP)
-				
-				backends := []accounts.Backend{ ks }
+				backends := []accounts.Backend{}
+				for _, x := range(c.StringSlice("key-store")) {
+					ks := keystore.NewKeyStore(
+						x, keystore.StandardScryptN, keystore.StandardScryptP)
+					backends = append(backends, ks)
+				}
 
 				if ledgerhub, err := usbwallet.NewLedgerHub(); err != nil {
 					fmt.Fprintf(os.Stderr, "ethsign: failed to look for USB Ledgers")
@@ -86,9 +108,9 @@ func main() {
 			Aliases: []string{"tx"},
 			Usage: "make a signed transaction",
 			Flags: []cli.Flag{
-				cli.StringFlag{
+				cli.StringSliceFlag{
 					Name: "key-store",
-					Value: os.Getenv("HOME") + "/.ethereum/keystore",
+					Value: &defaultKeyStores,
 					Usage: "path to key store",
 				},
 				cli.BoolFlag{
@@ -167,10 +189,13 @@ func main() {
 				}
 				data := hexutil.MustDecode(dataString)
 				
-				ks := keystore.NewKeyStore(
-					c.String("key-store"), keystore.StandardScryptN, keystore.StandardScryptP)
-				
-				backends := []accounts.Backend{ ks }
+				backends := []accounts.Backend{ }
+
+				for _, x := range(c.StringSlice("key-store")) {
+					ks := keystore.NewKeyStore(
+						x, keystore.StandardScryptN, keystore.StandardScryptP)
+					backends = append(backends, ks)
+				}
 
 				if ledgerhub, err := usbwallet.NewLedgerHub(); err != nil {
 					fmt.Fprintf(os.Stderr, "ethsign: failed to look for USB Ledgers")
