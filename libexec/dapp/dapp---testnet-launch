@@ -102,7 +102,7 @@ clean() {
     mkdir -p "$gethdir/snapshots/$SAVE"
     cp -r "$chaindir/keystore" "$gethdir/snapshots/$SAVE"
     cp -r "$chaindir/config" "$gethdir/snapshots/$SAVE"
-    geth >/dev/null 2>^2 --datadir "$chaindir" \
+    geth >/dev/null 2>&1 --datadir "$chaindir" \
        export "$gethdir/snapshots/$SAVE/backup"
   fi
   ( set -x; rm -rf "$chaindir" )
