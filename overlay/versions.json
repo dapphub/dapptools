@@ -138,16 +138,16 @@
     "master": {
       "owner": "dapphub",
       "repo": "seth",
-      "rev": "31fb53ca34601fe8388ba51ac8e22f89583877d8",
-      "sha256": "1n443cm7zipzvafphxql2c49wz0xb72jwzsqkh8jj5snsb9vlhnc"
+      "rev": "b6ae6326a1500a8712ffadbb5eda6659c17cc7a6",
+      "sha256": "13vnwfw3s8v52pms1ca2k7dnjs67fwxnir3fjnj1qwrbwkj1v5ff"
     },
     "stable": {
       "owner": "dapphub",
       "repo": "seth",
-      "rev": "290090498f205b5a87ea2b83f487e9b23dd952a9",
-      "sha256": "1gikj7azsv86xmh9k5h3yblnbg5ch2kg7q4rb9ywg77ffkjjkb2c"
+      "rev": "b6ae6326a1500a8712ffadbb5eda6659c17cc7a6",
+      "sha256": "13vnwfw3s8v52pms1ca2k7dnjs67fwxnir3fjnj1qwrbwkj1v5ff"
     },
-    "version": "0.5.11"
+    "version": "0.6"
   },
   "setzer": {
     "master": {
