@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -e
 if [[ -z $ETH_RPC_ACCOUNTS ]]; then
-  ethsign ls --key-store "$ETH_KEYSTORE"
+  ethsign ls
 else
   : ${ETH_RPC_URL:=${ETH_RPC_HOST:-localhost}:${ETH_RPC_PORT:-8545}}
   seth rpc eth_accounts | awk "{print \$1 \" $ETH_RPC_URL\"}"

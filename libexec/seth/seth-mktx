@@ -28,7 +28,6 @@ else
   args+=(--to $(seth --to-address "$1"))
 fi
 
-if [ ! -z "$ETH_KEYSTORE" ]; then args+=(--key-store "$ETH_KEYSTORE"); fi
 if [ ! -z "$ETH_PASSWORD" ]; then args+=(--passphrase-file "$ETH_PASSWORD"); fi
 
 tx=$(ethsign tx "${args[@]}")

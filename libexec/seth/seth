@@ -123,10 +123,7 @@ while [[ $1 ]]; do
   esac; shift
 done
 
-keystores=(
-  ~/{.ethereum,Library/Ethereum}/keystore/
-  ~/{.local/share,Library/Application\ Support}/io.parity.ethereum/keys/ethereum/
-)
+keystores=()
 
 if [[ $SETH_CHAIN ]]; then
   export ETH_LOGS_API=${SETH_LOGS_API:-etherscan}
@@ -157,13 +154,14 @@ if [[ $SETH_CHAIN ]]; then
   esac
 fi
 
-for dir in "${keystores[@]}"; do
-  [[ -d "$dir" ]] &&
-  grep -Ri "${ETH_FROM#0x}" $dir &> /dev/null &&
-  keystore=$dir
-done
+# If needed, set ETH_KEYSTORE to a comma-separated list
+if [[ ${#keystores[@]} -gt 0 ]]; then
+  keystore=$(printf ",%s" "${keystores[@]}")
+  keystore=${keystore:1}
+  ETH_KEYSTORE=${ETH_KEYSTORE:-$keystore}
+fi
 
-export ETH_KEYSTORE=${ETH_KEYSTORE:-$keystore}
+[[ ! -z $ETH_KEYSTORE ]] && export ETH_KEYSTORE
 export ETH_RPC_URL=${ETH_RPC_URL:-$eth_rpc_url}
 
 "${0##*/}-${1-help}" "${@:2}"
