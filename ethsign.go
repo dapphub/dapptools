@@ -25,18 +25,18 @@ import (
 func main() {
 	var defaultKeyStores cli.StringSlice
 	if runtime.GOOS == "darwin" {
-		defaultKeyStores = cli.StringSlice{
+		defaultKeyStores = []string{
 			os.Getenv("HOME") + "/Library/Ethereum/keystore",
 			os.Getenv("HOME") + "/Library/Application Support/io.parity.ethereum/keys/ethereum",
 		}
 	} else if runtime.GOOS == "windows" {
 		// XXX: I'm not sure these paths are correct, but they are from geth/parity wikis.
-		defaultKeyStores = cli.StringSlice{
+		defaultKeyStores = []string{
 			os.Getenv("APPDATA") + "/Ethereum/keystore",
 			os.Getenv("APPDATA") + "/Parity/Ethereum/keys",
 		}
 	} else {
-		defaultKeyStores = cli.StringSlice{
+		defaultKeyStores = []string{
 			os.Getenv("HOME") + "/.ethereum/keystore",
 			os.Getenv("HOME") + "/.local/share/io.parity.ethereum/keys/ethereum",
 		}
@@ -45,7 +45,7 @@ func main() {
 	app := cli.NewApp()
 	app.Name = "ethsign"
 	app.Usage = "sign Ethereum transactions using a JSON keyfile"
-	app.Version = "0.8.1"
+	app.Version = "0.8.2"
 	app.Commands = []cli.Command {
 		cli.Command {
 			Name: "list-accounts",
@@ -54,13 +54,20 @@ func main() {
 			Flags: []cli.Flag{
 				cli.StringSliceFlag{
 					Name: "key-store",
-					Value: &defaultKeyStores,
 					Usage: "path to key store",
+					EnvVar: "ETH_KEYSTORE",
 				},
 			},
 			Action: func(c *cli.Context) error {
 				backends := []accounts.Backend{}
-				for _, x := range(c.StringSlice("key-store")) {
+
+				var paths []string
+				if len(c.StringSlice("key-store")) == 0 {
+					paths = defaultKeyStores
+				} else {
+					paths = c.StringSlice("key-store")
+				}
+				for _, x := range(paths) {
 					ks := keystore.NewKeyStore(
 						x, keystore.StandardScryptN, keystore.StandardScryptP)
 					backends = append(backends, ks)
@@ -110,8 +117,8 @@ func main() {
 			Flags: []cli.Flag{
 				cli.StringSliceFlag{
 					Name: "key-store",
-					Value: &defaultKeyStores,
 					Usage: "path to key store",
+					EnvVar: "ETH_KEYSTORE",
 				},
 				cli.BoolFlag{
 					Name: "create",
@@ -120,6 +127,7 @@ func main() {
 				cli.StringFlag{
 					Name: "from",
 					Usage: "address of signing account",
+					EnvVar: "ETH_FROM",
 				},
 				cli.StringFlag{
 					Name: "passphrase-file",
@@ -191,7 +199,13 @@ func main() {
 				
 				backends := []accounts.Backend{ }
 
-				for _, x := range(c.StringSlice("key-store")) {
+				var paths []string
+				if len(c.StringSlice("key-store")) == 0 {
+					paths = defaultKeyStores
+				} else {
+					paths = c.StringSlice("key-store")
+				}
+				for _, x := range(paths) {
 					ks := keystore.NewKeyStore(
 						x, keystore.StandardScryptN, keystore.StandardScryptP)
 					backends = append(backends, ks)
