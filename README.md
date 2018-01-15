@@ -215,7 +215,7 @@ own accounts:
 
 ### Reading from contracts
 
-The basic tool to read information from a contract is [seth call],
+The basic tool to read information from a contract is [`seth call`],
 which performs a call without publishing a transaction.
 
 For example, you can read the total supply parameter the [MakerDAO]
