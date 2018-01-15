@@ -52,6 +52,34 @@ Contents
       * [Checking ether balances](#checking-ether-balances)
       * [Reading from contracts](#reading-from-smart-contracts)
       * [Transacting with contracts](#transacting-with-contracts)
+  * [Commands](#commands)
+      * [`seth --abi-decode`]
+      * [`seth --from-ascii`]
+      * [`seth --from-bin`]
+      * [`seth --from-wei`]
+      * [`seth --to-wei`]
+      * [`seth abi`]
+      * [`seth age`]
+      * [`seth balance`]
+      * [`seth block`]
+      * [`seth call`]
+      * [`seth calldata`]
+      * [`seth chain`]
+      * [`seth code`]
+      * [`seth estimate`]
+      * [`seth events`]
+      * [`seth help`]
+      * [`seth keccak`]
+      * [`seth logs`]
+      * [`seth ls`]
+      * [`seth mktx`]
+      * [`seth nonce`]
+      * [`seth publish`]
+      * [`seth receipt`]
+      * [`seth send`]
+      * [`seth sign`]
+      * [`seth storage`]
+      * [`seth tx`]
 
 <br />
 
@@ -258,6 +286,72 @@ See [`seth send`] for details on passing arguments, doing asynchronous
 transactions, and so on.
 
 
+<br />
+
+Commands
+========================================================================
+
+### `seth --abi-decode`
+
+Extracts return values from hex data.
+
+    seth --abi-decode "<name>(<in-types>)(<out-types>)" <hexdata>
+
+Decodes `<hexdata>` according to `<out-types>` (`<in-types>` are ignored).
+
+### `seth --from-ascii`
+
+Converts text data into hex data.
+
+    seth --from-ascii <text>...
+
+### `seth --from-bin`
+
+Converts binary data into hex data.
+
+    seth --from-bin <data.bin >data.hex
+
+Reads binary data from standard input and prints it as hex data.
+
+### `seth --from-wei`
+
+Converts a wei amount into another unit (ETH by default).
+
+    seth --from-wei <value> [<unit>]
+
+The unit may be `wei`, `gwei`, `eth`, or `ether`.
+
+### `seth --to-wei`
+
+Converts an ETH amount into wei.
+
+    seth --to-wei <value> [<unit>]
+
+The unit may be `wei`, `gwei`, `eth`, or `ether`.
+
+### `seth abi`
+### `seth age`
+### `seth balance`
+### `seth block`
+### `seth call`
+### `seth calldata`
+### `seth chain`
+### `seth code`
+### `seth estimate`
+### `seth events`
+### `seth help`
+### `seth keccak`
+### `seth logs`
+### `seth ls`
+### `seth mktx`
+### `seth nonce`
+### `seth publish`
+### `seth receipt`
+### `seth send`
+### `seth sign`
+### `seth storage`
+### `seth tx`
+
 [the DappHub collective]: https://dapphub.com
 
 [Ledger Nano S]: https://www.ledgerwallet.com/products/ledger-nano-s
@@ -297,7 +391,6 @@ transactions, and so on.
 [`seth nonce`]: #seth-nonce
 [`seth publish`]: #seth-publish
 [`seth receipt`]: #seth-receipt
-[`seth send`]: #seth-send
 [`seth send`]: #seth-send
 [`seth sign`]: #seth-sign
 [`seth storage`]: #seth-storage
