@@ -208,9 +208,9 @@ sending address from the `ETH_FROM` variable or the `--from` flag.
 Basic usage: a tutorial
 ------------------------------------------------------------------------
 
-This section assumes that you have something like the example
-`.sethrc` file specifying how to connect to the blockchain
-and a default sender address.
+This section assumes that you have something like the
+[example `.sethrc` file](#example-sethrc-file) specifying how to
+connect to the blockchain and a default sender address.
 
 ### Ether transactions
 
