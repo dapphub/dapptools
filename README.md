@@ -14,7 +14,7 @@ base for deploy scripts, integration tests, and bots.
 sci-fi future where you can manage funds from the command line.
 
 **New:** Seth supports signing transactions with [Ledger Nano S]
-hardware wallets.
+hardware wallets—even if you use a remote RPC node like Infura's.
 
 > "One indicator I look for in a healthy open source project is how
   many useful tools come out of its team as a side effect of their
