@@ -587,11 +587,11 @@ Show all fields unless `<field>` is given.
 
 [MakerDAO CDP utility]: https://github.com/makerdao/dai-cli
 
-[`seth --abi-decode`]: #seth-abi-decode
-[`seth --from-ascii`]: #seth-from-ascii
-[`seth --from-bin`]: #seth-from-bin
-[`seth --from-wei`]: #seth-from-wei
-[`seth --to-wei`]: #seth-to-wei
+[`seth --abi-decode`]: #seth---abi-decode
+[`seth --from-ascii`]: #seth---from-ascii
+[`seth --from-bin`]: #seth---from-bin
+[`seth --from-wei`]: #seth---from-wei
+[`seth --to-wei`]: #seth---to-wei
 [`seth abi`]: #seth-abi
 [`seth age`]: #seth-age
 [`seth balance`]: #seth-balance
