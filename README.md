@@ -149,6 +149,12 @@ Alternatively, you can use a default remote node (operated by
 Allowed values: `ethlive` (aka `mainnet`), `ropsten`, `kovan`, and
 `rinkeby`.
 
+Note: If you frequently use Seth with the Infura nodes, you should
+[sign up for an Infura API key](https://infura.io/signup) and use your
+custom URL:
+
+    export ETH_RPC_URL=https://mainnet.infura.io/<API-KEY>
+
 ### Key management and signing
 
 By default, Seth does not use the RPC node for key management or
