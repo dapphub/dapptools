@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 ### seth-mktx -- construct a signed transaction using ethsign
 ### Usage: seth mktx [<opts>] [-F <from>] <to> <sig> [<args>]
-###    or: seth mktx [<opts>] [-F <from>] <to> <calldata> [<args>]
+###    or: seth mktx [<opts>] [-F <from>] <to> <calldata>
 set -e
 
 [[ $# ]] && [[ $ETH_FROM ]] || seth --fail-usage "$0"

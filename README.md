@@ -292,7 +292,7 @@ Commands
 
 ### `seth --abi-decode`
 
-Extracts return values from hex data.
+Extract return values from hex data.
 
     seth --abi-decode "<name>(<in-types>)(<out-types>)" <hexdata>
 
@@ -300,13 +300,13 @@ Decodes `<hexdata>` according to `<out-types>` (`<in-types>` are ignored).
 
 ### `seth --from-ascii`
 
-Converts text data into hex data.
+Convert text data into hex data.
 
     seth --from-ascii <text>...
 
 ### `seth --from-bin`
 
-Converts binary data into hex data.
+Convert binary data into hex data.
 
     seth --from-bin <data.bin >data.hex
 
@@ -314,7 +314,7 @@ Reads binary data from standard input and prints it as hex data.
 
 ### `seth --from-wei`
 
-Converts a wei amount into another unit (ETH by default).
+Convert a wei amount into another unit (ETH by default).
 
     seth --from-wei <value> [<unit>]
 
@@ -322,7 +322,7 @@ The unit may be `wei`, `gwei`, `eth`, or `ether`.
 
 ### `seth --to-wei`
 
-Converts an ETH amount into wei.
+Convert an ETH amount into wei.
 
     seth --to-wei <value> [<unit>]
 
@@ -330,19 +330,19 @@ The unit may be `wei`, `gwei`, `eth`, or `ether`.
 
 ### `seth age`
 
-Shows the timestamp of a block (the latest block by default).
+Show the timestamp of a block (the latest block by default).
 
     seth age [--block <block>]
 
 ### `seth balance`
 
-Shows the ether balance of an account.
+Show the ether balance of an account.
 
     seth balance [--block <block>] <account>
 
 ### `seth block`
 
-Prints a table of information about a specific block.
+Print a table of information about a specific block.
 
     seth block [--json] <block> [<field>]
 
@@ -352,9 +352,9 @@ The `<block>` may be either a block hash or a block number.
 
 ### `seth call`
 
-Calls a contract without updating the blockchain.
+Call a contract without updating the blockchain.
 
-    seth call [<options>] <to> <sig> [<args>]
+    seth call [<options>] <to> <sig> [<args>...]
     seth call [<options>] <to> <calldata>
 
 When given `<sig>` of the form `<name>(<types>)`, perform ABI encoding
@@ -373,22 +373,177 @@ Otherwise `<calldata>` should be hex data.
 | `--value` | `ETH_VALUE` | `0`      | simulated ether value  |
 
 ### `seth calldata`
+
+Pack a signature and an argument list into hexadecimal calldata.
+
+    seth calldata <sig> [<args>...]
+    seth calldata <file>
+    seth calldata <data>
+
+When called with `<sig>` of the form `<name>(<types>...)`, then
+perform ABI encoding to produce the hexadecimal calldata.
+
+If `<file>` is given—containing at least one slash character—then
+treat it as a file name to read, and proceed as if the contents were
+passed as `<data>`.
+
+Given `<data>`, ensure it is hexadecimal calldata starting with `0x`
+and normalize it to lowercase.
+
 ### `seth chain`
+
+Print the symbolic name of the current blockchain by checking the
+genesis block hash.
+
+Outputs one of `ethlive`, `etclive`, `kovan`, `ropsten`, `morden`,
+`rinkeby`, or `unknown`.
+
 ### `seth code`
+
+Print the bytecode of a contract.
+
+    seth code [--block <block>] <address>
+
+If `<block>` is not given, the default is `latest`.
+
 ### `seth estimate`
+
+Estimate how much gas a transaction is likely to use, using the RPC
+node's gas estimation.
+
+    seth estimate [<options>] <to> <sig> [<args>]
+    seth estimate [<options>] <to> <sig> [<args>]
+    seth estimate [<options>] --create <code> <sig> [<args>]
+    seth estimate [<options>] --create <code> <data>
+
+Options are similar to [`seth send`], but no transaction is published.
+
 ### `seth events`
-### `seth help`
+
+Print the decoded events of a contract.
+
+    seth events [--block <block>] [--follow] <address>
+
+To use this command, you need to set the `SETH_ABI` variable:
+
+    export SETH_ABI=$(seth abi "event Foo(uint bar);")
+
+To use a JSON ABI file:
+
+    export SETH_ABI=$(seth --decorate-abi $(cat abi.json))
+
+With `--follow`, the command blocks waiting for new events (like `tail
+-f`).
+
+See also [`seth logs`] which does not decode events.
+
 ### `seth keccak`
+
+Print the Keccak-256 hash of an arbitrary piece of data.
+
+    seth keccak <data>
+
+Note: this uses the RPC node for hashing, which may be inefficient.
+
 ### `seth logs`
+
+Print the undecoded transaction logs of a contract.
+
+    seth logs [--block <block>] [--follow] <address>
+
+With `--follow`, the command blocks waiting for new events
+(like `tail -f`).
+
+See also [`seth events`] which decodes logs using an
+ABI specification.
+
 ### `seth ls`
+
+Display a list of your accounts and their ether balances.
+
+See [Key management and signing](#key-management-and-signing) for
+details on how Seth finds your accounts.
+
 ### `seth mktx`
+
+Make and signs a transaction without publishing it.
+
+    seth mktx [<options>] <to> <sig> [<args>]
+    seth mktx [<options>] <to> <calldata>
+
+Options are as for [`seth send`] but no transaction is published.
+
+See also [`seth publish`] for publishing a signed transaction.
+
 ### `seth nonce`
+
+Show the number of transactions successfully sent from an address (its
+nonce).
+
+    seth nonce [--block <block>] <address>
+
 ### `seth publish`
+
+Publish an already signed transaction to the blockchain.
+
+    seth publish [<txdata>]
+
+If `<txdata>` is not given, read it from standard input instead.
+
 ### `seth receipt`
+
+Wait for a transaction receipt to appear and print it in tabular form.
+
+    seth receipt [--async] <txhash> [<field>]
+
+Print all fields of the transaction receipt unless `<field>`
+is specified.
+
+Unless `--async` is given, wait indefinitely for the receipt
+to appear.
+
 ### `seth send`
-### `seth sign`
+
+Sign and publish a transaction to the blockchain.
+
+    seth send [<options>] <to> <sig> [<args>]
+    seth send [<options>] <to> [<data>]
+    seth send [<options>] --create <code> <sig> [<args>]
+    seth send [<options>] --create <code> [<data>]
+
+| Flag          | Variable        | Default      | Synopsis        |
+| ------------- | --------------- | ------------ | --------------- |
+| `--block`     | `ETH_BLOCK`     | `latest`     | block number    |
+| `--from`      | `ETH_FROM`      | n/a          | sender          |
+| `--gas`       | `ETH_GAS`       | node decides | gas quantity    |
+| `--gas-price` | `ETH_GAS_PRICE` | node decides | gas price       |
+| `--value`     | `ETH_VALUE`     | `0`          | ether value     |
+| `--create`    | `SETH_CREATE`   |              | create contract |
+| `--resend`    | `SETH_RESEND`   |              | reuse nonce     |
+| `--async`     | `SETH_ASYNC`    |              | don't wait      |
+
+See [Key management and signing](#key-management-and-signing) for
+details on how Seth signs transactions.
+
+With `--async`, just print the transaction hash.
+Otherwise, wait for the receipt and print as with [`seth receipt`].
+
 ### `seth storage`
+
+Show the raw value of a contract's storage slot.
+
+    seth storage [--block <block>] <address> <slot>
+
 ### `seth tx`
+
+Print a table of information about a transaction.
+
+    seth tx <txhash> [<field>]
+
+Show all fields unless `<field>` is given.
+
+
+
 
 [the DappHub collective]: https://dapphub.com
 
