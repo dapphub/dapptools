@@ -234,7 +234,7 @@ to another.  An example follows.
 
 Generally, you don't transact in terms of wei amounts, but in
 fractional amounts of ether.  You can convert an ether amount into a
-wei amount using [`seth --to-wei`](#seth-to-wei).  Here, we send 1.5
+wei amount using [`seth --to-wei`].  Here, we send 1.5
 ETH:
 
     $ fund=0xfB6916095ca1df60bB79Ce92cE3Ea74c37c5d359
@@ -249,14 +249,14 @@ also useful.
 
 ### Checking ether balances
 
-Now you can use [`seth balance`](#seth-balance) to see how much is in
-the donation fund:
+Now you can use [`seth balance`] to see how much is in the donation
+fund:
 
     $ seth balance 0xfB6916095ca1df60bB79Ce92cE3Ea74c37c5d359
     2963.72865500027557173E+18
 
-You can use [`seth ls`](#seth-ls) to check the ether balances of your
-own accounts:
+You can use [`seth ls`] to check the ether balances of your own
+accounts:
 
     $ seth ls
     0xCC41D9831E4857B4F16914A356306fBeA734183A    0.24E+18
