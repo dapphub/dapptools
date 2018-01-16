@@ -171,6 +171,9 @@ the `ETH_RPC_ACCOUNTS` variable or use the `--rpc-accounts` flag.
 This probably means you need to use Geth's or Parity's account
 management tools to "unlock" your account.
 
+Note: Seth uses the [`ethsign`] tool for signing transactions.
+This tool uses Geth as a library.
+
 ### Your address
 
 When making transactions or doing read-only calls, Seth takes the
@@ -595,3 +598,4 @@ Show all fields unless `<field>` is given.
 [Dai stablecoin system]: https://makerdao.com
 [Dai]: https://makerdao.com
 [OasisDEX]: https://oasisdex.com
+[`ethsign`]: https://github.com/dapphub/ethsign
