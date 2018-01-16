@@ -58,7 +58,6 @@ Contents
       * [`seth --from-bin`]
       * [`seth --from-wei`]
       * [`seth --to-wei`]
-      * [`seth abi`]
       * [`seth age`]
       * [`seth balance`]
       * [`seth block`]
@@ -329,11 +328,50 @@ Converts an ETH amount into wei.
 
 The unit may be `wei`, `gwei`, `eth`, or `ether`.
 
-### `seth abi`
 ### `seth age`
+
+Shows the timestamp of a block (the latest block by default).
+
+    seth age [--block <block>]
+
 ### `seth balance`
+
+Shows the ether balance of an account.
+
+    seth balance [--block <block>] <account>
+
 ### `seth block`
+
+Prints a table of information about a specific block.
+
+    seth block [--json] <block> [<field>]
+
+If `<field>` is given, print only the value of that field.
+
+The `<block>` may be either a block hash or a block number.
+
 ### `seth call`
+
+Calls a contract without updating the blockchain.
+
+    seth call [<options>] <to> <sig> [<args>]
+    seth call [<options>] <to> <calldata>
+
+When given `<sig>` of the form `<name>(<types>)`, perform ABI encoding
+to infer the calldata.
+
+When `<sig>` also includes a return type, as
+`name(<in-types>)(<out-types>)`, then also decode the return value.
+
+Otherwise `<calldata>` should be hex data.
+
+| Flag      | Variable    | Default  | Synopsis               |
+| --------- | ----------- | -------- | ---------------------- |
+| `--block` | `ETH_BLOCK` | `latest` | block number           |
+| `--from`  | `ETH_FROM`  | n/a      | simulated sender       |
+| `--gas`   | `ETH_GAS`   | n/a      | simulated gas quantity |
+| `--value` | `ETH_VALUE` | `0`      | simulated ether value  |
+
 ### `seth calldata`
 ### `seth chain`
 ### `seth code`
