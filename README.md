@@ -45,6 +45,7 @@ Contents
       * [Example `.sethrc` file](#example-sethrc-file)
       * [Connecting to the blockchain](#connecting-to-the-blockchain)
       * [Key management and signing](#key-management-and-signing)
+      * [Hardware wallets](#hardware-wallets)
       * [Your address](#your-address)
   * [Basic usage: a tutorial](#basic-usage-a-tutorial)
       * [Ether transactions](#ether-transactions)
@@ -145,9 +146,9 @@ You can specify another RPC URL using the variable `ETH_RPC_URL`
 or the flag `--rpc-url`.
 
 Alternatively, you can use a default remote node (operated by
-[Infura]) using the variable `SETH_CHAIN` or the flag `--chain`.
-Allowed values: `ethlive` (aka `mainnet`), `ropsten`, `kovan`, and
-`rinkeby`.
+[Infura]) using the variable `SETH_CHAIN` or the flag `--chain` (or
+`-C`).  Allowed values: `ethlive` (aka `mainnet`), `ropsten`, `kovan`,
+and `rinkeby`.
 
 Note: If you frequently use Seth with the Infura nodes, you should
 [sign up for an Infura API key](https://infura.io/signup) and use your
@@ -180,15 +181,27 @@ management tools to "unlock" your account.
 Note: Seth uses the [`ethsign`] tool for signing transactions.
 This tool uses Geth as a library.
 
+### Hardware wallets
+
+Seth will scan for [Ledger Nano S] hardware wallets by default.
+
+The Ledger wallet is only available to Seth while it is unlocked, in
+the Ethereum app, and with **browser mode off**.
+
+On Linux, you may have to enable some USB permissions.  See the
+[Ledger Wallet Linux instructions].
+
+When you use a sending address that belongs to the hardware wallet,
+Seth will automatically use it for signing transactions.
+
+**Note:** Seth currently only looks for the first four addresses
+derived from your seed phrase.  If the sending address is not one of
+those, Seth will not be able to sign transactions.
+
 ### Your address
 
 When making transactions or doing read-only calls, Seth takes the
 sending address from the `ETH_FROM` variable or the `--from` flag.
-
-Note for Ledger Nano S hardware wallet users: Seth currently only
-looks for the first four addresses derived from your seed phrase.
-If the sending address is not one of those, Seth will not be able
-to sign transactions.
 
 <br />
 
@@ -605,3 +618,5 @@ Show all fields unless `<field>` is given.
 [Dai]: https://makerdao.com
 [OasisDEX]: https://oasisdex.com
 [`ethsign`]: https://github.com/dapphub/ethsign
+
+[Ledger Wallet Linux instructions]: https://ledger.zendesk.com/hc/en-us/articles/115005165269-What-if-Ledger-Wallet-is-not-recognized-on-Linux-
