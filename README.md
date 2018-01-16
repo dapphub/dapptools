@@ -304,7 +304,7 @@ For example, to approve access to some of your [Dai] for the
 ERC20 tokens.)
 
 See [`seth send`] for details on passing arguments, doing asynchronous
-transactions, and so on.
+transactions, exit codes, and so on.
 
 
 <br />
@@ -543,12 +543,18 @@ Sign and publish a transaction to the blockchain.
 | `--create`    | `SETH_CREATE`   |              | create contract |
 | `--resend`    | `SETH_RESEND`   |              | reuse nonce     |
 | `--async`     | `SETH_ASYNC`    |              | don't wait      |
+| `--status`    | `SETH_STATUS`   |              | check success   |
 
 See [Key management and signing](#key-management-and-signing) for
 details on how Seth signs transactions.
 
 With `--async`, just print the transaction hash.
 Otherwise, wait for the receipt and print as with [`seth receipt`].
+
+With `--status` (which excludes `--async`), check the status field of
+the transaction receipt and exit with an error code if the transaction
+failed.  This is a post-Byzantium feature and will soon become the
+default behavior.
 
 ### `seth storage`
 
