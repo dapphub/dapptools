@@ -30,7 +30,7 @@ while [[ $1 ]]; do
     --accounts)  shift; ACCOUNTS=$(($1 - 1));;
     --save)      shift; SAVE=$1;;
     --load)      shift; LOAD=$1;;
-    *) printf "${0##*/}: internal error: %q\n" "$1"; exit 1
+    *) printf "${0##*/}: internal error: %q\\n" "$1"; exit 1
   esac; shift
 done
 
@@ -42,7 +42,7 @@ if [[ $LOAD ]]; then
   cp -r "$gethdir/snapshots/$LOAD"/{keystore,config} "$chaindir"
   geth >/dev/null 2>&1 --datadir "$chaindir" init "$chaindir/config/genesis.json"
   geth >/dev/null 2>&1 --datadir "$chaindir" import "$gethdir/snapshots/$LOAD/backup"
-  address+=($(jq <"$chaindir/config/genesis.json" -r ".alloc | keys | .[]"))
+  address+=( "$(jq <"$chaindir/config/genesis.json" -r ".alloc | keys | .[]")" )
   CHAINID=$(jq <"$chaindir/config/genesis.json" -r ".config.chainId")
 else
   while true; do
@@ -52,9 +52,9 @@ else
 
   mkdir -p "$chaindir/config"
   for i in $(seq 0 "$ACCOUNTS"); do
-    address+=($(
+    address+=( "$(
       geth 2>/dev/null account new --datadir "$chaindir" --password=<(exit) 2>/dev/null \
-        | grep Address | sed 's/Address: {\(.*\)}/\1/'))
+        | grep Address | sed 's/Address: {\(.*\)}/\1/')" )
     balance+=(-n {} -s "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff" -i balance \
       -i "${address[i]}")
   done
@@ -87,7 +87,7 @@ echo >&2 "dapp-testnet:  Chain ID: $CHAINID"
 echo >&2 "dapp-testnet:  Database: $chaindir"
 echo >&2 "dapp-testnet:  Geth log: $chaindir/geth.log"
 
-printf "%s\n" "${address[@]}" > "$chaindir/config/account"
+printf "%s\\n" "${address[@]}" > "$chaindir/config/account"
 echo "$ETH_RPC_URL"           > "$chaindir/config/rpc-url"
 echo "$port"                  > "$chaindir/config/node-port"
 
