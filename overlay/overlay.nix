@@ -434,4 +434,6 @@ in rec {
       emacs -q --no-splash --load=${dapphub-elisp}/dapphub.el
     '';
   };
+
+  celf = callPackage ./celf.nix {};
 }

@@ -44,6 +44,7 @@ in rec {
     inherit token;
     inherit dai;
     inherit dapp-which;
+    inherit celf;
 
     hevm-test-report = hevmTestReport linux;
   };
@@ -78,6 +79,7 @@ in rec {
     inherit token;
     inherit dai;
     inherit dapp-which;
+    inherit celf;
   };
 
   dapphub.darwin.master = with darwin.master.pkgs; {
