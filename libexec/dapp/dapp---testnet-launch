@@ -57,7 +57,6 @@ else
         | grep Address | sed 's/Address: {\(.*\)}/\1/'))
     balance+=(-n {} -s "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff" -i balance \
       -i "${address[i]}")
-    echo "${address[i]}"
   done
   jshon >"$chaindir/config/genesis.json" \
     -n {} \
@@ -88,9 +87,9 @@ echo >&2 "dapp-testnet:  Chain ID: $CHAINID"
 echo >&2 "dapp-testnet:  Database: $chaindir"
 echo >&2 "dapp-testnet:  Geth log: $chaindir/geth.log"
 
-echo "${address[@]}" > "$chaindir/config/account"
-echo "$ETH_RPC_URL"  > "$chaindir/config/rpc-url"
-echo "$port"         > "$chaindir/config/node-port"
+printf "%s\n" "${address[@]}" > "$chaindir/config/account"
+echo "$ETH_RPC_URL"           > "$chaindir/config/rpc-url"
+echo "$port"                  > "$chaindir/config/node-port"
 
 set +m
 geth \
@@ -122,7 +121,6 @@ ETH_FROM=$(seth rpc eth_coinbase)
 export ETH_FROM
 export ETH_KEYSTORE=$chaindir/keystore
 export ETH_PASSWORD=/dev/null
-#echo >&2 "dapp-testnet:   Account: $ETH_FROM"
 printf 'dapp-testnet:   Account: %s (default)\n' "${address[0]}" >&2
 [[ "${#address[@]}" -gt 1 ]] && printf 'dapp-testnet:   Account: %s\n' "${address[@]:1}" >&2
 
