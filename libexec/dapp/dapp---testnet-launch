@@ -7,6 +7,7 @@ dapp testnet --help
 rpc-port=port      change RPC port (default: 8545)
 chain-id=number    change chain ID (default: 99)
 period=seconds     use a block time instead of instamine
+accounts=number    create multiple accounts (default: 1)
 save=name          after finishing, save snapshot
 load=name          start from a previously saved snapshot
 "
@@ -18,6 +19,7 @@ eval "$(
 RPC_PORT=8545
 PERIOD=0
 CHAINID=99
+ACCOUNTS=0
 
 while [[ $1 ]]; do
   case $1 in
@@ -25,9 +27,10 @@ while [[ $1 ]]; do
     --rpc-port)  shift; RPC_PORT=$1;;
     --chain-id)  shift; CHAINID=$1;;
     --period)    shift; PERIOD=$1;;
+    --accounts)  shift; ACCOUNTS=$(($1 - 1));;
     --save)      shift; SAVE=$1;;
     --load)      shift; LOAD=$1;;
-    *) printf "${0##*/}: internal error: %q\n" "$1"; exit 1
+    *) printf "${0##*/}: internal error: %q\\n" "$1"; exit 1
   esac; shift
 done
 
@@ -39,7 +42,7 @@ if [[ $LOAD ]]; then
   cp -r "$gethdir/snapshots/$LOAD"/{keystore,config} "$chaindir"
   geth >/dev/null 2>&1 --datadir "$chaindir" init "$chaindir/config/genesis.json"
   geth >/dev/null 2>&1 --datadir "$chaindir" import "$gethdir/snapshots/$LOAD/backup"
-  address=$(jq <"$chaindir/config/genesis.json" -r ".alloc | keys | .[]")
+  address+=( "$(jq <"$chaindir/config/genesis.json" -r ".alloc | keys | .[]")" )
   CHAINID=$(jq <"$chaindir/config/genesis.json" -r ".config.chainId")
 else
   while true; do
@@ -48,9 +51,13 @@ else
   done
 
   mkdir -p "$chaindir/config"
-  address=$(
-    geth 2>/dev/null account new --datadir "$chaindir" --password=<(exit) 2>/dev/null \
-      | grep Address | sed 's/Address: {\(.*\)}/\1/')
+  for i in $(seq 0 "$ACCOUNTS"); do
+    address+=( "$(
+      geth 2>/dev/null account new --datadir "$chaindir" --password=<(exit) 2>/dev/null \
+        | grep Address | sed 's/Address: {\(.*\)}/\1/')" )
+    balance+=(-n {} -s "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff" -i balance \
+      -i "${address[i]}")
+  done
   jshon >"$chaindir/config/genesis.json" \
     -n {} \
     -n {} \
@@ -63,10 +70,9 @@ else
       -i config \
     -s 0x1 -i difficulty \
     -s 0xffffffffffffffff -i gaslimit \
-    -s "0x3132333400000000000000000000000000000000000000000000000000000000""$address""0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000" -i extraData \
+    -s "0x3132333400000000000000000000000000000000000000000000000000000000""${address[0]}""0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000" -i extraData \
     -n {} \
-      -n {} -s "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff" -i balance \
-      -i "$address" \
+      "${balance[@]}" \
     -i alloc
   geth 2>/dev/null --datadir "$chaindir" init "$chaindir/config/genesis.json"
 fi
@@ -81,9 +87,9 @@ echo >&2 "dapp-testnet:  Chain ID: $CHAINID"
 echo >&2 "dapp-testnet:  Database: $chaindir"
 echo >&2 "dapp-testnet:  Geth log: $chaindir/geth.log"
 
-echo "$address"     > "$chaindir/config/account"
-echo "$ETH_RPC_URL" > "$chaindir/config/rpc-url"
-echo "$port"        > "$chaindir/config/node-port"
+printf "%s\\n" "${address[@]}" > "$chaindir/config/account"
+echo "$ETH_RPC_URL"           > "$chaindir/config/rpc-url"
+echo "$port"                  > "$chaindir/config/node-port"
 
 set +m
 geth \
@@ -91,7 +97,7 @@ geth \
   --datadir "$chaindir" --networkid "$CHAINID" --port="$port" \
   --mine --minerthreads=1 \
   --rpc --rpcapi "web3,eth,net,debug" --rpccorsdomain '*' --nodiscover \
-  --rpcport="$RPC_PORT" --unlock="$address" --password=<(exit) &
+  --rpcport="$RPC_PORT" --unlock="$(IFS=,; echo "${address[*]}")" --password=<(exit) &
 
 gethpid=$!
 
@@ -115,7 +121,8 @@ ETH_FROM=$(seth rpc eth_coinbase)
 export ETH_FROM
 export ETH_KEYSTORE=$chaindir/keystore
 export ETH_PASSWORD=/dev/null
-echo >&2 "dapp-testnet:   Account: $ETH_FROM"
+printf 'dapp-testnet:   Account: %s (default)\n' "${address[0]}" >&2
+[[ "${#address[@]}" -gt 1 ]] && printf 'dapp-testnet:   Account: %s\n' "${address[@]:1}" >&2
 
 if [[ $1 ]]; then
   "$@"
