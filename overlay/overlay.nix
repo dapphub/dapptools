@@ -437,14 +437,14 @@ in rec {
 
   celf = callPackage ./celf.nix {};
 
-  shellcheck = super.shellcheck.overrideDerivation (_: rec {
-    name = "shellcheck-${version}";
-    version = "0.4.7";
-    src = self.pkgs.fetchFromGitHub {
-      owner = "koalaman";
-      repo = "shellcheck";
-      rev = "v${version}";
-      sha256 = "08j33ipk7w56vj315smq9hxz512gbi5w283d7mvcyjvpddr001gc";
-    };
-  });
+  # shellcheck = super.shellcheck.overrideDerivation (_: rec {
+  #   name = "shellcheck-${version}";
+  #   version = "0.4.7";
+  #   src = self.pkgs.fetchFromGitHub {
+  #     owner = "koalaman";
+  #     repo = "shellcheck";
+  #     rev = "v${version}";
+  #     sha256 = "08j33ipk7w56vj315smq9hxz512gbi5w283d7mvcyjvpddr001gc";
+  #   };
+  # });
 }
