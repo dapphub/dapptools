@@ -45,6 +45,7 @@ in rec {
     inherit dai;
     inherit dapp-which;
     inherit celf;
+    inherit tla-plus;
 
     hevm-test-report = hevmTestReport linux;
   };

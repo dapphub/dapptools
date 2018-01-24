@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Exec=tla-toolbox
+Icon=tla-toolbox
+Comment=IDE for TLA+
+Terminal=false
+Name=TLA Toolbox
+Categories=Application;Development;
+StartupWMClass=TLA+ Toolbox

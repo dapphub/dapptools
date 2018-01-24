@@ -447,4 +447,36 @@ in rec {
   #     sha256 = "08j33ipk7w56vj315smq9hxz512gbi5w283d7mvcyjvpddr001gc";
   #   };
   # });
+
+  # Use an older version of PolyML, for TLA+.
+  # I'm not familiar with these tools, but this seemed to be necessary.
+  # The specific commit is the parent of a change that is incompatible
+  # with some stage of the TLA+ build.
+  polyml = self.polyml56.overrideDerivation (_: rec {
+    name = "polyml-${version}";
+    version = "unstable-2015-10-15";
+    src = self.pkgs.fetchFromGitHub {
+      owner = "polyml";
+      repo = "polyml";
+      rev = "257ef837c10e685170909878a64339b1144ff960";
+      sha256 = "00migdfxzj2m28ikbnpbri8aysf5w836qdmflmrpxk7mddncimvw";
+    };
+  });
+
+  tla-plus =
+    let
+      core = callPackage ./tla/core.nix {};
+      toolbox = callPackage ./tla/toolbox.nix { gtk = self.gtk2; };
+      isabelle2011-1 =
+        callPackage ./tla/isabelle2011-1 {
+          proofgeneral = self.emacsPackages.proofgeneral;
+        };
+      tlaps = callPackage ./tla/tlaps.nix {
+        inherit isabelle2011-1;
+      };
+      tla-smt = with self; [z3 yices cvc3];
+  in super.buildEnv {
+    name = "tla-plus-full";
+    paths = [toolbox] ++ core.all ++ tlaps.all ++ tla-smt;
+  };
 }
