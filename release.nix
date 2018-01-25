@@ -23,72 +23,69 @@ let
 in rec {
 
   dapphub.linux.stable = with linux.pkgs; {
-    inherit dapp;
-    inherit seth;
-    inherit hevm;
-    inherit hevml;
-    inherit evmdis;
-    inherit keeper;
-    inherit setzer;
-    inherit solc-versions;
-    inherit go-ethereum;
-    inherit go-ethereum-unlimited;
-    inherit hevmas;
-    inherit ethsign;
-    inherit qrtx;
-    inherit qrtx-term;
-    inherit ethjet;
-    inherit ds-chief;
-    inherit mkbip39;
-    inherit oasis-orders;
-    inherit token;
+    inherit celf;
     inherit dai;
     inherit dapp-which;
-    inherit celf;
-    inherit tla-plus;
+    inherit dapp;
+    inherit ds-chief;
+    inherit ethjet;
+    inherit ethsign;
+    inherit evmdis;
+    inherit go-ethereum-unlimited;
+    inherit go-ethereum;
+    inherit hevm;
+    inherit hevmas;
+    inherit hevml;
+    inherit keeper;
+    inherit mkbip39;
     inherit myetherwallet;
+    inherit oasis-orders;
+    inherit qrtx-term;
+    inherit qrtx;
+    inherit seth;
+    inherit setzer;
+    inherit solc-versions;
+    inherit tla-plus;
+    inherit token;
 
     hevm-test-report = hevmTestReport linux;
   };
 
   dapphub.linux.master = with linux.master.pkgs; {
     inherit dapp;
-    inherit seth;
     inherit hevm;
     inherit hevmas;
+    inherit seth;
 
     hevm-test-report = hevmTestReport linux.master;
   };
 
   dapphub.darwin.stable = with darwin.pkgs; {
-    inherit dapp;
-    inherit seth;
-    inherit hevm;
-    inherit hevml;
-    inherit evmdis;
-    # inherit keeper;
-    inherit setzer;
-    inherit solc-versions;
-    inherit go-ethereum;
-    inherit go-ethereum-unlimited;
-    # inherit hevmas;
-    inherit ethsign;
-    inherit qrtx-term;
-    inherit ethjet;
-    inherit ds-chief;
-    inherit mkbip39;
-    inherit oasis-orders;
-    inherit token;
+    inherit celf;
     inherit dai;
     inherit dapp-which;
-    inherit celf;
+    inherit dapp;
+    inherit ds-chief;
+    inherit ethjet;
+    inherit ethsign;
+    inherit evmdis;
+    inherit go-ethereum-unlimited;
+    inherit go-ethereum;
+    inherit hevm;
+    inherit hevml;
+    inherit mkbip39;
     inherit myetherwallet;
+    inherit oasis-orders;
+    inherit qrtx-term;
+    inherit seth;
+    inherit setzer;
+    inherit solc-versions;
+    inherit token;
   };
 
   dapphub.darwin.master = with darwin.master.pkgs; {
     inherit dapp;
-    inherit seth;
     inherit hevm;
-    # inherit hevmas;
+    inherit seth;
   };
 }
