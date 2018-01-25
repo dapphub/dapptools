@@ -220,8 +220,6 @@ in rec {
 
   ethsign = versioned "ethsign" (x: (callPackage x {}).bin);
 
-  dappsys-legacy = (import ./dappsys.nix { inherit (self) pkgs; }).dappsys;
-
   setzer = versioned "setzer" (x: callPackage x {});
 
   keeper = callPackage ./keeper.nix {};
