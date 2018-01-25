@@ -84,8 +84,8 @@ in rec {
     self.pkgs.fetchFromGitHub {
       owner = "dapphub";
       repo = "dappsys-nix";
-      rev = "1c51729ea24f0041a03722c81ccef75bce2eb9cc";
-      sha256 = "1ll0r7k30hgr8pkmymdvm5lhpzpi9vshzxc2r5wrxra6kvjbhs7b";
+      rev = "e449a7767779579d2f5862efc613d8345ba3b2f9";
+      sha256 = "030ws18sck7wp4710zcz6hash7v95p2z6mjgzx1yqras4ggmsc40";
     }
   ) {};
 
