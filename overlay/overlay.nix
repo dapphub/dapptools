@@ -75,9 +75,19 @@ in rec {
     }
   );
 
-  dappsys = import ../dappsys {
-    inherit (self.pkgs) dappsys solidityPackage;
+  callSolidityPackage = self.lib.callPackageWith {
+    inherit solidityPackage;
+    inherit dappsys;
   };
+
+  dappsys = self.callPackage (
+    self.pkgs.fetchFromGitHub {
+      owner = "dapphub";
+      repo = "dappsys-nix";
+      rev = "1c51729ea24f0041a03722c81ccef75bce2eb9cc";
+      sha256 = "1ll0r7k30hgr8pkmymdvm5lhpzpi9vshzxc2r5wrxra6kvjbhs7b";
+    }
+  ) {};
 
   solidityPackage = import ./solidity-package.nix {
     inherit (self) pkgs;
@@ -485,6 +495,26 @@ in rec {
   };
 
   git-stitch-repo = ourPerlPackages.GitFastExport;
+
+  tomono = stdenv.mkDerivation rec {
+    name = "tomono-${version}";
+    version = "unstable-2018-01-03";
+    src = self.fetchFromGitHub {
+      owner = "unravelin";
+      repo = "tomono";
+      rev = "ec59cb019a181f461e769feb22d43e09cf907566";
+      sha256 = "1s2bl8iwwalslh46gp37zrg19jvbzb65sajrqkhwb3bkbbx4s9pd";
+    };
+    installPhase = ''
+      mkdir -p $out/bin
+      cp tomono.sh $out/bin/tomono
+    '';
+    postInstall = ''
+      wrapProgram $out/bin/tomono \
+        --suffix PATH : "${lib.makeBinPath (with self.pkgs; [bash coreutils git])}"
+    '';
+    nativeBuildInputs = [self.pkgs.makeWrapper];
+  };
 
   myetherwallet = stdenv.mkDerivation rec {
     name = "myetherwallet-${version}";
