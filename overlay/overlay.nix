@@ -42,6 +42,10 @@ let
       }).config.system.build.isoImage
     );
 
+  ourPerlPackages = import ./perl.nix {
+    inherit (self) buildPerlPackage perlPackages;
+  };
+
 in rec {
   haskellPackages = super.haskellPackages.extend (
     _: super-hs: let
@@ -479,4 +483,6 @@ in rec {
     name = "tla-plus-full";
     paths = [toolbox] ++ core.all ++ tlaps.all ++ tla-smt;
   };
+
+  git-stitch-repo = ourPerlPackages.GitFastExport;
 }
