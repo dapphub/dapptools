@@ -485,4 +485,19 @@ in rec {
   };
 
   git-stitch-repo = ourPerlPackages.GitFastExport;
+
+  myetherwallet = stdenv.mkDerivation rec {
+    name = "myetherwallet-${version}";
+    version = "3.11.3.1";
+    src = self.fetchFromGitHub {
+      owner = "kvhnuke";
+      repo = "etherwallet";
+      rev = "v${version}";
+      sha256 = "1985zhy8lwnyg5hc436gcma0z9azm1qzsl3rj2vqq080s5czm4d2";
+    };
+    installPhase = ''
+      mkdir -p $out/myetherwallet
+      cp -R dist/* $out/myetherwallet
+    '';
+  };
 }

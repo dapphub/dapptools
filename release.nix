@@ -46,6 +46,7 @@ in rec {
     inherit dapp-which;
     inherit celf;
     inherit tla-plus;
+    inherit myetherwallet;
 
     hevm-test-report = hevmTestReport linux;
   };
@@ -81,6 +82,7 @@ in rec {
     inherit dai;
     inherit dapp-which;
     inherit celf;
+    inherit myetherwallet;
   };
 
   dapphub.darwin.master = with darwin.master.pkgs; {
