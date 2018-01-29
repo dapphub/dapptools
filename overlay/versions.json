@@ -33,8 +33,8 @@
     "master": {
       "owner": "dapphub",
       "repo": "ethsign",
-      "rev": "1d05e5002ff03a08d29273ed31dd9731beb542ad",
-      "sha256": "1gd0bq5x49sjm83r2wivjf03dxvhdli6cvwb9b853wwcvy4inmmh"
+      "rev": "3fbcf8177e4ff62bd0f1c4a899a8a194826fc01d",
+      "sha256": "0n903mzdfa7wp1ycn3j51k2hfzc5b4gm2b4m78h96f3zlsrz7s0d"
     },
     "stable": {
       "owner": "dapphub",
