@@ -33,16 +33,16 @@
     "master": {
       "owner": "dapphub",
       "repo": "ethsign",
-      "rev": "3fbcf8177e4ff62bd0f1c4a899a8a194826fc01d",
-      "sha256": "0n903mzdfa7wp1ycn3j51k2hfzc5b4gm2b4m78h96f3zlsrz7s0d"
+      "rev": "00a0b53b7a7c87b2a4d40869057ef0075e11403a",
+      "sha256": "0x02zcrk2q0rcllxldx69cm450c5s3z16vsm94017g1m8rasb0xw"
     },
     "stable": {
       "owner": "dapphub",
       "repo": "ethsign",
-      "rev": "1d05e5002ff03a08d29273ed31dd9731beb542ad",
-      "sha256": "1gd0bq5x49sjm83r2wivjf03dxvhdli6cvwb9b853wwcvy4inmmh"
+      "rev": "00a0b53b7a7c87b2a4d40869057ef0075e11403a",
+      "sha256": "0x02zcrk2q0rcllxldx69cm450c5s3z16vsm94017g1m8rasb0xw"
     },
-    "version": "0.8.2"
+    "version": "0.9"
   },
   "hevm": {
     "master": {
@@ -153,16 +153,16 @@
     "master": {
       "owner": "makerdao",
       "repo": "setzer",
-      "rev": "63165dac057dcd28f137a62264c22212c07a35f5",
-      "sha256": "0mmszimzd3q02p3g7qgg83r4j3jhwmw7bhbi11jlnhl7vwjrn1xz"
+      "rev": "3afae0fc50d35f7ccfc36a51cbd6f1baad683b0e",
+      "sha256": "1bky5lfvpwhkc65xi67cx7nag4jssplyl2ymbc8x885zw771v1y7"
     },
     "stable": {
       "owner": "makerdao",
       "repo": "setzer",
-      "rev": "6d65ea89fab2aa069a0566724ce0e848b1d80ac2",
-      "sha256": "0743rk5nic1d8zdvk47afvlzz1gh4qpf26q5qf8g85y9fqg6lakr"
+      "rev": "3afae0fc50d35f7ccfc36a51cbd6f1baad683b0e",
+      "sha256": "1bky5lfvpwhkc65xi67cx7nag4jssplyl2ymbc8x885zw771v1y7"
     },
-    "version": "0.1.16"
+    "version": "0.1.17"
   },
   "symbex": {
     "master": {
