@@ -1,0 +1,18 @@
+NAME:
+   ethsign - sign Ethereum transactions using a JSON keyfile
+
+USAGE:
+   ethsign [global options] command [command options] [arguments...]
+
+VERSION:
+   0.8.2
+
+COMMANDS:
+     list-accounts, ls  list accounts in keystore and USB wallets
+     transaction, tx    make a signed transaction
+     message, msg       sign arbitrary data with header prefix
+     help, h            Shows a list of commands or help for one command
+
+GLOBAL OPTIONS:
+   --help, -h     show help
+   --version, -v  print the version
