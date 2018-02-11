@@ -23,7 +23,7 @@ import (
 	"golang.org/x/crypto/ssh/terminal"
 )
 
-// https://github.com/ethereum/go-ethereum/blob/master/internal/ethapi/api.go#L373
+// https://github.com/ethereum/go-ethereum/blob/55599ee95d4151a2502465e0afc7c47bd1acba77/internal/ethapi/api.go#L404
 // signHash is a helper function that calculates a hash for the given message that can be
 // safely used to calculate a signature from.
 //
@@ -466,6 +466,72 @@ func main() {
 				signature[64] += 27 // Transform V from 0/1 to 27/28 according to the yellow paper
 
 				fmt.Println(hexutil.Encode(signature))
+
+				return nil
+			},
+		},
+
+		cli.Command{
+			Name:    "verify",
+			Usage:   "verify signed data by given key",
+			Flags: []cli.Flag{
+				cli.StringFlag{
+					Name:   "from",
+					Usage:  "address to verify",
+				},
+				cli.StringFlag{
+					Name:  "data",
+					Usage: "hex data to verify",
+				},
+				cli.StringFlag{
+					Name:  "sig",
+					Usage: "signature",
+				},
+			},
+			Action: func(c *cli.Context) error {
+				requireds := []string{
+					"from", "data", "sig",
+				}
+
+				for _, required := range requireds {
+					if c.String(required) == "" {
+						return cli.NewExitError("ethsign: missing required parameter --"+required, 1)
+					}
+				}
+
+				from := common.HexToAddress(c.String("from"))
+
+				dataString := c.String("data")
+				if !strings.HasPrefix(dataString, "0x") {
+					dataString = "0x" + dataString
+				}
+				data := hexutil.MustDecode(dataString)
+
+				sigString := c.String("sig")
+				if !strings.HasPrefix(sigString, "0x") {
+					sigString = "0x" + sigString
+				}
+				sig := hexutil.MustDecode(sigString)
+
+				// https://github.com/ethereum/go-ethereum/blob/55599ee95d4151a2502465e0afc7c47bd1acba77/internal/ethapi/api.go#L442
+				if len(sig) != 65 {
+					return cli.NewExitError("ethsign: signature must be 65 bytes long", 1)
+				}
+				if sig[64] != 27 && sig[64] != 28 {
+					return cli.NewExitError("ethsign: invalid Ethereum signature (V is not 27 or 28)", 1)
+				}
+				sig[64] -= 27 // Transform yellow paper V from 27/28 to 0/1
+
+				rpk, err := crypto.Ecrecover(signHash(data), sig)
+				if err != nil {
+					return cli.NewExitError("ethsign: error recovering address", 1)
+				}
+				pubKey := crypto.ToECDSAPub(rpk)
+				recoveredAddr := crypto.PubkeyToAddress(*pubKey)
+
+				if from != recoveredAddr {
+					return cli.NewExitError("ethsign: address did not match. Wanted "+from.String()+" got "+recoveredAddr.String(), 1)
+				}
 
 				return nil
 			},
