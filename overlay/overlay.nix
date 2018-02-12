@@ -207,6 +207,29 @@ in rec {
     '';
   };
 
+  hevmlsj = self.pkgs.bashScript {
+    name = "hevmlsj";
+    version = "0";
+    deps = with self.pkgs; [
+      coreutils
+      (haskellPackages.ghcWithPackages (x: [x.symbex]))
+    ];
+    text = ''
+      { echo "import qualified Prelude"
+        echo "import qualified EVM.Symbex.Main as Symbex"
+        echo "import qualified EVM.Symbex as Symbex"
+        echo "import qualified Data.ByteString.Lazy.Char8 as B8"
+        echo "import qualified Data.Aeson as Aeson"
+        echo "import Prelude ((.), ($))"
+        cat
+        echo
+        echo "main :: Prelude.IO ()"
+        echo "main = B8.putStrLn . Aeson.encode $"
+        echo "  Symbex.step' (assemble contract) Symbex.emptyState"
+      } | runghc --ghc-arg=-XNoImplicitPrelude --ghc-arg=-XRecursiveDo
+    '';
+  };
+
   symbex =
     self.pkgs.haskell.lib.justStaticExecutables
       (versioned "symbex" (x: haskellPackages.callPackage x {}));
