@@ -33,8 +33,8 @@
     "master": {
       "owner": "dapphub",
       "repo": "ethsign",
-      "rev": "00a0b53b7a7c87b2a4d40869057ef0075e11403a",
-      "sha256": "0x02zcrk2q0rcllxldx69cm450c5s3z16vsm94017g1m8rasb0xw"
+      "rev": "fac187fdd0d13f0fddfd007c1bb9aacac1e3db39",
+      "sha256": "1g1kw7iz4g615kl7cyz30svwdjss5m1wxjfzpd9grkri7s7n8scl"
     },
     "stable": {
       "owner": "dapphub",
@@ -168,16 +168,16 @@
     "master": {
       "owner": "mbrock",
       "repo": "symbex",
-      "rev": "e3d09606d3601541bed9881cb63257bfdae7946e",
-      "sha256": "0cfab3njbabxg81hj6gmnxv505lpf4f3l6r7ywjwdjchcipdggzx"
+      "rev": "cd00e3c72b96f08516137a763df62ef78778b46a",
+      "sha256": "08pr92rxn455m79j3k782jddhjs6gj2jm3j9ljnwd17bxqk3lvli"
     },
     "stable": {
       "owner": "mbrock",
       "repo": "symbex",
-      "rev": "76f1c9648cf067bb96b12ad4850a597e0e43f8ce",
-      "sha256": "0q833p9dfryzbhiw42m4jy4xwqb758ac3n9vv7nqwqaih9rq5g7s"
+      "rev": "cd00e3c72b96f08516137a763df62ef78778b46a",
+      "sha256": "08pr92rxn455m79j3k782jddhjs6gj2jm3j9ljnwd17bxqk3lvli"
     },
-    "version": "0.5.1"
+    "version": "0.6.1"
   },
   "token": {
     "master": {
