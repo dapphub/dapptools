@@ -47,6 +47,7 @@ in rec {
     inherit solc-versions;
     inherit tla-plus;
     inherit token;
+    inherit symbex;
 
     hevm-test-report = hevmTestReport linux;
   };
