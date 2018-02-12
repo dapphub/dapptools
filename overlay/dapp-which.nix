@@ -21,7 +21,7 @@ in bashScript {
         echo "''${table[$1]}"
       else
         for k in "''${!table[@]}"; do
-          if [[ ''${table[$k],,} = ''${1,,} ]]; then
+          if [[ ''${table[$k],,} = "''${1,,}" ]]; then
             echo "$k"
             exit
           fi
