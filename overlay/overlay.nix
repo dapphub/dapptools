@@ -189,6 +189,10 @@ in rec {
     '';
   };
 
+  symbex =
+    self.pkgs.haskell.lib.justStaticExecutables
+      (versioned "symbex" (x: haskellPackages.callPackage x {}));
+
   hevm = self.pkgs.haskell.lib.justStaticExecutables hevm-lib;
 
   hevm-lib = (
