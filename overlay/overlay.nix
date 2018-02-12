@@ -189,6 +189,24 @@ in rec {
     '';
   };
 
+  hevmls = self.pkgs.bashScript {
+    name = "hevmls";
+    version = "0";
+    deps = with self.pkgs; [
+      coreutils
+      (haskellPackages.ghcWithPackages (x: [x.symbex]))
+    ];
+    text = ''
+      { echo "import qualified Prelude"
+        echo "import qualified EVM.Symbex.Main as Symbex"
+        cat
+        echo
+        echo "main :: Prelude.IO ()"
+        echo "main = Symbex.showPaths (Symbex.run (assemble contract))"
+      } | runghc --ghc-arg=-XNoImplicitPrelude --ghc-arg=-XRecursiveDo
+    '';
+  };
+
   symbex =
     self.pkgs.haskell.lib.justStaticExecutables
       (versioned "symbex" (x: haskellPackages.callPackage x {}));
