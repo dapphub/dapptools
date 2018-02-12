@@ -131,18 +131,18 @@ if [[ $SETH_CHAIN ]]; then
   case "$SETH_CHAIN" in
     ethlive|mainnet)
       eth_rpc_url=https://mainnet.infura.io/$INFURA_KEY
-      ETHERSCAN_API_URL=https://api.etherscan.io/api
+      export ETHERSCAN_API_URL=https://api.etherscan.io/api
       ;;
     ropsten)
       eth_rpc_url=https://$SETH_CHAIN.infura.io/$INFURA_KEY
-      ETHERSCAN_API_URL=https://$SETH_CHAIN.etherscan.io/api
+      export ETHERSCAN_API_URL=https://$SETH_CHAIN.etherscan.io/api
       keystores=(
         ~/{.ethereum,Library/Ethereum}/testnet/keystore/
       )
       ;;
     kovan|rinkeby)
       eth_rpc_url=https://$SETH_CHAIN.infura.io/$INFURA_KEY
-      ETHERSCAN_API_URL=https://$SETH_CHAIN.etherscan.io/api
+      export ETHERSCAN_API_URL=https://$SETH_CHAIN.etherscan.io/api
       keystores=(
         ~/{.ethereum,Library/Ethereum}/$SETH_CHAIN/keystore/
         ~/{.local/share,Library/Application\ Support}/io.parity.ethereum/keys/$SETH_CHAIN/
