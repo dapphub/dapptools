@@ -22,6 +22,7 @@ jshon+=(-s "$TO"   -i to)
 jshon+=(-s "$DATA" -i data)
 jshon+=($(seth --send-params))
 jshon+=(-i append)
+[[ $ETH_BLOCK = [0-9]* ]] && ETH_BLOCK=$(seth --to-hex "$ETH_BLOCK")
 jshon+=(-s "${ETH_BLOCK-latest}" -i append)
 result=$(seth rpc eth_call -- "${jshon[@]}")
 seth --abi-decode "$2" "$result"
