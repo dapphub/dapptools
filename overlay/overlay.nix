@@ -177,7 +177,7 @@ in rec {
     version = "0";
     deps = with self.pkgs; [
       coreutils
-      (haskellPackages.ghcWithPackages (x: with x; [symbex]))
+      (haskellPackages.ghcWithPackages (x: [x.symbex]))
     ];
     text = ''
       { echo "import qualified Prelude"
