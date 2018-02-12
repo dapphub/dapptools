@@ -82,6 +82,7 @@ in rec {
     inherit setzer;
     inherit solc-versions;
     inherit token;
+    inherit symbex;
   };
 
   dapphub.darwin.master = with darwin.master.pkgs; {
