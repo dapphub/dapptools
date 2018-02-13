@@ -36,6 +36,25 @@ func signHash(data []byte) []byte {
 	return crypto.Keccak256([]byte(msg))
 }
 
+// https://github.com/ethereum/go-ethereum/blob/55599ee95d4151a2502465e0afc7c47bd1acba77/internal/ethapi/api.go#L442
+func recover(data []byte, sig hexutil.Bytes) (common.Address, error) {
+	if len(sig) != 65 {
+		return common.Address{}, fmt.Errorf("signature must be 65 bytes long")
+	}
+	if sig[64] != 27 && sig[64] != 28 {
+		return common.Address{}, fmt.Errorf("invalid Ethereum signature (V is not 27 or 28)")
+	}
+	sig[64] -= 27 // Transform yellow paper V from 27/28 to 0/1
+
+	rpk, err := crypto.Ecrecover(signHash(data), sig)
+	if err != nil {
+		return common.Address{}, err
+	}
+	pubKey := crypto.ToECDSAPub(rpk)
+	recoveredAddr := crypto.PubkeyToAddress(*pubKey)
+	return recoveredAddr, nil
+}
+
 func main() {
 	var defaultKeyStores cli.StringSlice
 	if runtime.GOOS == "darwin" {
@@ -513,25 +532,61 @@ func main() {
 				}
 				sig := hexutil.MustDecode(sigString)
 
-				// https://github.com/ethereum/go-ethereum/blob/55599ee95d4151a2502465e0afc7c47bd1acba77/internal/ethapi/api.go#L442
-				if len(sig) != 65 {
-					return cli.NewExitError("ethsign: signature must be 65 bytes long", 1)
-				}
-				if sig[64] != 27 && sig[64] != 28 {
-					return cli.NewExitError("ethsign: invalid Ethereum signature (V is not 27 or 28)", 1)
-				}
-				sig[64] -= 27 // Transform yellow paper V from 27/28 to 0/1
-
-				rpk, err := crypto.Ecrecover(signHash(data), sig)
+				recoveredAddr, err := recover(data, sig)
 				if err != nil {
-					return cli.NewExitError("ethsign: error recovering address", 1)
+					return cli.NewExitError(err, 1)
 				}
-				pubKey := crypto.ToECDSAPub(rpk)
-				recoveredAddr := crypto.PubkeyToAddress(*pubKey)
 
 				if from != recoveredAddr {
 					return cli.NewExitError("ethsign: address did not match. Wanted "+from.String()+" got "+recoveredAddr.String(), 1)
 				}
+
+				return nil
+			},
+		},
+
+		cli.Command{
+			Name:    "recover",
+			Usage:   "recover ethereum address from signature",
+			Flags: []cli.Flag{
+				cli.StringFlag{
+					Name:  "data",
+					Usage: "hex data to verify",
+				},
+				cli.StringFlag{
+					Name:  "sig",
+					Usage: "signature",
+				},
+			},
+			Action: func(c *cli.Context) error {
+				requireds := []string{
+					"data", "sig",
+				}
+
+				for _, required := range requireds {
+					if c.String(required) == "" {
+						return cli.NewExitError("ethsign: missing required parameter --"+required, 1)
+					}
+				}
+
+				dataString := c.String("data")
+				if !strings.HasPrefix(dataString, "0x") {
+					dataString = "0x" + dataString
+				}
+				data := hexutil.MustDecode(dataString)
+
+				sigString := c.String("sig")
+				if !strings.HasPrefix(sigString, "0x") {
+					sigString = "0x" + sigString
+				}
+				sig := hexutil.MustDecode(sigString)
+
+				recoveredAddr, err := recover(data, sig)
+				if err != nil {
+					return cli.NewExitError(err, 1)
+				}
+
+				fmt.Println(recoveredAddr.String())
 
 				return nil
 			},
