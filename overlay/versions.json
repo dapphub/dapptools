@@ -168,16 +168,16 @@
     "master": {
       "owner": "mbrock",
       "repo": "symbex",
-      "rev": "cd00e3c72b96f08516137a763df62ef78778b46a",
-      "sha256": "08pr92rxn455m79j3k782jddhjs6gj2jm3j9ljnwd17bxqk3lvli"
+      "rev": "8b72df303200743cd0b10cbcc0ce78520ae0a805",
+      "sha256": "0kpxnxmkczb28bbdfwmlfq6x5r1wwgrg02fgypv59l18kqlvp5hb"
     },
     "stable": {
       "owner": "mbrock",
       "repo": "symbex",
-      "rev": "cd00e3c72b96f08516137a763df62ef78778b46a",
-      "sha256": "08pr92rxn455m79j3k782jddhjs6gj2jm3j9ljnwd17bxqk3lvli"
+      "rev": "8b72df303200743cd0b10cbcc0ce78520ae0a805",
+      "sha256": "0kpxnxmkczb28bbdfwmlfq6x5r1wwgrg02fgypv59l18kqlvp5hb"
     },
-    "version": "0.6.1"
+    "version": "0.6.2"
   },
   "token": {
     "master": {
