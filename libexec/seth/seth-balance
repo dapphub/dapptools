@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 ### seth-balance -- show the balance of any account on the blockchain
 ### Usage: seth balance [-B <block>] <account>
-### Print the balance of <account> in ETH.
+### Print the balance of <account> in wei.
 ###
 ### With `-B <block>', print the balance as of <block>.
 set -e
