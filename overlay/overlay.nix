@@ -476,7 +476,7 @@ in rec {
                   (current-buffer))))
         (require 'agda2-mode)
         (setq auto-mode-alist '(("\\.agda" . agda2-mode)))
-        (setq agda2-program-args (quote (concat "--include-path=" (expand-file-name "~/src/agda-stdlib/src"))))
+        (setq agda2-program-args (list (concat "--include-path=" (expand-file-name "~/src/agda-stdlib/src"))))
       '';
     };
   in bashScript {
