@@ -465,7 +465,7 @@ in rec {
       destination = "/dapphub.el";
       text = ''
         (package-initialize)
-        (load-theme 'solarized-dark t)
+        (load-theme 'zenburn t)
         (set-face-attribute 'default (selected-frame) :height 180)
         (menu-bar-mode -1)
         (tool-bar-mode -1)
@@ -474,6 +474,9 @@ in rec {
                 (with-current-buffer (get-buffer-create "*DappHub*")
                   (insert ";; Hello, and welcome to DappHub!")
                   (current-buffer))))
+        (require 'agda2-mode)
+        (setq auto-mode-alist '(("\\.agda" . agda2-mode)))
+        (setq agda2-program-args (quote (concat "--include-path=" (expand-file-name "~/src/agda-stdlib/src"))))
       '';
     };
   in bashScript {
@@ -482,10 +485,11 @@ in rec {
     deps = with self.pkgs; [
       coreutils
       (emacsWithPackages (e: with e; [
-        solarized-theme
+        zenburn-theme agda2-mode
       ]))
       ethsign
       seth
+      haskellPackages.Agda
     ];
     text = ''
       emacs -q --no-splash --load=${dapphub-elisp}/dapphub.el
