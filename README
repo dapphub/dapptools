@@ -4,9 +4,6 @@ NAME:
 USAGE:
    ethsign [global options] command [command options] [arguments...]
 
-VERSION:
-   0.8.2
-
 COMMANDS:
      list-accounts, ls  list accounts in keystore and USB wallets
      transaction, tx    make a signed transaction
