@@ -201,7 +201,7 @@ func main() {
 				from := common.HexToAddress(c.String("from"))
 				nonce := math.MustParseUint64(c.String("nonce"))
 				gasPrice := math.MustParseBig256(c.String("gas-price"))
-				gasLimit := math.MustParseBig256(c.String("gas-limit"))
+				gasLimit := math.MustParseUint64(c.String("gas-limit"))
 				value := math.MustParseBig256(c.String("value"))
 				chainID := math.MustParseBig256(c.String("chain-id"))
 				

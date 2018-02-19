@@ -14,8 +14,8 @@ buildGoPackage rec {
       src = fetchFromGitHub {
         owner = "ethereum";
         repo = "go-ethereum";
-        rev = "v1.7.3";
-        sha256 = "1w6rbq2qpjyf2v9mr18yiv2af1h2sgyvgrdk4bd8ixgl3qcd5b11";
+        rev = "v1.8.1";
+        sha256 = "0k7ly9cw68ranksa1fdn7v2lncmlqgabw3qiiyqya2xz3s4aazlf";
       };
     }
     {
