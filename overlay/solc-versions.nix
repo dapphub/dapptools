@@ -53,4 +53,5 @@ in {
   solc_0_4_17 = mk2 "0.4.17" "bdeb9e52a2211510644fb53df93fb98258b40a65" "1x6q2rlq6gxggidgsy6li7m4phwr1hcfi65pq9yimz64ddqfiira";
   solc_0_4_18 = mk2 "0.4.18" "9cf6e910bd2b90d0c9415d9c257f85fe0c518de8" "0ij7qbn3ci6v4jf4gqcdphwy8lnc1l4ycw9pvq6c80kd1fayf2s6";
   solc_0_4_19 = mk2 "0.4.19" "c4cbbb054b5ed3b8ceaa21ee5b47b0704762ff40" "1h2ziwdswghj4aa3vd3k3y2ckfiwjk6x38w2kp4m324k2ydxd15c";
+  solc_0_4_20 = mk2 "0.4.20" "3155dd8058672ce8f04bc2c0f2536cb549067d0a" "0jgqi6rnyr8d3plbag1p0yp1s1fzvjjsk4yrv06v46bsvyx4lgcn";
 }
