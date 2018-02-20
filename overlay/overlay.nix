@@ -458,15 +458,63 @@ in rec {
     nativeBuildInputs = attrs.nativeBuildInputs ++ [self.pkgs.makeWrapper];
   });
 
+  sicc = let
+    version = "1";
+    AgdaStdlib = self.AgdaStdlib.overrideDerivation (_: {
+      src = self.fetchFromGitHub {
+        owner = "agda";
+        repo = "agda-stdlib";
+        rev = "301343525ab919a8c95d89fe15972010c272c2a8";
+        sha256 = "0w18czndsqyasfvgwlsi63f1cnc72hdgj46d7ndybp3a0c4xp2na";
+      };
+    });
+    sic = stdenv.mkDerivation {
+      name = "sic-${version}";
+      src = ./SIC.agda;
+      builder = ./sic.sh;
+    };
+    sic-unmangle = self.pkgs.writeTextFile {
+      name = "sic-unmangle-${version}";
+      executable = true;
+      destination = "/bin/sic-unmangle";
+      text = ''
+#!${self.pkgs.nodejs}/bin/node
+pad = (n, x) => new Array(n - x.length + 1).join("0") + x
+xpad = (n, x) => pad(n * 2, Number(x).toString(16))
+meme = x => x.replace(/BSig \\"(.*?)\\"/gm, (_, x) =>
+   x.split("").map(y => `B1 ''${y.charCodeAt(0).toString()}`).join(" "))
+scan = x => x.replace(/[^B]*B[124]\D+(\d+)[^B]*/gm, (_, n, x) => xpad(n, x))
+cat = x => require("fs").readFileSync(x, { encoding: "utf-8" })
+process.stdout.write(cat("/dev/stdin"))
+      '';
+    };
+  in bashScript {
+    inherit version;
+    name = "sicc";
+    deps = with self.pkgs; [coreutils haskellPackages.Agda gnugrep sic-unmangle];
+    text = ''
+      tmp=$(mktemp -d)
+      cd "$tmp"
+      cp ${sic}/share/agda/SIC.agda "$tmp"
+      { echo IOTCM "\"$tmp/SIC.agda\"" NonInteractive Indirect \
+          \( Cmd_load "\"$tmp/SIC.agda\"" \
+          [\"--include-path=${AgdaStdlib}/share/agda\", \
+          "\"--compile-dir=$tmp\""] \)
+        echo IOTCM "\"$tmp/SIC.agda\"" None Indirect \
+          \( Cmd_compute_toplevel DefaultCompute \"main\" \)
+      } | agda --interaction | grep 'Normal Form' | tail -c +36 | head -c -10 | sic-unmangle
+    '';
+  };
+
   dapphub-emacs-experiment = let
     version = "1";
     dapphub-elisp = self.pkgs.writeTextFile {
-      name = "dapphub-el-${version}";
+      name = "dapphub-emacs-${version}";
       destination = "/dapphub.el";
       text = ''
         (package-initialize)
         (load-theme 'zenburn t)
-        (set-face-attribute 'default (selected-frame) :height 180)
+        (set-face-attribute 'default (selected-frame) :height 180 :family "Courier")
         (menu-bar-mode -1)
         (tool-bar-mode -1)
         (setq initial-buffer-choice
