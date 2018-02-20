@@ -513,7 +513,6 @@ process.stdout.write(cat("/dev/stdin"))
       destination = "/dapphub.el";
       text = ''
         (package-initialize)
-        (load-theme 'zenburn t)
         (set-face-attribute 'default (selected-frame) :height 180 :family "Courier")
         (menu-bar-mode -1)
         (tool-bar-mode -1)
