@@ -185,6 +185,7 @@ data FrameState = FrameState
   , _callvalue    :: Word
   , _caller       :: Addr
   , _gas          :: Word
+  , _returndata   :: Blob
   }
 
 -- | The state that spans a whole transaction
@@ -241,6 +242,7 @@ blankState = FrameState
   , _callvalue    = 0
   , _caller       = 0
   , _gas          = 0
+  , _returndata   = mempty
   }
 
 makeLenses ''FrameState
@@ -298,6 +300,7 @@ makeVm o = VM
     , _callvalue = w256 $ vmoptValue o
     , _caller = vmoptCaller o
     , _gas = w256 $ vmoptGas o
+    , _returndata = mempty
     }
   , _env = Env
     { _sha3Crack = mempty
@@ -619,6 +622,22 @@ exec1 = do
                       codeSize codeOffset memOffset
             _ -> underrun
 
+        -- op: RETURNDATASIZE
+        0x3d ->
+          limitStack 1 . burn g_base $
+            next >> push (blobSize (the state returndata))
+
+        -- op: RETURNDATACOPY
+        0x3e ->
+          case stk of
+            ((num -> xTo) : (num -> xFrom) : (num -> xSize) :xs) -> do
+              burn (g_verylow + g_copy * ceilDiv xSize 32) $ do
+                accessMemoryRange fees xTo xSize $ do
+                  next
+                  assign (state . stack) xs
+                  copyBytesToMemory (the state returndata) xSize xFrom xTo
+            _ -> underrun
+
         -- op: BLOCKHASH
         0x40 -> do
           -- We adopt the fake block hash scheme of the VMTests,
@@ -905,6 +924,7 @@ exec1 = do
                         modifying (state . gas) (+ the state gas)
                         modifying burned (subtract (the state gas))
 
+                        assign (state . returndata) output
                         copyBytesToMemory
                           output
                           (num ySize)
