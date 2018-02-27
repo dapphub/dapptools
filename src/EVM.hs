@@ -825,8 +825,9 @@ exec1 = do
 
                           zoom (env . contracts) $ do
                             assign (at newAddr) (Just newContract)
-                            modifying (ix self . nonce) succ
+                            assign (ix newAddr . balance) xValue
                             modifying (ix self . balance) (flip (-) xValue)
+                            modifying (ix self . nonce) succ
 
                           pushTrace (FrameTrace newContext)
                           next
