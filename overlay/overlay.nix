@@ -624,4 +624,27 @@ process.stdout.write(cat("/dev/stdin"))
       cp -R dist/* $out/myetherwallet
     '';
   };
+
+  ocaml-getopt = stdenv.mkDerivation rec {
+    name = "ocaml-getopt-${version}";
+    version = "unstable-2012-06-15";
+    src = self.fetchurl {
+      url = "https://forge.ocamlcore.org/frs/download.php/896/ocaml-getopt-20120615.tar.gz";
+      sha256 = "1rz2mi3gddwpd249bvz6h897swiajk4d6cczrsscibwpkmdvrfwa";
+    };
+    buildInputs = with self.ocamlPackages; [ocaml ocamlbuild findlib];
+    createFindlibDestdir = true;
+  };
+
+  dry-analyzer = stdenv.mkDerivation rec {
+    name = "dry-analyzer-${version}";
+    version = "unstable-2017-07-10";
+    src = ~/src/dry-analyzer;
+    buildInputs = with self.ocamlPackages; [
+      ocaml cohttp cohttp-lwt cohttp-lwt-unix batteries ocamlnet ocamlbuild findlib ocaml-getopt
+    ] ++ [self.pkgs.coq];
+    patchPhase = ''
+      patchShebangs ./compile.sh
+    '';
+  };
 }
