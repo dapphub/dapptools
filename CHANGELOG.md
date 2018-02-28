@@ -1,5 +1,10 @@
 # hevm changelog
 
+## [0.13] - 2018-02-28
+ - Require specific block number for RPC debugging
+ - Implement RETURNDATACOPY and RETURNDATASIZE
+ - Fix bug where created contracts didn't get their balance
+
 ## [0.12.3] - 2017-12-19
  - More useful RPC debugging because we strip the entire BZZR metadata
 
