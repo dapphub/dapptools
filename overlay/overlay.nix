@@ -46,7 +46,7 @@ let
     inherit (self) buildPerlPackage perlPackages;
   };
 
-in rec {
+in {
   haskellPackages = super.haskellPackages.extend (
     _: super-hs: let
       dontCheck = x: super.haskell.lib.dontCheck (super-hs.callPackage x {});
@@ -64,11 +64,11 @@ in rec {
       # We don't want Megaparsec 5!
       megaparsec = super-hs.megaparsec_6_2_0;
 
-      hevm = hevm-lib;
+      hevm = self.hevm-lib;
     }
   );
 
-  profilingHaskellPackages = haskellPackages.extend (
+  profilingHaskellPackages = self.haskellPackages.extend (
     self: super-hs: {
       mkDerivation = args: super-hs.mkDerivation
         (args // { enableLibraryProfiling = true; });
@@ -76,8 +76,7 @@ in rec {
   );
 
   callSolidityPackage = self.lib.callPackageWith {
-    inherit solidityPackage;
-    inherit dappsys;
+    inherit (self) solidityPackage dappsys;
   };
 
   dappsys = self.callPackage (
@@ -134,17 +133,17 @@ in rec {
       (_: value: pastPackage value {})
       (import ./solc-versions.nix);
 
-  python3 = python36;
+  python3 = self.python36;
   python36 = super.python36.override {
     packageOverrides = (import ./python.nix { pkgs = super.pkgs; });
   };
 
   symbex-mueval = let
-    env = haskellPackages.ghcWithPackages (self: with self; [
+    env = self.haskellPackages.ghcWithPackages (x: with x; [
       symbex QuickCheck show simple-reflect
     ]);
-  in (haskellPackages.mueval.override {
-    hint = haskellPackages.hint.override {
+  in (self.haskellPackages.mueval.override {
+    hint = self.haskellPackages.hint.override {
       ghc = env;
     };
   }).overrideAttrs (attrs: {
@@ -232,13 +231,13 @@ in rec {
 
   symbex =
     self.pkgs.haskell.lib.justStaticExecutables
-      (versioned "symbex" (x: haskellPackages.callPackage x {}));
+      (versioned "symbex" (x: self.haskellPackages.callPackage x {}));
 
-  hevm = self.pkgs.haskell.lib.justStaticExecutables hevm-lib;
+  hevm = self.pkgs.haskell.lib.justStaticExecutables self.hevm-lib;
 
   hevm-lib = (
     versioned "hevm"
-      (x: haskellPackages.callPackage x {})
+      (x: self.haskellPackages.callPackage x {})
   ).overrideAttrs (attrs: {
     postInstall = ''
       wrapProgram $out/bin/hevm \
@@ -253,12 +252,12 @@ in rec {
   jays = (
     versioned "jays" (x:
       self.pkgs.haskell.lib.justStaticExecutables
-        (haskellPackages.callPackage x {})
+        (self.haskellPackages.callPackage x {})
     )
   ).overrideAttrs (_: { postInstall = "cp $out/bin/{jays,jshon}"; });
 
   # Override buggy jshon program with Haskell-based replacement.
-  jshon = jays;
+  jshon = self.jays;
 
   seth = versioned "seth" (x: callPackage x {});
   dapp = versioned "dapp" (x: callPackage x {});
@@ -290,7 +289,7 @@ in rec {
 
   # We use this to run private testnets without
   # the pesky transaction size limit.
-  go-ethereum-unlimited = go-ethereum.overrideDerivation (this: rec {
+  go-ethereum-unlimited = self.go-ethereum.overrideDerivation (this: rec {
     name = "go-ethereum-unlimited-${this.version}";
     preConfigure = ''
       # Huge transaction calldata
@@ -327,7 +326,7 @@ in rec {
     };
   };
 
-  qrtx = bashScript {
+  qrtx = self.bashScript {
     name = "qrtx";
     version = "0";
     deps = with self.pkgs; [qrencode feh vim gnused coreutils];
@@ -337,7 +336,7 @@ in rec {
     '';
   };
 
-  qrtx-term = bashScript {
+  qrtx-term = self.bashScript {
     name = "qrtx-term";
     version = "0";
     deps = with self.pkgs; [qrencode vim gnused coreutils];
@@ -353,7 +352,7 @@ in rec {
 
   ethjet = versioned "libethjet" (x: callPackage x {});
 
-  dialog-to-file = bashScript {
+  dialog-to-file = self.bashScript {
     name = "dialog-to-file";
     version = "0";
     deps = with self.pkgs; [dialog ncurses];
@@ -366,7 +365,7 @@ in rec {
     '';
   };
 
-  eth-pick-account = bashScript {
+  eth-pick-account = self.bashScript {
     name = "eth-pick-account";
     version = "0";
     deps = with self.pkgs; [ethsign dialog-to-file];
@@ -380,7 +379,7 @@ in rec {
   };
 
   ds-chief = {
-    vote = bashScript {
+    vote = self.bashScript {
       name = "ds-chief-vote";
       version = "0";
       deps = with self.pkgs; [
@@ -449,11 +448,11 @@ in rec {
   oasis-orders = (
     versioned "oasis-orders"
       (x: self.pkgs.haskell.lib.justStaticExecutables
-        (haskellPackages.callPackage x {}))
+        (self.haskellPackages.callPackage x {}))
   ).overrideAttrs (attrs: {
     postInstall = ''
       wrapProgram $out/bin/oasis-orders \
-        --set OASIS_DAPP_PATH ${dapps.maker-otc}/dapp/maker-otc
+        --set OASIS_DAPP_PATH ${self.dapps.maker-otc}/dapp/maker-otc
     '';
     nativeBuildInputs = attrs.nativeBuildInputs ++ [self.pkgs.makeWrapper];
   });
@@ -478,7 +477,7 @@ in rec {
         (setq agda2-program-args (list (concat "--include-path=" (expand-file-name "~/src/agda-stdlib/src"))))
       '';
     };
-  in bashScript {
+  in self.bashScript {
     inherit version;
     name = "dapphub-emacs-experiment";
     deps = with self.pkgs; [
