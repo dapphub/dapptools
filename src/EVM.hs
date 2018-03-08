@@ -69,6 +69,7 @@ data Error
   | IllegalOverflow
   | Query Query
   | PrecompiledContractError Int
+  | StateChangeWhileStatic
 
 deriving instance Show Error
 
@@ -186,6 +187,7 @@ data FrameState = FrameState
   , _caller       :: Addr
   , _gas          :: Word
   , _returndata   :: Blob
+  , _static       :: Bool
   }
 
 -- | The state that spans a whole transaction
@@ -243,6 +245,7 @@ blankState = FrameState
   , _caller       = 0
   , _gas          = 0
   , _returndata   = mempty
+  , _static       = False
   }
 
 makeLenses ''FrameState
@@ -301,6 +304,7 @@ makeVm o = VM
     , _caller = vmoptCaller o
     , _gas = w256 $ vmoptGas o
     , _returndata = mempty
+    , _static = False
     }
   , _env = Env
     { _sha3Crack = mempty
@@ -420,6 +424,7 @@ exec1 = do
 
         -- op: LOG
         x | x >= 0xa0 && x <= 0xa4 ->
+          notStatic $
           let n = (num x - 0xa0) in
           case stk of
             (xOffset:xSize:xs) ->
@@ -724,7 +729,8 @@ exec1 = do
             _ -> underrun
 
         -- op: SSTORE
-        0x55 -> do
+        0x55 ->
+          notStatic $
           case stk of
             (x:new:xs) -> do
               accessStorage self x $ \old -> do
@@ -796,7 +802,8 @@ exec1 = do
               else x .&. (bit n - 1)
 
         -- op: CREATE
-        0xf0 -> do
+        0xf0 ->
+          notStatic $
           case stk of
             (xValue:xOffset:xSize:xs) ->
               burn g_create $ do
@@ -868,6 +875,7 @@ exec1 = do
                     recipient    = view (env . contracts . at xTo) vm
                     (cost, gas') = costOfCall fees recipient xValue availableGas xGas
                   in burn (cost - gas') $
+                    (if xValue > 0 then notStatic else id) $
                     if xValue > view balance this
                     then do
                       assign (state . stack) (0 : xs)
@@ -952,8 +960,36 @@ exec1 = do
                     (return ())
             _ -> underrun
 
+        -- op: STATICCALL
+        0xfa ->
+          case stk of
+            (xGas : (num -> xTo) : xInOffset : xInSize : xOutOffset : xOutSize : xs) ->
+              case xTo of
+                n | n > 0 && n <= 8 -> precompiledContract
+                _ ->
+                  let
+                    availableGas = the state gas
+                    recipient    = view (env . contracts . at xTo) vm
+                    (cost, gas') = costOfCall fees recipient 0 availableGas xGas
+                  in burn (cost - gas') $
+                    case view execMode vm of
+                      ExecuteAsVMTest -> do
+                        assign (state . stack) (1 : xs)
+                        next
+                      ExecuteNormally -> do
+                        delegateCall fees gas' xTo xInOffset xInSize xOutOffset xOutSize xs $ do
+                          zoom state $ do
+                            assign callvalue 0
+                            assign caller (the state contract)
+                            assign contract xTo
+                            assign memorySize 0
+                            assign static True
+            _ ->
+              underrun
+
         -- op: SELFDESTRUCT
         0xff ->
+          notStatic $
           case stk of
             [] -> underrun
             (x:_) -> do
@@ -1101,6 +1137,13 @@ limitStack n continue = do
   stk <- use (state . stack)
   if length stk + n > 1024
     then vmError StackLimitExceeded
+    else continue
+
+notStatic :: EVM () -> EVM ()
+notStatic continue = do
+  bad <- use (state . static)
+  if bad
+    then vmError StateChangeWhileStatic
     else continue
 
 burn :: Word -> EVM () -> EVM ()
