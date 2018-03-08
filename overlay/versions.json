@@ -48,16 +48,16 @@
     "master": {
       "owner": "dapphub",
       "repo": "hevm",
-      "rev": "2d1547588e15085f1e7305b2f7086d0a30ed0c9f",
-      "sha256": "12nf7pss7wlpvfhacqr5p4dkbd9kfx2km9yh0liw9kxzm940vaqx"
+      "rev": "df392e6951ce9512d005be5636b7428943919e05",
+      "sha256": "01wda7i8laz079wygsknh5qija1ks744ia446d03pzivnhmk5abz"
     },
     "stable": {
       "owner": "dapphub",
       "repo": "hevm",
-      "rev": "2d1547588e15085f1e7305b2f7086d0a30ed0c9f",
-      "sha256": "12nf7pss7wlpvfhacqr5p4dkbd9kfx2km9yh0liw9kxzm940vaqx"
+      "rev": "2d790da86eaae4dc4a5fafcb42da830e818eb88d",
+      "sha256": "1q7pxhyi3d01sfm0c3z341i3frxw2m6ynwhdl7cqz5qfpxfbmmrv"
     },
-    "version": "0.13"
+    "version": "0.14"
   },
   "jays": {
     "master": {
