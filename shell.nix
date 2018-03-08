@@ -1,6 +1,6 @@
-{ nixpkgs ? import <nixpkgs> {} }:
+{ dapphub ? import <dapphub> {} }:
 let
-  inherit (nixpkgs) pkgs;
+  inherit (dapphub) pkgs;
 
   haskellPackages = pkgs.haskellPackages.extend (
     self: super: {
