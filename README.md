@@ -22,7 +22,10 @@ Please make sure you have [`solc` installed in your CLI](https://solidity.readth
    dapp install <pkg>         install the <pkg> package (e.g. `ds-auth')
    dapp upgrade <pkg>         upgrade the <pkg> package
    dapp uninstall <pkg>       uninstall the <pkg> package
+   
+   dapp testnet               spin up an ethereum testnet
 ```
+
 
 ## Docker
 
