@@ -297,7 +297,7 @@ For example, to approve access to some of your [Dai] for the
 
     $ DAI=0x89d24A6b4CcB1B6fAA2625fE562bDD9a23260359
     $ OASIS=0x14FBCA95be7e99C15Cc2996c6C9d841e54B79425
-    $ amount=$(seth --from-wei 0.5 ether)
+    $ amount=$(seth --to-wei 0.5 ether)
     $ seth send $DAI "approve(address,uint256)" $OASIS $amount
 
 (Again, see [`token`] for a more convenient way to interact with
