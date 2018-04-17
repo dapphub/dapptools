@@ -1,5 +1,11 @@
 # hevm changelog
 
+## [0.14.1] - 2018-04-17
+ - Improve PC display in TTY
+
+## [0.14] - 2018-03-08
+ - Implement STATICCALL
+
 ## [0.13] - 2018-02-28
  - Require specific block number for RPC debugging
  - Implement RETURNDATACOPY and RETURNDATASIZE
