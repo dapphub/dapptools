@@ -205,7 +205,7 @@ data Contract = Contract
   , _codehash :: W256
   , _codesize :: Int -- (redundant?)
   , _opIxMap  :: Vector Int
-  , _codeOps  :: RegularVector.Vector Op
+  , _codeOps  :: RegularVector.Vector (Int, Op)
   , _external :: Bool
   }
 
@@ -1610,7 +1610,7 @@ readOp x _ = case x of
   0xff -> OpSelfdestruct
   _    -> (OpUnknown x)
 
-mkCodeOps :: ByteString -> RegularVector.Vector Op
+mkCodeOps :: ByteString -> RegularVector.Vector (Int, Op)
 mkCodeOps bytes = RegularVector.fromList . toList $ go 0 bytes
   where
     go !i !xs =
@@ -1619,7 +1619,7 @@ mkCodeOps bytes = RegularVector.fromList . toList $ go 0 bytes
           mempty
         Just (x, xs') ->
           let j = opSize x
-          in readOp x xs' Seq.<| go (i + j) (BS.drop j xs)
+          in (i, readOp x xs') Seq.<| go (i + j) (BS.drop j xs)
 
 -- * Gas cost calculation helpers
 

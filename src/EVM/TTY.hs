@@ -44,6 +44,7 @@ import Data.Monoid ((<>))
 import Data.Text (Text, unpack, pack)
 import Data.Text.Encoding (decodeUtf8)
 import Data.List (sort)
+import Numeric (showHex)
 
 import qualified Data.ByteString as BS
 import qualified Data.Map as Map
@@ -669,7 +670,7 @@ updateUiVmState ui vm =
           (list StackPane (Vec.fromList $ zip [1..] (view (state . stack) vm)) 2)
       & set uiVmBytecodeList
           (move $ list BytecodePane
-             (Vec.imap (,) (view codeOps (fromJust (currentContract vm))))
+             (view codeOps (fromJust (currentContract vm)))
              1)
   in
     case view uiVmDapp ui of
@@ -808,8 +809,14 @@ ifTallEnough need w1 w2 =
       then render w1
       else render w2
 
-opWidget :: Show a => (a, Op) -> Widget n
-opWidget (i, o) = str (show i ++ " ") <+> case o of
+showPc :: (Integral a, Show a) => a -> String
+showPc x =
+  if x < 0x10
+  then '0' : showHex x ""
+  else showHex x ""
+
+opWidget :: (Integral a, Show a) => (a, Op) -> Widget n
+opWidget (i, o) = str (showPc i <> " ") <+> case o of
   OpStop -> txt "STOP"
   OpAdd -> txt "ADD"
   OpMul -> txt "MUL"
