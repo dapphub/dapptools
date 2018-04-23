@@ -48,25 +48,40 @@ let
 
 in {
   haskellPackages = super.haskellPackages.extend (
-    _: super-hs: let
-      dontCheck = x: super.haskell.lib.dontCheck (super-hs.callPackage x {});
-    in {
-      restless-git = versioned "restless-git" dontCheck;
-      symbex = versioned "symbex" dontCheck;
-      ethjet = versioned "libethjet-haskell"
-        (x: super-hs.callPackage x {
-          # Haskell libs with the same names as C libs...
-          # Depend on the C libs, not the Haskell libs.
-          # These are system deps, not Cabal deps.
-          inherit (self.pkgs) secp256k1 ethjet;
+    self-hs: super-hs:
+      let
+        dontCheck = x:
+          self.haskell.lib.dontCheck
+            (self-hs.callPackage x {});
+      in {
+        restless-git = versioned "restless-git" dontCheck;
+        symbex = versioned "symbex" dontCheck;
+        ethjet = versioned "libethjet-haskell"
+          (x: self-hs.callPackage x {
+            # Haskell libs with the same names as C libs...
+            # Depend on the C libs, not the Haskell libs.
+            # These are system deps, not Cabal deps.
+            inherit (self.pkgs) secp256k1 ethjet;
+          });
+
+        # We don't want Megaparsec 5!
+        megaparsec = self-hs.megaparsec_6_2_0;
+
+        hevm = (
+          versioned "hevm"
+            (x: self-hs.callPackage x {})
+        ).overrideAttrs (attrs: {
+          postInstall = ''
+            wrapProgram $out/bin/hevm \
+               --suffix PATH : "${lib.makeBinPath (with self.pkgs; [bash coreutils git])}"
+          '';
+
+          enableSeparateDataOutput = true;
+          buildInputs = attrs.buildInputs ++ [self.pkgs.solc];
+          nativeBuildInputs = attrs.nativeBuildInputs ++ [self.pkgs.makeWrapper];
         });
-
-      # We don't want Megaparsec 5!
-      megaparsec = super-hs.megaparsec_6_2_0;
-
-      hevm = self.hevm-lib;
-    }
-  );
+      }
+    );
 
   profilingHaskellPackages = self.haskellPackages.extend (
     self: super-hs: {
@@ -233,21 +248,7 @@ in {
     self.pkgs.haskell.lib.justStaticExecutables
       (versioned "symbex" (x: self.haskellPackages.callPackage x {}));
 
-  hevm = self.pkgs.haskell.lib.justStaticExecutables self.hevm-lib;
-
-  hevm-lib = (
-    versioned "hevm"
-      (x: self.haskellPackages.callPackage x {})
-  ).overrideAttrs (attrs: {
-    postInstall = ''
-      wrapProgram $out/bin/hevm \
-         --suffix PATH : "${lib.makeBinPath (with self.pkgs; [bash coreutils git])}"
-    '';
-
-    enableSeparateDataOutput = true;
-    buildInputs = attrs.buildInputs ++ [self.pkgs.solc];
-    nativeBuildInputs = attrs.nativeBuildInputs ++ [self.pkgs.makeWrapper];
-  });
+  hevm = self.pkgs.haskell.lib.justStaticExecutables self.haskellPackages.hevm;
 
   jays = (
     versioned "jays" (x:
