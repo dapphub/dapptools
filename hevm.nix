@@ -1,5 +1,5 @@
 let
-  pkgs = import <nixpkgs> {};
+  pkgs = import <dapphub> {};
   haskellPackages = pkgs.haskellPackages;
   profiling = haskellPackages.override {
     overrides = self: super: {
