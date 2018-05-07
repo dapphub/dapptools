@@ -12,6 +12,9 @@ nix-profiling: default.nix hevm.nix
 
 docker:; docker build -t dapphub/hevm .
 
+ghcid:
+	nix run dapphub.haskellPackages.ghcid --command ghcid --command='cabal repl lib:hevm'
+
 # Static binary built via Docker
 hevm-linux-x64: docker
 	docker run --rm dapphub/hevm cat /bin/hevm > $@
