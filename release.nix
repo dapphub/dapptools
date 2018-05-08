@@ -50,7 +50,7 @@ in rec {
     inherit symbex;
 
     hevm-test-report = hevmTestReport linux;
-  };
+  } // linux.pkgs.dappsys;
 
   dapphub.linux.master = with linux.master.pkgs; {
     inherit dapp;
@@ -59,7 +59,7 @@ in rec {
     inherit seth;
 
     hevm-test-report = hevmTestReport linux.master;
-  };
+  } // linux.master.pkgs.dappsys;
 
   dapphub.darwin.stable = with darwin.pkgs; {
     inherit celf;
@@ -83,11 +83,11 @@ in rec {
     inherit solc-versions;
     inherit token;
     inherit symbex;
-  };
+  } // darwin.pkgs.dappsys;
 
   dapphub.darwin.master = with darwin.master.pkgs; {
     inherit dapp;
     inherit hevm;
     inherit seth;
-  };
+  } // darwin.master.pkgs.dappsys;
 }

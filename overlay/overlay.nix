@@ -97,9 +97,10 @@ in {
   dappsys = self.callPackage (
     self.pkgs.fetchFromGitHub {
       owner = "dapphub";
-      repo = "dappsys-nix";
-      rev = "e449a7767779579d2f5862efc613d8345ba3b2f9";
-      sha256 = "030ws18sck7wp4710zcz6hash7v95p2z6mjgzx1yqras4ggmsc40";
+      repo = "dappsys";
+      rev = "73dea5a7d1e265dd2921ba420efbfcca3e8cdcc8";
+      sha256 = "16hnlim0da8sh7l3rhd6lxdxhhaskbkabr8zf9mx6s5vahyc39gl";
+      fetchSubmodules = true;
     }
   ) {};
 
