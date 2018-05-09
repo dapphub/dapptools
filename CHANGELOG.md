@@ -1,5 +1,8 @@
 # hevm changelog
 
+## [0.15] - 2018-05-09
+ - Fix SDIV/SMOD definitions for extreme case
+
 ## [0.14.1] - 2018-04-17
  - Improve PC display in TTY
 

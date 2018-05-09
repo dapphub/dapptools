@@ -64,18 +64,14 @@ sdiv _ (C _ (W256 0)) = 0
 sdiv (C _ (W256 x)) (C _ (W256 y)) =
   let sx = signedWord x
       sy = signedWord y
-      k  = if (sx < 0) /= (sy < 0)
-           then (-1)
-           else 1
-  in w256 . W256 . unsignedWord $ k * div (abs sx) (abs sy)
+  in w256 . W256 . unsignedWord $ quot sx sy
 
 smod :: Word -> Word -> Word
 smod _ (C _ (W256 0)) = 0
 smod (C _ (W256 x)) (C _ (W256 y)) =
   let sx = signedWord x
       sy = signedWord y
-      k  = if sx < 0 then (-1) else 1
-  in w256 . W256 . unsignedWord $ k * mod (abs sx) (abs sy)
+  in w256 . W256 . unsignedWord $ rem sx sy
 
 addmod :: Word -> Word -> Word -> Word
 addmod _ _ (C _ (W256 0)) = 0
