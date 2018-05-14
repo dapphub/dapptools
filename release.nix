@@ -48,6 +48,7 @@ in rec {
     inherit tla-plus;
     inherit token;
     inherit symbex;
+    inherit dafny;
 
     hevm-test-report = hevmTestReport linux;
   } // linux.pkgs.dappsys;
@@ -83,6 +84,7 @@ in rec {
     inherit solc-versions;
     inherit token;
     inherit symbex;
+    inherit dafny;
   } // darwin.pkgs.dappsys;
 
   dapphub.darwin.master = with darwin.master.pkgs; {

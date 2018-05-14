@@ -36,9 +36,9 @@ let
   makeIso = { module, config }:
     self.pkgs.lib.hydraJob (
       (import ../nixpkgs/nixos/lib/eval-config.nix {
-        inherit (self) pkgs;
-        system = "x86_64-linux";
-        modules = [module config];
+	inherit (self) pkgs;
+	system = "x86_64-linux";
+	modules = [module config];
       }).config.system.build.isoImage
     );
 
@@ -50,43 +50,43 @@ in {
   haskellPackages = super.haskellPackages.extend (
     self-hs: super-hs:
       let
-        dontCheck = x:
-          self.haskell.lib.dontCheck
-            (self-hs.callPackage x {});
+	dontCheck = x:
+	  self.haskell.lib.dontCheck
+	    (self-hs.callPackage x {});
       in {
-        restless-git = versioned "restless-git" dontCheck;
-        symbex = versioned "symbex" dontCheck;
-        ethjet = versioned "libethjet-haskell"
-          (x: self-hs.callPackage x {
-            # Haskell libs with the same names as C libs...
-            # Depend on the C libs, not the Haskell libs.
-            # These are system deps, not Cabal deps.
-            inherit (self.pkgs) secp256k1 ethjet;
-          });
+	restless-git = versioned "restless-git" dontCheck;
+	symbex = versioned "symbex" dontCheck;
+	ethjet = versioned "libethjet-haskell"
+	  (x: self-hs.callPackage x {
+	    # Haskell libs with the same names as C libs...
+	    # Depend on the C libs, not the Haskell libs.
+	    # These are system deps, not Cabal deps.
+	    inherit (self.pkgs) secp256k1 ethjet;
+	  });
 
-        # We don't want Megaparsec 5!
-        megaparsec = self-hs.megaparsec_6_2_0;
+	# We don't want Megaparsec 5!
+	megaparsec = self-hs.megaparsec_6_2_0;
 
-        hevm = (
-          versioned "hevm"
-            (x: self-hs.callPackage x {})
-        ).overrideAttrs (attrs: {
-          postInstall = ''
-            wrapProgram $out/bin/hevm \
-               --suffix PATH : "${lib.makeBinPath (with self.pkgs; [bash coreutils git])}"
-          '';
+	hevm = (
+	  versioned "hevm"
+	    (x: self-hs.callPackage x {})
+	).overrideAttrs (attrs: {
+	  postInstall = ''
+	    wrapProgram $out/bin/hevm \
+	       --suffix PATH : "${lib.makeBinPath (with self.pkgs; [bash coreutils git])}"
+	  '';
 
-          enableSeparateDataOutput = true;
-          buildInputs = attrs.buildInputs ++ [self.pkgs.solc];
-          nativeBuildInputs = attrs.nativeBuildInputs ++ [self.pkgs.makeWrapper];
-        });
+	  enableSeparateDataOutput = true;
+	  buildInputs = attrs.buildInputs ++ [self.pkgs.solc];
+	  nativeBuildInputs = attrs.nativeBuildInputs ++ [self.pkgs.makeWrapper];
+	});
       }
     );
 
   profilingHaskellPackages = self.haskellPackages.extend (
     self: super-hs: {
       mkDerivation = args: super-hs.mkDerivation
-        (args // { enableLibraryProfiling = true; });
+	(args // { enableLibraryProfiling = true; });
     }
   );
 
@@ -126,16 +126,16 @@ in {
       executable = true;
       destination = "/bin/${name}";
       text = ''
-        #!${self.pkgs.bash}/bin/bash
-        set -euo pipefail
-        shopt -s lastpipe
-        export PATH="${lib.makeBinPath deps}:/run/wrappers/bin"
-        ${text}
+	#!${self.pkgs.bash}/bin/bash
+	set -euo pipefail
+	shopt -s lastpipe
+	export PATH="${lib.makeBinPath deps}:/run/wrappers/bin"
+	${text}
       '';
       checkPhase = ''
-        ${self.pkgs.bash}/bin/bash -n $out/bin/${name}
+	${self.pkgs.bash}/bin/bash -n $out/bin/${name}
       '' + (if check then ''
-        ${self.pkgs.shellcheck}/bin/shellcheck $out/bin/${name}
+	${self.pkgs.shellcheck}/bin/shellcheck $out/bin/${name}
       '' else "");
     };
 
@@ -165,13 +165,13 @@ in {
   }).overrideAttrs (attrs: {
     preConfigure = ''
       substituteInPlace Mueval/ArgsParse.hs \
-        --replace 'Just defaultModules' 'Just []'
+	--replace 'Just defaultModules' 'Just []'
     '';
     postInstall = ''
       wrapProgram $out/bin/mueval \
-        --set NIX_GHC ${env}/bin/ghc \
-        --set NIX_GHCPKG ${env}/bin/ghc-pkg \
-        --set NIX_GHC_LIBDIR $(${env}/bin/ghc --print-libdir)
+	--set NIX_GHC ${env}/bin/ghc \
+	--set NIX_GHCPKG ${env}/bin/ghc-pkg \
+	--set NIX_GHC_LIBDIR $(${env}/bin/ghc --print-libdir)
     '';
     nativeBuildInputs = attrs.nativeBuildInputs ++ [self.pkgs.makeWrapper];
   });
@@ -182,8 +182,8 @@ in {
     deps = with self.pkgs; [symbex-mueval gnused];
     text = ''
       mueval -XRecursiveDo -m EVM.Assembly \
-        -e "$(echo "bytecode $ mdo"; sed 's/^/  /')" \
-        | sed -e 's/^"//' -e 's/"$//'
+	-e "$(echo "bytecode $ mdo"; sed 's/^/  /')" \
+	| sed -e 's/^"//' -e 's/"$//'
     '';
   };
 
@@ -196,10 +196,10 @@ in {
     ];
     text = ''
       { echo "import qualified Prelude"
-        cat
-        echo
-        echo "main :: Prelude.IO ()"
-        echo "main = Prelude.putStrLn (bytecode contract)"
+	cat
+	echo
+	echo "main :: Prelude.IO ()"
+	echo "main = Prelude.putStrLn (bytecode contract)"
       } | runghc --ghc-arg=-XNoImplicitPrelude --ghc-arg=-XRecursiveDo
     '';
   };
@@ -213,11 +213,11 @@ in {
     ];
     text = ''
       { echo "import qualified Prelude"
-        echo "import qualified EVM.Symbex.Main as Symbex"
-        cat
-        echo
-        echo "main :: Prelude.IO ()"
-        echo "main = Symbex.showPaths (Symbex.run (assemble contract))"
+	echo "import qualified EVM.Symbex.Main as Symbex"
+	cat
+	echo
+	echo "main :: Prelude.IO ()"
+	echo "main = Symbex.showPaths (Symbex.run (assemble contract))"
       } | runghc --ghc-arg=-XNoImplicitPrelude --ghc-arg=-XRecursiveDo
     '';
   };
@@ -231,16 +231,16 @@ in {
     ];
     text = ''
       { echo "import qualified Prelude"
-        echo "import qualified EVM.Symbex.Main as Symbex"
-        echo "import qualified EVM.Symbex as Symbex"
-        echo "import qualified Data.ByteString.Lazy.Char8 as B8"
-        echo "import qualified Data.Aeson as Aeson"
-        echo "import Prelude ((.), ($))"
-        cat
-        echo
-        echo "main :: Prelude.IO ()"
-        echo "main = B8.putStrLn . Aeson.encode $"
-        echo "  Symbex.step' (assemble contract) Symbex.emptyState"
+	echo "import qualified EVM.Symbex.Main as Symbex"
+	echo "import qualified EVM.Symbex as Symbex"
+	echo "import qualified Data.ByteString.Lazy.Char8 as B8"
+	echo "import qualified Data.Aeson as Aeson"
+	echo "import Prelude ((.), ($))"
+	cat
+	echo
+	echo "main :: Prelude.IO ()"
+	echo "main = B8.putStrLn . Aeson.encode $"
+	echo "  Symbex.step' (assemble contract) Symbex.emptyState"
       } | runghc --ghc-arg=-XNoImplicitPrelude --ghc-arg=-XRecursiveDo
     '';
   };
@@ -254,7 +254,7 @@ in {
   jays = (
     versioned "jays" (x:
       self.pkgs.haskell.lib.justStaticExecutables
-        (self.haskellPackages.callPackage x {})
+	(self.haskellPackages.callPackage x {})
     )
   ).overrideAttrs (_: { postInstall = "cp $out/bin/{jays,jshon}"; });
 
@@ -286,7 +286,7 @@ in {
     # (mbrock backported) fix for usb-related segmentation faults on darwin
     propagatedBuildInputs =
       stdenv.lib.optionals stdenv.isDarwin
-        (with self.pkgs; [ darwin.libobjc darwin.apple_sdk.frameworks.IOKit ]);
+	(with self.pkgs; [ darwin.libobjc darwin.apple_sdk.frameworks.IOKit ]);
   });
 
   # We use this to run private testnets without
@@ -299,13 +299,13 @@ in {
 
       # Huge contracts
       substituteInPlace params/protocol_params.go --replace \
-        'MaxCodeSize = 24576' \
-        'MaxCodeSize = 1000000'
+	'MaxCodeSize = 24576' \
+	'MaxCodeSize = 1000000'
 
       # Huge block gas limit in --dev mode
       substituteInPlace core/genesis.go --replace \
-        'GasLimit:   6283185,' \
-        'GasLimit:   0xffffffffffffffff,'
+	'GasLimit:   6283185,' \
+	'GasLimit:   0xffffffffffffffff,'
     '';
   });
 
@@ -334,7 +334,7 @@ in {
     deps = with self.pkgs; [qrencode feh vim gnused coreutils];
     text = ''
       sed 's/^0x//' | tr -d '[:space:]' | xxd -r -p | base64 -w0 |
-        qrencode -s 1 -o - | feh -ZB white --force-aliasing -
+	qrencode -s 1 -o - | feh -ZB white --force-aliasing -
     '';
   };
 
@@ -344,7 +344,7 @@ in {
     deps = with self.pkgs; [qrencode vim gnused coreutils];
     text = ''
       sed 's/^0x//' | tr -d '[:space:]' | xxd -r -p | base64 -w0 |
-        qrencode -t ANSIUTF8
+	qrencode -t ANSIUTF8
     '';
   };
 
@@ -375,8 +375,8 @@ in {
       accts=()
       while read -r x y; do accts+=("$x" "$y"); done < <(ethsign ls 2>/dev/null)
       dialog-to-file "$1" --ok-label "Use account" \
-         --menu "Pick an Ethereum account:" \
-          20 80 10 "''${accts[@]}"
+	 --menu "Pick an Ethereum account:" \
+	  20 80 10 "''${accts[@]}"
     '';
   };
 
@@ -385,47 +385,47 @@ in {
       name = "ds-chief-vote";
       version = "0";
       deps = with self.pkgs; [
-        seth eth-pick-account ethsign dialog-to-file ncurses coreutils qrtx readline
+	seth eth-pick-account ethsign dialog-to-file ncurses coreutils qrtx readline
       ];
       text = ''
-        acctfile=$(mktemp)
-        txfile=$(mktemp)
-        eth-pick-account "$acctfile"
-        acct=$(cat "$acctfile")
-        dialog-to-file "$txfile" --ok-label "Sign" \
-          --title "Make a signed transaction without publishing" \
-          --form "ds-chief vote -- set your approval to an existing slate" 10 60 4 \
-           "Slate ID" 1 1 "" 1 12 32 0 \
-           "Nonce" 2 1 "1" 2 12 10 0 \
-           "Gas price" 3 1 50 3 12 10 0 \
-           "Gas limit" 4 1 10000 4 12 10 0 \
-           "Account" 5 1 "$acct" 5 12 0 0
+	acctfile=$(mktemp)
+	txfile=$(mktemp)
+	eth-pick-account "$acctfile"
+	acct=$(cat "$acctfile")
+	dialog-to-file "$txfile" --ok-label "Sign" \
+	  --title "Make a signed transaction without publishing" \
+	  --form "ds-chief vote -- set your approval to an existing slate" 10 60 4 \
+	   "Slate ID" 1 1 "" 1 12 32 0 \
+	   "Nonce" 2 1 "1" 2 12 10 0 \
+	   "Gas price" 3 1 50 3 12 10 0 \
+	   "Gas limit" 4 1 10000 4 12 10 0 \
+	   "Account" 5 1 "$acct" 5 12 0 0
 
-        {
-          read -r slate
-          read -r nonce
-          read -r gasprice
-          read -r gaslimit
-        } < "$txfile"
+	{
+	  read -r slate
+	  read -r nonce
+	  read -r gasprice
+	  read -r gaslimit
+	} < "$txfile"
 
-        slate=$(seth --to-bytes32 "$(seth --from-ascii "$slate")")
-        calldata=$(seth calldata 'vote(bytes32)' "$slate")
+	slate=$(seth --to-bytes32 "$(seth --from-ascii "$slate")")
+	calldata=$(seth calldata 'vote(bytes32)' "$slate")
 
-        echo "Offline ds-chief vote transaction creation"
-        echo
-        echo "Account:   $acct"
-        echo "Slate ID:  $slate"
-        echo "Nonce:     $nonce"
-        echo "Gas price: $gasprice"
-        echo "Gas limit: $gaslimit"
-        echo "Call data: $calldata"
-        echo
-        echo "After authentication, signed transaction will be shown as QR code."
+	echo "Offline ds-chief vote transaction creation"
+	echo
+	echo "Account:   $acct"
+	echo "Slate ID:  $slate"
+	echo "Nonce:     $nonce"
+	echo "Gas price: $gasprice"
+	echo "Gas limit: $gaslimit"
+	echo "Call data: $calldata"
+	echo
+	echo "After authentication, signed transaction will be shown as QR code."
 
-        ethsign tx --from "$acct" --to 0x0 --nonce "$nonce" --gas-price "$gasprice" \
-          --gas-limit "$gaslimit" --data "$calldata" \
-          --value 0 --chain-id 1 | qrtx
-        echo
+	ethsign tx --from "$acct" --to 0x0 --nonce "$nonce" --gas-price "$gasprice" \
+	  --gas-limit "$gaslimit" --data "$calldata" \
+	  --value 0 --chain-id 1 | qrtx
+	echo
       '';
     };
   };
@@ -450,11 +450,11 @@ in {
   oasis-orders = (
     versioned "oasis-orders"
       (x: self.pkgs.haskell.lib.justStaticExecutables
-        (self.haskellPackages.callPackage x {}))
+	(self.haskellPackages.callPackage x {}))
   ).overrideAttrs (attrs: {
     postInstall = ''
       wrapProgram $out/bin/oasis-orders \
-        --set OASIS_DAPP_PATH ${self.dapps.maker-otc}/dapp/maker-otc
+	--set OASIS_DAPP_PATH ${self.dapps.maker-otc}/dapp/maker-otc
     '';
     nativeBuildInputs = attrs.nativeBuildInputs ++ [self.pkgs.makeWrapper];
   });
@@ -465,18 +465,18 @@ in {
       name = "dapphub-emacs-${version}";
       destination = "/dapphub.el";
       text = ''
-        (package-initialize)
-        (set-face-attribute 'default (selected-frame) :height 180 :family "Courier")
-        (menu-bar-mode -1)
-        (tool-bar-mode -1)
-        (setq initial-buffer-choice
-              (lambda ()
-                (with-current-buffer (get-buffer-create "*DappHub*")
-                  (insert ";; Hello, and welcome to DappHub!")
-                  (current-buffer))))
-        (require 'agda2-mode)
-        (setq auto-mode-alist '(("\\.agda" . agda2-mode)))
-        (setq agda2-program-args (list (concat "--include-path=" (expand-file-name "~/src/agda-stdlib/src"))))
+	(package-initialize)
+	(set-face-attribute 'default (selected-frame) :height 180 :family "Courier")
+	(menu-bar-mode -1)
+	(tool-bar-mode -1)
+	(setq initial-buffer-choice
+	      (lambda ()
+		(with-current-buffer (get-buffer-create "*DappHub*")
+		  (insert ";; Hello, and welcome to DappHub!")
+		  (current-buffer))))
+	(require 'agda2-mode)
+	(setq auto-mode-alist '(("\\.agda" . agda2-mode)))
+	(setq agda2-program-args (list (concat "--include-path=" (expand-file-name "~/src/agda-stdlib/src"))))
       '';
     };
   in self.bashScript {
@@ -485,7 +485,7 @@ in {
     deps = with self.pkgs; [
       coreutils
       (emacsWithPackages (e: with e; [
-        zenburn-theme agda2-mode
+	zenburn-theme agda2-mode
       ]))
       ethsign
       seth
@@ -529,11 +529,11 @@ in {
       core = callPackage ./tla/core.nix {};
       toolbox = callPackage ./tla/toolbox.nix { gtk = self.gtk2; };
       isabelle2011-1 =
-        callPackage ./tla/isabelle2011-1 {
-          proofgeneral = self.emacsPackages.proofgeneral;
-        };
+	callPackage ./tla/isabelle2011-1 {
+	  proofgeneral = self.emacsPackages.proofgeneral;
+	};
       tlaps = callPackage ./tla/tlaps.nix {
-        inherit isabelle2011-1;
+	inherit isabelle2011-1;
       };
       tla-smt = with self; [z3 yices cvc3];
   in super.buildEnv {
@@ -558,7 +558,7 @@ in {
     '';
     postInstall = ''
       wrapProgram $out/bin/tomono \
-        --suffix PATH : "${lib.makeBinPath (with self.pkgs; [bash coreutils git])}"
+	--suffix PATH : "${lib.makeBinPath (with self.pkgs; [bash coreutils git])}"
     '';
     nativeBuildInputs = [self.pkgs.makeWrapper];
   };
@@ -600,4 +600,22 @@ in {
       patchShebangs ./compile.sh
     '';
   };
+
+  dafny = super.dafny.overrideAttrs (_: rec {
+    name = "Dafny-${version}";
+    version = "2.1.0";
+
+    src = self.fetchurl {
+      url = "https://github.com/Microsoft/dafny/archive/v${version}.tar.gz";
+      sha256 = "1iyhy0zpi6wvqif7826anzgdipgsy5bk775ds9qqwfw27j7x6fy5";
+    };
+
+    postPatch = ''
+      sed -i \
+	-e 's/ Visible="False"//' \
+	-e "s/Exists(\$(CodeContractsInstallDir))/Exists('\$(CodeContractsInstallDir)')/" \
+	Source/*/*.csproj
+    '';
+  });
+
 }
