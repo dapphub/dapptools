@@ -1,11 +1,15 @@
 {-# Language ImplicitParams #-}
 {-# Language TemplateHaskell #-}
+{-# Language FlexibleInstances #-}
 
 module EVM.Emacs where
 
+import System.IO
+import Control.Monad.IO.Class
+import System.Directory
 import Data.Text (Text, pack, unpack)
 import EVM (VM, result, exec1)
-import EVM.UnitTest (UnitTestOptions (..))
+--import EVM.UnitTest (UnitTestOptions (..))
 import EVM.Dapp
 import EVM.Fetch (Fetcher)
 import EVM.Solidity (SolcContract, readSolc)
@@ -14,7 +18,9 @@ import qualified Control.Monad.Operational as Operational
 import qualified EVM.Stepper as Stepper
 import Control.Monad.State.Strict hiding (state)
 import Data.SCargot
+import Data.SCargot.Repr
 import Data.SCargot.Repr.Basic
+import Data.SCargot.Language.HaskLike
 import Control.Lens
 
 data UiVmState = UiVmState
@@ -158,16 +164,18 @@ updateUiVmState :: UiVmState -> VM -> UiVmState
 updateUiVmState ui vm =
   ui & set uiVm vm
 
-main :: UnitTestOptions -> FilePath -> FilePath -> IO ()
-main _opts root jsonPath =
-  readSolc jsonPath >>=
-    \case
-      Nothing -> error "Failed to read Solidity JSON"
-      Just (contractMap, sourceCache) -> do
-        let
-          dapp = dappInfo root contractMap sourceCache
-        putStrLn (unpack (display dapp))
+type Sexp = WellFormedSExpr HaskLikeAtom
 
+prompt :: Console (Maybe Sexp)
+prompt = do
+  line <- liftIO (putStr "> " >> hFlush stdout >> getLine)
+  case decodeOne (asWellFormed haskLikeParser) (pack line) of
+    Left e -> do
+      output (L [A "error", A (txt e)])
+      pure Nothing
+    Right s ->
+      pure (Just s)
+          
 class SDisplay a where
   sexp :: a -> SExpr Text
 
@@ -177,6 +185,52 @@ display = encodeOne (basicPrint id) . sexp
 txt :: Show a => a -> Text
 txt = pack . show
 
+type Console a = StateT () IO a
+
+output :: SDisplay a => a -> Console ()
+output = liftIO . putStrLn . unpack . display
+
+main :: IO ()
+main = do
+  putStrLn ";; Welcome to Hevm's Emacs integration."
+  execStateT loop ()
+
+loop :: Console ()
+loop = 
+  prompt >>=
+    \case
+      Nothing -> pure ()
+      Just command -> do
+        handle command
+        loop
+
+handle :: Sexp -> Console ()
+handle (WFSList
+        [ WFSAtom (HSIdent "load-dapp")
+        , WFSAtom (HSString (unpack -> root))
+        , WFSAtom (HSString (unpack -> jsonPath))
+        ]) = do
+  liftIO (setCurrentDirectory root)
+  liftIO (readSolc jsonPath) >>=
+    \case
+      Nothing -> 
+        output (L [A ("error" :: Text)])
+      Just (contractMap, sourceCache) ->
+        let
+          dapp = dappInfo root contractMap sourceCache
+        in
+          output dapp
+handle _ =
+  output (L [A ("unrecognized-command" :: Text)])
+        
+  -- readSolc jsonPath >>=
+  --   \case
+  --     Nothing -> error "Failed to read Solidity JSON"
+  --     Just (contractMap, sourceCache) -> do
+  --       let
+  --         dapp = dappInfo root contractMap sourceCache
+  --       putStrLn (unpack (display dapp))
+
 instance SDisplay DappInfo where
   sexp x =
     L [ A "dapp-info"
@@ -185,3 +239,7 @@ instance SDisplay DappInfo where
             [ L [A (txt a), L (map (A . txt) b)]
             | (a, b) <- view dappUnitTests x])
       ]
+
+instance SDisplay (SExpr Text) where
+  sexp = id
+

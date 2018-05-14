@@ -74,26 +74,9 @@ ghciTty root path state =
         }
     EVM.TTY.main testOpts root path
 
-ghciEmacs :: String -> String -> Maybe String -> IO ()
-ghciEmacs root path state =
-  withCurrentDirectory root $ do
-    loadFacts <-
-      case state of
-        Nothing ->
-          pure id
-        Just repoPath -> do
-          facts <- Git.loadFacts (Git.RepoAt repoPath)
-          pure (flip Facts.apply facts)
-    params <- getParametersFromEnvironmentVariables
-    let
-      testOpts = UnitTestOptions
-        { oracle = EVM.Fetch.zero
-        , verbose = False
-        , match = ""
-        , vmModifier = loadFacts
-        , testParams = params
-        }
-    EVM.Emacs.main testOpts root path
+ghciEmacs :: IO ()
+ghciEmacs =
+  EVM.Emacs.main
 
 foo :: IO ()
-foo = ghciEmacs "/home/mbrock/dapphub/ds-token" "out/token.t.sol.json" Nothing
+foo = ghciEmacs

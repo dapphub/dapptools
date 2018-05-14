@@ -18,6 +18,7 @@ import qualified EVM.Fetch
 import qualified EVM.Flatten
 import qualified EVM.Stepper
 import qualified EVM.TTY as EVM.TTY
+import qualified EVM.Emacs as EVM.Emacs
 
 #if MIN_VERSION_aeson(1, 0, 0)
 import qualified EVM.VMTest as VMTest
@@ -113,6 +114,7 @@ data Command
     , jsonFile   :: Maybe String
     , dappRoot   :: Maybe String
     }
+  | Emacs
   deriving (Show, Options.Generic, Eq)
 
 type URL = Text
@@ -185,6 +187,8 @@ main = do
               EVM.Flatten.flatten dapp (pack (sourceFile cmd))
             Nothing ->
               error ("Failed to read Solidity JSON for `" ++ theJson ++ "'")
+    Emacs ->
+      EVM.Emacs.main
 
 findJsonFile :: Maybe String -> IO String
 findJsonFile (Just s) = pure s
