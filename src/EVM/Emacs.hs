@@ -4,28 +4,34 @@
 
 module EVM.Emacs where
 
-import EVM.TTY (currentSrcMap)
-import qualified EVM.Fetch as Fetch
-import System.IO
+import Control.Lens
 import Control.Monad.IO.Class
-import System.Directory
+import Control.Monad.State.Strict hiding (state)
+import Data.ByteString (ByteString)
+import Data.Maybe
+import Data.Monoid
+import Data.SCargot
+import Data.SCargot.Language.HaskLike
+import Data.SCargot.Repr
+import Data.SCargot.Repr.Basic
 import Data.Text (Text, pack, unpack)
 import EVM
-import qualified Data.Map as Map
-import Data.Monoid
-import EVM.UnitTest hiding (interpret)
+import EVM.Concrete
 import EVM.Dapp
 import EVM.Fetch (Fetcher)
 import EVM.Solidity
 import EVM.Stepper (Stepper)
+import EVM.TTY (currentSrcMap)
+import EVM.Types
+import EVM.UnitTest hiding (interpret)
+import Prelude hiding (Word)
+import System.Directory
+import System.IO
 import qualified Control.Monad.Operational as Operational
+import qualified Data.ByteString as BS
+import qualified Data.Map as Map
+import qualified EVM.Fetch as Fetch
 import qualified EVM.Stepper as Stepper
-import Control.Monad.State.Strict hiding (state)
-import Data.SCargot
-import Data.SCargot.Repr
-import Data.SCargot.Repr.Basic
-import Data.SCargot.Language.HaskLike
-import Control.Lens
 
 data UiVmState = UiVmState
   { _uiVm             :: VM
@@ -180,7 +186,7 @@ prompt = do
       pure Nothing
     Right s ->
       pure (Just s)
-          
+
 class SDisplay a where
   sexp :: a -> SExpr Text
 
@@ -207,7 +213,7 @@ main = do
   pure ()
 
 loop :: Console ()
-loop = 
+loop =
   prompt >>=
     \case
       Nothing -> pure ()
@@ -230,7 +236,7 @@ handleCmd UiStarted = \case
     do liftIO (setCurrentDirectory root)
        liftIO (readSolc jsonPath) >>=
          \case
-           Nothing -> 
+           Nothing ->
              output (L [A ("error" :: Text)])
            Just (contractMap, sourceCache) ->
              let
@@ -238,7 +244,7 @@ handleCmd UiStarted = \case
              in do
                output dapp
                put (UiDappLoaded dapp)
-               
+
   _ ->
     output (L [A ("unrecognized-command" :: Text)])
 
@@ -247,39 +253,61 @@ handleCmd (UiDappLoaded dapp) = \case
                 WFSAtom (HSString testName)]) -> do
     opts <- defaultUnitTestOptions
     put (UiVm (initialStateForTest opts dapp (contractPath, testName)))
-    output (L [A ("ok" :: Text)])
+    outputVm
   _ ->
     output (L [A ("unrecognized-command" :: Text)])
 
 handleCmd (UiVm s) = \case
-  ("step-once", []) -> do
-    takeStep s StepNormally StepOne
-    let
-      noMap =
-        output $
-          L [ A "step"
-            , L [A ("pc" :: Text), A (txt (view (uiVm . state . pc) s))]]
-    case view uiVmDapp s of
-      Nothing -> noMap
-      Just dapp -> do
-        case currentSrcMap dapp (view uiVm s) of
-          Nothing -> noMap
-          Just sm ->
-            case view (dappSources . sourceFiles . at (srcMapFile sm)) dapp of
-              Nothing -> noMap
-              Just (fileName, _) -> do
-                output $
-                  L [ A "step"
-                    , L [A ("pc" :: Text), A (txt (view (uiVm . state . pc) s))]
-                    , L [A ("file" :: Text), A (txt fileName)]
-                    , L [ A ("srcmap" :: Text)
-                        , A (txt (srcMapOffset sm))
-                        , A (txt (srcMapLength sm))
-                        , A (txt (srcMapJump sm))
-                        ]
-                    ]
+  ("step", [WFSAtom (HSString modeName)]) -> do
+    case parseStepMode s modeName of
+      Just mode -> do
+        takeStep s StepNormally mode
+        outputVm
+      Nothing ->
+        output (L [A ("unrecognized-command" :: Text)])
   _ ->
     output (L [A ("unrecognized-command" :: Text)])
+
+outputVm :: Console ()
+outputVm = do
+  UiVm s <- get
+  let
+    noMap =
+      output $
+        L [ A "step"
+          , L [A ("pc" :: Text), A (txt (view (uiVm . state . pc) s))]]
+
+  fromMaybe noMap $ do
+    dapp <- view uiVmDapp s
+    sm <- currentSrcMap dapp (view uiVm s)
+    (fileName, _) <- view (dappSources . sourceFiles . at (srcMapFile sm)) dapp
+    pure . output $
+      L [ A "step"
+        , L [A ("vm" :: Text), sexp (view uiVm s)]
+        , L [A ("file" :: Text), A (txt fileName)]
+        , L [ A ("srcmap" :: Text)
+            , A (txt (srcMapOffset sm))
+            , A (txt (srcMapLength sm))
+            , A (txt (srcMapJump sm))
+            ]
+        ]
+
+
+isNextSourcePosition
+  :: UiVmState -> Pred VM
+isNextSourcePosition ui vm =
+  let
+    Just dapp       = view uiVmDapp ui
+    initialPosition = currentSrcMap dapp (view uiVm ui)
+  in
+    currentSrcMap dapp vm /= initialPosition
+
+parseStepMode :: UiVmState -> Text -> Maybe StepMode
+parseStepMode s =
+  \case
+    "once" -> Just StepOne
+    "source-location" -> Just (StepUntil (isNextSourcePosition s))
+    _ -> Nothing
 
 -- ^ Specifies whether to do I/O blocking or VM halting while stepping.
 -- When we step backwards, we don't want to allow those things.
@@ -338,6 +366,58 @@ instance SDisplay DappInfo where
 instance SDisplay (SExpr Text) where
   sexp = id
 
+instance SDisplay VM where
+  sexp x =
+    L [ L [A "result", sexp (view result x)]
+      , L [A "state", sexp (view state x)]
+      , L [A "frames", sexp (view frames x)]
+      ]
+
+instance SDisplay a => SDisplay (Maybe a) where
+  sexp Nothing = A "nil"
+  sexp (Just x) = sexp x
+
+instance SDisplay VMResult where
+  sexp = \case
+    VMFailure e -> L [A "vm-failure", A (txt (txt e))]
+    VMSuccess b -> L [A "vm-success", sexp b]
+
+instance SDisplay Frame where
+  sexp x =
+    L [A "frame", sexp (view frameContext x), sexp (view frameState x)]
+
+instance SDisplay Blob where
+  sexp (B x) = sexp x
+
+instance SDisplay FrameContext where
+  sexp _x = A "some-context"
+
+instance SDisplay FrameState where
+  sexp x =
+    L [ L [A "contract", A (txt (view contract x))]
+      , L [A "code-contract", A (txt (view codeContract x))]
+      , L [A "pc", A (txt (view pc x))]
+      , L [A "stack", sexp (view stack x)]
+      , L [A "memory", sexp (view memory x)]
+      ]
+
+instance SDisplay a => SDisplay [a] where
+  sexp = L . map sexp
+
+instance SDisplay Word where
+  sexp (C Dull x) = A (txt x)
+  sexp (C (FromKeccak bs) x) =
+    L [A "hash", A (txt x), sexp bs]
+
+instance SDisplay ByteString where
+  sexp = A . txt . pack . showByteStringWith0x
+
+instance SDisplay Memory where
+  sexp (ConcreteMemory bs) =
+    if BS.length bs > 1024
+    then L [A "large-memory", A (txt (BS.length bs))]
+    else sexp bs
+
 defaultUnitTestOptions :: MonadIO m => m UnitTestOptions
 defaultUnitTestOptions = do
   params <- liftIO getParametersFromEnvironmentVariables
@@ -378,4 +458,3 @@ initialStateForTest opts@(UnitTestOptions {..}) dapp (contractPath, testName) =
       initialUnitTestVm opts testContract (Map.elems (view dappSolcByName dapp))
     ui1 =
       updateUiVmState ui0 vm0 & set uiVmFirstState ui1
-
