@@ -8,6 +8,7 @@ import Control.Lens
 import Control.Monad.IO.Class
 import Control.Monad.State.Strict hiding (state)
 import Data.ByteString (ByteString)
+import Data.Map (Map)
 import Data.Maybe
 import Data.Monoid
 import Data.SCargot
@@ -371,7 +372,28 @@ instance SDisplay VM where
     L [ L [A "result", sexp (view result x)]
       , L [A "state", sexp (view state x)]
       , L [A "frames", sexp (view frames x)]
+      , L [A "contracts", sexp (view (env . contracts) x)]
       ]
+
+quoted :: Text -> Text
+quoted x = "\"" <> x <> "\""
+
+instance SDisplay Addr where
+  sexp = A . quoted . pack . showAddrWith0x
+
+instance SDisplay Contract where
+  sexp x =
+    L [ L [A "storage", sexp (view storage x)]
+      , L [A "balance", sexp (view balance x)]
+      , L [A "nonce", sexp (view nonce x)]
+      , L [A "codehash", sexp (view codehash x)]
+      ]
+
+instance SDisplay W256 where
+  sexp x = A (txt (txt x))
+
+instance (SDisplay k, SDisplay v) => SDisplay (Map k v) where
+  sexp x = L [L [sexp k, sexp v] | (k, v) <- Map.toList x]
 
 instance SDisplay a => SDisplay (Maybe a) where
   sexp Nothing = A "nil"
@@ -394,8 +416,8 @@ instance SDisplay FrameContext where
 
 instance SDisplay FrameState where
   sexp x =
-    L [ L [A "contract", A (txt (view contract x))]
-      , L [A "code-contract", A (txt (view codeContract x))]
+    L [ L [A "contract", sexp (view contract x)]
+      , L [A "code-contract", sexp (view codeContract x)]
       , L [A "pc", A (txt (view pc x))]
       , L [A "stack", sexp (view stack x)]
       , L [A "memory", sexp (view memory x)]
@@ -405,7 +427,7 @@ instance SDisplay a => SDisplay [a] where
   sexp = L . map sexp
 
 instance SDisplay Word where
-  sexp (C Dull x) = A (txt x)
+  sexp (C Dull x) = A (quoted (txt x))
   sexp (C (FromKeccak bs) x) =
     L [A "hash", A (txt x), sexp bs]
 
