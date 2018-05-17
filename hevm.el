@@ -68,10 +68,10 @@ and send it as input.")
 (defmacro hevm-define-command (name help command)
   "Define a simple Hevm command-sending function."
   (declare (indent defun))
-  `(defun ,command ()
+  `(defun ,name ()
      ,help
      (interactive)
-     (hevm-send ,command)))
+     (hevm-send (quote ,command))))
 
 (hevm-define-command hevm-do-step-once
   "Step forward by one opcode."
