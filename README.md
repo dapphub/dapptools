@@ -19,7 +19,7 @@ hardware wallets—even if you use a remote RPC node like Infura's.
 > "One indicator I look for in a healthy open source project is how
   many useful tools come out of its team as a side effect of their
   efforts."
-  —[`@danfinlay`](https://twitter.com/danfinlay/status/942909341044162560])
+  —[`@danfinlay`](https://twitter.com/danfinlay/status/942909341044162560)
 >
 > "Looks like a great set of CLI tools, very devopsy." —Andreas Antonopolous
 >
