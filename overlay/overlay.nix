@@ -276,12 +276,12 @@ in {
 
   go-ethereum = super.go-ethereum.overrideDerivation (_: rec {
     name = "go-ethereum-${version}";
-    version = "1.8.2";
+    version = "1.8.10";
     src = self.pkgs.fetchFromGitHub {
       owner = "ethereum";
       repo = "go-ethereum";
       rev = "v${version}";
-      sha256 = "19ryfy9dsmgk3kimkmq2hif1di4binqg9718xrmirf063rajk02a";
+      sha256 = "1n36pz4y3xa4d46mynym98bra79qx5n9lb29chyxfpvi5fmprdg1";
     };
     # (mbrock backported) fix for usb-related segmentation faults on darwin
     propagatedBuildInputs =
