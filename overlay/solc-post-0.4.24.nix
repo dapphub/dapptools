@@ -23,12 +23,6 @@ stdenv.mkDerivation {
     echo >prerelease.txt
     substituteInPlace cmake/jsoncpp.cmake \
       --replace '${jsoncppURL}' ${jsoncpp}
-
-    # Not sure why this was changed or why it doesn't seem to work in the Nix build...
-    substituteInPlace cmake/jsoncpp.cmake \
-      --replace 'set(JSONCPP_LIBRARY "''${prefix}/''${CMAKE_INSTALL_LIBDIR}/''${CMAKE_STATIC_LIBRARY_PREFIX}jsoncpp''${CMAKE_STATIC_LIBRARY_SUFFIX}")' \
-                'set(JSONCPP_LIBRARY "''${prefix}/lib/''${CMAKE_STATIC_LIBRARY_PREFIX}jsoncpp''${CMAKE_STATIC_LIBRARY_SUFFIX}")'
-
     substituteInPlace cmake/EthCompilerSettings.cmake \
       --replace 'add_compile_options(-Werror)' ""
   '' + stdenv.lib.optionalString stdenv.isDarwin ''
