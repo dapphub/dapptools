@@ -135,7 +135,7 @@ in {
       checkPhase = ''
 	${self.pkgs.bash}/bin/bash -n $out/bin/${name}
       '' + (if check then ''
-	${self.pkgs.shellcheck}/bin/shellcheck $out/bin/${name}
+	${self.pkgs.shellcheck}/bin/shellcheck -s bash $out/bin/${name}
       '' else "");
     };
 
