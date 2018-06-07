@@ -5,7 +5,7 @@ let
   jsoncppURL = https://github.com/open-source-parsers/jsoncpp/archive/1.8.4.tar.gz;
   jsoncpp = fetchzip {
     url = jsoncppURL;
-    sha256 = "1dpxk8hkni5dq4mdw8qbaj40jmid3a31d1gh8iqcnfwkw34ym7f4";
+    sha256 = "1z0gj7a6jypkijmpknis04qybs1hkd04d1arr3gy89lnxmp6qzlm";
   };
 in
 
