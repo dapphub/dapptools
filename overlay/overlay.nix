@@ -143,7 +143,7 @@ in {
     test-hevm = import ./dapp/dapp-test-hevm.nix { pkgs = self.pkgs; };
   };
 
-  solc = callPackage ((import ./solc-versions.nix).solc_0_4_24) {};
+  solc = callPackage ((import ./solc-versions.nix).solc_0_4_23) {};
   solc-versions =
     super.lib.mapAttrs
       (_: value: pastPackage value {})
