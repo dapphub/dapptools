@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+cd "${0%/*}"
+nix-shell -p bash nix-prefetch-scripts curl jshon jq --run ./bump.sh

@@ -1,0 +1,19 @@
+[
+    {
+        "anonymous": true,
+        "inputs": [
+            {
+                "indexed": true,
+                "name": "a",
+                "type": "bool"
+            },
+            {
+                "indexed": false,
+                "name": "b",
+                "type": "address"
+            }
+        ],
+        "name": "Event",
+        "type": "event"
+    }
+]

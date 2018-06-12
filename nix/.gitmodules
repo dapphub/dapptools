@@ -1,0 +1,76 @@
+[submodule "nixpkgs"]
+	path = nixpkgs
+	url = https://github.com/dapphub/nixpkgs
+  branch = carnix
+[submodule "dappsys/ds-auth"]
+	path = dappsys/ds-auth
+	url = https://github.com/dapphub/ds-auth
+	branch = dappnix
+[submodule "dappsys/erc20"]
+	path = dappsys/erc20
+	url = https://github.com/dapphub/erc20
+	branch = dappnix
+[submodule "dappsys/ds-exec"]
+	path = dappsys/ds-exec
+	url = https://github.com/dapphub/ds-exec
+	branch = dappnix
+[submodule "dappsys/ds-math"]
+	path = dappsys/ds-math
+	url = https://github.com/dapphub/ds-math
+	branch = dappnix
+[submodule "dappsys/ds-note"]
+	path = dappsys/ds-note
+	url = https://github.com/dapphub/ds-note
+	branch = dappnix
+[submodule "dappsys/ds-stop"]
+	path = dappsys/ds-stop
+	url = https://github.com/dapphub/ds-stop
+	branch = dappnix
+[submodule "dappsys/ds-test"]
+	path = dappsys/ds-test
+	url = https://github.com/dapphub/ds-test
+	branch = dappnix
+[submodule "dappsys/ds-warp"]
+	path = dappsys/ds-warp
+	url = https://github.com/dapphub/ds-warp
+	branch = dappnix
+[submodule "dappsys/ds-cache"]
+	path = dappsys/ds-cache
+	url = https://github.com/dapphub/ds-cache
+	branch = dappnix
+[submodule "dappsys/ds-chief"]
+	path = dappsys/ds-chief
+	url = https://github.com/dapphub/ds-chief
+	branch = dappnix
+[submodule "dappsys/ds-group"]
+	path = dappsys/ds-group
+	url = https://github.com/dapphub/ds-group
+	branch = dappnix
+[submodule "dappsys/ds-guard"]
+	path = dappsys/ds-guard
+	url = https://github.com/dapphub/ds-guard
+	branch = dappnix
+[submodule "dappsys/ds-proxy"]
+	path = dappsys/ds-proxy
+	url = https://github.com/dapphub/ds-proxy
+	branch = dappnix
+[submodule "dappsys/ds-roles"]
+	path = dappsys/ds-roles
+	url = https://github.com/dapphub/ds-roles
+	branch = dappnix
+[submodule "dappsys/ds-thing"]
+	path = dappsys/ds-thing
+	url = https://github.com/dapphub/ds-thing
+	branch = dappnix
+[submodule "dappsys/ds-token"]
+	path = dappsys/ds-token
+	url = https://github.com/dapphub/ds-token
+	branch = dappnix
+[submodule "dappsys/ds-value"]
+	path = dappsys/ds-value
+	url = https://github.com/dapphub/ds-value
+	branch = dappnix
+[submodule "dappsys/ds-vault"]
+	path = dappsys/ds-vault
+	url = https://github.com/dapphub/ds-vault
+	branch = dappnix

@@ -1,0 +1,19 @@
+[
+    {
+        "constant": false,
+        "inputs": [
+            {
+                "name": "hello",
+                "type": "address"
+            }
+        ],
+        "name": "bar",
+        "outputs": [
+            {
+                "name": "",
+                "type": "bool"
+            }
+        ],
+        "type": "function"
+    }
+]

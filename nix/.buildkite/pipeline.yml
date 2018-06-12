@@ -1,0 +1,36 @@
+steps:
+  - label: Build stable Linux
+    command: nix-build release.nix -A dapphub.linux.stable --no-out-link
+    agents:
+      linux: 'true'
+  - label: Build stable Darwin
+    command: nix-build release.nix -A dapphub.darwin.stable --no-out-link
+    agents:
+      mac: 'true'
+  - wait
+  - label: Sign stable Linux
+    command: nix-build release.nix -A dapphub.linux.stable -o nixout && nix sign-paths -r -v -k /var/lib/buildkite-agent/nix-key.sk ./nixout*
+    agents:
+      linux: 'true'
+  - label: Sign stable Darwin
+    command: nix-build release.nix -A dapphub.darwin.stable -o nixout && nix sign-paths -r -v -k /Users/administrator/nix-key.sk ./nixout*
+    agents:
+      mac: 'true'
+  - wait
+  - label: Upload stable Linux
+    command: nix-build release.nix -A dapphub.linux.stable -o nixout && nix copy -v --to s3://dapphub-nix-cache ./nixout*
+    agents:
+      linux: 'true'
+  - label: Upload stable Darwin
+    command: nix-build release.nix -A dapphub.darwin.stable -o nixout && nix copy -v --to s3://dapphub-nix-cache ./nixout*
+    agents:
+      mac: 'true'
+  - wait
+  - label: Update channel
+    command:
+      - 'tar --exclude-vcs --transform="s|^|nixpkgs-dapphub/|" -cf /tmp/nixexprs.tar *'
+      - 'xz -f /tmp/nixexprs.tar'
+      - 'aws s3 cp --acl public-read /tmp/nixexprs.tar.xz s3://dapphub-nix-cache/pkgs/dapphub/nixexprs.tar.xz'
+    agents:
+      linux: 'true'
+  - wait
