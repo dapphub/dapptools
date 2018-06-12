@@ -47,19 +47,9 @@ let
     else [];
 
 in (
-  (import ./nixpkgs) ({
-    overlays = [
-      (import ./nix/overlay.nix { flavor = "stable"; })
-    ] ++ extra-overlays;
-  } // (
-    if system != null then { inherit system; } else {}
-  ))
-) // {
-  master = (import ./nixpkgs) ({
-    overlays = [
-      (import ./nix/overlay.nix { flavor = "master"; })
-    ] ++ extra-overlays;
-  } // (
-    if system != null then { inherit system; } else {}
-  ));
-}
+  (import ./nixpkgs) (
+    { overlays = [(import ./nix/overlay.nix)] ++ extra-overlays;} // (
+      if system != null then { inherit system; } else {}
+    )
+  )
+)

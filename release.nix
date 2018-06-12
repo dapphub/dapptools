@@ -20,76 +20,45 @@ let
     echo report testlog $out index.html > $out/nix-support/hydra-build-products
   '';
 
-in rec {
-
-  dapphub.linux.stable = with linux.pkgs; {
-    # inherit celf;
+  # These packages should always work and be available in the binary cache.
+  stable = dist: with dist.pkgs; {
     inherit dai;
     inherit dapp-which;
     inherit dapp;
-    # inherit ds-chief;
     inherit ethjet;
     inherit ethsign;
     inherit evmdis;
     inherit go-ethereum-unlimited;
     inherit go-ethereum;
     inherit hevm;
-    # inherit hevmas;
-    # inherit hevml;
     inherit keeper;
-    inherit mkbip39;
-    inherit myetherwallet;
-    # inherit oasis-orders;
     inherit qrtx-term;
     inherit qrtx;
     inherit seth;
     inherit setzer;
     inherit solc-versions;
-    # inherit tla-plus;
     inherit token;
-    inherit symbex;
-    inherit dafny;
 
-    hevm-test-report = hevmTestReport linux;
-  } // linux.pkgs.dappsys;
+    hevm-test-report = hevmTestReport dist;
+  };
 
-  dapphub.linux.master = with linux.master.pkgs; {
-    inherit dapp;
-    inherit hevm;
-    # inherit hevmas;
-    inherit seth;
-
-    hevm-test-report = hevmTestReport linux.master;
-  } // linux.master.pkgs.dappsys;
-
-  dapphub.darwin.stable = with darwin.pkgs; {
-    # inherit celf;
-    inherit dai;
-    inherit dapp-which;
-    inherit dapp;
-    # inherit ds-chief;
-    inherit ethjet;
-    inherit ethsign;
-    inherit evmdis;
-    inherit go-ethereum-unlimited;
-    inherit go-ethereum;
-    inherit hevm;
-    # inherit hevml;
+  # These packages are semi-unmaintained or experimental.
+  weird = dist: with dist.pkgs; {
+    inherit celf;
+    inherit ds-chief;
+    inherit hevmas;
+    inherit hevml;
+    inherit oasis-orders;
+    inherit tla-plus;
     inherit mkbip39;
     inherit myetherwallet;
-    # inherit oasis-orders;
-    inherit qrtx-term;
-    inherit seth;
-    inherit setzer;
-    inherit solc-versions;
-    inherit token;
     inherit symbex;
     inherit dafny;
-  } // darwin.pkgs.dappsys;
+  };
 
-  dapphub.darwin.master = with darwin.master.pkgs; {
-    inherit dapp;
-    inherit hevm;
-    inherit seth;
-  } // darwin.master.pkgs.dappsys;
+in {
+  dapphub.linux.stable = stable linux;
+  dapphub.linux.weird = weird linux;
+  dapphub.darwin.stable = stable darwin;
+  dapphub.darwin.weird = weird darwin;
 }
