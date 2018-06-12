@@ -1,0 +1,4 @@
+#!/bin/sh -e
+x=$(seth --to-dec "$2")
+decimals=$(seth --lookup "$1-decimals" 2>/dev/null) || decimals=18
+seth --to-fix "$decimals" "$x"

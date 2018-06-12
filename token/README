@@ -1,0 +1,56 @@
+This is a simple utility for performing ERC20 operations.
+
+Usage: token [<options>] <command> [<args>]
+   or: token <command> --help
+
+Commands:
+
+   allowance       print the amount one account can spend from another
+   approve         approve another account to spend your tokens
+   balance         print the token balance of an account
+   help            show help about token(1) or one of its subcommands
+   supply          print the total supply of a token
+   transfer        transfer tokens from one account to another
+
+Use `make install' to install token(1) into `/usr/local'.
+Use `make link' to link token(1) into `/usr/local' from this directory.
+
+This program depends on Seth (see https://github.com/dapphub/seth).
+
+Example usage:
+
+   $ cat ~/.sethrc
+   export KOVAN_MKR=0x4bb514a7f83fbb13c2b41448208e89fabbcfe2fb
+   export KOVAN_MKR_DECIMALS=18
+   export KOVAN_DANIEL=0x0101010101010101010101010101010101010101
+   export KOVAN_KENNY=0x0202020202020202020202020202020202020202
+
+   $ token supply @mkr
+   1000000.000000000000000000
+
+   $ token balance @mkr @daniel
+   0.000000000123456789
+
+   $ token allowance
+   Usage: token allowance <token> <owner> <spender>
+
+   $ token allowance @mkr @kenny daniel
+   0.500000000000000000
+
+   $ token transfer
+   Usage: token transfer <token> <recipient> <amount> [<source>]
+   Note: <amount> must be an integer representing wei (or equivalent).
+
+   $ ETH_FROM=@daniel token transfer @mkr @daniel 150000000000000000 @kenny
+   seth-send: Published 200-byte transaction.
+   seth-send: 0x7682289e7245623cddf9657a47dae1c11c00466881cb7f5f2a4c2db8acec1594
+   seth-send: Waiting for transaction receipt.............................
+   seth-send: Transaction included in block 1622448.
+   seth-send: note: return value may be inaccurate
+   true
+
+   $ token balance @mkr @daniel
+   0.150000000123456789
+
+   $ token allowance @mkr @kenny daniel
+   0.350000000000000000

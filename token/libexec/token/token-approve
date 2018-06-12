@@ -1,0 +1,8 @@
+#!/bin/sh -e
+### token-approve -- set how much one account can transfer from another
+### Usage: token approve <token> <spender> <amount>
+### Note: <amount> must be an integer representing wei (or equivalent).
+[ $# = 3 ] || token approve --usage
+amount=$(token --parse "$3")
+sig="approve(address,uint)(bool)"
+seth send "$1" "$sig" "$2" "$amount"

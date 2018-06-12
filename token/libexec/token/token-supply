@@ -1,0 +1,6 @@
+#!/bin/sh -e
+### token-supply -- print the total supply of a token
+### Usage: token supply <token>
+[ $# = 1 ] || token supply --usage
+supply=$(seth call "$1" "totalSupply()(uint)")
+token --format "$1" "$supply"
