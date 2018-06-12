@@ -5,3 +5,12 @@
 	path = nixpkgs
 	url = https://github.com/dapphub/nixpkgs
 	branch = carnix
+[submodule "setzer"]
+	path = setzer
+	url = https://github.com/makerdao/setzer
+[submodule "symbex"]
+	path = symbex
+	url = https://github.com/mbrock/symbex
+[submodule "dai-cli"]
+	path = dai-cli
+	url = https://github.com/makerdao/dai-cli

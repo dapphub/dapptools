@@ -1,24 +1,6 @@
 { flavor ? "stable" }: self: super:
 
 let
-
-  versions = super.lib.importJSON ./versions.json;
-  versioned = pkg: caller: (
-    caller (import (./upstream + "/${flavor}/${pkg}.nix"))
-  ).overrideAttrs (x: {
-    src = self.pkgs.fetchFromGitHub versions.${pkg}.${flavor};
-  } // (if flavor == "stable" then rec {
-    name = "${pkg}-${version}";
-    version = versions.${pkg}.version;
-  } else {
-    name = "${pkg}-${flavor}";
-    version = flavor;
-  }));
-
-  local = src: pkg: pkg.overrideAttrs (_: {
-    inherit src;
-  });
-
   # This is a specific revision of Nixpkgs that we use to avoid
   # rebuilding all the versions of solc when we bump our submodule, or
   # to allow a package to succeed when something breaks in nixpkgs.
@@ -247,7 +229,7 @@ in {
 
   symbex =
     self.pkgs.haskell.lib.justStaticExecutables
-      (versioned "symbex" (x: self.haskellPackages.callPackage x {}));
+      (self.haskellPackages.callPackage (import ../symbex) {});
 
   hevm = self.pkgs.haskell.lib.justStaticExecutables self.haskellPackages.hevm;
 
@@ -264,13 +246,13 @@ in {
 
   ethsign = (callPackage (import ../ethsign) {}).bin;
 
-  setzer = versioned "setzer" (x: callPackage x {});
+  setzer = callPackage (import ../setzer) {};
 
   keeper = callPackage ./packages/keeper.nix {};
   evmdis = callPackage ./packages/evmdis.nix {};
 
   token = callPackage (import ../token) {};
-  dai = versioned "dai-cli" (x: callPackage x {});
+  dai = callPackage (import ../dai-cli) {};
 
   go-ethereum = super.go-ethereum.overrideDerivation (_: rec {
     name = "go-ethereum-${version}";
@@ -445,17 +427,17 @@ in {
     propagatedBuildInputs = [mnemonic];
   };
 
-  oasis-orders = (
-    versioned "oasis-orders"
-      (x: self.pkgs.haskell.lib.justStaticExecutables
-        (self.haskellPackages.callPackage x {}))
-  ).overrideAttrs (attrs: {
-    postInstall = ''
-      wrapProgram $out/bin/oasis-orders \
-        --set OASIS_DAPP_PATH ${self.dapps.maker-otc}/dapp/maker-otc
-    '';
-    nativeBuildInputs = attrs.nativeBuildInputs ++ [self.pkgs.makeWrapper];
-  });
+  # oasis-orders = (
+  #   versioned "oasis-orders"
+  #     (x: self.pkgs.haskell.lib.justStaticExecutables
+  #       (self.haskellPackages.callPackage x {}))
+  # ).overrideAttrs (attrs: {
+  #   postInstall = ''
+  #     wrapProgram $out/bin/oasis-orders \
+  #       --set OASIS_DAPP_PATH ${self.dapps.maker-otc}/dapp/maker-otc
+  #   '';
+  #   nativeBuildInputs = attrs.nativeBuildInputs ++ [self.pkgs.makeWrapper];
+  # });
 
   dapphub-emacs-experiment = let
     version = "1";
