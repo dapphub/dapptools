@@ -1,0 +1,7 @@
+[submodule "dappsys"]
+	path = dappsys
+	url = https://github.com/dapphub/dappsys
+[submodule "nixpkgs"]
+	path = nixpkgs
+	url = https://github.com/dapphub/nixpkgs
+	branch = carnix
