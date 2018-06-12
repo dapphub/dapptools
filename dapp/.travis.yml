@@ -1,0 +1,3 @@
+sudo: required
+language: nix
+script: ./.travis-test

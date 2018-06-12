@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+set -e
+
+opts=()
+
+while [[ $# -gt 0 ]]; do
+  opt=$1; shift
+  case $opt in
+    -r|--regex)
+      opts+=(--match "$1"); shift
+      ;;
+    *)
+      echo >&2 "dapp-test-hevm: unknown argument: $opt"
+      exit 1
+      ;;
+  esac
+done
+
+if [ "$DAPP_VERBOSE" ]; then set -x; fi
+
+state=$(dapp --make-library-state)
+function clean() { rm -rf "$state"; }
+trap clean EXIT
+
+find "${DAPP_OUT?}" -type f -name '*.sol.json' -print0 |
+  xargs -0 -n1 -I{} hevm dapp-test --json-file={} --dapp-root=. --state="$state" "${opts[@]}"

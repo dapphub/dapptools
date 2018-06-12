@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+set -e
+deps=$(dapp --parse-deps "$@")
+while read -r _ name url; do
+  ssh_url=${url/https:\/\/github.com\//git@github.com:}
+  (set -x; git clone "$ssh_url" "$name" --recursive)
+done <<<"$deps"

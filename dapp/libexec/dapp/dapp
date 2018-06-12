@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+set -e
+export DAPP_SRC=${DAPP_SRC-src}
+export DAPP_LIB=${DAPP_LIB-lib}
+export DAPP_OUT=${DAPP_OUT-out}
+
+version=$(solc --version)
+if grep -q 0.4.9 <<<"$version"; then
+  echo >&2 "${0##*/}: error: solc 0.4.9 not supported"
+  echo >&2 "${0##*/}: error: https://github.com/dapphub/dapp/issues/8"
+  echo >&2 "${0##*/}: error: please downgrade to 0.4.8 or upgrade to 0.4.10"
+  exit 1
+fi
+
+"${0##*/}-${1-help}" "${@:2}"

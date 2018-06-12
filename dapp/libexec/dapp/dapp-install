@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+set -e
+dapp --sanity "$0"
+deps=$(dapp --parse-deps "$@")
+while read -r unparsed name url; do
+  (set -x; git submodule add --force "$url" "lib/$name")
+  (set -x; git submodule update --init --recursive "lib/$name")
+  (set -x; git commit -m "dapp install $unparsed")
+done <<<"$deps"

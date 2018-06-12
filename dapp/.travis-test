@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+set -ex
+ETHRUN=https://github.com/dapphub/ethrun/releases/download/v0.2.4/ethrun-v0.2.4-linux.tar.gz
+( cd /tmp; curl -LO "$ETHRUN"; tar xf *.tar.gz; sudo mv ethrun /usr/local/bin/ )
+
+nix-channel --add https://nix.dapphub.com/pkgs/dapphub
+nix-channel --update
+nix-env -i ShellCheck solc seth nodejs hevm git
+
+make test
+sudo make link
+dapp selftest

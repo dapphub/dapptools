@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+set -e
+dapp --sanity "$0"
+
+if [[ $1 ]]; then
+  for x; do
+    (set -x; git submodule update --init --remote "lib/$x")
+    if [[ $(git status --porcelain -- lib) ]]; then
+      (set -x; git add "lib/$x")
+      (set -x; git commit -m "dapp upgrade $x")
+    else
+      echo "${0##*/}: dependency up-to-date: $x"
+    fi
+    dapp update "$x"
+  done
+else
+  for x in lib/*; do libs+=("${x#*/}"); done
+  dapp upgrade "${libs[@]}"
+fi

@@ -1,0 +1,45 @@
+#!/usr/bin/env bash
+set -e
+
+if [ "$DAPP_VERBOSE" ]; then set -x; fi
+
+# First, to support library linking, we build up a "state directory"
+# that contains the initial deployed contracts.  This way we can
+# directly put code at arbitrary addresses, which is how we fake the
+# deployed libraries.
+#
+# Funnily enough, Hevm loads state directories not from the file
+# system directly, but via Git.  Because these state directories are
+# ephemeral, it adds some complexity to this script: we create a
+# one-commit Git repository, run the tests, then delete it.
+#
+# (The state directory support of Hevm is made to allow persistence.
+# That's why we use Git repositories: to get atomic behavior and also
+# history tracking.)
+
+sender=0x00a329c0648769a73afac7f9381e08fb43dbea72
+nonce=1048576
+libraries=($(dapp --find-libraries))
+
+state=$(TMPDIR=. mktemp -d hevm.libs.XXXXX)
+
+for lib in "${libraries[@]}"; do
+  address=$(dapp address "$sender" "$nonce")
+  links+=" $lib:$address"
+  binpath=$(sed -E "s/.*:(.*)/$DAPP_OUT\/\1.bin/" <<<"$lib")
+  echo >&2 "dapp: Predeploying test library $lib at $address"
+  mkdir -p "$state/$address"
+  hevm exec --code "$(cat "$binpath")" > "$state/$address/code" --gas 1000000000
+  ((nonce++))
+done
+
+# Try to make sure `git commit' definitely succeeds...
+export GIT_CONFIG_NOSYSTEM=1
+export GIT_AUTHOR_NAME=hevm
+export GIT_AUTHOR_EMAIL=hevm@dapphub.com
+export GIT_COMMITTER_NAME=$GIT_AUTHOR_NAME
+export GIT_COMMITTER_EMAIL=$GIT_AUTHOR_EMAIL
+gitopts=(-q --no-verify --no-gpg-sign --allow-empty -m "dapp test")
+( cd "$state" ; git init -q && git add . && git commit "${gitopts[@]}" )
+
+echo "$state"

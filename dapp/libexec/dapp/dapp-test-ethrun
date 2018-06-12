@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+set -e
+
+sender=0x00a329c0648769a73afac7f9381e08fb43dbea72
+nonce=1048576
+
+libraries=($(dapp --find-libraries))
+
+for lib in "${libraries[@]}"; do
+  address=$(dapp address "$sender" "$nonce")
+  links+=" $lib:$address"
+  ((++nonce))
+done
+
+(set -x; find "${DAPP_OUT?}" -name "*.bin" -exec solc --link --libraries "$links" {} +)
+
+# pass the library bin files through to ethrun
+# (needs to be exact same order as above for nonces)
+function binfile() { sed -E "s/.*:(.*)/$DAPP_OUT\/\1.bin/"; }
+deploy=($(printf "%s\n" "${libraries[@]}" | binfile))
+
+(set -x; dapp quicktest "$@" "$DAPP_OUT" "${deploy[@]}")

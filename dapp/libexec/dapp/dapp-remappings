@@ -1,0 +1,60 @@
+#!/usr/bin/env node
+var PROGRAM_NAME = process.argv[1].replace(/.*\//, "")
+var pkg_src = {}, pkg_hash = {}
+
+findRemappings(".")
+
+Object.keys(pkg_src).sort((a, b) => a.length - b.length).sort(
+  (a, b) => {
+    var depth = name => pkg_src[name].split("/").length
+    return depth(a) - depth(b)
+  }
+).forEach(name => {
+  console.log(`${name}/=${pkg_src[name]}/`)
+  console.log(`${name}=${pkg_src[name]}/index.sol`)
+})
+
+function findRemappings(prefix) {
+  return ls(`${prefix}/${process.env.DAPP_LIB}`).forEach(name => {
+    var lib = `${prefix}/${process.env.DAPP_LIB}`
+
+    if (ls(`${lib}/${name}`).includes(".git") != true) {
+      console.error(`${PROGRAM_NAME}: error: ${lib}/${name} is not a Git repository`)
+      console.error(`${PROGRAM_NAME}: error: try "dapp update" to initialize submodules`)
+      process.exit(1)
+    }
+    
+    var src = `${lib}/${name}/${process.env.DAPP_SRC}`.replace(/^.\//, "")
+    var hash = run("git", ["-C", src, "rev-parse", "HEAD"])
+  
+    if (pkg_src[name]) {
+      if (hash != pkg_hash[name]) {
+        console.error(`${PROGRAM_NAME}: error: mismatching packages:`)
+        console.error(`${PROGRAM_NAME}: error: (1) ${pkg_src[name]}`)
+        console.error(`${PROGRAM_NAME}: error: (2) ${src}`)
+        process.exit(1)
+      } else if (src.length < pkg_src[name].length) {
+        pkg_src[name] = src
+      }
+    } else {
+      pkg_src[name] = src
+      pkg_hash[name] = hash
+    }
+  
+    findRemappings(`${lib}/${name}`)
+  })
+}
+
+function ls(dir) {
+  try {
+    return require("fs").readdirSync(dir)
+  } catch (error) {
+    return []
+  }
+}
+
+function run(cmd, args) {
+  return require("child_process").execFileSync(cmd, args, {
+    encoding: "utf-8"
+  })
+}

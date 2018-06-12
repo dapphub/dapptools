@@ -1,0 +1,16 @@
+#!/usr/bin/env node
+/// dapp-address -- determine address of newly generated contract
+
+var PROGRAM_NAME = process.argv[1].replace(/.*\//, "")
+var PROGRAM_ARGS = process.argv.slice(2)
+
+// shut up secp256k1
+const log = console.log
+console.log = () => {}
+const generateAddress = require("ethereumjs-util").generateAddress
+console.log = log
+
+var sender = PROGRAM_ARGS[0]
+var nonce = PROGRAM_ARGS[1]
+
+console.log(generateAddress(sender, nonce).toString("hex"))

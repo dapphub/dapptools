@@ -1,0 +1,2 @@
+#!/usr/bin/env bash
+dapp --nix-run go-ethereum-unlimited dapp --testnet-launch "$@"

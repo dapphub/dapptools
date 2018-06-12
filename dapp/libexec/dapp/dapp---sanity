@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+git status --porcelain | grep -qv '^??' || exit 0
+exec >&2
+git status
+echo "${1##*/}: please commit or stash your changes first"
+exit 1

@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+set -e
+
+# Find (heuristically) all the libraries defined in the source
+# hierarchy and print them like ``src/Foo.sol:FooLib'' (appropriate
+# for `solc --libraries').
+#
+# We don't have a "proper" way to find the libraries yet, so we use
+# some simple grep/sed magic.  If your Solidity source files are weird
+# then this might give you trouble.
+#
+# Instead of making this more smart, I think we could build linking
+# into Hevm.  It can more accurately determine which libraries are
+# needed (via looking at the bytecode and the ASTs).
+
+function binfile() { sed -E "s/.*:(.*)/$DAPP_OUT\/\1.bin/"; }
+sources=($(find "${DAPP_SRC?}" "$DAPP_LIB" -name '*.sol'))
+grep -EH '^library\s+\w+' "${sources[@]}" \
+  | sed -E 's/:library[[:blank:]]+([_[:alnum:]]+)[[:blank:]]+(\{|is).*/:\1/' \
+  | sort | while read -r line; do
+    # Only include libraries that have actually been built.
+    if [[ -f $(binfile <<<"$line") ]]; then echo "$line"; fi
+  done

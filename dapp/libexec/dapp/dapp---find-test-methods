@@ -1,0 +1,8 @@
+#!/usr/bin/env node
+let path = process.argv[2]
+let abi = JSON.parse(require("fs").readFileSync(path))
+if (abi.filter(x => x.name == "IS_TEST").length > 0) {
+  abi.filter(x => (x.name || "").match(/^test/)).forEach(method => {
+    console.log(method.name)
+  })
+}

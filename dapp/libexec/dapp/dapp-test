@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+set -e
+have() { command -v "$1" >/dev/null; }
+
+if ! [[ $DAPP_SKIP_BUILD ]] ; then
+  DAPP_LINK_TEST_LIBRARIES=1 dapp build || exit
+fi
+
+have hevm   && ! [[ $DAPP_NO_HEVM   ]] && dapp test-hevm   "$@"
+have ethrun && ! [[ $DAPP_NO_ETHRUN ]] && dapp test-ethrun "$@"
+
+have ethrun || have hevm || {
+  echo >&2 "${0##*/}: error: neither \`ethrun' nor \`hevm' found"
+  echo >&2 "${0##*/}: error: please install one (or both) and try again"
+  exit 1
+}

@@ -1,0 +1,47 @@
+#!/usr/bin/env bash
+## dapp debug -- starts an interactive debugger for unit tests (hevm)
+
+set -e
+
+have() { command -v "$1" >/dev/null; }
+have hevm || {
+  echo >&2 "${0##*/}: error: The hevm executable was not found in \$PATH."
+  echo >&2 "${0##*/}: error: See https://dapp.tools for installation instructions."
+  exit 1
+}
+
+# Make sure the dapp is built with libraries linked.
+
+( set -x; DAPP_LINK_TEST_LIBRARIES=1 dapp build || exit )
+
+# Create the state directory for linked libraries.
+
+state=$(dapp --make-library-state)
+function clean() { rm -rf "$state"; }
+trap clean EXIT
+
+# Make sure we know which JSON file to target.
+
+shopt -s nullglob
+shopt -s globstar
+jsons=($(echo out/**/*.sol.json))
+if [[ "${#jsons[@]}" -gt 1 ]]; then
+  if [[ "$#" -gt 0 ]]; then
+    target="$1"; shift
+  else
+    echo >&2 "${0##*/}: There are multiple compilation outputs:"
+    echo >&2 "${0##*/}:"
+    echo >&2 "${0##*/}:   ${jsons[*]}"
+    echo >&2 "${0##*/}:"
+    echo >&2 "${0##*/}: Choose one like this:"
+    echo >&2 "${0##*/}:   $ dapp debug ${jsons[0]}"
+    echo >&2 "${0##*/}:"
+    exit -1
+  fi
+elif [[ "${#jsons[@]}" -eq 0 ]]; then
+  echo >&2 "${0##*/}: error: No compilation outputs; nothing to debug."
+fi
+
+# Launch the debugger!
+
+( set -x; hevm interactive --dapp-root=. --state="$state" --json-file="$target" "$@" )
