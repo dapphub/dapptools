@@ -54,6 +54,7 @@ let
     inherit myetherwallet;
     inherit symbex;
     inherit dafny;
+    inherit dapp-debug;
   };
 
 in {

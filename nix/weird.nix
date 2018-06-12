@@ -11,7 +11,7 @@ let
         modules = [module config];
       }).config.system.build.isoImage
     );
-    
+
   ourPerlPackages = import ./packages/perl.nix {
     inherit (self) buildPerlPackage perlPackages;
   };
@@ -281,6 +281,44 @@ in {
     ];
     text = ''
       emacs -q --no-splash --load=${dapphub-elisp}/dapphub.el
+    '';
+  };
+
+  dapp-debug = let
+    version = "1";
+    emacs = self.pkgs.emacsWithPackages (e: with e; [ ivy ]);
+    elisp = self.pkgs.writeTextFile {
+      name = "dapp-debug-elisp-${version}";
+      destination = "/init.el";
+      text = ''
+        (require 'ivy)
+        (ivy-mode)
+        (define-key ivy-minibuffer-map (kbd "C-j") #'ivy-immediate-done)
+        (define-key ivy-minibuffer-map (kbd "RET") #'ivy-alt-done)
+
+        (menu-bar-mode -1)
+        (setq initial-buffer-choice
+              (lambda ()
+                (with-current-buffer (get-buffer-create "*Dapp Debugging*")
+                  (insert "Hello, and welcome to the dapp debugger!\n\n")
+                  (insert "See the input field below and good luck.\n\n")
+                  (insert "To exit, type `C-x C-c'.\n\n")
+                  (current-buffer))))
+
+        (load-file "${self.haskellPackages.hevm.src}/hevm.el")
+        (setq hevm-executable-path "${self.hevm}/bin/hevm")
+        (run-with-idle-timer 0 nil (lambda () (call-interactively 'hevm)))
+      '';
+    };
+  in self.bashScript {
+    inherit version;
+    name = "dapp-debug";
+    deps = with self.pkgs; [
+      coreutils
+      emacs
+    ];
+    text = ''
+      ${emacs}/bin/emacs -nw -q --no-splash --load=${elisp}/init.el
     '';
   };
 
