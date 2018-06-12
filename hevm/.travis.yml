@@ -1,0 +1,15 @@
+sudo: required
+services:
+- docker
+script:
+- make hevm-linux-x64
+before_deploy:
+- tar czf hevm-${TRAVIS_TAG}-linux-x64.tar.gz hevm-linux-x64
+deploy:
+  provider: releases
+  api_key:
+    secure: hUZxnwIpX9wzMSuwlgXQ8ybKWfYd6JUhFJBdhJN12cZrH2+fiQX9rmSV1TryGERREo22VNbYi/1tcDEC4nx9xJm50dPcqkw9muL4oMrF0QYU6sAWmnNndHbhZGTTdJ2MBmzz7Gojx3SUNsny8ewtlCBNmiK5MAeNF2jjLZ4ATgR+ABZpkDV1/KhHQGQUuANV3bZ1S/xk/chnAPkoBb8H0HVGCCeL2SKiMt1GWaoNvIEZw7SXqS6wZsSqmu7iqNlu8pnR8K2rVqRXDiBsUYv6QY2P4swHZd3I00FIOI0/962hTORb1bJHyfEGeHV9VGBEBNBMmkW9Al1uD2fO6BqrVMv93Y6FhZ2pySS5DM+9aCZMdCxS01ov5rgEY2B+zv4mDDEXEdfQGkPLVSpGrLkq7t2RAt+unuSpSVcatreqgZvfrPcptDkm7kYk+2aqcR38XJa00uKeEcbNuXaG9Ok/fZ211MKCsd9uZaSr7oBMta0P18sX2RvVY5Kbs9fqPcYgAz2WLqYUM7n3W8AwbRcfFOQ6Ev/PGVJhACcrmCkZI3lc7ojKInQkPm9PdZI8sbrjmHHJ5tQNs5zVACBsRiiWsrT3EFr2Pd6SVb4Hx2Wrq2dq0yGLLhOmPbPt7pBMp3G6/xYMhRZFabKgQ7XeHR5ybrpsvTR+lq/SAvyojauS8Tc=
+  file: "hevm-${TRAVIS_TAG}-linux-x64.tar.gz"
+  on:
+    tags: true
+  skip_cleanup: true

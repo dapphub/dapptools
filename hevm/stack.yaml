@@ -1,0 +1,14 @@
+resolver: lts-8.15
+packages:
+- .
+extra-deps:
+- data-dword-0.3.1
+- ghci-pretty-0.0.2
+- ipprint-0.6
+- sr-extra-1.46.3.2
+flags: {}
+extra-package-dbs: []
+image:
+  container:
+    name: mbrock/hevm
+    base: haskell:8.0.1
