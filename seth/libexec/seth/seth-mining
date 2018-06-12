@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+set -e
+mining=$(seth rpc eth_mining)
+[[ $mining = true ]]

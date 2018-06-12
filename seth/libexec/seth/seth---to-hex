@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+set -e
+if [[ $1 =~ ^[[:digit:]]+$ ]]; then
+  hexnum=$(bc <<<"obase=16; $1")
+  echo "0x$(tr A-F a-f <<<"$hexnum")"
+elif [[ $1 = 0x* ]]; then
+  seth --to-hexdata "$1"
+elif [[ $1 =~ ^[[:xdigit:]]+$ ]]; then
+  seth --fail "${0##*/}: error: missing \`0x' prefix: \`$1'"
+else
+  seth --fail "${0##*/}: error: bad number: \`$1'"
+fi

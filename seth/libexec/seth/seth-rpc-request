@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+set -e
+jshon <<<{} \
+-s 2.0 \
+  -i jsonrpc \
+-n 1 \
+  -i id \
+-s "$1" \
+  -i method \
+-n [] "${@:2}" \
+  -i params

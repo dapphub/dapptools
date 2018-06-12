@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+### seth-balance -- show the balance of any account on the blockchain
+### Usage: seth balance [-B <block>] <account>
+### Print the balance of <account> in wei.
+###
+### With `-B <block>', print the balance as of <block>.
+set -e
+[[ $1 ]] || seth --fail-usage "$0"
+account=$1
+[[ $account = @* ]] && account=$(seth lookup "$account")
+jshon+=(-s "$account" -i append)
+jshon+=(-s "${ETH_BLOCK-latest}" -i append)
+balance=$(seth rpc eth_getBalance -- "${jshon[@]}")
+[[ $balance = 0x* ]] && balance=$(seth --to-dec "$balance")
+echo "$balance"

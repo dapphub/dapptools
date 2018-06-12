@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+### seth-storage -- show the value of a storage slot on the blockchain
+### Usage: seth storage [-B <block>] <address> <slot>
+###
+### Print the value of a certain storage slot at a certain address.
+### With `-B <block>', print the value as of that block.
+set -e
+[[ $# = 2 ]] || seth --fail-usage "$0"
+address=$(seth --to-address "$1")
+slot=$(seth --to-hex "$2")
+jshon+=(-s "$address" -i append)
+jshon+=(-s "$slot" -i append)
+jshon+=(-s "${ETH_BLOCK-latest}" -i append)
+seth rpc eth_getStorageAt -- "${jshon[@]}"

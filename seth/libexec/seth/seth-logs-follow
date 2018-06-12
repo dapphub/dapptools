@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+set -e
+seth rpc eth_getFilterChanges -- -s "$1" -i append
+sleep 1
+exec "$0" "$@"

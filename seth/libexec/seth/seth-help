@@ -1,0 +1,51 @@
+#!/usr/bin/env bash
+### seth-help -- print help about seth(1) or one of its subcommands
+### Usage: seth help [<command>]
+###    or: seth <command> --help
+
+BUGS=https://github.com/dapphub/seth/issues
+
+name=seth
+file=${0%-*}${1+-$1}
+header=$(perl -ne 'print "$2\n" if /^(\S)\1\1(?: (.*))?/' "$file")
+
+if ! [[ $header ]]; then
+  sed "s/^/${0##*/}: /" "$file"
+elif [[ $(wc -l <<<"$header") = 1 ]]; then
+  echo "$header"
+else
+  sed "1{/^$name\\S* -- /d;}" <<<"$header"
+fi
+
+[[ $1 ]] && exit
+
+for file in ${0%/*}/$name-*; do
+  if [[ -L $file ]]; then
+    continue
+  elif [[ $file = */$name---* ]]; then
+    special_commands+=("$file")
+  else
+    normal_commands+=("$file")
+  fi
+done
+
+list-commands() {
+  cat "$@" |
+  perl -ne 'print "$2 $3\n" if /^(\S)\1\1 '"$name"'-(\S+) -- (.*)/' |
+  while read -r name label; do
+    printf "   %-14s  %s\n" "$name" "$label"
+  done | LANG=C sort
+}
+
+cat <<.
+
+Special commands:
+
+$(list-commands "${special_commands[@]}")
+
+Commands:
+
+$(list-commands "${normal_commands[@]}")
+
+Report bugs to <$BUGS>.
+.

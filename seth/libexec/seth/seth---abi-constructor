@@ -1,0 +1,6 @@
+#!/usr/bin/env node
+console.log(`constructor(${(JSON.parse(
+  require("fs").readFileSync("/dev/stdin", { encoding: "utf-8" })
+).filter(
+  x => x.type == "constructor"
+)[0] || { inputs: [] }).inputs.map(x => x.type).join(",")})`)

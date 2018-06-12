@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+### seth-events -- print the decoded events of some contract
+### Usage: seth events [-B <block>] [--follow] <address>
+### To use this command, you need to set the `SETH_ABI' variable:
+### export SETH_ABI=$(seth abi 'event Foo(uint bar);')
+set -e -o pipefail
+[[ $1 ]] || seth --fail-usage "$0"
+seth logs "$@" | seth --decode-events

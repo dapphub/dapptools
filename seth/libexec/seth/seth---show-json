@@ -1,0 +1,44 @@
+#!/usr/bin/env bash
+set -e
+
+show-json() {
+  if [[ $1 = \"*\" ]]; then
+    unquoted=$(jshon <<<"[$1]" -a -u)
+    if is-short-hexnum 20 "$unquoted"; then
+      show-hexnum "$unquoted"
+    else
+      echo "$unquoted"
+    fi
+  else
+    echo "$1"
+  fi
+}
+
+is-short-hexnum() {
+  [[ ${#2} -lt $1 && $2 =~ 0x[[:xdigit:]]+ ]]
+}
+
+show-hexnum() {
+  digits=${1:2}
+  bc <<<"ibase=16; $(tr a-f A-F <<<"$digits")"
+}
+
+if [[ $SETH_JSON ]]; then
+  jshon
+else
+  json=$(cat)
+  case $json in
+  \[*\]) jshon <<<"$json" -a -j |
+    while read -r item; do
+      show-json "$item"
+    done;;
+  \{*\}) jshon <<<"$json" -k |
+    while read -r key; do
+      value=$(jshon <<<"$json" -e "$key" -j)
+      value=$(show-json "$value")
+      printf "%-${SETH_KEY_WIDTH-23}s %s\n" "$key" "$value"
+    done | sort;;
+  \"*\") show-json "$json";;
+  *) echo "$json";;
+  esac
+fi

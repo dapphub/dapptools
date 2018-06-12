@@ -1,0 +1,26 @@
+#!/usr/bin/env node
+var keccak256 = require('./sha3.js').keccak256;
+
+// adapted from https://github.com/ethereumjs/ethereumjs-util/blob/master/index.js#L465
+function toChecksumAddress(address) {
+  address = address.toLowerCase().replace('0x','')
+  var hash = keccak256(address).toString('hex')
+  var ret = '0x'
+
+  for (let i = 0; i < address.length; i++) {
+    if (parseInt(hash[i], 16) >= 8) {
+      ret += address[i].toUpperCase()
+    } else {
+      ret += address[i]
+    }
+  }
+
+  console.log(ret)
+}
+
+if (!process.argv[2]) {
+  console.error("seth---to-checksum-address: error: missing argument")
+  process.exit(1)
+}
+var address = process.argv[2];
+toChecksumAddress(address)

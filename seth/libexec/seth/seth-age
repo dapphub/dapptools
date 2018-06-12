@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+### seth-age -- show the timestamp of the latest block
+set -e
+timestamp=$(seth block "${ETH_BLOCK-latest}" timestamp)
+date -d@"$timestamp"

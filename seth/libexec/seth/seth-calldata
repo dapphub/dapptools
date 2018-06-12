@@ -1,0 +1,35 @@
+#!/usr/bin/env bash
+### seth-calldata -- pack a signature and a list of arguments into calldata
+### Usage: seth calldata <sig> [<args>]
+###    or: seth calldata <file>
+###    or: seth calldata <data>
+###
+### Pack <sig> and <args> into data suitable for passing to `seth call'.
+### If <sig> has the form `<name>(<types>)', pack <sig>/<args> into calldata.
+###
+### If <file> contains a slash character, treat it as a file name to read.
+### Otherwise, ensure <data> begins with `0x' and treat it as hexdata.
+set -e
+if [[ $1 =~ ^([^\(]+)\( ]]; then
+  name=${BASH_REMATCH[1]}
+  abi=$(seth --abi-function-json "$1")
+  shift
+  for arg; do
+    [[ $arg = @* ]] && arg=$(seth lookup "$arg")
+    args+=(-p "${arg#0x}")
+  done
+  calldata=$(
+    [[ $SETH_DEBUG_ETHABI ]] && set -x
+    ethabi encode function <(echo "$abi") "$name" "${args[@]}" -l
+  )
+  if [[ $calldata = error* ]]; then
+    echo >&2 "ethabi: $calldata"
+    exit 1
+  else
+    echo "0x${calldata#0x}"
+  fi
+elif [[ $2 ]]; then
+  seth --fail-usage "$0"
+else
+  seth --to-hexdata "$1"
+fi

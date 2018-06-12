@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+### seth-call -- call a contract without updating the blockchain
+### Usage: seth call [<options>] <to> <sig> [<args>]
+###    or: seth call [<options>] <to> <data>
+###
+### Perform a local call to <to> without publishing a transaction.
+###
+### With <sig> of the form `<name>(<types>)', infer <data> from <sig>/<args>.
+### With `name(<in-types>)(<out-types>)', also decode the return values.
+###
+### With `-B <block>', use the state of the blockchain as of <block>.
+### With `-F <sender>', simulate calling <to> from <sender>
+### With `-V <value>', simulate transferring <value> to <to>.
+###
+### See also seth-send(1), seth-estimate(1), seth-storage(1), seth-code(1).
+set -e
+[[ $2 ]] || seth --fail-usage "$0"
+TO=$(seth --to-address "$1")
+DATA=$(seth calldata "${@:2}")
+jshon+=(-n {})
+jshon+=(-s "$TO"   -i to)
+jshon+=(-s "$DATA" -i data)
+jshon+=($(seth --send-params))
+jshon+=(-i append)
+[[ $ETH_BLOCK = [0-9]* ]] && ETH_BLOCK=$(seth --to-hex "$ETH_BLOCK")
+jshon+=(-s "${ETH_BLOCK-latest}" -i append)
+result=$(seth rpc eth_call -- "${jshon[@]}")
+seth --abi-decode "$2" "$result"

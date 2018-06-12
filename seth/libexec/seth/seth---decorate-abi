@@ -1,0 +1,15 @@
+#!/usr/bin/env node
+var abi = JSON.parse(process.argv[2])
+var { execFileSync } = require("child_process")
+var call = (name, ...args) => execFileSync(name, args, { encoding: "utf-8" })
+
+console.log(JSON.stringify(abi.map(x => {
+  if (x.type == "event") {
+    var sig = `${x.name}(${x.inputs.map(x => x.type).join(",")})`
+    var hexdata = call("seth", "--from-ascii", sig).trim()
+    var topic = call("seth", "keccak", hexdata).trim()
+    return Object.assign(x, { topic })
+  } else {
+    return x
+  }
+}, null, 2)))

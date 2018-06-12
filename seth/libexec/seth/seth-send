@@ -1,0 +1,87 @@
+#!/usr/bin/env bash
+### seth-send -- sign and publish a transaction to the blockchain
+### Usage: seth send [<opts>] [-F <from>] <to> <sig> [<args>]
+###    or: seth send [<opts>] [-F <from>] <to> [<data>]
+###    or: seth send [<opts>] [-F <from>] --create <code> <sig> [<args>]
+###    or: seth send [<opts>] [-F <from>] --create <code> [<data>]
+###
+### Publish a transaction signed by <from> to call <to> with <data>.
+### If no <from> is given, try `$ETH_FROM'.
+###
+### If <sig> has the form `<name>(<types>)', infer <data> from <sig>/<args>.
+### If no <data> is given, just call <to> without any calldata.
+### With `--create', create a new object initialized from <code> and <data>.
+### With `--create' and <sig>, encode constructor args <args> into <data>.
+###
+### With `--async', print the transaction hash and exit immediately.
+### With `--create', print the address of the newly created object.
+### With `--resend', force current nonce to overwrite a pending transaction.
+### With <to>, print an educated guess of the call's return value.
+### Note: The return value will be wrong if other transactions interfere.
+###
+### See also seth-call(1), seth-sign(1), seth-publish(1), seth-receipt(1).
+set -e
+[[ $1 ]] || seth --fail-usage "$0"
+
+[[ $ETH_FROM ]] ||
+seth --fail "${0##*/}: error: \`ETH_FROM' not set; send from which account?"
+[[ $ETH_GAS ]] ||
+echo >&2 "${0##*/}: warning: \`ETH_GAS' not set; using default gas amount"
+if [[ $SETH_RESEND ]]; then
+  nonce=$(seth nonce "$ETH_FROM")
+  export ETH_NONCE=$nonce
+fi
+
+if [[ $SETH_CREATE ]]; then
+  DATA=$(seth --to-hexdata "$1")
+  if [[ $2 ]]; then
+    args=$(seth calldata "${@:2}")
+    args=${args#0x}
+    DATA+=${args:8}
+  fi
+else
+  TO=$(seth --to-address "$1")
+  if [[ $2 ]]; then
+    DATA=$(seth calldata "${@:2}")
+  fi
+fi
+
+jshon+=(-n {})
+[[ $TO ]] && jshon+=(-s "$TO" -i to)
+[[ $DATA ]] && jshon+=(-s "$DATA" -i data)
+jshon+=($(seth --send-params))
+jshon+=(-i append)
+
+if [[ -z $ETH_RPC_ACCOUNTS ]]; then
+  tx=$(seth mktx "$TO" "$DATA")
+  tx=$(seth publish "$tx")
+else
+  tx=$(seth rpc eth_sendTransaction -- "${jshon[@]}")
+fi
+
+[[ $tx =~ ^0x0*$ ]] &&
+seth --fail "${0##*/}: error: bad tx hash: $tx; account locked?"
+
+[[ $SETH_ASYNC = yes ]] && exec echo "$tx"
+
+[[ $DATA ]] && bytes=$((${#DATA} / 2 - 1)) || bytes=0
+echo >&2 "${0##*/}: Published transaction with $bytes bytes of calldata."
+echo >&2 "${0##*/}: $tx"
+echo >&2 -n "${0##*/}: Waiting for transaction receipt..."
+number=$(SETH_TICK=true seth receipt "$tx" blockNumber)
+echo >&2
+
+if [[ $SETH_STATUS && ($(seth receipt "$tx" status) -eq 0) ]]; then
+  echo >&2 "${0##*/}: Transaction failed."
+  seth >&2 receipt "$tx"
+  exit 1
+else
+  echo >&2 "${0##*/}: Transaction included in block $number."
+fi
+
+[[ $TO ]] || exec seth receipt "$tx" contractAddress
+
+if [[ $SETH_GUESS ]]; then
+  echo >&2 "${0##*/}: warning: return value may be inaccurate"
+  seth -B "$((number - 1))" call "$TO" "${@:2}"
+fi

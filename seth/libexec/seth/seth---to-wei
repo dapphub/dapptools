@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+### seth---to-wei -- convert an ETH amount into wei
+### Usage: seth --to-wei <value> [<unit>]
+set -e
+[[ $1 ]] || seth --fail-usage "$0"
+set -- "$*"
+[[ $1 = *" "* ]] || set -- "$1 wei"
+number=${1%% *} unit=${1#* }
+unit=$(tr A-Z a-z <<<"$unit")
+
+case $unit in
+  wei) scale=0;;
+  gwei) scale=9;;
+  eth|ether) scale=18;;
+  *) seth --fail "${0##*/}: error: unrecognized monetary value: \`$1'"
+esac
+
+bc <<<"$number * 10 ^ $scale / 1"

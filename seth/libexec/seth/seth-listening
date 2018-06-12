@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+set -e
+listening=$(seth rpc net_listening)
+[[ $listening = true ]]

@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+### seth-block -- print a table of information about a specific block
+### Usage: seth block [-j|--json] <block> [<field>]
+### Print a table of information about <block>.
+### If <field> is given, print only the value of that field.
+set -e
+[[ $# = [12] ]] || seth --fail-usage "$0"
+
+if [[ $1 = 0x* ]]; then
+  block=$(seth get-block-by-hash "$1")
+else
+  block=$(seth get-block-by-number "$1")
+fi
+
+if [[ $block = null ]]; then
+  seth --fail "${0##*/}: error: no such block: $1"
+elif [[ $2 ]]; then
+  seth --field "$2" <<<"$block"
+else
+  echo "$block"
+fi

@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+set -e
+hexdata=$(seth --to-hexdata "$@")
+[[ ${#hexdata} = 42 ]] ||
+seth --fail "${0##*/}: error: bad address: \`$hexdata'"
+seth --to-checksum-address "$hexdata"

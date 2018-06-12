@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+set -e
+hexdata=$(seth --to-hexdata "$@")
+format=$(sed 's/../\\x&/g' <<<"${hexdata#0x}")
+bash -c "printf '$format\\n'"

@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+### seth-receipt -- wait for a transaction receipt to appear and print it
+### Usage: seth receipt [--async] <tx-hash> [<field>]
+### Print information about the transaction receipt for <tx-hash>.
+### If <field> is given, print only that piece of information.
+### If no <field> is given, print the whole transaction receipt.
+### Unless `--async' is given, wait indefinitely for the receipt to appear.
+set -e
+[[ $1 ]] || seth --fail-usage "$0"
+tx=$(seth --to-hexdata "$1")
+jshon+=(-s "$tx" -i append)
+receipt=$(seth rpc eth_getTransactionReceipt -- "${jshon[@]}")
+[[ $receipt != null ]] && number=$(seth --field <<<"$receipt" blockNumber)
+[[ ${number-null} != null && $2 ]] && exec seth --field "$2" <<<"$receipt"
+[[ ${number-null} != null ]] && exec echo "$receipt"
+[[ $SETH_ASYNC = yes ]] && seth --fail "${0##*/}: error: not found: $tx"
+sleep_seconds=1
+[[ $SETH_CHAIN ]] && sleep_seconds=5
+sleep "$sleep_seconds"; [[ $SETH_TICK ]] && printf . >&2
+exec "$0" "$@"

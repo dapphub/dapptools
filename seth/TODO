@@ -1,0 +1,37 @@
+- eth_newBlockFilter
+- eth_newPendingTransactionFilter
+
+[TODO: Rename to `--abi-decode-result'?]
+Usage: seth --abi-decode <name>(<in-types>)(<out-types>) <hexdata>
+
+[TODO: Add `-h' option?]
+Usage: seth balance [-B <block>] <account>
+
+[TODO: Add <block> argument to find the number of a specific block?]
+Usage: seth block-number
+
+[TODO: Allow <block> to be `current' (also defaulting to `latest')?]
+[TODO: Allow setting the second parameter of `eth_getBlockByHash'?]
+Usage: seth block [-j|--json] <block> [<field>]
+
+[TODO: Allow passing <text> through standard input?]
+Usage: seth --from-ascii <text>...
+
+[TODO: Add `-h' option?]
+Usage: seth gas-price
+
+[TODO: Allow passing <hexdata> through standard input?]
+Usage: seth keccak <hexdata>
+
+[TODO: Allow more than one address?]
+[TODO: Allow other filter options?]
+Usage: seth logs [-B <block>] [--follow] <address>
+
+[TODO: Add `-h' option?]
+Usage: seth ls
+
+[TODO: Allow passing <hexdata> through standard input?]
+Usage: seth sign [-F <sender>] <hexdata>
+
+[TODO: Remove?]
+Usage: seth --to-wei <amount> [<unit>]

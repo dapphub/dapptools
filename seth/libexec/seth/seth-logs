@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+### seth-logs -- print the transaction logs of some contract
+### Usage: seth logs [-B <block>] [--follow] <address>
+set -e
+[[ $1 ]] || seth --fail-usage "$0"
+seth-logs-${ETH_LOGS_API:-rpc} \
+"$(seth --to-address "$1")" \
+"${ETH_BLOCK-earliest}"

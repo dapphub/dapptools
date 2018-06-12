@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+set -e
+PATH=${0%/*/*}/libexec/seth:$PATH seth "$@"

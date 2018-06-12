@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+### seth---abi-decode -- extract return values from hexdata
+### Usage: seth --abi-decode <name>(<in-types>)(<out-types>) <hexdata>
+### Decode <hexdata> according to <out-types> (<in-types> are ignored).
+set -e
+[[ $1 = *"("*"("* ]] || exec seth --to-hex "$2"
+
+name=${1%%"("*}
+abi=$(seth --abi-function-json "$1")
+result=$(
+  [[ $SETH_DEBUG_ETHABI ]] && set -x
+  ethabi decode function <(echo "$abi") "$name" "${2#0x}"
+)
+
+if [[ $result = error* ]]; then
+  echo >&2 "ethabi: $result"
+  echo >&2 "ethabi: error: data = \`$2'"
+  exit 1
+fi
+
+cut -d' ' -f2 <<<"$result"

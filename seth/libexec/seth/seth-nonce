@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+### seth-nonce -- show the number of transactions sent from an address
+### Usage: seth nonce [-B <block>] <address>
+### Print the number of transactions sent from <address>.
+###
+### With `-B <block>', print the number of transactions as of <block>.
+set -e
+[[ $# = 1 ]] || seth --fail-usage "$0"
+ADDRESS=$(seth --to-hexdata "$1")
+jshon+=(-s "$ADDRESS" -i append)
+jshon+=(-s "${ETH_BLOCK-latest}" -i append)
+seth rpc eth_getTransactionCount -- "${jshon[@]}"

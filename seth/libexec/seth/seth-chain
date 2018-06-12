@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+### seth-chain -- print the symbolic name of the current blockchain
+### Print the name of the current chain (`ropsten', `ethlive', `etclive').
+set -e
+genesis=$(seth block 0 hash)
+case $genesis in
+  0xd4e56740f876aef8c010b86a40d5f56745a118d0906a34e69aec8c0db1cb8fa3)
+    case $(seth block 1920000 hash 2>/dev/null || echo null) in
+      0x94365e3a8c0b35089c1d1195081fe7489b528a84b22199c916180db8b28ade7f)
+        echo etclive;;
+      *)
+        echo ethlive;;
+    esac;;
+  0xa3c565fc15c7478862d50ccd6561e3c06b24cc509bf388941c25ea985ce32cb9)
+    echo kovan;;
+  0x41941023680923e0fe4d74a34bdac8141f2540e3ae90623718e47d66d1ca4a2d)
+    echo ropsten;;
+  0x0cd786a2425d16f152c658316c423e6ce1181e15c3295826d7c9904cba9ce303)
+    echo morden;;
+  0x6341fd3daf94b748c72ced5a5b26028f2474f5f00d824504e4fa37a75767e177)
+    echo rinkeby;;
+  *)
+    echo unknown;;
+esac

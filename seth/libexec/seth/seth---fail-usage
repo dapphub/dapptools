@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+basename=${1##*/}
+seth >&2 "${basename#seth-}" --help
+exit 1

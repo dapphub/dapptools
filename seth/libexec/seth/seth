@@ -1,0 +1,167 @@
+#!/usr/bin/env bash
+### seth -- command-line Ethereum RPC client
+### Usage: seth [<options>] <command> [<args>]
+###    or: seth <command> --help
+###
+### Perform Ethereum RPC calls from the comfort of your command line.
+###
+### Connection options:
+###
+###    --rpc-host=<host>          JSON-RPC host (default: `localhost')
+###    --rpc-port=<port>          JSON-RPC port (default: `8545')
+###    --rpc-url=<url>            JSON-RPC URL (overrides host and port)
+###    --rpc-accounts             use JSON-RPC node for accounts and signing
+###    -C, --chain=<chain>        remote node configuration preset
+###    --keystore=<dir>           local keystore directory
+###
+### Transaction options:
+###
+###    -F, --from=<sender>        account to send transaction from
+###    -G, --gas=<number>         number of gas units to provide
+###    -P, --gas-price=<number>   price (in wei) of each gas unit
+###    -N, --nonce=<number>       nonce value to use for the transaction
+###    -V, --value=<number>       amount (in wei) of ETH to send
+###    -S, --password=<file>      password for non-interactive signing
+###
+### Options for seth-call(1):
+###
+###    -B, --block=<number>       block number (default: `latest')
+###
+### Options for seth-send(1):
+###
+###    --create                   use the calldata to create a new object
+###    --guess                    guess the return value of the call
+###    --status                   exit failure on failed tx (Byzantium)
+###    --resend                   force current nonce to overwrite tx
+###
+### Other options:
+###
+###    --async                    do not wait for transaction receipt
+###    --follow                   go into a loop watching for new logs
+###    --json                     print output as JSON (if applicable)
+
+OPTS="seth [<options>] <command> [<args>]
+seth <command> --help
+--
+  Connection options:
+rpc-host=host        JSON-RPC host (default: \`localhost')
+rpc-port=port        JSON-RPC port (default: \`8545')
+rpc-url=url          JSON-RPC URL (overrides host and port)
+rpc-accounts         use JSON-RPC node for accounts and signing
+C,chain=chain        remote node configuration preset
+keystore=dir         local keystore directory
+
+  Transaction options:
+F,from=address       account to send transaction from
+G,gas=number         number of gas units to provide
+P,gas-price=number   price (in wei) of each gas unit
+N,nonce=number       nonce value to use for the transaction
+V,value=number       amount (in wei) of ETH to send
+S,password=file      password for non-interactive signing
+
+  Options for seth-call(1):
+B,block=number       block number (default: \`latest')
+
+  Options for seth-send(1):
+create               use the calldata to create a new object
+guess                guess the return value of the call
+status               exit failure on failed tx (Byzantium)
+resend               force current nonce to overwrite tx
+
+  Other options:
+async                do not wait for transaction receipt
+follow               go into a loop watching for new logs
+j,json               print output as JSON (if applicable)
+"
+
+set -e
+
+if ! [[ $SETH_INIT ]]; then
+  export SETH_INIT=1
+  [[ -e ~/.sethrc ]] && . ~/.sethrc
+  [[ $(pwd) != ~ && -e .sethrc ]] && . .sethrc
+fi
+
+if [[ $2 = --help ]]; then
+  exec "${0##*/}" help -- "$1"
+elif [[ $1 = -* ]] && which "${0##*/}-$1" &>/dev/null; then
+  exec "${0##*/}-$1" "${@:2}"
+fi
+
+eval "$(git rev-parse --parseopt -- "$@" <<<"$OPTS" || echo exit $?)"
+
+while [[ $1 ]]; do
+  case $1 in
+    --)              shift; break;;
+
+    --rpc-host)      shift; export ETH_RPC_HOST=$1;;
+    --rpc-port)      shift; export ETH_RPC_PORT=$1;;
+    --rpc-url)       shift; export ETH_RPC_URL=$1;;
+    --rpc-accounts)         export ETH_RPC_ACCOUNTS=yes;;
+    --keystore)      shift; export ETH_KEYSTORE=$1;;
+
+    -C|--chain)      shift; export SETH_CHAIN=$1;;
+
+    -B|--block)      shift; export ETH_BLOCK=$1;;
+    -F|--from)       shift; export ETH_FROM=$1;;
+    -G|--gas)        shift; export ETH_GAS=$1;;
+    -P|--gas-price)  shift; export ETH_GAS_PRICE=$1;;
+    -N|--nonce)      shift; export ETH_NONCE=$1;;
+    -V|--value)      shift; export ETH_VALUE=$1;;
+    -S|--password)   shift; export ETH_PASSWORD=$1;;
+
+       --create)            export SETH_CREATE=yes;;
+       --guess)             export SETH_GUESS=yes;;
+       --status)            export SETH_STATUS=yes;;
+       --resend)            export SETH_RESEND=yes;;
+
+       --async)             export SETH_ASYNC=yes;;
+       --follow)            export SETH_FOLLOW=yes;;
+    -j|--json)              export SETH_JSON=yes;;
+
+    *) printf "${0##*/}: internal error: %q\n" "$1"; exit 1
+  esac; shift
+done
+
+keystores=()
+
+if [[ $SETH_CHAIN ]]; then
+  export ETH_LOGS_API=${SETH_LOGS_API:-etherscan}
+
+  case "$SETH_CHAIN" in
+    ethlive|mainnet)
+      eth_rpc_url=https://mainnet.infura.io/$INFURA_KEY
+      export ETHERSCAN_API_URL=https://api.etherscan.io/api
+      ;;
+    ropsten)
+      eth_rpc_url=https://$SETH_CHAIN.infura.io/$INFURA_KEY
+      export ETHERSCAN_API_URL=https://$SETH_CHAIN.etherscan.io/api
+      keystores=(
+        ~/{.ethereum,Library/Ethereum}/testnet/keystore/
+      )
+      ;;
+    kovan|rinkeby)
+      eth_rpc_url=https://$SETH_CHAIN.infura.io/$INFURA_KEY
+      export ETHERSCAN_API_URL=https://$SETH_CHAIN.etherscan.io/api
+      keystores=(
+        ~/{.ethereum,Library/Ethereum}/$SETH_CHAIN/keystore/
+        ~/{.local/share,Library/Application\ Support}/io.parity.ethereum/keys/$SETH_CHAIN/
+      )
+      ;;
+    *)
+      echo >&2 "${0##*/}: error: unknown chain: \'$SETH_CHAIN'"
+      exit 1
+  esac
+fi
+
+# If needed, set ETH_KEYSTORE to a comma-separated list
+if [[ ${#keystores[@]} -gt 0 ]]; then
+  keystore=$(printf ",%s" "${keystores[@]}")
+  keystore=${keystore:1}
+  ETH_KEYSTORE=${ETH_KEYSTORE:-$keystore}
+fi
+
+[[ ! -z $ETH_KEYSTORE ]] && export ETH_KEYSTORE
+export ETH_RPC_URL=${ETH_RPC_URL:-$eth_rpc_url}
+
+"${0##*/}-${1-help}" "${@:2}"

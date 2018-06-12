@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+### seth-code -- print the bytecode of an object on the blockchain
+### Usage: seth code [-B <block>] <address>
+### Print the bytecode of the object at <address>.
+###
+### With `-B <block>', print the bytecode as of <block>.
+set -e
+[[ $# = 1 ]] || seth --fail-usage "$0"
+ADDRESS=$(seth --to-address "$@")
+jshon+=(-s "$ADDRESS" -i append)
+jshon+=(-s "${ETH_BLOCK-latest}" -i append)
+seth rpc eth_getCode -- "${jshon[@]}"

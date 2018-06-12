@@ -1,0 +1,39 @@
+#!/usr/bin/env bash
+### seth-estimate -- estimate how much gas a transaction is likely to use
+### Usage: seth estimate [<options>] <receiver> <sig> [<args>]
+###    or: seth estimate [<options>] <receiver> <data>
+###    or: seth estimate [<options>] --create <code> <sig> [<args>]
+###    or: seth estimate [<options>] --create <code> <data>
+###
+### Perform a local call to <receiver> and return the gas usage.
+###
+### If <sig> has the form `<name>(<types>)', infer <data> from <sig>/<args>.
+### With `--create', estimate gas usage of creation of a new object.
+### With `--create' and <sig>, encode constructor args <args> into <data>.
+###
+### With `-B <block>', use the state of the blockchain as of <block>.
+### With `-F <sender>', simulate calling <receiver> from <sender>
+### With `-V <value>', simulate transferring <value> to <receiver>.
+set -e
+[[ $2 ]] || seth --fail-usage "$0"
+
+if [[ $SETH_CREATE ]]; then
+  DATA=$(seth --to-hexdata "$1")
+  if [[ $2 ]]; then
+    args=$(seth calldata "${@:2}")
+    args=${args#0x}
+    DATA+=${args:8}
+  fi
+else
+  TO=$(seth --to-address "$1")
+  DATA=$(seth calldata "${@:2}")
+fi
+
+jshon+=(-n {})
+[[ $TO ]] && jshon+=(-s "$TO" -i to)
+jshon+=(-s "$DATA" -i data)
+jshon+=($(seth --send-params))
+jshon+=(-i append)
+: ${ETH_BLOCK:=latest} # geth doesn't like this argument
+[[ $ETH_BLOCK = latest ]] || jshon+=(-s "$ETH_BLOCK" -i append)
+seth rpc eth_estimateGas -- "${jshon[@]}"

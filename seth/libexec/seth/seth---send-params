@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+param() {
+  if [[ ${!1} ]]; then
+    if [[ ${!1} = *\ * ]]; then
+      seth --fail "${0##*/}: error: $1 contains whitespace"
+    else
+      if [[ $3 = --address ]]; then
+        value=$(seth --to-address "${!1}")
+      elif [[ $3 = --wei ]]; then
+        value=$(seth --to-wei "${!1}")
+        value=$(seth --to-hex "$value")
+      else
+        value=$(seth --to-hex "${!1}")
+      fi
+      echo -s "$value" -i "$2"
+    fi
+  fi
+}
+
+param ETH_FROM       from      --address
+param ETH_GAS        gas
+param ETH_GAS_PRICE  gasPrice  --wei
+param ETH_NONCE      nonce
+param ETH_VALUE      value     --wei
