@@ -48,13 +48,17 @@ let
 
 in (
   (import ./nixpkgs) ({
-    overlays = [(import ./overlay { flavor = "stable"; })] ++ extra-overlays;
+    overlays = [
+      (import ./nix/overlay.nix { flavor = "stable"; })
+    ] ++ extra-overlays;
   } // (
     if system != null then { inherit system; } else {}
   ))
 ) // {
   master = (import ./nixpkgs) ({
-    overlays = [(import ./overlay { flavor = "master"; })] ++ extra-overlays;
+    overlays = [
+      (import ./nix/overlay.nix { flavor = "master"; })
+    ] ++ extra-overlays;
   } // (
     if system != null then { inherit system; } else {}
   ));

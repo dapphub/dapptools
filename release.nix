@@ -23,29 +23,29 @@ let
 in rec {
 
   dapphub.linux.stable = with linux.pkgs; {
-    inherit celf;
+    # inherit celf;
     inherit dai;
     inherit dapp-which;
     inherit dapp;
-    inherit ds-chief;
+    # inherit ds-chief;
     inherit ethjet;
     inherit ethsign;
     inherit evmdis;
     inherit go-ethereum-unlimited;
     inherit go-ethereum;
     inherit hevm;
-    inherit hevmas;
-    inherit hevml;
+    # inherit hevmas;
+    # inherit hevml;
     inherit keeper;
     inherit mkbip39;
     inherit myetherwallet;
-    inherit oasis-orders;
+    # inherit oasis-orders;
     inherit qrtx-term;
     inherit qrtx;
     inherit seth;
     inherit setzer;
     inherit solc-versions;
-    inherit tla-plus;
+    # inherit tla-plus;
     inherit token;
     inherit symbex;
     inherit dafny;
@@ -56,28 +56,28 @@ in rec {
   dapphub.linux.master = with linux.master.pkgs; {
     inherit dapp;
     inherit hevm;
-    inherit hevmas;
+    # inherit hevmas;
     inherit seth;
 
     hevm-test-report = hevmTestReport linux.master;
   } // linux.master.pkgs.dappsys;
 
   dapphub.darwin.stable = with darwin.pkgs; {
-    inherit celf;
+    # inherit celf;
     inherit dai;
     inherit dapp-which;
     inherit dapp;
-    inherit ds-chief;
+    # inherit ds-chief;
     inherit ethjet;
     inherit ethsign;
     inherit evmdis;
     inherit go-ethereum-unlimited;
     inherit go-ethereum;
     inherit hevm;
-    inherit hevml;
+    # inherit hevml;
     inherit mkbip39;
     inherit myetherwallet;
-    inherit oasis-orders;
+    # inherit oasis-orders;
     inherit qrtx-term;
     inherit seth;
     inherit setzer;

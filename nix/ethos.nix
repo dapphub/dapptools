@@ -7,7 +7,7 @@
 in {
   imports = [
     ./ethos-iso-image.nix
-    ./nixpkgs/nixos/modules/profiles/all-hardware.nix
+    ../nixpkgs/nixos/modules/profiles/all-hardware.nix
   ];
 
   fonts.fontconfig.dpi = if hidpi then 200 else 96;
