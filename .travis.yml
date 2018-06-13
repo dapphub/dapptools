@@ -1,0 +1,20 @@
+os:
+  - linux
+  - osx
+language: nix
+sudo: required
+# workaround for a macOS specific issue with trusted users
+before_install:
+  - sudo mkdir -p /etc/nix
+  - echo "trusted-users = root $USER" | sudo tee -a /etc/nix/nix.conf
+  - echo "substituters = https://cache.nixos.org https://d121dybo9yhl5h.cloudfront.net" | sudo tee -a /etc/nix.nix.conf
+  - echo "trusted-public-keys = cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY= d121dybo9yhl5h.cloudfront.net-1:IOpHdUBT2b3fIRb/TBm+V8Y8eEj52fStcllzD6TFYyU=" | sudo tee -a /etc/nix/nix.conf
+  - sudo launchctl kickstart -k system/org.nixos.nix-daemon || true
+install:
+  - nix-env -if https://github.com/cachix/cachix/tarball/master --substituters https://cachix.cachix.org --trusted-public-keys cachix.cachix.org-1:eWNHQldwUO7G2VkjpnjDbWwy4KQ/HNxht7H4SSoMckM=
+  - cachix use dapp
+script:
+  - cachix push --watch-store dapp &
+  - if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then nix-build -j2 release.nix -A dapphub.linux.stable | cachix push dapp; fi
+  - if [[ "$TRAVIS_OS_NAME" == "osx" ]]; then nix-build -j2 release.nix -A dapphub.darwin.stable | cachix push dapp; fi
+
