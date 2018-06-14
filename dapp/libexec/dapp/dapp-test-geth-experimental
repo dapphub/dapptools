@@ -32,7 +32,8 @@ ETH_FROM=$(cat "$testnet/config/account")
 ETH_RPC_PORT=$(sed 's/^.*://' "$testnet/config/rpc-url")
 ETH_RPC_HOST=127.0.0.1
 ETH_GAS=$(printf "%d" 0xffffffff)
-export ETH_FROM ETH_RPC_PORT ETH_RPC_HOST ETH_GAS
+ETH_RPC_ACCOUNTS=1
+export ETH_FROM ETH_RPC_PORT ETH_RPC_HOST ETH_GAS ETH_RPC_ACCOUNTS
 
 # We use a temporary directory as a little database.
 tmp=$(mktemp -d)
