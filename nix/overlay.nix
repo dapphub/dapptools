@@ -18,39 +18,11 @@ let
   stdenv = self.pkgs.stdenv;
 
 in {
-  haskellPackages = super.haskellPackages.extend (
-    self-hs: super-hs:
-      let
-        dontCheck = x:
-          self.haskell.lib.dontCheck
-            (self-hs.callPackage x {});
-      in {
-        restless-git = dontCheck (import ../restless-git);
-        symbex = dontCheck (import ../symbex);
-        ethjet = self-hs.callPackage (import ../libethjet-haskell) {
-          # Haskell libs with the same names as C libs...
-          # Depend on the C libs, not the Haskell libs.
-          # These are system deps, not Cabal deps.
-          inherit (self.pkgs) secp256k1 ethjet;
-        };
-
-        # We don't want Megaparsec 5!
-        megaparsec = self-hs.megaparsec_6_2_0;
-
-        hevm = (
-          self-hs.callPackage (import ../hevm) {}
-        ).overrideAttrs (attrs: {
-          postInstall = ''
-            wrapProgram $out/bin/hevm \
-               --suffix PATH : "${lib.makeBinPath (with self.pkgs; [bash coreutils git])}"
-          '';
-
-          enableSeparateDataOutput = true;
-          buildInputs = attrs.buildInputs ++ [self.pkgs.solc];
-          nativeBuildInputs = attrs.nativeBuildInputs ++ [self.pkgs.makeWrapper];
-        });
-      }
-    );
+  haskellPackages = super.haskellPackages.override (old: {
+    overrides = lib.composeExtensions (old.overrides or (_: _: {})) (
+      import ./haskell.nix { inherit lib; pkgs = self; }
+    )
+  });
 
   profilingHaskellPackages = self.haskellPackages.extend (
     self: super-hs: {
@@ -127,7 +99,8 @@ in {
     self.pkgs.haskell.lib.justStaticExecutables
       (self.haskellPackages.callPackage (import ../symbex) {});
 
-  hevm = self.pkgs.haskell.lib.justStaticExecutables self.haskellPackages.hevm;
+  # hevm = self.pkgs.haskell.lib.justStaticExecutables self.haskellPackages.hevm;
+  hevm = self.haskellPackages.hevm;
 
   jays = (
     self.pkgs.haskell.lib.justStaticExecutables
