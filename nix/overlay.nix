@@ -21,7 +21,7 @@ in {
   haskellPackages = super.haskellPackages.override (old: {
     overrides = lib.composeExtensions (old.overrides or (_: _: {})) (
       import ./haskell.nix { inherit lib; pkgs = self; }
-    )
+    );
   });
 
   profilingHaskellPackages = self.haskellPackages.extend (
