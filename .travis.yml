@@ -17,4 +17,5 @@ script:
   - cachix push --watch-store dapp &
   - if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then nix-build -j2 release.nix -A dapphub.linux.stable | cachix push dapp; fi
   - if [[ "$TRAVIS_OS_NAME" == "osx" ]]; then nix-build -j2 release.nix -A dapphub.darwin.stable | cachix push dapp; fi
-
+after_success:
+  - curl -H "X-Auth-Token: $CHAT_AUTH_TOKEN" -H "X-User-Id: $CHAT_USER_ID" -H "Content-type:application/json" https://dapphub.chat/api/v1/chat.postMessage -d '{ "channel": "#announce", "text": "Hi everyone!" }'
