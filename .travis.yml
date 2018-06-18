@@ -18,4 +18,4 @@ script:
   - if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then nix-build -j2 release.nix -A dapphub.linux.stable | cachix push dapp; fi
   - if [[ "$TRAVIS_OS_NAME" == "osx" ]]; then nix-build -j2 release.nix -A dapphub.darwin.stable | cachix push dapp; fi
 after_success:
-  - nix run nixpkgs.httpie -c http -f https://dapphub.chat/api/v1/chat.postMessage X-Auth-Token:"$CHAT_AUTH_TOKEN" X-User-Id:"$CHAT_USER_ID" channel=#announce text="Another test"
+  - nix run nixpkgs.httpie -c http -f https://dapphub.chat/api/v1/chat.postMessage X-Auth-Token:"$CHAT_AUTH_TOKEN" X-User-Id:"$CHAT_USER_ID" channel=#announce text="New commit $TRAVIS_COMMIT at https://github.com/dapphub/dapptools/commit/$TRAVIS_COMMIT"
