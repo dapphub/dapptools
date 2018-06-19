@@ -1,9 +1,3 @@
-[submodule "dappsys"]
-	path = dappsys
-	url = https://github.com/dapphub/dappsys
-[submodule "nixpkgs"]
-	path = nixpkgs
-	url = https://github.com/NixOS/nixpkgs
 [submodule "setzer"]
 	path = setzer
 	url = https://github.com/makerdao/setzer
