@@ -13,8 +13,8 @@ set -e
 # into Hevm.  It can more accurately determine which libraries are
 # needed (via looking at the bytecode and the ASTs).
 
-function binfile() { sed -E "s/.*:(.*)/$DAPP_OUT\/\1.bin/"; }
-sources=($(find "${DAPP_SRC?}" "$DAPP_LIB" -name '*.sol'))
+function binfile() { sed -E "s/.*:(.*)/$DAPP_OUT\\/\\1.bin/"; }
+mapfile -t sources < <(find "${DAPP_SRC?}" "$DAPP_LIB" -name '*.sol')
 grep -EH '^library\s+\w+' "${sources[@]}" \
   | sed -E 's/:library[[:blank:]]+([_[:alnum:]]+)[[:blank:]]+(\{|is).*/:\1/' \
   | sort | while read -r line; do

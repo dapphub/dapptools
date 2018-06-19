@@ -15,7 +15,7 @@ shopt -s nullglob
 # create many copies of the same test contract, one for each
 # test method.
 
-testnets=($HOME/.dapp/testnet/*)
+testnets=("$HOME"/.dapp/testnet/*)
 
 if [[ ${#testnets[@]} -gt 1 ]]; then
   echo >&2 "dapp-test-geth: Several dapp testnets running: ${testnets[*]}"
@@ -41,7 +41,7 @@ clean() { rm -rf "$tmp"; }
 trap clean EXIT
 
 # Go through all the contract ABIs and look for ds-test suites.
-for x in $DAPP_OUT/*.abi; do
+for x in "$DAPP_OUT"/*.abi; do
   contract=$(sed <<<"$(basename "$x")" s/\.abi$//)
 
   # Deploy one instance per test method.
@@ -155,7 +155,7 @@ testcase() {
 
 # Run all test cases in parallel...
 for contract in "$tmp"/*; do
-  for method in $(printf "%s\n" "$contract"/*); do
+  for method in $(printf "%s\\n" "$contract"/*); do
     address=$(cat "$method")
     contract=$(basename "$contract")
     method=$(basename "$method")

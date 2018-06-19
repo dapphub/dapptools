@@ -24,7 +24,7 @@ trap clean EXIT
 
 shopt -s nullglob
 shopt -s globstar
-jsons=($(echo out/**/*.sol.json))
+jsons=(out/**/*.sol.json)
 if [[ "${#jsons[@]}" -gt 1 ]]; then
   if [[ "$#" -gt 0 ]]; then
     target="$1"; shift
