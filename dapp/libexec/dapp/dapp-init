@@ -25,7 +25,7 @@ insert .gitignore <<.
 
 name=$(basename "$(pwd)")
 name=$(<<<"$name" tr '[:upper:]' '[:lower:]')
-nouns=(${name//[^a-z]/ })
+IFS=" " read -r -a nouns <<<"${name//[^a-z]/ }"
 noun=${nouns[$((${#nouns[@]} - 1))]}
 type=$(<<<"$name" perl -pe 's/(\w+)/\u$1/g')
 type=$(<<<"$type" tr -cd a-zA-Z0-9)

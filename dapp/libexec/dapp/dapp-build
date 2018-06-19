@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -e
 
-opts=($SOLC_FLAGS)
+IFS=" " read -r -a opts <<<"$SOLC_FLAGS"
 json_opts=--combined-json=abi,bin,bin-runtime,srcmap,srcmap-runtime,ast
 solc --help | grep -q -- --overwrite && opts+=(--overwrite)
 
@@ -14,7 +14,7 @@ if [ "$DAPP_LINK_TEST_LIBRARIES" = 1 ]; then
   DAPP_LINK_TEST_LIBRARIES=0 dapp build
   sender=0x00a329c0648769a73afac7f9381e08fb43dbea72
   nonce=1048576
-  libraries=($(dapp --find-libraries))
+  mapfile -t libraries < <(dapp --find-libraries)
 
   if [[ ${#libraries[@]} -eq 0 ]]; then exit; fi
 

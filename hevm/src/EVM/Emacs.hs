@@ -42,6 +42,7 @@ data UiVmState = UiVmState
   , _uiVmStepCount    :: Int
   , _uiVmFirstState   :: UiVmState
   , _uiVmFetcher      :: Fetcher
+  , _uiVmMessage      :: Maybe Text
   }
 
 makeLenses ''UiVmState
@@ -157,7 +158,8 @@ interpret mode =
           interpret mode (k r)
 
         -- Stepper wants to emit a message.
-        Stepper.Note _ -> do
+        Stepper.Note s -> do
+          assign uiVmMessage (Just s)
           interpret mode (k ())
 
         -- Stepper wants to exit because of a failure.
@@ -473,6 +475,7 @@ initialStateForTest opts@(UnitTestOptions {..}) dapp (contractPath, testName) =
         , _uiVmStepCount    = 0
         , _uiVmFirstState   = undefined
         , _uiVmFetcher      = oracle
+        , _uiVmMessage      = Nothing
         }
     Just testContract =
       view (dappSolcByName . at contractPath) dapp

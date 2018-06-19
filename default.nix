@@ -10,6 +10,13 @@
 }:
 
 let
+  nixpkgs = (import <nixpkgs> {}).fetchFromGitHub {
+    owner = "NixOS";
+    repo = "nixpkgs";
+    rev = "4b649a99d8461c980e7028a693387dc48033c1f7";
+    sha256 = "0iy2gllj457052wkp20baigb2bnal9nhyai0z9hvjr3x25ngck4y";
+  };
+
   ## Horrible; copied from nixpkgs to get extra overlays to work with our overlay.
   homeDir = builtins.getEnv "HOME";
   try = x: def: let res = builtins.tryEval x; in if res.success then res.value else def;
@@ -47,7 +54,7 @@ let
     else [];
 
 in (
-  (import ./nixpkgs) (
+  import nixpkgs (
     { overlays = [(import ./nix/overlay.nix)] ++ extra-overlays;} // (
       if system != null then { inherit system; } else {}
     )
