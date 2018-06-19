@@ -15,6 +15,26 @@ install:
   - cachix use dapp
 script:
   - cachix push --watch-store dapp &
-  - if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then nix-build -j2 release.nix -A dapphub.linux.stable | cachix push dapp; fi
-  - if [[ "$TRAVIS_OS_NAME" == "osx" ]]; then nix-build -j2 release.nix -A dapphub.darwin.stable | cachix push dapp; fi
+  - |
+    PLATFORM=linux
 
+    if [[ "$TRAVIS_OS_NAME" == "osx" ]]; then PLATFORM=darwin; fi
+
+    # the additional call to `cachix push` is there to prevent a race condition
+    # that happens when the above daemon is killed mid-push at the end of this
+    # script.
+    nix-build -j2 release.nix -A dapphub.$PLATFORM.stable | cachix push dapp
+after_success:
+  - |
+    COMMIT_HASH=$(echo $TRAVIS_COMMIT | cut -c 1-8)
+
+    # Only run this on Linux to avoid announcing to the channel twice.
+    # Using build stages is another option but is inefficient because it requires initialization of an additional VM.
+    if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then
+      nix run nixpkgs.httpie -c \
+      http -f https://dapphub.chat/api/v1/chat.postMessage \
+        X-Auth-Token:"$CHAT_AUTH_TOKEN" \
+        X-User-Id:"$CHAT_USER_ID" \
+        channel=#announce \
+        text="Linux and Darwin packages for commit \`$COMMIT_HASH\` on branch \`$TRAVIS_BRANCH\` built and uploaded to \`dapp.cachix.org\`"
+    fi
