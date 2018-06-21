@@ -45,7 +45,7 @@ in {
     }
   ) {};
 
-  solidityPackage = import ./solidity-package.nix {
+  solidityPackage = import ./nix/solidity-package.nix {
     inherit (self) pkgs;
   };
 
@@ -58,8 +58,8 @@ in {
     }) self.pkgs;
   };
 
-  known-contracts = import ./known-contracts.nix;
-  dapp-which = callPackage ./packages/dapp-which.nix {};
+  known-contracts = import ./nix/known-contracts.nix;
+  dapp-which = callPackage ./nix/dapp-which.nix {};
 
   bashScript = { name, version ? "0", deps ? [], text, check ? true } :
     self.pkgs.writeTextFile {
@@ -81,47 +81,46 @@ in {
     };
 
   dapp2 = {
-    test-hevm = import ./dapp/dapp-test-hevm.nix { pkgs = self.pkgs; };
+    test-hevm = import ./nix/dapp/dapp-test-hevm.nix { pkgs = self.pkgs; };
   };
 
-  solc = callPackage ((import ./packages/solc-versions.nix).solc_0_4_23) {};
+  solc = callPackage ((import ./nix/solc-versions.nix).solc_0_4_23) {};
   solc-versions =
     super.lib.mapAttrs
       (_: value: pastPackage value {})
-      (import ./packages/solc-versions.nix);
+      (import ./nix/solc-versions.nix);
 
   python3 = self.python36;
   python36 = super.python36.override {
-    packageOverrides = (import ./packages/python.nix { pkgs = super.pkgs; });
+    packageOverrides = (import ./nix/python.nix { pkgs = super.pkgs; });
   };
 
   symbex =
     self.pkgs.haskell.lib.justStaticExecutables
-      (self.haskellPackages.callPackage (import ../symbex) {});
+      (self.haskellPackages.callPackage (import ./submodules/symbex) {});
 
-  # hevm = self.pkgs.haskell.lib.justStaticExecutables self.haskellPackages.hevm;
-  hevm = self.haskellPackages.hevm;
+  hevm = self.pkgs.haskell.lib.justStaticExecutables self.haskellPackages.hevm;
 
   jays = (
     self.pkgs.haskell.lib.justStaticExecutables
-      (self.haskellPackages.callPackage (import ../jays) {})
+      (self.haskellPackages.callPackage (import ./src/jays) {})
   ).overrideAttrs (_: { postInstall = "cp $out/bin/{jays,jshon}"; });
 
   # Override buggy jshon program with Haskell-based replacement.
   jshon = self.jays;
 
-  seth = callPackage (import ../seth) {};
-  dapp = callPackage (import ../dapp) {};
+  seth = callPackage (import ./src/seth) {};
+  dapp = callPackage (import ./src/dapp) {};
 
-  ethsign = (callPackage (import ../ethsign) {}).bin;
+  ethsign = (callPackage (import ./src/ethsign) {}).bin;
 
-  setzer = callPackage (import ../setzer) {};
+  setzer = callPackage (import ./submodules/setzer) {};
 
-  keeper = callPackage ./packages/keeper.nix {};
-  evmdis = callPackage ./packages/evmdis.nix {};
+  keeper = callPackage ./nix/keeper.nix {};
+  evmdis = callPackage ./nix/evmdis.nix {};
 
-  token = callPackage (import ../token) {};
-  dai = callPackage (import ../dai-cli) {};
+  token = callPackage (import ./src/token) {};
+  dai = callPackage (import ./submodules/dai-cli) {};
 
   go-ethereum = super.go-ethereum.overrideDerivation (_: rec {
     name = "go-ethereum-${version}";
@@ -159,7 +158,7 @@ in {
   });
 
   # Use unreleased ethabi that fixes empty array encoding.
-  ethabi = ((import ./packages/ethabi { pkgs = super; }).ethabi_cli_4_0_0);
+  ethabi = ((import ./nix/ethabi { pkgs = super; }).ethabi_cli_4_0_0);
 
   qrtx = self.bashScript {
     name = "qrtx";
@@ -185,16 +184,16 @@ in {
     dontDisableStatic = true;
   });
 
-  ethjet = callPackage (import ../libethjet) {};
+  ethjet = callPackage (import ./src/libethjet) {};
   
   mkbip39 = with self.pkgs.python3Packages; buildPythonApplication rec {
     version = "0.5";
     name = "mkbip39";
-    src = ./packages/mkbip39;
+    src = ./nix/mkbip39;
     propagatedBuildInputs = [mnemonic];
   };
 
-  celf = callPackage ./packages/celf.nix {};
+  celf = callPackage ./nix/celf.nix {};
 
   myetherwallet = stdenv.mkDerivation rec {
     name = "myetherwallet-${version}";
@@ -228,4 +227,4 @@ in {
     '';
   });
 
-} // (import ./weird.nix self super)
+} // (import ./experiments.nix self super)

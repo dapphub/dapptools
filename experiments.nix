@@ -12,7 +12,7 @@ let
       }).config.system.build.isoImage
     );
 
-  ourPerlPackages = import ./packages/perl.nix {
+  ourPerlPackages = import ./nix/perl.nix {
     inherit (self) buildPerlPackage perlPackages;
   };
 
@@ -38,13 +38,13 @@ in {
 
   tla-plus =
     let
-      core = callPackage ./packages/tla/core.nix {};
-      toolbox = callPackage ./packages/tla/toolbox.nix { gtk = self.gtk2; };
+      core = callPackage ./nix/tla/core.nix {};
+      toolbox = callPackage ./nix/tla/toolbox.nix { gtk = self.gtk2; };
       isabelle2011-1 =
-        callPackage ./packages/tla/isabelle2011-1 {
+        callPackage ./nix/tla/isabelle2011-1 {
           proofgeneral = self.emacsPackages.proofgeneral;
         };
-      tlaps = callPackage ./packages/tla/tlaps.nix {
+      tlaps = callPackage ./nix/tla/tlaps.nix {
         inherit isabelle2011-1;
       };
       tla-smt = with self; [z3 yices cvc3];
@@ -238,12 +238,12 @@ in {
   };
 
   ethos-iso = makeIso {
-    module = import ./ethos.nix { hidpi = false; };
+    module = import ./nix/ethos.nix { hidpi = false; };
     config.isoImage.appendToMenuLabel = " (Ethos by DappHub)";
   };
 
   ethos-iso-hidpi = makeIso {
-    module = import ./ethos.nix { hidpi = true; };
+    module = import ./nix/ethos.nix { hidpi = true; };
     config.isoImage.appendToMenuLabel = " (Ethos by DappHub, HiDPI)";
   };
 

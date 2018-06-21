@@ -1,9 +1,9 @@
 [submodule "setzer"]
-	path = setzer
+	path = submodules/setzer
 	url = https://github.com/makerdao/setzer
 [submodule "symbex"]
-	path = symbex
+	path = submodules/symbex
 	url = https://github.com/mbrock/symbex
 [submodule "dai-cli"]
-	path = dai-cli
+	path = submodules/dai-cli
 	url = https://github.com/makerdao/dai-cli

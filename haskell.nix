@@ -14,9 +14,9 @@ in self-hs: super-hs:
         (self-hs.callPackage x {});
     hevmBinPath = lib.makeBinPath (with pkgs; [bash coreutils git]);
   in {
-    restless-git = dontCheck (import ../restless-git);
-    symbex = dontCheck (import ../symbex);
-    ethjet = self-hs.callPackage (import ../libethjet-haskell) {
+    restless-git = dontCheck (import ./src/restless-git);
+    symbex = dontCheck (import ./submodules/symbex);
+    ethjet = self-hs.callPackage (import ./src/libethjet-haskell) {
       # Haskell libs with the same names as C libs...
       # Depend on the C libs, not the Haskell libs.
       # These are system deps, not Cabal deps.
@@ -26,11 +26,11 @@ in self-hs: super-hs:
     wreq = pkgs.haskell.lib.doJailbreak super-hs.wreq;
 
     hevm = pkgs.haskell.lib.dontHaddock ((
-      self-hs.callPackage (import ../hevm) {}
+      self-hs.callPackage (import ./src/hevm) {}
     ).overrideAttrs (attrs: {
       postInstall = ''
-        wrapProgram $out/bin/hevm \
-           --suffix PATH : "${lib.makeBinPath (with pkgs; [bash coreutils git])}"
+        wrapProgram $out/bin/hevm --suffix PATH \
+          : "${lib.makeBinPath (with pkgs; [bash coreutils git])}"
       '';
 
       enableSeparateDataOutput = true;

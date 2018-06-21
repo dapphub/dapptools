@@ -1,6 +1,6 @@
 { lib, bashScript, coreutils, gawk }:
 
-let contracts = import ../known-contracts.nix;
+let contracts = import ./known-contracts.nix;
 
 in bashScript {
   name = "dapp-which";

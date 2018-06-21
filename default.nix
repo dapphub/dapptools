@@ -10,7 +10,7 @@ let
 in
   # Now return the Nixpkgs configured to use our overlay.
   import nixpkgs (
-    { overlays = [(import ./nix/overlay.nix)]; }
+    { overlays = [(import ./overlay.nix)]; }
     // (if system != null then { inherit system; } else {})
   )
 
