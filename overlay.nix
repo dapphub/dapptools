@@ -90,11 +90,6 @@ in {
       (_: value: pastPackage value {})
       (import ./nix/solc-versions.nix);
 
-  python3 = self.python36;
-  python36 = super.python36.override {
-    packageOverrides = (import ./nix/python.nix { pkgs = super.pkgs; });
-  };
-
   symbex =
     self.pkgs.haskell.lib.justStaticExecutables
       (self.haskellPackages.callPackage (import ./submodules/symbex) {});
