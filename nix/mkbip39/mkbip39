@@ -1,5 +1,0 @@
-#!/usr/bin/env python
-import secrets
-import mnemonic
-m = mnemonic.Mnemonic("english")
-print(m.to_mnemonic(secrets.token_bytes(32)))

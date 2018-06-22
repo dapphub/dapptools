@@ -15,7 +15,6 @@ in self-hs: super-hs:
     hevmBinPath = lib.makeBinPath (with pkgs; [bash coreutils git]);
   in {
     restless-git = dontCheck (import ./src/restless-git);
-    symbex = dontCheck (import ./submodules/symbex);
     ethjet = self-hs.callPackage (import ./src/libethjet-haskell) {
       # Haskell libs with the same names as C libs...
       # Depend on the C libs, not the Haskell libs.

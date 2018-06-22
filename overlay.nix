@@ -90,10 +90,6 @@ in {
       (_: value: pastPackage value {})
       (import ./nix/solc-versions.nix);
 
-  symbex =
-    self.pkgs.haskell.lib.justStaticExecutables
-      (self.haskellPackages.callPackage (import ./submodules/symbex) {});
-
   hevm = self.pkgs.haskell.lib.justStaticExecutables self.haskellPackages.hevm;
 
   jays = (
@@ -179,13 +175,6 @@ in {
   });
 
   ethjet = callPackage (import ./src/libethjet) {};
-  
-  mkbip39 = with self.pkgs.python3Packages; buildPythonApplication rec {
-    version = "0.5";
-    name = "mkbip39";
-    src = ./nix/mkbip39;
-    propagatedBuildInputs = [mnemonic];
-  };
 
   celf = callPackage ./nix/celf.nix {};
 
@@ -221,4 +210,4 @@ in {
     '';
   });
 
-} // (import ./experiments.nix self super)
+}

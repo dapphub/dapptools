@@ -41,24 +41,7 @@ let
     hevm-test-report = hevmTestReport dist;
   };
 
-  # These packages are semi-unmaintained or experimental.
-  weird = dist: with dist.pkgs; {
-    inherit celf;
-    inherit ds-chief;
-    inherit hevmas;
-    inherit hevml;
-    inherit oasis-orders;
-    inherit tla-plus;
-    inherit mkbip39;
-    inherit myetherwallet;
-    inherit symbex;
-    inherit dafny;
-    inherit dapp-debug;
-  };
-
 in {
   dapphub.linux.stable = stable linux;
-  dapphub.linux.weird = weird linux;
   dapphub.darwin.stable = stable darwin;
-  dapphub.darwin.weird = weird darwin;
 }
