@@ -116,7 +116,6 @@ in {
 
   setzer = callPackage (import ./submodules/setzer) {};
 
-  keeper = callPackage ./nix/keeper.nix {};
   evmdis = callPackage ./nix/evmdis.nix {};
 
   token = callPackage (import ./src/token) {};
