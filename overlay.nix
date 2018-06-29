@@ -107,6 +107,8 @@ in {
 
   setzer = callPackage (import ./submodules/setzer) {};
 
+  chief = callPackage (import ./submodules/chief) {};
+
   evmdis = callPackage ./nix/evmdis.nix {};
 
   token = callPackage (import ./src/token) {};

@@ -4,3 +4,6 @@
 [submodule "dai-cli"]
 	path = submodules/dai-cli
 	url = https://github.com/makerdao/dai-cli
+[submodule "submodules/chief"]
+	path = submodules/chief
+	url = https://github.com/makerdao/chief
