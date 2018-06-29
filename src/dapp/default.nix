@@ -1,4 +1,4 @@
-{ lib, stdenv, fetchFromGitHub, makeWrapper
+{ lib, stdenv, fetchFromGitHub, makeWrapper, glibcLocales
 , seth, git, solc, shellcheck, nodejs, hevm, jshon, nix, coreutils }:
 
 stdenv.mkDerivation rec {
@@ -14,7 +14,10 @@ stdenv.mkDerivation rec {
   postInstall = let path = lib.makeBinPath [
     nodejs solc git seth hevm jshon nix coreutils
   ]; in ''
-    wrapProgram "$out/bin/dapp" --prefix PATH : "${path}"
+    wrapProgram "$out/bin/dapp" --prefix PATH : "${path}" \
+      ${if glibcLocales != null then
+        "--set LOCALE_ARCHIVE \"${glibcLocales}\"/lib/locale/locale-archive"
+        else ""}
   '';
 
   meta = {
