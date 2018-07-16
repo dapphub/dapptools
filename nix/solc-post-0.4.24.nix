@@ -1,5 +1,5 @@
 version: rev: sha256:
-{ stdenv, fetchzip, fetchgit, boost, cmake, z3 }:
+{ stdenv, fetchzip, fetchFromGitHub, boost, cmake, z3 }:
 
 let
   jsoncppURL = https://github.com/open-source-parsers/jsoncpp/archive/1.8.4.tar.gz;
@@ -8,46 +8,53 @@ let
     sha256 = "1z0gj7a6jypkijmpknis04qybs1hkd04d1arr3gy89lnxmp6qzlm";
   };
 in
-
 stdenv.mkDerivation {
   name = "solc-${version}";
 
-  # Cannot use `fetchFromGitHub' because of submodules
-  src = fetchgit {
-    url = "https://github.com/ethereum/solidity";
+  src = fetchFromGitHub {
+    owner = "ethereum";
+    repo = "solidity";
     inherit rev sha256;
   };
 
-  patchPhase = ''
-    echo >commit_hash.txt '${rev}'
-    echo >prerelease.txt
-    substituteInPlace cmake/jsoncpp.cmake \
-      --replace '${jsoncppURL}' ${jsoncpp}
-    substituteInPlace cmake/EthCompilerSettings.cmake \
-      --replace 'add_compile_options(-Werror)' ""
-  '' + stdenv.lib.optionalString stdenv.isDarwin ''
-    substituteInPlace cmake/EthDependencies.cmake \
-      --replace 'Boost_USE_STATIC_LIBS ON' 'Boost_USE_STATIC_LIBS OFF'
-  '';
+  patches = [
+    ./patches/shared-libs-install.patch
+  ];
 
-  # The Darwin flag for patch phase is a hack to avoid some
-  # recompilation.  Actually the cmakeFlags way works fine, except not
-  # in older versions.  I want to build those older version on Mac,
-  # but not rebuild my Linux versions, so I do it this silly way.
+  postPatch = ''
+    touch prerelease.txt
+    echo >commit_hash.txt "${rev}"
+    substituteInPlace cmake/jsoncpp.cmake \
+      --replace "${jsoncppURL}" ${jsoncpp}
+
+    # To allow non-standard CMAKE_INSTALL_LIBDIR (fixed in upstream, not yet released)
+    substituteInPlace cmake/jsoncpp.cmake \
+      --replace "\''${CMAKE_INSTALL_LIBDIR}" "lib" \
+      --replace "# Build static lib but suitable to be included in a shared lib." "-DCMAKE_INSTALL_LIBDIR=lib"
+  '';
 
   cmakeFlags = [
     "-DBoost_USE_STATIC_LIBS=OFF"
+    "-DBUILD_SHARED_LIBS=ON"
+    "-DINSTALL_LLLC=ON"
   ];
 
-  buildInputs = [ boost cmake z3 ];
+  doCheck = stdenv.hostPlatform.isLinux && stdenv.hostPlatform == stdenv.buildPlatform;
+  checkPhase = "LD_LIBRARY_PATH=./libsolc:./libsolidity:./liblll:./libevmasm:./libdevcore:$LD_LIBRARY_PATH " +
+               "./test/soltest -p -- --no-ipc --no-smt --testpath ../test";
 
-  meta = {
+  nativeBuildInputs = [ cmake ];
+  buildInputs = [ boost z3 ];
+
+  outputs = [ "out" "dev" ];
+
+  meta = with stdenv.lib; {
     description = "Compiler for Ethereum smart contract language Solidity";
     longDescription = "This package also includes `lllc', the LLL compiler.";
     homepage = https://github.com/ethereum/solidity;
-    license = stdenv.lib.licenses.gpl3;
-    platforms = with stdenv.lib.platforms; linux ++ darwin;
-    maintainers = [ stdenv.lib.maintainers.dbrock ];
+    license = licenses.gpl3;
+    platforms = with platforms; linux ++ darwin;
+    maintainers = with maintainers; [ dbrock akru ];
     inherit version;
   };
 }
