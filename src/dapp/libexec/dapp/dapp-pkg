@@ -10,8 +10,6 @@ if [[ ! -d "$DAPPTOOLS" ]]; then
   }
 fi
 
-apps=(dapp seth solc ethsign hevm)
-
 case $1 in
   init) {
     curl -sS https://dapp.tools/install | sh
