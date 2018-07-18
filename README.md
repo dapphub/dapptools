@@ -6,23 +6,46 @@ This repository contains the source code of several dapp tools
 hand-crafted and maintained by DappHub, along with various Nix
 expressions which are all bundled up into a Nix overlay.
 
-To install tools from this repository, you only need to install the
-Nix package manager and then run
+To install tools from this repository follow these instructions:
 
-    make install
+### Install Nix
 
-which will build and install these tools into your Nix profile.
+Make sure you are using Nix v2
+
+    curl https://nixos.org/nix/install | sh
+
+    # Run this or login again to use Nix
+    . "$HOME/.nix-profile/etc/profile.d/nix.sh"
+
+### Setup Cachix (optional)
 
 If you want to cache the binary builds across several computers, Nix
 provides several ways of doing this, the most convenient being
 the [Cachix](https://cachix.org) service.
 
-We maintain a public cache which you can use by installing Cachix and
+We maintain a public cache which you can use by installing Cachix 
+
+    nix-env -if https://github.com/cachix/cachix/tarball/master --substituters https://cachix.cachix.org --trusted-public-keys cachix.cachix.org-1:eWNHQldwUO7G2VkjpnjDbWwy4KQ/HNxht7H4SSoMckM=
+
 then running
 
     cachix use dapp
 
-followed by restarting your Nix daemon.
+followed by restarting your Nix daemon (if on a multi-user Nix installation)
+
+### Install our tools
+
+To install tools from this repository, you only need to run
+
+    make install
+
+which will build and install these tools into your Nix profile.
+
+In the background, the command that runs is 
+
+    nix-env -f . -iA [tool name]
+
+where `tool name` can be `seth`, `dapp`, `hevm`, `ethsign`, and other tools that we provide.
 
 ## TODO
 
