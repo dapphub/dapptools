@@ -1,0 +1,36 @@
+#!/usr/bin/env bash
+## dapp pkg -- use the dapp package manager
+
+set -e
+
+apps=(dapp seth solc ethsign hevm)
+
+case $1 in
+  list|ls) {
+    cd "$DAPPTOOLS"
+    nix-env -q
+  };;
+  selfupdate|self-update) {
+    echo "Updating dapptools..."
+    cd "$DAPPTOOLS"
+    git pull
+    nix-env -f . -iA dapp
+  };;
+  install|update) {
+    shift
+    cd "$DAPPTOOLS"
+    git pull
+    nix-env -f . -iA "$@"
+  };;
+  uninstall|remove) {
+    shift
+    nix-env -e "$@"
+  };;
+  *) {
+    echo "dapp package manager..."
+    echo "current directory: $DAPPTOOLS"
+    echo "Options:"
+    echo "  update"
+    echo "  install <package>"
+  }
+esac

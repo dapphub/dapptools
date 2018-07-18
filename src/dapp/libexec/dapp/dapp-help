@@ -1,3 +1,5 @@
 #!/usr/bin/env bash
 set -e
 echo "Usage: dapp <command> [<args>...]"
+echo ""
+echo "dapp pkg to use the package manager"
