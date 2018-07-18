@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -e
+export DAPPTOOLS=${DAPPTOOLS-~/.dapp/dapptools}
 export DAPP_SRC=${DAPP_SRC-src}
 export DAPP_LIB=${DAPP_LIB-lib}
 export DAPP_OUT=${DAPP_OUT-out}

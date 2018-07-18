@@ -5,30 +5,15 @@
 #
 # Runs a command with the binaries from a named Nix package in PATH.
 
-# It's basically an implementation of nix-shell(1) but simpler and
-# without actually starting a subshell.
-
 set -e
 
 have() { command -v "$1" >/dev/null; }
-{ have nix-channel && have nix-build; } || {
+{ have nix; } || {
   echo >&2 "${0##*/}: error: The Nix package manager is required."
   echo >&2 "${0##*/}: error: See https://dapp.tools for installation instructions."
   exit 1
 }
 
-channel=$HOME/.nix-defexpr/channels/dapphub
-
-if [[ ! -d "$channel" ]]; then
-  echo >&2 "${0##*/}: DappHub Nix channel not present; adding..."
-  ( set -x; nix-channel --add https://nix.dapphub.com/pkgs/dapphub )
-  ( set -x; nix-channel --update )
-fi
-
 expr="$1"; shift
-path=$(nix-build \
-  -Q --no-out-link \
-  -I dapphub="$channel" -E "with import <dapphub> {}; $expr" \
-  2> >(sed 's/^/nix: /' >&2))
 
-PATH="$path/bin":$PATH "$@"
+nix run "(with import $DAPPTOOLS {}; $expr)" -c "$@"
