@@ -3,12 +3,23 @@
 
 set -e
 
+if [[ ! -d "$DAPPTOOLS" ]]; then
+  [ "$1" = init ] || {
+    echo "Please run \`dapp pkg init\`"
+    exit 1
+  }
+fi
+
 apps=(dapp seth solc ethsign hevm)
 
 case $1 in
+  init) {
+    curl -sS https://dapp.tools/install | sh
+  };;
   list|ls) {
     cd "$DAPPTOOLS"
-    nix-env -q
+    mapfile -t installed < <(nix-env -q)
+    echo "${installed[@]}"
   };;
   selfupdate|self-update) {
     echo "Updating dapptools..."
@@ -29,8 +40,11 @@ case $1 in
   *) {
     echo "dapp package manager..."
     echo "current directory: $DAPPTOOLS"
+    echo ""
     echo "Options:"
-    echo "  update"
+    echo "  list"
     echo "  install <package>"
+    echo "  remove <package>"
+    echo "  selfupdate"
   }
 esac
