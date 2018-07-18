@@ -37,15 +37,10 @@ followed by restarting your Nix daemon (if on a multi-user Nix installation)
 
 To install tools from this repository, you only need to run
 
-    make install
+    nix-env -iA dapphub.{dapp,seth,hevm,evmdis}
 
-which will build and install these tools into your Nix profile.
-
-In the background, the command that runs is 
-
-    nix-env -f . -iA [tool name]
-
-where `tool name` can be `seth`, `dapp`, `hevm`, `ethsign`, and other tools that we provide.
+which will build and install these tools into your Nix profile, optionally
+fetching the binaries from the cache if you have configured it.
 
 ## TODO
 
