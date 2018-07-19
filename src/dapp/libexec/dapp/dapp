@@ -1,9 +1,11 @@
 #!/usr/bin/env bash
-set -e
-export DAPPTOOLS=${DAPPTOOLS-~/.dapp/dapptools}
-export DAPP_SRC=${DAPP_SRC-src}
-export DAPP_LIB=${DAPP_LIB-lib}
-export DAPP_OUT=${DAPP_OUT-out}
+### dapp -- Simple tool for creating Ethereum-based dapps
+### Usage: dapp [<options>] <command> [<args>]
+###    or: dapp <command> --help
+###
+### Simple tool for creating Ethereum-based dapps
+###
+### Options:
 
 version=$(solc --version)
 if grep -q 0.4.9 <<<"$version"; then
@@ -12,5 +14,67 @@ if grep -q 0.4.9 <<<"$version"; then
   echo >&2 "${0##*/}: error: please downgrade to 0.4.8 or upgrade to 0.4.10"
   exit 1
 fi
+
+OPTS="dapp [<options>] <command> [<args>]
+dapp <command> --help
+--
+  Options:
+"
+
+set -e
+
+if ! [[ $DAPP_INIT ]]; then
+  export DAPP_INIT=1
+  # shellcheck source=/dev/null
+  [[ -e ~/.dapprc ]] && . ~/.dapprc
+  # shellcheck source=/dev/null
+  [[ $(pwd) != ~ && -e .dapprc ]] && . .dapprc
+fi
+
+if [[ $2 = --help ]]; then
+  exec "${0##*/}" help -- "$1"
+elif [[ $1 = -* ]] && command -v "${0##*/}-$1" &>/dev/null; then
+  exec "${0##*/}-$1" "${@:2}"
+fi
+
+eval "$(git rev-parse --parseopt -- "$@" <<<"$OPTS" || echo exit $?)"
+
+while [[ $1 ]]; do
+  case $1 in
+    --)              shift; break;;
+
+    --rpc-host)      shift; export ETH_RPC_HOST=$1;;
+    --rpc-port)      shift; export ETH_RPC_PORT=$1;;
+    --rpc-url)       shift; export ETH_RPC_URL=$1;;
+    --rpc-accounts)         export ETH_RPC_ACCOUNTS=yes;;
+    --keystore)      shift; export ETH_KEYSTORE=$1;;
+
+    -C|--chain)      shift; export SETH_CHAIN=$1;;
+
+    -B|--block)      shift; export ETH_BLOCK=$1;;
+    -F|--from)       shift; export ETH_FROM=$1;;
+    -G|--gas)        shift; export ETH_GAS=$1;;
+    -P|--gas-price)  shift; export ETH_GAS_PRICE=$1;;
+    -N|--nonce)      shift; export ETH_NONCE=$1;;
+    -V|--value)      shift; export ETH_VALUE=$1;;
+    -S|--password)   shift; export ETH_PASSWORD=$1;;
+
+       --create)            export SETH_CREATE=yes;;
+       --guess)             export SETH_GUESS=yes;;
+       --status)            export SETH_STATUS=yes;;
+       --resend)            export SETH_RESEND=yes;;
+
+       --async)             export SETH_ASYNC=yes;;
+       --follow)            export SETH_FOLLOW=yes;;
+    -j|--json)              export SETH_JSON=yes;;
+
+    *) printf "${0##*/}: internal error: %q\\n" "$1"; exit 1
+  esac; shift
+done
+
+export DAPPTOOLS=${DAPPTOOLS-~/.dapp/dapptools}
+export DAPP_SRC=${DAPP_SRC-src}
+export DAPP_LIB=${DAPP_LIB-lib}
+export DAPP_OUT=${DAPP_OUT-out}
 
 "${0##*/}-${1-help}" "${@:2}"

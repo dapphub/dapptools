@@ -3,7 +3,7 @@
 ### Usage: seth help [<command>]
 ###    or: seth <command> --help
 
-BUGS=https://github.com/dapphub/seth/issues
+BUGS=https://github.com/dapphub/dapptools/issues
 
 name=seth
 file=${0%-*}${1+-$1}
@@ -19,7 +19,7 @@ fi
 
 [[ $1 ]] && exit
 
-for file in ${0%/*}/$name-*; do
+for file in "${0%/*}"/"$name"-*; do
   if [[ -L $file ]]; then
     continue
   elif [[ $file = */$name---* ]]; then
@@ -33,7 +33,7 @@ list-commands() {
   cat "$@" |
   perl -ne 'print "$2 $3\n" if /^(\S)\1\1 '"$name"'-(\S+) -- (.*)/' |
   while read -r name label; do
-    printf "   %-14s  %s\n" "$name" "$label"
+    printf "   %-14s  %s\\n" "$name" "$label"
   done | LANG=C sort
 }
 

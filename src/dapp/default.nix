@@ -1,5 +1,5 @@
 { lib, stdenv, fetchFromGitHub, makeWrapper, glibcLocales
-, seth, git, solc, shellcheck, nodejs, hevm, jshon, nix, coreutils }:
+, coreutils, git, gnused, hevm, jshon, nix, nodejs, perl, seth, shellcheck, solc }:
 
 stdenv.mkDerivation rec {
   name = "dapp-${version}";
@@ -12,7 +12,7 @@ stdenv.mkDerivation rec {
   checkPhase = "make test";
   makeFlags = ["prefix=$(out)"];
   postInstall = let path = lib.makeBinPath [
-    nodejs solc git seth hevm jshon nix coreutils
+    coreutils git gnused hevm jshon nix nodejs perl seth solc
   ]; in ''
     wrapProgram "$out/bin/dapp" --prefix PATH : "${path}" \
       ${if glibcLocales != null then
@@ -22,7 +22,7 @@ stdenv.mkDerivation rec {
 
   meta = {
     description = "Simple tool for creating Ethereum-based dapps";
-    homepage = https://github.com/dapphub/dapp/;
+    homepage = https://github.com/dapphub/dapptools/src/dapp/;
     maintainers = [stdenv.lib.maintainers.dbrock];
     license = lib.licenses.gpl3;
     inherit version;
