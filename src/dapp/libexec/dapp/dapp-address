@@ -1,5 +1,7 @@
 #!/usr/bin/env node
-/// dapp-address -- determine address of newly generated contract
+### dapp-address -- determine address of newly generated contract
+### Usage: dapp address
+
 
 var PROGRAM_NAME = process.argv[1].replace(/.*\//, "")
 var PROGRAM_ARGS = process.argv.slice(2)

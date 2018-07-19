@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+### dapp-build -- compile the source code
+### Usage: dapp build
 set -e
 
 IFS=" " read -r -a opts <<<"$SOLC_FLAGS"

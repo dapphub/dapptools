@@ -19,7 +19,7 @@ fi
 
 [[ $1 ]] && exit
 
-for file in "${0%/*}"/"$name"-*; do
+for file in ${0%/*}/$name-*; do
   if [[ -L $file ]]; then
     continue
   elif [[ $file = */$name---* ]]; then

@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+### dapp-init -- bootstrap a new dapp
+### Usage: dapp init
 set -e -o noclobber
 [[ -e .git ]] && dapp --sanity "$0"
 

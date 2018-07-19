@@ -1,6 +1,14 @@
 #!/usr/bin/env bash
-### dapp pkg -- use the dapp package manager
+### dapp-pkg -- use the dapp package manager
 ### Usage: dapp pkg [<command>] [<arg>...]
+###
+### Options:
+###
+###   init                 initialize dapp pkg workflow`
+###   list                 list installed packages
+###   install <package>    add a package
+###   uninstall <package>  remove a package
+###   selfupdate           update dapp(1)
 
 set -e
 

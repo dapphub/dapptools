@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-## dapp debug -- starts an interactive debugger for unit tests (hevm)
+### dapp-debug -- start an interactive debugger for unit tests (hevm)
+### Usage: dapp debug
 
 set -e
 
