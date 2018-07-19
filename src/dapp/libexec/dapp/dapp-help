@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 ### dapp-help -- print help about dapp(1) or one of its subcommands
 ### Usage: dapp help [<command>]
-###    or: dapp <command> --help
 
 BUGS=https://github.com/dapphub/dapptools/issues
 
@@ -19,7 +18,7 @@ fi
 
 [[ $1 ]] && exit
 
-for file in ${0%/*}/$name-*; do
+for file in "${0%/*}"/$name-*; do
   if [[ -L $file ]]; then
     continue
   elif [[ $file = */$name---* ]]; then
