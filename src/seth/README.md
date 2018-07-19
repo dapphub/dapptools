@@ -51,7 +51,7 @@ Contents
       * [Ether transactions](#ether-transactions)
       * [Helper commands](#helper-commands)
       * [Checking ether balances](#checking-ether-balances)
-      * [Reading from contracts](#reading-from-smart-contracts)
+      * [Reading from contracts](#reading-from-contracts)
       * [Transacting with contracts](#transacting-with-contracts)
   * [Commands](#commands)
       * [`seth --abi-decode`]
