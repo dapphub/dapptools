@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
+### dapp-install -- install smart contract libraries
+### Usage: dapp install <lib>
 set -e
+
 dapp --sanity "$0"
 deps=$(dapp --parse-deps "$@")
 while read -r unparsed name url; do

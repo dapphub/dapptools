@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-## dapp pkg -- use the dapp package manager
+### dapp pkg -- use the dapp package manager
+### Usage: dapp pkg [<command>] [<arg>...]
 
 set -e
 
@@ -40,9 +41,10 @@ case $1 in
     echo "current directory: $DAPPTOOLS"
     echo ""
     echo "Options:"
+    echo "  init"
     echo "  list"
     echo "  install <package>"
-    echo "  remove <package>"
+    echo "  uninstall <package>"
     echo "  selfupdate"
   }
 esac

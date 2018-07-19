@@ -1,8 +1,13 @@
 #!/usr/bin/env bash
+### dapp---parse-deps -- parse arguments into (unparsed, name, url) tuples.
+### Usage: dapp --parse-deps <lib>...
 set -e
+
 for x; do
+  # matches strings like foo/bar
   if [[ ${x:?} =~ ^[^/]+/([^/]+)$ ]]; then
     echo "$x" "${BASH_REMATCH[1]}" "https://github.com/$x"
+  # matches strings like foo@bar, foo:bar or /foo/bar
   elif [[ $x =~ .*[@:/](.*) ]]; then
     name=${BASH_REMATCH[1]%.*}
     echo "$x" "${name:?}" "$x"
