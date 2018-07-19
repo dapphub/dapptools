@@ -35,17 +35,13 @@ followed by restarting your Nix daemon (if on a multi-user Nix installation)
 
 ### Install our tools
 
-To install tools from this repository, you only need to run
+To install tools from this repository, you need to run
 
-    make install
+    git clone --recursive https://github.com/dapphub/dapptools $HOME/.dapp/dapptools
+    nix-env -f $HOME/.dapp/dapptools -iA dapp seth solc hevm ethsign
 
-which will build and install these tools into your Nix profile.
-
-In the background, the command that runs is 
-
-    nix-env -f . -iA [tool name]
-
-where `tool name` can be `seth`, `dapp`, `hevm`, `ethsign`, and other tools that we provide.
+which will build and install these tools into your Nix profile, optionally
+fetching the binaries from the cache if you have configured it.
 
 ## TODO
 
