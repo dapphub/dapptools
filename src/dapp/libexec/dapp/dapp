@@ -1,4 +1,10 @@
 #!/usr/bin/env bash
+### dapp -- command-line Ethereum dapp tools
+### Usage: dapp <command> [<args>]
+###    or: dapp help <command>
+###
+### Build, test, deploy and transact with Ethereum contracts from the comfort of your command line.
+###
 set -e
 export DAPPTOOLS=${DAPPTOOLS-~/.dapp/dapptools}
 export DAPP_SRC=${DAPP_SRC-src}

@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+### dapp-create -- deploy a compiled contract
+### Usage: dapp create <name>
 set -e
 bin=$DAPP_OUT/${1?missing contract name}.bin
 type=$(seth --abi-constructor <"$DAPP_OUT/$1.abi")

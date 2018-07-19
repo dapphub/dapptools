@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+### dapp-clone -- clone a github repo
+### Usage: dapp clone <org/repo>
 set -e
 deps=$(dapp --parse-deps "$@")
 while read -r _ name url; do
