@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+### seth---to-ascii -- convert hexdata into text data
+### Usage: seth --to-ascii [<hexdata>]
 set -e
 hexdata=$(seth --to-hexdata "$@")
 format=$(sed 's/../\\x&/g' <<<"${hexdata#0x}")

@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+### seth---to-bytes32 -- convert hexdata into bytes32 value
+### Usage: seth --to-bytes32 [<hexdata>]
 set -e
 [[ $1 ]] || set -- "$(cat)"
 printf "%-64s\n" "${1#0x}" | tr ' ' 0
