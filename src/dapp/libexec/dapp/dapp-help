@@ -33,7 +33,7 @@ list-commands() {
   cat "$@" |
   perl -ne 'print "$2 $3\n" if /^(\S)\1\1 '"$name"'-(\S+) -- (.*)/' |
   while read -r name label; do
-    printf "   %-14s  %s\n" "$name" "$label"
+    printf "   %-14s  %s\\n" "$name" "$label"
   done | LANG=C sort
 }
 

@@ -78,13 +78,15 @@ set -e
 
 if ! [[ $SETH_INIT ]]; then
   export SETH_INIT=1
+  # shellcheck source=/dev/null
   [[ -e ~/.sethrc ]] && . ~/.sethrc
+  # shellcheck source=/dev/null
   [[ $(pwd) != ~ && -e .sethrc ]] && . .sethrc
 fi
 
 if [[ $2 = --help ]]; then
   exec "${0##*/}" help -- "$1"
-elif [[ $1 = -* ]] && which "${0##*/}-$1" &>/dev/null; then
+elif [[ $1 = -* ]] && command -v "${0##*/}-$1" &>/dev/null; then
   exec "${0##*/}-$1" "${@:2}"
 fi
 
@@ -119,7 +121,7 @@ while [[ $1 ]]; do
        --follow)            export SETH_FOLLOW=yes;;
     -j|--json)              export SETH_JSON=yes;;
 
-    *) printf "${0##*/}: internal error: %q\n" "$1"; exit 1
+    *) printf "${0##*/}: internal error: %q\\n" "$1"; exit 1
   esac; shift
 done
 
@@ -144,12 +146,12 @@ if [[ $SETH_CHAIN ]]; then
       eth_rpc_url=https://$SETH_CHAIN.infura.io/$INFURA_KEY
       export ETHERSCAN_API_URL=https://$SETH_CHAIN.etherscan.io/api
       keystores=(
-        ~/{.ethereum,Library/Ethereum}/$SETH_CHAIN/keystore/
-        ~/{.local/share,Library/Application\ Support}/io.parity.ethereum/keys/$SETH_CHAIN/
+        ~/{.ethereum,Library/Ethereum}/"$SETH_CHAIN"/keystore/
+        ~/{.local/share,Library/Application\ Support}/io.parity.ethereum/keys/"$SETH_CHAIN"/
       )
       ;;
     *)
-      echo >&2 "${0##*/}: error: unknown chain: \'$SETH_CHAIN'"
+      echo >&2 "${0##*/}: error: unknown chain: \\'$SETH_CHAIN'"
       exit 1
   esac
 fi
