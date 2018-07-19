@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+### dapp-uninstall -- remove a smart contract library
+### Usage: dapp uninstall <lib>
 set -e
 dapp --sanity "$0"
 for x; do

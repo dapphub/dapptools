@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+### dapp-update -- fetch all upstream lib changes
+### Usage: dapp update [<lib>]
 set -e
 if [[ $1 ]]; then
   for x; do (set -x; git submodule update --init --recursive "lib/$x"); done

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-### dapp-install -- install smart contract libraries
+### dapp-install -- install a smart contract library
 ### Usage: dapp install <lib>
 set -e
 

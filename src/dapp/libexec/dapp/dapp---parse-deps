@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-### dapp --parse-deps -- parse arguments into (unparsed, name, url) tuples.
+### dapp---parse-deps -- parse arguments into (unparsed, name, url) tuples.
 ### Usage: dapp --parse-deps <lib>...
 set -e
 

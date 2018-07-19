@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+### dapp-test -- run the test suite
+### Usage: dapp test
 set -e
 have() { command -v "$1" >/dev/null; }
 

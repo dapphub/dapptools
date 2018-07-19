@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+### dapp-upgrade -- pull & commit all upstream lib changes
+### Usage: dapp upgrade [<lib>]
 set -e
 dapp --sanity "$0"
 
