@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+### seth---to-uint256 -- convert an integer into uint256 value
+### Usage: seth --to-uint256 <value>
 set -e
 hex=$(seth --to-hex "$1")
 printf "%64s\n" "${hex#0x}" | tr ' ' 0
