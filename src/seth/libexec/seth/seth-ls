@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-### seth-ls -- display a list of your local accounts and balances
+### seth-ls -- display a list of your local accounts and balances (in wei)
 set -e
 accounts=$(seth accounts | awk '{print $1}')
 for x in $accounts; do
-  printf "%s\t%s\n" "$x" "$(seth balance "$x" || echo -)" &
+  printf "%s\\t%s\\n" "$x" "$(seth balance "$x" || echo -)" &
 done | sort

@@ -3,6 +3,8 @@ set -e
 [[ $SETH_DEBUG_CURL ]] && set -x
 curl -fsS "$@" || {
   code=$?
+  # TODO(mariano): fix this
+  # shellcheck disable=2154
   [[ $code = 22 ]] && (set -x; : "${command[@]}")
   exit $code
 }

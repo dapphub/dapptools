@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -e
 [[ $# = 2 ]] || seth --fail-usage "$0"
-[[ ${#2} -lt $1 ]] && exec printf "0.%0${1}d\n" "$2"
+[[ ${#2} -lt $1 ]] && exec printf "0.%0${1}d\\n" "$2"
 whole_digits=$((${#2} - $1))
 whole_part=${2:0:$whole_digits}
 echo "${whole_part:-0}.${2:$whole_digits}"

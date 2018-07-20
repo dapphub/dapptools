@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -e
 data=$(cat)
-: ${ETH_RPC_URL:=${ETH_RPC_HOST:-localhost}:${ETH_RPC_PORT:-8545}}
+: "${ETH_RPC_URL:=${ETH_RPC_HOST:-localhost}:${ETH_RPC_PORT:-8545}}"
 seth curl "$ETH_RPC_URL" -- -d "$data" -H "Content-Type: application/json" || {
   code=$?
   [[ $code = 7 ]] && sed >&2 <<. "s/^/${0##*/}: /"

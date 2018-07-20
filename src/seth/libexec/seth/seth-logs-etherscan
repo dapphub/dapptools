@@ -5,12 +5,12 @@ set -e
   exit 1
 }
 params=(
-  module=logs action=getLogs
-  address="$1" fromBlock="$2" toBlock=latest
-  apikey="$ETHERSCAN_API_KEY"
+  "module=logs" "action=getLogs"
+  "address=$1" "fromBlock=$2" "toBlock=latest"
+  "apikey=$ETHERSCAN_API_KEY"
 )
 query=$(printf "&%s" "${params[@]}")
-response=$(seth curl ${ETHERSCAN_API_URL?}${query/&/?})
+response=$(seth curl "${ETHERSCAN_API_URL?}""${query/&/?}")
 message=$(jshon <<<"$response" -e message -u)
 result=$(jshon <<<"$response" -e result -j)
 if [[ $message = OK || $result = "[]" ]]; then

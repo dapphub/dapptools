@@ -36,7 +36,7 @@ else
     while read -r key; do
       value=$(jshon <<<"$json" -e "$key" -j)
       value=$(show-json "$value")
-      printf "%-${SETH_KEY_WIDTH-23}s %s\n" "$key" "$value"
+      printf "%-${SETH_KEY_WIDTH-23}s %s\\n" "$key" "$value"
     done | sort;;
   \"*\") show-json "$json";;
   *) echo "$json";;

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 set -e
-topics=($(jshon -e topics -a -u <<<"$1"))
+mapfile -t topics < <(jshon -e topics -a -u <<<"$1")
 tx=$(jshon -e transactionHash -u <<<"$1")
 data=$(jshon -e data -u <<<"$1")
 event=$(seth --event-name "${topics[0]}")

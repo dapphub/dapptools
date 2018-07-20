@@ -3,4 +3,4 @@
 ### Usage: seth --to-bytes32 [<hexdata>]
 set -e
 [[ $1 ]] || set -- "$(cat)"
-printf "%-64s\n" "${1#0x}" | tr ' ' 0
+printf "%-64s\\n" "${1#0x}" | tr ' ' 0

@@ -34,6 +34,6 @@ jshon+=(-n {})
 jshon+=(-s "$DATA" -i data)
 jshon+=($(seth --send-params))
 jshon+=(-i append)
-: ${ETH_BLOCK:=latest} # geth doesn't like this argument
+: "${ETH_BLOCK:=latest}" # geth doesn't like this argument
 [[ $ETH_BLOCK = latest ]] || jshon+=(-s "$ETH_BLOCK" -i append)
 seth rpc eth_estimateGas -- "${jshon[@]}"

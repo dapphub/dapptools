@@ -6,6 +6,7 @@ set -e
 set -- "$*"
 [[ $1 = *" "* ]] || set -- "$1 wei"
 number=${1%% *} unit=${1#* }
+# shellcheck disable=2018,2019
 unit=$(tr A-Z a-z <<<"$unit")
 
 case $unit in

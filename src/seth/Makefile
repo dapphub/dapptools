@@ -13,4 +13,4 @@ uninstall:; rm -rf $(addprefix $(prefix)/,$(files))
 
 test:; ! grep '^#!/bin/sh' libexec/*/* && \
 grep '^#!/usr/bin/env bash' libexec/*/* | \
-cut -d: -f1 | xargs shellcheck -e SC1090 -e SC2018 -e SC2019
+cut -d: -f1 | xargs shellcheck
