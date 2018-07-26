@@ -5,7 +5,9 @@
 ###
 ### Build, test, deploy and transact with Ethereum contracts from the comfort of your command line.
 ###
+
 set -e
+
 export DAPPTOOLS=${DAPPTOOLS-~/.dapp/dapptools}
 export DAPP_SRC=${DAPP_SRC-src}
 export DAPP_LIB=${DAPP_LIB-lib}
@@ -22,7 +24,35 @@ fi
 OPTS="dapp [<options>] <command> [<args>]
 dapp <command> --help
 --
-  Options:
+  Connection options:
+rpc-host=host        JSON-RPC host (default: \`localhost')
+rpc-port=port        JSON-RPC port (default: \`8545')
+rpc-url=url          JSON-RPC URL (overrides host and port)
+rpc-accounts         use JSON-RPC node for accounts and signing
+C,chain=chain        remote node configuration preset
+keystore=dir         local keystore directory
+
+  Transaction options:
+F,from=address       account to send transaction from
+G,gas=number         number of gas units to provide
+P,gas-price=number   price (in wei) of each gas unit
+N,nonce=number       nonce value to use for the transaction
+V,value=number       amount (in wei) of ETH to send
+S,password=file      password for non-interactive signing
+
+  Options for seth-call(1):
+B,block=number       block number (default: \`latest')
+
+  Options for seth-send(1):
+create               use the calldata to create a new object
+guess                guess the return value of the call
+status               exit failure on failed tx (Byzantium)
+resend               force current nonce to overwrite tx
+
+  Other options:
+async                do not wait for transaction receipt
+follow               go into a loop watching for new logs
+j,json               print output as JSON (if applicable)
 "
 
 set -e
@@ -75,10 +105,5 @@ while [[ $1 ]]; do
     *) printf "${0##*/}: internal error: %q\\n" "$1"; exit 1
   esac; shift
 done
-
-export DAPPTOOLS=${DAPPTOOLS-~/.dapp/dapptools}
-export DAPP_SRC=${DAPP_SRC-src}
-export DAPP_LIB=${DAPP_LIB-lib}
-export DAPP_OUT=${DAPP_OUT-out}
 
 "${0##*/}-${1-help}" "${@:2}"
