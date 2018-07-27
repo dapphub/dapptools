@@ -1,7 +1,8 @@
-#!/bin/sh -e
+#!/usr/bin/env bash
 ### token-transfer -- transfer tokens to one account from another
 ### Usage: token transfer <token> <destination> <amount> [<source>]
 ### Perform a `transfer' or (if <source> is given) `transferFrom' operation.
+set -e
 [ $# = 3 ] || [ $# = 4 ] || token transfer --usage
 amount=$(token --parse "$3")
 if [ $# = 3 ]; then

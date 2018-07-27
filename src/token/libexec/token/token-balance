@@ -1,6 +1,7 @@
-#!/bin/sh -e
+#!/usr/bin/env bash
 ### token-balance -- print the token balance of an account
 ### Usage: token balance <token> <account>
+set -e
 [ $# = 2 ] || token balance --usage
 sig="balanceOf(address)(uint)"
 balance=$(seth call "$1" "$sig" "$2")

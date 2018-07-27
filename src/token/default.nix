@@ -1,8 +1,8 @@
-{ lib, stdenv, makeWrapper, coreutils, perl, seth }:
+{ lib, stdenv, makeWrapper, coreutils, perl, seth, glibcLocales }:
 
 stdenv.mkDerivation rec {
   name = "token-${version}";
-  version = "0.5";
+  version = "0.5.1";
   src = ./.;
 
   nativeBuildInputs = [makeWrapper];
@@ -11,12 +11,15 @@ stdenv.mkDerivation rec {
   postInstall = let path = lib.makeBinPath [
     coreutils perl seth
   ]; in ''
-    wrapProgram "$out/bin/token" --prefix PATH : "${path}"
+    wrapProgram "$out/bin/token" --prefix PATH : "${path}" \
+      ${if glibcLocales != null then
+        "--set LOCALE_ARCHIVE \"${glibcLocales}\"/lib/locale/locale-archive"
+        else ""}
   '';
 
   meta = {
     description = "Command-line tool for ERC20 tokens";
-    homepage = https://github.com/dapphub/token;
+    homepage = https://github.com/dapphub/src/token;
     license = lib.licenses.gpl3;
     inherit version;
   };

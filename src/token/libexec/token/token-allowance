@@ -1,6 +1,7 @@
-#!/bin/sh -e
+#!/usr/bin/env bash
 ### token-allowance -- print how much one account can transfer from another
 ### Usage: token allowance <token> <owner> <spender>
+set -e
 [ $# = 3 ] || token allowance --usage
 sig="allowance(address,address)(uint)"
 allowance=$(seth call "$1" "$sig" "$2" "$3")

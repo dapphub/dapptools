@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-BUGS=https://github.com/dapphub/token/issues/new
+BUGS=https://github.com/dapphub/dapptools/issues/new
 
 name=${0##*/} name=${name%-help}
 file=${0%-*}${1+-$1}
@@ -15,7 +15,7 @@ fi
 
 [[ $1 ]] && exit
 
-for file in ${0%/*}/$name-*; do
+for file in "${0%/*}"/"$name"-*; do
   [[ -L $file ]] && continue
   commands+=("$file")
 done
@@ -24,7 +24,7 @@ list-commands() {
   cat "$@" |
   perl -ne 'print "$2 $3\n" if /^(\S)\1\1 '"$name"'-(\S+) -- (.*)/' |
   while read -r name label; do
-    printf "   %-14s  %s\n" "$name" "$label"
+    printf "   %-14s  %s\\n" "$name" "$label"
   done | LANG=C sort
 }
 
