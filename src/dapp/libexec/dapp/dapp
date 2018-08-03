@@ -13,48 +13,6 @@ export DAPP_SRC=${DAPP_SRC-src}
 export DAPP_LIB=${DAPP_LIB-lib}
 export DAPP_OUT=${DAPP_OUT-out}
 
-version=$(solc --version)
-if grep -q 0.4.9 <<<"$version"; then
-  echo >&2 "${0##*/}: error: solc 0.4.9 not supported"
-  echo >&2 "${0##*/}: error: https://github.com/dapphub/dapp/issues/8"
-  echo >&2 "${0##*/}: error: please downgrade to 0.4.8 or upgrade to 0.4.10"
-  exit 1
-fi
-
-OPTS="dapp [<options>] <command> [<args>]
-dapp <command> --help
---
-  Connection options:
-rpc-host=host        JSON-RPC host (default: \`localhost')
-rpc-port=port        JSON-RPC port (default: \`8545')
-rpc-url=url          JSON-RPC URL (overrides host and port)
-rpc-accounts         use JSON-RPC node for accounts and signing
-C,chain=chain        remote node configuration preset
-keystore=dir         local keystore directory
-
-  Transaction options:
-F,from=address       account to send transaction from
-G,gas=number         number of gas units to provide
-P,gas-price=number   price (in wei) of each gas unit
-N,nonce=number       nonce value to use for the transaction
-V,value=number       amount (in wei) of ETH to send
-S,password=file      password for non-interactive signing
-
-  Options for seth-call(1):
-B,block=number       block number (default: \`latest')
-
-  Options for seth-send(1):
-create               use the calldata to create a new object
-guess                guess the return value of the call
-status               exit failure on failed tx (Byzantium)
-resend               force current nonce to overwrite tx
-
-  Other options:
-async                do not wait for transaction receipt
-follow               go into a loop watching for new logs
-j,json               print output as JSON (if applicable)
-"
-
 set -e
 
 if ! [[ $DAPP_INIT ]]; then
@@ -70,40 +28,5 @@ if [[ $2 = --help ]]; then
 elif [[ $1 = -* ]] && command -v "${0##*/}-$1" &>/dev/null; then
   exec "${0##*/}-$1" "${@:2}"
 fi
-
-eval "$(git rev-parse --parseopt -- "$@" <<<"$OPTS" || echo exit $?)"
-
-while [[ $1 ]]; do
-  case $1 in
-    --)              shift; break;;
-
-    --rpc-host)      shift; export ETH_RPC_HOST=$1;;
-    --rpc-port)      shift; export ETH_RPC_PORT=$1;;
-    --rpc-url)       shift; export ETH_RPC_URL=$1;;
-    --rpc-accounts)         export ETH_RPC_ACCOUNTS=yes;;
-    --keystore)      shift; export ETH_KEYSTORE=$1;;
-
-    -C|--chain)      shift; export SETH_CHAIN=$1;;
-
-    -B|--block)      shift; export ETH_BLOCK=$1;;
-    -F|--from)       shift; export ETH_FROM=$1;;
-    -G|--gas)        shift; export ETH_GAS=$1;;
-    -P|--gas-price)  shift; export ETH_GAS_PRICE=$1;;
-    -N|--nonce)      shift; export ETH_NONCE=$1;;
-    -V|--value)      shift; export ETH_VALUE=$1;;
-    -S|--password)   shift; export ETH_PASSWORD=$1;;
-
-       --create)            export SETH_CREATE=yes;;
-       --guess)             export SETH_GUESS=yes;;
-       --status)            export SETH_STATUS=yes;;
-       --resend)            export SETH_RESEND=yes;;
-
-       --async)             export SETH_ASYNC=yes;;
-       --follow)            export SETH_FOLLOW=yes;;
-    -j|--json)              export SETH_JSON=yes;;
-
-    *) printf "${0##*/}: internal error: %q\\n" "$1"; exit 1
-  esac; shift
-done
 
 "${0##*/}-${1-help}" "${@:2}"
