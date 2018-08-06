@@ -9,10 +9,9 @@ if ! [[ $DAPP_SKIP_BUILD ]] ; then
 fi
 
 have hevm   && ! [[ $DAPP_NO_HEVM   ]] && dapp test-hevm   "$@"
-have ethrun && ! [[ $DAPP_NO_ETHRUN ]] && dapp test-ethrun "$@"
 
-have ethrun || have hevm || {
-  echo >&2 "${0##*/}: error: neither \`ethrun' nor \`hevm' found"
-  echo >&2 "${0##*/}: error: please install one (or both) and try again"
+have hevm || {
+  echo >&2 "${0##*/}: error: \`hevm' not found"
+  echo >&2 "${0##*/}: error: please install it and try again"
   exit 1
 }
