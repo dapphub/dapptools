@@ -1,6 +1,22 @@
-#!/usr/bin/env bash
+#!/usr/bin/env node
+/*
 ### seth-keccak -- print the Keccak hash of an arbitrary piece of data
-set -e
-[[ $# = 1 ]] || seth --fail-usage "$0"
-hexdata=$(seth --to-hexdata "$1")
-seth rpc web3_sha3 -- -s "$hexdata" -i append
+*/
+var keccak256 = require('./sha3.js').keccak256;
+
+if (!process.argv[2]) {
+  console.error("seth-keccak -- print the Keccak hash of an arbitrary piece of data")
+  process.exit(1)
+}
+
+var data = process.argv[2];
+
+if (data.startsWith('0x')) {
+  data = data.replace('0x','')
+  var res = keccak256(Buffer.from(data, 'hex'))
+  console.log(`0x${res}`)
+} else {
+  var res = keccak256(data)
+  console.log(`0x${res}`)
+}
+

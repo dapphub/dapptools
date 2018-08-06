@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+### seth-sig -- print the 4-byte signature of a method
+### Usage: seth sig <method>
+### Example: seth sig "withdraw(uint256)"
+### Returns: 0x2e1a7d4d
+set -e
+[[ $# = 1 ]] || seth --fail-usage "$0"
+method=$(seth keccak "$1")
+echo "${method:0:10}"
