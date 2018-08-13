@@ -7,3 +7,6 @@
 [submodule "submodules/chief"]
 	path = submodules/chief
 	url = https://github.com/makerdao/chief
+[submodule "submodules/terra"]
+	path = submodules/terra
+	url = https://github.com/makerdao/terra
