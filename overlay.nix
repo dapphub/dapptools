@@ -105,14 +105,14 @@ in {
 
   ethsign = (callPackage (import ./src/ethsign) {}).bin;
 
-  setzer = callPackage (import ./submodules/setzer) {};
-
-  chief = callPackage (import ./submodules/chief) {};
-
   evmdis = callPackage ./nix/evmdis.nix {};
 
   token = callPackage (import ./src/token) {};
   dai = callPackage (import ./submodules/dai-cli) {};
+
+  setzer = callPackage (import ./submodules/setzer) {};
+  terra = callPackage (import ./submodules/terra) {};
+  chief = callPackage (import ./submodules/chief) {};
 
   go-ethereum = super.go-ethereum.overrideDerivation (_: rec {
     name = "go-ethereum-${version}";
