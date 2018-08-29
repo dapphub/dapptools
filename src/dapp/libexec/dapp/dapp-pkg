@@ -32,12 +32,14 @@ case $1 in
     echo "Updating dapptools..."
     cd "$DAPPTOOLS"
     git pull
+    git submodule update --recursive --remote
     nix-env -f . -iA dapp
   };;
   install|update) {
     shift
     cd "$DAPPTOOLS"
     git pull
+    git submodule update --recursive --remote
     nix-env -f . -iA "$@"
   };;
   uninstall|remove) {
