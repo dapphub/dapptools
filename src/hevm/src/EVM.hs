@@ -926,7 +926,7 @@ exec1 = do
                         popTrace
 
                       ctx@(CallContext yOffset ySize _ _ _ _) -> do
-                        let output = readMemory (num xOffset) (num ySize) vm
+                        let output = readMemory (num xOffset) (num xSize) vm
                         assign state (view frameState nextFrame)
 
                         -- Take back the remaining gas allowance
