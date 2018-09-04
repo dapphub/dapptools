@@ -41,6 +41,8 @@ data Op
   | OpGasprice
   | OpExtcodesize
   | OpExtcodecopy
+  | OpReturndatasize
+  | OpReturndatacopy
   | OpBlockhash
   | OpCoinbase
   | OpTimestamp

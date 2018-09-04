@@ -1583,6 +1583,8 @@ readOp x _ = case x of
   0x3a -> OpGasprice
   0x3b -> OpExtcodesize
   0x3c -> OpExtcodecopy
+  0x3d -> OpReturndatasize
+  0x3e -> OpReturndatacopy
   0x40 -> OpBlockhash
   0x41 -> OpCoinbase
   0x42 -> OpTimestamp
