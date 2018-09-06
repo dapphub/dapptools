@@ -567,7 +567,7 @@ drawVm ui =
           ]
         , hBox $
           [ drawSolidityPane ui
-          , vLimit 20 $ drawTracePane ui
+          , drawTracePane ui
           ]
         , vLimit 2 $ drawHelpBar
         ]
