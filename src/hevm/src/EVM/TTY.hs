@@ -567,7 +567,7 @@ drawVm ui =
           ]
         , hBox $
           [ drawSolidityPane ui
-          , vLimit 20 $ drawTracePane ui
+          , drawTracePane ui
           ]
         , vLimit 2 $ drawHelpBar
         ]
@@ -854,6 +854,8 @@ opWidget (i, o) = str (showPc i <> " ") <+> case o of
   OpGasprice -> txt "GASPRICE"
   OpExtcodesize -> txt "EXTCODESIZE"
   OpExtcodecopy -> txt "EXTCODECOPY"
+  OpReturndatasize -> txt "RETURNDATASIZE"
+  OpReturndatacopy -> txt "RETURNDATACOPY"
   OpBlockhash -> txt "BLOCKHASH"
   OpCoinbase -> txt "COINBASE"
   OpTimestamp -> txt "TIMESTAMP"
