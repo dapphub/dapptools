@@ -96,7 +96,7 @@ geth \
   2> >(tee "$chaindir/geth.log" | grep --line-buffered Success | sed 's/^/geth: /' >&2) \
   --datadir "$chaindir" --networkid "$CHAINID" --port="$port" \
   --mine --minerthreads=1 \
-  --rpc --rpcapi "web3,eth,net,debug" --rpccorsdomain '*' --nodiscover \
+  --rpc --rpcapi "web3,eth,net,debug,personal" --rpccorsdomain '*' --nodiscover \
   --rpcport="$RPC_PORT" --unlock="$(IFS=,; echo "${address[*]}")" --password=<(exit) &
 
 gethpid=$!
