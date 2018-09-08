@@ -81,6 +81,8 @@ if ! [[ $SETH_INIT ]]; then
   # shellcheck source=/dev/null
   [[ -e ~/.sethrc ]] && . ~/.sethrc
   # shellcheck source=/dev/null
+  [[ -e $XDG_CONFIG_HOME/seth/sethrc ]] && . $XDG_CONFIG_HOME/seth/sethrc
+  # shellcheck source=/dev/null
   [[ $(pwd) != ~ && -e .sethrc ]] && . .sethrc
 fi
 
