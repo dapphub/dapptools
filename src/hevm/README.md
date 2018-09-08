@@ -42,22 +42,8 @@ or you can enter the interactive debugger using
 
 ### Nix
 
-DappHub maintains a repository for the [Nix](https://nixos.org/nix/)
-package manager, which works on any Linux distribution, OS X, and
-other Unix-likes.
-
-These commands will install Nix, add the DappHub "channel", and
-install `hevm`. The channel has cached binaries for Linux and OS X.
-
-    $ curl https://nixos.org/nix/install | sh
-    $ nix-channel --add https://nix.dapphub.com/pkgs/dapphub
-    $ nix-channel --update
-    $ nix-env -iA dapphub.hevm
-
-This Nix channel can also be used to install
-[`dapp`](https://github.com/dapphub/dapp), our development tool:
-
-    $ nix-env -iA dapphub.dapp
+`hevm` is distributed as part of the [Dapp
+tools](https://github.com/dapphub/dapptools) suite.
 
 ### Static binary
 
