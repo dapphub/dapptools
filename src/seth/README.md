@@ -86,30 +86,8 @@ Contents
 Installing
 ------------------------------------------------------------------------
 
-Seth is distributed via [the Nix package manager], enabling
-cryptographically precise dependency tracking.  First, install Nix
-itself:
-
-    $ curl https://nixos.org/nix/install | sh
-
-Then add DappHub's distribution channel and install `seth`:
-
-    $ nix-channel --add https://nix.dapphub.com/pkgs/dapphub
-    $ nix-channel --update
-    $ nix-env -iA dapphub.seth
-
-See [dapp.tools](https://dapp.tools) for more software available
-through our channel.
-
-### Upgrading
-
-To upgrade Seth to the latest release, update the channel and then
-reinstall:
-
-    $ nix-channel --update
-    $ nix-env -iA dapphub.seth
-
-<br />
+Seth is distributed as part of the [Dapp
+tools](https://github.com/dapphub/dapptools) suite.
 
 Configuration
 ------------------------------------------------------------------------
