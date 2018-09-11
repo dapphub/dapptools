@@ -95,14 +95,16 @@ Configuration
 Seth has options that can be specified via command-line flags
 or environment variables.
 
-For convenience, Seth looks for `~/.sethrc` and loads it as a shell
-script (Bash 4 syntax).  This is a convenient place to set default
+Seth looks in the following places for configuration, in descending order of precedence:
+
+* `./.sethrc`
+* `XDG_CONFIG_HOME/seth/sethrc`
+* `~/.sethrc`
+
+The configuration is loaded as a shell script (Bash 4 syntax).  This is a convenient place to set default
 options by exporting environment variables.
 
 ### Example `.sethrc` file
-
-The `~/.sethrc` file is just a regular Bash script that is
-automatically loaded by Seth.  Here is an example:
 
     # Use Infura's mainnet node for all RPC calls
     export SETH_CHAIN=ethlive
