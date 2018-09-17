@@ -109,6 +109,7 @@ in {
 
   token = callPackage (import ./src/token) {};
   dai = callPackage (import ./submodules/dai-cli) {};
+  mcd = callPackage (import ./submodules/mcd-cli) {};
 
   setzer = callPackage (import ./submodules/setzer) {};
   terra = callPackage (import ./submodules/terra) {};
