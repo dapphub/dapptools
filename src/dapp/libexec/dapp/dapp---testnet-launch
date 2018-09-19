@@ -10,6 +10,7 @@ period=seconds     use a block time instead of instamine
 accounts=number    create multiple accounts (default: 1)
 save=name          after finishing, save snapshot
 load=name          start from a previously saved snapshot
+reset              delete chaindata & keystore
 "
 
 eval "$(
@@ -30,12 +31,18 @@ while [[ $1 ]]; do
     --accounts)  shift; ACCOUNTS=$(($1 - 1));;
     --save)      shift; SAVE=$1;;
     --load)      shift; LOAD=$1;;
+    --reset)     shift; RESET=$1;;
     *) printf "${0##*/}: internal error: %q\\n" "$1"; exit 1
   esac; shift
 done
 
 gethdir=$HOME/.dapp/testnet
 chaindir=$gethdir/$RPC_PORT
+
+if [[ $RESET ]]; then
+  rm -rf "$chaindir"
+  exit 0
+fi
 
 if [[ $LOAD ]]; then
   mkdir -p "$chaindir"
