@@ -12,7 +12,9 @@ let
   );
 
   drv = pkgs.haskell.lib.addBuildTool (
-    haskellPackages.callPackage (import ./default.nix) {}
+    haskellPackages.callPackage (import ./default.nix) {
+      inherit (pkgs) secp256k1;
+    }
   ) [pkgs.git];
 
 in if pkgs.lib.inNixShell then drv.env else drv

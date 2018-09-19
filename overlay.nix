@@ -177,8 +177,6 @@ in {
     dontDisableStatic = true;
   });
 
-  ethjet = callPackage (import ./src/libethjet) {};
-
   celf = callPackage ./nix/celf.nix {};
 
   myetherwallet = stdenv.mkDerivation rec {

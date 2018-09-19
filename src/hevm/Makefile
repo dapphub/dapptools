@@ -6,10 +6,6 @@ default.nix: hevm.cabal
 nix: default.nix shell.nix
 	nix-shell --command 'cabal configure --enable-tests'
 
-nix-profiling: default.nix hevm.nix
-	nix-shell -A hevmProfiling.env hevm.nix \
-	  --command 'cabal configure --enable-profiling'
-
 docker:; docker build -t dapphub/hevm .
 
 ghcid:
