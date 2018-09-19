@@ -20,6 +20,7 @@ cabal-version:
   >=1.10
 data-files:
   run-consensus-tests
+
 library
   exposed-modules:
     EVM,
@@ -37,6 +38,7 @@ library
     EVM.Fetch,
     EVM.FeeSchedule,
     EVM.Op,
+    EVM.Precompiled,
     EVM.Keccak,
     EVM.Solidity,
     EVM.Stepper,
@@ -49,6 +51,10 @@ library
     Paths_hevm
   ghc-options:
     -O2 -Wall -Werror -Wno-deprecations
+  extra-libraries:
+    secp256k1
+  c-sources:
+    ethjet/ethjet.c, ethjet/tinykeccak.c
   if impl(ghcjs)
     build-depends:
       ghcjs-base
@@ -73,7 +79,6 @@ library
     data-dword                        >= 0.3.1,
     deepseq                           >= 1.4.2,
     directory                         >= 1.3.0,
-    ethjet,
     filepath                          >= 1.4.1,
     fgl                               == 5.*,
     ghci-pretty                       >= 0.0.2,
@@ -176,10 +181,13 @@ test-suite test
     test
   main-is:
     test.hs
+  extra-libraries:
+    secp256k1
   build-depends:
     HUnit,
     QuickCheck,
     base >=4.9,
+    base16-bytestring,
     ghci-pretty,
     hevm,
     tasty,

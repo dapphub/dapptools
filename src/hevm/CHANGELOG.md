@@ -1,5 +1,8 @@
 # hevm changelog
 
+## 0.16 - 2018-09-19
+ - Move ethjet into hevm
+
 ## [0.15] - 2018-05-09
  - Fix SDIV/SMOD definitions for extreme case
 
@@ -48,7 +51,7 @@
 
 ## [0.11.5] - 2017-11-14
  - Use --state with --exec --debug
- 
+
 ## [0.11.4] - 2017-11-12
  - Fix bug when unit test contract has creations in constructor
 
@@ -147,7 +150,7 @@
 
 ## [0.2.0] - 2017-06-13
  - Fixes bug in `CALL`
-  
+
 ## [0.1.0.1] - 2017-03-31
  - Highlights Solidity exactly on character level
  - Adds `N` command for stepping by Solidity source position instead of by opcode

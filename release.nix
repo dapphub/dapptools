@@ -25,7 +25,6 @@ let
     inherit dai;
     inherit dapp-which;
     inherit dapp;
-    inherit ethjet;
     inherit ethsign;
     inherit evmdis;
     inherit go-ethereum-unlimited;
