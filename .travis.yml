@@ -35,6 +35,6 @@ after_success:
       http -f https://dapphub.chat/api/v1/chat.postMessage \
         X-Auth-Token:"$CHAT_AUTH_TOKEN" \
         X-User-Id:"$CHAT_USER_ID" \
-        channel=#dev \
+        channel=#dev-announce \
         text=":construction_site: Nix build of dapptools [$COMMIT_HASH](https://github.com/dapphub/dapptools/commit/$COMMIT_HASH) (branch \`$TRAVIS_BRANCH\`) finished; binaries for GNU/Linux and Darwin uploaded to Cachix."
     fi
