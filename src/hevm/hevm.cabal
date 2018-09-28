@@ -4,6 +4,11 @@ version:
   0.16
 synopsis:
   Ethereum virtual machine evaluator
+description:
+  Hevm implements the Ethereum virtual machine semantics.
+  .
+  It can be used as a library, and it also comes with an executable
+  that can run unit test suites, optionally with a visual TTY debugger.
 homepage:
   https://github.com/dapphub/dapptools
 license:
@@ -14,12 +19,16 @@ author:
   Mikael Brockman
 maintainer:
   mikael@brockman.se
+category:
+  Ethereum
 build-type:
   Simple
 cabal-version:
   >=1.10
 data-files:
   run-consensus-tests
+extra-source-files:
+  CHANGELOG.md
 
 library
   exposed-modules:
@@ -50,24 +59,17 @@ library
     EVM.VMTest,
     Paths_hevm
   ghc-options:
-    -O2 -Wall -Werror -Wno-deprecations
+    -Wall -Wno-deprecations
   extra-libraries:
     secp256k1
   c-sources:
     ethjet/ethjet.c, ethjet/tinykeccak.c
-  if impl(ghcjs)
-    build-depends:
-      ghcjs-base
-    js-sources:
-      jsbits/base64js.min.js
-      jsbits/sha3.min.js
-      jsbits/hevm-keccak.js
   build-depends:
     QuickCheck                        >= 2.9,
     abstract-par                      >= 0.3,
     aeson                             >= 1.0,
     ansi-wl-pprint                    >= 0.6,
-    base                              >= 4.9,
+    base                              >= 4.9 && < 5,
     base16-bytestring                 >= 0.1,
     base64-bytestring                 >= 1.0,
     binary                            >= 0.8,
@@ -134,13 +136,13 @@ executable hevm
   main-is:
     hevm-cli.hs
   ghc-options:
-    -O2 -Wall -threaded -with-rtsopts=-N
+    -Wall -threaded -with-rtsopts=-N
   build-depends:
     QuickCheck                        >= 2.9,
     aeson                             >= 1.0,
     ansi-wl-pprint                    >= 0.6,
     async                             == 2.*,
-    base                              >= 4.9,
+    base                              >= 4.9 && < 5,
     base16-bytestring                 >= 0.1,
     base64-bytestring                 >= 1.0,
     binary                            >= 0.8,
@@ -174,7 +176,7 @@ test-suite test
   default-language:
     Haskell2010
   ghc-options:
-    -O2 -Wall
+    -Wall
   type:
     exitcode-stdio-1.0
   hs-source-dirs:
@@ -186,7 +188,7 @@ test-suite test
   build-depends:
     HUnit >= 1.6,
     QuickCheck >= 2.9,
-    base >= 4.9,
+    base >= 4.9 && < 5,
     base16-bytestring >= 0.1,
     ghci-pretty >= 0.0.2,
     hevm,
