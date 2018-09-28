@@ -17,4 +17,9 @@ let
     }
   ) [pkgs.git];
 
-in if pkgs.lib.inNixShell then drv.env else drv
+in
+  if pkgs.lib.inNixShell
+  then drv.env.overrideAttrs (_: {
+    LD_LIBRARY_PATH = "${pkgs.secp256k1}/lib";
+  })
+  else drv
