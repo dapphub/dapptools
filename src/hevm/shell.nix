@@ -1,4 +1,4 @@
-{ dapphub ? import <dapphub> {} }:
+{ dapphub ? import ../.. {} }:
 let
   inherit (dapphub) pkgs;
 
