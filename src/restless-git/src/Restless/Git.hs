@@ -21,7 +21,7 @@ import Control.Monad.IO.Class (MonadIO, liftIO)
 import Data.ByteString        (ByteString)
 import Data.Foldable          (toList)
 import Data.Map               (Map)
-import Data.Monoid            ((<>))
+import Data.Semigroup         ((<>))
 import Data.Set               (Set)
 import Data.Text              (Text, unpack)
 import Data.Text.Encoding     (decodeUtf8)
@@ -43,12 +43,14 @@ data File = File { filePath :: Path, fileData :: ByteString }
 data Tree a = Tree (Map ByteString (Tree a)) (Map ByteString a)
   deriving (Functor, Show)
 
+instance Semigroup (Tree a) where
+  Tree a b <> Tree c d =
+    Tree (Map.unionWith mappend a c)
+         (Map.union b d)
+
 instance Monoid (Tree a) where
   mempty =
     Tree mempty mempty
-  mappend (Tree a b) (Tree c d) =
-    Tree (Map.unionWith mappend a c)
-         (Map.union b d)
 
 -- | Initialize an empty repository at the given path.
 make

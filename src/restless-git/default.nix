@@ -3,7 +3,7 @@
 }:
 mkDerivation {
   pname = "restless-git";
-  version = "0.5";
+  version = "0.7";
   src = ./.;
   libraryHaskellDepends = [
     base bytestring clock containers HSH text time
@@ -11,7 +11,7 @@ mkDerivation {
   testHaskellDepends = [
     base bytestring containers tasty tasty-hunit temporary text
   ];
-  homepage = "https://github.com/lessrest/restless-git";
+  homepage = "https://github.com/dapphub/dapptools";
   description = "Easy Git repository serialization";
   license = stdenv.lib.licenses.gpl3;
 }
