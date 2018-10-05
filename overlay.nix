@@ -115,7 +115,7 @@ in {
   terra = callPackage (import ./submodules/terra) {};
   chief = callPackage (import ./submodules/chief) {};
 
-  go-ethereum = super.go-ethereum.overrideDerivation (_: rec {
+  go-ethereum = (super.go-ethereum.overrideDerivation (_: rec {
     name = "go-ethereum-${version}";
     version = "1.8.10";
     src = self.pkgs.fetchFromGitHub {
@@ -128,7 +128,7 @@ in {
     propagatedBuildInputs =
       stdenv.lib.optionals stdenv.isDarwin
         (with self.pkgs; [ darwin.libobjc darwin.apple_sdk.frameworks.IOKit ]);
-  });
+  })).override { buildGoPackage = super.buildGo19Package; };
 
   # We use this to run private testnets without
   # the pesky transaction size limit.
