@@ -1,6 +1,6 @@
-{ stdenv, buildGoPackage, fetchFromGitHub, fetchgit, clang }:
+{ stdenv, buildGo19Package, fetchFromGitHub, fetchgit, clang }:
 
-buildGoPackage rec {
+buildGo19Package rec {
   name = "ethsign-${version}";
   version = "0.10";
 
