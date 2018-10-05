@@ -37,6 +37,7 @@ import Data.ByteString              (ByteString)
 import Data.ByteString.Lazy         (fromStrict)
 import Data.Map.Strict              (Map)
 import Data.Maybe                   (fromMaybe, isNothing)
+import Data.Semigroup               (Semigroup (..))
 import Data.Sequence                (Seq)
 import Data.Vector.Storable         (Vector)
 import Data.Foldable                (toList)
@@ -258,11 +259,12 @@ makeLenses ''Cache
 makeLenses ''Trace
 makeLenses ''VM
 
+instance Semigroup Cache where
+  a <> b = Cache
+    { _fetched = mappend (view fetched a) (view fetched b) }
+
 instance Monoid Cache where
   mempty = Cache { _fetched = mempty }
-  mappend a b = Cache
-    { _fetched = mappend (view fetched a) (view fetched b)
-    }
 
 -- * Data accessors
 

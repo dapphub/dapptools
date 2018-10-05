@@ -15,7 +15,7 @@ import Data.Bits       (Bits (..), FiniteBits (..))
 import Data.ByteString (ByteString)
 import Data.DoubleWord (signedWord, unsignedWord)
 import Data.Maybe      (fromMaybe)
-import Data.Monoid     ((<>))
+import Data.Semigroup  ((<>))
 import Data.String     (IsString)
 import Data.Word       (Word8)
 
@@ -169,7 +169,9 @@ deriving instance Enum Byte
 deriving instance Eq Byte
 deriving instance Integral Byte
 deriving instance IsString Blob
+deriving instance Semigroup Blob
 deriving instance Monoid Blob
+deriving instance Semigroup Memory
 deriving instance Monoid Memory
 deriving instance Num Byte
 deriving instance Ord Byte

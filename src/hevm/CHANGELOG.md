@@ -1,5 +1,8 @@
 # hevm changelog
 
+## 0.17 - 2018-10-05
+ - Semigroup/Monoid fix
+
 ## 0.16 - 2018-09-19
  - Move ethjet into hevm
 

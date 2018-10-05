@@ -49,7 +49,7 @@ import Data.Char            (isDigit, digitToInt)
 import Data.Foldable
 import Data.Map.Strict      (Map)
 import Data.Maybe
-import Data.Monoid
+import Data.Semigroup
 import Data.Sequence        (Seq)
 import Data.Text            (Text, pack, intercalate)
 import Data.Text.Encoding   (encodeUtf8)
@@ -97,9 +97,11 @@ data SourceCache = SourceCache
   , _sourceAsts   :: Map Text Value
   } deriving (Show, Eq, Generic)
 
+instance Semigroup SourceCache where
+  _ <> _ = error "lol"
+
 instance Monoid SourceCache where
   mempty = SourceCache mempty mempty mempty mempty
-  mappend (SourceCache _ _ _ _) (SourceCache _ _ _ _) = error "lol"
 
 data JumpType = JumpInto | JumpFrom | JumpRegular
   deriving (Show, Eq, Ord, Generic)
