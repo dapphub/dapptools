@@ -11,7 +11,7 @@
 }:
 mkDerivation {
   pname = "hevm";
-  version = "0.15";
+  version = "0.17";
   src = ./.;
   isLibrary = true;
   isExecutable = true;
@@ -40,7 +40,7 @@ mkDerivation {
     lens mtl QuickCheck tasty tasty-hunit tasty-quickcheck text vector
   ];
   testSystemDepends = [ secp256k1 ];
-  homepage = "https://github.com/mbrock/hevm";
+  homepage = "https://github.com/dapphub/dapptools";
   description = "Ethereum virtual machine evaluator";
   license = stdenv.lib.licenses.agpl3;
 }
