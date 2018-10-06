@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+#
+# This script is used to upload Haskell packages to Hackage...
+#
+# Run with FLAGS=--publish after making sure the candidate looks fine.
+
+set -ex
+cd "$1"
+rm -rf dist/*.tar.gz dist/docs
+nix-shell --command "cabal haddock --builddir=dist/docs --for-hackage \
+  --haddock-option=--hyperlinked-source"
+cabal sdist
+cabal upload $FLAGS dist/*.tar.gz
+cabal upload $FLAGS -d dist/docs/*-docs.tar.gz
+
