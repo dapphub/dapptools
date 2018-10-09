@@ -1,5 +1,8 @@
 # hevm changelog
 
+## 0.18 - 2018-10-09
+ - Fix [duplicate address bug](https://github.com/dapphub/dapptools/issues/70)
+
 ## 0.17 - 2018-10-05
  - Semigroup/Monoid fix
 

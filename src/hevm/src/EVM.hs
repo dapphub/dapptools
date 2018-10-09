@@ -1110,6 +1110,7 @@ replaceCodeOfSelf createdCode = do
           initialContract createdCode
             & set storage (view storage now)
             & set balance (view balance now)
+            & set nonce   (view nonce now)
 
 resetState :: EVM ()
 resetState = do
