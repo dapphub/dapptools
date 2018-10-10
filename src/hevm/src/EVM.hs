@@ -871,6 +871,10 @@ exec1 = do
              ) ->
               case xTo of
                 n | n > 0 && n <= 8 -> precompiledContract
+                n | num n == cheatCode ->
+                  do
+                    assign (state . stack) xs
+                    cheat (xInOffset, xInSize) (xOutOffset, xOutSize)
                 _ ->
                   let
                     availableGas = the state gas
@@ -1169,6 +1173,9 @@ refund n = do
 -- * Cheat codes
 
 -- The cheat code is 7109709ecfa91a80626ff3989d68f67f5b1dd12d.
+-- Call this address using one of the cheatActions below to do
+-- special things, e.g. changing the block timestamp. Beware that
+-- these are necessarily hevm specific.
 cheatCode :: Addr
 cheatCode = num (keccak "hevm cheat code")
 
