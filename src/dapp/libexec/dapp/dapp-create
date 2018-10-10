@@ -2,6 +2,27 @@
 ### dapp-create -- deploy a compiled contract
 ### Usage: dapp create <name>
 set -e
+for i in "$@"
+do
+case $i in
+  --verify)
+    DAPP_VERIFY_CONTRACT=yes
+    shift
+    ;;
+  *)
+    shift
+    set -- "$@" "$i"
+    ;;
+esac
+done
 bin=$DAPP_OUT/${1?missing contract name}.bin
 type=$(seth --abi-constructor <"$DAPP_OUT/$1.abi")
-(set -x; seth send --create "$bin" "${type/constructor/${1##*/}}" "${@:2}")
+address=$(set -x; seth send --create "$bin" "${type/constructor/${1##*/}}" "${@:2}")
+
+[[ $DAPP_VERIFY_CONTRACT ]] && {
+  sleep 5
+  echo >&2 "Verifying contract..."
+  dapp verify-contract "$1" "$address"
+}
+
+echo "$address"

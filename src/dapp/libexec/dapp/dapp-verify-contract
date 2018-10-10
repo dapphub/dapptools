@@ -1,0 +1,63 @@
+#!/usr/bin/env bash
+set -e
+v=$(solc --version)
+v=$(grep -oP '^Version: \K(.*commit.\w{8})' <<<"$v")
+version="v$v"
+
+[[ $ETHERSCAN_API_KEY ]] || {
+  cat >&2 <<.
+
+  You need an Etherscan Api Key to use this command.
+  Create one at https://etherscan.io/myapikey
+  
+  Then export it with \`export ETHERSCAN_API_KEY=xxxxxxxx'
+
+.
+  exit 1
+}
+
+params=(
+  "module=contract" "action=verifysourcecode"
+  "contractname=${1?contractname}" "contractaddress=${2?contractaddress}"
+  "optimizationUsed=1" "runs=200"
+  "apikey=${ETHERSCAN_API_KEY}"
+)
+
+source=$(hevm flatten --source-file "$DAPP_SRC"/"$1".sol --json-file "$DAPP_OUT"/"$1".sol.json)
+
+query=$(printf "&%s" "${params[@]}")
+
+count=0
+while [ $count -lt 5 ]; do
+  sleep 5
+  response=$(curl -fsS "https://api-kovan.etherscan.io/api" -d "$query" --data-urlencode "compilerversion=$version" --data-urlencode "sourceCode@"<(echo "$source") -X POST)
+  status=$(jshon <<<"$response" -e status -u)
+  message=$(jshon <<<"$response" -e message -u)
+  guid=$(jshon <<<"$response" -e result -u)
+  count=$((count + 1))
+  echo >&2 "$guid"
+  [[ $status = 1 ]] && break;
+done
+
+[[ $status = 0 ]] && {
+  echo >&2 "There was an error verifying this contract."
+  echo >&2 "Response: $guid"
+  exit 1
+}
+echo "$response"
+
+count=0
+while [ $count -lt 5 ]; do
+  sleep 5
+  response=$(curl -fsS "https://api-kovan.etherscan.io/api" -d "module=contract&action=checkverifystatus&guid=$guid")
+  echo >&2 "$response"
+  status=$(jshon <<<"$response" -e status -u)
+  message=$(jshon <<<"$response" -e message -u)
+  result=$(jshon <<<"$response" -e result -u)
+  [[ $status = 1 ]] && {
+    echo >&2 "Go to https://kovan.etherscan.io/address/$2#code"
+    echo >&2 "$result"
+    exit 0
+  }
+  count=$((count + 1))
+done
