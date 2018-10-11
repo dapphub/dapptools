@@ -507,6 +507,16 @@ exec1 = do
           (n, x) ->
             0xff .&. shiftR x (8 * (31 - num n))
 
+        -- op: SHL
+        0x1b -> error "SHL not implemented"
+        -- 0x1b -> stackOp2 (const g_verylow) $
+        -- op: SHR
+        0x1c -> error "SHR not implemented"
+        -- 0x1c -> stackOp2 (const g_verylow) $
+        -- op: SAR
+        0x1d -> error "SAR not implemented"
+        -- 0x1d -> stackOp2 (const g_verylow) $
+
         -- op: SHA3
         0x20 ->
           case stk of
@@ -644,6 +654,9 @@ exec1 = do
                   assign (state . stack) xs
                   copyBytesToMemory (the state returndata) xSize xFrom xTo
             _ -> underrun
+
+        -- op: EXTCODEHASH
+        0x3f -> error "EXTCODEHASH not implemented"
 
         -- op: BLOCKHASH
         0x40 -> do
@@ -961,6 +974,9 @@ exec1 = do
                   delegateCall fees xGas (num xTo) xInOffset xInSize xOutOffset xOutSize xs
                     (return ())
             _ -> underrun
+
+        -- op: CREATE2
+        0xf5 -> error "CREATE2 not implemented"
 
         -- op: STATICCALL
         0xfa ->
@@ -1572,6 +1588,9 @@ readOp x _ = case x of
   0x18 -> OpXor
   0x19 -> OpNot
   0x1a -> OpByte
+  0x1b -> OpShl
+  0x1c -> OpShr
+  0x1d -> OpSar
   0x20 -> OpSha3
   0x30 -> OpAddress
   0x31 -> OpBalance
@@ -1588,6 +1607,7 @@ readOp x _ = case x of
   0x3c -> OpExtcodecopy
   0x3d -> OpReturndatasize
   0x3e -> OpReturndatacopy
+  0x3f -> OpExtcodehash
   0x40 -> OpBlockhash
   0x41 -> OpCoinbase
   0x42 -> OpTimestamp
@@ -1611,6 +1631,7 @@ readOp x _ = case x of
   0xf2 -> OpCallcode
   0xf3 -> OpReturn
   0xf4 -> OpDelegatecall
+  0xf5 -> OpCreate2
   0xfd -> OpRevert
   0xff -> OpSelfdestruct
   _    -> (OpUnknown x)
