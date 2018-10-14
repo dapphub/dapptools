@@ -36,7 +36,7 @@ find "${DAPP_SRC}" -name '*.sol' | while read -r x; do
   dir=${dir#$DAPP_SRC}
   dir=${dir#/}
   mkdir -p "$DAPP_OUT/$dir"
-  (set -x; solc "${opts[@]}" --abi --bin --bin-runtime = -o "$DAPP_OUT/$dir" "$x")
+  (set -x; solc "${opts[@]}" --abi --bin --bin-runtime --metadata = -o "$DAPP_OUT/$dir" "$x")
   json_file=$DAPP_OUT/$dir/${x##*/}.json
   (set -x; solc "${opts[@]}" "${json_opts[@]}" = "$x" >"$json_file")
 done

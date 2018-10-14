@@ -1,13 +1,10 @@
 #!/usr/bin/env bash
 set -e
-v=$(solc --version)
-v=$(grep -oP '^Version: \K(.*commit.\w{8})' <<<"$v")
-version="v$v"
 
 [[ $ETHERSCAN_API_KEY ]] || {
   cat >&2 <<.
 
-  You need an Etherscan Api Key to use this command.
+  You need an Etherscan Api Key to verify contracts.
   Create one at https://etherscan.io/myapikey
   
   Then export it with \`export ETHERSCAN_API_KEY=xxxxxxxx'
@@ -16,27 +13,72 @@ version="v$v"
   exit 1
 }
 
+chain=$(seth chain)
+case "$chain" in
+  ethlive|mainnet)
+    export ETHERSCAN_API_URL=https://api.etherscan.io/api
+    export ETHERSCAN_URL=https://etherscan.io/address
+    ;;
+  ropsten|kovan|rinkeby)
+    export ETHERSCAN_API_URL=https://api-$chain.etherscan.io/api
+    export ETHERSCAN_URL=https://$chain.etherscan.io/address
+    ;;
+  *)
+    echo >&2 "Verification only works on mainnet, ropsten, kovan and rinkeby."
+    exit 1
+esac
+
+meta=$(cat "$DAPP_OUT"/"${1?contractname}"_meta.json)
+version=$(jshon <<<"$meta" -e compiler -e version -u)
+file=$(jshon <<<"$meta" -e settings -e compilationTarget -k)
+optimized=$(jshon <<<"$meta" -e settings -e optimizer -e enabled -u)
+runs=$(jshon <<<"$meta" -e settings -e optimizer -e runs -u)
+
+version=v"$version"
+file="${file##*/}"
+if [[ "$optimized" = "true" ]]; then
+  optimized=1
+else
+  optimized=0
+fi
+
 params=(
   "module=contract" "action=verifysourcecode"
   "contractname=${1?contractname}" "contractaddress=${2?contractaddress}"
-  "optimizationUsed=1" "runs=200"
-  "apikey=${ETHERSCAN_API_KEY}"
+  "optimizationUsed=$optimized" "runs=$runs"
+  "apikey=$ETHERSCAN_API_KEY"
 )
 
-source=$(hevm flatten --source-file "$DAPP_SRC"/"$1".sol --json-file "$DAPP_OUT"/"$1".sol.json)
+source=$(hevm flatten --source-file "$DAPP_SRC/$file" \
+--json-file "$DAPP_OUT/$file".json)
+
+source=$(cat <<.
+// Verified using https://dapp.tools
+
+$source
+.
+)
 
 query=$(printf "&%s" "${params[@]}")
 
 count=0
 while [ $count -lt 5 ]; do
-  sleep 5
-  response=$(curl -fsS "https://api-kovan.etherscan.io/api" -d "$query" --data-urlencode "compilerversion=$version" --data-urlencode "sourceCode@"<(echo "$source") -X POST)
+  response=$(curl -fsS "$ETHERSCAN_API_URL" -d "$query" \
+  --data-urlencode "compilerversion=$version" \
+  --data-urlencode "sourceCode@"<(echo "$source") -X POST)
+  
   status=$(jshon <<<"$response" -e status -u)
-  message=$(jshon <<<"$response" -e message -u)
+  #message=$(jshon <<<"$response" -e message -u)
   guid=$(jshon <<<"$response" -e result -u)
   count=$((count + 1))
-  echo >&2 "$guid"
+
+  [[ $guid = "Contract source code already verified" ]] && {
+    echo >&2 "$guid"
+    echo >&2 "Go to $ETHERSCAN_URL/$2#code"
+    exit 1
+  }
   [[ $status = 1 ]] && break;
+  sleep 5
 done
 
 [[ $status = 0 ]] && {
@@ -44,19 +86,20 @@ done
   echo >&2 "Response: $guid"
   exit 1
 }
-echo "$response"
 
 count=0
 while [ $count -lt 5 ]; do
-  sleep 5
-  response=$(curl -fsS "https://api-kovan.etherscan.io/api" -d "module=contract&action=checkverifystatus&guid=$guid")
-  echo >&2 "$response"
+  sleep 10
+  response=$(curl -fsS "$ETHERSCAN_API_URL" \
+  -d "module=contract&action=checkverifystatus&guid=$guid")
+  
   status=$(jshon <<<"$response" -e status -u)
-  message=$(jshon <<<"$response" -e message -u)
+  # message=$(jshon <<<"$response" -e message -u)
   result=$(jshon <<<"$response" -e result -u)
+  
   [[ $status = 1 ]] && {
-    echo >&2 "Go to https://kovan.etherscan.io/address/$2#code"
     echo >&2 "$result"
+    echo >&2 "Go to $ETHERSCAN_URL/$2#code"
     exit 0
   }
   count=$((count + 1))
