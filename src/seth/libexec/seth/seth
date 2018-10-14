@@ -139,14 +139,14 @@ if [[ $SETH_CHAIN ]]; then
       ;;
     ropsten)
       eth_rpc_url=https://$SETH_CHAIN.infura.io/$INFURA_KEY
-      export ETHERSCAN_API_URL=https://$SETH_CHAIN.etherscan.io/api
+      export ETHERSCAN_API_URL=https://api-$SETH_CHAIN.etherscan.io/api
       keystores=(
         ~/{.ethereum,Library/Ethereum}/testnet/keystore/
       )
       ;;
     kovan|rinkeby)
       eth_rpc_url=https://$SETH_CHAIN.infura.io/$INFURA_KEY
-      export ETHERSCAN_API_URL=https://$SETH_CHAIN.etherscan.io/api
+      export ETHERSCAN_API_URL=https://api-$SETH_CHAIN.etherscan.io/api
       keystores=(
         ~/{.ethereum,Library/Ethereum}/"$SETH_CHAIN"/keystore/
         ~/{.local/share,Library/Application\ Support}/io.parity.ethereum/keys/"$SETH_CHAIN"/
