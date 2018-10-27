@@ -17,6 +17,7 @@ module EVM.Solidity
   , abiMap
   , eventMap
   , contractName
+  , constructorInputs
   , creationCode
   , makeSrcMaps
   , readSolc
@@ -76,6 +77,7 @@ data SolcContract = SolcContract
   , _runtimeCode      :: ByteString
   , _creationCode     :: ByteString
   , _contractName     :: Text
+  , _constructorInputs :: [(Text, AbiType)]
   , _abiMap           :: Map Word32 Method
   , _eventMap         :: Map W256 Event
   , _runtimeSrcmap    :: Seq SrcMap
@@ -229,6 +231,8 @@ readJSON json = do
       let
         theRuntimeCode = toCode (x ^?! key "bin-runtime" . _String)
         theCreationCode = toCode (x ^?! key "bin" . _String)
+        abis =
+          toList ((x ^?! key "abi" . _String) ^?! _Array)
       in (s, SolcContract {
         _runtimeCode      = theRuntimeCode,
         _creationCode     = theCreationCode,
@@ -241,10 +245,19 @@ readJSON json = do
           fromMaybe
             (error "JSON lacks abstract syntax trees.")
             (preview (ix (Text.split (== ':') s !! 0) . key "AST") asts),
+
+        _constructorInputs =
+          let
+            isConstructor y =
+              "constructor" == y ^?! key "type" . _String
+          in
+            case filter isConstructor abis of
+              [abi] -> map parseMethodInput (toList (abi ^?! key "inputs" . _Array))
+              [] -> [] -- default constructor has zero inputs
+              _  -> error "strange: contract has multiple constructors",
+
         _abiMap       = Map.fromList $
           let
-            abis =
-              toList ((x ^?! key "abi" . _String) ^?! _Array)
             relevant =
               filter (\y -> "function" == y ^?! key "type" . _String) abis
           in flip map relevant $

@@ -11,6 +11,7 @@ import Brick.Widgets.Center
 import Brick.Widgets.List
 
 import EVM
+import EVM.ABI (abiTypeSolidity)
 import EVM.Concrete (Word (C))
 import EVM.Dapp (DappInfo, dappInfo)
 import EVM.Dapp (dappUnitTests, dappSolcByName, dappSolcByHash, dappSources)
@@ -531,11 +532,14 @@ drawVmBrowser ui =
               [ borderWithLabel (txt "Contract information") . padBottom Max . padRight (Pad 2) $ vBox
                   [ txt "Name: " <+> txt (contractNamePart (view contractName solc))
                   , txt "File: " <+> txt (contractPathPart (view contractName solc))
-                    , txt " "
-                    , txt "Public methods:"
-                    , vBox . flip map (sort (Map.elems (view abiMap solc))) $
-                        \method -> txt ("  " <> view methodSignature method)
-                    ]
+                  , txt " "
+                  , txt "Constructor inputs:"
+                  , vBox . flip map (view constructorInputs solc) $
+                      \(name, abiType) -> txt ("  " <> name <> ": " <> abiTypeSolidity abiType)
+                  , txt "Public methods:"
+                  , vBox . flip map (sort (Map.elems (view abiMap solc))) $
+                      \method -> txt ("  " <> view methodSignature method)
+                  ]
                 , borderWithLabel (txt "Storage slots") . padBottom Max . padRight Max $ vBox
                     (map txt (storageLayout dapp solc))
                 ]
