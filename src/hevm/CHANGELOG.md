@@ -1,9 +1,12 @@
 # hevm changelog
 
+## 0.20 - 2018-10-27
+ - Parse constructor inputs from Solidity AST
+
 ## 0.19 - 2018-10-09
-- Enable experimental 'cheat' address, allowing for modification of the
-  EVM environment from within the tests. Currently just the block
-  timestamp can be adjusted.
+ - Enable experimental 'cheat' address, allowing for modification of the
+   EVM environment from within the tests. Currently just the block
+   timestamp can be adjusted.
 
 ## 0.18 - 2018-10-09
  - Fix [duplicate address bug](https://github.com/dapphub/dapptools/issues/70)
