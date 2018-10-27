@@ -1,20 +1,14 @@
-all: default.nix nix; nix-shell --command 'cabal build'
+all: build
 
 default.nix: hevm.cabal
-	cabal2nix . > default.nix
-
-nix: default.nix shell.nix
+	nix-shell --command 'cabal2nix . > default.nix'
+.configured: default.nix shell.nix
 	nix-shell --command 'cabal configure --enable-tests'
-
-docker:; docker build -t dapphub/hevm .
-
-ghcid:
-	nix run dapphub.haskellPackages.ghcid --command ghcid --command='cabal repl lib:hevm'
-
-# Static binary built via Docker
-hevm-linux-x64: docker
-	docker run --rm dapphub/hevm cat /bin/hevm > $@
-	chmod +x $@
+	touch .configured
+build: .configured
+	nix-shell --command 'cabal build'
+repl: .configured
+	nix-shell --command 'cabal repl lib:hevm'
 
 PORT ?= 8001
 BROWSER ?= chromium
