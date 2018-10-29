@@ -1,5 +1,8 @@
 # hevm changelog
 
+## 0.21 - 2018-11-29
+ - Fix Hackage package by including C header files for ethjet
+
 ## 0.20 - 2018-10-27
  - Parse constructor inputs from Solidity AST
 

@@ -1,7 +1,7 @@
 name:
   hevm
 version:
-  0.20
+  0.21
 synopsis:
   Ethereum virtual machine evaluator
 description:
@@ -64,6 +64,8 @@ library
     secp256k1
   c-sources:
     ethjet/ethjet.c, ethjet/tinykeccak.c
+  install-includes:
+    ethjet/ethjet.h, ethjet/tinykeccak.h
   build-depends:
     QuickCheck                        >= 2.9,
     abstract-par                      >= 0.3,
