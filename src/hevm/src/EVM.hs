@@ -62,7 +62,7 @@ data Error
   | SelfDestruction
   | StackUnderrun
   | BadJumpDestination
-  | Revert
+  | Revert Blob
   | NoSuchContract Addr
   | OutOfGas Word Word
   | BadCheatCode Word32
@@ -1009,7 +1009,36 @@ exec1 = do
 
         -- op: REVERT
         0xfd ->
-          vmError Revert
+          case stk of
+            (xOffset:xSize:_) ->
+              accessMemoryRange fees xOffset xSize $ do
+                let output = readMemory (num xOffset) (num xSize) vm
+                case vm ^. frames of
+                  [] -> assign result (Just (VMFailure (Revert output)))
+
+                  (nextFrame : remainingFrames) -> do
+                    assign frames remainingFrames
+
+                    insertTrace (ErrorTrace (Revert output))
+                    popTrace
+
+                    case view frameContext nextFrame of
+                      CreationContext _ -> do
+                        assign state (view frameState nextFrame)
+                        assign (state . gas) (the state gas)
+                        assign (env . contracts . at self) Nothing
+                        assign (state . returndata) output
+                        push 0
+
+                      CallContext _ _ _ _ _ reversion -> do
+                        assign state (view frameState nextFrame)
+                        modifying (state . gas) (+ the state gas)
+                        modifying burned (subtract (the state gas))
+                        assign (env . contracts) reversion
+                        assign (state . returndata) output
+                        push 0
+
+            _ -> underrun
 
         xxx ->
           vmError (UnrecognizedOpcode xxx)
