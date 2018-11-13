@@ -101,6 +101,9 @@ forceConcreteBlob (B x) = x
 forceConcreteWord :: Word -> W256
 forceConcreteWord (C _ x) = x
 
+memoryToByteString :: Memory -> ByteString
+memoryToByteString (ConcreteMemory m) = m
+
 sliceMemory :: (Integral a, Integral b) => a -> b -> Memory -> Blob
 sliceMemory o s (ConcreteMemory m) =
   B $ byteStringSliceWithDefaultZeroes (num o) (num s) m

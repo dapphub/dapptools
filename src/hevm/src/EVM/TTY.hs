@@ -12,7 +12,7 @@ import Brick.Widgets.List
 
 import EVM
 import EVM.ABI (abiTypeSolidity)
-import EVM.Concrete (Word (C))
+import EVM.Concrete (Word (C), memoryToByteString)
 import EVM.Dapp (DappInfo, dappInfo)
 import EVM.Dapp (dappUnitTests, dappSolcByName, dappSolcByHash, dappSources)
 import EVM.Dapp (dappAstSrcMap)
@@ -20,6 +20,7 @@ import EVM.Debug
 import EVM.Format (Signedness (..), showDec, showWordExact)
 import EVM.Format (showTraceTree)
 import EVM.Format (contractNamePart, contractPathPart)
+import EVM.Hexdump (prettyHex)
 import EVM.Op
 import EVM.Solidity
 import EVM.Types hiding (padRight)
@@ -83,6 +84,7 @@ data UiVmState = UiVmState
   , _uiVmFirstState   :: UiVmState
   , _uiVmMessage      :: Maybe String
   , _uiVmNotes        :: [String]
+  , _uiVmShowMemory   :: Bool
   }
 
 data UiTestPickerState = UiTestPickerState
@@ -260,6 +262,7 @@ runFromVM vm = do
            , _uiVmFirstState = undefined
            , _uiVmMessage = Just "Executing EVM code"
            , _uiVmNotes = []
+           , _uiVmShowMemory = False
            }
     ui1 = updateUiVmState ui0 vm & set uiVmFirstState ui1
 
@@ -423,6 +426,9 @@ app opts =
               -- ought to be cached.
               takeStep s1 StepTimidly (StepMany (n - 1))
 
+        (UiVmScreen s, VtyEvent (Vty.EvKey (Vty.KChar 'm') [])) ->
+          continue (UiVmScreen (over uiVmShowMemory not s))
+
         (UiTestPickerScreen s', VtyEvent (Vty.EvKey (Vty.KEnter) [])) -> do
           case listSelectedElement (view testPickerList s') of
             Nothing -> error "nothing selected"
@@ -471,6 +477,7 @@ initialUiVmStateForTest opts@(UnitTestOptions {..}) dapp (theContractName, theTe
         , _uiVmFirstState   = undefined
         , _uiVmMessage      = Just "Creating unit test contract"
         , _uiVmNotes        = []
+        , _uiVmShowMemory   = False
         }
     Just testContract =
       view (dappSolcByName . at theContractName) dapp
@@ -591,6 +598,7 @@ drawHelpBar = hBorder <=> hCenter help
       , ("N", "step more")
       , ("C-n", "step over")
 --      , ("  Enter", "browse")
+      , ("m", "toggle memory")
       , ("  Esc", "exit")
       ]
 
@@ -751,11 +759,16 @@ withHighlight True  = withDefAttr boldAttr
 
 drawTracePane :: UiVmState -> UiWidget
 drawTracePane ui =
-  hBorderWithLabel (txt "Trace") <=>
-    renderList
-      (\_ x -> txt x)
-      False
-      (view uiVmTraceList ui)
+  case view uiVmShowMemory ui of
+    False ->
+      hBorderWithLabel (txt "Trace") <=>
+        renderList
+          (\_ x -> txt x)
+          False
+          (view uiVmTraceList ui)
+    True ->
+      hBorderWithLabel (txt "Memory") <=>
+        str (prettyHex 40 (memoryToByteString (view (uiVm . state . memory) ui)))
 
 drawSolidityPane :: UiVmState -> UiWidget
 drawSolidityPane ui@(view uiVmDapp -> Just dapp) =

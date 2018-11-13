@@ -1,6 +1,9 @@
 # hevm changelog
 
-## 0.21 - 2018-11-29
+## 0.22 - 2018-11-13
+ - Simple memory view in TTY
+
+## 0.21 - 2018-10-29
  - Fix Hackage package by including C header files for ethjet
 
 ## 0.20 - 2018-10-27

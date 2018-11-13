@@ -1,7 +1,7 @@
 name:
   hevm
 version:
-  0.21
+  0.22
 synopsis:
   Ethereum virtual machine evaluator
 description:
@@ -46,6 +46,7 @@ library
     EVM.Format,
     EVM.Fetch,
     EVM.FeeSchedule,
+    EVM.Hexdump,
     EVM.Op,
     EVM.Precompiled,
     EVM.Keccak,
