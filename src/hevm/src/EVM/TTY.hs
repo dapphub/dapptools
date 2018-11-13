@@ -417,14 +417,15 @@ app opts =
               -- and execute n - 1 instructions from there.
               --
               -- We keep the current cache so we don't have to redo
-              -- any blocking queries.
+              -- any blocking queries, and also the memory view.
               let
                 s0 = view uiVmFirstState s
-                s1 = set (uiVm . cache) (view (uiVm . cache) s) s0
+                s1 = set (uiVm . cache)   (view (uiVm . cache) s) s0
+                s2 = set (uiVmShowMemory) (view uiVmShowMemory s) s1
 
               -- Take n steps; "timidly," because all queries
               -- ought to be cached.
-              takeStep s1 StepTimidly (StepMany (n - 1))
+              takeStep s2 StepTimidly (StepMany (n - 1))
 
         (UiVmScreen s, VtyEvent (Vty.EvKey (Vty.KChar 'm') [])) ->
           continue (UiVmScreen (over uiVmShowMemory not s))
