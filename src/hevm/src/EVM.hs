@@ -357,34 +357,11 @@ exec1 = do
 
     fees@(FeeSchedule {..}) = the block schedule
 
-    doStop =
-      case vm ^. frames of
-        [] ->
-          assign result (Just (VMSuccess ""))
-        (nextFrame : remainingFrames) -> do
-          popTrace
-          assign frames remainingFrames
-          assign state (view frameState nextFrame)
-          case view frameContext nextFrame of
-            CreationContext _ -> do
-              -- Move back the gas to the parent context
-              assign (state . gas) (the state gas)
-
-            CallContext _ _ _ _ _ _ -> do
-              -- Take back the remaining gas allowance
-              modifying (state . gas) (+ the state gas)
-              modifying burned (subtract (the state gas))
-          push 1
+    doStop = finishFrame (FrameReturned "")
 
   if the state pc >= num (BS.length (the state code))
     then
-      case view frames vm of
-        (nextFrame : remainingFrames) -> do
-          assign frames remainingFrames
-          assign state (view frameState nextFrame)
-          push 1
-        [] ->
-          assign result (Just (VMSuccess (blob "")))
+      doStop
 
     else do
       let ?op = BS.index (the state code) (the state pc)
@@ -913,43 +890,8 @@ exec1 = do
           case stk of
             (xOffset:xSize:_) ->
               accessMemoryRange fees xOffset xSize $ do
-                case vm ^. frames of
-                  [] ->
-                    assign result (Just (VMSuccess (readMemory (num xOffset) (num xSize) vm)))
-
-                  (nextFrame : remainingFrames) -> do
-                    assign frames remainingFrames
-
-                    case view frameContext nextFrame of
-                      CreationContext _ -> do
-                        replaceCodeOfSelf (forceConcreteBlob (readMemory (num xOffset) (num xSize) vm))
-                        assign state (view frameState nextFrame)
-
-                        -- Move back the gas to the parent context
-                        assign (state . gas) (the state gas)
-
-                        push (num (the state contract))
-                        popTrace
-
-                      ctx@(CallContext yOffset ySize _ _ _ _) -> do
-                        let output = readMemory (num xOffset) (num xSize) vm
-                        assign state (view frameState nextFrame)
-
-                        -- Take back the remaining gas allowance
-                        modifying (state . gas) (+ the state gas)
-                        modifying burned (subtract (the state gas))
-
-                        assign (state . returndata) output
-                        copyBytesToMemory
-                          output
-                          (num ySize)
-                          0
-                          (num yOffset)
-                        push 1
-
-                        insertTrace (ReturnTrace output ctx)
-                        popTrace
-
+                let output = readMemory (num xOffset) (num xSize) vm
+                finishFrame (FrameReturned output)
             _ -> underrun
 
         -- op: DELEGATECALL
@@ -1013,31 +955,7 @@ exec1 = do
             (xOffset:xSize:_) ->
               accessMemoryRange fees xOffset xSize $ do
                 let output = readMemory (num xOffset) (num xSize) vm
-                case vm ^. frames of
-                  [] -> assign result (Just (VMFailure (Revert output)))
-
-                  (nextFrame : remainingFrames) -> do
-                    assign frames remainingFrames
-
-                    insertTrace (ErrorTrace (Revert output))
-                    popTrace
-
-                    case view frameContext nextFrame of
-                      CreationContext _ -> do
-                        assign state (view frameState nextFrame)
-                        assign (state . gas) (the state gas)
-                        assign (env . contracts . at self) Nothing
-                        assign (state . returndata) output
-                        push 0
-
-                      CallContext _ _ _ _ _ reversion -> do
-                        assign state (view frameState nextFrame)
-                        modifying (state . gas) (+ the state gas)
-                        modifying burned (subtract (the state gas))
-                        assign (env . contracts) reversion
-                        assign (state . returndata) output
-                        push 0
-
+                finishFrame (FrameReverted output)
             _ -> underrun
 
         xxx ->
@@ -1129,21 +1047,25 @@ accessStorage addr slot continue =
       touchAccount addr $ \_ ->
         accessStorage addr slot continue
 
--- | Replace current contract's code, like when CREATE returns
+-- | Replace a contract's code, like when CREATE returns
 -- from the constructor code.
-replaceCodeOfSelf :: ByteString -> EVM ()
-replaceCodeOfSelf createdCode = do
-  self <- use (state . contract)
-  zoom (env . contracts . at self) $ do
-    if BS.null createdCode
+replaceCode :: Addr -> Blob -> EVM ()
+replaceCode target (forceConcreteBlob -> newCode) = do
+  zoom (env . contracts . at target) $ do
+    if BS.null newCode
       then put Nothing
       else do
         Just now <- get
         put . Just $
-          initialContract createdCode
+          initialContract newCode
             & set storage (view storage now)
             & set balance (view balance now)
             & set nonce   (view nonce now)
+
+replaceCodeOfSelf :: ByteString -> EVM ()
+replaceCodeOfSelf newCode = do
+  vm <- get
+  replaceCode (view (state . contract) vm) (blob newCode)
 
 resetState :: EVM ()
 resetState = do
@@ -1312,35 +1234,122 @@ delegateCall fees xGas xTo xInOffset xInSize xOutOffset xOutSize xs continue =
 
 
 -- * VM error implementation
+
 underrun :: EVM ()
 underrun = vmError StackUnderrun
 
-vmError :: Error -> EVM ()
-vmError e = do
-  vm <- get
-  case view frames vm of
-    [] -> assign result (Just (VMFailure e))
+-- | A stack frame can be popped in three ways.
+data FrameResult
+  = FrameReturned Blob -- ^ STOP, RETURN, or no more code
+  | FrameReverted Blob -- ^ REVERT
+  | FrameErrored Error -- ^ Any other error
+  deriving Show
 
-    (nextFrame : remainingFrames) -> do
+-- | This function defines how to pop the current stack frame in either of
+-- the ways specified by 'FrameResult'.
+--
+-- It also handles the case when the current stack frame is the only one;
+-- in this case, we set the final '_result' of the VM execution.
+finishFrame :: FrameResult -> EVM ()
+finishFrame how = do
+  oldVm <- get
 
-      insertTrace (ErrorTrace e)
+  case view frames oldVm of
+    -- Is the current frame the only one?
+    [] ->
+      assign result . Just $
+        case how of
+          FrameReturned output -> VMSuccess output
+          FrameReverted output -> VMFailure (Revert output)
+          FrameErrored e       -> VMFailure e
+
+    -- Are there some remaining frames?
+    nextFrame : remainingFrames -> do
+
+      -- Pop the top frame.
+      assign frames remainingFrames
+      -- Install the state of the frame to which we shall return.
+      assign state (view frameState nextFrame)
+      -- Insert a debug trace.
+      insertTrace $
+        case how of
+          FrameErrored e ->
+            ErrorTrace e
+          FrameReverted output ->
+            ErrorTrace (Revert output)
+          FrameReturned output ->
+            ReturnTrace output (view frameContext nextFrame)
+      -- Pop to the previous level of the debug trace stack.
       popTrace
 
+      let remainingGas = view (state . gas) oldVm
+
+      -- Now dispatch on whether we were creating or calling,
+      -- and whether we shall return, revert, or error (six cases).
       case view frameContext nextFrame of
+
+        -- Were we calling?
+        CallContext (num -> outOffset) (num -> outSize) _ _ _ reversion -> do
+
+          let
+            -- When entering a call, the gas allowance is counted as burned
+            -- in advance; this unburns the remainder and adds it to the
+            -- parent frame.
+            reclaimRemainingGasAllowance = do
+              modifying burned (subtract remainingGas)
+              modifying (state . gas) (+ remainingGas)
+
+            revertContracts = assign (env . contracts) reversion
+
+          case how of
+            -- Case 1: Returning from a call?
+            FrameReturned output -> do
+              assign (state . returndata) output
+              copyBytesToMemory output outSize 0 outOffset
+              reclaimRemainingGasAllowance
+              push 1
+
+            -- Case 2: Reverting during a call?
+            FrameReverted output -> do
+              revertContracts
+              assign (state . returndata) output
+              reclaimRemainingGasAllowance
+              push 0
+
+            -- Case 3: Error during a call?
+            FrameErrored _ -> do
+              revertContracts
+              push 0
+
+        -- Or were we creating?
         CreationContext _ -> do
-          assign frames remainingFrames
-          assign state (view frameState nextFrame)
-          assign (state . gas) 0
-          push 0
-          let self = vm ^. state . contract
-          assign (env . contracts . at self) Nothing
+          let
+            createe = view (state . contract) oldVm
+            destroy = assign (env . contracts . at createe) Nothing
 
-        CallContext _ _ _ _ _ reversion -> do
-          assign frames remainingFrames
-          assign state (view frameState nextFrame)
-          assign (env . contracts) reversion
-          push 0
+          case how of
+            -- Case 4: Returning during a creation?
+            FrameReturned output -> do
+              replaceCode createe output
+              assign (state . gas) remainingGas
+              push (num createe)
 
+            -- Case 5: Reverting during a creation?
+            FrameReverted output -> do
+              destroy
+              assign (state . returndata) output
+              assign (state . gas) remainingGas
+              push 0
+
+            -- Case 6: Error during a creation?
+            FrameErrored _ -> do
+              destroy
+              assign (state . gas) 0
+              push 0
+
+
+vmError :: Error -> EVM ()
+vmError e = finishFrame (FrameErrored e)
 
 -- * Memory helpers
 

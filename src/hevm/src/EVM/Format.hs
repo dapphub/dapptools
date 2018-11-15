@@ -171,8 +171,8 @@ showTrace dapp trace =
           "← " <> abiTypeSolidity t <> " " <> showValue t (forceConcreteBlob output)
     ReturnTrace output (CallContext {}) ->
       "← " <> formatBinary (forceConcreteBlob output)
-    ReturnTrace _ (CreationContext {}) ->
-      error "internal error: shouldn't show returns for creates"
+    ReturnTrace output (CreationContext {}) ->
+      "← " <> pack (show (BS.length (forceConcreteBlob output))) <> " bytes of code"
 
     EntryTrace t ->
       t
