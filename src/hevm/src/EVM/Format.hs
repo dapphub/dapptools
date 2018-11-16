@@ -2,7 +2,7 @@ module EVM.Format where
 
 import Prelude hiding (Word)
 
-import EVM (VM, cheatCode, traceForest, traceData)
+import EVM (VM, cheatCode, traceForest, traceData, Error (..))
 import EVM (Trace, TraceData (..), Log (..), Query (..), FrameContext (..))
 import EVM.Dapp (DappInfo, dappSolcByHash, showTraceLocation, dappEventMap)
 import EVM.Concrete (Word (..), Blob (..))
@@ -161,7 +161,11 @@ showTrace dapp trace =
         PleaseFetchSlot addr slot _ ->
           "fetch storage slot " <> pack (show slot) <> " from " <> pack (show addr) <> pos
     ErrorTrace e ->
-      "\x1b[91merror\x1b[0m " <> pack (show e) <> pos
+      case e of
+        Revert output ->
+          "\x1b[91merror\x1b[0m " <> "Revert " <> formatBinary (forceConcreteBlob output) <> pos
+        _ ->
+          "\x1b[91merror\x1b[0m " <> pack (show e) <> pos
 
     ReturnTrace output (CallContext _ _ hash (Just abi) _ _) ->
       case getAbiMethodOutput dapp hash abi of
