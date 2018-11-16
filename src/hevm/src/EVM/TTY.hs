@@ -12,7 +12,7 @@ import Brick.Widgets.List
 
 import EVM
 import EVM.ABI (abiTypeSolidity)
-import EVM.Concrete (Word (C), memoryToByteString)
+import EVM.Concrete (Word (C), memoryToByteString, forceConcreteBlob)
 import EVM.Dapp (DappInfo, dappInfo)
 import EVM.Dapp (dappUnitTests, dappSolcByName, dappSolcByHash, dappSources)
 import EVM.Dapp (dappAstSrcMap)
@@ -768,8 +768,14 @@ drawTracePane ui =
           False
           (view uiVmTraceList ui)
     True ->
-      hBorderWithLabel (txt "Memory") <=>
-        str (prettyHex 40 (memoryToByteString (view (uiVm . state . memory) ui)))
+      vBox
+      [ hBorderWithLabel (txt "Calldata") <=>
+          str (prettyHex 40 (forceConcreteBlob (view (uiVm . state . calldata) ui)))
+      , hBorderWithLabel (txt "Returndata") <=>
+          str (prettyHex 40 (forceConcreteBlob (view (uiVm . state . returndata) ui)))
+      , hBorderWithLabel (txt "Memory") <=>
+          str (prettyHex 40 (memoryToByteString (view (uiVm . state . memory) ui)))
+      ]
 
 drawSolidityPane :: UiVmState -> UiWidget
 drawSolidityPane ui@(view uiVmDapp -> Just dapp) =
