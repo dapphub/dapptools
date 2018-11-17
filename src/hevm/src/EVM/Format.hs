@@ -163,7 +163,7 @@ showTrace dapp trace =
     ErrorTrace e ->
       case e of
         Revert output ->
-          "\x1b[91merror\x1b[0m " <> "Revert " <> formatBinary (forceConcreteBlob output) <> pos
+          "\x1b[91merror\x1b[0m " <> "Revert " <> formatBinary output <> pos
         _ ->
           "\x1b[91merror\x1b[0m " <> pack (show e) <> pos
 
