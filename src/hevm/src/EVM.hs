@@ -62,7 +62,7 @@ data Error
   | SelfDestruction
   | StackUnderrun
   | BadJumpDestination
-  | Revert Blob
+  | Revert ByteString
   | NoSuchContract Addr
   | OutOfGas Word Word
   | BadCheatCode Word32
@@ -76,8 +76,8 @@ deriving instance Show Error
 
 -- | The possible result states of a VM
 data VMResult
-  = VMFailure Error  -- ^ An operation failed
-  | VMSuccess Blob   -- ^ Reached STOP, RETURN, or end-of-code
+  = VMFailure Error -- ^ An operation failed
+  | VMSuccess ByteString -- ^ Reached STOP, RETURN, or end-of-code
 
 deriving instance Show VMResult
 
@@ -108,7 +108,7 @@ data TraceData
   | QueryTrace Query
   | ErrorTrace Error
   | EntryTrace Text
-  | ReturnTrace Blob FrameContext
+  | ReturnTrace ByteString FrameContext
 
 data ExecMode = ExecuteNormally | ExecuteAsVMTest
 
@@ -153,7 +153,7 @@ data VMOpts = VMOpts
   } deriving Show
 
 -- | A log entry
-data Log = Log Addr Blob [Word]
+data Log = Log Addr ByteString [Word]
 
 -- | An entry in the VM's "call/create stack"
 data Frame = Frame
@@ -170,7 +170,7 @@ data FrameContext
     , callContextSize     :: Word
     , callContextCodehash :: W256
     , callContextAbi      :: Maybe Word
-    , callContextData     :: Blob
+    , callContextData     :: ByteString
     , callContextReversion :: Map Addr Contract
     }
 
@@ -181,13 +181,13 @@ data FrameState = FrameState
   , _code         :: ByteString
   , _pc           :: Int
   , _stack        :: [Word]
-  , _memory       :: Memory
+  , _memory       :: ByteString
   , _memorySize   :: Int
-  , _calldata     :: Blob
+  , _calldata     :: ByteString
   , _callvalue    :: Word
   , _caller       :: Addr
   , _gas          :: Word
-  , _returndata   :: Blob
+  , _returndata   :: ByteString
   , _static       :: Bool
   }
 
@@ -216,7 +216,7 @@ deriving instance Eq Contract
 -- | Various environmental data
 data Env = Env
   { _contracts :: Map Addr Contract
-  , _sha3Crack :: Map Word Blob
+  , _sha3Crack :: Map Word ByteString
   , _origin    :: Addr
   }
 
@@ -301,7 +301,7 @@ makeVm o = VM
     , _code = vmoptCode o
     , _contract = vmoptAddress o
     , _codeContract = vmoptAddress o
-    , _calldata = B $ vmoptCalldata o
+    , _calldata = vmoptCalldata o
     , _callvalue = w256 $ vmoptValue o
     , _caller = vmoptCaller o
     , _gas = w256 $ vmoptGas o
@@ -562,7 +562,7 @@ exec1 = do
                 accessMemoryRange fees memOffset n $ do
                   next
                   assign (state . stack) xs
-                  copyBytesToMemory (blob (view bytecode this))
+                  copyBytesToMemory (view bytecode this)
                     n codeOffset memOffset
             _ -> underrun
 
@@ -602,7 +602,7 @@ exec1 = do
                   touchAccount (num extAccount) $ \c -> do
                     next
                     assign (state . stack) xs
-                    copyBytesToMemory (blob (view bytecode c))
+                    copyBytesToMemory (view bytecode c)
                       codeSize codeOffset memOffset
             _ -> underrun
 
@@ -794,7 +794,7 @@ exec1 = do
                     else do
                       let
                         newAddr =
-                          newContractAddress self (forceConcreteWord (view nonce this))
+                          newContractAddress self (wordValue (view nonce this))
                       case view execMode vm of
                         ExecuteAsVMTest -> do
                           assign (state . stack) (num newAddr : xs)
@@ -803,7 +803,7 @@ exec1 = do
                         ExecuteNormally -> do
                           let
                             newCode =
-                              forceConcreteBlob $ readMemory (num xOffset) (num xSize) vm
+                              readMemory (num xOffset) (num xSize) vm
                             newContract =
                               initialContract newCode
                             newContext  =
@@ -969,7 +969,7 @@ precompiledContract = do
   use (state . stack) >>= \case
     (_:(num -> op):_:inOffset:inSize:outOffset:outSize:xs) ->
       let
-        input = forceConcreteBlob (readMemory (num inOffset) (num inSize) vm)
+        input = readMemory (num inOffset) (num inSize) vm
       in
         case EVM.Precompiled.execute op input (num outSize) of
           Nothing -> do
@@ -986,7 +986,7 @@ precompiledContract = do
                 burn cost $ do
                   assign (state . stack) (1 : xs)
                   modifying (state . memory)
-                    (writeMemory (blob output) outSize 0 outOffset)
+                    (writeMemory output outSize 0 outOffset)
                   next
     _ ->
       underrun
@@ -1049,8 +1049,8 @@ accessStorage addr slot continue =
 
 -- | Replace a contract's code, like when CREATE returns
 -- from the constructor code.
-replaceCode :: Addr -> Blob -> EVM ()
-replaceCode target (forceConcreteBlob -> newCode) = do
+replaceCode :: Addr -> ByteString -> EVM ()
+replaceCode target newCode = do
   zoom (env . contracts . at target) $ do
     if BS.null newCode
       then put Nothing
@@ -1065,7 +1065,7 @@ replaceCode target (forceConcreteBlob -> newCode) = do
 replaceCodeOfSelf :: ByteString -> EVM ()
 replaceCodeOfSelf newCode = do
   vm <- get
-  replaceCode (view (state . contract) vm) (blob newCode)
+  replaceCode (view (state . contract) vm) newCode
 
 resetState :: EVM ()
 resetState = do
@@ -1138,9 +1138,9 @@ cheat (inOffset, inSize) (outOffset, outSize) = do
   mem <- use (state . memory)
   let
     abi =
-      num (forceConcreteWord (readMemoryWord32 inOffset mem))
+      num (wordValue (readMemoryWord32 inOffset mem))
     input =
-      forceConcreteBlob (sliceMemory (inOffset + 4) (inSize - 4) mem)
+      sliceMemory (inOffset + 4) (inSize - 4) mem
   case Map.lookup abi cheatActions of
     Nothing ->
       vmError (BadCheatCode abi)
@@ -1156,7 +1156,7 @@ cheat (inOffset, inSize) (outOffset, outSize) = do
             Just (encodeAbiValue -> bs) -> do
               next
               modifying (state . memory)
-                (writeMemory (blob bs) outSize 0 outOffset)
+                (writeMemory bs outSize 0 outOffset)
               push 1
         Left _ ->
           vmError (BadCheatCode abi)
@@ -1205,7 +1205,7 @@ delegateCall fees xGas xTo xInOffset xInSize xOutOffset xOutSize xs continue =
                           if xInSize >= 4
                           then
                             let
-                              w = forceConcreteWord
+                              w = wordValue
                                     (readMemoryWord32 xInOffset (view (state . memory) vm0))
                             in Just $! num w
                           else Nothing
@@ -1240,8 +1240,8 @@ underrun = vmError StackUnderrun
 
 -- | A stack frame can be popped in three ways.
 data FrameResult
-  = FrameReturned Blob -- ^ STOP, RETURN, or no more code
-  | FrameReverted Blob -- ^ REVERT
+  = FrameReturned ByteString -- ^ STOP, RETURN, or no more code
+  | FrameReverted ByteString -- ^ REVERT
   | FrameErrored Error -- ^ Any other error
   deriving Show
 
@@ -1375,7 +1375,7 @@ accessMemoryWord
 accessMemoryWord fees x continue = accessMemoryRange fees x 32 continue
 
 copyBytesToMemory
-  :: Blob -> Word -> Word -> Word -> EVM ()
+  :: ByteString -> Word -> Word -> Word -> EVM ()
 copyBytesToMemory bs size xOffset yOffset =
   if size == 0 then noop
   else do
@@ -1383,13 +1383,13 @@ copyBytesToMemory bs size xOffset yOffset =
     assign (state . memory) $
       writeMemory bs size xOffset yOffset mem
 
-readMemory :: Word -> Word -> VM -> Blob
+readMemory :: Word -> Word -> VM -> ByteString
 readMemory offset size vm = sliceMemory offset size (view (state . memory) vm)
 
 word256At
   :: Functor f
   => Word -> (Word -> f Word)
-  -> Memory -> f Memory
+  -> ByteString -> f ByteString
 word256At i = lens getter setter where
   getter m = readMemoryWord i m
   setter m x = setMemoryWord i x m

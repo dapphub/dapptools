@@ -15,7 +15,6 @@ import Test.Tasty.HUnit
 import Control.Monad.State.Strict (execState, runState)
 import Control.Lens
 
-import Data.Monoid
 import qualified Data.Vector as Vector
 import Data.String.Here
 
@@ -24,7 +23,6 @@ import Data.Binary.Get (runGetOrFail)
 
 import EVM
 import EVM.ABI
-import EVM.Concrete
 import EVM.Exec
 import EVM.Solidity
 import EVM.Types
@@ -158,7 +156,7 @@ runStatements stmts args t = do
   |]
 
   case runState exec (vmForEthrunCreation x) of
-    (VMSuccess (B targetCode), vm1) -> do
+    (VMSuccess targetCode, vm1) -> do
       let target = view (state . contract) vm1
           vm2 = execState (replaceCodeOfSelf targetCode) vm1
       case flip runState vm2
@@ -166,9 +164,9 @@ runStatements stmts args t = do
                  assign (state . gas) 0xffffffffffffffff -- kludge
                  loadContract target
                  assign (state . calldata)
-                   (B (abiCalldata sig (Vector.fromList args)))
+                   (abiCalldata sig (Vector.fromList args))
                  exec) of
-        (VMSuccess (B out), _) ->
+        (VMSuccess out, _) ->
           return (Just out)
         (VMFailure problem, _) -> do
           print problem

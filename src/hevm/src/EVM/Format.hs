@@ -5,14 +5,14 @@ import Prelude hiding (Word)
 import EVM (VM, cheatCode, traceForest, traceData, Error (..))
 import EVM (Trace, TraceData (..), Log (..), Query (..), FrameContext (..))
 import EVM.Dapp (DappInfo, dappSolcByHash, showTraceLocation, dappEventMap)
-import EVM.Concrete (Word (..), Blob (..))
+import EVM.Concrete (Word (..))
 import EVM.Types (W256 (..), num)
 import EVM.ABI (AbiValue (..), Event (..), AbiType (..))
 import EVM.ABI (Indexed (Indexed, NotIndexed), getAbiSeq, getAbi)
 import EVM.ABI (abiTypeSolidity, parseTypeName)
 import EVM.Solidity (SolcContract, contractName, abiMap)
 import EVM.Solidity (methodOutput, methodSignature)
-import EVM.Concrete (forceConcreteBlob, forceConcreteWord)
+import EVM.Concrete (wordValue)
 
 import Control.Arrow ((>>>))
 import Control.Lens (view, preview, ix, _2, to, _Just)
@@ -151,7 +151,7 @@ showTrace dapp trace =
         (t:_) ->
           formatLog
             (getEvent t (view dappEventMap dapp))
-            (forceConcreteBlob bytes) <> pos
+            bytes <> pos
         _ ->
           "log" <> pos
     QueryTrace q ->
@@ -170,13 +170,13 @@ showTrace dapp trace =
     ReturnTrace output (CallContext _ _ hash (Just abi) _ _) ->
       case getAbiMethodOutput dapp hash abi of
         Nothing ->
-          "← " <> formatBinary (forceConcreteBlob output)
+          "← " <> formatBinary output
         Just (_, t) ->
-          "← " <> abiTypeSolidity t <> " " <> showValue t (forceConcreteBlob output)
+          "← " <> abiTypeSolidity t <> " " <> showValue t output
     ReturnTrace output (CallContext {}) ->
-      "← " <> formatBinary (forceConcreteBlob output)
+      "← " <> formatBinary output
     ReturnTrace output (CreationContext {}) ->
-      "← " <> pack (show (BS.length (forceConcreteBlob output))) <> " bytes of code"
+      "← " <> pack (show (BS.length output)) <> " bytes of code"
 
     EntryTrace t ->
       t
@@ -194,9 +194,9 @@ showTrace dapp trace =
             <> maybe ("[fallback function]")
                  (\x -> maybe "[unknown method]" id (maybeAbiName solc x))
                  abi
-            <> maybe ("(" <> formatBinary (forceConcreteBlob calldata) <> ")")
+            <> maybe ("(" <> formatBinary calldata <> ")")
                  -- todo: if unknown method, then just show raw calldata
-                 (\x -> showCall (catMaybes x) (forceConcreteBlob calldata))
+                 (\x -> showCall (catMaybes x) calldata)
                  (abi >>= fmap getAbiTypes . maybeAbiName solc)
             <> "\x1b[0m"
             <> pos
@@ -263,7 +263,7 @@ formatLog event args =
                       error "lol"
 
 getEvent :: Word -> Map W256 Event -> Maybe Event
-getEvent w events = Map.lookup (forceConcreteWord w) events
+getEvent w events = Map.lookup (wordValue w) events
 
 getEventName :: Maybe Event -> Text
 getEventName (Just (Event name _ _)) = name
@@ -277,8 +277,8 @@ getEventIndexedTypes :: Maybe Event -> [AbiType]
 getEventIndexedTypes Nothing = []
 getEventIndexedTypes (Just (Event _ _ xs)) = [x | (x, Indexed) <- xs]
 
-getEventArgs :: Blob -> Text
+getEventArgs :: ByteString -> Text
 getEventArgs b = formatBlob b
 
-formatBlob :: Blob -> Text
-formatBlob b = decodeUtf8 $ forceConcreteBlob b
+formatBlob :: ByteString -> Text
+formatBlob b = decodeUtf8 b

@@ -63,7 +63,7 @@ data Expectation = Expectation
 checkExpectation :: Case -> EVM.VM -> IO Bool
 checkExpectation x vm =
   case (testExpectation x, view EVM.result vm) of
-    (Just expectation, Just (EVM.VMSuccess (EVM.B output))) -> do
+    (Just expectation, Just (EVM.VMSuccess output)) -> do
       let
         (s1, b1) = ("bad-state", checkExpectedContracts vm (expectedContracts expectation))
         (s2, b2) = ("bad-output", checkExpectedOut output (expectedOut expectation))

@@ -13,7 +13,7 @@ import EVM.Format
 import EVM.Keccak
 import EVM.Solidity
 import EVM.Types
-import EVM.Concrete (blob, w256, forceConcreteBlob, Blob (B), wordAt)
+import EVM.Concrete (w256, wordAt)
 
 import qualified EVM.FeeSchedule as FeeSchedule
 
@@ -107,7 +107,7 @@ initializeUnitTest UnitTestOptions { .. } = do
   Stepper.evm (pushTrace (EntryTrace "constructor"))
 
   -- Constructor is loaded; run until it returns code
-  B bytes <- Stepper.execFullyOrFail
+  bytes <- Stepper.execFullyOrFail
   addr <- Stepper.evm (use (state . contract))
 
   -- Mutate the current contract to use the new code
@@ -473,10 +473,9 @@ formatTestLogs events xs =
 
 formatTestLog :: Map W256 Event -> Log -> Maybe Text
 formatTestLog _ (Log _ _ []) = Nothing
-formatTestLog events (Log _ b (t:_)) =
+formatTestLog events (Log _ args (t:_)) =
   let
     name  = getEventName event
-    args  = forceConcreteBlob b
     event = getEvent t events
 
   in case name of
@@ -517,7 +516,7 @@ setupCall :: Addr -> Text -> W256 -> EVM ()
 setupCall target abi allowance = do
   resetState
   loadContract target
-  assign (state . calldata) (blob (word32Bytes (abiKeccak (encodeUtf8 abi))))
+  assign (state . calldata) (word32Bytes (abiKeccak (encodeUtf8 abi)))
   assign (state . gas) (w256 allowance)
 
 initialUnitTestVm :: UnitTestOptions -> SolcContract -> [SolcContract] -> VM

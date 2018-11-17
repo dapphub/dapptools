@@ -16,7 +16,6 @@ import Data.ByteString (ByteString)
 import Data.DoubleWord (signedWord, unsignedWord)
 import Data.Maybe      (fromMaybe)
 import Data.Semigroup  ((<>))
-import Data.String     (IsString)
 import Data.Word       (Word8)
 
 import qualified Data.ByteString as BS
@@ -45,16 +44,10 @@ data Whiff = Dull | FromKeccak ByteString
 w256 :: W256 -> Word
 w256 = C Dull
 
-blob :: ByteString -> Blob
-blob = B
-
 data Word = C Whiff W256
-newtype Blob = B ByteString
-newtype Byte = ConcreteByte Word8
-newtype Memory = ConcreteMemory ByteString
 
-wordToByte :: Word -> Byte
-wordToByte (C _ x) = ConcreteByte (num (x .&. 0xff))
+wordToByte :: Word -> Word8
+wordToByte (C _ x) = num (x .&. 0xff)
 
 exponentiate :: Word -> Word -> Word
 exponentiate (C _ x) (C _ y) = w256 (x ^ y)
@@ -95,21 +88,15 @@ sgt :: Word -> Word -> Word
 sgt (C _ (W256 x)) (C _ (W256 y)) =
   if signedWord x > signedWord y then w256 1 else w256 0
 
-forceConcreteBlob :: Blob -> ByteString
-forceConcreteBlob (B x) = x
+wordValue :: Word -> W256
+wordValue (C _ x) = x
 
-forceConcreteWord :: Word -> W256
-forceConcreteWord (C _ x) = x
+sliceMemory :: (Integral a, Integral b) => a -> b -> ByteString -> ByteString
+sliceMemory o s m =
+  byteStringSliceWithDefaultZeroes (num o) (num s) m
 
-memoryToByteString :: Memory -> ByteString
-memoryToByteString (ConcreteMemory m) = m
-
-sliceMemory :: (Integral a, Integral b) => a -> b -> Memory -> Blob
-sliceMemory o s (ConcreteMemory m) =
-  B $ byteStringSliceWithDefaultZeroes (num o) (num s) m
-
-writeMemory :: Blob -> Word -> Word -> Word -> Memory -> Memory
-writeMemory (B bs1) (C _ n) (C _ src) (C _ dst) (ConcreteMemory bs0) =
+writeMemory :: ByteString -> Word -> Word -> Word -> ByteString -> ByteString
+writeMemory bs1 (C _ n) (C _ src) (C _ dst) bs0 =
   if src > num (BS.length bs1)
   then
     let
@@ -117,19 +104,17 @@ writeMemory (B bs1) (C _ n) (C _ src) (C _ dst) (ConcreteMemory bs0) =
       c      = BS.replicate (num n) 0
       b'     = BS.drop (num n) b
     in
-      ConcreteMemory $
-        a <> c <> b'
+      a <> c <> b'
   else
     let
       (a, b) = BS.splitAt (num dst) bs0
       c      = BS.take (num n) (BS.drop (num src) bs1)
       b'     = BS.drop (num n) b
     in
-      ConcreteMemory $
-        a <> BS.replicate (num dst - BS.length a) 0 <> c <> b'
+      a <> BS.replicate (num dst - BS.length a) 0 <> c <> b'
 
-readMemoryWord :: Word -> Memory -> Word
-readMemoryWord (C _ i) (ConcreteMemory m) =
+readMemoryWord :: Word -> ByteString -> Word
+readMemoryWord (C _ i) m =
   let
     go !a (-1) = a
     go !a !n = go (a + shiftL (num $ readByteOrZero (num i + n) m)
@@ -137,8 +122,8 @@ readMemoryWord (C _ i) (ConcreteMemory m) =
   in {-# SCC readMemoryWord #-}
     w256 $ go (0 :: W256) (31 :: Int)
 
-readMemoryWord32 :: Word -> Memory -> Word
-readMemoryWord32 (C _ i) (ConcreteMemory m) =
+readMemoryWord32 :: Word -> ByteString -> Word
+readMemoryWord32 (C _ i) m =
   let
     go !a (-1) = a
     go !a !n = go (a + shiftL (num $ readByteOrZero (num i + n) m)
@@ -146,40 +131,25 @@ readMemoryWord32 (C _ i) (ConcreteMemory m) =
   in {-# SCC readMemoryWord32 #-}
     w256 $ go (0 :: W256) (3 :: Int)
 
-setMemoryWord :: Word -> Word -> Memory -> Memory
+setMemoryWord :: Word -> Word -> ByteString -> ByteString
 setMemoryWord (C _ i) (C _ x) m =
-  writeMemory (B (word256Bytes x)) 32 0 (num i) m
+  writeMemory (word256Bytes x) 32 0 (num i) m
 
-setMemoryByte :: Word -> Byte -> Memory -> Memory
-setMemoryByte (C _ i) (ConcreteByte x) m =
-  writeMemory (B (BS.singleton x)) 1 0 (num i) m
+setMemoryByte :: Word -> Word8 -> ByteString -> ByteString
+setMemoryByte (C _ i) x m =
+  writeMemory (BS.singleton x) 1 0 (num i) m
 
-readBlobWord :: Word -> Blob -> Word
-readBlobWord (C _ i) (B x) =
+readBlobWord :: Word -> ByteString -> Word
+readBlobWord (C _ i) x =
   if i > num (BS.length x)
   then 0
   else w256 (wordAt (num i) x)
 
-blobSize :: Blob -> Word
-blobSize (B x) = w256 (num (BS.length x))
+blobSize :: ByteString -> Word
+blobSize x = w256 (num (BS.length x))
 
-keccakBlob :: Blob -> Word
-keccakBlob (B x) = C (FromKeccak x) (keccak x)
-
-deriving instance Bits Byte
-deriving instance FiniteBits Byte
-deriving instance Enum Byte
-deriving instance Eq Byte
-deriving instance Integral Byte
-deriving instance IsString Blob
-deriving instance Semigroup Blob
-deriving instance Monoid Blob
-deriving instance Semigroup Memory
-deriving instance Monoid Memory
-deriving instance Num Byte
-deriving instance Ord Byte
-deriving instance Real Byte
-deriving instance Show Blob
+keccakBlob :: ByteString -> Word
+keccakBlob x = C (FromKeccak x) (keccak x)
 
 instance Show Word where
   show (C Dull x) = show x

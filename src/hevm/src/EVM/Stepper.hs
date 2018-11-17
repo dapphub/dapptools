@@ -36,8 +36,8 @@ import EVM (EVM, VMResult (VMFailure, VMSuccess), Error (Query), Query)
 import qualified EVM
 
 import EVM.ABI (AbiType, AbiValue, getAbi)
-import EVM.Concrete (Blob (B))
 
+import Data.ByteString (ByteString)
 import qualified Data.ByteString.Lazy as LazyByteString
 
 -- | The instruction type of the operational monad
@@ -86,7 +86,7 @@ note :: Text -> Stepper ()
 note = singleton . Note
 
 -- | Run the VM until final result, resolving all queries
-execFully :: Stepper (Either Error Blob)
+execFully :: Stepper (Either Error ByteString)
 execFully =
   exec >>= \case
     VMFailure (Query q) ->
@@ -96,12 +96,12 @@ execFully =
     VMSuccess x ->
       pure (Right x)
 
-execFullyOrFail :: Stepper Blob
+execFullyOrFail :: Stepper ByteString
 execFullyOrFail = execFully >>= either (fail . VMFailed) pure
 
 -- | Decode a blob as an ABI value, failing if ABI encoding wrong
-decode :: AbiType -> Blob -> Stepper AbiValue
-decode abiType (B bytes) =
+decode :: AbiType -> ByteString -> Stepper AbiValue
+decode abiType bytes =
   case runGetOrFail (getAbi abiType) (LazyByteString.fromStrict bytes) of
     Right ("", _, x) ->
       pure x
