@@ -58,20 +58,37 @@ set the `TERMINFO` environment variable; on Ubuntu, you should do
 
 ### Building with Stack or Cabal
 
-If you can't or won't use Nix, the easiest way especially if you don't
-have GHC (the Haskell compiler) installed already, is to use
-[Stack](https://docs.haskellstack.org/en/stable/README/), which can
-take care of installing GHC for you.  These commands should work:
+If you can't or won't use Nix, the easiest way especially if you don't have GHC (the Haskell compiler) installed already, is to use [Stack](https://docs.haskellstack.org/en/stable/README/), which can take care of installing GHC for you.  These commands should work:
 
-    $ curl -sSL https://get.haskellstack.org/ | sh
-    $ git clone https://github.com/dapphub/hevm
-    $ cd hevm && stack setup && stack install
+```
+$ curl -sSL https://get.haskellstack.org/ | sh
+$ git clone https://github.com/dapphub/dapptools.git
+$ cd dapptools/src/hevm && stack setup && stack install
+```
+Also, hevm is in Hackage so you can execute `stack install hevm` to get it up and running.
 
-If you prefer to use your own installation of GHC and the basic
-Haskell package manager, Cabal, simply run:
+If you prefer to use your own installation of GHC and the basic Haskell package manager, Cabal, simply run:
 
-    $ git clone https://github.com/dapphub/hevm
-    $ cd hevm && cabal configure && cabal install
+```
+$ git clone https://github.com/dapphub/dapptools.git
+$ cd dapptools/src/hevm && cabal configure && cabal install
+```
+
+**Note:** If you are on Mac OS environment when building with Stack you will have to previously deal with `readline` and `secp256k1`. These commands should be enough (rearding you have brew already installed):
+
+```
+$ brew install readline # for installing GNU readline in the system
+$ stack install readline --extra-include-dirs=/usr/local/opt/readline/include --extra-lib-dirs=/usr/local/opt/readline/lib # for installing the Haskell readline package
+$ git clone https://github.com/bitcoin-core/secp256k1.git
+$ cd secp256k1
+$ ./autogen.sh
+$ ./configure --enable-module-recovery # for generating secp256k1_recovery.h
+$ make
+$ sudo make install
+$ cd .. && rm -rf secp256k1 # optional (cleanup)
+```
+
+Then you can proceed with the stack installation as all the dependecies would be successfully fulfilled but when invoking `stack install` it's necessary to pass the flags `--extra-include-dirs=/usr/local/opt/readline/include --extra-lib-dirs=/usr/local/opt/readline/lib` for it to find readline.
 
 ## Contact
 
