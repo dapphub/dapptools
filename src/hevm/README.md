@@ -63,11 +63,9 @@ have GHC (the Haskell compiler) installed already, is to use
 [Stack](https://docs.haskellstack.org/en/stable/README/), which can
 take care of installing GHC for you.  These commands should work:
 
-```
-$ curl -sSL https://get.haskellstack.org/ | sh
-$ git clone https://github.com/dapphub/dapptools.git
-$ cd dapptools/src/hevm && stack setup && stack install
-```
+    $ curl -sSL https://get.haskellstack.org/ | sh
+    $ git clone https://github.com/dapphub/dapptools.git
+    $ cd dapptools/src/hevm && stack setup && stack install
 
 Also, hevm is in Hackage so you can execute `stack install hevm` to
 get it up and running.
@@ -75,35 +73,29 @@ get it up and running.
 If you prefer to use your own installation of GHC and the basic
 Haskell package manager, Cabal, simply run:
 
-```
-$ git clone https://github.com/dapphub/dapptools.git
-$ cd dapptools/src/hevm && cabal configure && cabal install
-```
+    $ git clone https://github.com/dapphub/dapptools.git
+    $ cd dapptools/src/hevm && cabal configure && cabal install
 
 **Note:** If you are on macOS when building with
 Stack you will have to previously deal with `readline` and
 `secp256k1`. These commands should be enough (assuming you
 have brew already installed):
 
-```
-$ brew install readline # for installing GNU readline in the system
-$ stack install readline --extra-include-dirs=/usr/local/opt/readline/include --extra-lib-dirs=/usr/local/opt/readline/lib # for installing the Haskell readline package
-$ git clone https://github.com/bitcoin-core/secp256k1.git
-$ cd secp256k1
-$ ./autogen.sh
-$ ./configure --enable-module-recovery # for generating secp256k1_recovery.h
-$ make
-$ sudo make install
-$ cd .. && rm -rf secp256k1 # optional (cleanup)
-```
+    $ brew install readline # for installing GNU readline in the system
+    $ stack install readline --extra-include-dirs=/usr/local/opt/readline/include --extra-lib-dirs=/usr/local/opt/readline/lib # for installing the Haskell readline package
+    $ git clone https://github.com/bitcoin-core/secp256k1.git
+    $ cd secp256k1
+    $ ./autogen.sh
+    $ ./configure --enable-module-recovery # for generating secp256k1_recovery.h
+    $ make
+    $ sudo make install
+    $ cd .. && rm -rf secp256k1 # optional (cleanup)
 
 After these commands, you should invoke the installing
 commands with the readline flags set:
 
-```
-$ stack install --extra-include-dirs=/usr/local/opt/readline/include --extra-lib-dirs=/usr/local/opt/readline/lib # if you are in the cloned repository
-$ stack install hevm --extra-include-dirs=/usr/local/opt/readline/include --extra-lib-dirs=/usr/local/opt/readline/lib # if you are installing hevm from Hackage
-```
+    $ stack install --extra-include-dirs=/usr/local/opt/readline/include --extra-lib-dirs=/usr/local/opt/readline/lib # if you are in the cloned repository
+    $ stack install hevm --extra-include-dirs=/usr/local/opt/readline/include --extra-lib-dirs=/usr/local/opt/readline/lib # if you are installing hevm from Hackage
 
 ## Contact
 
