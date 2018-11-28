@@ -10,17 +10,17 @@ dappsys() {
   ( cd "$1" && dapp test )
 }
 
-dappsys ds-auth
-# dappsys ds-cache # No test suite
-dappsys ds-exec
-dappsys ds-guard
-dappsys ds-math
-dappsys ds-multisig
-dappsys ds-note
-dappsys ds-proxy
-dappsys ds-roles
-dappsys ds-stop
-dappsys ds-thing
-dappsys ds-token
-# dappsys ds-value # No test suite
-dappsys ds-vault
+dapp ds-auth
+# dapp ds-cache # No test suite
+dapp ds-exec
+dapp ds-guard
+dapp ds-math
+dapp ds-multisig
+dapp ds-note
+dapp ds-proxy
+dapp ds-roles
+dapp ds-stop
+dapp ds-thing
+dapp ds-token
+# dapp ds-value # No test suite
+dapp ds-vault
