@@ -7,8 +7,8 @@ let
   past = import (super.fetchFromGitHub {
     owner = "NixOS";
     repo = "nixpkgs";
-    rev = "0bb2d3112b259940df18ec6c0203bb01234f4e48";
-    sha256 = "110jcn1k0kc9jmcbg97av10m36i4mqyxa057hwl6lpzjhrq40f3k";
+    rev = "18.09";
+    sha256 = "1ib96has10v5nr6bzf7v8kw7yzww8zanxgw2qi1ll1sbv6kj6zpd";
   }) { config = {}; };
 
   callPackage = self.pkgs.callPackage;
