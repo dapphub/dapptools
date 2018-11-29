@@ -1,10 +1,10 @@
 { system ? null , ... }:
 let
+  version = "18.09";
   # Import a specific Nixpkgs revision to use as the base for our overlay.
-  nixpkgs = (import <nixpkgs> {}).fetchFromGitHub {
-    owner = "NixOS";
-    repo = "nixpkgs";
-    rev = "18.09";
+  nixpkgs = builtins.fetchTarball {
+    name = "nixpkgs-${version}";
+    url = "https://github.com/nixos/nixpkgs/archive/${version}.tar.gz";
     sha256 = "1ib96has10v5nr6bzf7v8kw7yzww8zanxgw2qi1ll1sbv6kj6zpd";
   };
 in
