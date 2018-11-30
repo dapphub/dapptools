@@ -16,4 +16,5 @@ test:
 	for x in libexec/*/*; do [[ -f $$x ]] && files+=($$x); done; \
 	! grep '^#!/bin/sh' "$${files[@]}"; \
 	grep '^#!/usr/bin/env bash' "$${files[@]}" | \
-	cut -d: -f1 | xargs shellcheck
+	cut -d: -f1 | xargs shellcheck;
+	bats tests.bats

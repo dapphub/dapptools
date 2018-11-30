@@ -1,12 +1,13 @@
 { lib, stdenv, fetchFromGitHub, makeWrapper, glibcLocales
-, coreutils, git, gnused, hevm, jshon, jq, nix, nodejs, perl, seth, shellcheck, solc }:
+, bats, coreutils, git, gnused, hevm, jshon, jq
+, nix, nodejs, perl, seth, shellcheck, solc }:
 
 stdenv.mkDerivation rec {
   name = "dapp-${version}";
   version = "0.9.0";
   src = ./.;
 
-  nativeBuildInputs = [makeWrapper shellcheck coreutils];
+  nativeBuildInputs = [ bats makeWrapper shellcheck coreutils ];
   buildPhase = "true";
   doCheck = true;
   checkPhase = "make test";
