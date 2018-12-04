@@ -54,7 +54,7 @@ stdenv.mkDerivation {
     homepage = https://github.com/ethereum/solidity;
     license = licenses.gpl3;
     platforms = with platforms; linux ++ darwin;
-    maintainers = with maintainers; [ dbrock akru ];
+    maintainers = with maintainers; [ asymmetric dbrock nanexcool ];
     inherit version;
   };
 }
