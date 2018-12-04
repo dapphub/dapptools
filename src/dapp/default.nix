@@ -10,7 +10,9 @@ stdenv.mkDerivation rec {
   nativeBuildInputs = [ bats makeWrapper shellcheck coreutils ];
   buildPhase = "true";
   doCheck = true;
-  checkPhase = "make test";
+  checkPhase = let kek = ''
+    wrapProgram make --prefix PATH : "$out/bin/dapp"
+  ''; in "${kek} test";
   makeFlags = ["prefix=$(out)"];
   postInstall = let path = lib.makeBinPath [
     coreutils git gnused hevm jshon jq nix nodejs perl seth solc
