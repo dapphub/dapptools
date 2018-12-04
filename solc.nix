@@ -1,7 +1,7 @@
 { ... }:
 
 let
-  system = (system: (import ./default.nix { inherit system; }));
+  system = (sys: (import ./default.nix { inherit sys; }));
   linux = system "x86_64-linux";
   darwin = system "x86_64-darwin";
 
