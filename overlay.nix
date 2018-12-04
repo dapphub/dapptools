@@ -76,11 +76,11 @@ in {
     test-hevm = import ./nix/dapp/dapp-test-hevm.nix { pkgs = self.pkgs; };
   };
 
-  solc = self.callPackage ((import ./nix/solc-versions.nix).solc_0_4_24) {};
+  solc = self.callPackage ((import ./nix/solc/versions.nix).solc_0_4_24) {};
   solc-versions =
     super.lib.mapAttrs
       (_: value: self.callPackage value {})
-      (import ./nix/solc-versions.nix);
+      (import ./nix/solc/versions.nix);
 
   hevm = self.pkgs.haskell.lib.justStaticExecutables self.haskellPackages.hevm;
 
