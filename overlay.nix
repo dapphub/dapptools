@@ -4,11 +4,11 @@ let
   # This is a specific revision of Nixpkgs that we use to avoid
   # rebuilding all the versions of solc when we bump our submodule, or
   # to allow a package to succeed when something breaks in nixpkgs.
-  past = import (super.fetchFromGitHub {
-    owner = "NixOS";
-    repo = "nixpkgs";
-    rev = "0bb2d3112b259940df18ec6c0203bb01234f4e48";
-    sha256 = "110jcn1k0kc9jmcbg97av10m36i4mqyxa057hwl6lpzjhrq40f3k";
+  version = "18.09";
+  past = import (builtins.fetchTarball {
+    name = "nixpkgs-${version}";
+    url = "https://github.com/nixos/nixpkgs/archive/${version}.tar.gz";
+    sha256 = "1ib96has10v5nr6bzf7v8kw7yzww8zanxgw2qi1ll1sbv6kj6zpd";
   }) { config = {}; };
 
   callPackage = self.pkgs.callPackage;
