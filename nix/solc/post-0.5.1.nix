@@ -18,7 +18,7 @@ stdenv.mkDerivation {
   };
 
   patches = [
-    ./patches/solc-0.5.1.patch
+    ./patches/post-0.5.1.patch
   ];
 
   postPatch = ''
