@@ -7,23 +7,23 @@ index b22ade23..f6d8fe11 100644
  add_subdirectory(libsolc)
  
 +install(DIRECTORY libdevcore/
-+               DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/libdevcore
-+               FILES_MATCHING PATTERN "*.h")
++        DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/libdevcore
++        FILES_MATCHING PATTERN "*.h")
 +install(DIRECTORY libevmasm/
-+               DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/libevmasm
-+               FILES_MATCHING PATTERN "*.h")
++        DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/libevmasm
++        FILES_MATCHING PATTERN "*.h")
 +install(DIRECTORY libsolidity/
-+               DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/libsolidity
-+               FILES_MATCHING PATTERN "*.h")
++        DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/libsolidity
++        FILES_MATCHING PATTERN "*.h")
 +install(DIRECTORY liblll/
-+               DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/liblll
-+               FILES_MATCHING PATTERN "*.h")
++        DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/liblll
++        FILES_MATCHING PATTERN "*.h")
 +install(DIRECTORY liblangutil/
-+               DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/liblangutil
-+               FILES_MATCHING PATTERN "*.h")
++        DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/liblangutil
++        FILES_MATCHING PATTERN "*.h")
 +install(DIRECTORY libyul/
-+               DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/libyul
-+               FILES_MATCHING PATTERN "*.h")
++        DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/libyul
++        FILES_MATCHING PATTERN "*.h")
 +
  if (NOT EMSCRIPTEN)
         add_subdirectory(solc)
