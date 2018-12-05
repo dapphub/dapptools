@@ -34,8 +34,10 @@ stdenv.mkDerivation {
   '';
 
   cmakeFlags = [
-    "-DBoost_USE_STATIC_LIBS=OFF"
+    "-DBoost_USE_STATIC_LIBS=ON"
     "-DBUILD_SHARED_LIBS=ON"
+    "-DSOLC_LINK_STATIC=ON"
+    "-DLLLC_LINK_STATIC=ON"
     "-DINSTALL_LLLC=ON"
   ];
 
