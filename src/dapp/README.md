@@ -11,6 +11,10 @@ Please make sure you have [`solc` installed in your CLI](https://solidity.readth
    make uninstall             uninstall dapp(1) from /usr/local
 ```
 
+### macOS
+
+On macOS, you need to install Bash 4.
+
 ## Usage
 
 ```
