@@ -149,9 +149,26 @@ showTrace dapp trace =
     EventTrace (Log _ bytes topics) ->
       case topics of
         (t:_) ->
-          formatLog
-            (getEvent t (view dappEventMap dapp))
-            bytes <> pos
+          let event = getEvent t (view dappEventMap dapp)
+              -- indexed types are in the remaining topics
+              types = getEventUnindexedTypes event
+          in case event of
+            -- todo: catch ds-note in Anonymous case
+            Just (Event name _ _) ->
+              mconcat
+                [ "\x1b[36m"
+                , name
+                , showEvent types bytes
+                , "\x1b[0m"
+                ] <> pos
+            Nothing ->
+              mconcat
+                [ "\x1b[36m"
+                , "<unknown-event> "
+                , formatBinary bytes
+                , mconcat (map (pack . show) topics)
+                , "\x1b[0m"
+                ] <> pos
         _ ->
           "log" <> pos
     QueryTrace q ->
@@ -225,6 +242,13 @@ showCall ts bs =
     Right (_, _, xs) -> showAbiValues xs
     Left (_, _, _)   -> formatBinary bs
 
+showEvent :: [AbiType] -> ByteString -> Text
+showEvent ts bs =
+  case runGetOrFail (getAbiSeq (length ts) ts)
+            (fromStrict bs) of
+    Right (_, _, abivals) -> showAbiValues abivals
+    Left (_,_,_) -> error "lol"
+
 showValue :: AbiType -> ByteString -> Text
 showValue t bs =
   case runGetOrFail (getAbi t) (fromStrict bs) of
@@ -244,24 +268,6 @@ contractNamePart x = Text.split (== ':') x !! 1
 contractPathPart :: Text -> Text
 contractPathPart x = Text.split (== ':') x !! 0
 
--- TODO: this should take Log
-formatLog :: Maybe Event -> ByteString -> Text
-formatLog event args =
-  let types = getEventUnindexedTypes event
-      name  = getEventName event
-  in
-  case runGetOrFail (getAbiSeq (length types) types)
-                      (fromStrict args) of
-                    Right (_, _, abivals) ->
-                      mconcat
-                        [ "\x1b[36m"
-                        , name
-                        , showAbiValues abivals
-                        , "\x1b[0m"
-                        ]
-                    Left (_,_,_) ->
-                      error "lol"
-
 getEvent :: Word -> Map W256 Event -> Maybe Event
 getEvent w events = Map.lookup (wordValue w) events
 
@@ -276,9 +282,3 @@ getEventUnindexedTypes (Just (Event _ _ xs)) = [x | (x, NotIndexed) <- xs]
 getEventIndexedTypes :: Maybe Event -> [AbiType]
 getEventIndexedTypes Nothing = []
 getEventIndexedTypes (Just (Event _ _ xs)) = [x | (x, Indexed) <- xs]
-
-getEventArgs :: ByteString -> Text
-getEventArgs b = formatBlob b
-
-formatBlob :: ByteString -> Text
-formatBlob b = decodeUtf8 b
