@@ -157,6 +157,10 @@ func main() {
 					Name: "create",
 					Usage: "make a contract creation transaction",
 				},
+				cli.BoolFlag{
+					Name: "signature-only",
+					Usage: "create the signature only",
+				},
 				cli.StringFlag{
 					Name: "from",
 					Usage: "address of signing account",
@@ -329,15 +333,20 @@ func main() {
 				} else {
 					tx = types.NewTransaction(nonce, to, value, gasLimit, gasPrice, data)
 				}
-				
+
 				signed, err := wallet.SignTxWithPassphrase(*acct, passphrase, tx, chainID)
 				if err != nil {
 					return cli.NewExitError("ethsign: failed to sign tx", 1)
 				}
 
-				encoded, _ := rlp.EncodeToBytes(signed)
-				fmt.Println(hexutil.Encode(encoded[:]))
-				
+				signature := c.Bool("signature-only")
+				if(signature){
+					v, r, s := signed.RawSignatureValues()
+					fmt.Println(fmt.Sprintf("0x%064x%064x%02x", r, s, v))
+				}else{
+					encoded, _ := rlp.EncodeToBytes(signed)
+					fmt.Println(hexutil.Encode(encoded[:]))
+				}
 				return nil
 			},
 		},
