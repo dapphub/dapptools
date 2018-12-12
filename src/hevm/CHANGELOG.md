@@ -1,5 +1,8 @@
 # hevm changelog
 
+## 0.23 - 2018-12-12
+ - Show passing test traces with --verbose flag
+
 ## 0.22 - 2018-11-13
  - Simple memory view in TTY
 
