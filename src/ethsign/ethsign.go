@@ -158,7 +158,7 @@ func main() {
 					Usage: "make a contract creation transaction",
 				},
 				cli.BoolFlag{
-					Name: "signature-only",
+					Name: "sig",
 					Usage: "create the signature only",
 				},
 				cli.StringFlag{
@@ -339,7 +339,7 @@ func main() {
 					return cli.NewExitError("ethsign: failed to sign tx", 1)
 				}
 
-				signature := c.Bool("signature-only")
+				signature := c.Bool("sig")
 				if(signature){
 					v, r, s := signed.RawSignatureValues()
 					fmt.Println(fmt.Sprintf("0x%064x%064x%02x", r, s, v))
