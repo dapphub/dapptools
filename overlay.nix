@@ -9,7 +9,7 @@ let
   lib = self.pkgs.lib;
   stdenv = self.pkgs.stdenv;
 
-in {
+in rec {
   haskellPackages = super.haskellPackages.override (old: {
     overrides = lib.composeExtensions (old.overrides or (_: _: {})) (
       import ./haskell.nix { inherit lib; pkgs = self; }
@@ -76,11 +76,11 @@ in {
     test-hevm = import ./nix/dapp/dapp-test-hevm.nix { pkgs = self.pkgs; };
   };
 
-  solc = self.callPackage ((import ./nix/solc/versions.nix).solc_0_4_24) {};
   solc-versions =
     super.lib.mapAttrs
       (_: value: self.callPackage value {})
       (import ./nix/solc/versions.nix);
+  solc = solc-versions.solc_0_4_24;
 
   hevm = self.pkgs.haskell.lib.justStaticExecutables self.haskellPackages.hevm;
 
