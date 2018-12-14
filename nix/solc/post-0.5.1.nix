@@ -1,3 +1,4 @@
+version: rev: sha256:
 { stdenv, fetchzip, fetchFromGitHub, boost, cmake, z3 }:
 
 let
@@ -20,7 +21,7 @@ stdenv.mkDerivation {
   };
 
   patches = [
-    ./patches/shared-libs-install.patch
+    ./patches/post-0.5.1.patch
   ];
 
   postPatch = ''
