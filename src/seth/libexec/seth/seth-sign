@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 ### seth-sign -- sign arbitrary data with one of your account keys
-### Usage: seth sign [-F <sender>] <data>
-### Sign <data> with the private key of <account>.
+### Usage: seth sign <data>
+### Sign <data> with the private key of $ETH_FROM.
 set -e
 [[ $# = 1 ]] || seth --fail-usage "$0"
 [[ $ETH_FROM ]] || seth --fail "${0##*/}: error: \`ETH_FROM' not set"
