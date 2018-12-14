@@ -5,14 +5,8 @@ let
   # rebuilding all the versions of solc when we bump our submodule, or
   # to allow a package to succeed when something breaks in nixpkgs.
   version = "18.09";
-  past = import (builtins.fetchTarball {
-    name = "nixpkgs-${version}";
-    url = "https://github.com/nixos/nixpkgs/archive/${version}.tar.gz";
-    sha256 = "1ib96has10v5nr6bzf7v8kw7yzww8zanxgw2qi1ll1sbv6kj6zpd";
-  }) { config = {}; };
 
   callPackage = self.pkgs.callPackage;
-  pastPackage = past.pkgs.callPackage;
 
   lib = self.pkgs.lib;
   stdenv = self.pkgs.stdenv;
