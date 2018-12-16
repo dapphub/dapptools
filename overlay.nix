@@ -5,14 +5,6 @@ let
   # rebuilding all the versions of solc when we bump our submodule, or
   # to allow a package to succeed when something breaks in nixpkgs.
   version = "18.09";
-  past = import (builtins.fetchTarball {
-    name = "nixpkgs-${version}";
-    url = "https://github.com/nixos/nixpkgs/archive/${version}.tar.gz";
-    sha256 = "1ib96has10v5nr6bzf7v8kw7yzww8zanxgw2qi1ll1sbv6kj6zpd";
-  }) { config = {}; };
-
-  callPackage = self.pkgs.callPackage;
-  pastPackage = past.pkgs.callPackage;
 
   lib = self.pkgs.lib;
   stdenv = self.pkgs.stdenv;
@@ -59,7 +51,7 @@ in {
   };
 
   known-contracts = import ./nix/known-contracts.nix;
-  dapp-which = callPackage ./nix/dapp-which.nix {};
+  dapp-which = self.callPackage ./nix/dapp-which.nix {};
 
   bashScript = { name, version ? "0", deps ? [], text, check ? true } :
     self.pkgs.writeTextFile {
@@ -84,10 +76,10 @@ in {
     test-hevm = import ./nix/dapp/dapp-test-hevm.nix { pkgs = self.pkgs; };
   };
 
-  solc = callPackage ((import ./nix/solc-versions.nix).solc_0_4_24) {};
+  solc = self.callPackage ((import ./nix/solc-versions.nix).solc_0_4_24) {};
   solc-versions =
     super.lib.mapAttrs
-      (_: value: pastPackage value {})
+      (_: value: self.callPackage value {})
       (import ./nix/solc-versions.nix);
 
   hevm = self.pkgs.haskell.lib.justStaticExecutables self.haskellPackages.hevm;
@@ -100,20 +92,20 @@ in {
   # Override buggy jshon program with Haskell-based replacement.
   jshon = self.jays;
 
-  seth = callPackage (import ./src/seth) {};
-  dapp = callPackage (import ./src/dapp) {};
+  seth = self.callPackage (import ./src/seth) {};
+  dapp = self.callPackage (import ./src/dapp) {};
 
-  ethsign = (callPackage (import ./src/ethsign) {}).bin;
+  ethsign = (self.callPackage (import ./src/ethsign) {}).bin;
 
-  evmdis = callPackage ./nix/evmdis.nix {};
+  evmdis = self.callPackage ./nix/evmdis.nix {};
 
-  token = callPackage (import ./src/token) {};
-  dai = callPackage (import ./submodules/dai-cli) {};
-  mcd = callPackage (import ./submodules/mcd-cli) {};
+  token = self.callPackage (import ./src/token) {};
+  dai = self.callPackage (import ./submodules/dai-cli) {};
+  mcd = self.callPackage (import ./submodules/mcd-cli) {};
 
-  setzer = callPackage (import ./submodules/setzer) {};
-  terra = callPackage (import ./submodules/terra) {};
-  chief = callPackage (import ./submodules/chief) {};
+  setzer = self.callPackage (import ./submodules/setzer) {};
+  terra = self.callPackage (import ./submodules/terra) {};
+  chief = self.callPackage (import ./submodules/chief) {};
 
   go-ethereum = (super.go-ethereum.overrideDerivation (_: rec {
     name = "go-ethereum-${version}";
@@ -177,7 +169,7 @@ in {
     dontDisableStatic = true;
   });
 
-  celf = callPackage ./nix/celf.nix {};
+  celf = self.callPackage ./nix/celf.nix {};
 
   myetherwallet = stdenv.mkDerivation rec {
     name = "myetherwallet-${version}";
