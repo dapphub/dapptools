@@ -23,7 +23,7 @@ script:
     # the additional call to `cachix push` is there to prevent a race condition
     # that happens when the above daemon is killed mid-push at the end of this
     # script.
-    nix-build -j2 release.nix -A dapphub.$PLATFORM.stable | cachix push dapp
+    nix-build -j auto release.nix -A dapphub.$PLATFORM.stable | cachix push dapp
 after_success:
   - |
     COMMIT_HASH=$(echo $TRAVIS_COMMIT | cut -c 1-8)
