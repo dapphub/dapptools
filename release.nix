@@ -34,11 +34,12 @@ let
     inherit qrtx;
     inherit seth;
     inherit setzer;
-    inherit solc-versions;
     inherit token;
 
     hevm-test-report = hevmTestReport dist;
-  };
+  # the union is necessary because nix-build does not evaluate sets
+  # recursively, and `solc-versions` is a set
+  } // dist.pkgs.solc-versions ;
 
 in {
   dapphub.linux.stable = stable linux;
