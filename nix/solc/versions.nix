@@ -1,7 +1,7 @@
 let
-   mk1 = import ./solc.nix;
-   mk2 = import ./solc-post-0.4.17.nix;
-   mk3 = import ./solc-post-0.4.24.nix;
+   mk1 = import ./post-0.4.5.nix;
+   mk2 = import ./post-0.4.17.nix;
+   mk3 = import ./post-0.4.24.nix;
 in {
 
   ## I looked up the hashes for all the older versions, but prior to
