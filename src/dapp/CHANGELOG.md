@@ -4,10 +4,8 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.9.2] - 2018-12-21
-- Introduce new global var `DAPP_SOLC_VERSION`. Overrides default `solc` used by `dapp`. Can be used with `export DAPP_SOLC_VERSION=0.5.0` instead of `dapp --use solc:0.5.0 [command]` for every command.
-
-## [0.9.1] - 2018-12-10
+## [Unreleased]
+- Introduce a new environment variable `DAPP_SOLC_VERSION`. Overrides default `solc` used by `dapp`. Can be used with `export DAPP_SOLC_VERSION=0.5.0` instead of `dapp --use solc:0.5.0 [command]` for every command.
 - Pass `--verbose` flag to `hevm`
 
 ## [0.9.0] - 2018-12-04
