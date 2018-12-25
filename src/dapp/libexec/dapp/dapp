@@ -25,6 +25,10 @@ fi
 
 if [[ $2 = --help ]]; then
   exec "${0##*/}" help -- "$1"
+elif [[ $DAPP_SOLC_VERSION ]]; then
+  v=$DAPP_SOLC_VERSION
+  unset DAPP_SOLC_VERSION
+  exec "${0##*/}---use" "solc:$v" "${@:1}"
 elif [[ $1 = -* ]] && command -v "${0##*/}-$1" &>/dev/null; then
   exec "${0##*/}-$1" "${@:2}"
 fi
