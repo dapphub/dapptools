@@ -6,7 +6,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 ### Added
-- Support for solc 0.5.1
+- Support for solc 0.5.1 and 0.5.2
 - Introduce a new environment variable `DAPP_SOLC_VERSION`. Overrides default `solc` used by `dapp`. Can be used with `export DAPP_SOLC_VERSION=0.5.0` instead of `dapp --use solc:0.5.0 [command]` for every command.
 
 ## [0.9.1] - 2018-12-13
