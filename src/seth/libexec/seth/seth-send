@@ -79,7 +79,7 @@ else
   echo >&2 "${0##*/}: Transaction included in block $number."
 fi
 
-[[ $TO ]] || exec seth receipt "$tx" contractAddress
+[[ $TO ]] || test $(seth receipt "$tx" status) = 1 && exec seth receipt "$tx" contractAddress
 
 if [[ $SETH_GUESS ]]; then
   echo >&2 "${0##*/}: warning: return value may be inaccurate"
