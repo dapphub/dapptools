@@ -94,6 +94,9 @@ fi
 
 eval "$(git rev-parse --parseopt -- "$@" <<<"$OPTS" || echo exit $?)"
 
+# To be reviewed in the future. It should be set depending on the chain:
+export SETH_STATUS=yes
+
 while [[ $1 ]]; do
   case $1 in
     --)              shift; break;;
