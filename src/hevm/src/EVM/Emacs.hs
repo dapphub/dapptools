@@ -305,7 +305,7 @@ outputVm = do
     noMap =
       output $
         L [ A "step"
-          , L [A ("pc" :: Text), A (txt (view (uiVm . state . pc) s))]]
+        , L [A ("vm" :: Text), sexp (view uiVm s)]]
 
   fromMaybe noMap $ do
     dapp <- view uiVmDapp s
