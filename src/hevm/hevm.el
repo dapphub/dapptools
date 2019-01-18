@@ -167,6 +167,12 @@ and send it as input.")
        (fit-window-to-buffer)
        (other-window 1)))
 
+    ;; Incoming new VM step information without srcmap
+    (`(step (vm ,vm))
+     (hevm-update vm)
+     (hevm-highlight-source-region 0 0 'JumpRegular)
+     (message "No srcmap!"))
+
     ;; We sent some command that Hevm didn't understand.
     ('(unrecognized-command)
      (error "Unrecognized Hevm input command."))
