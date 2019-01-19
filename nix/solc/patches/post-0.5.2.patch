@@ -7,8 +7,8 @@ index 399dd9df..44a5c53d 100644
  add_subdirectory(libsolc)
  
 +install(DIRECTORY libdevcore/
-+    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/libdevcore
-+    FILES_MATCHING PATTERN "*.h")
++	DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/libdevcore
++	FILES_MATCHING PATTERN "*.h")
 +install(DIRECTORY libevmasm/
 +	DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/libevmasm
 +	FILES_MATCHING PATTERN "*.h")
