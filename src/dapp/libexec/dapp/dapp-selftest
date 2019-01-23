@@ -15,7 +15,7 @@ dappsys ds-auth
 dappsys ds-exec
 dappsys ds-guard
 dappsys ds-math
-dappsys ds-multisig
+# dappsys ds-multisig # Incompatible with Solidity 0.5
 dappsys ds-note
 dappsys ds-proxy
 dappsys ds-roles

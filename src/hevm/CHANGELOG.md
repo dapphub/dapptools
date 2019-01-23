@@ -1,5 +1,9 @@
 # hevm changelog
 
+## 0.24 - 2019-01-23
+ - Fix STATICCALL for precompiled contracts
+ - Assume Solidity 0.5.2 in tests
+
 ## 0.23 - 2018-12-12
  - Show passing test traces with --verbose flag
 

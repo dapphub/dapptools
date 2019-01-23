@@ -318,7 +318,7 @@ toCode = fst . BS16.decode . encodeUtf8
 solidity' :: Text -> IO (Text, Text)
 solidity' src = withSystemTempFile "hevm.sol" $ \path handle -> do
   hClose handle
-  writeFile path ("pragma solidity ^0.4.8;\n" <> src)
+  writeFile path ("pragma solidity ^0.5.2;\n" <> src)
   x <- pack <$>
     readProcess
       "solc"
