@@ -900,6 +900,7 @@ opWidget (i, o) = str (showPc i <> " ") <+> case o of
   OpJumpdest -> txt "JUMPDEST"
   OpCreate -> txt "CREATE"
   OpCall -> txt "CALL"
+  OpStaticcall -> txt "STATICCALL"
   OpCallcode -> txt "CALLCODE"
   OpReturn -> txt "RETURN"
   OpDelegatecall -> txt "DELEGATECALL"

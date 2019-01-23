@@ -63,6 +63,7 @@ data Op
   | OpJumpdest
   | OpCreate
   | OpCall
+  | OpStaticcall
   | OpCallcode
   | OpReturn
   | OpDelegatecall
