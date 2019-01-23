@@ -965,9 +965,20 @@ precompiledContract :: (?op :: Word8) => EVM ()
 precompiledContract = do
   vm <- get
   fees <- use (block . schedule)
+  stk <- use (state . stack)
 
-  use (state . stack) >>= \case
-    (_:(num -> op):_:inOffset:inSize:outOffset:outSize:xs) ->
+  case (?op, stk) of
+    -- CALL (includes value)
+    (0xf1, (_:(num -> op):_:inOffset:inSize:outOffset:outSize:xs)) ->
+      doIt vm fees op inOffset inSize outOffset outSize xs
+    -- STATICCALL (does not include value)
+    (0xfa, (_:(num -> op):inOffset:inSize:outOffset:outSize:xs)) ->
+      doIt vm fees op inOffset inSize outOffset outSize xs
+    _ ->
+      underrun
+
+  where
+    doIt vm fees op inOffset inSize outOffset outSize xs =
       let
         input = readMemory (num inOffset) (num inSize) vm
       in
@@ -988,8 +999,6 @@ precompiledContract = do
                   modifying (state . memory)
                     (writeMemory output outSize 0 outOffset)
                   next
-    _ ->
-      underrun
 
 -- * Opcode helper actions
 
@@ -1657,6 +1666,7 @@ readOp x _ = case x of
   0xf3 -> OpReturn
   0xf4 -> OpDelegatecall
   0xfd -> OpRevert
+  0xfa -> OpStaticcall
   0xff -> OpSelfdestruct
   _    -> (OpUnknown x)
 
