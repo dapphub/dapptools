@@ -49,6 +49,10 @@ params=(
   "apikey=$ETHERSCAN_API_KEY"
 )
 
+if [[ -n $3 ]]; then
+  params+=("constructorArguements=$3")
+fi
+
 source=$(hevm flatten --source-file "$DAPP_SRC/$file" \
 --json-file "$DAPP_OUT/$file".json)
 
