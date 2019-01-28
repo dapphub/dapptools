@@ -38,6 +38,27 @@ and then run:
    dapp testnet               spin up an ethereum testnet
 ```
 
+## Configuration
+
+These variables can be set at the prompt or in a `.dapprc` file.
+
+|          Variable          |          Default           |               Synopsis                |
+|----------------------------|----------------------------|---------------------------------------|
+| `DAPPTOOLS`                | `~/.dapp/dapptools`        | Installed location of tools           |
+| `DAPP_SRC`                 | `src`                      | Project Solidity source directory     |
+| `DAPP_LIB`                 | `lib`                      | Directory for installed Dapp packages |
+| `DAPP_OUT`                 | `out`                      | Directory for compilation artifacts   |
+| `DAPP_SOLC_VERSION`        | n/a                        | Solidity compiler version to use      |
+| `DAPP_VERBOSE`             | n/a                        | Produce more `dapp test` output       |
+| `DAPP_SKIP_BUILD`          | n/a                        | Avoid compiling this time             |
+| `DAPP_NO_HEVM`             | n/a                        | Skip HEVM tests                       |
+| `DAPP_LINK_TEST_LIBRARIES` | `1` when testing; else `0` | Compile with libraries                |
+| `DAPP_VERIFY_CONTRACT`     | `yes`                      | Attempt Etherscan verification        |
+| `SOLC_FLAGS`               | n/a                        | Compilation flags passed to `solc`    |
+
+A global (always loaded) config file is located in `~/.dapprc`.
+A local `.dapprc` can also be defined in your project's root, which overrides variables in the global config.
+
 
 ## Docker
 
