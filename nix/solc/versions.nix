@@ -4,7 +4,6 @@ let
    mk3 = import ./post-0.4.24.nix;
    mk4 = import ./post-0.5.1.nix;
    mk5 = import ./post-0.5.2.nix;
-   mk6 = import ./post-0.5.3.nix;
 in {
 
   ## I looked up the hashes for all the older versions, but prior to
@@ -66,5 +65,5 @@ in {
   solc_0_5_0  = mk3 "0.5.0"   "1d4f565a64988a3400847d2655ca24f73f234bc6" "0phzk2whvgrrf8xpl5pz886glhd5s40y1hbbvq9q3fxf6vc3lisy";
   solc_0_5_1  = mk4 "0.5.1"   "c8a2cb62832afb2dc09ccee6fd42c1516dfdb981" "0d6mfnixlr9m5yr3r4p6cv6vwrrivcamyar5d0f9rvir9w9ypzrr";
   solc_0_5_2  = mk5 "0.5.2"   "1df8f40cd2fd7b47698d847907b8ca7b47eb488d" "009kjyb3r2p64wpdzfcmqr9swm5haaixbzvsbw1nd4wipwbp66y0";
-  solc_0_5_3  = mk6 "0.5.3"   "10d17f245839f208ec5085309022a32cd2502f55" "1jq41pd3nj534cricy1nq6wgk4wlwg239387n785aswpwd705jbb";
+  solc_0_5_3  = mk5 "0.5.3"   "10d17f245839f208ec5085309022a32cd2502f55" "1jq41pd3nj534cricy1nq6wgk4wlwg239387n785aswpwd705jbb";
 }
