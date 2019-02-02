@@ -2,17 +2,17 @@ module EVM.Format where
 
 import Prelude hiding (Word)
 
-import EVM (VM, cheatCode, traceForest, traceData)
+import EVM (VM, cheatCode, traceForest, traceData, Error (..))
 import EVM (Trace, TraceData (..), Log (..), Query (..), FrameContext (..))
 import EVM.Dapp (DappInfo, dappSolcByHash, showTraceLocation, dappEventMap)
-import EVM.Concrete (Word (..), Blob (..))
+import EVM.Concrete (Word (..))
 import EVM.Types (W256 (..), num)
 import EVM.ABI (AbiValue (..), Event (..), AbiType (..))
 import EVM.ABI (Indexed (Indexed, NotIndexed), getAbiSeq, getAbi)
 import EVM.ABI (abiTypeSolidity, parseTypeName)
 import EVM.Solidity (SolcContract, contractName, abiMap)
 import EVM.Solidity (methodOutput, methodSignature)
-import EVM.Concrete (forceConcreteBlob, forceConcreteWord)
+import EVM.Concrete (wordValue)
 
 import Control.Arrow ((>>>))
 import Control.Lens (view, preview, ix, _2, to, _Just)
@@ -149,9 +149,26 @@ showTrace dapp trace =
     EventTrace (Log _ bytes topics) ->
       case topics of
         (t:_) ->
-          formatLog
-            (getEvent t (view dappEventMap dapp))
-            (forceConcreteBlob bytes) <> pos
+          let event = getEvent t (view dappEventMap dapp)
+              -- indexed types are in the remaining topics
+              types = getEventUnindexedTypes event
+          in case event of
+            -- todo: catch ds-note in Anonymous case
+            Just (Event name _ _) ->
+              mconcat
+                [ "\x1b[36m"
+                , name
+                , showEvent types bytes
+                , "\x1b[0m"
+                ] <> pos
+            Nothing ->
+              mconcat
+                [ "\x1b[36m"
+                , "<unknown-event> "
+                , formatBinary bytes
+                , mconcat (map (pack . show) topics)
+                , "\x1b[0m"
+                ] <> pos
         _ ->
           "log" <> pos
     QueryTrace q ->
@@ -161,18 +178,22 @@ showTrace dapp trace =
         PleaseFetchSlot addr slot _ ->
           "fetch storage slot " <> pack (show slot) <> " from " <> pack (show addr) <> pos
     ErrorTrace e ->
-      "\x1b[91merror\x1b[0m " <> pack (show e) <> pos
+      case e of
+        Revert output ->
+          "\x1b[91merror\x1b[0m " <> "Revert " <> formatBinary output <> pos
+        _ ->
+          "\x1b[91merror\x1b[0m " <> pack (show e) <> pos
 
     ReturnTrace output (CallContext _ _ hash (Just abi) _ _) ->
       case getAbiMethodOutput dapp hash abi of
         Nothing ->
-          "← " <> formatBinary (forceConcreteBlob output)
+          "← " <> formatBinary output
         Just (_, t) ->
-          "← " <> abiTypeSolidity t <> " " <> showValue t (forceConcreteBlob output)
+          "← " <> abiTypeSolidity t <> " " <> showValue t output
     ReturnTrace output (CallContext {}) ->
-      "← " <> formatBinary (forceConcreteBlob output)
-    ReturnTrace _ (CreationContext {}) ->
-      error "internal error: shouldn't show returns for creates"
+      "← " <> formatBinary output
+    ReturnTrace output (CreationContext {}) ->
+      "← " <> pack (show (BS.length output)) <> " bytes of code"
 
     EntryTrace t ->
       t
@@ -190,9 +211,9 @@ showTrace dapp trace =
             <> maybe ("[fallback function]")
                  (\x -> maybe "[unknown method]" id (maybeAbiName solc x))
                  abi
-            <> maybe ("(" <> formatBinary (forceConcreteBlob calldata) <> ")")
+            <> maybe ("(" <> formatBinary calldata <> ")")
                  -- todo: if unknown method, then just show raw calldata
-                 (\x -> showCall (catMaybes x) (forceConcreteBlob calldata))
+                 (\x -> showCall (catMaybes x) calldata)
                  (abi >>= fmap getAbiTypes . maybeAbiName solc)
             <> "\x1b[0m"
             <> pos
@@ -221,6 +242,13 @@ showCall ts bs =
     Right (_, _, xs) -> showAbiValues xs
     Left (_, _, _)   -> formatBinary bs
 
+showEvent :: [AbiType] -> ByteString -> Text
+showEvent ts bs =
+  case runGetOrFail (getAbiSeq (length ts) ts)
+            (fromStrict bs) of
+    Right (_, _, abivals) -> showAbiValues abivals
+    Left (_,_,_) -> error "lol"
+
 showValue :: AbiType -> ByteString -> Text
 showValue t bs =
   case runGetOrFail (getAbi t) (fromStrict bs) of
@@ -240,26 +268,8 @@ contractNamePart x = Text.split (== ':') x !! 1
 contractPathPart :: Text -> Text
 contractPathPart x = Text.split (== ':') x !! 0
 
--- TODO: this should take Log
-formatLog :: Maybe Event -> ByteString -> Text
-formatLog event args =
-  let types = getEventUnindexedTypes event
-      name  = getEventName event
-  in
-  case runGetOrFail (getAbiSeq (length types) types)
-                      (fromStrict args) of
-                    Right (_, _, abivals) ->
-                      mconcat
-                        [ "\x1b[36m"
-                        , name
-                        , showAbiValues abivals
-                        , "\x1b[0m"
-                        ]
-                    Left (_,_,_) ->
-                      error "lol"
-
 getEvent :: Word -> Map W256 Event -> Maybe Event
-getEvent w events = Map.lookup (forceConcreteWord w) events
+getEvent w events = Map.lookup (wordValue w) events
 
 getEventName :: Maybe Event -> Text
 getEventName (Just (Event name _ _)) = name
@@ -272,9 +282,3 @@ getEventUnindexedTypes (Just (Event _ _ xs)) = [x | (x, NotIndexed) <- xs]
 getEventIndexedTypes :: Maybe Event -> [AbiType]
 getEventIndexedTypes Nothing = []
 getEventIndexedTypes (Just (Event _ _ xs)) = [x | (x, Indexed) <- xs]
-
-getEventArgs :: Blob -> Text
-getEventArgs b = formatBlob b
-
-formatBlob :: Blob -> Text
-formatBlob b = decodeUtf8 $ forceConcreteBlob b

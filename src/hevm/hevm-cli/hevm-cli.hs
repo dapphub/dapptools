@@ -12,7 +12,6 @@
 import EVM.Concrete (w256)
 
 import qualified EVM as EVM
-import qualified EVM.Concrete as EVM
 import qualified EVM.FeeSchedule as FeeSchedule
 import qualified EVM.Fetch
 import qualified EVM.Flatten
@@ -282,7 +281,7 @@ launchExec cmd = do
           error "internal error; no EVM result"
         Just (EVM.VMFailure e) -> do
           die (show e)
-        Just (EVM.VMSuccess (EVM.B x)) -> do
+        Just (EVM.VMSuccess x) -> do
           let hex = BS16.encode x
           if ByteString.null hex then pure ()
             else do

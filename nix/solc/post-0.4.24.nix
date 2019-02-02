@@ -18,7 +18,7 @@ stdenv.mkDerivation {
   };
 
   patches = [
-    ./patches/shared-libs-install.patch
+    ./patches/post-0.4.24.patch
   ];
 
   postPatch = ''

@@ -1,5 +1,26 @@
 # hevm changelog
 
+## 0.24 - 2019-01-23
+ - Fix STATICCALL for precompiled contracts
+ - Assume Solidity 0.5.2 in tests
+
+## 0.23 - 2018-12-12
+ - Show passing test traces with --verbose flag
+
+## 0.22 - 2018-11-13
+ - Simple memory view in TTY
+
+## 0.21 - 2018-10-29
+ - Fix Hackage package by including C header files for ethjet
+
+## 0.20 - 2018-10-27
+ - Parse constructor inputs from Solidity AST
+
+## 0.19 - 2018-10-09
+ - Enable experimental 'cheat' address, allowing for modification of the
+   EVM environment from within the tests. Currently just the block
+   timestamp can be adjusted.
+
 ## 0.18 - 2018-10-09
  - Fix [duplicate address bug](https://github.com/dapphub/dapptools/issues/70)
 

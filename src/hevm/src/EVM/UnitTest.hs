@@ -13,7 +13,7 @@ import EVM.Format
 import EVM.Keccak
 import EVM.Solidity
 import EVM.Types
-import EVM.Concrete (blob, w256, forceConcreteBlob, Blob (B), wordAt)
+import EVM.Concrete (w256, wordAt)
 
 import qualified EVM.FeeSchedule as FeeSchedule
 
@@ -107,7 +107,7 @@ initializeUnitTest UnitTestOptions { .. } = do
   Stepper.evm (pushTrace (EntryTrace "constructor"))
 
   -- Constructor is loaded; run until it returns code
-  B bytes <- Stepper.execFullyOrFail
+  bytes <- Stepper.execFullyOrFail
   addr <- Stepper.evm (use (state . contract))
 
   -- Mutate the current contract to use the new code
@@ -428,22 +428,25 @@ runUnitTestContract
                in
                  pure
                    ( "PASS " <> testName <> " (gas: " <> gasText <> ")"
-                   , Right (passOutput vm testName)
+                   , Right (passOutput vm dapp opts testName)
                    )
              (Right False, vm) ->
-               pure ("FAIL " <> testName, Left (failOutput vm dapp testName))
+               pure ("FAIL " <> testName, Left (failOutput vm dapp opts testName))
              (Left _, _)       ->
                pure ("OOPS " <> testName, Left ("VM error for " <> testName))
-        inform = \(x, y) -> Text.putStrLn x >> pure y
+
+      let inform = \(x, y) -> Text.putStrLn x >> pure y
 
       -- Run all the test cases and print their status updates
       details <-
         mapM (\x -> runOne x >>= inform) testNames
 
+      let mails = [x | Right x <- details]
       let fails = [x | Left x <- details]
 
       tick "\n"
-      tick (Text.unlines fails)
+      tick (Text.unlines (filter (not . Text.null) mails))
+      tick (Text.unlines (filter (not . Text.null) fails))
 
       pure (null fails)
 
@@ -452,11 +455,23 @@ indentLines n s =
   let p = Text.replicate n " "
   in Text.unlines (map (p <>) (Text.lines s))
 
-passOutput :: VM -> Text -> Text
-passOutput _ testName = "PASS " <> testName
+passOutput :: VM -> DappInfo -> UnitTestOptions -> Text -> Text
+passOutput vm dapp UnitTestOptions { .. } testName =
+  case verbose of
+    True ->
+      mconcat $
+        [ "Success: "
+        , fromMaybe "" (stripSuffix "()" testName)
+        , "\n"
+        , indentLines 2 (formatTestLogs (view dappEventMap dapp) (view logs vm))
+        , indentLines 2 (showTraceTree dapp vm)
+        , "\n"
+        ]
+    False ->
+      ""
 
-failOutput :: VM -> DappInfo -> Text -> Text
-failOutput vm dapp testName = mconcat $
+failOutput :: VM -> DappInfo -> UnitTestOptions -> Text -> Text
+failOutput vm dapp _ testName = mconcat $
   [ "Failure: "
   , fromMaybe "" (stripSuffix "()" testName)
   , "\n"
@@ -473,10 +488,9 @@ formatTestLogs events xs =
 
 formatTestLog :: Map W256 Event -> Log -> Maybe Text
 formatTestLog _ (Log _ _ []) = Nothing
-formatTestLog events (Log _ b (t:_)) =
+formatTestLog events (Log _ args (t:_)) =
   let
     name  = getEventName event
-    args  = forceConcreteBlob b
     event = getEvent t events
 
   in case name of
@@ -494,6 +508,7 @@ formatTestLog events (Log _ b (t:_)) =
           val = BS.drop 44 args
       in Just $ formatString key <> ": " <> formatBinary val
 
+  -- TODO: event logs (bytes);
   -- TODO: event log_named_decimal_int  (bytes32 key, int val, uint decimals);
   -- TODO: event log_named_decimal_uint (bytes32 key, uint val, uint decimals);
 
@@ -517,7 +532,7 @@ setupCall :: Addr -> Text -> W256 -> EVM ()
 setupCall target abi allowance = do
   resetState
   loadContract target
-  assign (state . calldata) (blob (word32Bytes (abiKeccak (encodeUtf8 abi))))
+  assign (state . calldata) (word32Bytes (abiKeccak (encodeUtf8 abi)))
   assign (state . gas) (w256 allowance)
 
 initialUnitTestVm :: UnitTestOptions -> SolcContract -> [SolcContract] -> VM

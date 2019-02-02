@@ -15,7 +15,6 @@ import Test.Tasty.HUnit
 import Control.Monad.State.Strict (execState, runState)
 import Control.Lens
 
-import Data.Monoid
 import qualified Data.Vector as Vector
 import Data.String.Here
 
@@ -24,7 +23,6 @@ import Data.Binary.Get (runGetOrFail)
 
 import EVM
 import EVM.ABI
-import EVM.Concrete
 import EVM.Exec
 import EVM.Solidity
 import EVM.Types
@@ -51,7 +49,7 @@ main = defaultMain $ testGroup "hevm"
           [AbiUInt 8 0] ===> AbiUInt 8 255
 
     , testCase "keccak256()" $ do
-        SolidityCall "x = uint(keccak256(a));"
+        SolidityCall "x = uint(keccak256(abi.encodePacked(a)));"
           [AbiString ""] ===> AbiUInt 256 0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470
     ]
 
@@ -63,7 +61,7 @@ main = defaultMain $ testGroup "hevm"
           s = "0x1542b6457e91098682138856165381453b3d0acae2470286fd8c8a09914b1b5d"
         in SolidityCall
              (Text.unlines
-               [ "bytes32 h = keccak256(\"\\x19Ethereum Signed Message:\\n32\", d);"
+               [ "bytes32 h = keccak256(abi.encodePacked(\"\\x19Ethereum Signed Message:\\n32\", d));"
                , "x = ecrecover(h, a, b, c);"
                ])
              [ AbiUInt 8 28
@@ -74,6 +72,7 @@ main = defaultMain $ testGroup "hevm"
              ===>
              AbiAddress 0x2d5e56d45c63150d937f2182538a0f18510cb11f
     ]
+
   , testGroup "Precompiled contracts" $
       [ testGroup "Example (reverse)"
           [ testCase "success" $
@@ -138,6 +137,17 @@ singleContract x s =
     contract ${x} { ${s} }
   |]
 
+defaultDataLocation :: AbiType -> Text
+defaultDataLocation t =
+  if (case t of
+        AbiBytesDynamicType -> True
+        AbiStringType -> True
+        AbiArrayDynamicType _ -> True
+        AbiArrayType _ _ -> True
+        _ -> False)
+  then "memory"
+  else ""
+
 runStatements
   :: Text -> [AbiValue] -> AbiType
   -> IO (Maybe ByteString)
@@ -145,6 +155,7 @@ runStatements stmts args t = do
   let params =
         Text.intercalate ", "
           (map (\(x, c) -> abiTypeSolidity (abiValueType x)
+                             <> " " <> defaultDataLocation (abiValueType x)
                              <> " " <> Text.pack [c])
             (zip args "abcdefg"))
       sig =
@@ -158,7 +169,7 @@ runStatements stmts args t = do
   |]
 
   case runState exec (vmForEthrunCreation x) of
-    (VMSuccess (B targetCode), vm1) -> do
+    (VMSuccess targetCode, vm1) -> do
       let target = view (state . contract) vm1
           vm2 = execState (replaceCodeOfSelf targetCode) vm1
       case flip runState vm2
@@ -166,9 +177,9 @@ runStatements stmts args t = do
                  assign (state . gas) 0xffffffffffffffff -- kludge
                  loadContract target
                  assign (state . calldata)
-                   (B (abiCalldata sig (Vector.fromList args)))
+                   (abiCalldata sig (Vector.fromList args))
                  exec) of
-        (VMSuccess (B out), _) ->
+        (VMSuccess out, _) ->
           return (Just out)
         (VMFailure problem, _) -> do
           print problem

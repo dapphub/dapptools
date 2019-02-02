@@ -11,6 +11,7 @@ import Brick.Widgets.Center
 import Brick.Widgets.List
 
 import EVM
+import EVM.ABI (abiTypeSolidity)
 import EVM.Concrete (Word (C))
 import EVM.Dapp (DappInfo, dappInfo)
 import EVM.Dapp (dappUnitTests, dappSolcByName, dappSolcByHash, dappSources)
@@ -19,6 +20,7 @@ import EVM.Debug
 import EVM.Format (Signedness (..), showDec, showWordExact)
 import EVM.Format (showTraceTree)
 import EVM.Format (contractNamePart, contractPathPart)
+import EVM.Hexdump (prettyHex)
 import EVM.Op
 import EVM.Solidity
 import EVM.Types hiding (padRight)
@@ -82,6 +84,7 @@ data UiVmState = UiVmState
   , _uiVmFirstState   :: UiVmState
   , _uiVmMessage      :: Maybe String
   , _uiVmNotes        :: [String]
+  , _uiVmShowMemory   :: Bool
   }
 
 data UiTestPickerState = UiTestPickerState
@@ -259,6 +262,7 @@ runFromVM vm = do
            , _uiVmFirstState = undefined
            , _uiVmMessage = Just "Executing EVM code"
            , _uiVmNotes = []
+           , _uiVmShowMemory = False
            }
     ui1 = updateUiVmState ui0 vm & set uiVmFirstState ui1
 
@@ -413,14 +417,18 @@ app opts =
               -- and execute n - 1 instructions from there.
               --
               -- We keep the current cache so we don't have to redo
-              -- any blocking queries.
+              -- any blocking queries, and also the memory view.
               let
                 s0 = view uiVmFirstState s
-                s1 = set (uiVm . cache) (view (uiVm . cache) s) s0
+                s1 = set (uiVm . cache)   (view (uiVm . cache) s) s0
+                s2 = set (uiVmShowMemory) (view uiVmShowMemory s) s1
 
               -- Take n steps; "timidly," because all queries
               -- ought to be cached.
-              takeStep s1 StepTimidly (StepMany (n - 1))
+              takeStep s2 StepTimidly (StepMany (n - 1))
+
+        (UiVmScreen s, VtyEvent (Vty.EvKey (Vty.KChar 'm') [])) ->
+          continue (UiVmScreen (over uiVmShowMemory not s))
 
         (UiTestPickerScreen s', VtyEvent (Vty.EvKey (Vty.KEnter) [])) -> do
           case listSelectedElement (view testPickerList s') of
@@ -470,6 +478,7 @@ initialUiVmStateForTest opts@(UnitTestOptions {..}) dapp (theContractName, theTe
         , _uiVmFirstState   = undefined
         , _uiVmMessage      = Just "Creating unit test contract"
         , _uiVmNotes        = []
+        , _uiVmShowMemory   = False
         }
     Just testContract =
       view (dappSolcByName . at theContractName) dapp
@@ -531,11 +540,14 @@ drawVmBrowser ui =
               [ borderWithLabel (txt "Contract information") . padBottom Max . padRight (Pad 2) $ vBox
                   [ txt "Name: " <+> txt (contractNamePart (view contractName solc))
                   , txt "File: " <+> txt (contractPathPart (view contractName solc))
-                    , txt " "
-                    , txt "Public methods:"
-                    , vBox . flip map (sort (Map.elems (view abiMap solc))) $
-                        \method -> txt ("  " <> view methodSignature method)
-                    ]
+                  , txt " "
+                  , txt "Constructor inputs:"
+                  , vBox . flip map (view constructorInputs solc) $
+                      \(name, abiType) -> txt ("  " <> name <> ": " <> abiTypeSolidity abiType)
+                  , txt "Public methods:"
+                  , vBox . flip map (sort (Map.elems (view abiMap solc))) $
+                      \method -> txt ("  " <> view methodSignature method)
+                  ]
                 , borderWithLabel (txt "Storage slots") . padBottom Max . padRight Max $ vBox
                     (map txt (storageLayout dapp solc))
                 ]
@@ -587,6 +599,7 @@ drawHelpBar = hBorder <=> hCenter help
       , ("N", "step more")
       , ("C-n", "step over")
 --      , ("  Enter", "browse")
+      , ("m", "toggle memory")
       , ("  Esc", "exit")
       ]
 
@@ -747,11 +760,22 @@ withHighlight True  = withDefAttr boldAttr
 
 drawTracePane :: UiVmState -> UiWidget
 drawTracePane ui =
-  hBorderWithLabel (txt "Trace") <=>
-    renderList
-      (\_ x -> txt x)
-      False
-      (view uiVmTraceList ui)
+  case view uiVmShowMemory ui of
+    False ->
+      hBorderWithLabel (txt "Trace") <=>
+        renderList
+          (\_ x -> txt x)
+          False
+          (view uiVmTraceList ui)
+    True ->
+      vBox
+      [ hBorderWithLabel (txt "Calldata") <=>
+          str (prettyHex 40 (view (uiVm . state . calldata) ui))
+      , hBorderWithLabel (txt "Returndata") <=>
+          str (prettyHex 40 (view (uiVm . state . returndata) ui))
+      , hBorderWithLabel (txt "Memory") <=>
+          str (prettyHex 40 (view (uiVm . state . memory) ui))
+      ]
 
 drawSolidityPane :: UiVmState -> UiWidget
 drawSolidityPane ui@(view uiVmDapp -> Just dapp) =
@@ -876,6 +900,7 @@ opWidget (i, o) = str (showPc i <> " ") <+> case o of
   OpJumpdest -> txt "JUMPDEST"
   OpCreate -> txt "CREATE"
   OpCall -> txt "CALL"
+  OpStaticcall -> txt "STATICCALL"
   OpCallcode -> txt "CALLCODE"
   OpReturn -> txt "RETURN"
   OpDelegatecall -> txt "DELEGATECALL"

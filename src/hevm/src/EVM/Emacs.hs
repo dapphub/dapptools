@@ -410,9 +410,6 @@ instance SDisplay Frame where
   sexp x =
     L [A "frame", sexp (view frameContext x), sexp (view frameState x)]
 
-instance SDisplay Blob where
-  sexp (B x) = sexp x
-
 instance SDisplay FrameContext where
   sexp _x = A "some-context"
 
@@ -422,7 +419,7 @@ instance SDisplay FrameState where
       , L [A "code-contract", sexp (view codeContract x)]
       , L [A "pc", A (txt (view pc x))]
       , L [A "stack", sexp (view stack x)]
-      , L [A "memory", sexp (view memory x)]
+      , L [A "memory", sexpMemory (view memory x)]
       ]
 
 instance SDisplay a => SDisplay [a] where
@@ -436,11 +433,11 @@ instance SDisplay Word where
 instance SDisplay ByteString where
   sexp = A . txt . pack . showByteStringWith0x
 
-instance SDisplay Memory where
-  sexp (ConcreteMemory bs) =
-    if BS.length bs > 1024
-    then L [A "large-memory", A (txt (BS.length bs))]
-    else sexp bs
+sexpMemory :: ByteString -> SExpr Text
+sexpMemory bs =
+  if BS.length bs > 1024
+  then L [A "large-memory", A (txt (BS.length bs))]
+  else sexp bs
 
 defaultUnitTestOptions :: MonadIO m => m UnitTestOptions
 defaultUnitTestOptions = do

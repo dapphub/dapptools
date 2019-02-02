@@ -62,7 +62,7 @@ data Error
   | SelfDestruction
   | StackUnderrun
   | BadJumpDestination
-  | Revert
+  | Revert ByteString
   | NoSuchContract Addr
   | OutOfGas Word Word
   | BadCheatCode Word32
@@ -76,8 +76,8 @@ deriving instance Show Error
 
 -- | The possible result states of a VM
 data VMResult
-  = VMFailure Error  -- ^ An operation failed
-  | VMSuccess Blob   -- ^ Reached STOP, RETURN, or end-of-code
+  = VMFailure Error -- ^ An operation failed
+  | VMSuccess ByteString -- ^ Reached STOP, RETURN, or end-of-code
 
 deriving instance Show VMResult
 
@@ -108,7 +108,7 @@ data TraceData
   | QueryTrace Query
   | ErrorTrace Error
   | EntryTrace Text
-  | ReturnTrace Blob FrameContext
+  | ReturnTrace ByteString FrameContext
 
 data ExecMode = ExecuteNormally | ExecuteAsVMTest
 
@@ -153,7 +153,7 @@ data VMOpts = VMOpts
   } deriving Show
 
 -- | A log entry
-data Log = Log Addr Blob [Word]
+data Log = Log Addr ByteString [Word]
 
 -- | An entry in the VM's "call/create stack"
 data Frame = Frame
@@ -170,7 +170,7 @@ data FrameContext
     , callContextSize     :: Word
     , callContextCodehash :: W256
     , callContextAbi      :: Maybe Word
-    , callContextData     :: Blob
+    , callContextData     :: ByteString
     , callContextReversion :: Map Addr Contract
     }
 
@@ -181,13 +181,13 @@ data FrameState = FrameState
   , _code         :: ByteString
   , _pc           :: Int
   , _stack        :: [Word]
-  , _memory       :: Memory
+  , _memory       :: ByteString
   , _memorySize   :: Int
-  , _calldata     :: Blob
+  , _calldata     :: ByteString
   , _callvalue    :: Word
   , _caller       :: Addr
   , _gas          :: Word
-  , _returndata   :: Blob
+  , _returndata   :: ByteString
   , _static       :: Bool
   }
 
@@ -216,7 +216,7 @@ deriving instance Eq Contract
 -- | Various environmental data
 data Env = Env
   { _contracts :: Map Addr Contract
-  , _sha3Crack :: Map Word Blob
+  , _sha3Crack :: Map Word ByteString
   , _origin    :: Addr
   }
 
@@ -301,7 +301,7 @@ makeVm o = VM
     , _code = vmoptCode o
     , _contract = vmoptAddress o
     , _codeContract = vmoptAddress o
-    , _calldata = B $ vmoptCalldata o
+    , _calldata = vmoptCalldata o
     , _callvalue = w256 $ vmoptValue o
     , _caller = vmoptCaller o
     , _gas = w256 $ vmoptGas o
@@ -357,34 +357,11 @@ exec1 = do
 
     fees@(FeeSchedule {..}) = the block schedule
 
-    doStop =
-      case vm ^. frames of
-        [] ->
-          assign result (Just (VMSuccess ""))
-        (nextFrame : remainingFrames) -> do
-          popTrace
-          assign frames remainingFrames
-          assign state (view frameState nextFrame)
-          case view frameContext nextFrame of
-            CreationContext _ -> do
-              -- Move back the gas to the parent context
-              assign (state . gas) (the state gas)
-
-            CallContext _ _ _ _ _ _ -> do
-              -- Take back the remaining gas allowance
-              modifying (state . gas) (+ the state gas)
-              modifying burned (subtract (the state gas))
-          push 1
+    doStop = finishFrame (FrameReturned "")
 
   if the state pc >= num (BS.length (the state code))
     then
-      case view frames vm of
-        (nextFrame : remainingFrames) -> do
-          assign frames remainingFrames
-          assign state (view frameState nextFrame)
-          push 1
-        [] ->
-          assign result (Just (VMSuccess (blob "")))
+      doStop
 
     else do
       let ?op = BS.index (the state code) (the state pc)
@@ -595,7 +572,7 @@ exec1 = do
                 accessMemoryRange fees memOffset n $ do
                   next
                   assign (state . stack) xs
-                  copyBytesToMemory (blob (view bytecode this))
+                  copyBytesToMemory (view bytecode this)
                     n codeOffset memOffset
             _ -> underrun
 
@@ -635,7 +612,7 @@ exec1 = do
                   touchAccount (num extAccount) $ \c -> do
                     next
                     assign (state . stack) xs
-                    copyBytesToMemory (blob (view bytecode c))
+                    copyBytesToMemory (view bytecode c)
                       codeSize codeOffset memOffset
             _ -> underrun
 
@@ -830,7 +807,7 @@ exec1 = do
                     else do
                       let
                         newAddr =
-                          newContractAddress self (forceConcreteWord (view nonce this))
+                          newContractAddress self (wordValue (view nonce this))
                       case view execMode vm of
                         ExecuteAsVMTest -> do
                           assign (state . stack) (num newAddr : xs)
@@ -839,7 +816,7 @@ exec1 = do
                         ExecuteNormally -> do
                           let
                             newCode =
-                              forceConcreteBlob $ readMemory (num xOffset) (num xSize) vm
+                              readMemory (num xOffset) (num xSize) vm
                             newContract =
                               initialContract newCode
                             newContext  =
@@ -884,6 +861,10 @@ exec1 = do
              ) ->
               case xTo of
                 n | n > 0 && n <= 8 -> precompiledContract
+                n | num n == cheatCode ->
+                  do
+                    assign (state . stack) xs
+                    cheat (xInOffset, xInSize) (xOutOffset, xOutSize)
                 _ ->
                   let
                     availableGas = the state gas
@@ -922,43 +903,8 @@ exec1 = do
           case stk of
             (xOffset:xSize:_) ->
               accessMemoryRange fees xOffset xSize $ do
-                case vm ^. frames of
-                  [] ->
-                    assign result (Just (VMSuccess (readMemory (num xOffset) (num xSize) vm)))
-
-                  (nextFrame : remainingFrames) -> do
-                    assign frames remainingFrames
-
-                    case view frameContext nextFrame of
-                      CreationContext _ -> do
-                        replaceCodeOfSelf (forceConcreteBlob (readMemory (num xOffset) (num xSize) vm))
-                        assign state (view frameState nextFrame)
-
-                        -- Move back the gas to the parent context
-                        assign (state . gas) (the state gas)
-
-                        push (num (the state contract))
-                        popTrace
-
-                      ctx@(CallContext yOffset ySize _ _ _ _) -> do
-                        let output = readMemory (num xOffset) (num xSize) vm
-                        assign state (view frameState nextFrame)
-
-                        -- Take back the remaining gas allowance
-                        modifying (state . gas) (+ the state gas)
-                        modifying burned (subtract (the state gas))
-
-                        assign (state . returndata) output
-                        copyBytesToMemory
-                          output
-                          (num ySize)
-                          0
-                          (num yOffset)
-                        push 1
-
-                        insertTrace (ReturnTrace output ctx)
-                        popTrace
-
+                let output = readMemory (num xOffset) (num xSize) vm
+                finishFrame (FrameReturned output)
             _ -> underrun
 
         -- op: DELEGATECALL
@@ -1021,7 +967,12 @@ exec1 = do
 
         -- op: REVERT
         0xfd ->
-          vmError Revert
+          case stk of
+            (xOffset:xSize:_) ->
+              accessMemoryRange fees xOffset xSize $ do
+                let output = readMemory (num xOffset) (num xSize) vm
+                finishFrame (FrameReverted output)
+            _ -> underrun
 
         xxx ->
           vmError (UnrecognizedOpcode xxx)
@@ -1030,11 +981,22 @@ precompiledContract :: (?op :: Word8) => EVM ()
 precompiledContract = do
   vm <- get
   fees <- use (block . schedule)
+  stk <- use (state . stack)
 
-  use (state . stack) >>= \case
-    (_:(num -> op):_:inOffset:inSize:outOffset:outSize:xs) ->
+  case (?op, stk) of
+    -- CALL (includes value)
+    (0xf1, (_:(num -> op):_:inOffset:inSize:outOffset:outSize:xs)) ->
+      doIt vm fees op inOffset inSize outOffset outSize xs
+    -- STATICCALL (does not include value)
+    (0xfa, (_:(num -> op):inOffset:inSize:outOffset:outSize:xs)) ->
+      doIt vm fees op inOffset inSize outOffset outSize xs
+    _ ->
+      underrun
+
+  where
+    doIt vm fees op inOffset inSize outOffset outSize xs =
       let
-        input = forceConcreteBlob (readMemory (num inOffset) (num inSize) vm)
+        input = readMemory (num inOffset) (num inSize) vm
       in
         case EVM.Precompiled.execute op input (num outSize) of
           Nothing -> do
@@ -1051,10 +1013,8 @@ precompiledContract = do
                 burn cost $ do
                   assign (state . stack) (1 : xs)
                   modifying (state . memory)
-                    (writeMemory (blob output) outSize 0 outOffset)
+                    (writeMemory output outSize 0 outOffset)
                   next
-    _ ->
-      underrun
 
 -- * Opcode helper actions
 
@@ -1112,21 +1072,25 @@ accessStorage addr slot continue =
       touchAccount addr $ \_ ->
         accessStorage addr slot continue
 
--- | Replace current contract's code, like when CREATE returns
+-- | Replace a contract's code, like when CREATE returns
 -- from the constructor code.
-replaceCodeOfSelf :: ByteString -> EVM ()
-replaceCodeOfSelf createdCode = do
-  self <- use (state . contract)
-  zoom (env . contracts . at self) $ do
-    if BS.null createdCode
+replaceCode :: Addr -> ByteString -> EVM ()
+replaceCode target newCode = do
+  zoom (env . contracts . at target) $ do
+    if BS.null newCode
       then put Nothing
       else do
         Just now <- get
         put . Just $
-          initialContract createdCode
+          initialContract newCode
             & set storage (view storage now)
             & set balance (view balance now)
             & set nonce   (view nonce now)
+
+replaceCodeOfSelf :: ByteString -> EVM ()
+replaceCodeOfSelf newCode = do
+  vm <- get
+  replaceCode (view (state . contract) vm) newCode
 
 resetState :: EVM ()
 resetState = do
@@ -1185,6 +1149,9 @@ refund n = do
 -- * Cheat codes
 
 -- The cheat code is 7109709ecfa91a80626ff3989d68f67f5b1dd12d.
+-- Call this address using one of the cheatActions below to do
+-- special things, e.g. changing the block timestamp. Beware that
+-- these are necessarily hevm specific.
 cheatCode :: Addr
 cheatCode = num (keccak "hevm cheat code")
 
@@ -1196,9 +1163,9 @@ cheat (inOffset, inSize) (outOffset, outSize) = do
   mem <- use (state . memory)
   let
     abi =
-      num (forceConcreteWord (readMemoryWord32 inOffset mem))
+      num (wordValue (readMemoryWord32 inOffset mem))
     input =
-      forceConcreteBlob (sliceMemory (inOffset + 4) (inSize - 4) mem)
+      sliceMemory (inOffset + 4) (inSize - 4) mem
   case Map.lookup abi cheatActions of
     Nothing ->
       vmError (BadCheatCode abi)
@@ -1214,7 +1181,7 @@ cheat (inOffset, inSize) (outOffset, outSize) = do
             Just (encodeAbiValue -> bs) -> do
               next
               modifying (state . memory)
-                (writeMemory (blob bs) outSize 0 outOffset)
+                (writeMemory bs outSize 0 outOffset)
               push 1
         Left _ ->
           vmError (BadCheatCode abi)
@@ -1263,7 +1230,7 @@ delegateCall fees xGas xTo xInOffset xInSize xOutOffset xOutSize xs continue =
                           if xInSize >= 4
                           then
                             let
-                              w = forceConcreteWord
+                              w = wordValue
                                     (readMemoryWord32 xInOffset (view (state . memory) vm0))
                             in Just $! num w
                           else Nothing
@@ -1292,35 +1259,122 @@ delegateCall fees xGas xTo xInOffset xInSize xOutOffset xOutSize xs continue =
 
 
 -- * VM error implementation
+
 underrun :: EVM ()
 underrun = vmError StackUnderrun
 
-vmError :: Error -> EVM ()
-vmError e = do
-  vm <- get
-  case view frames vm of
-    [] -> assign result (Just (VMFailure e))
+-- | A stack frame can be popped in three ways.
+data FrameResult
+  = FrameReturned ByteString -- ^ STOP, RETURN, or no more code
+  | FrameReverted ByteString -- ^ REVERT
+  | FrameErrored Error -- ^ Any other error
+  deriving Show
 
-    (nextFrame : remainingFrames) -> do
+-- | This function defines how to pop the current stack frame in either of
+-- the ways specified by 'FrameResult'.
+--
+-- It also handles the case when the current stack frame is the only one;
+-- in this case, we set the final '_result' of the VM execution.
+finishFrame :: FrameResult -> EVM ()
+finishFrame how = do
+  oldVm <- get
 
-      insertTrace (ErrorTrace e)
+  case view frames oldVm of
+    -- Is the current frame the only one?
+    [] ->
+      assign result . Just $
+        case how of
+          FrameReturned output -> VMSuccess output
+          FrameReverted output -> VMFailure (Revert output)
+          FrameErrored e       -> VMFailure e
+
+    -- Are there some remaining frames?
+    nextFrame : remainingFrames -> do
+
+      -- Pop the top frame.
+      assign frames remainingFrames
+      -- Install the state of the frame to which we shall return.
+      assign state (view frameState nextFrame)
+      -- Insert a debug trace.
+      insertTrace $
+        case how of
+          FrameErrored e ->
+            ErrorTrace e
+          FrameReverted output ->
+            ErrorTrace (Revert output)
+          FrameReturned output ->
+            ReturnTrace output (view frameContext nextFrame)
+      -- Pop to the previous level of the debug trace stack.
       popTrace
 
+      let remainingGas = view (state . gas) oldVm
+
+      -- Now dispatch on whether we were creating or calling,
+      -- and whether we shall return, revert, or error (six cases).
       case view frameContext nextFrame of
+
+        -- Were we calling?
+        CallContext (num -> outOffset) (num -> outSize) _ _ _ reversion -> do
+
+          let
+            -- When entering a call, the gas allowance is counted as burned
+            -- in advance; this unburns the remainder and adds it to the
+            -- parent frame.
+            reclaimRemainingGasAllowance = do
+              modifying burned (subtract remainingGas)
+              modifying (state . gas) (+ remainingGas)
+
+            revertContracts = assign (env . contracts) reversion
+
+          case how of
+            -- Case 1: Returning from a call?
+            FrameReturned output -> do
+              assign (state . returndata) output
+              copyBytesToMemory output outSize 0 outOffset
+              reclaimRemainingGasAllowance
+              push 1
+
+            -- Case 2: Reverting during a call?
+            FrameReverted output -> do
+              revertContracts
+              assign (state . returndata) output
+              reclaimRemainingGasAllowance
+              push 0
+
+            -- Case 3: Error during a call?
+            FrameErrored _ -> do
+              revertContracts
+              push 0
+
+        -- Or were we creating?
         CreationContext _ -> do
-          assign frames remainingFrames
-          assign state (view frameState nextFrame)
-          assign (state . gas) 0
-          push 0
-          let self = vm ^. state . contract
-          assign (env . contracts . at self) Nothing
+          let
+            createe = view (state . contract) oldVm
+            destroy = assign (env . contracts . at createe) Nothing
 
-        CallContext _ _ _ _ _ reversion -> do
-          assign frames remainingFrames
-          assign state (view frameState nextFrame)
-          assign (env . contracts) reversion
-          push 0
+          case how of
+            -- Case 4: Returning during a creation?
+            FrameReturned output -> do
+              replaceCode createe output
+              assign (state . gas) remainingGas
+              push (num createe)
 
+            -- Case 5: Reverting during a creation?
+            FrameReverted output -> do
+              destroy
+              assign (state . returndata) output
+              assign (state . gas) remainingGas
+              push 0
+
+            -- Case 6: Error during a creation?
+            FrameErrored _ -> do
+              destroy
+              assign (state . gas) 0
+              push 0
+
+
+vmError :: Error -> EVM ()
+vmError e = finishFrame (FrameErrored e)
 
 -- * Memory helpers
 
@@ -1346,7 +1400,7 @@ accessMemoryWord
 accessMemoryWord fees x continue = accessMemoryRange fees x 32 continue
 
 copyBytesToMemory
-  :: Blob -> Word -> Word -> Word -> EVM ()
+  :: ByteString -> Word -> Word -> Word -> EVM ()
 copyBytesToMemory bs size xOffset yOffset =
   if size == 0 then noop
   else do
@@ -1354,13 +1408,13 @@ copyBytesToMemory bs size xOffset yOffset =
     assign (state . memory) $
       writeMemory bs size xOffset yOffset mem
 
-readMemory :: Word -> Word -> VM -> Blob
+readMemory :: Word -> Word -> VM -> ByteString
 readMemory offset size vm = sliceMemory offset size (view (state . memory) vm)
 
 word256At
   :: Functor f
   => Word -> (Word -> f Word)
-  -> Memory -> f Memory
+  -> ByteString -> f ByteString
 word256At i = lens getter setter where
   getter m = readMemoryWord i m
   setter m x = setMemoryWord i x m
@@ -1633,6 +1687,7 @@ readOp x _ = case x of
   0xf4 -> OpDelegatecall
   0xf5 -> OpCreate2
   0xfd -> OpRevert
+  0xfa -> OpStaticcall
   0xff -> OpSelfdestruct
   _    -> (OpUnknown x)
 
