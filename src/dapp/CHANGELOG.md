@@ -33,4 +33,4 @@ changelog.
 [0.9.1]: https://github.com/dapphub/dapptools/tree/dapp/0.9.1
 [0.9.2]: https://github.com/dapphub/dapptools/tree/dapp/0.9.2
 [0.10.0]: https://github.com/dapphub/dapptools/tree/dapp/0.10.0
-[0.10.0]: https://github.com/dapphub/dapptools/tree/dapp/0.11.0
+[0.11.0]: https://github.com/dapphub/dapptools/tree/dapp/0.11.0
