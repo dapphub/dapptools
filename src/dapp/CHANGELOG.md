@@ -8,6 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - Support for solc 0.5.3
 
+### Changed
+- Updated go-ethereum to v1.8.22 (Constantinople)
+
 ## [0.10.0] - 2018-01-24
 ### Changed
 - Default to running solc 0.5.2
