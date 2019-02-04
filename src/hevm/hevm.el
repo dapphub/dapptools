@@ -72,15 +72,21 @@ and send it as input.")
   `(defun ,name ()
      ,help
      (interactive)
-     (hevm-send (quote ,command))))
+     (hevm-send ,command)))
 
 (hevm-define-command hevm-do-step-once
   "Step forward by one opcode."
-  (step "once"))
+  '(step "once"))
 
 (hevm-define-command hevm-do-step-to-next-source-location
   "Step forward until the source location changes."
-  (step "source-location"))
+  '(step "source-location"))
+
+(hevm-define-command hevm-do-step-to-file-line
+  "Step forward until the source location visits a specific source line."
+  (let ((wanted-file-name (file-relative-name (buffer-file-name) hevm-root))
+        (wanted-line-number (line-number-at-pos)))
+    `(step ("file-line" ,wanted-file-name ,wanted-line-number))))
 
 (define-minor-mode hevm-debug-mode
   "Hevm debug minor mode."
@@ -88,6 +94,7 @@ and send it as input.")
   " Hevm"
   '(("n" . hevm-do-step-once)
     ("N" . hevm-do-step-to-next-source-location)
+    ("!" . hevm-do-step-to-file-line)
     ("c" . hevm-browse-contracts)
     ("q" . quit-window))
   :group 'hevm)

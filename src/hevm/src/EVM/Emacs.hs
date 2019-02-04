@@ -19,6 +19,7 @@ import Data.Text (Text, pack, unpack)
 import EVM
 import EVM.Concrete
 import EVM.Dapp
+import EVM.Debug (srcMapCodePos)
 import EVM.Fetch (Fetcher)
 import EVM.Solidity
 import EVM.Stepper (Stepper)
@@ -268,8 +269,34 @@ handleCmd (UiVm s) = \case
         outputVm
       Nothing ->
         output (L [A ("unrecognized-command" :: Text)])
+  ("step", [WFSList [ WFSAtom (HSString "file-line")
+                    , WFSAtom (HSString fileName)
+                    , WFSAtom (HSInt (fromIntegral -> lineNumber))
+                    ]]) ->
+    case view uiVmDapp s of
+      Nothing ->
+        output (L [A ("impossible" :: Text)])
+      Just dapp -> do
+        takeStep s StepNormally
+          (StepUntil (atFileLine dapp fileName lineNumber))
+        outputVm
   _ ->
     output (L [A ("unrecognized-command" :: Text)])
+
+atFileLine :: DappInfo -> Text -> Int -> VM -> Bool
+atFileLine dapp wantedFileName wantedLineNumber vm =
+  case currentSrcMap dapp vm of
+    Nothing -> False
+    Just sm ->
+      case view (dappSources . sourceFiles . at (srcMapFile sm)) dapp of
+        Nothing -> False
+        Just _ ->
+          let
+            (currentFileName, currentLineNumber) =
+              fromJust (srcMapCodePos (view dappSources dapp) sm)
+          in
+            currentFileName == wantedFileName &&
+              currentLineNumber == wantedLineNumber
 
 outputVm :: Console ()
 outputVm = do
