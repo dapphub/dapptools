@@ -2,8 +2,27 @@
 ;; hevm.el
 ;;
 
-(defvar hevm-executable-path
-  "/Users/mbrock/src/hevm/dist/build/hevm/hevm")
+(defgroup hevm nil
+  "Hevm, the amazing EVM debugger")
+
+(defcustom hevm-executable-path nil
+  "How to find the hevm executable"
+  :type '(choice (const :tag "Find hevm automatically" nil)
+                 (file :tag "Use a specific binary")))
+
+(defun hevm-get-executable-path ()
+  "Return the path to use for the hevm executable"
+  (let ((path (if (null hevm-executable-path)
+                  (executable-find "hevm")
+                hevm-executable-path)))
+    (if (file-executable-p path)
+        path
+      (if (null hevm-executable-path)
+          (error
+           "hevm executable not found; maybe customize `hevm-executable-path'")
+        (error
+         "hevm executable not found in `%s'; maybe customize `hevm-executable-path'"
+         hevm-executable-path)))))
 
 (defvar hevm-root nil
   "Root path of the currently debugged dapp.")
@@ -48,7 +67,7 @@ and send it as input.")
   (let ((buffer (get-buffer-create "*hevm*")))
     (setq hevm-plan
           `((load-dapp ,(expand-file-name root) ,(expand-file-name json-file))))
-    (make-comint-in-buffer "Hevm" buffer hevm-executable-path nil "emacs")
+    (make-comint-in-buffer "Hevm" buffer (hevm-get-executable-path) nil "emacs")
     (with-current-buffer buffer (hevm-mode))
     (setq hevm-buffer buffer)
     (message "Hevm started.")))
