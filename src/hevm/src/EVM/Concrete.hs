@@ -90,7 +90,7 @@ sgt (C _ (W256 x)) (C _ (W256 y)) =
 
 sar :: Word -> Word -> Word
 sar (C _ (W256 x)) (C _ (W256 y)) =
-  w256 (num (shiftR (signedWord x) (num y)))
+  w256 (num (shiftR (signedWord y) (num x)))
 
 wordValue :: Word -> W256
 wordValue (C _ x) = x
