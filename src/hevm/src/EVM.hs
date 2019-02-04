@@ -485,15 +485,11 @@ exec1 = do
             0xff .&. shiftR x (8 * (31 - num n))
 
         -- op: SHL
-        0x1b -> stackOp2 (const g_verylow) $ \case
-          (n, _) | n >= 256 -> 0
-          (n, x) -> shiftL x (num n)
+        0x1b -> stackOp2 (const g_verylow) $ \(n, x) -> shiftL x (num n)
         -- op: SHR
-        0x1c -> stackOp2 (const g_verylow) $ \case
-          (n, _) | n >= 256 -> 0
-          (n, x) -> shiftR x (num n)
+        0x1c -> stackOp2 (const g_verylow) $ \(n, x) -> shiftR x (num n)
         -- op: SAR
-        0x1d -> error "SAR not implemented"
+        0x1d -> stackOp2 (const g_verylow) $ uncurry sar
 
         -- op: SHA3
         0x20 ->
