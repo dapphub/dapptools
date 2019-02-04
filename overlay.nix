@@ -80,7 +80,7 @@ in rec {
     super.lib.mapAttrs
       (_: value: self.callPackage value {})
       (import ./nix/solc/versions.nix);
-  solc = solc-versions.solc_0_5_2;
+  solc = solc-versions.solc_0_5_3;
 
   hevm = self.pkgs.haskell.lib.justStaticExecutables self.haskellPackages.hevm;
 
@@ -109,12 +109,12 @@ in rec {
 
   go-ethereum = (super.go-ethereum.overrideDerivation (_: rec {
     name = "go-ethereum-${version}";
-    version = "1.8.10";
+    version = "1.8.22";
     src = self.pkgs.fetchFromGitHub {
       owner = "ethereum";
       repo = "go-ethereum";
       rev = "v${version}";
-      sha256 = "1n36pz4y3xa4d46mynym98bra79qx5n9lb29chyxfpvi5fmprdg1";
+      sha256 = "0ag9qxrf7n0qkccaf6v4jaysivpxvsy5zfzar3mcm65223pqy375";
     };
     # (mbrock backported) fix for usb-related segmentation faults on darwin
     propagatedBuildInputs =

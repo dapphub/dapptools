@@ -63,9 +63,13 @@ else
     -n {} \
       -n "$CHAINID" -i chainId \
       -n 0 -i homesteadBlock \
+      -n 0 -i eip150Block \
       -n 0 -i eip155Block \
       -n 0 -i eip158Block \
+      -n 0 -i eip160Block \
       -n 0 -i byzantiumBlock \
+      -n 0 -i constantinopleBlock \
+      -n 0 -i petersburgBlock \
       -n {} -n "$PERIOD" -i period -n 3000 -i epoch -i clique \
       -i config \
     -s 0x1 -i difficulty \
