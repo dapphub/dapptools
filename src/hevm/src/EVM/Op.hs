@@ -27,6 +27,9 @@ data Op
   | OpXor
   | OpNot
   | OpByte
+  | OpShl
+  | OpShr
+  | OpSar
   | OpSha3
   | OpAddress
   | OpBalance
@@ -43,6 +46,7 @@ data Op
   | OpExtcodecopy
   | OpReturndatasize
   | OpReturndatacopy
+  | OpExtcodehash
   | OpBlockhash
   | OpCoinbase
   | OpTimestamp
@@ -67,6 +71,7 @@ data Op
   | OpCallcode
   | OpReturn
   | OpDelegatecall
+  | OpCreate2
   | OpRevert
   | OpSelfdestruct
   | OpDup !Word8

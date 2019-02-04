@@ -864,6 +864,9 @@ opWidget (i, o) = str (showPc i <> " ") <+> case o of
   OpXor -> txt "XOR"
   OpNot -> txt "NOT"
   OpByte -> txt "BYTE"
+  OpShl -> txt "SHL"
+  OpShr -> txt "SHR"
+  OpSar -> txt "SAR"
   OpSha3 -> txt "SHA3"
   OpAddress -> txt "ADDRESS"
   OpBalance -> txt "BALANCE"
@@ -880,6 +883,7 @@ opWidget (i, o) = str (showPc i <> " ") <+> case o of
   OpExtcodecopy -> txt "EXTCODECOPY"
   OpReturndatasize -> txt "RETURNDATASIZE"
   OpReturndatacopy -> txt "RETURNDATACOPY"
+  OpExtcodehash -> txt "EXTCODEHASH"
   OpBlockhash -> txt "BLOCKHASH"
   OpCoinbase -> txt "COINBASE"
   OpTimestamp -> txt "TIMESTAMP"
@@ -904,6 +908,7 @@ opWidget (i, o) = str (showPc i <> " ") <+> case o of
   OpCallcode -> txt "CALLCODE"
   OpReturn -> txt "RETURN"
   OpDelegatecall -> txt "DELEGATECALL"
+  OpCreate2 -> txt "CREATE2"
   OpSelfdestruct -> txt "SELFDESTRUCT"
   OpDup x -> txt "DUP" <+> str (show x)
   OpSwap x -> txt "SWAP" <+> str (show x)
