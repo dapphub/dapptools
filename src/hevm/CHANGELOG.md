@@ -1,5 +1,8 @@
 # hevm changelog
 
+## 0.25 - 2019-02-04
+ - Add SHL, SHR and SAR opcodes
+
 ## 0.24 - 2019-01-23
  - Fix STATICCALL for precompiled contracts
  - Assume Solidity 0.5.2 in tests
