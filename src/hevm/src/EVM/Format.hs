@@ -180,7 +180,7 @@ showTrace dapp trace =
     ErrorTrace e ->
       case e of
         Revert output ->
-          "\x1b[91merror\x1b[0m " <> "Revert " <> formatBinary output <> pos
+          "\x1b[91merror\x1b[0m " <> "Revert " <> showError output <> pos
         _ ->
           "\x1b[91merror\x1b[0m " <> pack (show e) <> pos
 
@@ -241,6 +241,12 @@ showCall ts bs =
          (fromStrict (BS.drop 4 bs)) of
     Right (_, _, xs) -> showAbiValues xs
     Left (_, _, _)   -> formatBinary bs
+
+showError :: ByteString -> Text
+showError bs = case BS.take 4 bs of
+  -- Method ID for Error(string)
+  "\b\195y\160" -> showCall [AbiStringType] bs
+  _             -> formatBinary bs
 
 showEvent :: [AbiType] -> ByteString -> Text
 showEvent ts bs =
