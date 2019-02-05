@@ -1,5 +1,8 @@
 # hevm changelog
 
+## 0.26 - 2019-02-05
+ - Format Solidity Error(string) messages in trace
+
 ## 0.25 - 2019-02-04
  - Add SHL, SHR and SAR opcodes
 
