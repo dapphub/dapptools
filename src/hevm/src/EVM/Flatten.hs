@@ -12,6 +12,7 @@ module EVM.Flatten (flatten) where
 
 import EVM.Dapp (DappInfo, dappSources)
 import EVM.Solidity (sourceAsts)
+import EVM.Demand (demand)
 
 -- We query and alter the Solidity code using the compiler's AST.
 -- The AST is a deep JSON structure, so we use Aeson and Lens.
@@ -126,6 +127,10 @@ flatten dapp target = do
             [ "////// ", encodeUtf8 path, "\n"
             , stripImportsAndPragmas src (asts ! path), "\n"
             ]
+
+      -- Force all evaluation before any printing happens, to avoid
+      -- partial output.
+      demand target; demand pragma; demand sources
 
       -- Finally print the whole concatenation.
       putStrLn $ "// hevm: flattened sources of " <> unpack target

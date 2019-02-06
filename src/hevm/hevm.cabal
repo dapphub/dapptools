@@ -38,6 +38,7 @@ library
     EVM.Dapp,
     EVM.Dev,
     EVM.Debug,
+    EVM.Demand,
     EVM.Emacs,
     EVM.Exec,
     EVM.Facts,
