@@ -15,7 +15,7 @@ let
     haskellPackages.callPackage (import ./default.nix) {
       inherit (pkgs) secp256k1;
     }
-  ) [pkgs.git pkgs.cabal-install];
+  ) [pkgs.git pkgs.cabal-install pkgs.cabal2nix];
 
 in
   if pkgs.lib.inNixShell
