@@ -26,14 +26,19 @@ import qualified Data.Graph.Inductive.PatriciaTree as Fgl
 import qualified Data.Graph.Inductive.Query.BFS as Fgl
 import qualified Data.Graph.Inductive.Query.DFS as Fgl
 
+-- The Solidity version pragmas can be arbitrary SemVer ranges,
+-- so we use this library to parse them.
+import Data.SemVer (SemVerRange, parseSemVerRange)
+import qualified Data.SemVer as SemVer
+
 import Control.Monad (forM)
 import Data.ByteString (ByteString)
 import Data.Foldable (foldl', toList)
-import Data.List (sort)
+import Data.List (sort, nub)
 import Data.Map (Map, (!))
-import Data.Maybe (mapMaybe, isJust, fromMaybe)
+import Data.Maybe (mapMaybe, isJust)
 import Data.Monoid ((<>))
-import Data.Text (Text, unpack, pack, intercalate)
+import Data.Text (Text, unpack, pack)
 import Data.Text.Encoding (encodeUtf8)
 import Text.Read (readMaybe)
 
@@ -134,14 +139,20 @@ maximalPragma asts =
   case mapMaybe versions asts of
     [] -> error "no Solidity version pragmas in any source files"
     xs ->
-      "pragma solidity ^"
-        <> intercalate "." (map (pack . show) (maximum xs))
+      "pragma solidity "
+        <> pack (show (rangeIntersection xs))
         <> ";\n"
 
   where
-    -- Get the version components from a source file's pragma,
+    -- Simple way to combine many SemVer ranges.  We don't actually
+    -- optimize these boolean expressions, so the resulting pragma
+    -- might be redundant, like ">=0.4.23 >=0.5.0 <0.6.0".
+    rangeIntersection :: [SemVerRange] -> SemVerRange
+    rangeIntersection = foldr1 SemVer.And . nub . sort
+
+    -- Get the semantic version range from a source file's pragma,
     -- or nothing if no pragma present.
-    versions :: Value -> Maybe [Int]
+    versions :: Value -> Maybe SemVerRange
     versions ast = fmap grok components
       where
         pragma :: Maybe Value
@@ -155,14 +166,16 @@ maximalPragma asts =
         components = fmap toList
           (pragma >>= preview (key "attributes" . key "literals" . _Array))
 
-        grok :: [Value] -> [Int]
+        grok :: [Value] -> SemVerRange
         grok = \case
-          [String "solidity", String _prefix, String a, String b] ->
-            map
-              (fromMaybe
-                 (error . Text.unpack $ "bad Solidity version: " <> a <> b)
-                 . readAs)
-              (Text.splitOn "." (a <> b))
+          String "solidity" : xs ->
+            let
+              rangeText = mconcat [x | String x <- xs]
+            in
+              case parseSemVerRange rangeText of
+                Right r -> r
+                Left _ ->
+                  error ("failed to parse SemVer range " ++ show rangeText)
           x ->
             error ("unrecognized pragma: " ++ show x)
 

@@ -5,8 +5,8 @@
 , lens-aeson, megaparsec, memory, monad-par, mtl, multiset
 , operational, optparse-generic, process, QuickCheck
 , quickcheck-text, readline, regex-tdfa, restless-git, rosezipper
-, s-cargot, scientific, secp256k1, stdenv, tasty, tasty-hunit
-, tasty-quickcheck, temporary, text, text-format, time
+, s-cargot, scientific, secp256k1, semver-range, stdenv, tasty
+, tasty-hunit, tasty-quickcheck, temporary, text, text-format, time
 , transformers, tree-view, unordered-containers, vector, vty, wreq
 }:
 mkDerivation {
@@ -22,9 +22,9 @@ mkDerivation {
     cryptonite data-dword deepseq directory fgl filepath ghci-pretty
     haskeline lens lens-aeson megaparsec memory monad-par mtl multiset
     operational optparse-generic process QuickCheck quickcheck-text
-    readline restless-git rosezipper s-cargot scientific temporary text
-    text-format time transformers tree-view unordered-containers vector
-    vty wreq
+    readline restless-git rosezipper s-cargot scientific semver-range
+    temporary text text-format time transformers tree-view
+    unordered-containers vector vty wreq
   ];
   librarySystemDepends = [ secp256k1 ];
   executableHaskellDepends = [

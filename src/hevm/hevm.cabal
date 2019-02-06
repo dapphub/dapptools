@@ -105,6 +105,7 @@ library
     restless-git                      >= 0.7,
     rosezipper                        >= 0.2,
     scientific                        >= 0.3,
+    semver-range                      >= 0.2,
     s-cargot                          >= 0.1,
     temporary                         >= 1.2,
     text                              >= 1.2,
