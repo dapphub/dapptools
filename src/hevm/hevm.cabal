@@ -64,9 +64,9 @@ library
   extra-libraries:
     secp256k1
   c-sources:
-    ethjet/ethjet.c, ethjet/tinykeccak.c
+    ethjet/tinykeccak.c, ethjet/ethjet.c
   install-includes:
-    ethjet/ethjet.h, ethjet/tinykeccak.h
+    ethjet/tinykeccak.h, ethjet/ethjet.h
   build-depends:
     QuickCheck                        >= 2.9,
     abstract-par                      >= 0.3,
