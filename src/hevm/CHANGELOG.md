@@ -1,5 +1,9 @@
 # hevm changelog
 
+## 0.27 - 2019-02-06
+ - Fix [hevm flatten issue](https://github.com/dapphub/dapptools/issues/127)
+   related to SemVer ranges in Solidity version pragmas
+
 ## 0.26 - 2019-02-05
  - Format Solidity Error(string) messages in trace
 

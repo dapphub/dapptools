@@ -1,7 +1,7 @@
 name:
   hevm
 version:
-  0.26
+  0.27
 synopsis:
   Ethereum virtual machine evaluator
 description:
