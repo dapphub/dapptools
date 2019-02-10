@@ -12,7 +12,7 @@ stdenv.mkDerivation rec {
   checkPhase = "make test";
   makeFlags = ["prefix=$(out)"];
   postInstall = let path = lib.makeBinPath [
-    coreutils git gnused hevm jshon jq nix nodejs perl seth solc
+    coreutils git gnused hevm jshon jq nodejs perl seth solc
   ]; in ''
     wrapProgram "$out/bin/dapp" --prefix PATH : "${path}" \
       ${if glibcLocales != null then

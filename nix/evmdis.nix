@@ -1,6 +1,6 @@
-{ stdenv, lib, buildGo19Package, fetchFromGitHub }:
+{ stdenv, lib, buildGoPackage, fetchFromGitHub }:
 
-buildGo19Package rec {
+buildGoPackage rec {
   name = "evmdis-${version}";
   version = "0.20170616";
   goPackagePath = "github.com/Arachnid/evmdis";
