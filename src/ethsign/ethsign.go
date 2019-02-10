@@ -75,6 +75,19 @@ func main() {
 		}
 	}
 
+	backends := []accounts.Backend{ }
+
+	if ledgerhub, err := usbwallet.NewLedgerHub(); err != nil {
+		fmt.Fprintf(os.Stderr, "ethsign: failed to look for USB Ledgers")
+	} else {
+		backends = append(backends, ledgerhub)
+	}
+	if trezorhub, err := usbwallet.NewTrezorHub(); err != nil {
+		fmt.Fprintf(os.Stderr, "ethsign: failed to look for USB Trezors")
+	} else {
+		backends = append(backends, trezorhub)
+	}
+
 	app := cli.NewApp()
 	app.Name = "ethsign"
 	app.Usage = "sign Ethereum transactions using a JSON keyfile"
@@ -93,25 +106,12 @@ func main() {
 				},
 			},
 			Action: func(c *cli.Context) error {
-				backends := []accounts.Backend{}
-
 				paths := c.StringSlice("key-store")
 
 				for _, x := range(paths) {
 					ks := keystore.NewKeyStore(
 						x, keystore.StandardScryptN, keystore.StandardScryptP)
 					backends = append(backends, ks)
-				}
-
-				if ledgerhub, err := usbwallet.NewLedgerHub(); err != nil {
-					fmt.Fprintf(os.Stderr, "ethsign: failed to look for USB Ledgers")
-				} else {
-					backends = append(backends, ledgerhub)
-				}
-				if trezorhub, err := usbwallet.NewTrezorHub(); err != nil {
-					fmt.Fprintf(os.Stderr, "ethsign: failed to look for USB Trezors")
-				} else {
-					backends = append(backends, trezorhub)
 				}
 
 				manager := accounts.NewManager(backends...)
@@ -232,25 +232,12 @@ func main() {
 				}
 				data := hexutil.MustDecode(dataString)
 
-				backends := []accounts.Backend{ }
-				
 				paths := c.StringSlice("key-store")
 
 				for _, x := range(paths) {
 					ks := keystore.NewKeyStore(
 						x, keystore.StandardScryptN, keystore.StandardScryptP)
 					backends = append(backends, ks)
-				}
-
-				if ledgerhub, err := usbwallet.NewLedgerHub(); err != nil {
-					fmt.Fprintf(os.Stderr, "ethsign: failed to look for USB Ledgers")
-				} else {
-					backends = append(backends, ledgerhub)
-				}
-				if trezorhub, err := usbwallet.NewTrezorHub(); err != nil {
-					fmt.Fprintf(os.Stderr, "ethsign: failed to look for USB Trezors")
-				} else {
-					backends = append(backends, trezorhub)
 				}
 
 				manager := accounts.NewManager(backends...)
@@ -389,25 +376,12 @@ func main() {
 				}
 				data := hexutil.MustDecode(dataString)
 
-				backends := []accounts.Backend{ }
-				
 				paths := c.StringSlice("key-store")
 
 				for _, x := range(paths) {
 					ks := keystore.NewKeyStore(
 						x, keystore.StandardScryptN, keystore.StandardScryptP)
 					backends = append(backends, ks)
-				}
-
-				if ledgerhub, err := usbwallet.NewLedgerHub(); err != nil {
-					fmt.Fprintf(os.Stderr, "ethsign: failed to look for USB Ledgers")
-				} else {
-					backends = append(backends, ledgerhub)
-				}
-				if trezorhub, err := usbwallet.NewTrezorHub(); err != nil {
-					fmt.Fprintf(os.Stderr, "ethsign: failed to look for USB Trezors")
-				} else {
-					backends = append(backends, trezorhub)
 				}
 
 				manager := accounts.NewManager(backends...)
