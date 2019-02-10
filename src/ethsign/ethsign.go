@@ -17,7 +17,7 @@ import (
 	"strings"
 	"syscall"
 	"runtime"
-	
+
 	"gopkg.in/urfave/cli.v1"
 
 	"golang.org/x/crypto/ssh/terminal"
@@ -138,7 +138,7 @@ func main() {
 						}
 					}
 				}
-				
+
 				return nil
 			},
 		},
@@ -211,7 +211,7 @@ func main() {
 				}
 
 				create := c.Bool("create")
-				
+
 				if (c.String("to") == "" && !create) || (c.String("to") != "" && create) {
 					return cli.NewExitError("ethsign: need exactly one of --to or --create", 1)
 				}
@@ -312,7 +312,7 @@ func main() {
 						if err != nil {
 							return cli.NewExitError("ethsign: failed to read passphrase file", 1)
 						}
-						
+
 						passphrase = strings.TrimSuffix(string(passphraseFile), "\n")
 					} else {
 						fmt.Fprintf(os.Stderr, "Ethereum account passphrase (not echoed): ")
@@ -601,6 +601,6 @@ func main() {
 			},
 		},
 	}
-	
+
 	app.Run(os.Args)
 }
