@@ -56,6 +56,7 @@ func recover(data []byte, sig hexutil.Bytes) (common.Address, error) {
 }
 
 func main() {
+	var defaultHDPath = "m/44'/60'/0'"  // aka "ledger legacy"
 	var defaultKeyStores cli.StringSlice
 	if runtime.GOOS == "darwin" {
 		defaultKeyStores = []string{
@@ -104,6 +105,12 @@ func main() {
 					EnvVar: "ETH_KEYSTORE",
 					Value: &defaultKeyStores,
 				},
+				cli.StringFlag{
+					Name: "hd-path",
+					Usage: "hd derivation path",
+					EnvVar: "ETH_HDPATH",
+					Value: defaultHDPath,
+				},
 			},
 			Action: func(c *cli.Context) error {
 				paths := c.StringSlice("key-store")
@@ -124,7 +131,7 @@ func main() {
 					} else if x.URL().Scheme == "ledger" {
 						x.Open("")
 						for j := 0; j <= 3; j++ {
-							pathstr := fmt.Sprintf("m/44'/60'/0'/%d", j)
+							pathstr := fmt.Sprintf(c.String("hd-path") + "/%d", j)
 							path, _ := accounts.ParseDerivationPath(pathstr)
 							z, err := x.Derive(path, false)
 							if err != nil {
@@ -150,6 +157,12 @@ func main() {
 					Usage: "path to key store",
 					EnvVar: "ETH_KEYSTORE",
 					Value: &defaultKeyStores,
+				},
+				cli.StringFlag{
+					Name: "hd-path",
+					Usage: "hd derivation path",
+					EnvVar: "ETH_HDPATH",
+					Value: defaultHDPath,
 				},
 				cli.BoolFlag{
 					Name: "create",
@@ -260,7 +273,7 @@ func main() {
 					} else if x.URL().Scheme == "ledger" {
 						x.Open("")
 						for j := 0; j <= 3; j++ {
-							pathstr := fmt.Sprintf("m/44'/60'/0'/%d", j)
+							pathstr := fmt.Sprintf(c.String("hd-path") + "/%d", j)
 							path, _ := accounts.ParseDerivationPath(pathstr)
 							y, err := x.Derive(path, true)
 							if err != nil {
@@ -344,6 +357,12 @@ func main() {
 					Value: &defaultKeyStores,
 				},
 				cli.StringFlag{
+					Name: "hd-path",
+					Usage: "hd derivation path",
+					EnvVar: "ETH_HDPATH",
+					Value: defaultHDPath,
+				},
+				cli.StringFlag{
 					Name:   "from",
 					Usage:  "address of signing account",
 					EnvVar: "ETH_FROM",
@@ -405,7 +424,7 @@ func main() {
 					} else if x.URL().Scheme == "ledger" {
 						x.Open("")
 						for j := 0; j <= 3; j++ {
-							pathstr := fmt.Sprintf("m/44'/60'/0'/%d", j)
+							pathstr := fmt.Sprintf(c.String("hd-path") + "/%d", j)
 							path, _ := accounts.ParseDerivationPath(pathstr)
 							y, err := x.Derive(path, true)
 							if err != nil {
