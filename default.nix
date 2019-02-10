@@ -1,4 +1,8 @@
-{ system ? null , ... }:
+{
+  system ? null,
+  android ? false,
+  ...
+}:
 let
   version = "6a0d2ff7c1d024914a3570b85f1c88df8930b471";
   # Import a specific Nixpkgs revision to use as the base for our overlay.
@@ -10,7 +14,11 @@ let
 in
   # Now return the Nixpkgs configured to use our overlay.
   import nixpkgs (
-    { overlays = [(import ./overlay.nix)]; }
-    // (if system != null then { inherit system; } else {})
+    {
+      overlays = [
+        (import ./overlay.nix)
+      ] ++ (if android then [(import ./overlay-android.nix)] else []);
+    } // (
+      if system != null then { inherit system; } else {}
+    )
   )
-
