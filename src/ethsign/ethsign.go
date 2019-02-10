@@ -74,11 +74,11 @@ func main() {
 			os.Getenv("HOME") + "/.local/share/io.parity.ethereum/keys/ethereum",
 		}
 	}
-	
+
 	app := cli.NewApp()
 	app.Name = "ethsign"
 	app.Usage = "sign Ethereum transactions using a JSON keyfile"
-	app.Version = "0.10"
+	app.Version = "0.11"
 	app.Commands = []cli.Command {
 		cli.Command {
 			Name: "list-accounts",
