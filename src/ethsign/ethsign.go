@@ -89,17 +89,14 @@ func main() {
 					Name: "key-store",
 					Usage: "path to key store",
 					EnvVar: "ETH_KEYSTORE",
+					Value: &defaultKeyStores,
 				},
 			},
 			Action: func(c *cli.Context) error {
 				backends := []accounts.Backend{}
 
-				var paths []string
-				if len(c.StringSlice("key-store")) == 0 {
-					paths = defaultKeyStores
-				} else {
-					paths = c.StringSlice("key-store")
-				}
+				paths := c.StringSlice("key-store")
+
 				for _, x := range(paths) {
 					ks := keystore.NewKeyStore(
 						x, keystore.StandardScryptN, keystore.StandardScryptP)
@@ -152,6 +149,7 @@ func main() {
 					Name: "key-store",
 					Usage: "path to key store",
 					EnvVar: "ETH_KEYSTORE",
+					Value: &defaultKeyStores,
 				},
 				cli.BoolFlag{
 					Name: "create",
@@ -227,21 +225,17 @@ func main() {
 				gasLimit := math.MustParseUint64(c.String("gas-limit"))
 				value := math.MustParseBig256(c.String("value"))
 				chainID := math.MustParseBig256(c.String("chain-id"))
-				
+
 				dataString := c.String("data")
 				if dataString == "" {
 					dataString = "0x"
 				}
 				data := hexutil.MustDecode(dataString)
-				
-				backends := []accounts.Backend{ }
 
-				var paths []string
-				if len(c.StringSlice("key-store")) == 0 {
-					paths = defaultKeyStores
-				} else {
-					paths = c.StringSlice("key-store")
-				}
+				backends := []accounts.Backend{ }
+				
+				paths := c.StringSlice("key-store")
+
 				for _, x := range(paths) {
 					ks := keystore.NewKeyStore(
 						x, keystore.StandardScryptN, keystore.StandardScryptP)
@@ -360,6 +354,7 @@ func main() {
 					Name:   "key-store",
 					Usage:  "path to key store",
 					EnvVar: "ETH_KEYSTORE",
+					Value: &defaultKeyStores,
 				},
 				cli.StringFlag{
 					Name:   "from",
@@ -395,13 +390,9 @@ func main() {
 				data := hexutil.MustDecode(dataString)
 
 				backends := []accounts.Backend{ }
+				
+				paths := c.StringSlice("key-store")
 
-				var paths []string
-				if len(c.StringSlice("key-store")) == 0 {
-					paths = defaultKeyStores
-				} else {
-					paths = c.StringSlice("key-store")
-				}
 				for _, x := range(paths) {
 					ks := keystore.NewKeyStore(
 						x, keystore.StandardScryptN, keystore.StandardScryptP)
