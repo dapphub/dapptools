@@ -120,7 +120,7 @@ in rec {
     propagatedBuildInputs =
       stdenv.lib.optionals stdenv.isDarwin
         (with self.pkgs; [ darwin.libobjc darwin.apple_sdk.frameworks.IOKit ]);
-  })).override { buildGoPackage = super.buildGoPackage; };
+  })).override { buildGoPackage = super.buildGo110Package; };
 
   # We use this to run private testnets without
   # the pesky transaction size limit.
