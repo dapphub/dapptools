@@ -15,15 +15,17 @@ import Data.SCargot
 import Data.SCargot.Language.HaskLike
 import Data.SCargot.Repr
 import Data.SCargot.Repr.Basic
+import Data.Set (Set)
 import Data.Text (Text, pack, unpack)
 import EVM
 import EVM.Concrete
 import EVM.Dapp
 import EVM.Debug (srcMapCodePos)
 import EVM.Fetch (Fetcher)
+import EVM.Op
 import EVM.Solidity
 import EVM.Stepper (Stepper)
-import EVM.TTY (currentSrcMap)
+import EVM.TTY (currentSrcMap, showPc)
 import EVM.Types
 import EVM.UnitTest hiding (interpret)
 import Prelude hiding (Word)
@@ -31,7 +33,10 @@ import System.Directory
 import System.IO
 import qualified Control.Monad.Operational as Operational
 import qualified Data.ByteString as BS
+import qualified Data.List as List
 import qualified Data.Map as Map
+import qualified Data.Set as Set
+import qualified Data.Vector as Vector
 import qualified EVM.Fetch as Fetch
 import qualified EVM.Stepper as Stepper
 
@@ -44,6 +49,7 @@ data UiVmState = UiVmState
   , _uiVmFirstState   :: UiVmState
   , _uiVmFetcher      :: Fetcher
   , _uiVmMessage      :: Maybe Text
+  , _uiVmSentHashes   :: Set W256
   }
 
 makeLenses ''UiVmState
@@ -156,6 +162,7 @@ interpret mode =
           vm0 <- use uiVm
           let (r, vm1) = runState m vm0
           modify (flip updateUiVmState vm1)
+          modify updateSentHashes
           interpret mode (k r)
 
         -- Stepper wants to emit a message.
@@ -178,6 +185,11 @@ stepOneOpcode ui =
 updateUiVmState :: UiVmState -> VM -> UiVmState
 updateUiVmState ui vm =
   ui & set uiVm vm
+
+updateSentHashes :: UiVmState -> UiVmState
+updateSentHashes ui =
+  let sent = allHashes (view uiVm ui) in
+    ui & set uiVmSentHashes sent
 
 type Sexp = WellFormedSExpr HaskLikeAtom
 
@@ -298,15 +310,31 @@ atFileLine dapp wantedFileName wantedLineNumber vm =
             currentFileName == wantedFileName &&
               currentLineNumber == wantedLineNumber
 
+codeByHash :: W256 -> VM -> Maybe ByteString
+codeByHash h vm = do
+  let cs = view (env . contracts) vm
+  c <- List.find (\c -> h == (view codehash c)) (Map.elems cs)
+  return (view bytecode c)
+
+allHashes :: VM -> Set W256
+allHashes vm = let cs = view (env . contracts) vm
+  in Set.fromList ((view codehash) <$> Map.elems cs)
+
+prettifyCode :: ByteString -> String
+prettifyCode b = List.intercalate "\n" (opString <$> (Vector.toList (EVM.mkCodeOps b)))
+
 outputVm :: Console ()
 outputVm = do
   UiVm s <- get
-  let
-    noMap =
-      output $
+  let vm = view uiVm s
+      sendHashes = Set.difference (allHashes vm) (view uiVmSentHashes s)
+      sendCodes = Map.fromSet (`codeByHash` vm) sendHashes
+      noMap =
+        output $
         L [ A "step"
-        , L [A ("vm" :: Text), sexp (view uiVm s)]]
-
+          , L [A ("vm" :: Text), sexp (view uiVm s)]
+          , L [A ("newCodes" :: Text), sexp ((fmap prettifyCode) <$> sendCodes)]
+          ]
   fromMaybe noMap $ do
     dapp <- view uiVmDapp s
     sm <- currentSrcMap dapp (view uiVm s)
@@ -320,6 +348,7 @@ outputVm = do
             , A (txt (srcMapLength sm))
             , A (txt (srcMapJump sm))
             ]
+        , L [A ("newCodes" :: Text), sexp ((fmap prettifyCode) <$> sendCodes)]
         ]
 
 
@@ -452,6 +481,10 @@ instance SDisplay FrameState where
 instance SDisplay a => SDisplay [a] where
   sexp = L . map sexp
 
+-- this overlaps the neighbouring [a] instance
+instance {-# OVERLAPPING #-} SDisplay String where
+  sexp x = A (txt x)
+
 instance SDisplay Word where
   sexp (C Dull x) = A (quoted (txt x))
   sexp (C (FromKeccak bs) x) =
@@ -500,6 +533,7 @@ initialStateForTest opts@(UnitTestOptions {..}) dapp (contractPath, testName) =
         , _uiVmFirstState   = undefined
         , _uiVmFetcher      = oracle
         , _uiVmMessage      = Nothing
+        , _uiVmSentHashes   = Set.empty
         }
     Just testContract =
       view (dappSolcByName . at contractPath) dapp
@@ -507,3 +541,81 @@ initialStateForTest opts@(UnitTestOptions {..}) dapp (contractPath, testName) =
       initialUnitTestVm opts testContract (Map.elems (view dappSolcByName dapp))
     ui1 =
       updateUiVmState ui0 vm0 & set uiVmFirstState ui1
+
+opString :: (Integral a, Show a) => (a, Op) -> String
+opString (i, o) = (showPc i <> " ") ++ case o of
+  OpStop -> "STOP"
+  OpAdd -> "ADD"
+  OpMul -> "MUL"
+  OpSub -> "SUB"
+  OpDiv -> "DIV"
+  OpSdiv -> "SDIV"
+  OpMod -> "MOD"
+  OpSmod -> "SMOD"
+  OpAddmod -> "ADDMOD"
+  OpMulmod -> "MULMOD"
+  OpExp -> "EXP"
+  OpSignextend -> "SIGNEXTEND"
+  OpLt -> "LT"
+  OpGt -> "GT"
+  OpSlt -> "SLT"
+  OpSgt -> "SGT"
+  OpEq -> "EQ"
+  OpIszero -> "ISZERO"
+  OpAnd -> "AND"
+  OpOr -> "OR"
+  OpXor -> "XOR"
+  OpNot -> "NOT"
+  OpByte -> "BYTE"
+  OpShl -> "SHL"
+  OpShr -> "SHR"
+  OpSar -> "SAR"
+  OpSha3 -> "SHA3"
+  OpAddress -> "ADDRESS"
+  OpBalance -> "BALANCE"
+  OpOrigin -> "ORIGIN"
+  OpCaller -> "CALLER"
+  OpCallvalue -> "CALLVALUE"
+  OpCalldataload -> "CALLDATALOAD"
+  OpCalldatasize -> "CALLDATASIZE"
+  OpCalldatacopy -> "CALLDATACOPY"
+  OpCodesize -> "CODESIZE"
+  OpCodecopy -> "CODECOPY"
+  OpGasprice -> "GASPRICE"
+  OpExtcodesize -> "EXTCODESIZE"
+  OpExtcodecopy -> "EXTCODECOPY"
+  OpReturndatasize -> "RETURNDATASIZE"
+  OpReturndatacopy -> "RETURNDATACOPY"
+  OpExtcodehash -> "EXTCODEHASH"
+  OpBlockhash -> "BLOCKHASH"
+  OpCoinbase -> "COINBASE"
+  OpTimestamp -> "TIMESTAMP"
+  OpNumber -> "NUMBER"
+  OpDifficulty -> "DIFFICULTY"
+  OpGaslimit -> "GASLIMIT"
+  OpPop -> "POP"
+  OpMload -> "MLOAD"
+  OpMstore -> "MSTORE"
+  OpMstore8 -> "MSTORE8"
+  OpSload -> "SLOAD"
+  OpSstore -> "SSTORE"
+  OpJump -> "JUMP"
+  OpJumpi -> "JUMPI"
+  OpPc -> "PC"
+  OpMsize -> "MSIZE"
+  OpGas -> "GAS"
+  OpJumpdest -> "JUMPDEST"
+  OpCreate -> "CREATE"
+  OpCall -> "CALL"
+  OpStaticcall -> "STATICCALL"
+  OpCallcode -> "CALLCODE"
+  OpReturn -> "RETURN"
+  OpDelegatecall -> "DELEGATECALL"
+  OpCreate2 -> "CREATE2"
+  OpSelfdestruct -> "SELFDESTRUCT"
+  OpDup x -> "DUP" ++ show x
+  OpSwap x -> "SWAP" ++ show x
+  OpLog x -> "LOG" ++ show x
+  OpPush x -> "PUSH " ++ show x
+  OpRevert -> "REVERT"
+  OpUnknown x -> "UNKNOWN " ++ show x

@@ -125,6 +125,21 @@ and send it as input.")
   '(("q" . quit-window))
   :group 'hevm)
 
+(defun hevm-get-bytecode-buffer (codehash)
+  (let ((buffer (get-buffer-create (format "*hevm bytecode %s*" codehash))))
+    (with-current-buffer buffer
+      (when (equal 0 (buffer-size buffer))
+        (insert "(no bytecode)")))
+    buffer))
+
+(defun hevm-add-bytecode-buffers (codes)
+  (dolist (item codes)
+    (let ((codehash (car item))
+          (code (cadr item)))
+      (with-current-buffer (hevm-get-bytecode-buffer codehash)
+        (delete-region (point-min) (point-max))
+        (insert (format "%s" code))))))
+
 (defun hevm-output-filter (string)
   "Hook for the Hevm process output."
   ;; Does the readline prompt occur in the output?
@@ -152,7 +167,8 @@ and send it as input.")
      (run-with-idle-timer 0 nil #'hevm-run-test))
 
     ;; Incoming new VM step information.
-    (`(step (vm ,vm) (file ,file) (srcmap ,offset ,length ,jump-type))
+    (`(step (vm ,vm) (file ,file) (srcmap ,offset ,length ,jump-type) (newCodes ,new-codes))
+     (hevm-add-bytecode-buffers new-codes)
      (hevm-update vm)
      (find-file-read-only (concat hevm-root file))
      (hevm-debug-mode)
@@ -162,13 +178,15 @@ and send it as input.")
      (when hevm-should-setup
        (setq hevm-should-setup nil)
        (delete-other-windows)
-       (split-window)
+       (select-window (split-window nil -10 'above))
        (switch-to-buffer hevm-stack-buffer)
-       (fit-window-to-buffer)
-       (other-window 1)))
+       (select-window (split-window nil nil 'right))
+       (generate-new-buffer "*hevm bytecode placeholder*")
+       (other-window -2)))
 
     ;; Incoming new VM step information without srcmap
-    (`(step (vm ,vm))
+    (`(step (vm ,vm) (newCodes ,new-codes))
+     (hevm-add-bytecode-buffers new-codes)
      (hevm-update vm)
      (hevm-highlight-source-region 0 0 'JumpRegular)
      (message "No srcmap!"))
@@ -219,21 +237,40 @@ and send it as input.")
 		 `((weight . "bold")
 		   (background-color . ,color)))))
 
+(defun hevm-get-current-codehash (vm)
+  (let* ((contracts     (cadr (assoc 'contracts vm)))
+         (state         (cadr (assoc 'state vm)))
+         (code-contract (cadr (assoc 'code-contract state)))
+         (contract      (cadr (assoc code-contract contracts)))
+         (codehash      (cadr (assoc 'codehash contract))))
+    codehash))
+
 (defun hevm-update (vm)
-  "Use a new EVM state and update live buffers like the stack viewer."
+  "Use a new EVM state and update live buffers like the stack viewer and bytecode viewer."
   (setq hevm-vm vm)
   (setq hevm-stack-buffer (get-buffer-create "*hevm stack*"))
+  (setq hevm-bytecode-buffer (get-buffer-create "*hevm bytecode*"))
   (let* ((state (cadr (assoc 'state hevm-vm)))
-	 (stack (cadr (assoc 'stack state))))
+	 (stack (cadr (assoc 'stack state)))
+         (pc    (cadr (assoc 'pc state)))
+         (bytecode-buffer (hevm-get-bytecode-buffer (hevm-get-current-codehash vm))))
     (with-current-buffer hevm-stack-buffer
       (delete-region (point-min) (point-max))
       (let ((i 1))
 	(dolist (word stack)
 	  (insert (format "(%S) %S\n" i word))
-	  (setf i (+ i 1))))
-      (fit-window-to-buffer
-       (get-buffer-window hevm-stack-buffer)
-       16 6))))
+	  (setf i (+ i 1)))))
+    (when (get-buffer-window hevm-stack-buffer)
+      (with-selected-window (get-buffer-window hevm-stack-buffer)
+        ;; find the previous bytecode window
+        (other-window 1)
+        ;; point it to the current bytecode
+        (switch-to-buffer bytecode-buffer)
+        (beginning-of-buffer)
+        ;; find the line with the pc
+        (search-forward (format "%02x " pc) nil t nil)
+        (beginning-of-line)
+        (recenter)))))
 
 (defun hevm-browse-contracts ()
   "Open a buffer that lists all the contracts in the current EVM.
