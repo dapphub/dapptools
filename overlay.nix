@@ -80,7 +80,7 @@ in rec {
     super.lib.mapAttrs
       (_: value: self.callPackage value {})
       (import ./nix/solc/versions.nix);
-  solc = solc-versions.solc_0_5_3;
+  solc = solc-versions.solc_0_5_4;
 
   hevm = self.pkgs.haskell.lib.justStaticExecutables self.haskellPackages.hevm;
 
