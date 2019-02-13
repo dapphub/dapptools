@@ -4,7 +4,7 @@
 {-# Language JavaScriptFFI #-}
 #endif
 
-module EVM.Keccak (keccak, abiKeccak, newContractAddress) where
+module EVM.Keccak (word256Bytes, keccak, abiKeccak, newContractAddress, newContractAddressCREATE2) where
 
 import EVM.Types
 
@@ -48,6 +48,12 @@ keccakBytes =
 #endif
 
 keccakBytes :: ByteString -> ByteString
+
+word256Bytes :: W256 -> ByteString
+word256Bytes x = BS.pack [byteAt x (31 - i) | i <- [0..31]]
+
+word160Bytes :: Addr -> ByteString
+word160Bytes x = BS.pack [byteAt (addressWord160 x) (19 - i) | i <- [0..19]]
 
 word32 :: [Word8] -> Word32
 word32 xs = sum [ fromIntegral x `shiftL` (8*n)
@@ -100,3 +106,7 @@ newContractAddress :: Addr -> W256 -> Addr
 newContractAddress a n =
   fromIntegral
     (keccak $ rlpList [rlpWord160 a, rlpWord256 n])
+
+newContractAddressCREATE2 :: Addr -> W256 -> ByteString -> Addr
+newContractAddressCREATE2 a s b =
+  fromIntegral (keccak $ BS.cons (fromIntegral (0xff :: Integer)) (BS.concat $ [word160Bytes a, word256Bytes $ num s, word256Bytes $ keccak b]))

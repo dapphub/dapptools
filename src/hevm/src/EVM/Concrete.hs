@@ -7,8 +7,8 @@ module EVM.Concrete where
 import Prelude hiding (Word, (^))
 
 import EVM.Types (W256 (..), num, toWord512, fromWord512)
-import EVM.Types (word, padRight, byteAt)
-import EVM.Keccak (keccak)
+import EVM.Types (word, padRight)
+import EVM.Keccak (keccak, word256Bytes)
 
 import Control.Lens    ((^?), ix)
 import Data.Bits       (Bits (..), FiniteBits (..))
@@ -23,9 +23,6 @@ import qualified Data.ByteString as BS
 wordAt :: Int -> ByteString -> W256
 wordAt i bs =
   word (padRight 32 (BS.drop i bs))
-
-word256Bytes :: W256 -> ByteString
-word256Bytes x = BS.pack [byteAt x (31 - i) | i <- [0..31]]
 
 readByteOrZero :: Int -> ByteString -> Word8
 readByteOrZero i bs = fromMaybe 0 (bs ^? ix i)
