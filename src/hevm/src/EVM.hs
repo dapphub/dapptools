@@ -806,53 +806,9 @@ exec1 = do
           notStatic $
           case stk of
             (xValue:xOffset:xSize:xs) ->
-              burn g_create $ do
-                accessMemoryRange fees xOffset xSize $ do
-                  if xValue > view balance this
-                    then do
-                      assign (state . stack) (0 : xs)
-                      next
-                    else do
-                      let
-                        newAddr =
-                          newContractAddress self (wordValue (view nonce this))
-                      case view execMode vm of
-                        ExecuteAsVMTest -> do
-                          assign (state . stack) (num newAddr : xs)
-                          next
-
-                        ExecuteNormally -> do
-                          let
-                            newCode =
-                              readMemory (num xOffset) (num xSize) vm
-                            newContract =
-                              initialContract newCode
-                            newContext  =
-                              CreationContext (view codehash newContract)
-
-                          zoom (env . contracts) $ do
-                            assign (at newAddr) (Just newContract)
-                            assign (ix newAddr . balance) xValue
-                            modifying (ix self . balance) (flip (-) xValue)
-                            modifying (ix self . nonce) succ
-
-                          pushTrace (FrameTrace newContext)
-                          next
-                          vm' <- get
-                          pushTo frames $ Frame
-                            { _frameContext = newContext
-                            , _frameState   = (set stack xs) (view state vm')
-                            }
-
-                          assign state $
-                            blankState
-                              & set contract   newAddr
-                              & set codeContract newAddr
-                              & set code       newCode
-                              & set callvalue  xValue
-                              & set caller     self
-                              & set gas        (view (state . gas) vm')
-
+              burn g_create $ let
+              newAddr = newContractAddress self (wordValue (view nonce this)) in
+              create vm self this fees xValue xOffset xSize xs newAddr
             _ -> underrun
 
         -- op: CALL
@@ -930,7 +886,14 @@ exec1 = do
             _ -> underrun
 
         -- op: CREATE2
-        0xf5 -> error "CREATE2 not implemented"
+        0xf5 -> notStatic $
+          case stk of
+            (xValue:xOffset:xSize:xSalt:xs) ->
+              burn (g_create + g_sha3word * ceilDiv (num xSize) 32) $ let
+                initcode = readMemory (num xOffset) (num xSize) vm
+                newAddr  = newContractAddressCREATE2 self (num xSalt) initcode in
+                  create vm self this fees xValue xOffset xSize xs newAddr
+            _ -> underrun
 
         -- op: STATICCALL
         0xfa ->
@@ -1080,20 +1043,66 @@ accessStorage addr slot continue =
       touchAccount addr $ \_ ->
         accessStorage addr slot continue
 
+create :: (?op :: Word8)
+  => VM -> Addr -> Contract
+  -> FeeSchedule Word
+  -> Word -> Word -> Word -> [Word] -> Addr -> EVM ()
+create vm self this fees xValue xOffset xSize xs newAddr =
+  accessMemoryRange fees xOffset xSize $ do
+  if xValue > view balance this
+    then do
+      assign (state . stack) (0 : xs)
+      next
+    else do
+      case view execMode vm of
+        ExecuteAsVMTest -> do
+          assign (state . stack) (num newAddr : xs)
+          next
+
+        ExecuteNormally -> do
+          let
+            newCode =
+              readMemory (num xOffset) (num xSize) vm
+            newContract =
+              initialContract newCode
+            newContext  =
+              CreationContext (view codehash newContract)
+
+          zoom (env . contracts) $ do
+            assign (at newAddr) (Just newContract)
+            assign (ix newAddr . balance) xValue
+            modifying (ix self . balance) (flip (-) xValue)
+            modifying (ix self . nonce) succ
+
+          pushTrace (FrameTrace newContext)
+          next
+          vm' <- get
+          pushTo frames $ Frame
+            { _frameContext = newContext
+            , _frameState   = (set stack xs) (view state vm')
+            }
+
+          assign state $
+            blankState
+              & set contract   newAddr
+              & set codeContract newAddr
+              & set code       newCode
+              & set callvalue  xValue
+              & set caller     self
+              & set gas        (view (state . gas) vm')
+
+
 -- | Replace a contract's code, like when CREATE returns
 -- from the constructor code.
 replaceCode :: Addr -> ByteString -> EVM ()
 replaceCode target newCode = do
   zoom (env . contracts . at target) $ do
-    if BS.null newCode
-      then put Nothing
-      else do
-        Just now <- get
-        put . Just $
-          initialContract newCode
-            & set storage (view storage now)
-            & set balance (view balance now)
-            & set nonce   (view nonce now)
+    Just now <- get
+    put . Just $
+      initialContract newCode
+      & set storage (view storage now)
+      & set balance (view balance now)
+      & set nonce   (view nonce now)
 
 replaceCodeOfSelf :: ByteString -> EVM ()
 replaceCodeOfSelf newCode = do
