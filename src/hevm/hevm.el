@@ -266,9 +266,9 @@ and send it as input.")
         (other-window 1)
         ;; point it to the current bytecode
         (switch-to-buffer bytecode-buffer)
-        (beginning-of-buffer)
-        ;; find the line with the pc
-        (search-forward (format "%02x " pc) nil t nil)
+        ;; find the line with the pc (optimised search)
+        (if (not (search-forward (format "%02x " pc) nil t nil))
+            (search-backward (format "%02x " pc) nil t nil))
         (beginning-of-line)
         (recenter)))))
 
