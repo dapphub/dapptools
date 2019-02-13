@@ -152,7 +152,10 @@ and send it as input.")
 	(let ((have-something-to-do (looking-at comint-prompt-regexp)))
 	  (when have-something-to-do
 	    (forward-line 1)
-	    (hevm-handle-output (read hevm-buffer))))))
+            (save-excursion
+	      (hevm-handle-output (read hevm-buffer)))
+            (kill-sexp)
+            (insert "[redacted]")))))
     (hevm-follow-plan)
     (comint-next-prompt 1)))
 
