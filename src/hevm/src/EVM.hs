@@ -630,7 +630,18 @@ exec1 = do
             _ -> underrun
 
         -- op: EXTCODEHASH
-        0x3f -> error "EXTCODEHASH not implemented"
+        0x3f ->
+          case stk of
+            (x:xs) -> do
+              burn g_extcodehash $ do
+                next
+                assign (state . stack) xs
+                preuse (env . contracts . ix (num x)) >>=
+                  \case
+                    Nothing -> push (num (0 :: Int))
+                    Just c  -> push (num (extcodehash c))
+            [] ->
+              underrun
 
         -- op: BLOCKHASH
         0x40 -> do
@@ -1142,6 +1153,8 @@ refund n = do
   self <- use (state . contract)
   pushTo (tx . refunds) (self, n)
 
+extcodehash :: Contract -> W256
+extcodehash c = keccak (view bytecode c)
 
 -- * Cheat codes
 
