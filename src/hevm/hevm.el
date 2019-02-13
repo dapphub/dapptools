@@ -33,6 +33,9 @@
 (defvar hevm-stack-buffer nil
   "Buffer that displays the current VM's word stack.")
 
+(defvar hevm-waiting nil
+  "Are we waiting for the previous command to finish?")
+
 (defvar hevm-plan '()
   "When the next prompt is ready, we pop the head of this list
 and send it as input.")
@@ -67,6 +70,7 @@ and send it as input.")
   (let ((buffer (get-buffer-create "*hevm*")))
     (setq hevm-plan
           `((load-dapp ,(expand-file-name root) ,(expand-file-name json-file))))
+    (setq hevm-waiting t)
     (make-comint-in-buffer "Hevm" buffer (hevm-get-executable-path) nil "emacs")
     (with-current-buffer buffer (hevm-mode))
     (setq hevm-buffer buffer)
@@ -80,10 +84,13 @@ and send it as input.")
 
 (defun hevm-send (input)
   "Send a command to the Hevm process."
-  (with-current-buffer hevm-buffer
-    (goto-char (point-max))
-    (insert (prin1-to-string input))
-    (comint-send-input nil t)))
+  (if hevm-waiting
+      (push input hevm-plan)
+    (with-current-buffer hevm-buffer
+      (goto-char (point-max))
+      (insert (prin1-to-string input))
+      (setq hevm-waiting t)
+      (comint-send-input nil t))))
 
 (defmacro hevm-define-command (name help command)
   "Define a simple Hevm command-sending function."
@@ -145,6 +152,7 @@ and send it as input.")
   ;; Does the readline prompt occur in the output?
   ;; If so, we should process all the output before it.
   (when (string-match comint-prompt-regexp string)
+    (setq hevm-waiting nil)
     (save-excursion
       (with-current-buffer hevm-buffer
 	(comint-previous-prompt 1)
@@ -155,9 +163,9 @@ and send it as input.")
             (save-excursion
 	      (hevm-handle-output (read hevm-buffer)))
             (kill-sexp)
-            (insert "[redacted]")))))
-    (hevm-follow-plan)
-    (comint-next-prompt 1)))
+            (insert ";; [redacted]"))))))
+  (hevm-follow-plan)
+  (comint-next-prompt 1))
 
 (defun hevm-handle-output (thing)
   "React to a Hevm process output s-expression."
