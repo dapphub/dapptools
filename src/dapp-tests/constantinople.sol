@@ -8,29 +8,36 @@ contract DeadCode{
 
 contract ConstantinopleTests is DSTest {
 
+    ConstantinopleTests notmuch;
+    // this 5 byte-long initcode simply returns nothing
+    // PUSH1  00     PUSH1  00     RETURN
+    // 60     00     60     00     f3
+    bytes32 zerocode        = 0x60006000f3000000000000000000000000000000000000000000000000000000;
     // this 13 byte-long initcode simply returns 0xdeadbeef:
-    // PUSH4  de     ad     be     ef     PUSH1  00     MSTORE PUSH1  04     PUSH1  00     RETURN
-    // 63     de     ad     be     ef     60     00     52     60     04     60     00     f3
-    bytes32 deadcode        = 0x63deadbeef60005260046000f300000000000000000000000000000000000000;
+    // PUSH4  de     ad     be     ef     PUSH1  00     MSTORE PUSH1  32     PUSH1  00     RETURN
+    // 63     de     ad     be     ef     60     00     52     60     20     60     00     f3
+    bytes32 deadcode        = 0x63deadbeef60005260206000f300000000000000000000000000000000000000;
     // this 25 byte-long initcode returns deadcode (but without the padding)
     // PUSH1  0d     PUSH1  0c     PUSH1  00     CODECO PUSH1  0d     PUSH1  00     RETURN deadcode
     // 60     0d     60     0c     60     00     39     60     0d     60     00     f3
-    bytes32 deploysdeadcode = 0x600d600c600039600d6000f363deadbeef60005260046000f300000000000000;
+    bytes32 deploysdeadcode = 0x600d600c600039600d6000f363deadbeef60005260206000f300000000000000;
 
     // EXTCODEHASH of non-existent account is 0
     function test_extcodehash_1() public {
         uint256 h;
         assembly {
-            h := extcodehash(0x0)
+            h := extcodehash(0x10)
         }
         assertEq(h, 0);
     }
-    // EXTCODEHASH of account with code 0x0 is 0
+    // EXTCODEHASH of account with no code is keccak256("")
     function test_extcodehash_2() public {
         address a;
         uint256 h;
         assembly {
-            a := create(0, 0, 0)
+            let top := mload(0x40)
+            mstore(top, sload(zerocode_slot))
+            a := create(0, top, 5)
             h := extcodehash(a)
         }
         assertEq(h, 0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470);
@@ -51,7 +58,26 @@ contract ConstantinopleTests is DSTest {
         assembly {
             let top := mload(0x40)
             mstore(top, 0xdeadbeef)
-            expected_h := keccak256(top, 4)
+            expected_h := keccak256(top, 32)
+        }
+        assertEq(h, expected_h);
+    }
+    // EXTCODEHASH of the notmuch contract should be same as
+    // doing EXTCODECOPY and then keccak256
+    function test_extcodehash_4() public {
+        address a = address(notmuch);
+        uint256 h;
+
+        assembly {
+            h := extcodehash(a)
+        }
+
+        uint256 expected_h;
+        assembly {
+            let top := mload(0x40)
+            let size := extcodesize(a)
+            extcodecopy(a, top, 0, size)
+            expected_h := keccak256(top, size)
         }
         assertEq(h, expected_h);
     }
@@ -73,11 +99,11 @@ contract ConstantinopleTests is DSTest {
           let top := mload(0x40)
           mstore(top, sload(deadcode_slot))
           let inithash := keccak256(top, 13)
-          mstore(top, 0xff)
-          mstore(add(top, 1), address)
+          mstore(sub(top, 11), address)
+          mstore8(top, 0xff)
           mstore(add(top, 21), salt)
           mstore(add(top, 53), inithash)
-          expected_a := xor(keccak256(top, 85), 0x0000000000000000000000001111111111111111111111111111111111111111)
+          expected_a := and(keccak256(top, 85), 0x000000000000000000000000ffffffffffffffffffffffffffffffffffffffff)
         }
 
         assertEq(a, expected_a);
