@@ -889,10 +889,10 @@ exec1 = do
         0xf5 -> notStatic $
           case stk of
             (xValue:xOffset:xSize:xSalt:xs) ->
-              burn g_create $ let
-              initcode = readMemory (num xOffset) (num xSize) vm
-              newAddr  = newContractAddressCREATE2 self (num xSalt) initcode in
-              create vm self this fees xValue xOffset xSize xs newAddr
+              burn (g_create + g_sha3word * ceilDiv (num xSize) 32) $ let
+                initcode = readMemory (num xOffset) (num xSize) vm
+                newAddr  = newContractAddressCREATE2 self (num xSalt) initcode in
+                  create vm self this fees xValue xOffset xSize xs newAddr
             _ -> underrun
 
         -- op: STATICCALL
