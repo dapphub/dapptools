@@ -6,7 +6,7 @@ stdenv.mkDerivation rec {
   version = "0.13.0";
   src = ./.;
 
-  nativeBuildInputs = [makeWrapper shellcheck coreutils];
+  nativeBuildInputs = [makeWrapper shellcheck coreutils nodejs];
   buildPhase = "true";
   doCheck = true;
   checkPhase = "make test";

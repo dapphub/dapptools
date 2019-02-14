@@ -31,14 +31,42 @@ in rec {
     self.pkgs.fetchFromGitHub {
       owner = "dapphub";
       repo = "dappsys";
-      rev = "73dea5a7d1e265dd2921ba420efbfcca3e8cdcc8";
-      sha256 = "16hnlim0da8sh7l3rhd6lxdxhhaskbkabr8zf9mx6s5vahyc39gl";
+      rev = "933fb468f72f1a81ee8b6d90b17ffdf25d8e1067";
+      sha256 = "06k5j597y4i1q6zcpqxzbflzq6qp62nrnjs6slh7vk70wjccrbh9";
       fetchSubmodules = true;
     }
   ) {};
 
   solidityPackage = import ./nix/solidity-package.nix {
     inherit (self) pkgs;
+  };
+
+  # A merged Dappsys to act as the DAPPSYS_PATH for dapp-tests.
+  dappsys-merged = self.symlinkJoin {
+    name = "dappsys";
+    paths = map builtins.toString (lib.attrVals [
+      "ds-test"
+      "ds-auth"
+      "ds-math"
+    ] dappsys);
+  };
+
+  # Here we can make e.g. integration tests for Dappsys,
+  # or tests that verify Hevm correctness, etc.
+  dapp-tests = stdenv.mkDerivation {
+    name = "dapp-tests";
+    src = ./src/dapp-tests;
+    installPhase = "true";
+    buildInputs = [self.dapp];
+    buildPhase = ''
+      set -e
+      export DAPPSYS_PATH=${dappsys-merged}/dapp
+      ls "$DAPPSYS_PATH"
+      echo "$PATH"
+      patchShebangs .
+      make
+      mkdir "$out"
+    '';
   };
 
   dapps = {

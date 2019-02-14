@@ -15,8 +15,16 @@ Object.keys(pkg_src).sort((a, b) => a.length - b.length).sort(
 })
 
 function findRemappings(prefix) {
-  return ls(`${prefix}/${process.env.DAPP_LIB}`).forEach(name => {
+  ls(`${prefix}/${process.env.DAPP_LIB}`).forEach(name => {
     var lib = `${prefix}/${process.env.DAPP_LIB}`
+    var src = `${lib}/${name}/${process.env.DAPP_SRC}`.replace(/^.\//, "")
+
+    // Shortcut when we're ignoring all the Git hash stuff.
+    if (process.env.DAPP_IGNORE_HASHES) {
+      pkg_src[name] = src
+      findRemappings(`${lib}/${name}`)
+      return
+    }
 
     if (ls(`${lib}/${name}`).includes(".git") != true) {
       console.error(`${PROGRAM_NAME}: error: ${lib}/${name} is not a Git repository`)
@@ -24,7 +32,6 @@ function findRemappings(prefix) {
       process.exit(1)
     }
     
-    var src = `${lib}/${name}/${process.env.DAPP_SRC}`.replace(/^.\//, "")
     var hash = run("git", ["-C", src, "rev-parse", "HEAD"])
   
     if (pkg_src[name]) {
