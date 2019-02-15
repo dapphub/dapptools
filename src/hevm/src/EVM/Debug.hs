@@ -1,7 +1,7 @@
 module EVM.Debug where
 
 import EVM          (Contract, storage, nonce, balance)
-import EVM          (bytecode, codehash, bytecode)
+import EVM          (bytecodeE, codehash)
 import EVM.Solidity (SrcMap, srcMapFile, srcMapOffset, srcMapLength)
 import EVM.Solidity (SourceCache, sourceFiles)
 import EVM.Types    (Addr)
@@ -30,11 +30,11 @@ object xs =
 prettyContract :: Contract -> Doc
 prettyContract c =
   object $
-    [ (text "codesize", int (ByteString.length (c ^. bytecode)))
+    [ (text "codesize", int (ByteString.length (c ^. bytecodeE)))
     , (text "codehash", text (show (c ^. codehash)))
     , (text "balance", int (fromIntegral (c ^. balance)))
     , (text "nonce", int (fromIntegral (c ^. nonce)))
-    , (text "code", text (show (ByteString.take 16 (c ^. bytecode))))
+    , (text "code", text (show (ByteString.take 16 (c ^. bytecodeE))))
     , (text "storage", text (show (c ^. storage)))
     ]
 

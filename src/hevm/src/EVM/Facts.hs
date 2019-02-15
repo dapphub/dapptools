@@ -36,7 +36,7 @@ module EVM.Facts
 
 import EVM          (VM, Contract)
 import EVM.Concrete (Word)
-import EVM          (balance, nonce, storage, bytecode, env, contracts)
+import EVM          (balance, nonce, storage, bytecodeE, env, contracts)
 import EVM.Types    (Addr)
 
 import qualified EVM as EVM
@@ -113,7 +113,7 @@ contractFacts :: Addr -> Contract -> [Fact]
 contractFacts a x = storageFacts a x ++
   [ BalanceFact a (view balance x)
   , NonceFact   a (view nonce x)
-  , CodeFact    a (view bytecode x)
+  , CodeFact    a (view bytecodeE x)
   ]
 
 storageFacts :: Addr -> Contract -> [Fact]
@@ -142,7 +142,7 @@ apply1 :: VM -> Fact -> VM
 apply1 vm fact =
   case fact of
     CodeFact    {..} ->
-      vm & set (env . contracts . at addr) (Just (EVM.initialContract blob))
+      vm & set (env . contracts . at addr) (Just (EVM.initialContract (EVM.RuntimeCode blob)))
     StorageFact {..} ->
       vm & set (env . contracts . ix addr . storage . at which) (Just what)
     BalanceFact {..} ->
