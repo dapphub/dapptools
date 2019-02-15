@@ -142,7 +142,7 @@ apply1 :: VM -> Fact -> VM
 apply1 vm fact =
   case fact of
     CodeFact    {..} ->
-      vm & set (env . contracts . at addr) (Just (EVM.initialContract blob))
+      vm & set (env . contracts . at addr) (Just (EVM.initialContract (EVM.RuntimeCode blob)))
     StorageFact {..} ->
       vm & set (env . contracts . ix addr . storage . at which) (Just what)
     BalanceFact {..} ->

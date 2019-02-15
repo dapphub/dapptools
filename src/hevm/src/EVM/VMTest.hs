@@ -173,7 +173,7 @@ realizeContracts = Map.fromList . map f . Map.toList
 
 realizeContract :: Contract -> EVM.Contract
 realizeContract x =
-  EVM.initialContract (contractCode x)
+  EVM.initialContract (EVM.RuntimeCode (contractCode x))
     & EVM.balance .~ EVM.w256 (contractBalance x)
     & EVM.nonce   .~ EVM.w256 (contractNonce x)
     & EVM.storage .~ (

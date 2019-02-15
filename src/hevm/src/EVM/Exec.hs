@@ -35,7 +35,7 @@ vmForEthrunCreation creationCode =
     , vmoptGas = 0xffffffffffffffff
     , vmoptSchedule = FeeSchedule.metropolis
     }) & set (env . contracts . at ethrunAddress)
-             (Just (initialContract mempty))
+             (Just (initialContract (RuntimeCode mempty)))
 
 exec :: MonadState VM m => m VMResult
 exec =
