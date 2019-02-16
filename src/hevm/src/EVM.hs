@@ -208,14 +208,14 @@ data ContractCode
 
 -- | The state of a contract
 data Contract = Contract
-  { _bytecode :: ContractCode
-  , _storage  :: Map Word Word
-  , _balance  :: Word
-  , _nonce    :: Word
-  , _codehash :: W256
-  , _opIxMap  :: Vector Int
-  , _codeOps  :: RegularVector.Vector (Int, Op)
-  , _external :: Bool
+  { _contractcode :: ContractCode
+  , _storage      :: Map Word Word
+  , _balance      :: Word
+  , _nonce        :: Word
+  , _codehash     :: W256
+  , _opIxMap      :: Vector Int
+  , _codeOps      :: RegularVector.Vector (Int, Op)
+  , _external     :: Bool
   }
 
 deriving instance Show Contract
@@ -269,16 +269,9 @@ makeLenses ''VM
 
 -- | An "external" view of a contract's bytecode, appropriate for
 -- e.g. @EXTCODEHASH@.
-bytecodeE :: Getter Contract ByteString
-bytecodeE = bytecode . to f
+bytecode :: Getter Contract ByteString
+bytecode = contractcode . to f
   where f (InitCode _)    = BS.empty
-        f (RuntimeCode b) = b
-
--- | An "internal" view of a contract's bytecode, appropriate for
--- e.g. @CODECOPY@.
-bytecodeI :: Getter Contract ByteString
-bytecodeI = bytecode . to f
-  where f (InitCode b)    = b
         f (RuntimeCode b) = b
 
 instance Semigroup Cache where
@@ -343,7 +336,7 @@ makeVm o = VM
 
 initialContract :: ContractCode -> Contract
 initialContract theContractCode = Contract
-  { _bytecode = theContractCode
+  { _contractcode = theContractCode
   , _codehash =
     if BS.null theCode then 0 else
       keccak (stripBytecodeMetadata theCode)
@@ -579,7 +572,6 @@ exec1 = do
                   copyBytesToMemory (the state calldata) xSize xFrom xTo
             _ -> underrun
 
-        -- TODO: the asymmetry between CODESIZE and CODECOPY is a little irritating
         -- op: CODESIZE
         0x38 ->
           limitStack 1 . burn g_base $
@@ -593,7 +585,7 @@ exec1 = do
                 accessMemoryRange fees memOffset n $ do
                   next
                   assign (state . stack) xs
-                  copyBytesToMemory (view bytecodeI this)
+                  copyBytesToMemory (the state code)
                     n codeOffset memOffset
             _ -> underrun
 
@@ -616,7 +608,7 @@ exec1 = do
                     touchAccount (num x) $ \c -> do
                       next
                       assign (state . stack) xs
-                      push (num (BS.length (view bytecodeE c)))
+                      push (num (BS.length (view bytecode c)))
             [] ->
               underrun
 
@@ -633,7 +625,7 @@ exec1 = do
                   touchAccount (num extAccount) $ \c -> do
                     next
                     assign (state . stack) xs
-                    copyBytesToMemory (view bytecodeE c)
+                    copyBytesToMemory (view bytecode c)
                       codeSize codeOffset memOffset
             _ -> underrun
 
@@ -663,7 +655,7 @@ exec1 = do
                 preuse (env . contracts . ix (num x)) >>=
                   \case
                     Nothing -> push (num (0 :: Int))
-                    Just c  -> push (num (keccak (view bytecodeE c)))
+                    Just c  -> push (num (keccak (view bytecode c)))
             [] ->
               underrun
 
@@ -1122,7 +1114,7 @@ replaceCode :: Addr -> ContractCode -> EVM ()
 replaceCode target newCode = do
   zoom (env . contracts . at target) $ do
     Just now <- get
-    case (view bytecode now) of
+    case (view contractcode now) of
       InitCode _ ->
         put . Just $
         initialContract newCode
@@ -1151,7 +1143,7 @@ finalize = do
 
 loadContract :: Addr -> EVM ()
 loadContract target =
-  preuse (env . contracts . ix target . bytecodeE) >>=
+  preuse (env . contracts . ix target . bytecode) >>=
     \case
       Nothing ->
         error "Call target doesn't exist"
@@ -1293,7 +1285,7 @@ delegateCall fees xGas xTo xInOffset xInSize xOutOffset xOutSize xs continue =
                 zoom state $ do
                   assign gas xGas
                   assign pc 0
-                  assign code (view bytecodeE target)
+                  assign code (view bytecode target)
                   assign codeContract xTo
                   assign stack mempty
                   assign memory mempty
