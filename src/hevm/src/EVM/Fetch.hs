@@ -99,7 +99,7 @@ fetchContractWithSession n url sess addr = runMaybeT $ do
   theBalance <- MaybeT $ fetch (QueryBalance addr)
 
   return $
-    initialContract (EVM.RuntimeCode theCode)
+    initialContract (Just theCode)
       & set nonce    (w256 theNonce)
       & set balance  (w256 theBalance)
       & set external True
@@ -137,7 +137,7 @@ zero :: Monad m => EVM.Query -> m (EVM ())
 zero q = do
   case q of
     EVM.PleaseFetchContract _ continue ->
-      return (continue (initialContract (EVM.RuntimeCode mempty)))
+      return (continue (initialContract (Just mempty)))
     EVM.PleaseFetchSlot _ _ continue ->
       return (continue 0)
 

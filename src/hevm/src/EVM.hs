@@ -201,14 +201,10 @@ data TxState = TxState
 -- post-creation, and code in these two modes is treated differently
 -- by instructions like @EXTCODEHASH@, so we distinguish these two
 -- code types.
-data ContractCode
-  = InitCode ByteString     -- ^ "Constructor" code, during contract creation
-  | RuntimeCode ByteString  -- ^ "Instance" code, after contract creation
-  deriving (Show, Eq)
 
 -- | The state of a contract
 data Contract = Contract
-  { _contractcode :: ContractCode
+  { _contractcode :: Maybe ByteString
   , _storage      :: Map Word Word
   , _balance      :: Word
   , _nonce        :: Word
@@ -270,9 +266,7 @@ makeLenses ''VM
 -- | An "external" view of a contract's bytecode, appropriate for
 -- e.g. @EXTCODEHASH@.
 bytecode :: Getter Contract ByteString
-bytecode = contractcode . to f
-  where f (InitCode _)    = BS.empty
-        f (RuntimeCode b) = b
+bytecode = contractcode . to (fromMaybe BS.empty)
 
 instance Semigroup Cache where
   a <> b = Cache
@@ -327,14 +321,14 @@ makeVm o = VM
     { _sha3Crack = mempty
     , _origin = vmoptOrigin o
     , _contracts = Map.fromList
-      [(vmoptAddress o, initialContract (InitCode (vmoptCode o)))]
+      [(vmoptAddress o, initialContract Nothing)]
     }
   , _cache = mempty
   , _execMode = ExecuteNormally
   , _burned = 0
   }
 
-initialContract :: ContractCode -> Contract
+initialContract :: Maybe ByteString -> Contract
 initialContract theContractCode = Contract
   { _contractcode = theContractCode
   , _codehash =
@@ -346,10 +340,7 @@ initialContract theContractCode = Contract
   , _opIxMap  = mkOpIxMap theCode
   , _codeOps  = mkCodeOps theCode
   , _external = False
-  } where theCode = case theContractCode of
-            InitCode b    -> b
-            RuntimeCode b -> b
-
+  } where theCode = fromMaybe BS.empty theContractCode
 -- * Opcode dispatch (exec1)
 
 next :: (?op :: Word8) => EVM ()
@@ -1080,7 +1071,7 @@ create vm self this fees xValue xOffset xSize xs newAddr =
             initCode =
               readMemory (num xOffset) (num xSize) vm
             newContract =
-              initialContract (InitCode initCode)
+              initialContract Nothing
             newContext  =
               CreationContext (view codehash newContract)
 
@@ -1110,21 +1101,21 @@ create vm self this fees xValue xOffset xSize xs newAddr =
 
 -- | Replace a contract's code, like when CREATE returns
 -- from the constructor code.
-replaceCode :: Addr -> ContractCode -> EVM ()
+replaceCode :: Addr -> ByteString -> EVM ()
 replaceCode target newCode = do
   zoom (env . contracts . at target) $ do
     Just now <- get
     case (view contractcode now) of
-      InitCode _ ->
+      Nothing ->
         put . Just $
-        initialContract newCode
+        initialContract (Just newCode)
         & set storage (view storage now)
         & set balance (view balance now)
         & set nonce   (view nonce now)
-      RuntimeCode _ ->
+      Just _ ->
         error "internal error: can't replace code of deployed contract"
 
-replaceCodeOfSelf :: ContractCode -> EVM ()
+replaceCodeOfSelf :: ByteString -> EVM ()
 replaceCodeOfSelf newCode = do
   vm <- get
   replaceCode (view (state . contract) vm) newCode
@@ -1391,7 +1382,7 @@ finishFrame how = do
           case how of
             -- Case 4: Returning during a creation?
             FrameReturned output -> do
-              replaceCode createe (RuntimeCode output)
+              replaceCode createe output
               assign (state . gas) remainingGas
               push (num createe)
 
