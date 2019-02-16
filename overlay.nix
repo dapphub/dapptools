@@ -112,6 +112,8 @@ in rec {
 
   hevm = self.pkgs.haskell.lib.justStaticExecutables self.haskellPackages.hevm;
 
+  libff = self.callPackage (import ./nix/libff.nix) {};
+
   jays = (
     self.pkgs.haskell.lib.justStaticExecutables
       (self.haskellPackages.callPackage (import ./src/jays) {})
