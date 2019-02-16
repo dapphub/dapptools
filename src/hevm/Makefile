@@ -9,6 +9,8 @@ build: .configured
 	nix-shell --command 'cabal build'
 repl: .configured
 	nix-shell --command 'cabal repl lib:hevm'
+tests: .configured
+	nix-shell --command 'cabal test'
 
 PORT ?= 8001
 BROWSER ?= chromium
