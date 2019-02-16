@@ -36,7 +36,7 @@ module EVM.Facts
 
 import EVM          (VM, Contract)
 import EVM.Concrete (Word)
-import EVM          (balance, nonce, storage, bytecodeE, env, contracts)
+import EVM          (balance, nonce, storage, bytecode, env, contracts)
 import EVM.Types    (Addr)
 
 import qualified EVM as EVM
@@ -113,7 +113,7 @@ contractFacts :: Addr -> Contract -> [Fact]
 contractFacts a x = storageFacts a x ++
   [ BalanceFact a (view balance x)
   , NonceFact   a (view nonce x)
-  , CodeFact    a (view bytecodeE x)
+  , CodeFact    a (view bytecode x)
   ]
 
 storageFacts :: Addr -> Contract -> [Fact]
