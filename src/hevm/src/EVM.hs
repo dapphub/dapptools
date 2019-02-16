@@ -197,10 +197,14 @@ data TxState = TxState
   , _refunds       :: [(Addr, Word)]
   }
 
-data ContractCode = InitCode ByteString | RuntimeCode ByteString
-
-deriving instance Show ContractCode
-deriving instance Eq ContractCode
+-- | A contract is either in creation (running its "constructor") or
+-- post-creation, and code in these two modes is treated differently
+-- by instructions like @EXTCODEHASH@, so we distinguish these two
+-- code types.
+data ContractCode
+  = InitCode ByteString     -- ^ "Constructor" code, during contract creation
+  | RuntimeCode ByteString  -- ^ "Instance" code, after contract creation
+  deriving (Show, Eq)
 
 -- | The state of a contract
 data Contract = Contract
@@ -263,23 +267,19 @@ makeLenses ''Cache
 makeLenses ''Trace
 makeLenses ''VM
 
--- there's probably a Lens method for this somewhere?
-conjugate :: Functor f => (a -> f a) -> (a -> b) -> (b -> a) -> (b -> f b)
-conjugate v phi psi = (fmap phi) . v . psi
-
--- getters for bytecode externally and internally
+-- | An "external" view of a contract's bytecode, appropriate for
+-- e.g. @EXTCODEHASH@.
 bytecodeE :: Getter Contract ByteString
-bytecodeE v c = let codeE (InitCode _)    = BS.empty
-                    codeE (RuntimeCode b) = b
-                    codeEinv b            = RuntimeCode b
-                  in bytecode (conjugate v codeEinv codeE) c
+bytecodeE = bytecode . to f
+  where f (InitCode _)    = BS.empty
+        f (RuntimeCode b) = b
 
+-- | An "internal" view of a contract's bytecode, appropriate for
+-- e.g. @CODECOPY@.
 bytecodeI :: Getter Contract ByteString
-bytecodeI v c = let codeI (InitCode b)    = b
-                    codeI (RuntimeCode b) = b
-                    -- choice of RunTimeCode here is arbitrary
-                    codeIinv b            = RuntimeCode b
-                  in bytecode (conjugate v codeIinv codeI) c
+bytecodeI = bytecode . to f
+  where f (InitCode b)    = b
+        f (RuntimeCode b) = b
 
 instance Semigroup Cache where
   a <> b = Cache
