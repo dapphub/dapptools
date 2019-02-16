@@ -334,7 +334,7 @@ makeVm o = VM
     { _sha3Crack = mempty
     , _origin = vmoptOrigin o
     , _contracts = Map.fromList
-      [(vmoptAddress o, initialContract (RuntimeCode (vmoptCode o)))]
+      [(vmoptAddress o, initialContract (InitCode (vmoptCode o)))]
     }
   , _cache = mempty
   , _execMode = ExecuteNormally
