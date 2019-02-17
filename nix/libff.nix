@@ -11,6 +11,8 @@ stdenv.mkDerivation rec {
     fetchSubmodules = true;
   };
 
+  patches = [./libff.patch];
+
   nativeBuildInputs = [cmake pkgconfig];
   buildInputs = [boost gmp procps openssl];
   enableParallelBuilding = true;
