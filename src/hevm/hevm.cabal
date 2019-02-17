@@ -1,3 +1,4 @@
+cabal-version: 2.2
 name:
   hevm
 version:
@@ -12,7 +13,7 @@ description:
 homepage:
   https://github.com/dapphub/dapptools
 license:
-  AGPL-3
+  AGPL-3.0-only
 license-file:
   COPYING
 author:
@@ -23,8 +24,6 @@ category:
   Ethereum
 build-type:
   Simple
-cabal-version:
-  >=1.10
 data-files:
   run-consensus-tests
 extra-source-files:
@@ -64,9 +63,11 @@ library
   ghc-options:
     -Wall -Wno-deprecations
   extra-libraries:
-    secp256k1
+    secp256k1, ff
   c-sources:
     ethjet/tinykeccak.c, ethjet/ethjet.c
+  cxx-sources:
+    ethjet/ethjet-ff.cc
   install-includes:
     ethjet/tinykeccak.h, ethjet/ethjet.h
   build-depends:

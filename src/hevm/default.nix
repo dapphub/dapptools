@@ -1,7 +1,7 @@
 { mkDerivation, abstract-par, aeson, ansi-wl-pprint, async, base
 , base16-bytestring, base64-bytestring, binary, brick, bytestring
 , cereal, containers, cryptonite, data-dword, deepseq, directory
-, fgl, filepath, ghci-pretty, haskeline, here, HUnit, lens
+, ff, fgl, filepath, ghci-pretty, haskeline, here, HUnit, lens
 , lens-aeson, megaparsec, memory, monad-par, mtl, multiset
 , operational, optparse-generic, process, QuickCheck
 , quickcheck-text, regex-tdfa, restless-git, rosezipper
@@ -27,7 +27,7 @@ mkDerivation {
     temporary text text-format time transformers tree-view
     unordered-containers vector vty witherable wreq
   ];
-  librarySystemDepends = [ secp256k1 ];
+  librarySystemDepends = [ ff secp256k1 ];
   executableHaskellDepends = [
     aeson ansi-wl-pprint async base base16-bytestring base64-bytestring
     binary brick bytestring containers cryptonite data-dword deepseq
