@@ -2,7 +2,7 @@
 
 buildGoPackage rec {
   name = "ethsign-${version}";
-  version = "0.10";
+  version = "0.11";
 
   goPackagePath = "github.com/dapphub/ethsign";
   hardeningDisable = ["fortify"];

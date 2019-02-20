@@ -50,7 +50,10 @@ func recover(data []byte, sig hexutil.Bytes) (common.Address, error) {
 	if err != nil {
 		return common.Address{}, err
 	}
-	pubKey := crypto.ToECDSAPub(rpk)
+	pubKey, err := crypto.UnmarshalPubkey(rpk)
+  if err != nil {
+    return common.Address{}, err
+  }
 	recoveredAddr := crypto.PubkeyToAddress(*pubKey)
 	return recoveredAddr, nil
 }
