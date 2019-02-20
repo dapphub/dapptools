@@ -1,4 +1,5 @@
-{ system ? null , ... }:
+{ system ? builtins.currentSystem , ... }:
+
 let
   # this is a branch rather than a tag
   version = "release-18.09";
@@ -11,8 +12,9 @@ let
   };
 in
   # Now return the Nixpkgs configured to use our overlay.
-  import nixpkgs (
-    { overlays = [(import ./overlay.nix)]; }
-    // (if system != null then { inherit system; } else {})
-  )
+  import nixpkgs {
+    inherit system;
+
+    overlays = [(import ./overlay.nix)];
+  }
 
