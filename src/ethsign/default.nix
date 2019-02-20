@@ -1,4 +1,4 @@
-{ stdenv, buildGoPackage, fetchFromGitHub, fetchgit, clang }:
+{ stdenv, buildGoPackage, fetchFromGitHub, fetchgit, geth-version, geth-sha, clang }:
 
 buildGoPackage rec {
   name = "ethsign-${version}";
@@ -14,8 +14,8 @@ buildGoPackage rec {
       src = fetchFromGitHub {
         owner = "ethereum";
         repo = "go-ethereum";
-        rev = "v1.8.22";
-        sha256 = "0ag9qxrf7n0qkccaf6v4jaysivpxvsy5zfzar3mcm65223pqy375";
+        rev = geth-version;
+        sha256 = geth-sha;
       };
     }
     {
