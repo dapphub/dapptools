@@ -125,7 +125,9 @@ in rec {
   seth = self.callPackage (import ./src/seth) {};
   dapp = self.callPackage (import ./src/dapp) {};
 
-  ethsign = (self.callPackage (import ./src/ethsign) {}).bin;
+  ethsign = (self.callPackage (import ./src/ethsign) {
+    inherit geth-version geth-sha;
+  }).bin;
 
   evmdis = self.callPackage ./nix/evmdis.nix {};
 
@@ -137,20 +139,22 @@ in rec {
   terra = self.callPackage (import ./submodules/terra) {};
   chief = self.callPackage (import ./submodules/chief) {};
 
-  go-ethereum = (super.go-ethereum.overrideDerivation (_: rec {
+  geth-version = "1.8.22";
+  geth-sha = "0ag9qxrf7n0qkccaf6v4jaysivpxvsy5zfzar3mcm65223pqy375";
+  go-ethereum = super.go-ethereum.overrideDerivation (_: rec {
     name = "go-ethereum-${version}";
-    version = "1.8.22";
+    version = geth-version;
     src = self.pkgs.fetchFromGitHub {
       owner = "ethereum";
       repo = "go-ethereum";
       rev = "v${version}";
-      sha256 = "0ag9qxrf7n0qkccaf6v4jaysivpxvsy5zfzar3mcm65223pqy375";
+      sha256 = geth-sha;
     };
     # (mbrock backported) fix for usb-related segmentation faults on darwin
     propagatedBuildInputs =
       stdenv.lib.optionals stdenv.isDarwin
-        (with self.pkgs; [ darwin.libobjc darwin.apple_sdk.frameworks.IOKit ]);
-  })).override { buildGoPackage = super.buildGo19Package; };
+      (with self.pkgs; [ darwin.libobjc darwin.apple_sdk.frameworks.IOKit ]);
+  });
 
   # We use this to run private testnets without
   # the pesky transaction size limit.

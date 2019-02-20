@@ -1,8 +1,8 @@
-{ stdenv, buildGo19Package, fetchFromGitHub, fetchgit, clang }:
+{ stdenv, buildGoPackage, fetchFromGitHub, fetchgit, geth-version, geth-sha, clang }:
 
-buildGo19Package rec {
+buildGoPackage rec {
   name = "ethsign-${version}";
-  version = "0.10";
+  version = "0.11.0";
 
   goPackagePath = "github.com/dapphub/ethsign";
   hardeningDisable = ["fortify"];
@@ -14,8 +14,8 @@ buildGo19Package rec {
       src = fetchFromGitHub {
         owner = "ethereum";
         repo = "go-ethereum";
-        rev = "v1.8.1";
-        sha256 = "0k7ly9cw68ranksa1fdn7v2lncmlqgabw3qiiyqya2xz3s4aazlf";
+        rev = geth-version;
+        sha256 = geth-sha;
       };
     }
     {
@@ -46,8 +46,8 @@ buildGo19Package rec {
   ];
 
   meta = with stdenv.lib; {
-    homepage = http://github.com/dapphub/ethsign;
+    homepage = http://github.com/dapphub/dapptools;
     description = "Make raw signed Ethereum transactions";
-    license = [licenses.gpl3];
+    license = [licenses.agpl3];
   };
 }
