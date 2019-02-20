@@ -52,7 +52,7 @@ func recover(data []byte, sig hexutil.Bytes) (common.Address, error) {
   }
   pubKey, err := crypto.UnmarshalPubkey(rpk)
   if err != nil {
-    return common.Address{}, err
+    return common.Address{}, fmt.Errorf("invalid public key")
   }
   recoveredAddr := crypto.PubkeyToAddress(*pubKey)
   return recoveredAddr, nil
