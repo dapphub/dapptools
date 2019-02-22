@@ -5,7 +5,7 @@ jshon+=(-s "$1" -i address)
 jshon+=(-s "$2" -i fromBlock)
 [[ "$3" ]] && jshon+=(-n []); jshon+=(-s "$3" -i append)
 [[ "$4" ]] && jshon+=(-s "$4" -i append)
-[[ "$#" -gt 2 ]] && jshon+=(-i topics)
+[[ "$3" ]] && jshon+=(-i topics)
 jshon+=(-i append)
 id=$(seth rpc eth_newFilter -- "${jshon[@]}")
 trap 'seth rpc eth_uninstallFilter -- -s "$id" -i append >/dev/null' EXIT
