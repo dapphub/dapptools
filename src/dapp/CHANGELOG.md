@@ -4,6 +4,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.14.0] - 2019-02-22
+
+### Fixed
+- Fix missing runtime dependency to `gnumake` in `dapp`.
+
 ## [0.13.0] - 2018-02-04
 ### Added
 - Support for solc 0.5.4
@@ -48,3 +53,4 @@ changelog.
 [0.11.0]: https://github.com/dapphub/dapptools/tree/dapp/0.11.0
 [0.12.0]: https://github.com/dapphub/dapptools/tree/dapp/0.12.0
 [0.13.0]: https://github.com/dapphub/dapptools/tree/dapp/0.13.0
+[0.14.0]: https://github.com/dapphub/dapptools/tree/dapp/0.14.0
