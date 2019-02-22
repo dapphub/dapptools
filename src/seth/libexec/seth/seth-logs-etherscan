@@ -9,6 +9,9 @@ params=(
   "address=$1" "fromBlock=$2" "toBlock=latest"
   "apikey=$ETHERSCAN_API_KEY"
 )
+[[ "$3" ]] && params[6]="topic0=$3"
+[[ "$4" ]] && params[7]="topic0_1_opr=and"
+[[ "$4" ]] && params[8]="topic1=$ilk"
 query=$(printf "&%s" "${params[@]}")
 response=$(seth curl "${ETHERSCAN_API_URL?}""${query/&/?}")
 message=$(jshon <<<"$response" -e message -u)
