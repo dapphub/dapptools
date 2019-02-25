@@ -1,11 +1,13 @@
 { system ? null , ... }:
 let
-  version = "18.09";
+  # this is a branch rather than a tag
+  version = "release-18.09";
   # Import a specific Nixpkgs revision to use as the base for our overlay.
   nixpkgs = builtins.fetchTarball {
     name = "nixpkgs-${version}";
-    url = "https://github.com/nixos/nixpkgs/archive/${version}.tar.gz";
-    sha256 = "1ib96has10v5nr6bzf7v8kw7yzww8zanxgw2qi1ll1sbv6kj6zpd";
+    # pin the current release-18.09 commit
+    url = "https://github.com/nixos/nixpkgs/archive/185ab27b8a2ff2c7188bc29d056e46b25dd56218.tar.gz";
+    sha256 = "0bflmi7w3gas9q8wwwwbnz79nkdmiv2c1bpfc3xyplwy8npayxh2";
   };
 in
   # Now return the Nixpkgs configured to use our overlay.
