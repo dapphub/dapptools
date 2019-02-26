@@ -45,6 +45,26 @@ To install tools from this repository, you need to run
 which will build and install these tools into your Nix profile, optionally
 fetching the binaries from the cache if you have configured it.
 
+#### Installing custom solc versions
+
+For a list of the supported `solc` versions, check
+[`./nix/solc-versions.nix`](./nix/solc-versions.nix).
+
+You can specify a `solc` version to run within `dapp` with `dapp --use
+solc:x.y.z test`, but you can also install `solc` "standalone" (i.e. add it to
+your `$PATH`) with:
+
+```
+   $ nix-env -f $HOME/.dapp/dapptools -iA solc-versions.solc_0_5_0
+```
+
+Versions of `solc` that haven't yet landed in nixpkgs can be found under the
+`unreleased` key: `solc-versions.unreleased.solc_x_y_z`. Again, refer to
+[`./nix/solc/versions.nix`](./nix/solc-versions.nix) for a list of supported
+unreleased versions.
+
+NOTE: not all versions are supported on macOS platforms.
+
 ## TODO
 
   [ ] Better installation instructions.
