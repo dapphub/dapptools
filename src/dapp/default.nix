@@ -1,9 +1,10 @@
 { lib, stdenv, fetchFromGitHub, makeWrapper, glibcLocales
-, coreutils, git, gnused, hevm, jshon, jq, nix, nodejs, perl, seth, shellcheck, solc }:
+, coreutils, git, gnused, gnumake, hevm, jshon, jq, nix
+, nodejs, perl, seth , shellcheck , solc }:
 
 stdenv.mkDerivation rec {
   name = "dapp-${version}";
-  version = "0.13.0";
+  version = "0.14.0";
   src = ./.;
 
   nativeBuildInputs = [makeWrapper shellcheck coreutils nodejs];
@@ -12,7 +13,7 @@ stdenv.mkDerivation rec {
   checkPhase = "make test";
   makeFlags = ["prefix=$(out)"];
   postInstall = let path = lib.makeBinPath [
-    coreutils git gnused hevm jshon jq nix nodejs perl seth solc
+    coreutils git gnused gnumake hevm jshon jq nix nodejs perl seth solc
   ]; in ''
     wrapProgram "$out/bin/dapp" --prefix PATH : "${path}" \
       ${if glibcLocales != null then
