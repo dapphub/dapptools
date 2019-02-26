@@ -23,4 +23,7 @@ rec {
     solc_0_4_12 = { rev = "a76557700444c33c4ee0665b5161907f28a67284"; sha256 = "1gh7aw1r2nizd8vkjdc2w0w62kr20kd85wn23h7srij5zi417086"; };
   };
 
+  unreleased = {
+    solc_0_5_4  = { rev = "572f828e7e87b113e416a48db603985b2d1b7036"; sha256 = "0f464dwglx12782djwafnha0f8z71xkh2fy2aawn4pa2k2a1f2jl"; };
+  };
 }
