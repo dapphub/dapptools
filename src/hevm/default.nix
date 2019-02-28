@@ -7,7 +7,8 @@
 , quickcheck-text, readline, regex-tdfa, restless-git, rosezipper
 , s-cargot, scientific, secp256k1, semver-range, stdenv, tasty
 , tasty-hunit, tasty-quickcheck, temporary, text, text-format, time
-, transformers, tree-view, unordered-containers, vector, vty, wreq
+, transformers, tree-view, unordered-containers, vector, vty
+, witherable, wreq
 }:
 mkDerivation {
   pname = "hevm";
@@ -24,7 +25,7 @@ mkDerivation {
     operational optparse-generic process QuickCheck quickcheck-text
     readline restless-git rosezipper s-cargot scientific semver-range
     temporary text text-format time transformers tree-view
-    unordered-containers vector vty wreq
+    unordered-containers vector vty witherable wreq
   ];
   librarySystemDepends = [ secp256k1 ];
   executableHaskellDepends = [

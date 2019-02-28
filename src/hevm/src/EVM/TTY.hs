@@ -251,7 +251,7 @@ runFromVM vm = do
     ui0 = UiVmState
            { _uiVm = vm
            , _uiVmNextStep =
-               void Stepper.execFully >> Stepper.evm finalize
+               void Stepper.execFully >> Stepper.evm (finalize False)
            , _uiVmStackList = undefined
            , _uiVmBytecodeList = undefined
            , _uiVmTraceList = undefined

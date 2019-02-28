@@ -54,6 +54,7 @@ library
     EVM.Solidity,
     EVM.Stepper,
     EVM.StorageLayout,
+    EVM.Transaction,
     EVM.TTY,
     EVM.TTYCenteredList,
     EVM.Types,
@@ -115,6 +116,7 @@ library
     unordered-containers              >= 0.2,
     vector                            >= 0.11,
     vty                               >= 5.15,
+    witherable                        >= 0.2,
     wreq                              >= 0.5
   hs-source-dirs:
     src

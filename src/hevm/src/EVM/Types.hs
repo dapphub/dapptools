@@ -26,6 +26,7 @@ import qualified Data.ByteString     as BS
 import qualified Data.Serialize.Get  as Cereal
 import qualified Data.Text           as Text
 import qualified Data.Text.Encoding  as Text
+import qualified Text.Read
 
 -- Some stuff for "generic programming", needed to create Word512
 import Data.Data
@@ -123,12 +124,20 @@ hexText t =
 readN :: Integral a => String -> a
 readN s = fromIntegral (read s :: Integer)
 
+readNull :: Read a => a -> String -> a
+readNull x s = case Text.Read.readMaybe s of
+  Just y  -> y
+  Nothing -> x
+
 wordField :: JSON.Object -> Text -> JSON.Parser W256
-wordField x f = (read . Text.unpack)
+wordField x f = ((readNull 0) . Text.unpack)
                   <$> (x .: f)
 
 addrField :: JSON.Object -> Text -> JSON.Parser Addr
 addrField x f = (read . Text.unpack) <$> (x .: f)
+
+addrFieldMaybe :: JSON.Object -> Text -> JSON.Parser (Maybe Addr)
+addrFieldMaybe x f = (Text.Read.readMaybe . Text.unpack) <$> (x .: f)
 
 dataField :: JSON.Object -> Text -> JSON.Parser ByteString
 dataField x f = hexText <$> (x .: f)

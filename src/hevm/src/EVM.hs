@@ -110,7 +110,7 @@ data TraceData
   | EntryTrace Text
   | ReturnTrace ByteString FrameContext
 
-data ExecMode = ExecuteNormally | ExecuteAsVMTest
+data ExecMode = ExecuteNormally | ExecuteAsBlockchainTest | ExecuteAsVMTest
 
 data Query where
   PleaseFetchContract :: Addr         -> (Contract -> EVM ()) -> Query
@@ -143,13 +143,15 @@ data VMOpts = VMOpts
   , vmoptCaller :: Addr
   , vmoptOrigin :: Addr
   , vmoptGas :: W256
+  , vmoptGaslimit :: W256
   , vmoptNumber :: W256
   , vmoptTimestamp :: W256
   , vmoptCoinbase :: Addr
   , vmoptDifficulty :: W256
-  , vmoptGaslimit :: W256
+  , vmoptBlockGaslimit :: W256
   , vmoptGasprice :: W256
   , vmoptSchedule :: FeeSchedule Word
+  , vmoptCreate :: Bool
   } deriving Show
 
 -- | A log entry
@@ -193,8 +195,15 @@ data FrameState = FrameState
 
 -- | The state that spans a whole transaction
 data TxState = TxState
-  { _selfdestructs :: [Addr]
+  { _gasprice      :: Word
+  , _txgaslimit    :: Word
+  , _origin        :: Addr
+  , _toAddr        :: Addr
+  , _value         :: Word
+  , _selfdestructs :: [Addr]
   , _refunds       :: [(Addr, Word)]
+  , _isCreate      :: Bool
+  , _txReversion   :: Map Addr Contract
   }
 
 -- | A contract is either in creation (running its "constructor") or
@@ -225,7 +234,6 @@ deriving instance Eq Contract
 data Env = Env
   { _contracts :: Map Addr Contract
   , _sha3Crack :: Map Word ByteString
-  , _origin    :: Addr
   }
 
 
@@ -236,7 +244,6 @@ data Block = Block
   , _number     :: Word
   , _difficulty :: Word
   , _gaslimit   :: Word
-  , _gasprice   :: Word
   , _schedule   :: FeeSchedule Word
   }
 
@@ -294,8 +301,16 @@ makeVm o = VM
   { _result = Nothing
   , _frames = mempty
   , _tx = TxState
-    { _selfdestructs = mempty
+    { _gasprice = w256 $ vmoptGasprice o
+    , _txgaslimit = w256 $ vmoptGaslimit o
+    , _origin = vmoptOrigin o
+    , _toAddr = vmoptAddress o
+    , _value = w256 $ vmoptValue o
+    , _selfdestructs = mempty
     , _refunds = mempty
+    , _isCreate = vmoptCreate o
+    , _txReversion = Map.fromList
+      [(vmoptAddress o, initialContract (InitCode (vmoptCode o)))]
     }
   , _logs = mempty
   , _traces = Zipper.fromForest []
@@ -304,8 +319,7 @@ makeVm o = VM
     , _timestamp = w256 $ vmoptTimestamp o
     , _number = w256 $ vmoptNumber o
     , _difficulty = w256 $ vmoptDifficulty o
-    , _gaslimit = w256 $ vmoptGaslimit o
-    , _gasprice = w256 $ vmoptGasprice o
+    , _gaslimit = w256 $ vmoptBlockGaslimit o
     , _schedule = vmoptSchedule o
     }
   , _state = FrameState
@@ -325,7 +339,6 @@ makeVm o = VM
     }
   , _env = Env
     { _sha3Crack = mempty
-    , _origin = vmoptOrigin o
     , _contracts = Map.fromList
       [(vmoptAddress o, initialContract (InitCode (vmoptCode o)))]
     }
@@ -540,7 +553,7 @@ exec1 = do
         -- op: ORIGIN
         0x32 ->
           limitStack 1 . burn g_base $
-            next >> push (num (the env origin))
+            next >> push (num (the tx origin))
 
         -- op: CALLER
         0x33 ->
@@ -592,7 +605,7 @@ exec1 = do
         -- op: GASPRICE
         0x3a ->
           limitStack 1 . burn g_base $
-            next >> push (the block gasprice)
+            next >> push (the tx gasprice)
 
         -- op: EXTCODESIZE
         0x3b ->
@@ -861,7 +874,7 @@ exec1 = do
                         ExecuteAsVMTest -> do
                           assign (state . stack) (1 : xs)
                           next
-                        ExecuteNormally -> do
+                        _ -> do
                           delegateCall fees gas' xTo xInOffset xInSize xOutOffset xOutSize xs $ do
                             zoom state $ do
                               assign callvalue xValue
@@ -898,9 +911,8 @@ exec1 = do
               else let
                 availableGas = the state gas
                 (cost, gas') = costOfCall fees (Just this) 0 availableGas xGas
-                  in burn (cost - gas') $ do
-                  delegateCall fees gas' (num xTo) xInOffset xInSize xOutOffset xOutSize xs
-                    (return ())
+                  in burn (cost - gas') $
+                     delegateCall fees gas' (num xTo) xInOffset xInSize xOutOffset xOutSize xs (return ())
             _ -> underrun
 
         -- op: CREATE2
@@ -929,7 +941,7 @@ exec1 = do
                       ExecuteAsVMTest -> do
                         assign (state . stack) (1 : xs)
                         next
-                      ExecuteNormally -> do
+                      _ -> do
                         delegateCall fees gas' xTo xInOffset xInSize xOutOffset xOutSize xs $ do
                           zoom state $ do
                             assign callvalue 0
@@ -1077,7 +1089,7 @@ create vm self this fees xValue xOffset xSize xs newAddr =
           assign (state . stack) (num newAddr : xs)
           next
 
-        ExecuteNormally -> do
+        _ -> do
           let
             initCode =
               readMemory (num xOffset) (num xSize) vm
@@ -1137,11 +1149,53 @@ resetState = do
   assign frames     []
   assign state      blankState
 
-finalize :: EVM ()
-finalize = do
+finalize :: Bool -> EVM ()
+finalize txmode = do
   destroyedAddresses <- use (tx . selfdestructs)
   modifying (env . contracts)
     (Map.filterWithKey (\k _ -> not (elem k destroyedAddresses)))
+  -- whether or not we "finalise the tx"
+  case txmode of
+    False -> return ()
+    True  -> do
+      res <- use result
+      -- burn remaining gas on error
+      case resultRefunds <$> res of
+        Just False -> use (state . gas) >>= (flip burn (return ()))
+        _          -> return ()
+      txOrigin <- use (tx . origin)
+      -- TODO: selfdestruct gas refunds
+      sumRefunds <- (sum . (snd <$>)) <$> (use (tx . refunds))
+      miner    <- use (block . coinbase)
+      blockReward  <- r_block <$> (use (block . schedule))
+      gasRemaining <- use (state . gas)
+      gasPrice     <- use (tx . gasprice)
+      gasLimit     <- use (tx . txgaslimit)
+      reversion    <- use (tx . txReversion)
+      let gasUsed      = gasLimit - gasRemaining
+          cappedRefund = min (quot gasUsed 2) sumRefunds
+          originPay    = (gasRemaining + cappedRefund) * gasPrice
+          minerPay     = blockReward + gasPrice * (gasUsed - cappedRefund)
+      -- revert all contracts on error
+      case res of
+        Just (VMFailure _) -> assign (env . contracts) reversion
+        _                  -> return ()
+      -- revert created contract on error
+      use (tx . isCreate) >>= \case
+        False -> return ()
+        True  -> case res of
+          Just (VMFailure _) -> do
+            createe <- use (state . contract)
+            modifying (env . contracts)
+              (Map.delete createe)
+          Just (VMSuccess output) -> do
+            createe <- use (state . contract)
+            replaceCode createe (RuntimeCode output)
+          Nothing -> error "Finalising an unfinished tx."
+      modifying (env . contracts)
+        (Map.adjust (over balance (+ minerPay)) miner)
+      modifying (env . contracts)
+        (Map.adjust (over balance (+ originPay)) txOrigin)
 
 loadContract :: Addr -> EVM ()
 loadContract target =
@@ -1413,6 +1467,12 @@ finishFrame how = do
 
 vmError :: Error -> EVM ()
 vmError e = finishFrame (FrameErrored e)
+
+resultRefunds :: VMResult -> Bool
+resultRefunds = \case
+  VMSuccess _          -> True
+  VMFailure (Revert _) -> True
+  VMFailure _          -> False
 
 -- * Memory helpers
 

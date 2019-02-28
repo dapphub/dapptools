@@ -5,6 +5,7 @@ module EVM.VMTest
   ( Case
 #if MIN_VERSION_aeson(1, 0, 0)
   , parseSuite
+  , parseBCSuite
 #endif
   , vmForCase
   , checkExpectation
@@ -23,10 +24,14 @@ import qualified Control.Monad.Operational as Operational
 import qualified Control.Monad.State.Class as State
 
 import EVM (EVM)
+import EVM.Keccak (newContractAddress)
 import EVM.Stepper (Stepper)
+import EVM.Transaction
 import EVM.Types
 
+import Control.Arrow ((***), (&&&))
 import Control.Lens
+import Control.Monad
 
 import IPPrint.Colored (cpprint)
 
@@ -34,12 +39,25 @@ import Data.ByteString (ByteString)
 import Data.Aeson ((.:), (.:?))
 import Data.Aeson (FromJSON (..))
 import Data.Map (Map)
+import Data.Maybe (fromMaybe)
 import Data.List (intercalate)
+import Data.Witherable (Filterable, catMaybes)
 
 import qualified Data.Map          as Map
 import qualified Data.Aeson        as JSON
 import qualified Data.Aeson.Types  as JSON
 import qualified Data.ByteString.Lazy  as Lazy
+
+data Which = Pre | Post
+
+data Block = Block
+  { blockCoinbase   :: Addr
+  , blockDifficulty :: W256
+  , blockGasLimit   :: W256
+  , blockNumber     :: W256
+  , blockTimestamp  :: W256
+  , blockTxs        :: [Transaction]
+  } deriving Show
 
 data Case = Case
   { testVmOpts      :: EVM.VMOpts
@@ -47,34 +65,67 @@ data Case = Case
   , testExpectation :: Maybe Expectation
   } deriving Show
 
+data BlockchainCase = BlockchainCase
+  { blockchainBlocks  :: [Block]
+  , blockchainPre     :: Map Addr Contract
+  , blockchainPost    :: Map Addr Contract
+  , blockchainNetwork :: String
+  } deriving Show
+
 data Contract = Contract
-  { contractBalance :: W256
-  , contractCode    :: ByteString
-  , contractNonce   :: W256
-  , contractStorage :: Map W256 W256
+  { _balance :: W256
+  , _code    :: EVM.ContractCode
+  , _nonce   :: W256
+  , _storage :: Map W256 W256
+  , _create  :: Bool
   } deriving Show
 
 data Expectation = Expectation
-  { expectedOut :: ByteString
+  { expectedOut       :: Maybe ByteString
   , expectedContracts :: Map Addr Contract
-  , expectedGas :: W256
+  , expectedGas       :: Maybe W256
   } deriving Show
+
+makeLenses ''Contract
+
+accountAt :: Addr -> Getter (Map Addr Contract) Contract
+accountAt a = (at a) . (to $ fromMaybe newAccount)
+
+touchAccount :: Addr -> Map Addr Contract -> Map Addr Contract
+touchAccount a cs = Map.insertWith (flip const) a newAccount cs
+
+newAccount :: Contract
+newAccount = Contract
+  { _balance = 0
+  , _code    = EVM.RuntimeCode mempty
+  , _nonce   = 0
+  , _storage = mempty
+  , _create  = False
+  }
+
+splitEithers :: (Filterable f) => f (Either a b) -> (f a, f b)
+splitEithers =
+  (catMaybes *** catMaybes)
+  . (fmap fst &&& fmap snd)
+  . (fmap (preview _Left &&& preview _Right))
 
 checkExpectation :: Case -> EVM.VM -> IO Bool
 checkExpectation x vm =
   case (testExpectation x, view EVM.result vm) of
     (Just expectation, Just (EVM.VMSuccess output)) -> do
       let
-        (s1, b1) = ("bad-state", checkExpectedContracts vm (expectedContracts expectation))
+        (s4, (_, b4)) = ("bad-balance", checkExpectedContracts vm (expectedContracts expectation))
+        (s1, (b1, _)) = ("bad-state", checkExpectedContracts vm (expectedContracts expectation))
         (s2, b2) = ("bad-output", checkExpectedOut output (expectedOut expectation))
         (s3, b3) = ("bad-gas", checkExpectedGas vm (expectedGas expectation))
-        ss = map fst (filter (not . snd) [(s1, b1), (s2, b2), (s3, b3)])
-      putStr (intercalate " " ss)
-      putStrLn ""
-      putStrLn "Expected postState: "
-      putStrLn $ show (expectedContracts expectation)
-      putStrLn "Actual postState: "
-      putStrLn $ show (vm ^. EVM.env . EVM.contracts . to (fmap clearZeroStorage))
+        ss = map fst (filter (not . snd) [(s4, not b4), (s1, b1), (s2, b2), (s3, b3)])
+      if not b1 then do
+        putStrLn (intercalate " " ss)
+        putStrLn "Expected postState: "
+        putStrLn $ show (expectedContracts expectation)
+        putStrLn "Actual postState: "
+        putStrLn $ show (vm ^. EVM.env . EVM.contracts . to (fmap clearZeroStorage))
+        else do return ()
       return (b1 && b2 && b3)
     (Nothing, Just (EVM.VMSuccess _)) -> do
       putStr "unexpected-success"
@@ -88,21 +139,29 @@ checkExpectation x vm =
       cpprint (view EVM.result vm)
       error "internal error"
 
-checkExpectedOut :: ByteString -> ByteString -> Bool
-checkExpectedOut output expected =
-  output == expected
+checkExpectedOut :: ByteString -> Maybe ByteString -> Bool
+checkExpectedOut output ex = case ex of
+  Nothing       -> True
+  Just expected -> output == expected
 
-checkExpectedContracts :: EVM.VM -> Map Addr Contract -> Bool
+checkExpectedContracts :: EVM.VM -> Map Addr Contract -> (Bool,Bool)
 checkExpectedContracts vm expected =
-  realizeContracts expected == vm ^. EVM.env . EVM.contracts . to (fmap clearZeroStorage)
+  let cs = vm ^. EVM.env . EVM.contracts . to (fmap clearZeroStorage)
+      expectedCs = realizeContracts expected
+  in (expectedCs == cs,
+      (clearBalance <$> expectedCs) == (clearBalance <$> cs))
 
 clearZeroStorage :: EVM.Contract -> EVM.Contract
 clearZeroStorage =
   over EVM.storage (Map.filterWithKey (\_ x -> x /= 0))
 
-checkExpectedGas :: EVM.VM -> W256 -> Bool
-checkExpectedGas vm expected =
-  case vm ^. EVM.state . EVM.gas of
+clearBalance :: EVM.Contract -> EVM.Contract
+clearBalance = set EVM.balance 0
+
+checkExpectedGas :: EVM.VM -> Maybe W256 -> Bool
+checkExpectedGas vm ex = case ex of
+  Nothing -> True
+  Just expected -> case vm ^. EVM.state . EVM.gas of
     EVM.C _ x | x == expected -> True
     _ -> False
 
@@ -111,19 +170,42 @@ checkExpectedGas vm expected =
 instance FromJSON Contract where
   parseJSON (JSON.Object v) = Contract
     <$> v .: "balance"
-    <*> (hexText <$> v .: "code")
+    <*> (EVM.RuntimeCode <$> (hexText <$> v .: "code"))
     <*> v .: "nonce"
     <*> v .: "storage"
+    <*> pure False
   parseJSON invalid =
     JSON.typeMismatch "VM test case contract" invalid
 
 instance FromJSON Case where
   parseJSON (JSON.Object v) = Case
     <$> parseVmOpts v
-    <*> parseContracts v
+    <*> parseContracts Pre v
     <*> parseExpectation v
   parseJSON invalid =
-      JSON.typeMismatch "VM test case" invalid
+    JSON.typeMismatch "VM test case" invalid
+
+instance FromJSON BlockchainCase where
+  parseJSON (JSON.Object v) = BlockchainCase
+    <$> v .: "blocks"
+    <*> parseContracts Pre v
+    <*> parseContracts Post v
+    <*> v .: "network"
+  parseJSON invalid =
+    JSON.typeMismatch "GeneralState test case" invalid
+
+instance FromJSON Block where
+  parseJSON (JSON.Object v) = do
+    v'         <- v .: "blockHeader"
+    txs        <- v .: "transactions"
+    coinbase   <- addrField v' "coinbase"
+    difficulty <- wordField v' "difficulty"
+    gasLimit   <- wordField v' "gasLimit"
+    number     <- wordField v' "number"
+    timestamp  <- wordField v' "timestamp"
+    return $ Block coinbase difficulty gasLimit number timestamp txs
+  parseJSON invalid =
+    JSON.typeMismatch "Block" invalid
 
 parseVmOpts :: JSON.Object -> JSON.Parser EVM.VMOpts
 parseVmOpts v =
@@ -139,6 +221,7 @@ parseVmOpts v =
            <*> addrField exec "caller"
            <*> addrField exec "origin"
            <*> wordField exec "gas" -- XXX: correct?
+           <*> wordField exec "gas" -- XXX: correct?
            <*> wordField env  "currentNumber"
            <*> wordField env  "currentTimestamp"
            <*> addrField env  "currentCoinbase"
@@ -146,13 +229,17 @@ parseVmOpts v =
            <*> wordField env  "currentGasLimit"
            <*> wordField exec "gasPrice"
            <*> pure (EVM.FeeSchedule.homestead)
+           <*> pure False
        _ ->
          JSON.typeMismatch "VM test case" (JSON.Object v)
 
 parseContracts ::
-  JSON.Object -> JSON.Parser (Map Addr Contract)
-parseContracts v =
-  v .: "pre" >>= parseJSON
+  Which -> JSON.Object -> JSON.Parser (Map Addr Contract)
+parseContracts w v =
+  v .: which >>= parseJSON
+  where which = case w of
+          Pre  -> "pre"
+          Post -> "postState"
 
 parseExpectation :: JSON.Object -> JSON.Parser (Maybe Expectation)
 parseExpectation v =
@@ -161,7 +248,7 @@ parseExpectation v =
      gas       <- v .:? "gas"
      case (out, contracts, gas) of
        (Just x, Just y, Just z) ->
-         return (Just (Expectation x y z))
+         return (Just (Expectation (Just x) y (Just z)))
        _ ->
          return Nothing
 
@@ -169,6 +256,20 @@ parseSuite ::
   Lazy.ByteString -> Either String (Map String Case)
 parseSuite = JSON.eitherDecode'
 
+parseBCSuite ::
+  Lazy.ByteString -> Either String (Map String Case)
+parseBCSuite x = case (JSON.eitherDecode' x) :: Either String (Map String BlockchainCase) of
+  Left e        -> Left e
+  Right bcCases -> let allCases = (fromBlockchainCase <$> bcCases)
+                       rightNetwork (Left OldNetwork) = False
+                       rightNetwork _                 = True
+                       rightNetworkCases = Map.filter rightNetwork allCases
+                       (erroredCases, parsedCases) = splitEithers rightNetworkCases
+    in if Map.size erroredCases > 0
+    then Left ("Couldn't parse case: " ++ (show $ (Map.elems erroredCases) !! 0))
+    else if Map.size parsedCases == 0
+    then Left "No cases for current network."
+    else Right parsedCases
 #endif
 
 realizeContracts :: Map Addr Contract -> Map Addr EVM.Contract
@@ -178,20 +279,157 @@ realizeContracts = Map.fromList . map f . Map.toList
 
 realizeContract :: Contract -> EVM.Contract
 realizeContract x =
-  EVM.initialContract (EVM.RuntimeCode (contractCode x))
-    & EVM.balance .~ EVM.w256 (contractBalance x)
-    & EVM.nonce   .~ EVM.w256 (contractNonce x)
+  EVM.initialContract (x ^. code)
+    & EVM.balance .~ EVM.w256 (x ^. balance)
+    & EVM.nonce   .~ EVM.w256 (x ^. nonce)
     & EVM.storage .~ (
         Map.fromList .
         map (\(k, v) -> (EVM.w256 k, EVM.w256 v)) .
-        Map.toList $ contractStorage x
+        Map.toList $ x ^. storage
         )
 
-vmForCase :: Case -> EVM.VM
-vmForCase x =
-  EVM.makeVm (testVmOpts x)
-    & EVM.env . EVM.contracts .~ realizeContracts (testContracts x)
-    & EVM.execMode .~ EVM.ExecuteAsVMTest
+data BlockchainError = TooManyBlocks | TooManyTxs | NoTxs | TargetMissing | SignatureUnverified | InvalidTx | OldNetwork | FailedCreate deriving Show
+
+fromBlockchainCase :: BlockchainCase -> Either BlockchainError Case
+fromBlockchainCase (BlockchainCase blocks preState postState network) =
+  case (blocks, network) of
+    ((block : []), "ConstantinopleFix") -> case blockTxs block of
+      (tx : []) -> case txToAddr tx of
+        Nothing -> fromCreateBlockchainCase block tx preState postState
+        Just _  -> fromNormalBlockchainCase block tx preState postState
+      []        -> Left NoTxs
+      _         -> Left TooManyTxs
+    ((_ : []), _) -> Left OldNetwork
+    (_, _)        -> Left TooManyBlocks
+
+fromCreateBlockchainCase :: Block -> Transaction
+                         -> Map Addr Contract -> Map Addr Contract
+                         -> Either BlockchainError Case
+fromCreateBlockchainCase block tx preState postState =
+  case (sender 1 tx,
+        initCreateTx tx block preState) of
+    (Nothing, _) -> Left SignatureUnverified
+    (_, Nothing) -> Left FailedCreate
+    (Just origin, Just (initState, createdAddr)) -> let
+      feeSchedule = EVM.FeeSchedule.metropolis
+      in Right $ Case
+         (EVM.VMOpts
+          { vmoptCode          = txData tx
+          , vmoptCalldata      = mempty
+          , vmoptValue         = txValue tx
+          , vmoptAddress       = createdAddr
+          , vmoptCaller        = origin
+          , vmoptOrigin        = origin
+          , vmoptGas           = txGasLimit tx - fromIntegral (txGasCost feeSchedule tx)
+          , vmoptGaslimit      = txGasLimit tx
+          , vmoptNumber        = blockNumber block
+          , vmoptTimestamp     = blockTimestamp block
+          , vmoptCoinbase      = blockCoinbase block
+          , vmoptDifficulty    = blockDifficulty block
+          , vmoptBlockGaslimit = blockGasLimit block
+          , vmoptGasprice      = txGasPrice tx
+          , vmoptSchedule      = feeSchedule
+          , vmoptCreate        = True
+          })
+        initState
+        (Just $ Expectation Nothing postState Nothing)
+
+
+fromNormalBlockchainCase :: Block -> Transaction
+                       -> Map Addr Contract -> Map Addr Contract
+                       -> Either BlockchainError Case
+fromNormalBlockchainCase block tx preState postState =
+  let Just toAddr = txToAddr tx
+      feeSchedule = EVM.FeeSchedule.metropolis
+    in case (toAddr
+           , Map.lookup toAddr preState
+           , sender 1 tx
+           , initNormalTx tx block preState) of
+      (_, _, Nothing, _) -> Left SignatureUnverified
+      (_, _, _, Nothing) -> Left InvalidTx
+      (_, Nothing, _, _) -> Left TargetMissing
+      (_, Just c, Just origin, Just initState) -> Right $ Case
+        (EVM.VMOpts
+         { vmoptCode          = theCode
+         , vmoptCalldata      = txData tx
+         , vmoptValue         = txValue tx
+         , vmoptAddress       = toAddr
+         , vmoptCaller        = origin
+         , vmoptOrigin        = origin
+         , vmoptGas           = txGasLimit tx - fromIntegral (txGasCost feeSchedule tx)
+         , vmoptGaslimit      = txGasLimit tx
+         , vmoptNumber        = blockNumber block
+         , vmoptTimestamp     = blockTimestamp block
+         , vmoptCoinbase      = blockCoinbase block
+         , vmoptDifficulty    = blockDifficulty block
+         , vmoptBlockGaslimit = blockGasLimit block
+         , vmoptGasprice      = txGasPrice tx
+         , vmoptSchedule      = feeSchedule
+         , vmoptCreate        = False
+         })
+        initState
+        (Just $ Expectation Nothing postState Nothing)
+        where theCode = case (view code c) of
+                EVM.RuntimeCode x  -> x
+                EVM.InitCode x     -> x
+
+validateTx :: Transaction -> Map Addr Contract -> Maybe Bool
+validateTx tx cs = do
+  origin        <- sender 1 tx
+  originBalance <- (view balance) <$> view (at origin) cs
+  originNonce   <- (view nonce)   <$> view (at origin) cs
+  let gasDeposit = fromIntegral (txGasPrice tx) * (txGasLimit tx)
+  return $ gasDeposit + (txValue tx) <= originBalance
+    && (txNonce tx) == originNonce
+
+initNormalTx :: Transaction -> Block -> Map Addr Contract -> Maybe (Map Addr Contract)
+initNormalTx tx block cs = do
+  toAddr <- txToAddr tx
+  origin <- sender 1 tx
+  valid  <- validateTx tx cs
+  let gasDeposit = fromIntegral (txGasPrice tx) * (txGasLimit tx)
+      coinbase   = blockCoinbase block
+  if not valid then mzero else
+    return $
+    (Map.adjust ((over nonce   (+ 1))
+               . (over balance (subtract gasDeposit))
+               . (over balance (subtract $ txValue tx))) origin)
+    . (Map.adjust (over balance (+ (txValue tx))) toAddr)
+    . touchAccount origin
+    . touchAccount toAddr
+    . touchAccount coinbase $ cs
+
+initCreateTx :: Transaction -> Block -> Map Addr Contract -> Maybe ((Map Addr Contract), Addr)
+initCreateTx tx block cs = do
+  origin <- sender 1 tx
+  valid  <- validateTx tx cs
+  let gasDeposit  = fromIntegral (txGasPrice tx) * (txGasLimit tx)
+      coinbase    = blockCoinbase block
+      senderNonce = view (accountAt origin . nonce) cs
+      createdAddr = newContractAddress origin senderNonce
+      prevCode    = view (accountAt createdAddr .  code) cs
+      prevNonce   = view (accountAt createdAddr . nonce) cs
+  guard $ (prevCode == EVM.RuntimeCode mempty) && (prevNonce == 0)
+  if not valid then mzero else
+    return $
+    ((Map.adjust ((over nonce   (+ 1))
+                . (over balance (subtract gasDeposit))
+                . (over balance (subtract $ txValue tx))) origin)
+   . (Map.adjust ((over balance (+ (txValue tx)))
+                . (set code (EVM.InitCode $ txData tx))
+                . (set nonce 1)
+                . (set create True)) createdAddr)
+   . touchAccount origin
+   . touchAccount createdAddr
+   . touchAccount coinbase $ cs, createdAddr)
+
+vmForCase :: EVM.ExecMode -> Case -> EVM.VM
+vmForCase mode x =
+  let cs = realizeContracts (testContracts x) in
+    EVM.makeVm (testVmOpts x)
+    & EVM.env . EVM.contracts .~ cs
+    & EVM.tx . EVM.txReversion .~ cs
+    & EVM.execMode .~ mode
 
 interpret :: Stepper a -> EVM a
 interpret =

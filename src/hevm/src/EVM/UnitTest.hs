@@ -547,13 +547,15 @@ initialUnitTestVm (UnitTestOptions {..}) theContract _ =
            , vmoptCaller = testCaller
            , vmoptOrigin = testOrigin
            , vmoptGas = testGasCreate
+           , vmoptGaslimit = testGasCreate
            , vmoptCoinbase = testCoinbase
            , vmoptNumber = testNumber
            , vmoptTimestamp = testTimestamp
-           , vmoptGaslimit = testGaslimit
+           , vmoptBlockGaslimit = testGaslimit
            , vmoptGasprice = testGasprice
            , vmoptDifficulty = testDifficulty
            , vmoptSchedule = FeeSchedule.metropolis
+           , vmoptCreate = False
            }
     creator =
       initialContract (RuntimeCode mempty)

@@ -37,6 +37,7 @@ data Num n => FeeSchedule n = FeeSchedule
   , g_copy :: n
   , g_blockhash :: n
   , g_extcodehash :: n
+  , r_block :: n
   } deriving Show
 
 -- For the purposes of this module, we define an EIP as just a fee
@@ -99,6 +100,7 @@ homestead = FeeSchedule
   , g_copy = 3
   , g_blockhash = 20
   , g_extcodehash = 400
+  , r_block = 2000000000000000000
   }
 
 metropolis :: Num n => FeeSchedule n

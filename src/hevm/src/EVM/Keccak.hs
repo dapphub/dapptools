@@ -4,7 +4,7 @@
 {-# Language JavaScriptFFI #-}
 #endif
 
-module EVM.Keccak (word256Bytes, keccak, abiKeccak, newContractAddress, newContractAddressCREATE2) where
+module EVM.Keccak (word160Bytes, word256Bytes, keccak, abiKeccak, newContractAddress, newContractAddressCREATE2, rlpWord160, rlpWord256, rlpBytes, rlpList) where
 
 import EVM.Types
 
@@ -12,6 +12,7 @@ import Control.Arrow ((>>>))
 
 import Data.Bits
 import Data.ByteString (ByteString)
+
 import qualified Data.ByteString as BS
 import Data.Word
 
@@ -79,6 +80,14 @@ abiKeccak =
     >>> BS.take 4
     >>> BS.unpack
     >>> word32
+
+rlpBytes :: ByteString -> ByteString
+rlpBytes x | (BS.length x == 1) && (head . BS.unpack) x < 128 = x
+rlpBytes x = let n = BS.length x
+  in if n <= 55
+     then BS.cons (fromIntegral (0x80 + n)) x
+     else let ns = rlpWord256 (fromIntegral n)
+  in BS.cons (fromIntegral (0xb7 + BS.length ns)) (BS.concat [ns, x])
 
 rlpWord256 :: W256 -> ByteString
 rlpWord256 0 = BS.pack [0x80]

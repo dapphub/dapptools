@@ -23,6 +23,7 @@ import qualified EVM.Emacs as EVM.Emacs
 import qualified EVM.VMTest as VMTest
 #endif
 
+import EVM (ExecMode(..))
 import EVM.Debug
 import EVM.Exec
 import EVM.Solidity
@@ -108,6 +109,11 @@ data Command
   | VmTestReport
       { tests :: String
       }
+  | BcTest
+      { file  :: String
+      , test  :: [String]
+      , debug :: Bool
+      }
   | Flatten
     { sourceFile :: String
     , jsonFile   :: Maybe String
@@ -157,7 +163,9 @@ main = do
     Exec {} ->
       launchExec cmd
     VmTest {} ->
-      launchVMTest cmd
+      launchTest ExecuteAsVMTest cmd
+    BcTest {} ->
+      launchTest ExecuteAsBlockchainTest cmd
     DappTest {} ->
       withCurrentDirectory root $ do
         testFile <- findJsonFile (jsonFile cmd)
@@ -301,30 +309,35 @@ vmFromCommand cmd =
     value'   = word value 0
     address' = addr address 1
     vm1 = EVM.makeVm $ EVM.VMOpts
-      { EVM.vmoptCode       = hexByteString "--code" (code cmd)
-      , EVM.vmoptCalldata   = maybe "" (hexByteString "--calldata")
-                                (calldata cmd)
-      , EVM.vmoptValue      = value'
-      , EVM.vmoptAddress    = address'
-      , EVM.vmoptCaller     = addr caller 2
-      , EVM.vmoptOrigin     = addr origin 3
-      , EVM.vmoptGas        = word gas 0
-      , EVM.vmoptCoinbase   = addr coinbase 0
-      , EVM.vmoptNumber     = word number 0
-      , EVM.vmoptTimestamp  = word timestamp 0
-      , EVM.vmoptGaslimit   = word gaslimit 0
-      , EVM.vmoptGasprice   = word gasprice 0
-      , EVM.vmoptDifficulty = word difficulty 0
-      , EVM.vmoptSchedule   = FeeSchedule.metropolis
+      { EVM.vmoptCode          = hexByteString "--code" (code cmd)
+      , EVM.vmoptCalldata      = maybe "" (hexByteString "--calldata")
+                                   (calldata cmd)
+      , EVM.vmoptValue         = value'
+      , EVM.vmoptAddress       = address'
+      , EVM.vmoptCaller        = addr caller 2
+      , EVM.vmoptOrigin        = addr origin 3
+      , EVM.vmoptGas           = word gas 0
+      , EVM.vmoptGaslimit      = word gas 0
+      , EVM.vmoptCoinbase      = addr coinbase 0
+      , EVM.vmoptNumber        = word number 0
+      , EVM.vmoptTimestamp     = word timestamp 0
+      , EVM.vmoptBlockGaslimit = word gaslimit 0
+      , EVM.vmoptGasprice      = word gasprice 0
+      , EVM.vmoptDifficulty    = word difficulty 0
+      , EVM.vmoptSchedule      = FeeSchedule.metropolis
+      , EVM.vmoptCreate        = False
       }
     word f def = maybe def id (f cmd)
     addr f def = maybe def id (f cmd)
 
-launchVMTest :: Command -> IO ()
-launchVMTest cmd =
+launchTest :: ExecMode -> Command ->  IO ()
+launchTest execmode cmd = do
 #if MIN_VERSION_aeson(1, 0, 0)
-  VMTest.parseSuite <$> LazyByteString.readFile (file cmd) >>=
-   \case
+  let parser = case execmode of
+        ExecuteAsVMTest -> VMTest.parseSuite
+        ExecuteAsBlockchainTest -> VMTest.parseBCSuite
+  parsed <- parser <$> LazyByteString.readFile (file cmd)
+  case parsed of
      Left err -> print err
      Right allTests ->
        let testFilter =
@@ -332,19 +345,21 @@ launchVMTest cmd =
              then id
              else filter (\(x, _) -> elem x (test cmd))
        in
-         mapM_ (runVMTest (optsMode cmd)) $
+         mapM_ (runVMTest execmode (optsMode cmd)) $
            testFilter (Map.toList allTests)
 #else
   putStrLn "Not supported"
 #endif
 
 #if MIN_VERSION_aeson(1, 0, 0)
-runVMTest :: Mode -> (String, VMTest.Case) -> IO Bool
-runVMTest mode (name, x) = do
+runVMTest :: ExecMode -> Mode -> (String, VMTest.Case) -> IO Bool
+runVMTest execmode mode (name, x) = do
   let
-    vm0 = VMTest.vmForCase x
-    m = void EVM.Stepper.execFully >> EVM.Stepper.evm EVM.finalize
-
+    vm0 = VMTest.vmForCase execmode x
+    m = case execmode of
+      -- whether or not to "finalize the tx"
+      ExecuteAsVMTest -> void EVM.Stepper.execFully >> EVM.Stepper.evm (EVM.finalize False)
+      ExecuteAsBlockchainTest -> void EVM.Stepper.execFully >> EVM.Stepper.evm (EVM.finalize True)
   putStr (name ++ " ")
   hFlush stdout
   result <- do
