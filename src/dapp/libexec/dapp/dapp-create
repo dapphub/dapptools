@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 ### dapp-create -- deploy a compiled contract (--verify on Etherscan)
-### Usage: dapp create <name>
+### Usage: dapp create <name> <arguments...>
 ### Add --verify and export your ETHERSCAN_API_KEY to auto-verify on Etherscan
 set -e
 for i in "$@"; do
