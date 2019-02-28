@@ -116,8 +116,9 @@ in rec {
           repo = "nixpkgs";
         }) {}).solc;
       in
-        fetchNixpkgs { owner = "NixOS"; attr = super.system; }
-        // { unreleased = fetchNixpkgs { owner = "dapphub"; attr = "unreleased"; }; };
+        fetchNixpkgs { owner = "NixOS";   attr = super.system; }
+        //
+        fetchNixpkgs { owner = "dapphub"; attr = "unreleased"; };
   solc = solc-versions.solc_0_5_3;
 
   hevm = self.pkgs.haskell.lib.justStaticExecutables self.haskellPackages.hevm;
