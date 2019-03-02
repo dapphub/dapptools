@@ -70,6 +70,11 @@ checkExpectation x vm =
         (s3, b3) = ("bad-gas", checkExpectedGas vm (expectedGas expectation))
         ss = map fst (filter (not . snd) [(s1, b1), (s2, b2), (s3, b3)])
       putStr (intercalate " " ss)
+      putStrLn ""
+      putStrLn "Expected postState: "
+      putStrLn $ show (expectedContracts expectation)
+      putStrLn "Actual postState: "
+      putStrLn $ show (vm ^. EVM.env . EVM.contracts . to (fmap clearZeroStorage))
       return (b1 && b2 && b3)
     (Nothing, Just (EVM.VMSuccess _)) -> do
       putStr "unexpected-success"
