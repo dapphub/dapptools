@@ -10,9 +10,9 @@ fi
 
 {
   cd "$1"
-  for x in VMTests/*/*; do
+  for x in BlockchainTests/GeneralStateTests/*/*; do
     echo >&2 "$x"
-    echo -n "$x " ; "$HEVM" vm-test --file $x
+    echo -n "$x " ; "$HEVM" bc-test --file $x
   done
 } | {
   while read path test outcome; do
@@ -21,11 +21,12 @@ fi
     row="<tr><td class=testcase>$testcase<td>$outcome<td class=category>$category"
     row+=$'\n'
     case $outcome in
-      ok) passed+=$row ;;
-      *)  failed+=$row ;;
+      ok)          passed+=$row ;;
+      bad-balance) balancefailed+=$row ;;
+      *)           failed+=$row ;;
     esac
   done
-  
+
   cat <<.
 <!doctype html>
 <title>hevm test results</title>
@@ -48,6 +49,7 @@ a { color: darkblue; text-decoration: none; }
 h1, h2 { text-align: center; margin-top: 2rem  }
 .testcase { font-weight: bold }
 #failed .testcase { color: rgb(200, 0, 0) }
+#balancefailed .testcase { color: rgb(200, 200, 0) }
 #passed .testcase { color: rgb(0, 150, 0) }
 </style>
 <header>
@@ -59,18 +61,27 @@ $(date +%Y-%m-%d)
 
   wc -l <<<"$passed"
   echo "passed, "
+  wc -l <<<"$balancefailed"
+  echo "bad-balance, "
   wc -l <<<"$failed"
   echo "failed"
-  
+
   cat <<.
 <p>
-(Test suite: <span class=VMTests</span>VMTests</span> for Homestead)
+(Test suite: <span class=GeneralStateTests</span>GeneralStateTests</span> for ConstantinopleFix)
 </header>
 <h2>Failed tests</h2>
 <table id=failed>
 <tbody>
 .
   echo "$failed"
+  cat <<.
+</table>
+<h2>Failed tests (due to balance only)</h2>
+<table id=balancefailed>
+<tbody>
+.
+  echo "$balancefailed"
   cat <<.
 </table>
 <h2>Passed tests</h2>
