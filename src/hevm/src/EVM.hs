@@ -912,9 +912,11 @@ exec1 = do
               then do
                 assign (state . stack) xs
                 cheat (xInOffset, xInSize) (xOutOffset, xOutSize)
-              else
-                burn (num g_call) $ do
-                  delegateCall fees xGas (num xTo) xInOffset xInSize xOutOffset xOutSize xs
+              else let
+                availableGas = the state gas
+                (cost, gas') = costOfCall fees (Just this) 0 availableGas xGas
+                  in burn (cost - gas') $ do
+                  delegateCall fees gas' (num xTo) xInOffset xInSize xOutOffset xOutSize xs
                     (return ())
             _ -> underrun
 
