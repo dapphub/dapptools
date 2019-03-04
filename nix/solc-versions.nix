@@ -12,6 +12,7 @@ rec {
     solc_0_5_1  = { rev = "a5a537d515718107b4b1ee0ae43862d6140473be"; sha256 = "06dwb0ffi4vj6v51ccq2w54kl9n024dqr7qn90i0vga7qjqpckns"; };
     solc_0_5_2  = { rev = "5b216291fef500181515fb771bb98bf6b091bd3a"; sha256 = "03ahyxr72nlm49ri5q4g4f16p8blccbmbx7pq9lzm024wyv2h9xa"; };
     solc_0_5_3  = { rev = "e639f2468121d1008f9b52d7e5d0819ead56e58c"; sha256 = "1nz8hzw2ga21qh4b4j7npzyz51691n6cga3al7ypg4vlj5nql3c3"; };
+    solc_0_5_4  = { rev = "1774c6809033b3d0b6400154b7eb4f8c0287abc2"; sha256 = "1n11g8mh1jzqmwvc78148cvn3b73ywjcjxqkcjvxfdnpjpf8lxca"; };
   };
 
   x86_64-linux = x86_64-darwin // {
@@ -24,6 +25,5 @@ rec {
   };
 
   unreleased = {
-    solc_0_5_4  = { rev = "572f828e7e87b113e416a48db603985b2d1b7036"; sha256 = "0f464dwglx12782djwafnha0f8z71xkh2fy2aawn4pa2k2a1f2jl"; };
   };
 }
