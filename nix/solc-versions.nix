@@ -27,5 +27,6 @@ rec {
 
   # revs here refer to commits on https://github.com/dapphub/nixpkgs
   unreleased = {
+    solc_0_5_5 = { rev = "ef86658929a2c61f7e8ed524775346cfe5419012"; sha256 = "0dlk7xbp2pp7lj6n8sly0fc7qlc6sdd56mmhaaamdqmlx31p3is7"; };
   };
 }
