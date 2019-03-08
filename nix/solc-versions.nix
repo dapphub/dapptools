@@ -1,4 +1,5 @@
 rec {
+  # revs here and on x86_64-linux refer to commits on https://github.com/NixOS/nixpkgs
   x86_64-darwin = {
     solc_0_4_13 = { rev = "61c1313bd1a71fce3b074d9c5d1482604a75529e"; sha256 = "0g7fsb6j13ah1mj1dz4qjd194z6i2n6i2ij0pgxmvaaylzwvpgiv"; };
     solc_0_4_16 = { rev = "3d107c15bd0c9f32cd8e51ed5c4aa40e4b1accf8"; sha256 = "0m1nvzbavjfldv2wj5kmb3qinrx0q37mwp7p61km62a80437cpiz"; };
@@ -24,6 +25,7 @@ rec {
     solc_0_4_12 = { rev = "a76557700444c33c4ee0665b5161907f28a67284"; sha256 = "1gh7aw1r2nizd8vkjdc2w0w62kr20kd85wn23h7srij5zi417086"; };
   };
 
+  # revs here refer to commits on https://github.com/dapphub/nixpkgs
   unreleased = {
   };
 }
