@@ -17,3 +17,5 @@ test:
 	! grep '^#!/bin/sh' "$${files[@]}"; \
 	grep '^#!/usr/bin/env bash' "$${files[@]}" | \
 	cut -d: -f1 | xargs shellcheck
+
+.PHONY: default dirs install link uninstall test

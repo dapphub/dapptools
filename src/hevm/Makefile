@@ -13,3 +13,5 @@ repl: .configured
 PORT ?= 8001
 BROWSER ?= chromium
 hoogle-server:; nix-shell --run 'hoogle server --local -p $(PORT)'
+
+.PHONY: all build repl
