@@ -131,7 +131,7 @@ Alternatively, you can use a default remote node (operated by
 and `rinkeby`.
 
 Note: If you frequently use Seth with the Infura nodes, you should
-[sign up for an Infura API key](https://infura.io/signup) and use your
+[sign up for an Infura API key](https://infura.io/register) and use your
 custom URL:
 
     export ETH_RPC_URL=https://mainnet.infura.io/<API-KEY>
