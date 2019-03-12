@@ -1086,7 +1086,8 @@ create :: (?op :: Word8)
   -> Word -> Word -> Word -> [Word] -> Addr -> EVM ()
 create vm self this fees xValue xOffset xSize xs newAddr =
   accessMemoryRange fees xOffset xSize $ do
-  if xValue > view balance this
+  if (xValue > view balance this)
+    || (collision $ view (env . contracts . at newAddr) vm)
     then do
       assign (state . stack) (0 : xs)
       next
@@ -1108,6 +1109,7 @@ create vm self this fees xValue xOffset xSize xs newAddr =
           zoom (env . contracts) $ do
             assign (at newAddr) (Just newContract)
             assign (ix newAddr . balance) xValue
+            assign (ix newAddr . nonce) 1
             modifying (ix self . balance) (flip (-) xValue)
             modifying (ix self . nonce) succ
 
@@ -1155,6 +1157,12 @@ resetState = do
   assign result     Nothing
   assign frames     []
   assign state      blankState
+
+-- EIP 684
+collision :: Maybe Contract -> Bool
+collision c' = case c' of
+  Just c -> (view contractcode c /= RuntimeCode mempty) || (view nonce c /= 0)
+  Nothing -> False
 
 finalize :: Bool -> EVM ()
 finalize txmode = do
