@@ -373,14 +373,16 @@ runVMTest execmode mode (name, x) = do
     waitCatch action
   case result of
     Right (Just vm1) -> do
-      ok <- VMTest.checkExpectation x vm1
+      ok <- VMTest.checkExpectation (isDebug mode) x vm1
       putStrLn (if ok then "ok" else "")
       return ok
     Right Nothing -> do
       putStrLn "timeout"
       return False
-    Left _ -> do
-      putStrLn "error"
+    Left e -> do
+      putStrLn $ "error: " ++ if isDebug mode
+        then show e
+        else (head . lines . show) e
       return False
 
 #endif

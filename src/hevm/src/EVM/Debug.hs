@@ -19,6 +19,10 @@ import Text.PrettyPrint.ANSI.Leijen
 
 data Mode = Debug | Run deriving (Eq, Show)
 
+isDebug m = case m of
+  Debug -> True
+  _     -> False
+
 object :: [(Doc, Doc)] -> Doc
 object xs =
   group $ lbrace

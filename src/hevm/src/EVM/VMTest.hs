@@ -109,18 +109,18 @@ splitEithers =
   . (fmap fst &&& fmap snd)
   . (fmap (preview _Left &&& preview _Right))
 
-checkExpectation :: Case -> EVM.VM -> IO Bool
-checkExpectation x vm =
+checkExpectation :: Bool -> Case -> EVM.VM -> IO Bool
+checkExpectation diff x vm =
   case (testExpectation x, view EVM.result vm) of
     (Just expectation, Just (EVM.VMSuccess output)) -> do
       let
-        (s4, (_, b4)) = ("bad-balance", checkExpectedContracts vm (expectedContracts expectation))
-        (s1, (b1, _)) = ("bad-state", checkExpectedContracts vm (expectedContracts expectation))
+        ((s1, s1'), (b1, b1')) = (("bad-state", "(only balance)"), checkExpectedContracts vm (expectedContracts expectation))
         (s2, b2) = ("bad-output", checkExpectedOut output (expectedOut expectation))
         (s3, b3) = ("bad-gas", checkExpectedGas vm (expectedGas expectation))
-        ss = map fst (filter (not . snd) [(s4, not b4), (s1, b1), (s2, b2), (s3, b3)])
-      if not b1 then do
-        putStrLn (intercalate " " ss)
+        ss = map fst (filter (not . snd) [(s1, b1), (s1', b1 || (not b1')), (s2, b2), (s3, b3)])
+      putStr (intercalate " " ss)
+      if diff && not b1 then do
+        putStrLn ""
         putStrLn "Expected postState: "
         putStrLn $ show (expectedContracts expectation)
         putStrLn "Actual postState: "
