@@ -889,7 +889,42 @@ exec1 = do
 
         -- op: CALLCODE
         0xf2 ->
-          error "CALLCODE not supported (use DELEGATECALL)"
+          case stk of
+            ( xGas
+              : (num -> xTo)
+              : xValue
+              : xInOffset
+              : xInSize
+              : xOutOffset
+              : xOutSize
+              : xs
+             ) ->
+              case xTo of
+                n | n > 0 && n <= 8 -> precompiledContract
+                _ ->
+                  let
+                    availableGas = the state gas
+                    recipient    = Just this
+                    (cost, gas') = costOfCall fees recipient xValue availableGas xGas
+                  in burn (cost - gas') $
+                    (if xValue > 0 then notStatic else id) $
+                    if xValue > view balance this
+                    then do
+                      assign (state . stack) (0 : xs)
+                      next
+                    else
+                      case view execMode vm of
+                        ExecuteAsVMTest -> do
+                          assign (state . stack) (1 : xs)
+                          next
+                        _ -> do
+                          delegateCall fees gas' xTo xInOffset xInSize xOutOffset xOutSize xs $ do
+                            zoom state $ do
+                              assign callvalue xValue
+                              assign caller (the state contract)
+                              assign memorySize 0
+            _ ->
+              underrun
 
         -- op: RETURN
         0xf3 ->
@@ -988,6 +1023,9 @@ precompiledContract = do
   case (?op, stk) of
     -- CALL (includes value)
     (0xf1, (gasCap:(num -> op):_:inOffset:inSize:outOffset:outSize:xs)) ->
+      doIt vm fees op gasCap inOffset inSize outOffset outSize xs
+    -- CALLCODE (includes value)
+    (0xf2, (gasCap:(num -> op):_:inOffset:inSize:outOffset:outSize:xs)) ->
       doIt vm fees op gasCap inOffset inSize outOffset outSize xs
     -- STATICCALL (does not include value)
     (0xfa, (gasCap:(num -> op):inOffset:inSize:outOffset:outSize:xs)) ->
