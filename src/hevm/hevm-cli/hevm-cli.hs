@@ -105,6 +105,7 @@ data Command
       { file  :: String
       , test  :: [String]
       , debug :: Bool
+      , diff  :: Bool
       }
   | VmTestReport
       { tests :: String
@@ -113,6 +114,7 @@ data Command
       { file  :: String
       , test  :: [String]
       , debug :: Bool
+      , diff  :: Bool
       }
   | Flatten
     { sourceFile :: String
@@ -345,15 +347,15 @@ launchTest execmode cmd = do
              then id
              else filter (\(x, _) -> elem x (test cmd))
        in
-         mapM_ (runVMTest execmode (optsMode cmd)) $
+         mapM_ (runVMTest (diff cmd) execmode (optsMode cmd)) $
            testFilter (Map.toList allTests)
 #else
   putStrLn "Not supported"
 #endif
 
 #if MIN_VERSION_aeson(1, 0, 0)
-runVMTest :: ExecMode -> Mode -> (String, VMTest.Case) -> IO Bool
-runVMTest execmode mode (name, x) = do
+runVMTest :: Bool -> ExecMode -> Mode -> (String, VMTest.Case) -> IO Bool
+runVMTest diffmode execmode mode (name, x) = do
   let
     vm0 = VMTest.vmForCase execmode x
     m = case execmode of
@@ -373,14 +375,14 @@ runVMTest execmode mode (name, x) = do
     waitCatch action
   case result of
     Right (Just vm1) -> do
-      ok <- VMTest.checkExpectation (isDebug mode) x vm1
+      ok <- VMTest.checkExpectation diffmode execmode x vm1
       putStrLn (if ok then "ok" else "")
       return ok
     Right Nothing -> do
       putStrLn "timeout"
       return False
     Left e -> do
-      putStrLn $ "error: " ++ if isDebug mode
+      putStrLn $ "error: " ++ if diffmode
         then show e
         else (head . lines . show) e
       return False

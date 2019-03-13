@@ -38,6 +38,7 @@ import IPPrint.Colored (cpprint)
 import Data.ByteString (ByteString)
 import Data.Aeson ((.:), (.:?))
 import Data.Aeson (FromJSON (..))
+import Data.Foldable (fold)
 import Data.Map (Map)
 import Data.Maybe (fromMaybe)
 import Data.List (intercalate)
@@ -109,15 +110,13 @@ splitEithers =
   . (fmap fst &&& fmap snd)
   . (fmap (preview _Left &&& preview _Right))
 
-checkExpectation :: Bool -> Case -> EVM.VM -> IO Bool
-checkExpectation diff x vm =
-  case (testExpectation x, view EVM.result vm) of
-    (Just expectation, Just (EVM.VMSuccess output)) -> do
+checkExpectation :: Bool -> EVM.ExecMode -> Case -> EVM.VM -> IO Bool
+checkExpectation diff execmode x vm =
+  case (execmode, testExpectation x, view EVM.result vm) of
+    (EVM.ExecuteAsBlockchainTest, Just expectation, _) -> do
       let
-        ((s1, s1'), (b1, b1')) = (("bad-state", "(only balance)"), checkExpectedContracts vm (expectedContracts expectation))
-        (s2, b2) = ("bad-output", checkExpectedOut output (expectedOut expectation))
-        (s3, b3) = ("bad-gas", checkExpectedGas vm (expectedGas expectation))
-        ss = map fst (filter (not . snd) [(s1, b1), (s1', b1 || (not b1')), (s2, b2), (s3, b3)])
+        ((s1, s1'), (b1, b1')) = (("bad-state", "bad-balance"), checkExpectedContracts vm (expectedContracts expectation))
+        ss = map fst (filter (not . snd) [(s1, b1 || b1'), (s1', b1 || not b1')])
       putStr (intercalate " " ss)
       if diff && not b1 then do
         putStrLn ""
@@ -125,17 +124,25 @@ checkExpectation diff x vm =
         putStrLn $ show (expectedContracts expectation)
         putStrLn "Actual postState: "
         putStrLn $ show (vm ^. EVM.env . EVM.contracts . to (fmap clearZeroStorage))
-        else do return ()
+        else return ()
+      return b1
+    (_, Just expectation, Just (EVM.VMSuccess output)) -> do
+      let
+        (s1, (b1, _)) = ("bad-state", checkExpectedContracts vm (expectedContracts expectation))
+        (s2, b2) = ("bad-output", checkExpectedOut output (expectedOut expectation))
+        (s3, b3) = ("bad-gas", checkExpectedGas vm (expectedGas expectation))
+        ss = map fst (filter (not . snd) [(s1, b1), (s2, b2), (s3, b3)])
+      putStr (intercalate " " ss)
       return (b1 && b2 && b3)
-    (Nothing, Just (EVM.VMSuccess _)) -> do
+    (_, Nothing, Just (EVM.VMSuccess _)) -> do
       putStr "unexpected-success"
       return False
-    (Nothing, Just (EVM.VMFailure _)) ->
+    (_, Nothing, Just (EVM.VMFailure _)) ->
       return True
-    (Just _, Just (EVM.VMFailure _)) -> do
+    (_, Just _, Just (EVM.VMFailure _)) -> do
       putStr "unexpected-failure"
       return False
-    (_, Nothing) -> do
+    (_, _, Nothing) -> do
       cpprint (view EVM.result vm)
       error "internal error"
 
@@ -144,12 +151,21 @@ checkExpectedOut output ex = case ex of
   Nothing       -> True
   Just expected -> output == expected
 
+-- quotient account state by nullness
+(~=) :: Map Addr EVM.Contract -> Map Addr EVM.Contract -> Bool
+(~=) cs cs' =
+    let nullAccount = EVM.initialContract (EVM.RuntimeCode mempty)
+        padNewAccounts cs'' ks = (fold [Map.insertWith (\_ x -> x) k nullAccount | k <- ks]) cs''
+        padded_cs' = padNewAccounts cs' (Map.keys cs)
+        padded_cs  = padNewAccounts cs  (Map.keys cs')
+    in padded_cs == padded_cs'
+
 checkExpectedContracts :: EVM.VM -> Map Addr Contract -> (Bool,Bool)
 checkExpectedContracts vm expected =
   let cs = vm ^. EVM.env . EVM.contracts . to (fmap clearZeroStorage)
       expectedCs = realizeContracts expected
-  in (expectedCs == cs,
-      (clearBalance <$> expectedCs) == (clearBalance <$> cs))
+  in (expectedCs ~= cs,
+      (clearBalance <$> expectedCs) ~= (clearBalance <$> cs))
 
 clearZeroStorage :: EVM.Contract -> EVM.Contract
 clearZeroStorage =
