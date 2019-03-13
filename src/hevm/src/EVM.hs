@@ -904,13 +904,14 @@ exec1 = do
         0xf4 ->
           case stk of
             (xGas:xTo:xInOffset:xInSize:xOutOffset:xOutSize:xs) ->
-              if num xTo == cheatCode
-              then do
-                assign (state . stack) xs
-                cheat (xInOffset, xInSize) (xOutOffset, xOutSize)
-              else let
-                availableGas = the state gas
-                (cost, gas') = costOfCall fees (Just this) 0 availableGas xGas
+              case xTo of
+                n | n > 0 && n <= 8 -> precompiledContract
+                n | num n == cheatCode -> do
+                      assign (state . stack) xs
+                      cheat (xInOffset, xInSize) (xOutOffset, xOutSize)
+                _ -> let
+                  availableGas = the state gas
+                  (cost, gas') = costOfCall fees (Just this) 0 availableGas xGas
                   in burn (cost - gas') $
                      delegateCall fees gas' (num xTo) xInOffset xInSize xOutOffset xOutSize xs (return ())
             _ -> underrun
@@ -990,6 +991,9 @@ precompiledContract = do
       doIt vm fees op inOffset inSize outOffset outSize xs
     -- STATICCALL (does not include value)
     (0xfa, (_:(num -> op):inOffset:inSize:outOffset:outSize:xs)) ->
+      doIt vm fees op inOffset inSize outOffset outSize xs
+    -- DELEGATECALL (does not include value)
+    (0xf4, (_:(num -> op):inOffset:inSize:outOffset:outSize:xs)) ->
       doIt vm fees op inOffset inSize outOffset outSize xs
     _ ->
       underrun
