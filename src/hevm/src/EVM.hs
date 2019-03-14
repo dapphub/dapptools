@@ -835,9 +835,11 @@ exec1 = do
           notStatic $
           case stk of
             (xValue:xOffset:xSize:xs) ->
-              burn g_create $ let
-              newAddr = newContractAddress self (wordValue (view nonce this)) in
-              create vm self this fees xValue xOffset xSize xs newAddr
+              let availableGas = the state gas
+                  (cost, gas') = costOfCreate fees availableGas 0
+                  newAddr      = newContractAddress self (wordValue (view nonce this))
+              in burn cost $
+                 create vm self this fees gas' xValue xOffset xSize xs newAddr
             _ -> underrun
 
         -- op: CALL
@@ -955,10 +957,12 @@ exec1 = do
         0xf5 -> notStatic $
           case stk of
             (xValue:xOffset:xSize:xSalt:xs) ->
-              burn (g_create + g_sha3word * ceilDiv (num xSize) 32) $ let
-                initcode = readMemory (num xOffset) (num xSize) vm
-                newAddr  = newContractAddressCREATE2 self (num xSalt) initcode in
-                  create vm self this fees xValue xOffset xSize xs newAddr
+              let availableGas = the state gas
+                  (cost, gas') = costOfCreate fees availableGas xSize
+                  initcode     = readMemory (num xOffset) (num xSize) vm
+                  newAddr      = newContractAddressCREATE2 self (num xSalt) initcode
+              in burn cost $
+                 create vm self this fees gas' xValue xOffset xSize xs newAddr
             _ -> underrun
 
         -- op: STATICCALL
@@ -1121,8 +1125,8 @@ accessStorage addr slot continue =
 create :: (?op :: Word8)
   => VM -> Addr -> Contract
   -> FeeSchedule Word
-  -> Word -> Word -> Word -> [Word] -> Addr -> EVM ()
-create vm self this fees xValue xOffset xSize xs newAddr =
+  -> Word -> Word -> Word -> Word -> [Word] -> Addr -> EVM ()
+create vm self this fees xGas xValue xOffset xSize xs newAddr =
   accessMemoryRange fees xOffset xSize $ do
   if (xValue > view balance this)
     || (collision $ view (env . contracts . at newAddr) vm)
@@ -1166,7 +1170,7 @@ create vm self this fees xValue xOffset xSize xs newAddr =
               & set code       initCode
               & set callvalue  xValue
               & set caller     self
-              & set gas        (view (state . gas) vm')
+              & set gas        xGas
 
 
 -- | Replace a contract's code, like when CREATE returns
@@ -1452,7 +1456,13 @@ finishFrame how = do
       -- Pop to the previous level of the debug trace stack.
       popTrace
 
+      -- When entering a call, the gas allowance is counted as burned
+      -- in advance; this unburns the remainder and adds it to the
+      -- parent frame.
       let remainingGas = view (state . gas) oldVm
+          reclaimRemainingGasAllowance = do
+            modifying burned (subtract remainingGas)
+            modifying (state . gas) (+ remainingGas)
 
       -- Now dispatch on whether we were creating or calling,
       -- and whether we shall return, revert, or error (six cases).
@@ -1462,13 +1472,6 @@ finishFrame how = do
         CallContext (num -> outOffset) (num -> outSize) _ _ _ reversion -> do
 
           let
-            -- When entering a call, the gas allowance is counted as burned
-            -- in advance; this unburns the remainder and adds it to the
-            -- parent frame.
-            reclaimRemainingGasAllowance = do
-              modifying burned (subtract remainingGas)
-              modifying (state . gas) (+ remainingGas)
-
             revertContracts = assign (env . contracts) reversion
 
           case how of
@@ -1501,20 +1504,19 @@ finishFrame how = do
             -- Case 4: Returning during a creation?
             FrameReturned output -> do
               replaceCode createe (RuntimeCode output)
-              assign (state . gas) remainingGas
+              reclaimRemainingGasAllowance
               push (num createe)
 
             -- Case 5: Reverting during a creation?
             FrameReverted output -> do
               destroy
               assign (state . returndata) output
-              assign (state . gas) remainingGas
+              reclaimRemainingGasAllowance
               push 0
 
             -- Case 6: Error during a creation?
             FrameErrored _ -> do
               destroy
-              assign (state . gas) 0
               push 0
 
 
@@ -1875,6 +1877,16 @@ costOfCall (FeeSchedule {..}) recipient xValue availableGas xGas =
       if availableGas >= c_extra
       then min xGas (allButOne64th (availableGas - c_extra))
       else xGas
+
+costOfCreate
+  :: FeeSchedule Word
+  -> Word -> Word -> (Word, Word)
+costOfCreate (FeeSchedule {..}) availableGas hashSize =
+  (createCost + hashCost + initGas, initGas)
+  where
+    createCost = g_create
+    hashCost   = g_sha3word * ceilDiv (hashSize) 32
+    initGas    = allButOne64th (availableGas - createCost)
 
 memoryCost :: FeeSchedule Word -> Word -> Word
 memoryCost FeeSchedule{..} byteCount =
