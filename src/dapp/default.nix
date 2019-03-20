@@ -4,7 +4,7 @@
 
 stdenv.mkDerivation rec {
   name = "dapp-${version}";
-  version = "0.15.1";
+  version = "0.16.0";
   src = ./.;
 
   nativeBuildInputs = [makeWrapper shellcheck coreutils nodejs];

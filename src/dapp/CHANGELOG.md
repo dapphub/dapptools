@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.16.0] - 2019-03-20
+### Added
+- Support for solc 0.5.6
+
+### Changed
+- Default to solc 0.5.6
+
 ## [0.15.1] - 2019-03-05
 ### Fixed
 - The version returned by `dapp --version` had not been updated from 0.14.0 to 0.15.0
@@ -64,3 +71,4 @@ changelog.
 [0.14.0]: https://github.com/dapphub/dapptools/tree/dapp/0.14.0
 [0.15.0]: https://github.com/dapphub/dapptools/tree/dapp/0.15.0
 [0.15.1]: https://github.com/dapphub/dapptools/tree/dapp/0.15.1
+[0.16.0]: https://github.com/dapphub/dapptools/tree/dapp/0.16.0
