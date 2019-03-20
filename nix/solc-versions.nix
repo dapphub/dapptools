@@ -25,5 +25,6 @@ rec {
   };
 
   unreleased = {
+    solc_0_5_6 = { rev = "1aeb954a70b389ee4eaffddbe74363ca2664084f"; sha256 = "0a0kd8m6r675prs9sm4g245rwfp4wskra4q1xkpdbk767qdvwk6k"; };
   };
 }
