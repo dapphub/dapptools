@@ -172,6 +172,8 @@ data FrameContext
     , callContextAbi      :: Maybe Word
     , callContextData     :: ByteString
     , callContextReversion :: Map Addr Contract
+    -- | The gas allowance given to this call
+    , callContextAllowance :: Word
     }
 
 -- | The "registers" of the VM along with memory and data stack
@@ -1215,7 +1217,6 @@ delegateCall fees xGas xTo xInOffset xInSize xOutOffset xOutSize xs continue =
         Just target ->
           accessMemoryRange fees xInOffset xInSize $ do
             accessMemoryRange fees xOutOffset xOutSize $ do
-              burn xGas $ do
                 vm0 <- get
 
                 let newContext = CallContext
@@ -1232,6 +1233,7 @@ delegateCall fees xGas xTo xInOffset xInSize xOutOffset xOutSize xs continue =
                             in Just $! num w
                           else Nothing
                       , callContextData = (readMemory (num xInOffset) (num xInSize) vm0)
+                      , callContextAllowance = xGas
                       }
 
                 pushTrace (FrameTrace newContext)
@@ -1311,16 +1313,10 @@ finishFrame how = do
       case view frameContext nextFrame of
 
         -- Were we calling?
-        CallContext (num -> outOffset) (num -> outSize) _ _ _ reversion -> do
+        CallContext (num -> outOffset) (num -> outSize) _ _ _ reversion allowance -> do
 
           let
-            -- When entering a call, the gas allowance is counted as burned
-            -- in advance; this unburns the remainder and adds it to the
-            -- parent frame.
-            reclaimRemainingGasAllowance = do
-              modifying burned (subtract remainingGas)
-              modifying (state . gas) (+ remainingGas)
-
+            spentAllowance = allowance - remainingGas
             revertContracts = assign (env . contracts) reversion
 
           case how of
@@ -1328,20 +1324,21 @@ finishFrame how = do
             FrameReturned output -> do
               assign (state . returndata) output
               copyBytesToMemory output outSize 0 outOffset
-              reclaimRemainingGasAllowance
-              push 1
+              burn spentAllowance $
+                push 1
 
             -- Case 2: Reverting during a call?
             FrameReverted output -> do
               revertContracts
               assign (state . returndata) output
-              reclaimRemainingGasAllowance
-              push 0
+              burn spentAllowance $
+                push 0
 
             -- Case 3: Error during a call?
             FrameErrored _ -> do
               revertContracts
-              push 0
+              burn allowance $
+                push 0
 
         -- Or were we creating?
         CreationContext _ -> do
