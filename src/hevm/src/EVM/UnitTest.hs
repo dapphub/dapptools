@@ -389,6 +389,7 @@ runUnitTestContract
   opts@(UnitTestOptions {..}) contractMap sources (name, testNames) = do
 
   -- Print a header
+  putStrLn "\n\n----------------------------------------------------------------------------------"
   putStrLn $ "Running " ++ show (length testNames) ++ " tests for "
     ++ unpack name
 
@@ -427,13 +428,13 @@ runUnitTestContract
                      (fromIntegral gasSpent :: Integer)
                in
                  pure
-                   ( "PASS " <> testName <> " (gas: " <> gasText <> ")"
+                   ( "\t\x1b[32mPASS\x1b[0m " <> testName <> " (gas: " <> gasText <> ")"
                    , Right (passOutput vm dapp opts testName)
                    )
              (Right False, vm) ->
-               pure ("FAIL " <> testName, Left (failOutput vm dapp opts testName))
+               pure ("\t\x1b[91mFAIL\x1b[0m " <> testName, Left (failOutput vm dapp opts testName))
              (Left _, _)       ->
-               pure ("OOPS " <> testName, Left ("VM error for " <> testName))
+               pure ("\t\x1b[41;1mOOPS\x1b[0m " <> testName, Left ("VM error for " <> testName))
 
       let inform = \(x, y) -> Text.putStrLn x >> pure y
 
