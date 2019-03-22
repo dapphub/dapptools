@@ -1,5 +1,9 @@
 # hevm changelog
 
+## 0.28 - 2019-03-22
+ - Fix delegatecall gas metering, as reported in
+   https://github.com/dapphub/dapptools/issues/34
+
 ## 0.27 - 2019-02-06
  - Fix [hevm flatten issue](https://github.com/dapphub/dapptools/issues/127)
    related to SemVer ranges in Solidity version pragmas
