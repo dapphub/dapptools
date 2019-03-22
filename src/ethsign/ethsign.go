@@ -36,6 +36,11 @@ func signHash(data []byte) []byte {
   return crypto.Keccak256([]byte(msg))
 }
 
+func rawSignHash(data []byte) []byte {
+  msg := fmt.Sprintf("%s", data)
+  return crypto.Keccak256([]byte(msg))
+}
+
 // https://github.com/ethereum/go-ethereum/blob/55599ee95d4151a2502465e0afc7c47bd1acba77/internal/ethapi/api.go#L442
 func recover(data []byte, sig hexutil.Bytes) (common.Address, error) {
   if len(sig) != 65 {
@@ -377,6 +382,11 @@ func main() {
           Name:  "data",
           Usage: "hex data to sign",
         },
+        cli.BoolFlag{
+          Name:  "no-prefix",
+          Usage: "sign data without prefix",
+        },
+
       },
       Action: func(c *cli.Context) error {
         requireds := []string{
@@ -487,11 +497,15 @@ func main() {
         } else {
           fmt.Fprintf(os.Stderr, "Waiting for hardware wallet confirmation...\n")
         }
-
-        signature, err := wallet.SignHashWithPassphrase(*acct, passphrase, signHash(data))
-
+        var hash []byte
+        if c.Bool("no-prefix") == true {
+          hash = rawSignHash(data)
+        } else {
+          hash = signHash(data)
+        }
+        signature, err := wallet.SignHashWithPassphrase(*acct, passphrase, hash)
         if err != nil {
-          return cli.NewExitError("ethsign: failed to sign message", 1)
+          return cli.NewExitError(err, 1)
         }
 
         signature[64] += 27 // Transform V from 0/1 to 27/28 according to the yellow paper
