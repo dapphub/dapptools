@@ -428,13 +428,13 @@ runUnitTestContract
                      (fromIntegral gasSpent :: Integer)
                in
                  pure
-                   ( "\t\x1b[32mPASS\x1b[0m " <> testName <> " (gas: " <> gasText <> ")"
+                   ( "\x1b[32mPASS\x1b[0m " <> testName <> " (gas: " <> gasText <> ")"
                    , Right (passOutput vm dapp opts testName)
                    )
              (Right False, vm) ->
-               pure ("\t\x1b[91mFAIL\x1b[0m " <> testName, Left (failOutput vm dapp opts testName))
+               pure ("\x1b[91mFAIL\x1b[0m " <> testName, Left (failOutput vm dapp opts testName))
              (Left _, _)       ->
-               pure ("\t\x1b[41;1mOOPS\x1b[0m " <> testName, Left ("VM error for " <> testName))
+               pure ("\x1b[41;1mOOPS\x1b[0m " <> testName, Left ("VM error for " <> testName))
 
       let inform = \(x, y) -> Text.putStrLn x >> pure y
 
