@@ -166,7 +166,9 @@ data Frame = Frame
 -- | Call/create info
 data FrameContext
   = CreationContext
-    { creationContextCodehash :: W256 }
+    { creationContextCodehash :: W256
+    , creationContextReversion :: Map Addr Contract
+    }
   | CallContext
     { callContextOffset   :: Word
     , callContextSize     :: Word
@@ -839,7 +841,7 @@ exec1 = do
                   (cost, gas') = costOfCreate fees availableGas 0
                   newAddr      = newContractAddress self (wordValue (view nonce this))
               in burn cost $
-                 create vm self this fees gas' xValue xOffset xSize xs newAddr
+                 create self this fees gas' xValue xOffset xSize xs newAddr
             _ -> underrun
 
         -- op: CALL
@@ -962,7 +964,7 @@ exec1 = do
                   initcode     = readMemory (num xOffset) (num xSize) vm
                   newAddr      = newContractAddressCREATE2 self (num xSalt) initcode
               in burn cost $
-                 create vm self this fees gas' xValue xOffset xSize xs newAddr
+                 create self this fees gas' xValue xOffset xSize xs newAddr
             _ -> underrun
 
         -- op: STATICCALL
@@ -1123,18 +1125,19 @@ accessStorage addr slot continue =
         accessStorage addr slot continue
 
 create :: (?op :: Word8)
-  => VM -> Addr -> Contract
+  => Addr -> Contract
   -> FeeSchedule Word
   -> Word -> Word -> Word -> Word -> [Word] -> Addr -> EVM ()
-create vm self this fees xGas xValue xOffset xSize xs newAddr =
+create self this fees xGas xValue xOffset xSize xs newAddr =
   accessMemoryRange fees xOffset xSize $ do
+  vm0 <- get
   if (xValue > view balance this)
-    || (collision $ view (env . contracts . at newAddr) vm)
+    || (collision $ view (env . contracts . at newAddr) vm0)
     then do
       assign (state . stack) (0 : xs)
       next
     else do
-      case view execMode vm of
+      case view execMode vm0 of
         ExecuteAsVMTest -> do
           assign (state . stack) (num newAddr : xs)
           next
@@ -1142,11 +1145,13 @@ create vm self this fees xGas xValue xOffset xSize xs newAddr =
         _ -> do
           let
             initCode =
-              readMemory (num xOffset) (num xSize) vm
+              readMemory (num xOffset) (num xSize) vm0
             newContract =
               initialContract (InitCode initCode)
             newContext  =
-              CreationContext (view codehash newContract)
+              CreationContext { creationContextCodehash  = view codehash newContract
+                              , creationContextReversion = view (env . contracts) vm0
+                              }
 
           zoom (env . contracts) $ do
             assign (at newAddr) (Just newContract)
@@ -1157,10 +1162,10 @@ create vm self this fees xGas xValue xOffset xSize xs newAddr =
 
           pushTrace (FrameTrace newContext)
           next
-          vm' <- get
+          vm1 <- get
           pushTo frames $ Frame
             { _frameContext = newContext
-            , _frameState   = (set stack xs) (view state vm')
+            , _frameState   = (set stack xs) (view state vm1)
             }
 
           assign state $
@@ -1495,10 +1500,10 @@ finishFrame how = do
               push 0
 
         -- Or were we creating?
-        CreationContext _ -> do
+        CreationContext _ reversion -> do
           let
             createe = view (state . contract) oldVm
-            destroy = assign (env . contracts . at createe) Nothing
+            revertContracts = assign (env . contracts) reversion
 
           case how of
             -- Case 4: Returning during a creation?
@@ -1509,14 +1514,14 @@ finishFrame how = do
 
             -- Case 5: Reverting during a creation?
             FrameReverted output -> do
-              destroy
+              revertContracts
               assign (state . returndata) output
               reclaimRemainingGasAllowance
               push 0
 
             -- Case 6: Error during a creation?
             FrameErrored _ -> do
-              destroy
+              revertContracts
               push 0
 
 

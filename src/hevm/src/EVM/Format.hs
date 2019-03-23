@@ -197,7 +197,7 @@ showTrace dapp trace =
 
     EntryTrace t ->
       t
-    FrameTrace (CreationContext hash) ->
+    FrameTrace (CreationContext hash _) ->
       "create " <> maybeContractName (preview (dappSolcByHash . ix hash . _2) dapp) <> pos
     FrameTrace (CallContext _ _ hash abi calldata _) ->
       case preview (dappSolcByHash . ix hash . _2) dapp of
