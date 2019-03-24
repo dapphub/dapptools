@@ -40,7 +40,7 @@ ghciTest root path state =
     let
       opts = UnitTestOptions
         { oracle = EVM.Fetch.zero
-        , verbose = False
+        , verbose = Nothing
         , match = ""
         , vmModifier = loadFacts
         , testParams = params
@@ -67,7 +67,7 @@ ghciTty root path state =
     let
       testOpts = UnitTestOptions
         { oracle = EVM.Fetch.zero
-        , verbose = False
+        , verbose = Nothing
         , match = ""
         , vmModifier = loadFacts
         , testParams = params

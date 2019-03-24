@@ -59,7 +59,7 @@ import qualified Data.Vector as Vector
 data UnitTestOptions = UnitTestOptions
   {
     oracle     :: Query -> IO (EVM ())
-  , verbose    :: Bool
+  , verbose    :: Maybe Int
   , match      :: Text
   , vmModifier :: VM -> VM
   , testParams :: TestVMParams
@@ -427,13 +427,16 @@ runUnitTestContract
                      (fromIntegral gasSpent :: Integer)
                in
                  pure
-                   ( "PASS " <> testName <> " (gas: " <> gasText <> ")"
+                   ("\x1b[32m[PASS]\x1b[0m "
+                   <> testName <> " (gas: " <> gasText <> ")"
                    , Right (passOutput vm dapp opts testName)
                    )
              (Right False, vm) ->
-               pure ("FAIL " <> testName, Left (failOutput vm dapp opts testName))
+               pure ("\x1b[31m[FAIL]\x1b[0m "
+               <> testName, Left (failOutput vm dapp opts testName))
              (Left _, _)       ->
-               pure ("OOPS " <> testName, Left ("VM error for " <> testName))
+               pure ("\x1b[33m[OOPS]\x1b[0m "
+               <> testName, Left ("VM error for " <> testName))
 
       let inform = \(x, y) -> Text.putStrLn x >> pure y
 
@@ -441,14 +444,14 @@ runUnitTestContract
       details <-
         mapM (\x -> runOne x >>= inform) testNames
 
-      let mails = [x | Right x <- details]
-      let fails = [x | Left x <- details]
+      let running = [x | Right x <- details]
+      let bailing = [x | Left x <- details]
 
       tick "\n"
-      tick (Text.unlines (filter (not . Text.null) mails))
-      tick (Text.unlines (filter (not . Text.null) fails))
+      tick (Text.unlines (filter (not . Text.null) running))
+      tick (Text.unlines (filter (not . Text.null) bailing))
 
-      pure (null fails)
+      pure (null bailing)
 
 indentLines :: Int -> Text -> Text
 indentLines n s =
@@ -458,7 +461,7 @@ indentLines n s =
 passOutput :: VM -> DappInfo -> UnitTestOptions -> Text -> Text
 passOutput vm dapp UnitTestOptions { .. } testName =
   case verbose of
-    True ->
+    Just 2 ->
       mconcat $
         [ "Success: "
         , fromMaybe "" (stripSuffix "()" testName)
@@ -467,17 +470,18 @@ passOutput vm dapp UnitTestOptions { .. } testName =
         , indentLines 2 (showTraceTree dapp vm)
         , "\n"
         ]
-    False ->
+    _ ->
       ""
 
 failOutput :: VM -> DappInfo -> UnitTestOptions -> Text -> Text
-failOutput vm dapp _ testName = mconcat $
+failOutput vm dapp UnitTestOptions { .. } testName = mconcat $
   [ "Failure: "
   , fromMaybe "" (stripSuffix "()" testName)
   , "\n"
   , indentLines 2 (formatTestLogs (view dappEventMap dapp) (view logs vm))
-  , indentLines 2 (showTraceTree dapp vm)
-  , "\n"
+  , case verbose of
+      Nothing -> ""
+      _       -> indentLines 2 (showTraceTree dapp vm)
   ]
 
 formatTestLogs :: Map W256 Event -> Seq.Seq Log -> Text

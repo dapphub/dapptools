@@ -90,7 +90,7 @@ data Command
       , dappRoot           :: Maybe String
       , debug              :: Bool
       , rpc                :: Maybe URL
-      , verbose            :: Bool
+      , verbose            :: Maybe Int
       , coverage           :: Bool
       , state              :: Maybe String
       , match              :: Maybe String
