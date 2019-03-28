@@ -42,7 +42,7 @@ func rawSignHash(data []byte) []byte {
 }
 
 // https://github.com/ethereum/go-ethereum/blob/55599ee95d4151a2502465e0afc7c47bd1acba77/internal/ethapi/api.go#L442
-func recover(data []byte, sig hexutil.Bytes) (common.Address, error) {
+func recover(data []byte, sig hexutil.Bytes, noPrefix bool) (common.Address, error) {
   if len(sig) != 65 {
     return common.Address{}, fmt.Errorf("signature must be 65 bytes long")
   }
@@ -51,7 +51,14 @@ func recover(data []byte, sig hexutil.Bytes) (common.Address, error) {
   }
   sig[64] -= 27 // Transform yellow paper V from 27/28 to 0/1
 
-  rpk, err := crypto.Ecrecover(signHash(data), sig)
+  var hash []byte
+  if noPrefix == true {
+    hash = rawSignHash(data)
+  } else {
+    hash = signHash(data)
+  }
+
+  rpk, err := crypto.Ecrecover(hash, sig)
   if err != nil {
     return common.Address{}, err
   }
@@ -86,7 +93,7 @@ func main() {
   app := cli.NewApp()
   app.Name = "ethsign"
   app.Usage = "sign Ethereum transactions using a JSON keyfile"
-  app.Version = "0.10"
+  app.Version = "0.12"
   app.Commands = []cli.Command {
     cli.Command {
       Name: "list-accounts",
@@ -386,7 +393,6 @@ func main() {
           Name:  "no-prefix",
           Usage: "sign data without prefix",
         },
-
       },
       Action: func(c *cli.Context) error {
         requireds := []string{
@@ -532,6 +538,10 @@ func main() {
           Name:  "sig",
           Usage: "signature",
         },
+        cli.BoolFlag{
+          Name:  "no-prefix",
+          Usage: "sign data without prefix",
+        },
       },
       Action: func(c *cli.Context) error {
         requireds := []string{
@@ -558,7 +568,7 @@ func main() {
         }
         sig := hexutil.MustDecode(sigString)
 
-        recoveredAddr, err := recover(data, sig)
+        recoveredAddr, err := recover(data, sig, c.Bool("no-prefix"))
         if err != nil {
           return cli.NewExitError(err, 1)
         }
@@ -582,6 +592,10 @@ func main() {
         cli.StringFlag{
           Name:  "sig",
           Usage: "signature",
+        },
+        cli.BoolFlag{
+          Name:  "no-prefix",
+          Usage: "sign data without prefix",
         },
       },
       Action: func(c *cli.Context) error {
@@ -607,7 +621,7 @@ func main() {
         }
         sig := hexutil.MustDecode(sigString)
 
-        recoveredAddr, err := recover(data, sig)
+        recoveredAddr, err := recover(data, sig, c.Bool("no-prefix"))
         if err != nil {
           return cli.NewExitError(err, 1)
         }
