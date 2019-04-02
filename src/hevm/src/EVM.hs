@@ -987,38 +987,41 @@ precompiledContract = do
 
   case (?op, stk) of
     -- CALL (includes value)
-    (0xf1, (_:(num -> op):_:inOffset:inSize:outOffset:outSize:xs)) ->
-      doIt vm fees op inOffset inSize outOffset outSize xs
+    (0xf1, (gasCap:(num -> op):_:inOffset:inSize:outOffset:outSize:xs)) ->
+      doIt vm fees op gasCap inOffset inSize outOffset outSize xs
     -- STATICCALL (does not include value)
-    (0xfa, (_:(num -> op):inOffset:inSize:outOffset:outSize:xs)) ->
-      doIt vm fees op inOffset inSize outOffset outSize xs
+    (0xfa, (gasCap:(num -> op):inOffset:inSize:outOffset:outSize:xs)) ->
+      doIt vm fees op gasCap inOffset inSize outOffset outSize xs
     -- DELEGATECALL (does not include value)
-    (0xf4, (_:(num -> op):inOffset:inSize:outOffset:outSize:xs)) ->
-      doIt vm fees op inOffset inSize outOffset outSize xs
+    (0xf4, (gasCap:(num -> op):inOffset:inSize:outOffset:outSize:xs)) ->
+      doIt vm fees op gasCap inOffset inSize outOffset outSize xs
     _ ->
       underrun
 
   where
-    doIt vm fees op inOffset inSize outOffset outSize xs =
+    doIt vm fees op gasCap inOffset inSize outOffset outSize xs =
       let
         input = readMemory (num inOffset) (num inSize) vm
+        cost  =
+          case op of
+            1 -> 3000
+            _ -> error ("unimplemented precompiled contract " ++ show op)
       in
-        case EVM.Precompiled.execute op input (num outSize) of
-          Nothing -> do
+        case (EVM.Precompiled.execute op input (num outSize)
+             , gasCap >= cost) of
+          (Nothing, _) -> do
             assign (state . stack) (0 : xs)
             next
-          Just output -> do
-            let
-              cost =
-                case op of
-                  1 -> 3000
-                  _ -> error ("unimplemented precompiled contract " ++ show op)
+          (_, False) -> do
+            assign (state . stack) (0 : xs)
+            next
+          (Just output, True) -> do
             accessMemoryRange fees inOffset inSize $
               accessMemoryRange fees outOffset outSize $
                 burn cost $ do
                   assign (state . stack) (1 : xs)
-                  modifying (state . memory)
-                    (writeMemory output outSize 0 outOffset)
+                  assign (state . returndata) output
+                  copyBytesToMemory output outSize 0 outOffset
                   next
 
 -- * Opcode helper actions
