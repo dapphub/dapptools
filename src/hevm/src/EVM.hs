@@ -197,15 +197,16 @@ data FrameState = FrameState
 
 -- | The state that spans a whole transaction
 data TxState = TxState
-  { _gasprice      :: Word
-  , _txgaslimit    :: Word
-  , _origin        :: Addr
-  , _toAddr        :: Addr
-  , _value         :: Word
-  , _selfdestructs :: [Addr]
-  , _refunds       :: [(Addr, Word)]
-  , _isCreate      :: Bool
-  , _txReversion   :: Map Addr Contract
+  { _gasprice        :: Word
+  , _txgaslimit      :: Word
+  , _origin          :: Addr
+  , _toAddr          :: Addr
+  , _value           :: Word
+  , _selfdestructs   :: [Addr]
+  , _touchedAccounts :: [Addr]
+  , _refunds         :: [(Addr, Word)]
+  , _isCreate        :: Bool
+  , _txReversion     :: Map Addr Contract
   }
 
 -- | A contract is either in creation (running its "constructor") or
@@ -309,6 +310,7 @@ makeVm o = VM
     , _toAddr = vmoptAddress o
     , _value = w256 $ vmoptValue o
     , _selfdestructs = mempty
+    , _touchedAccounts = mempty
     , _refunds = mempty
     , _isCreate = vmoptCreate o
     , _txReversion = Map.fromList
@@ -888,6 +890,8 @@ exec1 = do
                             zoom (env . contracts) $ do
                               ix self . balance -= xValue
                               ix xTo  . balance += xValue
+                            modifying (tx . touchedAccounts) (self:)
+                            modifying (tx . touchedAccounts) (xTo:)
             _ ->
               underrun
 
@@ -952,7 +956,8 @@ exec1 = do
                   availableGas = the state gas
                   (cost, gas') = costOfCall fees (Just this) 0 availableGas xGas
                   in burn (cost - gas') $
-                     delegateCall fees gas' (num xTo) xInOffset xInSize xOutOffset xOutSize xs (return ())
+                     delegateCall fees gas' (num xTo) xInOffset xInSize xOutOffset xOutSize xs $ do
+                  modifying (tx . touchedAccounts) (self:)
             _ -> underrun
 
         -- op: CREATE2
@@ -991,6 +996,8 @@ exec1 = do
                             assign contract xTo
                             assign memorySize 0
                             assign static True
+                          modifying (tx . touchedAccounts) (self:)
+                          modifying (tx . touchedAccounts) (xTo:)
             _ ->
               underrun
 
@@ -1130,6 +1137,8 @@ create :: (?op :: Word8)
   -> Word -> Word -> Word -> Word -> [Word] -> Addr -> EVM ()
 create self this fees xGas xValue xOffset xSize xs newAddr =
   accessMemoryRange fees xOffset xSize $ do
+  modifying (tx . touchedAccounts) (self:)
+  modifying (tx . touchedAccounts) (newAddr:)
   vm0 <- get
   if xValue > view balance this
     then do
@@ -1219,11 +1228,24 @@ collision c' = case c' of
   Just c -> (view contractcode c /= RuntimeCode mempty) || (view nonce c /= 0)
   Nothing -> False
 
+-- EIP 161
+accountEmpty :: Contract -> Bool
+accountEmpty c =
+  (view contractcode c == RuntimeCode mempty)
+  && (view nonce c == 0)
+  && (view balance c == 0)
+
 finalize :: Bool -> EVM ()
 finalize txmode = do
+  -- process selfdestructs
   destroyedAddresses <- use (tx . selfdestructs)
   modifying (env . contracts)
     (Map.filterWithKey (\k _ -> not (elem k destroyedAddresses)))
+  -- process state trie clearing (EIP 161)
+  touchedAddresses <- use (tx . touchedAccounts)
+  modifying (env . contracts)
+    (Map.filterWithKey (\k a -> not ((elem k touchedAddresses)
+                                && accountEmpty a)))
   -- whether or not we "finalise the tx"
   case txmode of
     False -> return ()
