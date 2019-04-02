@@ -1131,9 +1131,13 @@ create :: (?op :: Word8)
 create self this fees xGas xValue xOffset xSize xs newAddr =
   accessMemoryRange fees xOffset xSize $ do
   vm0 <- get
-  if (xValue > view balance this)
-    || (collision $ view (env . contracts . at newAddr) vm0)
+  if xValue > view balance this
     then do
+      assign (state . stack) (0 : xs)
+      next
+    else if collision $ view (env . contracts . at newAddr) vm0
+    then do
+      modifying (env . contracts . ix self . nonce) succ
       assign (state . stack) (0 : xs)
       next
     else do
@@ -1154,8 +1158,12 @@ create self this fees xGas xValue xOffset xSize xs newAddr =
                               }
 
           zoom (env . contracts) $ do
+            oldAcc <- use (at newAddr)
+            let oldBal = case oldAcc of
+                  Nothing -> 0
+                  Just c  -> view balance c
             assign (at newAddr) (Just newContract)
-            assign (ix newAddr . balance) xValue
+            assign (ix newAddr . balance) (oldBal + xValue)
             assign (ix newAddr . nonce) 1
             modifying (ix self . balance) (flip (-) xValue)
             modifying (ix self . nonce) succ
