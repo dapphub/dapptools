@@ -1105,8 +1105,8 @@ accessStorage addr slot continue =
   use (env . contracts . at addr) >>= \case
     Just c ->
       case view (storage . at slot) c of
-        Just value ->
-          continue value
+        Just x ->
+          continue x
         Nothing ->
           if view external c
           then
