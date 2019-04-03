@@ -86,7 +86,7 @@ rlpBytes x | (BS.length x == 1) && (head . BS.unpack) x < 128 = x
 rlpBytes x = let n = BS.length x
   in if n <= 55
      then BS.cons (fromIntegral (0x80 + n)) x
-     else let ns = rlpWord256 (fromIntegral n)
+     else let ns = BS.pack $ octets (fromIntegral n)
   in BS.cons (fromIntegral (0xb7 + BS.length ns)) (BS.concat [ns, x])
 
 rlpWord256 :: W256 -> ByteString
@@ -108,7 +108,7 @@ rlpList xs =
   in if n <= 55
      then BS.cons (fromIntegral (0xc0 + n)) (BS.concat xs)
      else
-       let ns = rlpWord256 (fromIntegral n)
+       let ns = BS.pack $ octets (fromIntegral n)
        in BS.cons (fromIntegral (0xf7 + BS.length ns)) (BS.concat (ns : xs))
 
 newContractAddress :: Addr -> W256 -> Addr
