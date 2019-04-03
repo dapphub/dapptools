@@ -1,16 +1,16 @@
 all: build
 
 default.nix: hevm.cabal
-	nix-shell --command 'cabal2nix . > default.nix'
+	nix-shell --command 'cabal2nix . > default.nix' --pure
 .configured: default.nix shell.nix
-	nix-shell --command 'cabal configure --enable-tests'
+	nix-shell --command 'cabal new-configure --enable-tests' --pure
 	touch .configured
 build: .configured
-	nix-shell --command 'cabal build'
+	nix-shell --command 'cabal new-build' --pure
 repl: .configured
-	nix-shell --command 'cabal repl lib:hevm'
+	nix-shell --command 'cabal new-repl lib:hevm' --pure
 tests: .configured
-	nix-shell --command 'cabal test'
+	nix-shell --command 'cabal new-test' --pure
 
 PORT ?= 8001
 BROWSER ?= chromium
