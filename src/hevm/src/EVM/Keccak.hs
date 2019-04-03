@@ -4,7 +4,7 @@
 {-# Language JavaScriptFFI #-}
 #endif
 
-module EVM.Keccak (keccak, abiKeccak, newContractAddress) where
+module EVM.Keccak (word160Bytes, word256Bytes, keccak, abiKeccak, newContractAddress, newContractAddressCREATE2, rlpWord160, rlpWord256, rlpBytes, rlpList) where
 
 import EVM.Types
 
@@ -12,6 +12,7 @@ import Control.Arrow ((>>>))
 
 import Data.Bits
 import Data.ByteString (ByteString)
+
 import qualified Data.ByteString as BS
 import Data.Word
 
@@ -49,6 +50,12 @@ keccakBytes =
 
 keccakBytes :: ByteString -> ByteString
 
+word256Bytes :: W256 -> ByteString
+word256Bytes x = BS.pack [byteAt x (31 - i) | i <- [0..31]]
+
+word160Bytes :: Addr -> ByteString
+word160Bytes x = BS.pack [byteAt (addressWord160 x) (19 - i) | i <- [0..19]]
+
 word32 :: [Word8] -> Word32
 word32 xs = sum [ fromIntegral x `shiftL` (8*n)
                 | (n, x) <- zip [0..] (reverse xs) ]
@@ -74,6 +81,14 @@ abiKeccak =
     >>> BS.unpack
     >>> word32
 
+rlpBytes :: ByteString -> ByteString
+rlpBytes x | (BS.length x == 1) && (head . BS.unpack) x < 128 = x
+rlpBytes x = let n = BS.length x
+  in if n <= 55
+     then BS.cons (fromIntegral (0x80 + n)) x
+     else let ns = BS.pack $ octets (fromIntegral n)
+  in BS.cons (fromIntegral (0xb7 + BS.length ns)) (BS.concat [ns, x])
+
 rlpWord256 :: W256 -> ByteString
 rlpWord256 0 = BS.pack [0x80]
 rlpWord256 x | x <= 0x7f = BS.pack [fromIntegral x]
@@ -93,10 +108,14 @@ rlpList xs =
   in if n <= 55
      then BS.cons (fromIntegral (0xc0 + n)) (BS.concat xs)
      else
-       let ns = rlpWord256 (fromIntegral n)
+       let ns = BS.pack $ octets (fromIntegral n)
        in BS.cons (fromIntegral (0xf7 + BS.length ns)) (BS.concat (ns : xs))
 
 newContractAddress :: Addr -> W256 -> Addr
 newContractAddress a n =
   fromIntegral
     (keccak $ rlpList [rlpWord160 a, rlpWord256 n])
+
+newContractAddressCREATE2 :: Addr -> W256 -> ByteString -> Addr
+newContractAddressCREATE2 a s b =
+  fromIntegral (keccak $ BS.cons (fromIntegral (0xff :: Integer)) (BS.concat $ [word160Bytes a, word256Bytes $ num s, word256Bytes $ keccak b]))

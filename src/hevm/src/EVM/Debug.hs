@@ -1,7 +1,7 @@
 module EVM.Debug where
 
 import EVM          (Contract, storage, nonce, balance)
-import EVM          (bytecode, codehash, bytecode)
+import EVM          (bytecode, codehash)
 import EVM.Solidity (SrcMap, srcMapFile, srcMapOffset, srcMapLength)
 import EVM.Solidity (SourceCache, sourceFiles)
 import EVM.Types    (Addr)

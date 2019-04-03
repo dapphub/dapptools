@@ -110,7 +110,7 @@ data TraceData
   | EntryTrace Text
   | ReturnTrace ByteString FrameContext
 
-data ExecMode = ExecuteNormally | ExecuteAsVMTest
+data ExecMode = ExecuteNormally | ExecuteAsBlockchainTest | ExecuteAsVMTest
 
 data Query where
   PleaseFetchContract :: Addr         -> (Contract -> EVM ()) -> Query
@@ -143,13 +143,15 @@ data VMOpts = VMOpts
   , vmoptCaller :: Addr
   , vmoptOrigin :: Addr
   , vmoptGas :: W256
+  , vmoptGaslimit :: W256
   , vmoptNumber :: W256
   , vmoptTimestamp :: W256
   , vmoptCoinbase :: Addr
   , vmoptDifficulty :: W256
-  , vmoptGaslimit :: W256
+  , vmoptBlockGaslimit :: W256
   , vmoptGasprice :: W256
   , vmoptSchedule :: FeeSchedule Word
+  , vmoptCreate :: Bool
   } deriving Show
 
 -- | A log entry
@@ -164,7 +166,9 @@ data Frame = Frame
 -- | Call/create info
 data FrameContext
   = CreationContext
-    { creationContextCodehash :: W256 }
+    { creationContextCodehash :: W256
+    , creationContextReversion :: Map Addr Contract
+    }
   | CallContext
     { callContextOffset   :: Word
     , callContextSize     :: Word
@@ -193,21 +197,37 @@ data FrameState = FrameState
 
 -- | The state that spans a whole transaction
 data TxState = TxState
-  { _selfdestructs :: [Addr]
-  , _refunds       :: [(Addr, Word)]
+  { _gasprice        :: Word
+  , _txgaslimit      :: Word
+  , _origin          :: Addr
+  , _toAddr          :: Addr
+  , _value           :: Word
+  , _selfdestructs   :: [Addr]
+  , _touchedAccounts :: [Addr]
+  , _refunds         :: [(Addr, Word)]
+  , _isCreate        :: Bool
+  , _txReversion     :: Map Addr Contract
   }
+
+-- | A contract is either in creation (running its "constructor") or
+-- post-creation, and code in these two modes is treated differently
+-- by instructions like @EXTCODEHASH@, so we distinguish these two
+-- code types.
+data ContractCode
+  = InitCode ByteString     -- ^ "Constructor" code, during contract creation
+  | RuntimeCode ByteString  -- ^ "Instance" code, after contract creation
+  deriving (Show, Eq)
 
 -- | The state of a contract
 data Contract = Contract
-  { _bytecode :: ByteString
-  , _storage  :: Map Word Word
-  , _balance  :: Word
-  , _nonce    :: Word
-  , _codehash :: W256
-  , _codesize :: Int -- (redundant?)
-  , _opIxMap  :: Vector Int
-  , _codeOps  :: RegularVector.Vector (Int, Op)
-  , _external :: Bool
+  { _contractcode :: ContractCode
+  , _storage      :: Map Word Word
+  , _balance      :: Word
+  , _nonce        :: Word
+  , _codehash     :: W256
+  , _opIxMap      :: Vector Int
+  , _codeOps      :: RegularVector.Vector (Int, Op)
+  , _external     :: Bool
   }
 
 deriving instance Show Contract
@@ -217,7 +237,6 @@ deriving instance Eq Contract
 data Env = Env
   { _contracts :: Map Addr Contract
   , _sha3Crack :: Map Word ByteString
-  , _origin    :: Addr
   }
 
 
@@ -228,7 +247,6 @@ data Block = Block
   , _number     :: Word
   , _difficulty :: Word
   , _gaslimit   :: Word
-  , _gasprice   :: Word
   , _schedule   :: FeeSchedule Word
   }
 
@@ -259,6 +277,13 @@ makeLenses ''Cache
 makeLenses ''Trace
 makeLenses ''VM
 
+-- | An "external" view of a contract's bytecode, appropriate for
+-- e.g. @EXTCODEHASH@.
+bytecode :: Getter Contract ByteString
+bytecode = contractcode . to f
+  where f (InitCode _)    = BS.empty
+        f (RuntimeCode b) = b
+
 instance Semigroup Cache where
   a <> b = Cache
     { _fetched = mappend (view fetched a) (view fetched b) }
@@ -279,8 +304,17 @@ makeVm o = VM
   { _result = Nothing
   , _frames = mempty
   , _tx = TxState
-    { _selfdestructs = mempty
+    { _gasprice = w256 $ vmoptGasprice o
+    , _txgaslimit = w256 $ vmoptGaslimit o
+    , _origin = vmoptOrigin o
+    , _toAddr = vmoptAddress o
+    , _value = w256 $ vmoptValue o
+    , _selfdestructs = mempty
+    , _touchedAccounts = mempty
     , _refunds = mempty
+    , _isCreate = vmoptCreate o
+    , _txReversion = Map.fromList
+      [(vmoptAddress o, initialContract (InitCode (vmoptCode o)))]
     }
   , _logs = mempty
   , _traces = Zipper.fromForest []
@@ -289,8 +323,7 @@ makeVm o = VM
     , _timestamp = w256 $ vmoptTimestamp o
     , _number = w256 $ vmoptNumber o
     , _difficulty = w256 $ vmoptDifficulty o
-    , _gaslimit = w256 $ vmoptGaslimit o
-    , _gasprice = w256 $ vmoptGasprice o
+    , _gaslimit = w256 $ vmoptBlockGaslimit o
     , _schedule = vmoptSchedule o
     }
   , _state = FrameState
@@ -310,19 +343,17 @@ makeVm o = VM
     }
   , _env = Env
     { _sha3Crack = mempty
-    , _origin = vmoptOrigin o
     , _contracts = Map.fromList
-      [(vmoptAddress o, initialContract (vmoptCode o))]
+      [(vmoptAddress o, initialContract (InitCode (vmoptCode o)))]
     }
   , _cache = mempty
   , _execMode = ExecuteNormally
   , _burned = 0
   }
 
-initialContract :: ByteString -> Contract
-initialContract theCode = Contract
-  { _bytecode = theCode
-  , _codesize = BS.length theCode
+initialContract :: ContractCode -> Contract
+initialContract theContractCode = Contract
+  { _contractcode = theContractCode
   , _codehash =
     if BS.null theCode then 0 else
       keccak (stripBytecodeMetadata theCode)
@@ -332,7 +363,9 @@ initialContract theCode = Contract
   , _opIxMap  = mkOpIxMap theCode
   , _codeOps  = mkCodeOps theCode
   , _external = False
-  }
+  } where theCode = case theContractCode of
+            InitCode b    -> b
+            RuntimeCode b -> b
 
 -- * Opcode dispatch (exec1)
 
@@ -524,7 +557,7 @@ exec1 = do
         -- op: ORIGIN
         0x32 ->
           limitStack 1 . burn g_base $
-            next >> push (num (the env origin))
+            next >> push (num (the tx origin))
 
         -- op: CALLER
         0x33 ->
@@ -569,14 +602,14 @@ exec1 = do
                 accessMemoryRange fees memOffset n $ do
                   next
                   assign (state . stack) xs
-                  copyBytesToMemory (view bytecode this)
+                  copyBytesToMemory (the state code)
                     n codeOffset memOffset
             _ -> underrun
 
         -- op: GASPRICE
         0x3a ->
           limitStack 1 . burn g_base $
-            next >> push (the block gasprice)
+            next >> push (the tx gasprice)
 
         -- op: EXTCODESIZE
         0x3b ->
@@ -592,7 +625,7 @@ exec1 = do
                     touchAccount (num x) $ \c -> do
                       next
                       assign (state . stack) xs
-                      push (num (view codesize c))
+                      push (num (BS.length (view bytecode c)))
             [] ->
               underrun
 
@@ -630,7 +663,18 @@ exec1 = do
             _ -> underrun
 
         -- op: EXTCODEHASH
-        0x3f -> error "EXTCODEHASH not implemented"
+        0x3f ->
+          case stk of
+            (x:xs) -> do
+              burn g_extcodehash $ do
+                next
+                assign (state . stack) xs
+                preuse (env . contracts . ix (num x)) >>=
+                  \case
+                    Nothing -> push (num (0 :: Int))
+                    Just c  -> push (num (keccak (view bytecode c)))
+            [] ->
+              underrun
 
         -- op: BLOCKHASH
         0x40 -> do
@@ -795,53 +839,11 @@ exec1 = do
           notStatic $
           case stk of
             (xValue:xOffset:xSize:xs) ->
-              burn g_create $ do
-                accessMemoryRange fees xOffset xSize $ do
-                  if xValue > view balance this
-                    then do
-                      assign (state . stack) (0 : xs)
-                      next
-                    else do
-                      let
-                        newAddr =
-                          newContractAddress self (wordValue (view nonce this))
-                      case view execMode vm of
-                        ExecuteAsVMTest -> do
-                          assign (state . stack) (num newAddr : xs)
-                          next
-
-                        ExecuteNormally -> do
-                          let
-                            newCode =
-                              readMemory (num xOffset) (num xSize) vm
-                            newContract =
-                              initialContract newCode
-                            newContext  =
-                              CreationContext (view codehash newContract)
-
-                          zoom (env . contracts) $ do
-                            assign (at newAddr) (Just newContract)
-                            assign (ix newAddr . balance) xValue
-                            modifying (ix self . balance) (flip (-) xValue)
-                            modifying (ix self . nonce) succ
-
-                          pushTrace (FrameTrace newContext)
-                          next
-                          vm' <- get
-                          pushTo frames $ Frame
-                            { _frameContext = newContext
-                            , _frameState   = (set stack xs) (view state vm')
-                            }
-
-                          assign state $
-                            blankState
-                              & set contract   newAddr
-                              & set codeContract newAddr
-                              & set code       newCode
-                              & set callvalue  xValue
-                              & set caller     self
-                              & set gas        (view (state . gas) vm')
-
+              let availableGas = the state gas
+                  (cost, gas') = costOfCreate fees availableGas 0
+                  newAddr      = newContractAddress self (wordValue (view nonce this))
+              in burn cost $
+                 create self this fees gas' xValue xOffset xSize xs newAddr
             _ -> underrun
 
         -- op: CALL
@@ -878,7 +880,7 @@ exec1 = do
                         ExecuteAsVMTest -> do
                           assign (state . stack) (1 : xs)
                           next
-                        ExecuteNormally -> do
+                        _ -> do
                           delegateCall fees gas' xTo xInOffset xInSize xOutOffset xOutSize xs $ do
                             zoom state $ do
                               assign callvalue xValue
@@ -888,12 +890,49 @@ exec1 = do
                             zoom (env . contracts) $ do
                               ix self . balance -= xValue
                               ix xTo  . balance += xValue
+                            modifying (tx . touchedAccounts) (self:)
+                            modifying (tx . touchedAccounts) (xTo:)
             _ ->
               underrun
 
         -- op: CALLCODE
         0xf2 ->
-          error "CALLCODE not supported (use DELEGATECALL)"
+          case stk of
+            ( xGas
+              : (num -> xTo)
+              : xValue
+              : xInOffset
+              : xInSize
+              : xOutOffset
+              : xOutSize
+              : xs
+             ) ->
+              case xTo of
+                n | n > 0 && n <= 8 -> precompiledContract
+                _ ->
+                  let
+                    availableGas = the state gas
+                    recipient    = Just this
+                    (cost, gas') = costOfCall fees recipient xValue availableGas xGas
+                  in burn (cost - gas') $
+                    (if xValue > 0 then notStatic else id) $
+                    if xValue > view balance this
+                    then do
+                      assign (state . stack) (0 : xs)
+                      next
+                    else
+                      case view execMode vm of
+                        ExecuteAsVMTest -> do
+                          assign (state . stack) (1 : xs)
+                          next
+                        _ -> do
+                          delegateCall fees gas' xTo xInOffset xInSize xOutOffset xOutSize xs $ do
+                            zoom state $ do
+                              assign callvalue xValue
+                              assign caller (the state contract)
+                              assign memorySize 0
+            _ ->
+              underrun
 
         -- op: RETURN
         0xf3 ->
@@ -908,20 +947,30 @@ exec1 = do
         0xf4 ->
           case stk of
             (xGas:xTo:xInOffset:xInSize:xOutOffset:xOutSize:xs) ->
-              if num xTo == cheatCode
-              then do
-                assign (state . stack) xs
-                cheat (xInOffset, xInSize) (xOutOffset, xOutSize)
-              else let
-                availableGas = the state gas
-                (cost, gas') = costOfCall fees (Just this) 0 availableGas xGas
-                  in burn (cost - gas') $ do
-                  delegateCall fees gas' (num xTo) xInOffset xInSize xOutOffset xOutSize xs
-                    (return ())
+              case xTo of
+                n | n > 0 && n <= 8 -> precompiledContract
+                n | num n == cheatCode -> do
+                      assign (state . stack) xs
+                      cheat (xInOffset, xInSize) (xOutOffset, xOutSize)
+                _ -> let
+                  availableGas = the state gas
+                  (cost, gas') = costOfCall fees (Just this) 0 availableGas xGas
+                  in burn (cost - gas') $
+                     delegateCall fees gas' (num xTo) xInOffset xInSize xOutOffset xOutSize xs $ do
+                  modifying (tx . touchedAccounts) (self:)
             _ -> underrun
 
         -- op: CREATE2
-        0xf5 -> error "CREATE2 not implemented"
+        0xf5 -> notStatic $
+          case stk of
+            (xValue:xOffset:xSize:xSalt:xs) ->
+              let availableGas = the state gas
+                  (cost, gas') = costOfCreate fees availableGas xSize
+                  initcode     = readMemory (num xOffset) (num xSize) vm
+                  newAddr      = newContractAddressCREATE2 self (num xSalt) initcode
+              in burn cost $
+                 create self this fees gas' xValue xOffset xSize xs newAddr
+            _ -> underrun
 
         -- op: STATICCALL
         0xfa ->
@@ -939,7 +988,7 @@ exec1 = do
                       ExecuteAsVMTest -> do
                         assign (state . stack) (1 : xs)
                         next
-                      ExecuteNormally -> do
+                      _ -> do
                         delegateCall fees gas' xTo xInOffset xInSize xOutOffset xOutSize xs $ do
                           zoom state $ do
                             assign callvalue 0
@@ -947,6 +996,8 @@ exec1 = do
                             assign contract xTo
                             assign memorySize 0
                             assign static True
+                          modifying (tx . touchedAccounts) (self:)
+                          modifying (tx . touchedAccounts) (xTo:)
             _ ->
               underrun
 
@@ -984,35 +1035,44 @@ precompiledContract = do
 
   case (?op, stk) of
     -- CALL (includes value)
-    (0xf1, (_:(num -> op):_:inOffset:inSize:outOffset:outSize:xs)) ->
-      doIt vm fees op inOffset inSize outOffset outSize xs
+    (0xf1, (gasCap:(num -> op):_:inOffset:inSize:outOffset:outSize:xs)) ->
+      doIt vm fees op gasCap inOffset inSize outOffset outSize xs
+    -- CALLCODE (includes value)
+    (0xf2, (gasCap:(num -> op):_:inOffset:inSize:outOffset:outSize:xs)) ->
+      doIt vm fees op gasCap inOffset inSize outOffset outSize xs
     -- STATICCALL (does not include value)
-    (0xfa, (_:(num -> op):inOffset:inSize:outOffset:outSize:xs)) ->
-      doIt vm fees op inOffset inSize outOffset outSize xs
+    (0xfa, (gasCap:(num -> op):inOffset:inSize:outOffset:outSize:xs)) ->
+      doIt vm fees op gasCap inOffset inSize outOffset outSize xs
+    -- DELEGATECALL (does not include value)
+    (0xf4, (gasCap:(num -> op):inOffset:inSize:outOffset:outSize:xs)) ->
+      doIt vm fees op gasCap inOffset inSize outOffset outSize xs
     _ ->
       underrun
 
   where
-    doIt vm fees op inOffset inSize outOffset outSize xs =
+    doIt vm fees op gasCap inOffset inSize outOffset outSize xs =
       let
         input = readMemory (num inOffset) (num inSize) vm
+        cost  =
+          case op of
+            1 -> 3000
+            _ -> error ("unimplemented precompiled contract " ++ show op)
       in
-        case EVM.Precompiled.execute op input (num outSize) of
-          Nothing -> do
+        case (EVM.Precompiled.execute op input (num outSize)
+             , gasCap >= cost) of
+          (Nothing, _) -> do
             assign (state . stack) (0 : xs)
-            vmError (PrecompiledContractError op)
-          Just output -> do
-            let
-              cost =
-                case op of
-                  1 -> 3000
-                  _ -> error ("unimplemented precompiled contract " ++ show op)
+            next
+          (_, False) -> do
+            assign (state . stack) (0 : xs)
+            next
+          (Just output, True) -> do
             accessMemoryRange fees inOffset inSize $
               accessMemoryRange fees outOffset outSize $
                 burn cost $ do
                   assign (state . stack) (1 : xs)
-                  modifying (state . memory)
-                    (writeMemory output outSize 0 outOffset)
+                  assign (state . returndata) output
+                  copyBytesToMemory output outSize 0 outOffset
                   next
 
 -- * Opcode helper actions
@@ -1052,8 +1112,8 @@ accessStorage addr slot continue =
   use (env . contracts . at addr) >>= \case
     Just c ->
       case view (storage . at slot) c of
-        Just value ->
-          continue value
+        Just x ->
+          continue x
         Nothing ->
           if view external c
           then
@@ -1071,22 +1131,87 @@ accessStorage addr slot continue =
       touchAccount addr $ \_ ->
         accessStorage addr slot continue
 
+create :: (?op :: Word8)
+  => Addr -> Contract
+  -> FeeSchedule Word
+  -> Word -> Word -> Word -> Word -> [Word] -> Addr -> EVM ()
+create self this fees xGas xValue xOffset xSize xs newAddr =
+  accessMemoryRange fees xOffset xSize $ do
+  modifying (tx . touchedAccounts) (self:)
+  modifying (tx . touchedAccounts) (newAddr:)
+  vm0 <- get
+  if xValue > view balance this
+    then do
+      assign (state . stack) (0 : xs)
+      next
+    else if collision $ view (env . contracts . at newAddr) vm0
+    then do
+      modifying (env . contracts . ix self . nonce) succ
+      assign (state . stack) (0 : xs)
+      next
+    else do
+      case view execMode vm0 of
+        ExecuteAsVMTest -> do
+          assign (state . stack) (num newAddr : xs)
+          next
+
+        _ -> do
+          let
+            initCode =
+              readMemory (num xOffset) (num xSize) vm0
+            newContract =
+              initialContract (InitCode initCode)
+            newContext  =
+              CreationContext { creationContextCodehash  = view codehash newContract
+                              , creationContextReversion = view (env . contracts) vm0
+                              }
+
+          zoom (env . contracts) $ do
+            oldAcc <- use (at newAddr)
+            let oldBal = case oldAcc of
+                  Nothing -> 0
+                  Just c  -> view balance c
+            assign (at newAddr) (Just newContract)
+            assign (ix newAddr . balance) (oldBal + xValue)
+            assign (ix newAddr . nonce) 1
+            modifying (ix self . balance) (flip (-) xValue)
+            modifying (ix self . nonce) succ
+
+          pushTrace (FrameTrace newContext)
+          next
+          vm1 <- get
+          pushTo frames $ Frame
+            { _frameContext = newContext
+            , _frameState   = (set stack xs) (view state vm1)
+            }
+
+          assign state $
+            blankState
+              & set contract   newAddr
+              & set codeContract newAddr
+              & set code       initCode
+              & set callvalue  xValue
+              & set caller     self
+              & set gas        xGas
+
+
 -- | Replace a contract's code, like when CREATE returns
 -- from the constructor code.
-replaceCode :: Addr -> ByteString -> EVM ()
+replaceCode :: Addr -> ContractCode -> EVM ()
 replaceCode target newCode = do
   zoom (env . contracts . at target) $ do
-    if BS.null newCode
-      then put Nothing
-      else do
-        Just now <- get
+    Just now <- get
+    case (view contractcode now) of
+      InitCode _ ->
         put . Just $
-          initialContract newCode
-            & set storage (view storage now)
-            & set balance (view balance now)
-            & set nonce   (view nonce now)
+        initialContract newCode
+        & set storage (view storage now)
+        & set balance (view balance now)
+        & set nonce   (view nonce now)
+      RuntimeCode _ ->
+        error "internal error: can't replace code of deployed contract"
 
-replaceCodeOfSelf :: ByteString -> EVM ()
+replaceCodeOfSelf :: ContractCode -> EVM ()
 replaceCodeOfSelf newCode = do
   vm <- get
   replaceCode (view (state . contract) vm) newCode
@@ -1097,11 +1222,72 @@ resetState = do
   assign frames     []
   assign state      blankState
 
-finalize :: EVM ()
-finalize = do
+-- EIP 684
+collision :: Maybe Contract -> Bool
+collision c' = case c' of
+  Just c -> (view contractcode c /= RuntimeCode mempty) || (view nonce c /= 0)
+  Nothing -> False
+
+-- EIP 161
+accountEmpty :: Contract -> Bool
+accountEmpty c =
+  (view contractcode c == RuntimeCode mempty)
+  && (view nonce c == 0)
+  && (view balance c == 0)
+
+finalize :: Bool -> EVM ()
+finalize txmode = do
+  -- process selfdestructs
   destroyedAddresses <- use (tx . selfdestructs)
   modifying (env . contracts)
     (Map.filterWithKey (\k _ -> not (elem k destroyedAddresses)))
+  -- process state trie clearing (EIP 161)
+  touchedAddresses <- use (tx . touchedAccounts)
+  modifying (env . contracts)
+    (Map.filterWithKey (\k a -> not ((elem k touchedAddresses)
+                                && accountEmpty a)))
+  -- whether or not we "finalise the tx"
+  case txmode of
+    False -> return ()
+    True  -> do
+      res <- use result
+      -- burn remaining gas on error
+      case resultRefunds <$> res of
+        Just False -> use (state . gas) >>= (flip burn (return ()))
+        _          -> return ()
+      txOrigin <- use (tx . origin)
+      -- TODO: selfdestruct gas refunds
+      sumRefunds <- (sum . (snd <$>)) <$> (use (tx . refunds))
+      miner    <- use (block . coinbase)
+      blockReward  <- r_block <$> (use (block . schedule))
+      gasRemaining <- use (state . gas)
+      gasPrice     <- use (tx . gasprice)
+      gasLimit     <- use (tx . txgaslimit)
+      reversion    <- use (tx . txReversion)
+      let gasUsed      = gasLimit - gasRemaining
+          cappedRefund = min (quot gasUsed 2) sumRefunds
+          originPay    = (gasRemaining + cappedRefund) * gasPrice
+          minerPay     = blockReward + gasPrice * (gasUsed - cappedRefund)
+      -- revert all contracts on error
+      case res of
+        Just (VMFailure _) -> assign (env . contracts) reversion
+        _                  -> return ()
+      -- revert created contract on error
+      use (tx . isCreate) >>= \case
+        False -> return ()
+        True  -> case res of
+          Just (VMFailure _) -> do
+            createe <- use (state . contract)
+            modifying (env . contracts)
+              (Map.delete createe)
+          Just (VMSuccess output) -> do
+            createe <- use (state . contract)
+            replaceCode createe (RuntimeCode output)
+          Nothing -> error "Finalising an unfinished tx."
+      modifying (env . contracts)
+        (Map.adjust (over balance (+ minerPay)) miner)
+      modifying (env . contracts)
+        (Map.adjust (over balance (+ originPay)) txOrigin)
 
 loadContract :: Addr -> EVM ()
 loadContract target =
@@ -1143,7 +1329,6 @@ refund :: Word -> EVM ()
 refund n = do
   self <- use (state . contract)
   pushTo (tx . refunds) (self, n)
-
 
 -- * Cheat codes
 
@@ -1306,7 +1491,13 @@ finishFrame how = do
       -- Pop to the previous level of the debug trace stack.
       popTrace
 
+      -- When entering a call, the gas allowance is counted as burned
+      -- in advance; this unburns the remainder and adds it to the
+      -- parent frame.
       let remainingGas = view (state . gas) oldVm
+          reclaimRemainingGasAllowance = do
+            modifying burned (subtract remainingGas)
+            modifying (state . gas) (+ remainingGas)
 
       -- Now dispatch on whether we were creating or calling,
       -- and whether we shall return, revert, or error (six cases).
@@ -1316,13 +1507,6 @@ finishFrame how = do
         CallContext (num -> outOffset) (num -> outSize) _ _ _ reversion -> do
 
           let
-            -- When entering a call, the gas allowance is counted as burned
-            -- in advance; this unburns the remainder and adds it to the
-            -- parent frame.
-            reclaimRemainingGasAllowance = do
-              modifying burned (subtract remainingGas)
-              modifying (state . gas) (+ remainingGas)
-
             revertContracts = assign (env . contracts) reversion
 
           case how of
@@ -1346,34 +1530,39 @@ finishFrame how = do
               push 0
 
         -- Or were we creating?
-        CreationContext _ -> do
+        CreationContext _ reversion -> do
           let
             createe = view (state . contract) oldVm
-            destroy = assign (env . contracts . at createe) Nothing
+            revertContracts = assign (env . contracts) reversion
 
           case how of
             -- Case 4: Returning during a creation?
             FrameReturned output -> do
-              replaceCode createe output
-              assign (state . gas) remainingGas
+              replaceCode createe (RuntimeCode output)
+              reclaimRemainingGasAllowance
               push (num createe)
 
             -- Case 5: Reverting during a creation?
             FrameReverted output -> do
-              destroy
+              revertContracts
               assign (state . returndata) output
-              assign (state . gas) remainingGas
+              reclaimRemainingGasAllowance
               push 0
 
             -- Case 6: Error during a creation?
             FrameErrored _ -> do
-              destroy
-              assign (state . gas) 0
+              revertContracts
               push 0
 
 
 vmError :: Error -> EVM ()
 vmError e = finishFrame (FrameErrored e)
+
+resultRefunds :: VMResult -> Bool
+resultRefunds = \case
+  VMSuccess _          -> True
+  VMFailure (Revert _) -> True
+  VMFailure _          -> False
 
 -- * Memory helpers
 
@@ -1723,6 +1912,16 @@ costOfCall (FeeSchedule {..}) recipient xValue availableGas xGas =
       if availableGas >= c_extra
       then min xGas (allButOne64th (availableGas - c_extra))
       else xGas
+
+costOfCreate
+  :: FeeSchedule Word
+  -> Word -> Word -> (Word, Word)
+costOfCreate (FeeSchedule {..}) availableGas hashSize =
+  (createCost + hashCost + initGas, initGas)
+  where
+    createCost = g_create
+    hashCost   = g_sha3word * ceilDiv (hashSize) 32
+    initGas    = allButOne64th (availableGas - createCost)
 
 memoryCost :: FeeSchedule Word -> Word -> Word
 memoryCost FeeSchedule{..} byteCount =

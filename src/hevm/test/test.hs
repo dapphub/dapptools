@@ -171,7 +171,7 @@ runStatements stmts args t = do
   case runState exec (vmForEthrunCreation x) of
     (VMSuccess targetCode, vm1) -> do
       let target = view (state . contract) vm1
-          vm2 = execState (replaceCodeOfSelf targetCode) vm1
+          vm2 = execState (replaceCodeOfSelf (RuntimeCode targetCode)) vm1
       case flip runState vm2
              (do resetState
                  assign (state . gas) 0xffffffffffffffff -- kludge

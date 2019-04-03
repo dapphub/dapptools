@@ -111,7 +111,7 @@ initializeUnitTest UnitTestOptions { .. } = do
   addr <- Stepper.evm (use (state . contract))
 
   -- Mutate the current contract to use the new code
-  Stepper.evm $ replaceCodeOfSelf bytes
+  Stepper.evm $ replaceCodeOfSelf (RuntimeCode bytes)
 
   -- Increase the nonce, in case the constructor created contracts
   Just n <- Stepper.evm (preuse (env . contracts . ix ethrunAddress . nonce))
@@ -547,16 +547,18 @@ initialUnitTestVm (UnitTestOptions {..}) theContract _ =
            , vmoptCaller = testCaller
            , vmoptOrigin = testOrigin
            , vmoptGas = testGasCreate
+           , vmoptGaslimit = testGasCreate
            , vmoptCoinbase = testCoinbase
            , vmoptNumber = testNumber
            , vmoptTimestamp = testTimestamp
-           , vmoptGaslimit = testGaslimit
+           , vmoptBlockGaslimit = testGaslimit
            , vmoptGasprice = testGasprice
            , vmoptDifficulty = testDifficulty
            , vmoptSchedule = FeeSchedule.metropolis
+           , vmoptCreate = False
            }
     creator =
-      initialContract mempty
+      initialContract (RuntimeCode mempty)
         & set nonce 1
         & set balance (w256 testBalanceCreate)
   in vm

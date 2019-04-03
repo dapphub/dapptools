@@ -1,5 +1,9 @@
 # hevm changelog
 
+## 0.29 - 2019-04-03
+ - Significant jump in compliance with client tests
+ - Add support for running GeneralStateTests
+
 ## 0.28 - 2019-03-22
  - Fix delegatecall gas metering, as reported in
    https://github.com/dapphub/dapptools/issues/34
