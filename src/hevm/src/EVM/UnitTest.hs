@@ -13,7 +13,7 @@ import EVM.Format
 import EVM.Keccak
 import EVM.Solidity
 import EVM.Types
-import EVM.Concrete (w256, wordAt)
+import EVM.Concrete (w256, wordAt, wordValue)
 
 import qualified EVM.FeeSchedule as FeeSchedule
 
@@ -492,42 +492,38 @@ formatTestLogs events xs =
 
 formatTestLog :: Map W256 Event -> Log -> Maybe Text
 formatTestLog _ (Log _ _ []) = Nothing
-formatTestLog events (Log _ args (t:_)) =
-  let
-    name  = getEventName event
-    event = getEvent t events
+formatTestLog events (Log _ args (topic:_)) =
+  case (Map.lookup (wordValue topic) events) of
+    Nothing -> Nothing
+    Just (Event name _ _) -> case name of
+      "log_bytes32" ->
+        Just $ formatBytes args
 
-  in case name of
+      "log_named_bytes32" ->
+        let key = BS.take 32 args
+            val = BS.drop 32 args
+        in Just $ formatString key <> ": " <> formatBytes val
 
-    "log_bytes32" ->
-      Just $ formatBytes args
+      "log_named_address" ->
+        let key = BS.take 32 args
+            val = BS.drop 44 args
+        in Just $ formatString key <> ": " <> formatBinary val
 
-    "log_named_bytes32" ->
-      let key = BS.take 32 args
-          val = BS.drop 32 args
-      in Just $ formatString key <> ": " <> formatBytes val
+      "log_named_int" ->
+        let key = BS.take 32 args
+            val = wordAt 32 args
+        in Just $ formatString key <> ": " <> showDec Signed val
 
-    "log_named_address" ->
-      let key = BS.take 32 args
-          val = BS.drop 44 args
-      in Just $ formatString key <> ": " <> formatBinary val
+      "log_named_uint" ->
+        let key = BS.take 32 args
+            val = wordAt 32 args
+        in Just $ formatString key <> ": " <> showDec Unsigned val
 
-  -- TODO: event logs (bytes);
-  -- TODO: event log_named_decimal_int  (bytes32 key, int val, uint decimals);
-  -- TODO: event log_named_decimal_uint (bytes32 key, uint val, uint decimals);
+-- TODO: event logs (bytes);
+-- TODO: event log_named_decimal_int  (bytes32 key, int val, uint decimals);
+-- TODO: event log_named_decimal_uint (bytes32 key, uint val, uint decimals);
 
-    "log_named_int" ->
-      let key = BS.take 32 args
-          val = wordAt 32 args
-      in Just $ formatString key <> ": " <> showDec Signed val
-
-    "log_named_uint" ->
-      let key = BS.take 32 args
-          val = wordAt 32 args
-      in Just $ formatString key <> ": " <> showDec Unsigned val
-
-    _ ->
-      Nothing
+      _ -> Nothing
 
 word32Bytes :: Word32 -> ByteString
 word32Bytes x = BS.pack [byteAt x (3 - i) | i <- [0..3]]
