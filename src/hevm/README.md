@@ -76,13 +76,10 @@ Haskell package manager, Cabal, simply run:
     $ git clone https://github.com/dapphub/dapptools.git
     $ cd dapptools/src/hevm && cabal configure && cabal install
 
-**Note:** If you are on macOS when building with
-Stack you will have to previously deal with `readline` and
-`secp256k1`. These commands should be enough (assuming you
-have brew already installed):
+**Note:** If you are on macOS when building with Stack, 
+you will first need to install the `secp256k1` library. 
+These commands should be enough:
 
-    $ brew install readline # for installing GNU readline in the system
-    $ stack install readline --extra-include-dirs=/usr/local/opt/readline/include --extra-lib-dirs=/usr/local/opt/readline/lib # for installing the Haskell readline package
     $ git clone https://github.com/bitcoin-core/secp256k1.git
     $ cd secp256k1
     $ ./autogen.sh
@@ -90,12 +87,6 @@ have brew already installed):
     $ make
     $ sudo make install
     $ cd .. && rm -rf secp256k1 # optional (cleanup)
-
-After these commands, you should invoke the installing
-commands with the readline flags set:
-
-    $ stack install --extra-include-dirs=/usr/local/opt/readline/include --extra-lib-dirs=/usr/local/opt/readline/lib # if you are in the cloned repository
-    $ stack install hevm --extra-include-dirs=/usr/local/opt/readline/include --extra-lib-dirs=/usr/local/opt/readline/lib # if you are installing hevm from Hackage
 
 ## Contact
 
