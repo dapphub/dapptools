@@ -67,6 +67,6 @@ NOTE: not all versions are supported on macOS platforms.
 
 ## TODO
 
-  [ ] Better installation instructions.
-  [ ] Explain how to use the cache without installing Cachix.
-  [ ] Make a script that installs Nix and/or configures the cache.
+- [ ] Better installation instructions.
+- [ ] Explain how to use the cache without installing Cachix.
+- [ ] Make a script that installs Nix and/or configures the cache.
