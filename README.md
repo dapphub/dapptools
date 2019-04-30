@@ -1,4 +1,5 @@
 [![built with nix](https://builtwithnix.org/badge.svg)](https://builtwithnix.org)
+[![Chat](https://img.shields.io/badge/community-chat-blue.svg?style=flat-square)](https://dapphub.chat)
 
 # Dapp tools by DappHub
 
@@ -8,7 +9,19 @@ This repository contains the source code of several dapp tools
 hand-crafted and maintained by DappHub, along with various Nix
 expressions which are all bundled up into a Nix overlay.
 
-To install tools from this repository follow these instructions:
+Contents:
+
+- [Dapp](./src/dapp)
+- [Seth](./src/seth)
+- [Hevm](./src/hevm)
+- [Ethsign](./src/hevm)
+
+All dependencies and tools can be automaticaly installed by running:
+```sh
+curl https://dapp.tools/install | sh
+```
+
+For a manual install, please follow the instructions below.
 
 ### Install Nix
 
@@ -35,7 +48,7 @@ then running
 
 followed by restarting your Nix daemon (if on a multi-user Nix installation)
 
-### Install our tools
+### Manual install
 
 To install tools from this repository, you need to run
 
