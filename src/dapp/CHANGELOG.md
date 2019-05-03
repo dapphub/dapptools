@@ -4,6 +4,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.18.1] - 2019-05-03
+### Fixed
+- Revert the change to the output of `dapp create`, because it created problems
+  when concatenating scripts.
+
 ## [0.18.0] - 2019-05-02
 ### Changed
 - The return value of `dapp debug` in case of error is `1`, rather than `-1`
@@ -82,3 +87,4 @@ changelog.
 [0.16.0]: https://github.com/dapphub/dapptools/tree/dapp/0.16.0
 [0.17.0]: https://github.com/dapphub/dapptools/tree/dapp/0.17.0
 [0.18.0]: https://github.com/dapphub/dapptools/tree/dapp/0.18.0
+[0.18.1]: https://github.com/dapphub/dapptools/tree/dapp/0.18.1
