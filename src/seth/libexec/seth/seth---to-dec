@@ -4,5 +4,6 @@ set -e
 hexdata=$(seth --to-hexdata "$1")
 hexnum=${hexdata#0x}
 num=$(bc <<<"ibase=16; $(tr a-f A-F <<<"$hexnum")")
+# shellcheck disable=SC1003
 tr -d '\n\\' <<<"$num"
 echo

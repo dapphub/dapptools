@@ -4,6 +4,7 @@
 ###    or: seth mktx [<opts>] [-F <from>] <to> <calldata>
 set -e
 
+# shellcheck disable=SC2015
 [[ $# ]] && [[ $ETH_FROM ]] || seth --fail-usage "$0"
 
 value=$(seth --to-wei "${ETH_VALUE:-0}")
@@ -28,7 +29,7 @@ else
   args+=(--to "$(seth --to-address "$1")")
 fi
 
-if [ ! -z "$ETH_PASSWORD" ]; then args+=(--passphrase-file "$ETH_PASSWORD"); fi
+if [ -n "$ETH_PASSWORD" ]; then args+=(--passphrase-file "$ETH_PASSWORD"); fi
 
 tx=$(ethsign tx "${args[@]}")
 echo "$tx"

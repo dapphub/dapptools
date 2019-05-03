@@ -4,7 +4,7 @@
 
 set -e
 
-if [ ! -n "$DAPPSYS_PATH" ]; then
+if [ -z "$DAPPSYS_PATH" ]; then
   >&2 echo "dapp test-standalone: \$DAPPSYS_PATH must point to dappsys root"
   >&2 echo "dapp test-standalone: containing at least ds-test/src/test.sol"
   exit 1

@@ -14,6 +14,9 @@ install:
   - nix-env -if https://github.com/cachix/cachix/tarball/v0.2.0 --substituters https://cachix.cachix.org --trusted-public-keys cachix.cachix.org-1:eWNHQldwUO7G2VkjpnjDbWwy4KQ/HNxht7H4SSoMckM=
   - cachix use dapp
 script:
+  - |
+    nix-env -i ShellCheck
+    grep -RHL --exclude-dir node_modules node src/*/libexec | xargs shellcheck
   - cachix push --watch-store dapp &
   - |
     PLATFORM=linux
