@@ -1,6 +1,5 @@
 # Dapp
 
-[![Docs](https://img.shields.io/badge/view%20docs-readthedocs-blue.svg?style=flat-square)](https://dapp.readthedocs.io/en/latest/)
 [![Chat](https://img.shields.io/badge/community-chat-blue.svg?style=flat-square)](https://dapphub.chat)
 
 ## Installation
