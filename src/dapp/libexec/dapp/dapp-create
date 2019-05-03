@@ -26,4 +26,4 @@ address=$(set -x; seth send --create "$bin" "${type/constructor/${1##*/}}" "${@:
   dapp verify-contract "$1" "$address" || true
 }
 
-echo address: "$address"
+echo "$address"
