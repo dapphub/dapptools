@@ -49,6 +49,7 @@ fi
 jshon+=(-n {})
 [[ $TO ]] && jshon+=(-s "$TO" -i to)
 [[ $DATA ]] && jshon+=(-s "$DATA" -i data)
+# shellcheck disable=SC2207
 jshon+=($(seth --send-params))
 jshon+=(-i append)
 

@@ -20,6 +20,7 @@ DATA=$(seth calldata "${@:2}")
 jshon+=(-n {})
 jshon+=(-s "$TO"   -i to)
 jshon+=(-s "$DATA" -i data)
+# shellcheck disable=SC2207
 jshon+=($(seth --send-params))
 jshon+=(-i append)
 [[ $ETH_BLOCK = [0-9]* ]] && ETH_BLOCK=$(seth --to-hex "$ETH_BLOCK")
