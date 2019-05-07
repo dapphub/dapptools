@@ -49,8 +49,8 @@ fi
 jshon+=(-n {})
 [[ $TO ]] && jshon+=(-s "$TO" -i to)
 [[ $DATA ]] && jshon+=(-s "$DATA" -i data)
-mapfile -t params < <(seth --send-params)
-jshon+=( "${params[@]}" )
+# shellcheck disable=SC2207
+jshon+=($(seth --send-params))
 jshon+=(-i append)
 
 if [[ -z $ETH_RPC_ACCOUNTS ]]; then
