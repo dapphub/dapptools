@@ -38,7 +38,7 @@ If you want to cache the binary builds across several computers, Nix
 provides several ways of doing this, the most convenient being
 the [Cachix](https://cachix.org) service.
 
-We maintain a public cache which you can use by installing Cachix 
+We maintain a public cache which you can use by installing Cachix
 
     nix-env -if https://github.com/cachix/cachix/tarball/master --substituters https://cachix.cachix.org --trusted-public-keys cachix.cachix.org-1:eWNHQldwUO7G2VkjpnjDbWwy4KQ/HNxht7H4SSoMckM=
 
@@ -58,7 +58,7 @@ To install tools from this repository, you need to run
 which will build and install these tools into your Nix profile, optionally
 fetching the binaries from the cache if you have configured it.
 
-#### Installing custom solc versions
+### Installing custom solc versions
 
 For a list of the supported `solc` versions, check
 [`./nix/solc-versions.nix`](./nix/solc-versions.nix).
@@ -78,8 +78,7 @@ unreleased versions.
 
 NOTE: not all versions are supported on macOS platforms.
 
-## TODO
+### Maintenance
 
-- [ ] Better installation instructions.
-- [ ] Explain how to use the cache without installing Cachix.
-- [ ] Make a script that installs Nix and/or configures the cache.
+Instructions for adding new versions of `solc` can be found at
+[`nix/solc-updates.md`](./nix/solc-updates.md)
