@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 ### dapp-test -- run the test suite
-### Usage: dapp test
+### Usage: dapp test [-v[v]]
+###
+### By default, dapp test outputs failed assertions only.
+### -v increases verbosity to include the full trace of failing tests.
+### -vv outputs traces for all tests, including successful ones.
 set -e
 have() { command -v "$1" >/dev/null; }
 
