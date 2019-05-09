@@ -27,5 +27,6 @@ rec {
   unreleased = {
     solc_0_5_6 = { rev = "1aeb954a70b389ee4eaffddbe74363ca2664084f"; sha256 = "0a0kd8m6r675prs9sm4g245rwfp4wskra4q1xkpdbk767qdvwk6k"; };
     solc_0_5_7 = { rev = "ae4d6efc8ccb7f4afff41b79c929f5a9f889080c"; sha256 = "1ycc0c16n3p599w4kizdbsj9p9hwqghkw4fz73y08jir46zbpx2g"; };
+    solc_0_5_8 = { rev = "4274424a7b8cbe81589b4d78b879a8de06bb140b"; sha256 = "18v40ajc7cgca015bfam6izbffzbig3r14w2wv5x882g5qyv1xl0"; };
   };
 }
