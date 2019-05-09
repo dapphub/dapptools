@@ -5,14 +5,13 @@ import Prelude hiding (Word)
 import EVM (VM, cheatCode, traceForest, traceData, Error (..))
 import EVM (Trace, TraceData (..), Log (..), Query (..), FrameContext (..))
 import EVM.Dapp (DappInfo, dappSolcByHash, showTraceLocation, dappEventMap)
-import EVM.Concrete (Word (..))
+import EVM.Concrete (Word (..), wordValue)
 import EVM.Types (W256 (..), num)
 import EVM.ABI (AbiValue (..), Event (..), AbiType (..))
-import EVM.ABI (Indexed (Indexed, NotIndexed), getAbiSeq, getAbi)
+import EVM.ABI (Indexed (NotIndexed), getAbiSeq, getAbi)
 import EVM.ABI (abiTypeSolidity, parseTypeName)
 import EVM.Solidity (SolcContract, contractName, abiMap)
 import EVM.Solidity (methodOutput, methodSignature)
-import EVM.Concrete (wordValue)
 
 import Control.Arrow ((>>>))
 import Control.Lens (view, preview, ix, _2, to, _Just)
@@ -22,7 +21,6 @@ import Data.ByteString.Builder (byteStringHex, toLazyByteString)
 import Data.ByteString.Lazy (toStrict, fromStrict)
 import Data.DoubleWord (signedWord)
 import Data.Foldable (toList)
-import Data.Map (Map)
 import Data.Maybe (catMaybes)
 import Data.Monoid ((<>))
 import Data.Text (Text, pack, unpack, intercalate)
@@ -148,29 +146,34 @@ showTrace dapp trace =
   in case view traceData trace of
     EventTrace (Log _ bytes topics) ->
       case topics of
-        (t:_) ->
-          let event = getEvent t (view dappEventMap dapp)
-              -- indexed types are in the remaining topics
-              types = getEventUnindexedTypes event
-          in case event of
-            -- todo: catch ds-note in Anonymous case
-            Just (Event name _ _) ->
+        [] ->
+          mconcat
+            [ "\x1b[36m"
+            , "log0("
+            , formatBinary bytes
+            , ")"
+            , "\x1b[0m"
+            ] <> pos
+        (topic:_) ->
+          case (Map.lookup (wordValue topic) (view dappEventMap dapp)) of
+            Just (Event name _ types) ->
               mconcat
                 [ "\x1b[36m"
                 , name
-                , showEvent types bytes
+                , showValues [t | (t, NotIndexed) <- types] bytes
+                -- todo: show indexed
                 , "\x1b[0m"
                 ] <> pos
             Nothing ->
+              -- todo: catch ds-note
               mconcat
                 [ "\x1b[36m"
-                , "<unknown-event> "
-                , formatBinary bytes
-                , mconcat (map (pack . show) topics)
+                , "log" <> (pack (show (length topics))) <> "("
+                , formatBinary bytes <> ", "
+                , intercalate ", " (map (pack . show) topics) <> ")"
                 , "\x1b[0m"
                 ] <> pos
-        _ ->
-          "log" <> pos
+
     QueryTrace q ->
       case q of
         PleaseFetchContract addr _ ->
@@ -248,12 +251,11 @@ showError bs = case BS.take 4 bs of
   "\b\195y\160" -> showCall [AbiStringType] bs
   _             -> formatBinary bs
 
-showEvent :: [AbiType] -> ByteString -> Text
-showEvent ts bs =
-  case runGetOrFail (getAbiSeq (length ts) ts)
-            (fromStrict bs) of
-    Right (_, _, abivals) -> showAbiValues abivals
-    Left (_,_,_) -> error "lol"
+showValues :: [AbiType] -> ByteString -> Text
+showValues ts bs =
+  case runGetOrFail (getAbiSeq (length ts) ts) (fromStrict bs) of
+    Right (_, _, xs) -> showAbiValues xs
+    Left (_, _, _)   -> formatBinary bs
 
 showValue :: AbiType -> ByteString -> Text
 showValue t bs =
@@ -273,18 +275,3 @@ contractNamePart x = Text.split (== ':') x !! 1
 
 contractPathPart :: Text -> Text
 contractPathPart x = Text.split (== ':') x !! 0
-
-getEvent :: Word -> Map W256 Event -> Maybe Event
-getEvent w events = Map.lookup (wordValue w) events
-
-getEventName :: Maybe Event -> Text
-getEventName (Just (Event name _ _)) = name
-getEventName Nothing = "<unknown-event>"
-
-getEventUnindexedTypes :: Maybe Event -> [AbiType]
-getEventUnindexedTypes Nothing = []
-getEventUnindexedTypes (Just (Event _ _ xs)) = [x | (x, NotIndexed) <- xs]
-
-getEventIndexedTypes :: Maybe Event -> [AbiType]
-getEventIndexedTypes Nothing = []
-getEventIndexedTypes (Just (Event _ _ xs)) = [x | (x, Indexed) <- xs]

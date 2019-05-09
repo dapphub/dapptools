@@ -9,8 +9,11 @@ while [[ $# -gt 0 ]]; do
     -r|--regex)
       opts+=(--match "$1"); shift
       ;;
+    -vv)
+      opts+=(--verbose 2);
+      ;;
     -v|--verbose)
-      opts+=(--verbose);
+      opts+=(--verbose 1);
       ;;
     *)
       echo >&2 "dapp-test-hevm: unknown argument: $opt"

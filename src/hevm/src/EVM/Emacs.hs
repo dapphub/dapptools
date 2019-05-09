@@ -471,7 +471,7 @@ defaultUnitTestOptions = do
   params <- liftIO getParametersFromEnvironmentVariables
   pure UnitTestOptions
     { oracle            = Fetch.zero
-    , verbose           = False
+    , verbose           = Nothing
     , match             = ""
     , vmModifier        = id
     , testParams        = params

@@ -268,7 +268,7 @@ runFromVM vm = do
 
     testOpts = UnitTestOptions
       { oracle            = Fetch.zero
-      , verbose           = False
+      , verbose           = Nothing
       , match             = ""
       , vmModifier        = id
       , testParams        = error "irrelevant"

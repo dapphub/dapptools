@@ -13,7 +13,7 @@ import EVM.Format
 import EVM.Keccak
 import EVM.Solidity
 import EVM.Types
-import EVM.Concrete (w256, wordAt)
+import EVM.Concrete (w256, wordAt, wordValue)
 
 import qualified EVM.FeeSchedule as FeeSchedule
 
@@ -59,7 +59,7 @@ import qualified Data.Vector as Vector
 data UnitTestOptions = UnitTestOptions
   {
     oracle     :: Query -> IO (EVM ())
-  , verbose    :: Bool
+  , verbose    :: Maybe Int
   , match      :: Text
   , vmModifier :: VM -> VM
   , testParams :: TestVMParams
@@ -427,13 +427,16 @@ runUnitTestContract
                      (fromIntegral gasSpent :: Integer)
                in
                  pure
-                   ( "PASS " <> testName <> " (gas: " <> gasText <> ")"
+                   ("\x1b[32m[PASS]\x1b[0m "
+                   <> testName <> " (gas: " <> gasText <> ")"
                    , Right (passOutput vm dapp opts testName)
                    )
              (Right False, vm) ->
-               pure ("FAIL " <> testName, Left (failOutput vm dapp opts testName))
+               pure ("\x1b[31m[FAIL]\x1b[0m "
+               <> testName, Left (failOutput vm dapp opts testName))
              (Left _, _)       ->
-               pure ("OOPS " <> testName, Left ("VM error for " <> testName))
+               pure ("\x1b[33m[OOPS]\x1b[0m "
+               <> testName, Left ("VM error for " <> testName))
 
       let inform = \(x, y) -> Text.putStrLn x >> pure y
 
@@ -441,14 +444,14 @@ runUnitTestContract
       details <-
         mapM (\x -> runOne x >>= inform) testNames
 
-      let mails = [x | Right x <- details]
-      let fails = [x | Left x <- details]
+      let running = [x | Right x <- details]
+      let bailing = [x | Left x <- details]
 
       tick "\n"
-      tick (Text.unlines (filter (not . Text.null) mails))
-      tick (Text.unlines (filter (not . Text.null) fails))
+      tick (Text.unlines (filter (not . Text.null) running))
+      tick (Text.unlines (filter (not . Text.null) bailing))
 
-      pure (null fails)
+      pure (null bailing)
 
 indentLines :: Int -> Text -> Text
 indentLines n s =
@@ -458,7 +461,7 @@ indentLines n s =
 passOutput :: VM -> DappInfo -> UnitTestOptions -> Text -> Text
 passOutput vm dapp UnitTestOptions { .. } testName =
   case verbose of
-    True ->
+    Just 2 ->
       mconcat $
         [ "Success: "
         , fromMaybe "" (stripSuffix "()" testName)
@@ -467,17 +470,18 @@ passOutput vm dapp UnitTestOptions { .. } testName =
         , indentLines 2 (showTraceTree dapp vm)
         , "\n"
         ]
-    False ->
+    _ ->
       ""
 
 failOutput :: VM -> DappInfo -> UnitTestOptions -> Text -> Text
-failOutput vm dapp _ testName = mconcat $
+failOutput vm dapp UnitTestOptions { .. } testName = mconcat $
   [ "Failure: "
   , fromMaybe "" (stripSuffix "()" testName)
   , "\n"
   , indentLines 2 (formatTestLogs (view dappEventMap dapp) (view logs vm))
-  , indentLines 2 (showTraceTree dapp vm)
-  , "\n"
+  , case verbose of
+      Nothing -> ""
+      _       -> indentLines 2 (showTraceTree dapp vm)
   ]
 
 formatTestLogs :: Map W256 Event -> Seq.Seq Log -> Text
@@ -488,42 +492,38 @@ formatTestLogs events xs =
 
 formatTestLog :: Map W256 Event -> Log -> Maybe Text
 formatTestLog _ (Log _ _ []) = Nothing
-formatTestLog events (Log _ args (t:_)) =
-  let
-    name  = getEventName event
-    event = getEvent t events
+formatTestLog events (Log _ args (topic:_)) =
+  case (Map.lookup (wordValue topic) events) of
+    Nothing -> Nothing
+    Just (Event name _ _) -> case name of
+      "log_bytes32" ->
+        Just $ formatBytes args
 
-  in case name of
+      "log_named_bytes32" ->
+        let key = BS.take 32 args
+            val = BS.drop 32 args
+        in Just $ formatString key <> ": " <> formatBytes val
 
-    "log_bytes32" ->
-      Just $ formatBytes args
+      "log_named_address" ->
+        let key = BS.take 32 args
+            val = BS.drop 44 args
+        in Just $ formatString key <> ": " <> formatBinary val
 
-    "log_named_bytes32" ->
-      let key = BS.take 32 args
-          val = BS.drop 32 args
-      in Just $ formatString key <> ": " <> formatBytes val
+      "log_named_int" ->
+        let key = BS.take 32 args
+            val = wordAt 32 args
+        in Just $ formatString key <> ": " <> showDec Signed val
 
-    "log_named_address" ->
-      let key = BS.take 32 args
-          val = BS.drop 44 args
-      in Just $ formatString key <> ": " <> formatBinary val
+      "log_named_uint" ->
+        let key = BS.take 32 args
+            val = wordAt 32 args
+        in Just $ formatString key <> ": " <> showDec Unsigned val
 
-  -- TODO: event logs (bytes);
-  -- TODO: event log_named_decimal_int  (bytes32 key, int val, uint decimals);
-  -- TODO: event log_named_decimal_uint (bytes32 key, uint val, uint decimals);
+-- TODO: event logs (bytes);
+-- TODO: event log_named_decimal_int  (bytes32 key, int val, uint decimals);
+-- TODO: event log_named_decimal_uint (bytes32 key, uint val, uint decimals);
 
-    "log_named_int" ->
-      let key = BS.take 32 args
-          val = wordAt 32 args
-      in Just $ formatString key <> ": " <> showDec Signed val
-
-    "log_named_uint" ->
-      let key = BS.take 32 args
-          val = wordAt 32 args
-      in Just $ formatString key <> ": " <> showDec Unsigned val
-
-    _ ->
-      Nothing
+      _ -> Nothing
 
 word32Bytes :: Word32 -> ByteString
 word32Bytes x = BS.pack [byteAt x (3 - i) | i <- [0..3]]

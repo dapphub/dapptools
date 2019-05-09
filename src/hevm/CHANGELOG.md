@@ -1,5 +1,9 @@
 # hevm changelog
 
+## 0.30 - 2019-05-09
+ - Adjustable verbosity level for `dapp-test` with `--verbose={0,1,2}`
+ - Working stack build
+
 ## 0.29 - 2019-04-03
  - Significant jump in compliance with client tests
  - Add support for running GeneralStateTests
