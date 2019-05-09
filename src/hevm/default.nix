@@ -4,9 +4,9 @@
 , fgl, filepath, ghci-pretty, haskeline, here, HUnit, lens
 , lens-aeson, megaparsec, memory, monad-par, mtl, multiset
 , operational, optparse-generic, process, QuickCheck
-, quickcheck-text, regex-tdfa, restless-git, rosezipper
-, s-cargot, scientific, secp256k1, semver-range, stdenv, tasty
-, tasty-hunit, tasty-quickcheck, temporary, text, text-format, time
+, quickcheck-text, regex-tdfa, restless-git, rosezipper, s-cargot
+, scientific, secp256k1, semver-range, stdenv, tasty, tasty-hunit
+, tasty-quickcheck, temporary, text, text-format, time
 , transformers, tree-view, unordered-containers, vector, vty
 , witherable, wreq
 }:
@@ -23,18 +23,17 @@ mkDerivation {
     cryptonite data-dword deepseq directory fgl filepath ghci-pretty
     haskeline lens lens-aeson megaparsec memory monad-par mtl multiset
     operational optparse-generic process QuickCheck quickcheck-text
-    restless-git rosezipper s-cargot scientific semver-range
-    temporary text text-format time transformers tree-view
-    unordered-containers vector vty witherable wreq
+    restless-git rosezipper s-cargot scientific semver-range temporary
+    text text-format time transformers tree-view unordered-containers
+    vector vty witherable wreq
   ];
   librarySystemDepends = [ secp256k1 ];
   executableHaskellDepends = [
     aeson ansi-wl-pprint async base base16-bytestring base64-bytestring
     binary brick bytestring containers cryptonite data-dword deepseq
     directory filepath ghci-pretty lens lens-aeson memory mtl
-    optparse-generic process QuickCheck quickcheck-text
-    regex-tdfa temporary text text-format unordered-containers vector
-    vty
+    optparse-generic process QuickCheck quickcheck-text regex-tdfa
+    temporary text text-format unordered-containers vector vty
   ];
   testHaskellDepends = [
     base base16-bytestring binary bytestring ghci-pretty here HUnit

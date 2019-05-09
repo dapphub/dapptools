@@ -59,7 +59,8 @@ library
     EVM.TTYCenteredList,
     EVM.Types,
     EVM.UnitTest,
-    EVM.VMTest,
+    EVM.VMTest
+  other-modules:
     Paths_hevm
   ghc-options:
     -Wall -Wno-deprecations
@@ -143,6 +144,8 @@ executable hevm
     hevm-cli.hs
   ghc-options:
     -Wall -threaded -with-rtsopts=-N
+  other-modules:
+    Paths_hevm
   build-depends:
     QuickCheck                        >= 2.9,
     aeson                             >= 1.0,

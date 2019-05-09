@@ -338,6 +338,7 @@ launchTest execmode cmd = do
   let parser = case execmode of
         ExecuteAsVMTest -> VMTest.parseSuite
         ExecuteAsBlockchainTest -> VMTest.parseBCSuite
+        ExecuteNormally -> error "cannot launchTest normally"
   parsed <- parser <$> LazyByteString.readFile (file cmd)
   case parsed of
      Left err -> print err
@@ -362,6 +363,7 @@ runVMTest diffmode execmode mode (name, x) = do
       -- whether or not to "finalize the tx"
       ExecuteAsVMTest -> void EVM.Stepper.execFully >> EVM.Stepper.evm (EVM.finalize False)
       ExecuteAsBlockchainTest -> void EVM.Stepper.execFully >> EVM.Stepper.evm (EVM.finalize True)
+      ExecuteNormally -> error "cannot launchTest normally"
   putStr (name ++ " ")
   hFlush stdout
   result <- do
