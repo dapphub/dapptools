@@ -46,6 +46,7 @@ import Data.ByteString            (ByteString)
 import Data.List                  (intercalate, isSuffixOf)
 import Data.Text                  (Text, unpack, pack)
 import Data.Maybe                 (fromMaybe)
+import Data.Version               (showVersion)
 import System.Directory           (withCurrentDirectory, listDirectory)
 import System.Exit                (die, exitFailure)
 import System.IO                  (hFlush, stdout)
@@ -122,6 +123,7 @@ data Command
     , dappRoot   :: Maybe String
     }
   | Emacs
+  | Version
   deriving (Show, Options.Generic, Eq)
 
 type URL = Text
@@ -162,6 +164,7 @@ main = do
   let
     root = fromMaybe "." (dappRoot cmd)
   case cmd of
+    Version {} -> putStrLn (showVersion Paths.version)
     Exec {} ->
       launchExec cmd
     VmTest {} ->
