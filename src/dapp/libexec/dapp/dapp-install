@@ -1,10 +1,18 @@
 #!/usr/bin/env bash
 ### dapp-install -- install a smart contract library
 ### Usage: dapp install <lib>
+### <lib> may be:
+###   - a Dapphub repo (ds-foo)
+###   - the URL of a Dapphub repo (https://github.com/dapphub/ds-foo)
+###   - a path to a repo in another Github org (org-name/repo-name)
 set -e
 
 dapp --sanity "$0"
 deps=$(dapp --parse-deps "$@")
+if [[ -z "$deps" ]]; then
+  dapp help install
+  exit
+fi
 while read -r unparsed name url; do
   (set -x; git submodule add --force "$url" "lib/$name")
   (set -x; git submodule update --init --recursive "lib/$name")
