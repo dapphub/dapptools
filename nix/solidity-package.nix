@@ -15,9 +15,9 @@
          xs);
 in
   pkgs.lib.makeOverridable (
-    attrs @ { test ? true, deps ? [], ... }:
+    attrs @ { test ? true, deps ? [], solc ? pkgs.solc, ... }:
       pkgs.stdenv.mkDerivation (rec {
-        buildInputs = [pkgs.dapp2.test-hevm pkgs.solc];
+        buildInputs = [pkgs.dapp2.test-hevm solc];
         passthru = {
           remappings = remappings deps;
           libPaths = libPaths deps;
