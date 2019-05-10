@@ -1032,48 +1032,141 @@ precompiledContract = do
   vm <- get
   fees <- use (block . schedule)
   stk <- use (state . stack)
-
   case (?op, stk) of
     -- CALL (includes value)
-    (0xf1, (gasCap:(num -> op):_:inOffset:inSize:outOffset:outSize:xs)) ->
-      doIt vm fees op gasCap inOffset inSize outOffset outSize xs
+    (0xf1, (gasCap:(num -> op):val:inOffset:inSize:outOffset:outSize:xs)) ->
+      precompileHelper vm fees op val gasCap inOffset inSize outOffset outSize xs
     -- CALLCODE (includes value)
-    (0xf2, (gasCap:(num -> op):_:inOffset:inSize:outOffset:outSize:xs)) ->
-      doIt vm fees op gasCap inOffset inSize outOffset outSize xs
+    (0xf2, (gasCap:(num -> op):val:inOffset:inSize:outOffset:outSize:xs)) ->
+      precompileHelper vm fees op val gasCap inOffset inSize outOffset outSize xs
     -- STATICCALL (does not include value)
     (0xfa, (gasCap:(num -> op):inOffset:inSize:outOffset:outSize:xs)) ->
-      doIt vm fees op gasCap inOffset inSize outOffset outSize xs
+      precompileHelper vm fees op 0 gasCap inOffset inSize outOffset outSize xs
     -- DELEGATECALL (does not include value)
     (0xf4, (gasCap:(num -> op):inOffset:inSize:outOffset:outSize:xs)) ->
-      doIt vm fees op gasCap inOffset inSize outOffset outSize xs
+      precompileHelper vm fees op 0 gasCap inOffset inSize outOffset outSize xs
     _ ->
       underrun
 
-  where
-    doIt vm fees op gasCap inOffset inSize outOffset outSize xs =
-      let
-        input = readMemory (num inOffset) (num inSize) vm
-        cost  =
-          case op of
-            1 -> 3000
-            _ -> error ("unimplemented precompiled contract " ++ show op)
-      in
-        case (EVM.Precompiled.execute op input (num outSize)
-             , gasCap >= cost) of
-          (Nothing, _) -> do
-            assign (state . stack) (0 : xs)
-            next
-          (_, False) -> do
-            assign (state . stack) (0 : xs)
-            next
-          (Just output, True) -> do
-            accessMemoryRange fees inOffset inSize $
-              accessMemoryRange fees outOffset outSize $
-                burn cost $ do
-                  assign (state . stack) (1 : xs)
-                  assign (state . returndata) output
-                  copyBytesToMemory output outSize 0 outOffset
+precompileHelper
+  :: (?op :: Word8)
+  => VM
+  -> FeeSchedule Word
+  -> Addr
+  -> Word
+  -> Word -> Word -> Word -> Word -> Word
+  -> [Word]
+  -> EVM ()
+precompileHelper vm fees precompileAddr xValue gasCap inOffset inSize outOffset outSize xs =
+  let
+    the :: (b -> VM -> Const a VM) -> ((a -> Const a a) -> b) -> a
+    the f g = view (f . g) vm
+
+    availableGas = view (state . gas) vm
+    self = view (state . contract) vm
+    recipient = if ?op == 0xf1 -- If OP is a CALL (not CALLCODE, STATICCALL, DELEGATECALL)
+                then view (env . contracts . at precompileAddr) vm  -- then precompileAddr is recipient
+                else view (env . contracts . at self) vm            -- otherwise caller is recipient
+    (cost, gas') = costOfCall fees recipient xValue availableGas gasCap
+    this = fromMaybe (error "internal error: state contract") (preview (ix (the state contract)) (the env contracts))
+  in
+    accessMemoryRange fees inOffset inSize $
+      accessMemoryRange fees outOffset outSize $
+        burn (cost - gas') $
+          case xValue == 0 of
+            True ->
+              executePrecompile fees precompileAddr gasCap inOffset inSize outOffset outSize xs
+
+            False ->
+              notStatic $ do
+                if xValue > view balance this
+                then do
+                  assign (state . stack) (0 : xs)
                   next
+                else do
+                  executePrecompile fees precompileAddr gasCap inOffset inSize outOffset outSize xs
+                  stk <- use (state . stack)
+                  -- Transfer ether if op is a CALL, and precompile output was a success.
+                  -- Disregard transfer if op is DELEGATECALL, CALLCODE, or STATICCALL
+                  case (?op == 0xf1, stk) of
+                    (False, _) ->
+                      return ()
+
+                    (True, 0:_) ->
+                      return ()
+
+                    (True, 1:_) ->
+                      touchAccount precompileAddr $ \_ -> do
+                        zoom (env . contracts) $ do
+                          ix self . balance -= xValue
+                          ix precompileAddr  . balance += xValue
+                        modifying (tx . touchedAccounts) (self:)
+                        modifying (tx . touchedAccounts) (precompileAddr:)
+
+                    _ ->
+                      underrun
+
+executePrecompile
+  :: (?op :: Word8)
+  => FeeSchedule Word
+  -> Addr
+  -> Word -> Word -> Word -> Word -> Word -> [Word]
+  -> EVM ()
+executePrecompile (FeeSchedule {..}) preCompileAddr gasCap inOffset inSize outOffset outSize xs  = do
+  vm <- get
+  let input = readMemory (num inOffset) (num inSize) vm
+      cost = costOfPrecompile preCompileAddr input
+      notDone = error $ "precompile at address " <> show preCompileAddr <> " not yet implemented"
+  if cost > gasCap then
+    burn gasCap $ do
+      assign (state . stack) (0 : xs)
+      next
+  else
+    burn (costOfPrecompile preCompileAddr input) $
+      case preCompileAddr of
+        -- ECRECOVER
+        0x1 ->
+          case EVM.Precompiled.execute 0x1 input (num outSize) of
+            Nothing -> do
+              assign (state . stack) (0 : xs)
+              next
+            Just output -> do
+              assign (state . stack) (1 : xs)
+              assign (state . returndata) output
+              copyBytesToMemory output outSize 0 outOffset
+              next
+
+        -- SHA2-256
+        0x2 -> notDone
+
+        -- RIPEMD-160
+        0x3 -> notDone
+
+        -- IDENTITY
+        0x4 ->
+          let
+            output = readMemory (num inOffset) (num inSize) vm
+          in do
+            assign (state . stack) (1 : xs)
+            assign (state . returndata) output
+            copyBytesToMemory output inSize 0 outOffset
+            next
+
+        0x5 -> notDone
+        0x6 -> notDone
+        0x7 -> notDone
+        0x8 -> notDone
+        _   -> error "should be impossible"
+
+costOfPrecompile :: Addr -> ByteString -> Word
+costOfPrecompile precompileAddr input =
+  case precompileAddr of
+    0x1 -> 3000                                                       -- ECRECOVER
+    0x2 -> 42                                                         -- SHA2-256
+    0x3 -> 42                                                         -- RIPEMD-160
+    0x4 -> num $ (((BS.length input + 31) `div` 32) * 3) + 15         -- IDENTITY
+    _ -> error ("unimplemented precompiled contract " ++ show precompileAddr)
+
 
 -- * Opcode helper actions
 
@@ -1904,10 +1997,12 @@ costOfCall (FeeSchedule {..}) recipient xValue availableGas xGas =
       num g_call + c_xfer + c_new
     c_xfer =
       if xValue /= 0          then num g_callvalue              else 0
-    c_new =
-      if isNothing recipient  then num g_newaccount             else 0
     c_callgas =
       if xValue /= 0          then c_gascap + num g_callstipend else c_gascap
+    c_new =
+      if isNothing recipient && xValue /= 0
+      then num g_newaccount
+      else 0
     c_gascap =
       if availableGas >= c_extra
       then min xGas (allButOne64th (availableGas - c_extra))
