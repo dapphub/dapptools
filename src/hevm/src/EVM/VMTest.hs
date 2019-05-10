@@ -115,16 +115,21 @@ checkExpectation diff execmode x vm =
   case (execmode, testExpectation x, view EVM.result vm) of
     (EVM.ExecuteAsBlockchainTest, Just expectation, _) -> do
       let
+        printField :: (v -> String) -> Map Addr v -> IO ()
+        printField f d = putStrLn $ Map.foldrWithKey (\k v acc ->
+          acc ++ showAddrWith0x k ++ " : " ++ f v ++ "\n") "" d
+
         ((s1, s1'), (b1, b1')) = (("bad-state", "bad-balance"), checkExpectedContracts vm (expectedContracts expectation))
         ss = map fst (filter (not . snd) [(s1, b1 || b1'), (s1', b1 || not b1')])
+        expected = expectedContracts expectation
+        actual = view (EVM.env . EVM.contracts . to (fmap clearZeroStorage)) vm
       putStr (intercalate " " ss)
       if diff && not b1 then do
-        putStrLn ""
-        putStrLn "Expected postState: "
-        putStrLn $ show (expectedContracts expectation)
-        putStrLn "Actual postState: "
-        putStrLn $ show (vm ^. EVM.env . EVM.contracts . to (fmap clearZeroStorage))
-        else return ()
+        putStrLn "\nExpected balance/state: "
+        printField (\v -> (show . toInteger $ _balance v) ++ " " ++ (show . Map.toList $ _storage v) ) expected
+        putStrLn "\nActual balance/state: "
+        printField (\v -> (show . toInteger $ EVM._balance v) ++ " " ++ (show . Map.toList $ EVM._storage v)) actual
+      else return ()
       return b1
     (_, Just expectation, Just (EVM.VMSuccess output)) -> do
       let
