@@ -46,6 +46,7 @@ import Data.Tree
 
 import qualified Data.ByteString      as BS
 import qualified Data.ByteString.Char8 as Char8
+import qualified Data.ByteArray       as BA
 import qualified Data.Map.Strict      as Map
 import qualified Data.Sequence        as Seq
 import qualified Data.Tree.Zipper     as Zipper
@@ -53,6 +54,9 @@ import qualified Data.Vector.Storable as Vector
 import qualified Data.Vector.Storable.Mutable as Vector
 
 import qualified Data.Vector as RegularVector
+
+import Crypto.Hash (Digest, SHA256, RIPEMD160)
+import qualified Crypto.Hash as Crypto
 
 -- * Data types
 
@@ -1137,19 +1141,32 @@ executePrecompile (FeeSchedule {..}) preCompileAddr gasCap inOffset inSize outOf
               next
 
         -- SHA2-256
-        0x2 -> notDone
-
-        -- RIPEMD-160
-        0x3 -> notDone
-
-        -- IDENTITY
-        0x4 ->
+        0x2 ->
           let
-            output = readMemory (num inOffset) (num inSize) vm
+            hash  = BS.pack $ BA.unpack $ (Crypto.hash input :: Digest SHA256)
           in do
             assign (state . stack) (1 : xs)
-            assign (state . returndata) output
-            copyBytesToMemory output inSize 0 outOffset
+            assign (state . returndata) hash
+            copyBytesToMemory hash outSize 0 outOffset
+            next
+
+        -- RIPEMD-160
+        0x3 ->
+          let
+            padding = BS.pack $ replicate 12 0
+            hash' = BS.pack $ BA.unpack $ (Crypto.hash input :: Digest RIPEMD160)
+            hash  = padding <> hash'
+          in do
+            assign (state . stack) (1 : xs)
+            assign (state . returndata) hash
+            copyBytesToMemory hash outSize 0 outOffset
+            next
+
+        -- IDENTITY
+        0x4 -> do
+            assign (state . stack) (1 : xs)
+            assign (state . returndata) input
+            copyBytesToMemory input inSize 0 outOffset
             next
 
         0x5 -> notDone
@@ -1162,8 +1179,8 @@ costOfPrecompile :: Addr -> ByteString -> Word
 costOfPrecompile precompileAddr input =
   case precompileAddr of
     0x1 -> 3000                                                       -- ECRECOVER
-    0x2 -> 42                                                         -- SHA2-256
-    0x3 -> 42                                                         -- RIPEMD-160
+    0x2 -> num $ (((BS.length input + 31) `div` 32) * 12) + 60        -- SHA2-256
+    0x3 -> num $ (((BS.length input + 31) `div` 32) * 120) + 600      -- RIPEMD-160
     0x4 -> num $ (((BS.length input + 31) `div` 32) * 3) + 15         -- IDENTITY
     _ -> error ("unimplemented precompiled contract " ++ show precompileAddr)
 
