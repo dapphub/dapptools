@@ -69,7 +69,7 @@ library
   cxx-sources:
     ethjet/ethjet-ff.cc
   install-includes:
-    ethjet/tinykeccak.h, ethjet/ethjet.h
+    ethjet/tinykeccak.h, ethjet/ethjet.h, ethjet/ethjet-ff.h
   build-depends:
     QuickCheck                        >= 2.9,
     abstract-par                      >= 0.3,
