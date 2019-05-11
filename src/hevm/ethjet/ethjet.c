@@ -108,6 +108,9 @@ ethjet (struct ethjet_context *ctx,
   case ETHJET_ECADD:
     return ethjet_ecadd (NULL, in, in_size, out, out_size);
 
+  case ETHJET_ECMUL:
+    return ethjet_ecmul (NULL, in, in_size, out, out_size);
+
   case ETHJET_ECPAIRING:
     return ethjet_ecpairing (NULL, in, in_size, out, out_size);
 

@@ -1170,7 +1170,17 @@ executePrecompile (FeeSchedule {..}) preCompileAddr gasCap inOffset inSize outOf
             next
 
         0x5 -> notDone
-        0x6 -> notDone
+
+        -- ECADD
+        0x6 -> case EVM.Precompiled.execute 0x6 input (num outSize) of
+            Nothing -> do
+              assign (state . stack) (0 : xs)
+              next
+            Just output -> do
+              assign (state . stack) (1 : xs)
+              assign (state . returndata) output
+              copyBytesToMemory output outSize 0 outOffset
+              next
         0x7 -> notDone
         0x8 -> notDone
         _   -> error "should be impossible"
@@ -1178,10 +1188,22 @@ executePrecompile (FeeSchedule {..}) preCompileAddr gasCap inOffset inSize outOf
 costOfPrecompile :: Addr -> ByteString -> Word
 costOfPrecompile precompileAddr input =
   case precompileAddr of
-    0x1 -> 3000                                                       -- ECRECOVER
-    0x2 -> num $ (((BS.length input + 31) `div` 32) * 12) + 60        -- SHA2-256
-    0x3 -> num $ (((BS.length input + 31) `div` 32) * 120) + 600      -- RIPEMD-160
-    0x4 -> num $ (((BS.length input + 31) `div` 32) * 3) + 15         -- IDENTITY
+    -- ECRECOVER
+    0x1 -> 3000
+    -- SHA2-256
+    0x2 -> num $ (((BS.length input + 31) `div` 32) * 12) + 60
+    -- RIPEMD-160
+    0x3 -> num $ (((BS.length input + 31) `div` 32) * 120) + 600
+    -- IDENTITY
+    0x4 -> num $ (((BS.length input + 31) `div` 32) * 3) + 15
+    -- MODEXP
+    -- 0x5 -> TODO
+    -- ECADD
+    0x6 -> 500
+    -- ECMUL
+    -- 0x7 -> 40000
+    -- ECPAIRING
+    -- 0x8 -> num $ ((BS.length input) `div` 192) * 60000 + 40000
     _ -> error ("unimplemented precompiled contract " ++ show precompileAddr)
 
 
