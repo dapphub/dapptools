@@ -1168,12 +1168,38 @@ executePrecompile (FeeSchedule {..}) preCompileAddr gasCap inOffset inSize outOf
              copyBytesToMemory input inSize 0 outOffset
              next
 
-           0x5 -> notDone
-           0x6 -> notDone
-           0x7 -> notDone
+           -- ECADD
+           0x6 -> case EVM.Precompiled.execute 0x6 (truncpad 128 input) 64 of
+             Nothing -> do
+               assign (state . stack) (0 : xs)
+               next
+             Just output -> do
+               let truncpaddedOutput = truncpad 64 output
+               assign (state . stack) (1 : xs)
+               assign (state . returndata) truncpaddedOutput
+               copyBytesToMemory truncpaddedOutput outSize 0 outOffset
+               next
+
+           -- ECMUL
+           0x7 -> case EVM.Precompiled.execute 0x7 (truncpad 96 input) 64 of
+             Nothing -> do
+               assign (state . stack) (0 : xs)
+               next
+             Just output -> do
+               let truncpaddedOutput = truncpad 64 output
+               assign (state . stack) (1 : xs)
+               assign (state . returndata) truncpaddedOutput
+               copyBytesToMemory truncpaddedOutput outSize 0 outOffset
+               next
+
            0x8 -> notDone
+
            _   -> error "should be impossible"
 
+truncpad :: Int -> ByteString -> ByteString
+truncpad n xs = if m > n then BS.take n xs
+                     else BS.append xs (BS.replicate (n - m) 0)
+  where m = BS.length xs
 
 costOfPrecompile :: Addr -> ByteString -> Word
 costOfPrecompile precompileAddr input =
@@ -1191,7 +1217,7 @@ costOfPrecompile precompileAddr input =
     -- ECADD
     0x6 -> 500
     -- ECMUL
-    -- 0x7 -> 40000
+    0x7 -> 40000
     -- ECPAIRING
     -- 0x8 -> num $ ((BS.length input) `div` 192) * 60000 + 40000
     _ -> error ("unimplemented precompiled contract " ++ show precompileAddr)
