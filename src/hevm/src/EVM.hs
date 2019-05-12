@@ -1121,69 +1121,59 @@ executePrecompile (FeeSchedule {..}) preCompileAddr gasCap inOffset inSize outOf
   let input = readMemory (num inOffset) (num inSize) vm
       cost = costOfPrecompile preCompileAddr input
       notDone = error $ "precompile at address " <> show preCompileAddr <> " not yet implemented"
-  if cost > gasCap then
-    burn gasCap $ do
-      assign (state . stack) (0 : xs)
-      next
-  else
-    burn (costOfPrecompile preCompileAddr input) $
-      case preCompileAddr of
-        -- ECRECOVER
-        0x1 ->
-          case EVM.Precompiled.execute 0x1 input (num outSize) of
-            Nothing -> do
-              assign (state . stack) (0 : xs)
-              next
-            Just output -> do
-              assign (state . stack) (1 : xs)
-              assign (state . returndata) output
-              copyBytesToMemory output outSize 0 outOffset
-              next
+  if cost > gasCap then burn gasCap $ do
+    assign (state . stack) (0 : xs)
+    next
+    else burn (costOfPrecompile preCompileAddr input) $
+         case preCompileAddr of
 
-        -- SHA2-256
-        0x2 ->
-          let
-            hash  = BS.pack $ BA.unpack $ (Crypto.hash input :: Digest SHA256)
-          in do
-            assign (state . stack) (1 : xs)
-            assign (state . returndata) hash
-            copyBytesToMemory hash outSize 0 outOffset
-            next
+           -- ECRECOVER
+           0x1 ->
+             case EVM.Precompiled.execute 0x1 input (num outSize) of
+               Nothing -> do
+                 assign (state . stack) (0 : xs)
+                 next
+               Just output -> do
+                 assign (state . stack) (1 : xs)
+                 assign (state . returndata) output
+                 copyBytesToMemory output outSize 0 outOffset
+                 next
 
-        -- RIPEMD-160
-        0x3 ->
-          let
-            padding = BS.pack $ replicate 12 0
-            hash' = BS.pack $ BA.unpack $ (Crypto.hash input :: Digest RIPEMD160)
-            hash  = padding <> hash'
-          in do
-            assign (state . stack) (1 : xs)
-            assign (state . returndata) hash
-            copyBytesToMemory hash outSize 0 outOffset
-            next
+           -- SHA2-256
+           0x2 ->
+             let
+               hash  = BS.pack $ BA.unpack $ (Crypto.hash input :: Digest SHA256)
+             in do
+               assign (state . stack) (1 : xs)
+               assign (state . returndata) hash
+               copyBytesToMemory hash outSize 0 outOffset
+               next
 
-        -- IDENTITY
-        0x4 -> do
-            assign (state . stack) (1 : xs)
-            assign (state . returndata) input
-            copyBytesToMemory input inSize 0 outOffset
-            next
+           -- RIPEMD-160
+           0x3 ->
+             let
+               padding = BS.pack $ replicate 12 0
+               hash' = BS.pack $ BA.unpack $ (Crypto.hash input :: Digest RIPEMD160)
+               hash  = padding <> hash'
+             in do
+               assign (state . stack) (1 : xs)
+               assign (state . returndata) hash
+               copyBytesToMemory hash outSize 0 outOffset
+               next
 
-        0x5 -> notDone
+           -- IDENTITY
+           0x4 -> do
+             assign (state . stack) (1 : xs)
+             assign (state . returndata) input
+             copyBytesToMemory input inSize 0 outOffset
+             next
 
-        -- ECADD
-        0x6 -> case EVM.Precompiled.execute 0x6 input (num outSize) of
-            Nothing -> do
-              assign (state . stack) (0 : xs)
-              next
-            Just output -> do
-              assign (state . stack) (1 : xs)
-              assign (state . returndata) output
-              copyBytesToMemory output outSize 0 outOffset
-              next
-        0x7 -> notDone
-        0x8 -> notDone
-        _   -> error "should be impossible"
+           0x5 -> notDone
+           0x6 -> notDone
+           0x7 -> notDone
+           0x8 -> notDone
+           _   -> error "should be impossible"
+
 
 costOfPrecompile :: Addr -> ByteString -> Word
 costOfPrecompile precompileAddr input =
