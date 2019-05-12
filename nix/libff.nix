@@ -1,4 +1,4 @@
-{ stdenv, fetchFromGitHub, cmake, boost, gmp, procps, openssl, pkgconfig }:
+{ stdenv, fetchFromGitHub, cmake, boost, gmp, openssl, pkgconfig }:
 
 stdenv.mkDerivation rec {
   name = "libff-${version}";
@@ -13,8 +13,11 @@ stdenv.mkDerivation rec {
 
   patches = [./libff.patch];
 
+  cmakeFlags = [ "-DCURVE=ALT_BN128" "-DPERFORMANCE=Off" "-DWITH_PROCPS=Off" "-DUSE_PT_COMPRESSION=Off" ];
+  preConfigure = ''cmakeFlags="$cmakeFlags"'';
+
   nativeBuildInputs = [cmake pkgconfig];
-  buildInputs = [boost gmp procps openssl];
+  buildInputs = [boost gmp openssl];
   enableParallelBuilding = true;
 
   meta = with stdenv.lib; {
