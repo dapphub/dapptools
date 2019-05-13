@@ -45,9 +45,8 @@ namespace ethjet_ff {
     mpz_t q;
     mpz_init(q);
     alt_bn128_modulus_q.to_mpz(q);
-    const mp_size_t limbs = alt_bn128_q_limbs;
 
-    return Fp2_model<limbs, alt_bn128_modulus_q>(x0, x1);
+    return Fp2_model<alt_bn128_q_limbs, alt_bn128_modulus_q>(x0, x1);
   }
 
   // for loading an element of F_r (a scalar for G_1)
@@ -97,10 +96,9 @@ namespace ethjet_ff {
     // the point at infinity (0,0) is a special case
     if (ax.is_zero() && ay.is_zero()) {
       a = alt_bn128_G2::G2_zero;
+      return a;
     }
-    else {
-      a = alt_bn128_G2(ax, ay, alt_bn128_Fq2::one());
-    }
+    a = alt_bn128_G2(ax, ay, alt_bn128_Fq2::one());
     if (! a.is_well_formed()) {
       throw 0;
     }
@@ -121,6 +119,7 @@ namespace ethjet_ff {
     x.as_bigint().to_mpz(x_data);
     uint8_t *x_arr = (uint8_t *)mpz_export(NULL, &x_size, 1, 1, 1, 0, x_data);
     if (x_size > 32) {
+      // gmp_printf("Fq element too large to write!\n");
       throw 0;
     }
     // copy the result to the output buffer
@@ -251,31 +250,29 @@ extern "C" {
                     uint8_t *out, size_t out_size) {
 
     if (in_size % 192 != 0) {
-      printf("in_size=%d\n", int(in_size));
+      // printf("in_size=%d\n", int(in_size));
       return 0;
     }
     if (out_size != 32) {
-      printf("out_size=%d\n", int(out_size));
+      // printf("out_size=%d\n", int(out_size));
       return 0;
     }
     int pairs = in_size / 192;
 
-    alt_bn128_G1 as[pairs];
-    alt_bn128_G2 bs[pairs];
-
     try {
-      // do this pass first to catch any invalid points
-      for (int i = 0; i < pairs; i++) {
-        as[i] = read_G1_point(out + i*192);
-        bs[i] = read_G2_point(out + i*192 + 64);
-      }
       alt_bn128_Fq12 x = libff::alt_bn128_Fq12::one();
       for (int i = 0; i < pairs; i++) {
-        if (as[i].is_zero() || bs[i].is_zero())
+        alt_bn128_G1 a = read_G1_point(in + i*192);
+        alt_bn128_G2 b = read_G2_point(in + i*192 + 64);
+        if (a.is_zero() || b.is_zero())
           continue;
-        x = x * alt_bn128_miller_loop(alt_bn128_precompute_G1(as[i]), alt_bn128_precompute_G2(bs[i]));
+        x = x * alt_bn128_miller_loop(alt_bn128_precompute_G1(a), alt_bn128_precompute_G2(b));
       }
-      bool result = alt_bn128_final_exponentiation(x) == alt_bn128_GT::one();
+      bool result;
+      if (pairs == 0)
+        result = true;
+      else
+        result = (alt_bn128_final_exponentiation(x) == alt_bn128_GT::one());
       write_bool(out, result);
     }
     catch (int e) {
