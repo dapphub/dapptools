@@ -17,7 +17,8 @@ script:
   - |
     nix-env -i ShellCheck
     grep -RHL --exclude-dir node_modules node src/*/libexec | xargs shellcheck
-  - cachix push --watch-store dapp &
+  - |
+    [[ -z "$TRAVIS_PULL_REQUEST_SLUG" || "$TRAVIS_PULL_REQUEST_SLUG" == "dapphub/dapptools" ]] && cachix push --watch-store dapp &
   - |
     PLATFORM=linux
 
@@ -26,18 +27,20 @@ script:
     # the additional call to `cachix push` is there to prevent a race condition
     # that happens when the above daemon is killed mid-push at the end of this
     # script.
-    nix-build -j auto release.nix -A dapphub.$PLATFORM.stable | cachix push dapp
+    nix-build -j auto release.nix -A dapphub.$PLATFORM.stable | [[ "$TRAVIS_REPO_SLUG" == "dapphub/dapptools" ]] && cachix push dapp
 after_success:
   - |
-    COMMIT_HASH=$(echo $TRAVIS_COMMIT | cut -c 1-8)
+    if [[ -z "$TRAVIS_PULL_REQUEST_SLUG" || "$TRAVIS_PULL_REQUEST_SLUG" == "dapphub/dapptools" ]]; then
+      COMMIT_HASH=$(echo $TRAVIS_COMMIT | cut -c 1-8)
 
-    # Only run this on Linux to avoid announcing to the channel twice.
-    # Using build stages is another option but is inefficient because it requires initialization of an additional VM.
-    if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then
-      nix run nixpkgs.httpie -c \
-      http -f https://dapphub.chat/api/v1/chat.postMessage \
-        X-Auth-Token:"$CHAT_AUTH_TOKEN" \
-        X-User-Id:"$CHAT_USER_ID" \
-        channel=#dev-announce \
-        text=":construction_site: Nix build of dapptools [$COMMIT_HASH](https://github.com/dapphub/dapptools/commit/$COMMIT_HASH) (branch \`$TRAVIS_BRANCH\`) finished; binaries for GNU/Linux and Darwin uploaded to Cachix."
+      # Only run this on Linux to avoid announcing to the channel twice.
+      # Using build stages is another option but is inefficient because it requires initialization of an additional VM.
+      if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then
+        nix run nixpkgs.httpie -c \
+        http -f https://dapphub.chat/api/v1/chat.postMessage \
+          X-Auth-Token:"$CHAT_AUTH_TOKEN" \
+          X-User-Id:"$CHAT_USER_ID" \
+          channel=#dev-announce \
+          text=":construction_site: Nix build of dapptools [$COMMIT_HASH](https://github.com/dapphub/dapptools/commit/$COMMIT_HASH) (branch \`$TRAVIS_BRANCH\`) finished; binaries for GNU/Linux and Darwin uploaded to Cachix."
+      fi
     fi
