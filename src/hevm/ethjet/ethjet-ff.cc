@@ -193,7 +193,8 @@ extern "C" {
     // gmp_printf("n=%Zd\n", n_data);
 
     init_alt_bn128_params();
-    const mp_size_t limbs      = alt_bn128_q_limbs;
+    const mp_size_t q_limbs      = alt_bn128_q_limbs;
+    const mp_size_t r_limbs      = alt_bn128_r_limbs;
     const alt_bn128_Fq Fq_zero = alt_bn128_Fq::zero();
     const alt_bn128_Fq Fq_one  = alt_bn128_Fq::one();
     mpz_t q;
@@ -201,11 +202,14 @@ extern "C" {
     alt_bn128_modulus_q.to_mpz(q);
     // gmp_printf("q=%Zd\n", q);
 
-    // reduce n mod q
-    // mpz_mod(n_data, n_data, q);
+    // reduce n mod r
+    // mpz_t r;
+    // mpz_init(r);
+    // alt_bn128_modulus_r.to_mpz(r);
+    // mpz_mod(n_data, n_data, r);
     // gmp_printf("after reducing n=%Zd\n", n_data);
 
-    // check scalar and coordinates are in range
+    // check coordinates are in range
     // n.b. the scalar needn't be in range
     if ((mpz_cmp(ax_data, q) >= 0) ||
         (mpz_cmp(ay_data, q) >= 0)) {
@@ -213,9 +217,9 @@ extern "C" {
       return 0;
     }
 
-    const alt_bn128_Fq n = Fp_model<alt_bn128_q_limbs, alt_bn128_modulus_q>(bigint<limbs>(n_data));
-    const alt_bn128_Fq ax = Fp_model<alt_bn128_q_limbs, alt_bn128_modulus_q>(bigint<limbs>(ax_data));
-    const alt_bn128_Fq ay = Fp_model<alt_bn128_q_limbs, alt_bn128_modulus_q>(bigint<limbs>(ay_data));
+    const alt_bn128_Fr n = Fp_model<alt_bn128_r_limbs, alt_bn128_modulus_r>(bigint<r_limbs>(n_data));
+    const alt_bn128_Fq ax = Fp_model<alt_bn128_q_limbs, alt_bn128_modulus_q>(bigint<q_limbs>(ax_data));
+    const alt_bn128_Fq ay = Fp_model<alt_bn128_q_limbs, alt_bn128_modulus_q>(bigint<q_limbs>(ay_data));
 
     alt_bn128_G1 a;
     // create curve point from affine coordinates
