@@ -103,6 +103,10 @@ namespace ethjet_ff {
     if (! a.is_well_formed()) {
       throw 0;
     }
+    // additionally check that the element has the right order
+    if (-alt_bn128_Fr::one() * a + a != alt_bn128_G2::G2_zero) {
+      throw 0;
+    }
     return a;
   }
 
