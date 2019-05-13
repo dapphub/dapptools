@@ -1168,6 +1168,9 @@ executePrecompile (FeeSchedule {..}) preCompileAddr gasCap inOffset inSize outOf
              copyBytesToMemory input inSize 0 outOffset
              next
 
+           -- EXPMOD
+           0x5 -> notDone
+
            -- ECADD
            0x6 -> case EVM.Precompiled.execute 0x6 (truncpad 128 input) 64 of
              Nothing -> do
