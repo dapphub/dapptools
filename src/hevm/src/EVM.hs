@@ -1192,7 +1192,16 @@ executePrecompile (FeeSchedule {..}) preCompileAddr gasCap inOffset inSize outOf
                copyBytesToMemory truncpaddedOutput outSize 0 outOffset
                next
 
-           0x8 -> notDone
+           0x8 -> case EVM.Precompiled.execute 0x8 input 32 of
+             Nothing -> do
+               assign (state . stack) (0 : xs)
+               next
+             Just output -> do
+               let truncpaddedOutput = truncpad 32 output
+               assign (state . stack) (1 : xs)
+               assign (state . returndata) truncpaddedOutput
+               copyBytesToMemory truncpaddedOutput outSize 0 outOffset
+               next
 
            _   -> error "should be impossible"
 
@@ -1219,7 +1228,7 @@ costOfPrecompile precompileAddr input =
     -- ECMUL
     0x7 -> 40000
     -- ECPAIRING
-    -- 0x8 -> num $ ((BS.length input) `div` 192) * 60000 + 40000
+    0x8 -> num $ ((BS.length input) `div` 192) * 60000 + 40000
     _ -> error ("unimplemented precompiled contract " ++ show precompileAddr)
 
 
