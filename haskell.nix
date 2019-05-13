@@ -33,9 +33,7 @@ in self-hs: super-hs:
         # Haskell libs with the same names as C libs...
         # Depend on the C libs, not the Haskell libs.
         # These are system deps, not Cabal deps.
-        inherit (pkgs) secp256k1;
-
-        ff = pkgs.libff;
+        inherit (pkgs) libff secp256k1;
       }
     ).overrideAttrs (attrs: {
       postInstall = ''
