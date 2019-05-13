@@ -15,15 +15,18 @@
          xs);
 in
   pkgs.lib.makeOverridable (
-    attrs @ { test ? true, deps ? [], solc ? pkgs.solc, ... }:
+    { doCheck ? true
+    , deps ? []
+    , solc ? pkgs.solc
+    , ...
+    } @ attrs:
       pkgs.stdenv.mkDerivation (rec {
         buildInputs = [pkgs.dapp2.test-hevm solc];
+        inherit doCheck;
         passthru = {
           remappings = remappings deps;
           libPaths = libPaths deps;
         };
-
-        TEST = test;
 
         REMAPPINGS =
           pkgs.lib.mapAttrsToList
