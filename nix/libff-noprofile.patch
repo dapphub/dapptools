@@ -1,0 +1,15 @@
+diff --git a/libff/common/profiling.cpp b/libff/common/profiling.cpp
+index f2a1985..9c6dc6b 100755
+--- a/libff/common/profiling.cpp
++++ b/libff/common/profiling.cpp
+@@ -92,8 +92,8 @@ std::list<std::pair<std::string, long long*> > op_data_points = {
+ #endif
+ };
+ 
+-bool inhibit_profiling_info = false;
+-bool inhibit_profiling_counters = false;
++bool inhibit_profiling_info = true;
++bool inhibit_profiling_counters = true;
+ 
+ void clear_profiling_counters()
+ {

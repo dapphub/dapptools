@@ -11,7 +11,7 @@ stdenv.mkDerivation rec {
     fetchSubmodules = true;
   };
 
-  patches = [./libff.patch];
+  patches = [./libff.patch ./libff-noprofile.patch];
 
   cmakeFlags = [ "-DCURVE=ALT_BN128" "-DPERFORMANCE=Off" "-DWITH_PROCPS=Off" "-DUSE_PT_COMPRESSION=Off" ];
   preConfigure = ''cmakeFlags="$cmakeFlags"'';
