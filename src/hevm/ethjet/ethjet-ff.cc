@@ -38,8 +38,9 @@ namespace ethjet_ff {
   alt_bn128_Fq2 read_Fq2_element (uint8_t *in) {
     init_alt_bn128_params();
 
-    alt_bn128_Fq x0 = read_Fq_element(in);
-    alt_bn128_Fq x1 = read_Fq_element(in+32);
+    // suprising "big-endian" encoding
+    alt_bn128_Fq x0 = read_Fq_element(in+32);
+    alt_bn128_Fq x1 = read_Fq_element(in);
 
     mpz_t q;
     mpz_init(q);
@@ -136,8 +137,9 @@ namespace ethjet_ff {
   // writes an element of F_{q^2}
   // produces 64 bytes
   void write_Fq2_element(uint8_t *out, alt_bn128_Fq2 x) {
-    write_Fq_element(out,    x.c0);
-    write_Fq_element(out+32, x.c1);
+    // surprising "big-endian" encoding
+    write_Fq_element(out+32, x.c0);
+    write_Fq_element(out,    x.c1);
     return;
   }
 
