@@ -3,7 +3,7 @@
 
 # Dapp tools by DappHub
 
-Hello!
+Klaatu barada nikto!
 
 This repository contains the source code of several dapp tools
 hand-crafted and maintained by DappHub, along with various Nix
