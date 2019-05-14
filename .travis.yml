@@ -20,9 +20,7 @@ script:
   - |
     [[ -z "$TRAVIS_PULL_REQUEST_SLUG" || "$TRAVIS_PULL_REQUEST_SLUG" == "dapphub/dapptools" ]] && cachix push --watch-store dapp &
   - |
-    PLATFORM=linux
-
-    if [[ "$TRAVIS_OS_NAME" == "osx" ]]; then PLATFORM=darwin; fi
+    [[ "$TRAVIS_OS_NAME" == "osx" ]] && PLATFORM=darwin || PLATFORM=linux
 
     # the additional call to `cachix push` is there to prevent a race condition
     # that happens when the above daemon is killed mid-push at the end of this
