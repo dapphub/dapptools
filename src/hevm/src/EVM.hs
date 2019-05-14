@@ -1195,6 +1195,7 @@ executePrecompile (FeeSchedule {..}) preCompileAddr gasCap inOffset inSize outOf
                copyBytesToMemory truncpaddedOutput outSize 0 outOffset
                next
 
+           -- ECPAIRING
            0x8 -> case EVM.Precompiled.execute 0x8 input 32 of
              Nothing -> do
                assign (state . stack) (0 : xs)
