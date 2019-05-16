@@ -14,7 +14,7 @@ Contents:
 - [Dapp](./src/dapp)
 - [Seth](./src/seth)
 - [Hevm](./src/hevm)
-- [Ethsign](./src/hevm)
+- [Ethsign](./src/ethsign)
 
 All dependencies and tools can be automaticaly installed by running:
 ```sh
