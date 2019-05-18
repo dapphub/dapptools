@@ -603,6 +603,6 @@ Show all fields unless `<field>` is given.
 [Dai stablecoin system]: https://makerdao.com
 [Dai]: https://makerdao.com
 [OasisDEX]: https://oasisdex.com
-[`ethsign`]: https://github.com/dapphub/ethsign
+[`ethsign`]: https://github.com/dapphub/dapptools/blob/master/src/ethsign/README
 
 [Ledger Wallet Linux instructions]: https://ledger.zendesk.com/hc/en-us/articles/115005165269-What-if-Ledger-Wallet-is-not-recognized-on-Linux-
