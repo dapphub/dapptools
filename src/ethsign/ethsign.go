@@ -41,6 +41,109 @@ func rawSignHash(data []byte) []byte {
   return crypto.Keccak256([]byte(msg))
 }
 
+func getWallets(c *cli.Context, defaultKeyStores cli.StringSlice) []accounts.Wallet {
+  backends := []accounts.Backend{}
+
+  var paths []string
+  if len(c.StringSlice("key-store")) == 0 {
+    paths = defaultKeyStores
+  } else {
+    paths = c.StringSlice("key-store")
+  }
+  for _, x := range(paths) {
+    ks := keystore.NewKeyStore(
+      x, keystore.StandardScryptN, keystore.StandardScryptP)
+    backends = append(backends, ks)
+  }
+
+  if ledgerhub, err := usbwallet.NewLedgerHub(); err != nil {
+    fmt.Fprintf(os.Stderr, "ethsign: failed to look for USB Ledgers")
+  } else {
+    backends = append(backends, ledgerhub)
+  }
+  if trezorhub, err := usbwallet.NewTrezorHub(); err != nil {
+    fmt.Fprintf(os.Stderr, "ethsign: failed to look for USB Trezors")
+  } else {
+    backends = append(backends, trezorhub)
+  }
+
+  manager := accounts.NewManager(backends...)
+
+  return manager.Wallets()
+}
+
+func getWalletData(c *cli.Context, defaultKeyStores cli.StringSlice, from common.Address) (*accounts.Account, string, accounts.Wallet, error) {
+
+  wallets := getWallets(c, defaultKeyStores)
+
+  var wallet accounts.Wallet
+  var acct *accounts.Account
+
+  needPassphrase := true
+
+Scan:
+  for _, x := range(wallets) {
+    if x.URL().Scheme == "keystore" {
+      for _, y := range(x.Accounts()) {
+        if (y.Address == from) {
+          wallet = x
+          acct = &y
+          break Scan
+        }
+      }
+    } else if x.URL().Scheme == "ledger" {
+      x.Open("")
+      for j := 0; j <= 3; j++ {
+        pathstr := fmt.Sprintf("m/44'/60'/0'/%d", j)
+        path, _ := accounts.ParseDerivationPath(pathstr)
+        y, err := x.Derive(path, true)
+        if err != nil {
+          return nil, "", nil, cli.NewExitError("ethsign: Ledger needs to be in Ethereum app with browser support off", 1)
+        } else {
+          if y.Address == from {
+            wallet = x
+            acct = &y
+            needPassphrase = false
+            break Scan
+          }
+        }
+      }
+    }
+  }
+
+  if acct == nil {
+    return nil, "", nil, cli.NewExitError(
+      "ethsign: account not found",
+      1,
+    )
+  }
+
+  passphrase := ""
+
+  if needPassphrase {
+    if c.String("passphrase-file") != "" {
+      passphraseFile, err := ioutil.ReadFile(c.String("passphrase-file"))
+      if err != nil {
+        return nil, "", nil, cli.NewExitError("ethsign: failed to read passphrase file", 1)
+      }
+
+      passphrase = strings.TrimSuffix(string(passphraseFile), "\n")
+    } else {
+      fmt.Fprintf(os.Stderr, "Ethereum account passphrase (not echoed): ")
+      bytes, err := terminal.ReadPassword(int(syscall.Stdin))
+      if err != nil {
+        return nil, "", nil, cli.NewExitError("ethsign: failed to read passphrase", 1)
+      } else {
+        passphrase = string(bytes)
+      }
+    }
+  } else {
+    fmt.Fprintf(os.Stderr, "Waiting for hardware wallet confirmation...\n")
+  }
+
+  return acct, passphrase, wallet, nil
+}
+
 // https://github.com/ethereum/go-ethereum/blob/55599ee95d4151a2502465e0afc7c47bd1acba77/internal/ethapi/api.go#L442
 func recover(data []byte, sig hexutil.Bytes, noPrefix bool) (common.Address, error) {
   if len(sig) != 65 {
@@ -107,33 +210,7 @@ func main() {
         },
       },
       Action: func(c *cli.Context) error {
-        backends := []accounts.Backend{}
-
-        var paths []string
-        if len(c.StringSlice("key-store")) == 0 {
-          paths = defaultKeyStores
-        } else {
-          paths = c.StringSlice("key-store")
-        }
-        for _, x := range(paths) {
-          ks := keystore.NewKeyStore(
-            x, keystore.StandardScryptN, keystore.StandardScryptP)
-          backends = append(backends, ks)
-        }
-
-        if ledgerhub, err := usbwallet.NewLedgerHub(); err != nil {
-          fmt.Fprintf(os.Stderr, "ethsign: failed to look for USB Ledgers")
-        } else {
-          backends = append(backends, ledgerhub)
-        }
-        if trezorhub, err := usbwallet.NewTrezorHub(); err != nil {
-          fmt.Fprintf(os.Stderr, "ethsign: failed to look for USB Trezors")
-        } else {
-          backends = append(backends, trezorhub)
-        }
-
-        manager := accounts.NewManager(backends...)
-        wallets := manager.Wallets()
+        wallets := getWallets(c, defaultKeyStores)
         for _, x := range(wallets) {
           if x.URL().Scheme == "keystore" {
             for _, y := range(x.Accounts()) {
@@ -248,98 +325,9 @@ func main() {
           dataString = "0x"
         }
         data := hexutil.MustDecode(dataString)
-
-        backends := []accounts.Backend{ }
-
-        var paths []string
-        if len(c.StringSlice("key-store")) == 0 {
-          paths = defaultKeyStores
-        } else {
-          paths = c.StringSlice("key-store")
-        }
-        for _, x := range(paths) {
-          ks := keystore.NewKeyStore(
-            x, keystore.StandardScryptN, keystore.StandardScryptP)
-          backends = append(backends, ks)
-        }
-
-        if ledgerhub, err := usbwallet.NewLedgerHub(); err != nil {
-          fmt.Fprintf(os.Stderr, "ethsign: failed to look for USB Ledgers")
-        } else {
-          backends = append(backends, ledgerhub)
-        }
-        if trezorhub, err := usbwallet.NewTrezorHub(); err != nil {
-          fmt.Fprintf(os.Stderr, "ethsign: failed to look for USB Trezors")
-        } else {
-          backends = append(backends, trezorhub)
-        }
-
-        manager := accounts.NewManager(backends...)
-        wallets := manager.Wallets()
-        var wallet accounts.Wallet
-        var acct *accounts.Account
-
-        needPassphrase := true
-
-        Scan:
-        for _, x := range(wallets) {
-          if x.URL().Scheme == "keystore" {
-            for _, y := range(x.Accounts()) {
-              if (y.Address == from) {
-                wallet = x
-                acct = &y
-                break Scan
-              }
-            }
-          } else if x.URL().Scheme == "ledger" {
-            x.Open("")
-            for j := 0; j <= 3; j++ {
-              pathstr := fmt.Sprintf("m/44'/60'/0'/%d", j)
-              path, _ := accounts.ParseDerivationPath(pathstr)
-              y, err := x.Derive(path, true)
-              if err != nil {
-                return cli.NewExitError("ethsign: Ledger needs to be in Ethereum app with browser support off", 1)
-              } else {
-                if y.Address == from {
-                  wallet = x
-                  acct = &y
-                  needPassphrase = false
-                  break Scan
-                }
-              }
-            }
-          }
-        }
-
-        if acct == nil {
-          return cli.NewExitError(
-            "ethsign: account not found",
-            1,
-          )
-        }
-
-
-        passphrase := ""
-
-        if needPassphrase {
-          if c.String("passphrase-file") != "" {
-            passphraseFile, err := ioutil.ReadFile(c.String("passphrase-file"))
-            if err != nil {
-              return cli.NewExitError("ethsign: failed to read passphrase file", 1)
-            }
-
-            passphrase = strings.TrimSuffix(string(passphraseFile), "\n")
-          } else {
-            fmt.Fprintf(os.Stderr, "Ethereum account passphrase (not echoed): ")
-            bytes, err := terminal.ReadPassword(int(syscall.Stdin))
-            if err != nil {
-              return cli.NewExitError("ethsign: failed to read passphrase", 1)
-            } else {
-              passphrase = string(bytes)
-            }
-          }
-        } else {
-          fmt.Fprintf(os.Stderr, "Waiting for hardware wallet confirmation...\n")
+        acct, passphrase, wallet, err := getWalletData(c, defaultKeyStores, from)
+        if err !=nil {
+          return err
         }
 
         var tx *types.Transaction
@@ -413,96 +401,11 @@ func main() {
         }
         data := hexutil.MustDecode(dataString)
 
-        backends := []accounts.Backend{ }
-
-        var paths []string
-        if len(c.StringSlice("key-store")) == 0 {
-          paths = defaultKeyStores
-        } else {
-          paths = c.StringSlice("key-store")
-        }
-        for _, x := range(paths) {
-          ks := keystore.NewKeyStore(
-            x, keystore.StandardScryptN, keystore.StandardScryptP)
-          backends = append(backends, ks)
+        acct, passphrase, wallet, err := getWalletData(c, defaultKeyStores, from)
+        if err !=nil {
+          return err
         }
 
-        if ledgerhub, err := usbwallet.NewLedgerHub(); err != nil {
-          fmt.Fprintf(os.Stderr, "ethsign: failed to look for USB Ledgers")
-        } else {
-          backends = append(backends, ledgerhub)
-        }
-        if trezorhub, err := usbwallet.NewTrezorHub(); err != nil {
-          fmt.Fprintf(os.Stderr, "ethsign: failed to look for USB Trezors")
-        } else {
-          backends = append(backends, trezorhub)
-        }
-
-        manager := accounts.NewManager(backends...)
-        wallets := manager.Wallets()
-
-        var wallet accounts.Wallet
-        var acct *accounts.Account
-
-        needPassphrase := true
-
-      Scan:
-        for _, x := range wallets {
-          if x.URL().Scheme == "keystore" {
-            for _, y := range x.Accounts() {
-              if y.Address == from {
-                wallet = x
-                acct = &y
-                break Scan
-              }
-            }
-          } else if x.URL().Scheme == "ledger" {
-            x.Open("")
-            for j := 0; j <= 3; j++ {
-              pathstr := fmt.Sprintf("m/44'/60'/0'/%d", j)
-              path, _ := accounts.ParseDerivationPath(pathstr)
-              y, err := x.Derive(path, true)
-              if err != nil {
-                return cli.NewExitError("ethsign: Ledger needs to be in Ethereum app with browser support off", 1)
-              }
-              if y.Address == from {
-                wallet = x
-                acct = &y
-                needPassphrase = false
-                break Scan
-              }
-            }
-          }
-        }
-
-        if acct == nil {
-          return cli.NewExitError(
-            "ethsign: account not found",
-            1,
-          )
-        }
-
-        passphrase := ""
-
-        if needPassphrase {
-          if c.String("passphrase-file") != "" {
-            passphraseFile, err := ioutil.ReadFile(c.String("passphrase-file"))
-            if err != nil {
-              return cli.NewExitError("ethsign: failed to read passphrase file", 1)
-            }
-
-            passphrase = strings.TrimSuffix(string(passphraseFile), "\n")
-          } else {
-            fmt.Fprintf(os.Stderr, "Ethereum account passphrase (not echoed): ")
-            bytes, err := terminal.ReadPassword(int(syscall.Stdin))
-            if err != nil {
-              return cli.NewExitError("ethsign: failed to read passphrase", 1)
-            }
-            passphrase = string(bytes)
-          }
-        } else {
-          fmt.Fprintf(os.Stderr, "Waiting for hardware wallet confirmation...\n")
-        }
         var hash []byte
         if c.Bool("no-prefix") == true {
           hash = rawSignHash(data)
