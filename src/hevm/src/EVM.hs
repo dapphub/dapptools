@@ -1133,13 +1133,49 @@ executePrecompile (FeeSchedule {..}) preCompileAddr gasCap inOffset inSize outOf
 
         -- EXPMOD
         0x5 -> notImplemented
+
         -- ECADD
-        0x6 -> notImplemented
+        0x6 -> case EVM.Precompiled.execute 0x6 (truncpad 128 input) 64 of
+          Nothing -> do
+            assign (state . stack) (0 : xs)
+            next
+          Just output -> do
+            let truncpaddedOutput = truncpad 64 output
+            assign (state . stack) (1 : xs)
+            assign (state . returndata) truncpaddedOutput
+            copyBytesToMemory truncpaddedOutput outSize 0 outOffset
+            next
+
         -- ECMUL
-        0x7 -> notImplemented
+        0x7 -> case EVM.Precompiled.execute 0x7 (truncpad 96 input) 64 of
+          Nothing -> do
+            assign (state . stack) (0 : xs)
+            next
+          Just output -> do
+            let truncpaddedOutput = truncpad 64 output
+            assign (state . stack) (1 : xs)
+            assign (state . returndata) truncpaddedOutput
+            copyBytesToMemory truncpaddedOutput outSize 0 outOffset
+            next
+
         -- ECPAIRING
-        0x8 -> notImplemented
+        0x8 -> case EVM.Precompiled.execute 0x8 input 32 of
+          Nothing -> do
+            assign (state . stack) (0 : xs)
+            next
+          Just output -> do
+            let truncpaddedOutput = truncpad 32 output
+            assign (state . stack) (1 : xs)
+            assign (state . returndata) truncpaddedOutput
+            copyBytesToMemory truncpaddedOutput outSize 0 outOffset
+            next
+
         _   -> error "should be impossible"
+
+truncpad :: Int -> ByteString -> ByteString
+truncpad n xs = if m > n then BS.take n xs
+                     else BS.append xs (BS.replicate (n - m) 0)
+  where m = BS.length xs
 
 costOfPrecompile :: Addr -> ByteString -> Word
 costOfPrecompile precompileAddr input =
@@ -1154,6 +1190,12 @@ costOfPrecompile precompileAddr input =
     0x4 -> num $ (((BS.length input + 31) `div` 32) * 3) + 15
     -- MODEXP
     -- 0x5 -> TODO
+    -- ECADD
+    0x6 -> 500
+    -- ECMUL
+    0x7 -> 40000
+    -- ECPAIRING
+    0x8 -> num $ ((BS.length input) `div` 192) * 60000 + 40000
     _ -> error ("unimplemented precompiled contract " ++ show precompileAddr)
 
 
