@@ -340,6 +340,7 @@ launchTest execmode cmd = do
         ExecuteAsBlockchainTest -> VMTest.parseBCSuite
   parsed <- parser <$> LazyByteString.readFile (file cmd)
   case parsed of
+     Left "No cases to check." -> putStrLn "no-cases ok"
      Left err -> print err
      Right allTests ->
        let testFilter =
