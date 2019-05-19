@@ -1406,7 +1406,11 @@ finalize txmode = do
               (Map.delete createe)
           Just (VMSuccess output) -> do
             createe <- use (state . contract)
-            replaceCode createe (RuntimeCode output)
+            createeExists <- (Map.member createe) <$> use (env . contracts)
+            if createeExists then
+              replaceCode createe (RuntimeCode output)
+              -- don't deploy code when createe selfdestructed
+              else return ()
           Nothing -> error "Finalising an unfinished tx."
       modifying (env . contracts)
         (Map.adjust (over balance (+ minerPay)) miner)
