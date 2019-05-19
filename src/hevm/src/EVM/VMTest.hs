@@ -282,14 +282,14 @@ parseBCSuite ::
 parseBCSuite x = case (JSON.eitherDecode' x) :: Either String (Map String BlockchainCase) of
   Left e        -> Left e
   Right bcCases -> let allCases = (fromBlockchainCase <$> bcCases)
-                       rightNetwork (Left OldNetwork) = False
-                       rightNetwork _                 = True
-                       rightNetworkCases = Map.filter rightNetwork allCases
-                       (erroredCases, parsedCases) = splitEithers rightNetworkCases
+                       keepError (Left e) = errorFatal e
+                       keepError _        = True
+                       filteredCases = Map.filter keepError allCases
+                       (erroredCases, parsedCases) = splitEithers filteredCases
     in if Map.size erroredCases > 0
-    then Left ("Couldn't parse case: " ++ (show $ (Map.elems erroredCases) !! 0))
+    then Left ("errored case: " ++ (show $ (Map.elems erroredCases) !! 0))
     else if Map.size parsedCases == 0
-    then Left "No cases for current network."
+    then Left "No cases to check."
     else Right parsedCases
 #endif
 
@@ -310,6 +310,13 @@ realizeContract x =
         )
 
 data BlockchainError = TooManyBlocks | TooManyTxs | NoTxs | TargetMissing | SignatureUnverified | InvalidTx | OldNetwork | FailedCreate deriving Show
+
+errorFatal :: BlockchainError -> Bool
+errorFatal TooManyBlocks = True
+errorFatal TooManyTxs = True
+errorFatal TargetMissing = True
+errorFatal SignatureUnverified = True
+errorFatal _ = False
 
 fromBlockchainCase :: BlockchainCase -> Either BlockchainError Case
 fromBlockchainCase (BlockchainCase blocks preState postState network) =
