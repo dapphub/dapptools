@@ -36,7 +36,7 @@ import Control.Monad.State.Strict hiding (state)
 import Data.ByteString              (ByteString)
 import Data.ByteString.Lazy         (fromStrict)
 import Data.Map.Strict              (Map)
-import Data.Maybe                   (fromMaybe, isNothing)
+import Data.Maybe                   (fromMaybe)
 import Data.Semigroup               (Semigroup (..))
 import Data.Sequence                (Seq)
 import Data.Vector.Storable         (Vector)
@@ -863,16 +863,16 @@ exec1 = do
               : xs
              ) ->
               case xTo of
-                n | n > 0 && n <= 8 -> precompiledContract
+                n | n > 0 && n <= 8 -> precompiledContract vm fees xGas xTo xTo xValue xInOffset xInSize xOutOffset xOutSize xs
                 n | num n == cheatCode ->
                   do
                     assign (state . stack) xs
                     cheat (xInOffset, xInSize) (xOutOffset, xOutSize)
                 _ ->
                   let
-                    availableGas = the state gas
-                    recipient    = view (env . contracts . at xTo) vm
-                    (cost, gas') = costOfCall fees recipient xValue availableGas xGas
+                    availableGas    = the state gas
+                    recipientExists = Map.member xTo (view (env . contracts) vm)
+                    (cost, gas') = costOfCall fees recipientExists xValue availableGas xGas
                   in burn (cost - gas') $
                     (if xValue > 0 then notStatic else id) $
                     if xValue > view balance this
@@ -910,14 +910,13 @@ exec1 = do
               : xOutOffset
               : xOutSize
               : xs
-             ) ->
+              ) ->
               case xTo of
-                n | n > 0 && n <= 8 -> precompiledContract
+                n | n > 0 && n <= 8 -> precompiledContract vm fees xGas xTo self xValue xInOffset xInSize xOutOffset xOutSize xs
                 _ ->
                   let
                     availableGas = the state gas
-                    recipient    = Just this
-                    (cost, gas') = costOfCall fees recipient xValue availableGas xGas
+                    (cost, gas') = costOfCall fees True xValue availableGas xGas
                   in burn (cost - gas') $
                     (if xValue > 0 then notStatic else id) $
                     if xValue > view balance this
@@ -950,17 +949,17 @@ exec1 = do
         -- op: DELEGATECALL
         0xf4 ->
           case stk of
-            (xGas:xTo:xInOffset:xInSize:xOutOffset:xOutSize:xs) ->
+            (xGas:(num -> xTo):xInOffset:xInSize:xOutOffset:xOutSize:xs) ->
               case xTo of
-                n | n > 0 && n <= 8 -> precompiledContract
+                n | n > 0 && n <= 8 -> precompiledContract vm fees xGas xTo self 0 xInOffset xInSize xOutOffset xOutSize xs
                 n | num n == cheatCode -> do
                       assign (state . stack) xs
                       cheat (xInOffset, xInSize) (xOutOffset, xOutSize)
                 _ -> let
                   availableGas = the state gas
-                  (cost, gas') = costOfCall fees (Just this) 0 availableGas xGas
+                  (cost, gas') = costOfCall fees True 0 availableGas xGas
                   in burn (cost - gas') $
-                     delegateCall fees gas' (num xTo) xInOffset xInSize xOutOffset xOutSize xs $ do
+                     delegateCall fees gas' xTo xInOffset xInSize xOutOffset xOutSize xs $ do
                   modifying (tx . touchedAccounts) (self:)
             _ -> underrun
 
@@ -981,12 +980,12 @@ exec1 = do
           case stk of
             (xGas : (num -> xTo) : xInOffset : xInSize : xOutOffset : xOutSize : xs) ->
               case xTo of
-                n | n > 0 && n <= 8 -> precompiledContract
+                n | n > 0 && n <= 8 -> precompiledContract vm fees xGas xTo xTo 0 xInOffset xInSize xOutOffset xOutSize xs
                 _ ->
                   let
-                    availableGas = the state gas
-                    recipient    = view (env . contracts . at xTo) vm
-                    (cost, gas') = costOfCall fees recipient 0 availableGas xGas
+                    availableGas    = the state gas
+                    recipientExists = Map.member xTo (view (env . contracts) vm)
+                    (cost, gas') = costOfCall fees recipientExists 0 availableGas xGas
                   in burn (cost - gas') $
                     case view execMode vm of
                       ExecuteAsVMTest -> do
@@ -1031,84 +1030,47 @@ exec1 = do
         xxx ->
           vmError (UnrecognizedOpcode xxx)
 
-precompiledContract :: (?op :: Word8) => EVM ()
-precompiledContract = do
-  vm <- get
-  fees <- use (block . schedule)
-  stk <- use (state . stack)
-  case (?op, stk) of
-    -- CALL (includes value)
-    (0xf1, (gasCap:(num -> op):val:inOffset:inSize:outOffset:outSize:xs)) ->
-      precompileHelper vm fees op val gasCap inOffset inSize outOffset outSize xs
-    -- CALLCODE (includes value)
-    (0xf2, (gasCap:(num -> op):val:inOffset:inSize:outOffset:outSize:xs)) ->
-      precompileHelper vm fees op val gasCap inOffset inSize outOffset outSize xs
-    -- STATICCALL (does not include value)
-    (0xfa, (gasCap:(num -> op):inOffset:inSize:outOffset:outSize:xs)) ->
-      precompileHelper vm fees op 0 gasCap inOffset inSize outOffset outSize xs
-    -- DELEGATECALL (does not include value)
-    (0xf4, (gasCap:(num -> op):inOffset:inSize:outOffset:outSize:xs)) ->
-      precompileHelper vm fees op 0 gasCap inOffset inSize outOffset outSize xs
-    _ ->
-      underrun
-
-precompileHelper
+precompiledContract
   :: (?op :: Word8)
   => VM
   -> FeeSchedule Word
+  -> Word
+  -> Addr
   -> Addr
   -> Word
-  -> Word -> Word -> Word -> Word -> Word
+  -> Word -> Word -> Word -> Word
   -> [Word]
   -> EVM ()
-precompileHelper vm fees precompileAddr xValue gasCap inOffset inSize outOffset outSize xs =
+precompiledContract vm fees gasCap precompileAddr recipient xValue inOffset inSize outOffset outSize xs =
   let
-    the :: (b -> VM -> Const a VM) -> ((a -> Const a a) -> b) -> a
-    the f g = view (f . g) vm
-
     availableGas = view (state . gas) vm
     self = view (state . contract) vm
-    recipient = if ?op == 0xf1 -- If OP is a CALL (not CALLCODE, STATICCALL, DELEGATECALL)
-                then view (env . contracts . at precompileAddr) vm  -- then precompileAddr is recipient
-                else view (env . contracts . at self) vm            -- otherwise caller is recipient
-    (cost, gas') = costOfCall fees recipient xValue availableGas gasCap
-    this = fromMaybe (error "internal error: state contract") (preview (ix (the state contract)) (the env contracts))
+    Just this = view (env . contracts . at self) vm
+    recipientExists = Map.member recipient (view (env . contracts) vm)
+    (cost, gas') = costOfCall fees recipientExists xValue availableGas gasCap
   in
     accessMemoryRange fees inOffset inSize $
       accessMemoryRange fees outOffset outSize $
-        burn (cost - gas') $
-          case xValue == 0 of
-            True ->
-              executePrecompile fees precompileAddr gasCap inOffset inSize outOffset outSize xs
-
-            False ->
-              notStatic $ do
-                if xValue > view balance this
-                then do
-                  assign (state . stack) (0 : xs)
-                  next
-                else do
-                  executePrecompile fees precompileAddr gasCap inOffset inSize outOffset outSize xs
-                  stk <- use (state . stack)
-                  -- Transfer ether if op is a CALL, and precompile output was a success.
-                  -- Disregard transfer if op is DELEGATECALL, CALLCODE, or STATICCALL
-                  case (?op == 0xf1, stk) of
-                    (False, _) ->
-                      return ()
-
-                    (True, 0:_) ->
-                      return ()
-
-                    (True, 1:_) ->
-                      touchAccount precompileAddr $ \_ -> do
-                        zoom (env . contracts) $ do
-                          ix self . balance -= xValue
-                          ix precompileAddr  . balance += xValue
-                        modifying (tx . touchedAccounts) (self:)
-                        modifying (tx . touchedAccounts) (precompileAddr:)
-
-                    _ ->
-                      underrun
+        burn (cost - gas') $ do
+            (if xValue == 0 then notStatic else id) $
+              if xValue > view balance this then do
+                assign (state . stack) (0 : xs)
+                next
+              else do
+                executePrecompile fees precompileAddr gasCap inOffset inSize outOffset outSize xs
+                stk <- use (state . stack)
+                case stk of
+                  (0:_) ->
+                    return ()
+                  (1:_) ->
+                    touchAccount recipient $ \_ -> do
+                    zoom (env . contracts) $ do
+                      ix self . balance -= xValue
+                      ix recipient  . balance += xValue
+                    modifying (tx . touchedAccounts) (self:)
+                    modifying (tx . touchedAccounts) (recipient:)
+                  _ ->
+                    underrun
 
 executePrecompile
   :: (?op :: Word8)
@@ -1120,13 +1082,12 @@ executePrecompile (FeeSchedule {..}) preCompileAddr gasCap inOffset inSize outOf
   vm <- get
   let input = readMemory (num inOffset) (num inSize) vm
       cost = costOfPrecompile preCompileAddr input
-      notDone = error $ "precompile at address " <> show preCompileAddr <> " not yet implemented"
+      notImplemented = error $ "precompile at address " <> show preCompileAddr <> " not yet implemented"
   if cost > gasCap then burn gasCap $ do
     assign (state . stack) (0 : xs)
     next
     else burn (costOfPrecompile preCompileAddr input) $
          case preCompileAddr of
-
            -- ECRECOVER
            0x1 ->
              case EVM.Precompiled.execute 0x1 input (num outSize) of
@@ -1169,7 +1130,7 @@ executePrecompile (FeeSchedule {..}) preCompileAddr gasCap inOffset inSize outOf
              next
 
            -- EXPMOD
-           0x5 -> notDone
+           0x5 -> notImplemented
 
            -- ECADD
            0x6 -> case EVM.Precompiled.execute 0x6 (truncpad 128 input) 64 of
@@ -2056,9 +2017,9 @@ mkCodeOps bytes = RegularVector.fromList . toList $ go 0 bytes
 -- Gas cost function for CALL, transliterated from the Yellow Paper.
 costOfCall
   :: FeeSchedule Word
-  -> Maybe a -> Word -> Word -> Word
+  -> Bool -> Word -> Word -> Word
   -> (Word, Word)
-costOfCall (FeeSchedule {..}) recipient xValue availableGas xGas =
+costOfCall (FeeSchedule {..}) recipientExists xValue availableGas xGas =
   (c_gascap + c_extra, c_callgas)
   where
     c_extra =
@@ -2068,7 +2029,7 @@ costOfCall (FeeSchedule {..}) recipient xValue availableGas xGas =
     c_callgas =
       if xValue /= 0          then c_gascap + num g_callstipend else c_gascap
     c_new =
-      if isNothing recipient && xValue /= 0
+      if not recipientExists && xValue /= 0
       then num g_newaccount
       else 0
     c_gascap =
