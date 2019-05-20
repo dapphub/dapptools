@@ -22,10 +22,10 @@ script:
   - |
     [[ "$TRAVIS_OS_NAME" == "osx" ]] && PLATFORM=darwin || PLATFORM=linux
 
-    # the additional call to `cachix push` is there to prevent a race condition
-    # that happens when the above daemon is killed mid-push at the end of this
-    # script.
-    nix-build -j auto release.nix -A dapphub.$PLATFORM.stable | [[ "$TRAVIS_REPO_SLUG" == "dapphub/dapptools" ]] && cachix push dapp
+    nix-build -j auto release.nix -A dapphub.$PLATFORM.stable
+
+    # this is here to let cachix finish pushing the last artifact before the script is killed
+    sleep 10
 after_success:
   - |
     if [[ -z "$TRAVIS_PULL_REQUEST_SLUG" || "$TRAVIS_PULL_REQUEST_SLUG" == "dapphub/dapptools" ]]; then
