@@ -1062,8 +1062,7 @@ precompiledContract vm fees gasCap precompileAddr recipient xValue inOffset inSi
                 case stk of
                   (0:_) ->
                     return ()
-                  (1:_) ->
-                    touchAccount recipient $ \_ -> do
+                  (1:_) -> do
                     zoom (env . contracts) $ do
                       ix self . balance -= xValue
                       ix recipient  . balance += xValue
