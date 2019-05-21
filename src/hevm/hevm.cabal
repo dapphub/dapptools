@@ -68,6 +68,8 @@ library
     ethjet/tinykeccak.c, ethjet/ethjet.c
   cxx-sources:
     ethjet/ethjet-ff.cc
+  cxx-options:
+    -std=c++0x
   install-includes:
     ethjet/tinykeccak.h, ethjet/ethjet.h, ethjet/ethjet-ff.h
   build-depends:
