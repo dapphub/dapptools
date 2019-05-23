@@ -32,8 +32,8 @@ fi
 jshon+=(-n {})
 [[ $TO ]] && jshon+=(-s "$TO" -i to)
 jshon+=(-s "$DATA" -i data)
-IFS=" " read -r -a params <<< "$(seth --send-params)"
-jshon+=( "${params[@]}" )
+# shellcheck disable=SC2207
+jshon+=($(seth --send-params))
 jshon+=(-i append)
 : "${ETH_BLOCK:=latest}" # geth doesn't like this argument
 [[ $ETH_BLOCK = latest ]] || jshon+=(-s "$ETH_BLOCK" -i append)
