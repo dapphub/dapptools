@@ -53,26 +53,6 @@ main = defaultMain $ testGroup "hevm"
           [AbiString ""] ===> AbiUInt 256 0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470
     ]
 
-  , testGroup "ecrecover"
-    [ testCase "Example 1" $
-        let
-          h = "0x0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
-          r = "0xc84e55cee2032ea541a32bf6749e10c8b9344c92061724c4e751600f886f4732"
-          s = "0x1542b6457e91098682138856165381453b3d0acae2470286fd8c8a09914b1b5d"
-        in SolidityCall
-             (Text.unlines
-               [ "bytes32 h = keccak256(abi.encodePacked(\"\\x19Ethereum Signed Message:\\n32\", d));"
-               , "x = ecrecover(h, a, b, c);"
-               ])
-             [ AbiUInt 8 28
-             , AbiBytes 32 (hexText r)
-             , AbiBytes 32 (hexText s)
-             , AbiBytes 32 (hexText h)
-             ]
-             ===>
-             AbiAddress 0x2d5e56d45c63150d937f2182538a0f18510cb11f
-    ]
-
   , testGroup "Precompiled contracts" $
       [ testGroup "Example (reverse)"
           [ testCase "success" $
