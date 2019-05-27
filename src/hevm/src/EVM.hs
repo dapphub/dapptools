@@ -55,6 +55,7 @@ import qualified Data.Vector.Storable.Mutable as Vector
 
 import qualified Data.Vector as RegularVector
 
+import Crypto.Number.ModArithmetic (expFast)
 import Crypto.Hash (Digest, SHA256, RIPEMD160)
 import qualified Crypto.Hash as Crypto
 
@@ -1138,7 +1139,7 @@ executePrecompile fees preCompileAddr gasCap inOffset inSize outOffset outSize x
               (_, _, lenm, b, e, m) = parseModexpInput input
               output = case m of
                 0 -> bytes 0
-                _ -> truncpad lenm (bytes $ ((b ^ e) `mod` m))
+                _ -> truncpad lenm (bytes $ (expFast b e m))
           in do
             assign (state . stack) (1 : xs)
             assign (state . returndata) output
