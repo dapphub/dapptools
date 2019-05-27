@@ -37,6 +37,7 @@ data Num n => FeeSchedule n = FeeSchedule
   , g_copy :: n
   , g_blockhash :: n
   , g_extcodehash :: n
+  , g_quaddivisor :: n
   , r_block :: n
   } deriving Show
 
@@ -100,6 +101,7 @@ homestead = FeeSchedule
   , g_copy = 3
   , g_blockhash = 20
   , g_extcodehash = 400
+  , g_quaddivisor = 100
   , r_block = 2000000000000000000
   }
 

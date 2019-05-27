@@ -12,13 +12,13 @@
 
 module EVM where
 
-import Prelude hiding ((^), log, Word, exponent)
+import Prelude hiding (log, Word, exponent)
 
 import EVM.ABI
 import EVM.Types
 import EVM.Solidity
 import EVM.Keccak
-import EVM.Concrete
+import EVM.Concrete hiding ((^))
 import EVM.Op
 import EVM.FeeSchedule (FeeSchedule (..))
 
@@ -55,6 +55,7 @@ import qualified Data.Vector.Storable.Mutable as Vector
 
 import qualified Data.Vector as RegularVector
 
+import Crypto.Number.ModArithmetic (expFast)
 import Crypto.Hash (Digest, SHA256, RIPEMD160)
 import qualified Crypto.Hash as Crypto
 
@@ -73,7 +74,6 @@ data Error
   | StackLimitExceeded
   | IllegalOverflow
   | Query Query
-  | PrecompiledContractError Int
   | StateChangeWhileStatic
 
 deriving instance Show Error
@@ -1064,6 +1064,7 @@ precompiledContract vm fees gasCap precompileAddr recipient xValue inOffset inSi
                     return ()
                   (1:_) ->
                     touchAccount recipient $ \_ -> do
+
                     zoom (env . contracts) $ do
                       ix self . balance -= xValue
                       ix recipient  . balance += xValue
@@ -1078,17 +1079,17 @@ executePrecompile
   -> Addr
   -> Word -> Word -> Word -> Word -> Word -> [Word]
   -> EVM ()
-executePrecompile (FeeSchedule {..}) preCompileAddr gasCap inOffset inSize outOffset outSize xs  = do
+executePrecompile fees preCompileAddr gasCap inOffset inSize outOffset outSize xs  = do
   vm <- get
   let input = readMemory (num inOffset) (num inSize) vm
-      cost = costOfPrecompile preCompileAddr input
+      cost = costOfPrecompile fees preCompileAddr input
       notImplemented = error $ "precompile at address " <> show preCompileAddr <> " not yet implemented"
   if cost > gasCap then
     burn gasCap $ do
       assign (state . stack) (0 : xs)
       next
   else
-    burn (costOfPrecompile preCompileAddr input) $
+    burn cost $
       case preCompileAddr of
         -- ECRECOVER
         0x1 ->
@@ -1128,11 +1129,21 @@ executePrecompile (FeeSchedule {..}) preCompileAddr gasCap inOffset inSize outOf
         0x4 -> do
             assign (state . stack) (1 : xs)
             assign (state . returndata) input
-            copyBytesToMemory input inSize 0 outOffset
+            copyBytesToMemory (truncpad (num outSize) input) outSize 0 outOffset
             next
 
-        -- EXPMOD
-        0x5 -> notImplemented
+        -- MODEXP
+        0x5 ->
+          let
+              (_, _, lenm, b, e, m) = parseModexpInput input
+              output = case m of
+                0 -> truncpad lenm (asBE (0 :: Int))
+                _ -> frontpad lenm (asBE (expFast b e m))
+          in do
+            assign (state . stack) (1 : xs)
+            assign (state . returndata) output
+            copyBytesToMemory output outSize 0 outOffset
+            next
 
         -- ECADD
         0x6 -> case EVM.Precompiled.execute 0x6 (truncpad 128 input) 64 of
@@ -1170,15 +1181,31 @@ executePrecompile (FeeSchedule {..}) preCompileAddr gasCap inOffset inSize outOf
             copyBytesToMemory truncpaddedOutput outSize 0 outOffset
             next
 
-        _   -> error "should be impossible"
+        _   -> notImplemented
 
 truncpad :: Int -> ByteString -> ByteString
 truncpad n xs = if m > n then BS.take n xs
                      else BS.append xs (BS.replicate (n - m) 0)
   where m = BS.length xs
 
-costOfPrecompile :: Addr -> ByteString -> Word
-costOfPrecompile precompileAddr input =
+frontpad :: Int -> ByteString -> ByteString
+frontpad n xs = BS.append (BS.replicate (n - m) 0) xs
+  where m = BS.length xs
+
+parseModexpInput :: ByteString -> (Int, Int, Int, Integer, Integer, Integer)
+parseModexpInput input =
+  let paddedInput  = truncpad 96 input
+      lenb         = fromBE $ (BS.take 32) $ paddedInput
+      lene         = fromBE $ (BS.take 32) . (BS.drop 32) $ paddedInput
+      lenm         = fromBE $ (BS.take 32) . (BS.drop 64) $ paddedInput
+      paddedInput' = truncpad (96 + lenb + lene + lenm) input
+      b            = fromBE $ (BS.take lenb) . (BS.drop 96) $ paddedInput'
+      e            = fromBE $ (BS.take lene) . (BS.drop (96 + lenb)) $ paddedInput'
+      m            = fromBE $ (BS.take lenm) . (BS.drop (96 + lenb + lene)) $ paddedInput'
+  in (lenb, lene, lenm, b, e, m)
+
+costOfPrecompile :: FeeSchedule Word -> Addr -> ByteString -> Word
+costOfPrecompile (FeeSchedule {..}) precompileAddr input =
   case precompileAddr of
     -- ECRECOVER
     0x1 -> 3000
@@ -1189,7 +1216,20 @@ costOfPrecompile precompileAddr input =
     -- IDENTITY
     0x4 -> num $ (((BS.length input + 31) `div` 32) * 3) + 15
     -- MODEXP
-    -- 0x5 -> TODO
+    0x5 -> num $ ((f $ max lenm lenb) * (max lene' 1)) `div` (num g_quaddivisor)
+      where (lenb, lene, lenm, _, e, _) = parseModexpInput input
+            nextWord = word $ (BS.take 32) . (BS.drop (96 + lenb)) $ input
+            lene' = if e == 0 then 0
+                    else if lene <= 32
+                         then log2 lene
+                         else if nextWord == 0
+                              then 8 * (lene - 32)
+                              else 8 * (lene - 32) + log2 nextWord
+            f :: Int -> Int
+            f x = if x <= 64 then x * x
+                  else if x <= 1024
+                       then (x * x) `div` 4 + 96 * x - 3072
+                       else (x * x) `div` 16 + 480 * x - 199680
     -- ECADD
     0x6 -> 500
     -- ECMUL
