@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-set -e
+set -ex
 
 [[ $ETHERSCAN_API_KEY ]] || {
   cat >&2 <<.
 
   You need an Etherscan Api Key to verify contracts.
   Create one at https://etherscan.io/myapikey
-  
+
   Then export it with \`export ETHERSCAN_API_KEY=xxxxxxxx'
 
 .
@@ -28,14 +28,17 @@ case "$chain" in
     exit 1
 esac
 
-meta=$(cat "$DAPP_OUT"/"${1?contractname}"_meta.json)
+path=${1?contractname}
+name=${path#*:}
+address=${2?contractaddress}
+
+meta=$(<"$DAPP_JSON" jshon -e contracts -e "$path" -e metadata -u)
 version=$(jshon <<<"$meta" -e compiler -e version -u)
 file=$(jshon <<<"$meta" -e settings -e compilationTarget -k)
 optimized=$(jshon <<<"$meta" -e settings -e optimizer -e enabled -u)
 runs=$(jshon <<<"$meta" -e settings -e optimizer -e runs -u)
 
 version=v"$version"
-file="${file##*/}"
 if [[ "$optimized" = "true" ]]; then
   optimized=1
 else
@@ -44,13 +47,12 @@ fi
 
 params=(
   "module=contract" "action=verifysourcecode"
-  "contractname=${1?contractname}" "contractaddress=${2?contractaddress}"
+  "contractname=$name" "contractaddress=$address}"
   "optimizationUsed=$optimized" "runs=$runs"
   "apikey=$ETHERSCAN_API_KEY"
 )
 
-source=$(hevm flatten --source-file "$DAPP_SRC/$file" \
---json-file "$DAPP_OUT/$file".json)
+source=$(hevm flatten --source-file "$file" --json-file "$DAPP_JSON")
 
 source=$(cat <<.
 // Verified using https://dapp.tools
@@ -66,7 +68,7 @@ while [ $count -lt 5 ]; do
   response=$(curl -fsS "$ETHERSCAN_API_URL" -d "$query" \
   --data-urlencode "compilerversion=$version" \
   --data-urlencode "sourceCode@"<(echo "$source") -X POST)
-  
+
   status=$(jshon <<<"$response" -e status -u)
   #message=$(jshon <<<"$response" -e message -u)
   guid=$(jshon <<<"$response" -e result -u)
@@ -92,11 +94,11 @@ while [ $count -lt 5 ]; do
   sleep 10
   response=$(curl -fsS "$ETHERSCAN_API_URL" \
   -d "module=contract&action=checkverifystatus&guid=$guid")
-  
+
   status=$(jshon <<<"$response" -e status -u)
   # message=$(jshon <<<"$response" -e message -u)
   result=$(jshon <<<"$response" -e result -u)
-  
+
   [[ $status = 1 ]] && {
     echo >&2 "$result"
     echo >&2 "Go to $ETHERSCAN_URL/$2#code"
