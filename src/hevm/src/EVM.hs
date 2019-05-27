@@ -1139,7 +1139,7 @@ executePrecompile fees preCompileAddr gasCap inOffset inSize outOffset outSize x
               (_, _, lenm, b, e, m) = parseModexpInput input
               output = case m of
                 0 -> truncpad lenm (bytes 0)
-                _ -> truncpad lenm (bytes $ (expFast b e m))
+                _ -> frontpad lenm (bytes (expFast b e m))
           in do
             assign (state . stack) (1 : xs)
             assign (state . returndata) output
@@ -1187,6 +1187,10 @@ executePrecompile fees preCompileAddr gasCap inOffset inSize outOffset outSize x
 truncpad :: Int -> ByteString -> ByteString
 truncpad n xs = if m > n then BS.take n xs
                      else BS.append xs (BS.replicate (n - m) 0)
+  where m = BS.length xs
+
+frontpad :: Int -> ByteString -> ByteString
+frontpad n xs = BS.append (BS.replicate (n - m) 0) xs
   where m = BS.length xs
 
 parseModexpInput :: ByteString -> (Int, Int, Int, Integer, Integer, Integer)
