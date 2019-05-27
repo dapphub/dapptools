@@ -78,7 +78,7 @@ unreleased versions.
 
 NOTE: not all versions are supported on macOS platforms.
 
-### Maintenance
+### Contributing
 
 Instructions for adding new versions of `solc` can be found at
 [`nix/solc-updates.md`](./nix/solc-updates.md)
