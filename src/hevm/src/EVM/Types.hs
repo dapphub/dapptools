@@ -171,3 +171,11 @@ word xs = case Cereal.runGet m (padLeft 32 xs) of
 
 byteAt :: (Bits a, Bits b, Integral a, Num b) => a -> Int -> b
 byteAt x j = num (x `shiftR` (j * 8)) .&. 0xff
+
+integer :: ByteString -> Integer
+integer xs = if xs == mempty then 0
+  else (num $ BS.last xs) + 256 * integer (BS.init xs)
+
+bytes :: Integer -> ByteString
+bytes 0 = mempty
+bytes x = BS.append (BS.pack [num $ x `mod` 256]) (bytes (x `shiftR` 8))
