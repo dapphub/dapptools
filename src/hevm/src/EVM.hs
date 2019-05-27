@@ -1138,7 +1138,7 @@ executePrecompile fees preCompileAddr gasCap inOffset inSize outOffset outSize x
           let
               (_, _, lenm, b, e, m) = parseModexpInput input
               output = case m of
-                0 -> bytes 0
+                0 -> truncpad lenm (bytes 0)
                 _ -> truncpad lenm (bytes $ (expFast b e m))
           in do
             assign (state . stack) (1 : xs)
