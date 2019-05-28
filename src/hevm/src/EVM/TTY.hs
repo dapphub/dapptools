@@ -352,9 +352,6 @@ app opts =
   , appHandleEvent = \ui e ->
 
       case (ui, e) of
-        (UiVmBrowserScreen s, VtyEvent (Vty.EvKey Vty.KEsc [])) ->
-          continue (UiVmScreen (view browserVm s))
-
         (UiVmBrowserScreen s, VtyEvent e'@(Vty.EvKey Vty.KDown [])) -> do
           s' <- handleEventLensed s
             browserContractList
@@ -368,6 +365,27 @@ app opts =
             handleListEvent
             e'
           continue (UiVmBrowserScreen s')
+
+        (UiVmBrowserScreen s, VtyEvent (Vty.EvKey Vty.KEsc [])) ->
+          continue (UiVmScreen (view browserVm s))
+
+        (UiVmScreen s, VtyEvent (Vty.EvKey Vty.KEsc [])) ->
+          continue . UiTestPickerScreen $
+            case view uiVmDapp s of
+              Just dapp ->
+                UiTestPickerState
+                  { _testPickerList =
+                      list
+                        TestPickerPane
+                        (Vec.fromList
+                         (concatMap
+                          (\(a, xs) -> [(a, x) | x <- xs])
+                          (view dappUnitTests dapp)))
+                        1
+                  , _testPickerDapp = dapp
+                  }
+              Nothing ->
+                error "Sorry, we lost the dapp"
 
         (_, VtyEvent (Vty.EvKey Vty.KEsc [])) ->
           halt ui
@@ -393,7 +411,6 @@ app opts =
           in
             suspendAndResume $
               Readline.runInputT Readline.defaultSettings loop
-
 
         (UiVmScreen s, VtyEvent (Vty.EvKey (Vty.KChar 'n') [])) ->
           takeStep s StepNormally StepOne
