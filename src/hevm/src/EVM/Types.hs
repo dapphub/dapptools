@@ -178,4 +178,5 @@ integer xs = if xs == mempty then 0
 
 bytes :: Integer -> ByteString
 bytes 0 = mempty
-bytes x = BS.append (BS.pack [num $ x `mod` 256]) (bytes (x `shiftR` 8))
+bytes x = bytes (x `shiftR` 8)
+  <> BS.pack [num $ x `mod` 256]
