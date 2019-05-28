@@ -200,6 +200,8 @@ interpret mode =
                     \case
                       Stepped stepper ->
                         interpret (StepUntil p) stepper
+                      Returned _ ->
+                        interpret StepNone restart
 
                       -- This means that if we hit a blocking query
                       -- or a return, we pause despite the predicate.
@@ -334,10 +336,10 @@ takeStep ui policy mode = do
         StepTimidly ->
           error "step blocked unexpectedly"
 
-    (Returned (), ui') ->
+    (Returned (), _) ->
       case policy of
         StepNormally ->
-          halt (UiVmScreen ui')
+          continue (UiVmScreen ui)
         StepTimidly ->
           error "step halted unexpectedly"
 
@@ -405,6 +407,11 @@ app opts =
           takeStep s
             StepNormally
             (StepUntil (isNextSourcePositionWithoutEntering s))
+
+        (UiVmScreen s, VtyEvent (Vty.EvKey (Vty.KChar 'e') [])) ->
+          takeStep s
+            StepNormally
+            (StepUntil (\_ -> False))
 
         (UiVmScreen s, VtyEvent (Vty.EvKey (Vty.KChar 'p') [])) ->
           case view uiVmStepCount s of
