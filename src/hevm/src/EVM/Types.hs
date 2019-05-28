@@ -174,7 +174,8 @@ byteAt x j = num (x `shiftR` (j * 8)) .&. 0xff
 
 integer :: ByteString -> Integer
 integer xs = if xs == mempty then 0
-  else (num $ BS.last xs) + 256 * integer (BS.init xs)
+  else 256 * integer (BS.init xs)
+       + (num $ BS.last xs)
 
 bytes :: Integer -> ByteString
 bytes 0 = mempty
