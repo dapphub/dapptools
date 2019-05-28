@@ -19,6 +19,7 @@ in
     , deps ? []
     , solc ? pkgs.solc
     , test-hevm ? pkgs.dapp2.test-hevm
+    , solcFlags ? ""
     , ...
     } @ attrs:
       pkgs.stdenv.mkDerivation (rec {
