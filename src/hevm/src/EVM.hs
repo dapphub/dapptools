@@ -74,7 +74,6 @@ data Error
   | StackLimitExceeded
   | IllegalOverflow
   | Query Query
-  | PrecompiledContractError Int
   | StateChangeWhileStatic
 
 deriving instance Show Error
