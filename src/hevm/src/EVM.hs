@@ -1137,8 +1137,8 @@ executePrecompile fees preCompileAddr gasCap inOffset inSize outOffset outSize x
           let
               (_, _, lenm, b, e, m) = parseModexpInput input
               output = case m of
-                0 -> truncpad lenm (bytes 0)
-                _ -> frontpad lenm (bytes (expFast b e m))
+                0 -> truncpad lenm (asBE (0 :: Int))
+                _ -> frontpad lenm (asBE (expFast b e m))
           in do
             assign (state . stack) (1 : xs)
             assign (state . returndata) output
@@ -1195,13 +1195,13 @@ frontpad n xs = BS.append (BS.replicate (n - m) 0) xs
 parseModexpInput :: ByteString -> (Int, Int, Int, Integer, Integer, Integer)
 parseModexpInput input =
   let paddedInput  = truncpad 96 input
-      lenb         = num $ integer $ (BS.take 32) $ paddedInput
-      lene         = num $ integer $ (BS.take 32) . (BS.drop 32) $ paddedInput
-      lenm         = num $ integer $ (BS.take 32) . (BS.drop 64) $ paddedInput
+      lenb         = fromBE $ (BS.take 32) $ paddedInput
+      lene         = fromBE $ (BS.take 32) . (BS.drop 32) $ paddedInput
+      lenm         = fromBE $ (BS.take 32) . (BS.drop 64) $ paddedInput
       paddedInput' = truncpad (96 + lenb + lene + lenm) input
-      b            = integer $ (BS.take lenb) . (BS.drop 96) $ paddedInput'
-      e            = integer $ (BS.take lene) . (BS.drop (96 + lenb)) $ paddedInput'
-      m            = integer $ (BS.take lenm) . (BS.drop (96 + lenb + lene)) $ paddedInput'
+      b            = fromBE $ (BS.take lenb) . (BS.drop 96) $ paddedInput'
+      e            = fromBE $ (BS.take lene) . (BS.drop (96 + lenb)) $ paddedInput'
+      m            = fromBE $ (BS.take lenm) . (BS.drop (96 + lenb + lene)) $ paddedInput'
   in (lenb, lene, lenm, b, e, m)
 
 costOfPrecompile :: FeeSchedule Word -> Addr -> ByteString -> Word
