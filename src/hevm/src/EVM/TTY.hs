@@ -413,6 +413,9 @@ app opts =
             StepNormally
             (StepUntil (\_ -> False))
 
+        (UiVmScreen s, VtyEvent (Vty.EvKey (Vty.KChar 'a') [])) ->
+            takeStep (view uiVmFirstState s) StepTimidly StepNone
+
         (UiVmScreen s, VtyEvent (Vty.EvKey (Vty.KChar 'p') [])) ->
           case view uiVmStepCount s of
             0 ->
