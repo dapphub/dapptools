@@ -1,6 +1,7 @@
 source $stdenv/setup
 unpackPhase
 
+IFS=" " read -r -a opts <<<"$solcFlags"
 jsonopts=--combined-json=abi,bin,bin-runtime,srcmap,srcmap-runtime,ast
 
 export DAPP_SRC=$src
@@ -11,9 +12,9 @@ find "$DAPP_SRC" -name '*.sol' | while read -r x; do
   dir=${dir#$DAPP_SRC}
   dir=${dir#/}
   mkdir -p "$DAPP_OUT/$dir"
-  (set -x; solc --overwrite $REMAPPINGS --allow-paths $DAPP_SRC --abi --bin --bin-runtime -o "$DAPP_OUT/$dir" "$x")
+  (set -x; solc --overwrite $REMAPPINGS --allow-paths $DAPP_SRC "${opts[@]}" --abi --bin --bin-runtime -o "$DAPP_OUT/$dir" "$x")
   json_file=$DAPP_OUT/$dir/${x##*/}.json
-  (set -x; solc $REMAPPINGS --allow-paths $DAPP_SRC $jsonopts "$x" >"$json_file")
+  (set -x; solc $REMAPPINGS --allow-paths $DAPP_SRC "${opts[@]}" $jsonopts "$x" >"$json_file")
 done
 
 mkdir lib
