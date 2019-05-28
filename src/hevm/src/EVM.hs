@@ -1083,7 +1083,6 @@ executePrecompile fees preCompileAddr gasCap inOffset inSize outOffset outSize x
   vm <- get
   let input = readMemory (num inOffset) (num inSize) vm
       cost = costOfPrecompile fees preCompileAddr input
-      notImplemented = error $ "precompile at address " <> show preCompileAddr <> " not yet implemented"
   if cost > gasCap then
     burn gasCap $ do
       assign (state . stack) (0 : xs)
