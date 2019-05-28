@@ -1222,9 +1222,10 @@ costOfPrecompile (FeeSchedule {..}) precompileAddr input =
                     else if lene <= 32 then log2 lene
                          else if next32 /= 0 then 8 * (lene - 32) + log2 next32
                               else 8 * (lene - 32)
-            f x = if x <= 64 then x^2
-                  else if x <= 1024 then x^2 `div` 4 + 96 * x - 3072
-                       else x^2 `div` 4 + 480 * x - 199680
+            f :: Int -> Int
+            f x = if x <= 64 then x * x
+                  else if x <= 1024 then (x * x) `div` 4 + 96 * x - 3072
+                       else (x * x) `div` 4 + 480 * x - 199680
     -- ECADD
     0x6 -> 500
     -- ECMUL
