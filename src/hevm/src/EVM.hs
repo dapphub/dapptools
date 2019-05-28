@@ -1142,7 +1142,7 @@ executePrecompile fees preCompileAddr gasCap inOffset inSize outOffset outSize x
           in do
             assign (state . stack) (1 : xs)
             assign (state . returndata) output
-            copyBytesToMemory (truncpad (num outSize) output) outSize 0 outOffset
+            copyBytesToMemory output outSize 0 outOffset
             next
 
         -- ECADD
