@@ -41,7 +41,7 @@ import Control.Monad.State.Strict hiding (state)
 
 import Data.Aeson.Lens
 import Data.ByteString (ByteString)
-import Data.Maybe (fromJust, fromMaybe)
+import Data.Maybe (isJust, fromJust, fromMaybe)
 import Data.Monoid ((<>))
 import Data.Text (Text, unpack, pack)
 import Data.Text.Encoding (decodeUtf8)
@@ -428,7 +428,7 @@ app opts =
         (UiVmScreen s, VtyEvent (Vty.EvKey (Vty.KChar 'e') [])) ->
           takeStep s
             StepNormally
-            (StepUntil (\_ -> False))
+            (StepUntil (isExecutionHalted s))
 
         (UiVmScreen s, VtyEvent (Vty.EvKey (Vty.KChar 'a') [])) ->
             takeStep (view uiVmFirstState s) StepTimidly StepNone
@@ -671,6 +671,9 @@ isNextSourcePositionWithoutEntering ui vm =
                 True
         in
            moved && not deeper && not boring
+
+isExecutionHalted :: UiVmState -> Pred VM
+isExecutionHalted _ vm = isJust (view result vm)
 
 currentSrcMap :: DappInfo -> VM -> Maybe SrcMap
 currentSrcMap dapp vm =
