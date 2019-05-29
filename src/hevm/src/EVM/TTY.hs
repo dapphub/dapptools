@@ -41,7 +41,7 @@ import Control.Monad.State.Strict hiding (state)
 
 import Data.Aeson.Lens
 import Data.ByteString (ByteString)
-import Data.Maybe (fromJust, fromMaybe)
+import Data.Maybe (isJust, fromJust, fromMaybe)
 import Data.Monoid ((<>))
 import Data.Text (Text, unpack, pack)
 import Data.Text.Encoding (decodeUtf8)
@@ -200,6 +200,8 @@ interpret mode =
                     \case
                       Stepped stepper ->
                         interpret (StepUntil p) stepper
+                      Returned _ ->
+                        interpret StepNone restart
 
                       -- This means that if we hit a blocking query
                       -- or a return, we pause despite the predicate.
@@ -334,10 +336,10 @@ takeStep ui policy mode = do
         StepTimidly ->
           error "step blocked unexpectedly"
 
-    (Returned (), ui') ->
+    (Returned (), _) ->
       case policy of
         StepNormally ->
-          halt (UiVmScreen ui')
+          continue (UiVmScreen ui)
         StepTimidly ->
           error "step halted unexpectedly"
 
@@ -350,9 +352,6 @@ app opts =
   , appHandleEvent = \ui e ->
 
       case (ui, e) of
-        (UiVmBrowserScreen s, VtyEvent (Vty.EvKey Vty.KEsc [])) ->
-          continue (UiVmScreen (view browserVm s))
-
         (UiVmBrowserScreen s, VtyEvent e'@(Vty.EvKey Vty.KDown [])) -> do
           s' <- handleEventLensed s
             browserContractList
@@ -366,6 +365,27 @@ app opts =
             handleListEvent
             e'
           continue (UiVmBrowserScreen s')
+
+        (UiVmBrowserScreen s, VtyEvent (Vty.EvKey Vty.KEsc [])) ->
+          continue (UiVmScreen (view browserVm s))
+
+        (UiVmScreen s, VtyEvent (Vty.EvKey Vty.KEsc [])) ->
+          continue . UiTestPickerScreen $
+            case view uiVmDapp s of
+              Just dapp ->
+                UiTestPickerState
+                  { _testPickerList =
+                      list
+                        TestPickerPane
+                        (Vec.fromList
+                         (concatMap
+                          (\(a, xs) -> [(a, x) | x <- xs])
+                          (view dappUnitTests dapp)))
+                        1
+                  , _testPickerDapp = dapp
+                  }
+              Nothing ->
+                error "Sorry, we lost the dapp"
 
         (_, VtyEvent (Vty.EvKey Vty.KEsc [])) ->
           halt ui
@@ -392,7 +412,6 @@ app opts =
             suspendAndResume $
               Readline.runInputT Readline.defaultSettings loop
 
-
         (UiVmScreen s, VtyEvent (Vty.EvKey (Vty.KChar 'n') [])) ->
           takeStep s StepNormally StepOne
 
@@ -405,6 +424,14 @@ app opts =
           takeStep s
             StepNormally
             (StepUntil (isNextSourcePositionWithoutEntering s))
+
+        (UiVmScreen s, VtyEvent (Vty.EvKey (Vty.KChar 'e') [])) ->
+          takeStep s
+            StepNormally
+            (StepUntil (isExecutionHalted s))
+
+        (UiVmScreen s, VtyEvent (Vty.EvKey (Vty.KChar 'a') [])) ->
+            takeStep (view uiVmFirstState s) StepTimidly StepNone
 
         (UiVmScreen s, VtyEvent (Vty.EvKey (Vty.KChar 'p') [])) ->
           case view uiVmStepCount s of
@@ -598,9 +625,11 @@ drawHelpBar = hBorder <=> hCenter help
       , ("p", "step back")
       , ("N", "step more")
       , ("C-n", "step over")
---      , ("  Enter", "browse")
+      , ("a", "step to start")
+      , ("e", "step to end")
       , ("m", "toggle memory")
-      , ("  Esc", "exit")
+      , ("Esc", "exit")
+--      , ("Enter", "browse")
       ]
 
 stepOneOpcode :: UiVmState -> UiVmState
@@ -644,6 +673,9 @@ isNextSourcePositionWithoutEntering ui vm =
                 True
         in
            moved && not deeper && not boring
+
+isExecutionHalted :: UiVmState -> Pred VM
+isExecutionHalted _ vm = isJust (view result vm)
 
 currentSrcMap :: DappInfo -> VM -> Maybe SrcMap
 currentSrcMap dapp vm =
