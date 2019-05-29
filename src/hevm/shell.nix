@@ -14,12 +14,13 @@ let
   drv = pkgs.haskell.lib.addBuildTool (
     haskellPackages.callPackage (import ./default.nix) {
       inherit (pkgs) secp256k1;
+      ff = pkgs.libff;
     }
   ) [pkgs.git pkgs.cabal-install pkgs.cabal2nix];
 
 in
   if pkgs.lib.inNixShell
   then drv.env.overrideAttrs (_: {
-    LD_LIBRARY_PATH = "${pkgs.secp256k1}/lib";
+    LD_LIBRARY_PATH = "${pkgs.secp256k1}/lib:${pkgs.libff}/lib";
   })
   else drv

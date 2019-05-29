@@ -115,16 +115,21 @@ checkExpectation diff execmode x vm =
   case (execmode, testExpectation x, view EVM.result vm) of
     (EVM.ExecuteAsBlockchainTest, Just expectation, _) -> do
       let
+        printField :: (v -> String) -> Map Addr v -> IO ()
+        printField f d = putStrLn $ Map.foldrWithKey (\k v acc ->
+          acc ++ showAddrWith0x k ++ " : " ++ f v ++ "\n") "" d
+
         ((s1, s1'), (b1, b1')) = (("bad-state", "bad-balance"), checkExpectedContracts vm (expectedContracts expectation))
         ss = map fst (filter (not . snd) [(s1, b1 || b1'), (s1', b1 || not b1')])
+        expected = expectedContracts expectation
+        actual = view (EVM.env . EVM.contracts . to (fmap clearZeroStorage)) vm
       putStr (intercalate " " ss)
       if diff && not b1 then do
-        putStrLn ""
-        putStrLn "Expected postState: "
-        putStrLn $ show (expectedContracts expectation)
-        putStrLn "Actual postState: "
-        putStrLn $ show (vm ^. EVM.env . EVM.contracts . to (fmap clearZeroStorage))
-        else return ()
+        putStrLn "\nExpected balance/state: "
+        printField (\v -> (show . toInteger $ _balance v) ++ " " ++ (show . Map.toList $ _storage v) ) expected
+        putStrLn "\nActual balance/state: "
+        printField (\v -> (show . toInteger $ EVM._balance v) ++ " " ++ (show . Map.toList $ EVM._storage v)) actual
+      else return ()
       return b1
     (_, Just expectation, Just (EVM.VMSuccess output)) -> do
       let
@@ -277,14 +282,14 @@ parseBCSuite ::
 parseBCSuite x = case (JSON.eitherDecode' x) :: Either String (Map String BlockchainCase) of
   Left e        -> Left e
   Right bcCases -> let allCases = (fromBlockchainCase <$> bcCases)
-                       rightNetwork (Left OldNetwork) = False
-                       rightNetwork _                 = True
-                       rightNetworkCases = Map.filter rightNetwork allCases
-                       (erroredCases, parsedCases) = splitEithers rightNetworkCases
+                       keepError (Left e) = errorFatal e
+                       keepError _        = True
+                       filteredCases = Map.filter keepError allCases
+                       (erroredCases, parsedCases) = splitEithers filteredCases
     in if Map.size erroredCases > 0
-    then Left ("Couldn't parse case: " ++ (show $ (Map.elems erroredCases) !! 0))
+    then Left ("errored case: " ++ (show $ (Map.elems erroredCases) !! 0))
     else if Map.size parsedCases == 0
-    then Left "No cases for current network."
+    then Left "No cases to check."
     else Right parsedCases
 #endif
 
@@ -305,6 +310,13 @@ realizeContract x =
         )
 
 data BlockchainError = TooManyBlocks | TooManyTxs | NoTxs | TargetMissing | SignatureUnverified | InvalidTx | OldNetwork | FailedCreate deriving Show
+
+errorFatal :: BlockchainError -> Bool
+errorFatal TooManyBlocks = True
+errorFatal TooManyTxs = True
+errorFatal TargetMissing = True
+errorFatal SignatureUnverified = True
+errorFatal _ = False
 
 fromBlockchainCase :: BlockchainCase -> Either BlockchainError Case
 fromBlockchainCase (BlockchainCase blocks preState postState network) =

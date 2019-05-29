@@ -340,6 +340,7 @@ launchTest execmode cmd = do
         ExecuteAsBlockchainTest -> VMTest.parseBCSuite
   parsed <- parser <$> LazyByteString.readFile (file cmd)
   case parsed of
+     Left "No cases to check." -> putStrLn "no-cases ok"
      Left err -> print err
      Right allTests ->
        let testFilter =
@@ -368,7 +369,7 @@ runVMTest diffmode execmode mode (name, x) = do
     action <- async $
       case mode of
         Run ->
-          timeout (1e6) . evaluate $ do
+          timeout (1e7) . evaluate $ do
             execState (VMTest.interpret m) vm0
         Debug ->
           Just <$> EVM.TTY.runFromVM vm0
