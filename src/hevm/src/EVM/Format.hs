@@ -34,7 +34,6 @@ import Numeric (showHex)
 import qualified Data.ByteString as BS
 import qualified Data.Char as Char
 import qualified Data.Map as Map
-import qualified Data.Scientific as Scientific
 import qualified Data.Text as Text
 
 data Signedness = Signed | Unsigned
@@ -45,22 +44,12 @@ showDec signed (W256 w) =
     i = case signed of
           Signed   -> num (signedWord w)
           Unsigned -> num w
-
   in
     if i == num cheatCode
     then "<hevm cheat address>"
-    else
-      if abs i > 1000000000000
-      then
-        "~" <> pack (Scientific.formatScientific
-                       Scientific.Generic
-                       (Just 8)
-                       (fromIntegral i))
-      else
-        showDecExact i
-
-showDecExact :: Integer -> Text
-showDecExact = humanizeInteger
+    else if (i :: Integer) == 2 ^ (256 :: Integer) - 1
+    then "MAX_UINT256"
+    else Text.pack (show (i :: Integer))
 
 showWordExact :: Word -> Text
 showWordExact (C _ (W256 w)) = humanizeInteger w
