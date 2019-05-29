@@ -16,7 +16,7 @@ let
       inherit (pkgs) secp256k1;
       ff = pkgs.libff;
     }
-  ) [pkgs.git pkgs.cabal-install pkgs.cabal2nix];
+  ) [pkgs.git pkgs.cabal-install pkgs.cabal2nix pkgs.solc];
 
 in
   if pkgs.lib.inNixShell
