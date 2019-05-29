@@ -625,9 +625,11 @@ drawHelpBar = hBorder <=> hCenter help
       , ("p", "step back")
       , ("N", "step more")
       , ("C-n", "step over")
---      , ("  Enter", "browse")
+      , ("a", "step to start")
+      , ("e", "step to end")
       , ("m", "toggle memory")
-      , ("  Esc", "exit")
+      , ("Esc", "exit")
+--      , ("Enter", "browse")
       ]
 
 stepOneOpcode :: UiVmState -> UiVmState
