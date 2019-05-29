@@ -1,5 +1,15 @@
 # hevm changelog
 
+## 0.31 - 2019-05-29
+ - Precompiles: SHA256, RIPEMD, IDENTITY, MODEXP, ECADD, ECMUL,
+   ECPAIRING, MODEXP
+ - Show the hevm version with `hevm version`
+ - Interactive mode:
+  - no longer exits on reaching halt
+  - new shortcuts: 'a' / 'e' for start / end
+  - allow returning to test picker screen
+ - Exact integer formatting in dapp-test and tty
+
 ## 0.30 - 2019-05-09
  - Adjustable verbosity level for `dapp-test` with `--verbose={0,1,2}`
  - Working stack build
