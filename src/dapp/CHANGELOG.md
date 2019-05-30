@@ -98,3 +98,4 @@ changelog.
 [0.18.0]: https://github.com/dapphub/dapptools/tree/dapp/0.18.0
 [0.18.1]: https://github.com/dapphub/dapptools/tree/dapp/0.18.1
 [0.19.0]: https://github.com/dapphub/dapptools/tree/dapp/0.19.0
+[0.20.0]: https://github.com/dapphub/dapptools/tree/dapp/0.20.0
