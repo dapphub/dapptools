@@ -13,6 +13,11 @@ rec {
     solc_0_5_2  = { rev = "5b216291fef500181515fb771bb98bf6b091bd3a"; sha256 = "03ahyxr72nlm49ri5q4g4f16p8blccbmbx7pq9lzm024wyv2h9xa"; };
     solc_0_5_3  = { rev = "e639f2468121d1008f9b52d7e5d0819ead56e58c"; sha256 = "1nz8hzw2ga21qh4b4j7npzyz51691n6cga3al7ypg4vlj5nql3c3"; };
     solc_0_5_4  = { rev = "1774c6809033b3d0b6400154b7eb4f8c0287abc2"; sha256 = "1n11g8mh1jzqmwvc78148cvn3b73ywjcjxqkcjvxfdnpjpf8lxca"; };
+    # not safe. contains optimizer bug: https://github.com/ethereum/solidity/releases/tag/v0.5.6
+    # solc_0_5_5  = { rev = "b8d0bf3dd6bac6974cb334709c02284b89a421dc"; sha256 = "054bhn2w3g45x5fy58kz7zhrdxxnfqas8mr1jv0sk0hdz1kj09xx"; };
+    solc_0_5_6 = { rev = "090dcd3bb2745cc34ed098a7311e4256a8539f81"; sha256 = "0dk0szah3z3dqz9ihrmwvv3r9b85mzaf6ygl15v6nnjxi4w3290n"; };
+    solc_0_5_7 = { rev = "3dc078d7714ffd0848fd84de483aa717f67b7152"; sha256 = "19y2iyjxh3842wvif0nb9njizm0k4k6hd7j4hki5hnb99za61558"; };
+    solc_0_5_8 = { rev = "883d6262e4a7fdcd1480e885a61feb7f4214c651"; sha256 = "1ssdjcccrxf553qlclr8a2y0wmgvwync8fjbb0k7bxyfn94pbzs5"; };
   };
 
   x86_64-linux = x86_64-darwin // {
@@ -24,8 +29,5 @@ rec {
     solc_0_4_12 = { rev = "a76557700444c33c4ee0665b5161907f28a67284"; sha256 = "1gh7aw1r2nizd8vkjdc2w0w62kr20kd85wn23h7srij5zi417086"; };
   };
 
-  unreleased = {
-    solc_0_5_6 = { rev = "1aeb954a70b389ee4eaffddbe74363ca2664084f"; sha256 = "0a0kd8m6r675prs9sm4g245rwfp4wskra4q1xkpdbk767qdvwk6k"; };
-    solc_0_5_7 = { rev = "ae4d6efc8ccb7f4afff41b79c929f5a9f889080c"; sha256 = "1ycc0c16n3p599w4kizdbsj9p9hwqghkw4fz73y08jir46zbpx2g"; };
-  };
+  unreleased = {};
 }

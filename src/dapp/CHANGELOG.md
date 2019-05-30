@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.20.0] - 2019-05-23
+### Added
+- Support for solc 0.5.8
+
 ## [0.19.0] - 2019-05-09
 ## Changed
 - The default output of `dapp test` is now to only show assertion failures.
@@ -94,3 +98,4 @@ changelog.
 [0.18.0]: https://github.com/dapphub/dapptools/tree/dapp/0.18.0
 [0.18.1]: https://github.com/dapphub/dapptools/tree/dapp/0.18.1
 [0.19.0]: https://github.com/dapphub/dapptools/tree/dapp/0.19.0
+[0.20.0]: https://github.com/dapphub/dapptools/tree/dapp/0.20.0
