@@ -1,5 +1,10 @@
 # hevm changelog
 
+## 0.32 - 2019-06-14
+ - Fix dapp-test [nonce initialisation bug][224]
+
+[224]: https://github.com/dapphub/dapptools/pull/224
+
 ## 0.31 - 2019-05-29
  - Precompiles: SHA256, RIPEMD, IDENTITY, MODEXP, ECADD, ECMUL,
    ECPAIRING, MODEXP
