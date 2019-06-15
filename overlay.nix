@@ -1,11 +1,6 @@
 self: super:
 
 let
-  # This is a specific revision of Nixpkgs that we use to avoid
-  # rebuilding all the versions of solc when we bump our submodule, or
-  # to allow a package to succeed when something breaks in nixpkgs.
-  version = "18.09";
-
   lib = self.pkgs.lib;
   stdenv = self.pkgs.stdenv;
 

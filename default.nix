@@ -1,8 +1,6 @@
 { system ? builtins.currentSystem , ... }:
 
 let
-  # this is a branch rather than a tag
-  version = "release-18.09";
   # Import a specific Nixpkgs revision to use as the base for our overlay.
   nixpkgs = builtins.fetchTarball {
     name = "nixpkgs-${version}";
