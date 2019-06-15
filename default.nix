@@ -1,12 +1,10 @@
 { system ? builtins.currentSystem , ... }:
 
 let
-  # Import a specific Nixpkgs revision to use as the base for our overlay.
-  nixpkgs = builtins.fetchTarball {
-    name = "nixpkgs-${version}";
-    # pin the current release-18.09 commit
-    url = "https://github.com/nixos/nixpkgs/archive/185ab27b8a2ff2c7188bc29d056e46b25dd56218.tar.gz";
-    sha256 = "0bflmi7w3gas9q8wwwwbnz79nkdmiv2c1bpfc3xyplwy8npayxh2";
+  nixpkgs = builtins.fetchGit {
+    url = "https://github.com/nixos/nixpkgs";
+    ref = "release-19.03";
+    rev = "f1707d8875276cfa110139435a7e8998b4c2a4fd";
   };
 in
   # Now return the Nixpkgs configured to use our overlay.
