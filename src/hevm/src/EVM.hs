@@ -1364,16 +1364,18 @@ create self this fees xGas xValue xOffset xSize xs newAddr =
 replaceCode :: Addr -> ContractCode -> EVM ()
 replaceCode target newCode = do
   zoom (env . contracts . at target) $ do
-    Just now <- get
-    case (view contractcode now) of
-      InitCode _ ->
-        put . Just $
-        initialContract newCode
-        & set storage (view storage now)
-        & set balance (view balance now)
-        & set nonce   (view nonce now)
-      RuntimeCode _ ->
-        error "internal error: can't replace code of deployed contract"
+    get >>= \case
+      Just now -> case (view contractcode now) of
+        InitCode _ ->
+          put . Just $
+          initialContract newCode
+          & set storage (view storage now)
+          & set balance (view balance now)
+          & set nonce   (view nonce now)
+        RuntimeCode _ ->
+          error "internal error: can't replace code of deployed contract"
+      Nothing ->
+        error "internal error: can't replace code of nonexistent contract"
 
 replaceCodeOfSelf :: ContractCode -> EVM ()
 replaceCodeOfSelf newCode = do
@@ -1897,8 +1899,9 @@ insidePushData i =
     then pure False
     else do
       self <- use (state . codeContract)
-      Just x <- preuse (env . contracts . ix self . opIxMap)
-      pure ((x Vector.! i) == (x Vector.! (i - 1)))
+      preuse (env . contracts . ix self . opIxMap) >>= \case
+        Just m -> pure ((m Vector.! i) == (m Vector.! (i - 1)))
+        Nothing  -> error "internal error: can't find operation index map"
 
 opSize :: Word8 -> Int
 opSize x | x >= 0x60 && x <= 0x7f = num x - 0x60 + 2
