@@ -403,10 +403,12 @@ app opts =
         (UiVmScreen s, VtyEvent (Vty.EvKey (Vty.KChar ' ') [])) ->
           let
             loop = do
-              Just hey <- Readline.getInputLine "% "
-              Readline.outputStrLn hey
-              Just hey' <- Readline.getInputLine "% "
-              Readline.outputStrLn hey'
+              Readline.getInputLine "% " >>= \case
+                Just hey -> Readline.outputStrLn hey
+                Nothing  -> pure ()
+              Readline.getInputLine "% " >>= \case
+                Just hey' -> Readline.outputStrLn hey'
+                Nothing   -> pure ()
               return (UiVmScreen s)
           in
             suspendAndResume $

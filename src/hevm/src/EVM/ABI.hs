@@ -358,8 +358,9 @@ genAbiValue :: AbiType -> Gen AbiValue
 genAbiValue = \case
    AbiUIntType n -> genUInt n
    AbiIntType n ->
-     do AbiUInt _ x <- genUInt n
+     do a <- genUInt n
         b <- arbitrary
+        let AbiUInt _ x = a
         pure $ AbiInt n (signedWord x * if b then 1 else -1)
    AbiAddressType ->
      (\(AbiUInt _ x) -> AbiAddress (fromIntegral x)) <$> genUInt 20

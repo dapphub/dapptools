@@ -159,9 +159,8 @@ runUnitTest UnitTestOptions { .. } method = do
 
         -- If we failed, put the error in the trace.
         -- It's not clear to me right now why this doesn't happen somewhere else.
-        Just problem <- Stepper.evm $ use result
-        case problem of
-          VMFailure e ->
+        (Stepper.evm $ use result) >>= \case
+          Just (VMFailure e) ->
             Stepper.evm (pushTrace (ErrorTrace e))
           _ ->
             pure ()
@@ -170,7 +169,8 @@ runUnitTest UnitTestOptions { .. } method = do
         Stepper.evm $ popTrace
         Stepper.evm $ setupCall addr "failed()" 10000
         Stepper.note "Checking whether assertions failed"
-        AbiBool failed <- Stepper.execFullyOrFail >>= Stepper.decode AbiBoolType
+        res <- Stepper.execFullyOrFail >>= Stepper.decode AbiBoolType
+        let AbiBool failed = res
 
         -- Return true if the test was successful
         pure (shouldFail == (bailed || failed))

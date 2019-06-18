@@ -26,6 +26,7 @@ in self-hs: super-hs:
         rev = "patch-1";
         sha256 = "1l20hni4v4k6alxj867z00625pa5hkf0h5sdaj1mjc237k5v78j9";
       };
+      meta.broken = false;
     });
 
     hevm = pkgs.haskell.lib.dontHaddock ((
