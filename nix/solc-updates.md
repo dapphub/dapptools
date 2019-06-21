@@ -21,4 +21,4 @@
 1. once merged tag the commit with the new version number
 1. open a pr from `dapphub/nixpkgs:solc-X.Y.Z` to `nixos/nixpkgs:master`
 1. once merged make a new PR in `dapphub/dapptools` moving the `solc_X.Y.Z` from the `unreleased` to
-   the `darwin` section in `solc-versions.nix`
+   the `common` section in `solc-versions.nix`
