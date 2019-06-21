@@ -1,5 +1,9 @@
-let
-  common = {
+# this file lists the commits at which a version of solc was added to nixpkgs,
+# separated by platform.
+# the commit can either be on NixOS/nixpkgs or on dapphub/dapptools, depending
+# on whether the change has already been upstream or not.
+rec {
+  x86_64-linux  = {
     # broken on nixpkgs: https://github.com/NixOS/nixpkgs/pull/20098
     # solc_0_4_4 = { rev = "9e150c92d4de210f84bb5bd80630cc07a12f40be"; sha256 = "10kh3q0qzw4bckz84zn2c85d815dnxig5yx0nrr4f8jicbk8sn1a"; };
     solc_0_4_6  = { rev = "c25fc0f1736165617fde07bb447955e4fa2b5beb"; sha256 = "0cxfvmpgqx0xamw6gmg17vliwb3zkkr93pgwnfjx2akm86h2m244"; };
@@ -26,14 +30,10 @@ let
     solc_0_5_8 = { rev = "883d6262e4a7fdcd1480e885a61feb7f4214c651"; sha256 = "1ssdjcccrxf553qlclr8a2y0wmgvwync8fjbb0k7bxyfn94pbzs5"; };
     solc_0_5_9 = { rev = "b6be4a44d89b562aedbf7b9aaeefa130922035e2"; sha256 = "0caaw2jp87vkd371l5rqlq9ckcngj2npzqpnclcz4b0yii3l9mjy"; };
   };
-in
-  {
-    # all versions compile on x86_64 linux
-    x86_64-linux  = common;
 
-    # these versions do not compile on macOS
-    x86_64-darwin = removeAttrs common [ "solc_0_4_6" "solc_0_4_8" "solc_0_4_11" "solc_0_4_12" ];
+  # some versions do not compile on macOS
+  x86_64-darwin = removeAttrs x86_64-linux [ "solc_0_4_6" "solc_0_4_8" "solc_0_4_11" "solc_0_4_12" ];
 
-    # these versions have not been upstreamed on NixOS/nixpkgs yet, and come from our fork at dapptools/nixpkgs
-    unreleased = {};
-  }
+  # these versions have not been upstreamed on NixOS/nixpkgs yet, and come from our fork at dapptools/nixpkgs
+  unreleased = {};
+}
