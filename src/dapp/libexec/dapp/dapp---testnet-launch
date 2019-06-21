@@ -78,7 +78,7 @@ else
     -n {} \
       "${balance[@]}" \
     -i alloc
-  nohup geth 2>/dev/null --datadir "$chaindir" init "$chaindir/config/genesis.json"
+  nohup geth 2>/dev/null --datadir "$chaindir" init "$chaindir/config/genesis.json" > /dev/tty
 fi
 
 export ETH_RPC_URL=http://127.0.0.1:$RPC_PORT
@@ -95,7 +95,7 @@ printf "%s\\n" "${address[@]}" > "$chaindir/config/account"
 echo "$ETH_RPC_URL"           > "$chaindir/config/rpc-url"
 echo "$port"                  > "$chaindir/config/node-port"
 
-nohup geth \
+nohup >/dev/tty geth \
   2> >(tee "$chaindir/geth.log" | grep --line-buffered Success | sed 's/^/geth: /' >&2) \
   --datadir "$chaindir" --networkid "$CHAINID" --port="$port" \
   --mine --minerthreads=1 \
