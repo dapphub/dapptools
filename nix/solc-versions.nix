@@ -24,6 +24,7 @@ let
     solc_0_5_6 = { rev = "090dcd3bb2745cc34ed098a7311e4256a8539f81"; sha256 = "0dk0szah3z3dqz9ihrmwvv3r9b85mzaf6ygl15v6nnjxi4w3290n"; };
     solc_0_5_7 = { rev = "3dc078d7714ffd0848fd84de483aa717f67b7152"; sha256 = "19y2iyjxh3842wvif0nb9njizm0k4k6hd7j4hki5hnb99za61558"; };
     solc_0_5_8 = { rev = "883d6262e4a7fdcd1480e885a61feb7f4214c651"; sha256 = "1ssdjcccrxf553qlclr8a2y0wmgvwync8fjbb0k7bxyfn94pbzs5"; };
+    solc_0_5_9 = { rev = "b6be4a44d89b562aedbf7b9aaeefa130922035e2"; sha256 = "0caaw2jp87vkd371l5rqlq9ckcngj2npzqpnclcz4b0yii3l9mjy"; };
   };
 in
   {
