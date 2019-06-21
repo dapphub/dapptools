@@ -1,4 +1,4 @@
-{ stdenv, buildGoPackage, fetchFromGitHub, fetchgit, geth-version, geth-sha, clang }:
+{ stdenv, buildGoPackage, fetchFromGitHub, fetchgit, go-ethereum, clang }:
 
 buildGoPackage rec {
   name = "ethsign-${version}";
@@ -11,12 +11,7 @@ buildGoPackage rec {
   extraSrcs = [
     {
       goPackagePath = "github.com/ethereum/go-ethereum";
-      src = fetchFromGitHub {
-        owner = "ethereum";
-        repo = "go-ethereum";
-        rev = geth-version;
-        sha256 = geth-sha;
-      };
+      src = go-ethereum.src;
     }
     {
       goPackagePath = "gopkg.in/urfave/cli.v1";
