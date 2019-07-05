@@ -163,9 +163,6 @@ in rec {
     '';
   });
 
-  # Use unreleased ethabi that fixes empty array encoding.
-  ethabi = ((import ./nix/ethabi { pkgs = super; }).ethabi_cli_4_0_0);
-
   qrtx = self.bashScript {
     name = "qrtx";
     version = "0";
