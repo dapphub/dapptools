@@ -1,3 +1,4 @@
 #!/usr/bin/env bash
 echo dapp 0.22.0
 solc --version
+echo "hevm $(hevm version)"
