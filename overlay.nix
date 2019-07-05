@@ -163,6 +163,8 @@ in rec {
     '';
   });
 
+  ethabi = self.callPackage ./nix/ethabi.nix { };
+
   qrtx = self.bashScript {
     name = "qrtx";
     version = "0";
