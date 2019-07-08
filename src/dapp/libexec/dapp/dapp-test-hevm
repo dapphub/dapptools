@@ -28,5 +28,4 @@ state=$(dapp --make-library-state)
 function clean() { rm -rf "$state"; }
 trap clean EXIT
 
-find "${DAPP_OUT?}" -type f -name '*.sol.json' -print0 |
-  xargs -0 -n1 -I{} hevm dapp-test --json-file={} --dapp-root=. --state="$state" "${opts[@]}"
+hevm dapp-test --json-file="${DAPP_JSON}" --dapp-root=. --state="$state" "${opts[@]}"

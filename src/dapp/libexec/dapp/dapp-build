@@ -1,10 +1,43 @@
 #!/usr/bin/env bash
 ### dapp-build -- compile the source code
-### Usage: dapp build
+### Usage: dapp build [--extract]
+###
+###  --extract: After building, write the .abi, .bin and .bin-runtime
+###             files from the solc json into $DAPP_OUT. Beware of contract
+###             name collisions. This is provided for compatibility with older
+###             workflows.
 set -e
 
+while [[ $# -gt 0 ]]; do
+  opt=$1; shift
+  case $opt in
+    --extract)
+      DAPP_BUILD_EXTRACT=1
+      ;;
+    *)
+      info "unknown argument: $opt"
+      exit 1
+      ;;
+  esac
+done
+
+info() {
+  while [[ $# -gt 0 ]]; do
+    opt=$1; shift
+    case $opt in
+      -*)
+        FLAGS=$opt;
+        ;;
+      *)
+        ARGS=$opt;
+        ;;
+    esac
+  done
+  echo >&2 "$FLAGS" "${0##*/}: $ARGS"
+}
+
 IFS=" " read -r -a opts <<<"$SOLC_FLAGS"
-json_opts=--combined-json=abi,bin,bin-runtime,srcmap,srcmap-runtime,ast
+json_opts=--combined-json=abi,bin,bin-runtime,srcmap,srcmap-runtime,ast,metadata
 solc --help | grep -q -- --overwrite && opts+=(--overwrite)
 
 remappings=$(dapp remappings)
@@ -20,7 +53,7 @@ if [ "$DAPP_LINK_TEST_LIBRARIES" = 1 ]; then
 
   if [[ ${#libraries[@]} -eq 0 ]]; then exit; fi
 
-  echo >&2 "${0##*/}: rebuilding with linked libraries"
+  info "rebuilding with linked libraries"
   for lib in "${libraries[@]}"; do
     address=$(dapp address "$sender" "$nonce")
     links+=" $lib:$address"
@@ -31,12 +64,24 @@ else
   (set -x; dapp clean)
 fi
 
-find "${DAPP_SRC}" -name '*.sol' | while read -r x; do
-  dir=${x%\/*}
-  dir=${dir#$DAPP_SRC}
-  dir=${dir#/}
-  mkdir -p "$DAPP_OUT/$dir"
-  (set -x; solc "${opts[@]}" --abi --bin --bin-runtime --metadata /=/ -o "$DAPP_OUT/$dir" "$x")
-  json_file=$DAPP_OUT/$dir/${x##*/}.json
-  (set -x; solc "${opts[@]}" "${json_opts[@]}" /=/ "$x" >"$json_file")
-done
+mkdir -p "$DAPP_OUT"
+mapfile -t files < <(find "${DAPP_SRC}" -name '*.sol')
+(set -x; solc "${opts[@]}" "${json_opts[@]}" /=/ "${files[@]}" > "${DAPP_JSON}")
+
+if [ "$DAPP_BUILD_EXTRACT" ]; then
+  mapfile -t contracts < <(<"$DAPP_JSON" jq '.contracts|keys[]' -r | sort -u -t: -k2 | sort)
+  data=$(<"$DAPP_JSON" jq '.contracts' -r)
+  count=1
+  total=${#contracts[@]}
+  for path in "${contracts[@]}"; do
+    info -ne "Extracting build data... [$count/$total]\\r"
+    ((count++))
+    name="${path#*:}"
+    contract=$(echo "$data" | jq '.[''"'"$path"'"'']')
+    echo "$contract" | jq '.["abi"]' -r > "$DAPP_OUT/$name.abi"
+    echo "$contract" | jq '.["bin"]' -r > "$DAPP_OUT/$name.bin"
+    echo "$contract" | jq '.["bin-runtime"]' -r > "$DAPP_OUT/$name.bin-runtime"
+  done
+  echo
+  info "warning: --extract is slow and may have filename collisions. All build data can be found in $DAPP_JSON.\\n"
+fi
