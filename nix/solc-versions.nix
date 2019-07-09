@@ -29,6 +29,7 @@ rec {
     solc_0_5_7 = { rev = "3dc078d7714ffd0848fd84de483aa717f67b7152"; sha256 = "19y2iyjxh3842wvif0nb9njizm0k4k6hd7j4hki5hnb99za61558"; };
     solc_0_5_8 = { rev = "883d6262e4a7fdcd1480e885a61feb7f4214c651"; sha256 = "1ssdjcccrxf553qlclr8a2y0wmgvwync8fjbb0k7bxyfn94pbzs5"; };
     solc_0_5_9 = { rev = "b6be4a44d89b562aedbf7b9aaeefa130922035e2"; sha256 = "0caaw2jp87vkd371l5rqlq9ckcngj2npzqpnclcz4b0yii3l9mjy"; };
+    solc_0_5_10 = { rev = "8cced8017924086752a8fe47841c4a413a64e3b7"; sha256 = "09ck386lc1qrzq68f638a7l1plgzgmb72q7bny6z88pay2jp01rl"; };
   };
 
   # some versions do not compile on macOS
