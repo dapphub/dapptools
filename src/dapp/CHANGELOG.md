@@ -8,6 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - Support for solc 0.5.10
 
+### Changed
+- Default to solc 0.5.10
+
 ## [0.23.0] - 2019-07-08
 ### Changed
 - Faster `dapp build`, with a single compilation pass. Consolidates solc
