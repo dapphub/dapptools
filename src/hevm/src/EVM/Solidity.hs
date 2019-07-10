@@ -42,7 +42,7 @@ import EVM.Keccak
 import EVM.Types
 
 import Control.Applicative
-import Control.Lens         hiding (Indexed)
+import Lens.Micro.Platform hiding (Indexed)
 import Data.Aeson           (Value (..))
 import Data.Aeson.Lens
 import Data.ByteString      (ByteString)

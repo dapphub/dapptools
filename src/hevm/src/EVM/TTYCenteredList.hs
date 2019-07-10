@@ -2,7 +2,7 @@ module EVM.TTYCenteredList where
 
 -- Hard fork of brick's List that centers the currently highlighted line.
 
-import Control.Lens
+import Lens.Micro.Platform
 import Data.Maybe (fromMaybe)
 
 import Brick.Types

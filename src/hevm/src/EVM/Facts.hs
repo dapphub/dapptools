@@ -43,12 +43,12 @@ import qualified EVM as EVM
 
 import Prelude hiding (Word)
 
-import Control.Lens    (view, set, at, ix, (&))
-import Data.ByteString (ByteString)
-import Data.Monoid     ((<>))
-import Data.Ord        (comparing)
-import Data.Set        (Set)
-import Text.Read       (readMaybe)
+import Lens.Micro.Platform (view, set, at, ix, (&))
+import Data.ByteString     (ByteString)
+import Data.Monoid         ((<>))
+import Data.Ord            (comparing)
+import Data.Set            (Set)
+import Text.Read           (readMaybe)
 
 import qualified Data.ByteString.Base16 as BS16
 import qualified Data.ByteString as BS

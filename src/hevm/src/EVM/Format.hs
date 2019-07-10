@@ -14,7 +14,7 @@ import EVM.Solidity (SolcContract, contractName, abiMap)
 import EVM.Solidity (methodOutput, methodSignature)
 
 import Control.Arrow ((>>>))
-import Control.Lens (view, preview, ix, _2, to, _Just)
+import Lens.Micro.Platform (view, preview, ix, _2, to, _Just)
 import Data.Binary.Get (runGetOrFail)
 import Data.ByteString (ByteString)
 import Data.ByteString.Builder (byteStringHex, toLazyByteString)

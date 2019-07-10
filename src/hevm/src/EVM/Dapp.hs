@@ -22,7 +22,7 @@ import Data.Word (Word32)
 import Data.List (sort)
 
 import Control.Arrow ((>>>))
-import Control.Lens
+import Lens.Micro.Platform
 
 import qualified Data.Map as Map
 

@@ -10,13 +10,13 @@ import EVM.Types (W256 (..), num, toWord512, fromWord512)
 import EVM.Types (word, padRight)
 import EVM.Keccak (keccak, word256Bytes)
 
-import Control.Lens    ((^?), ix)
-import Data.Bits       (Bits (..), FiniteBits (..))
-import Data.ByteString (ByteString)
-import Data.DoubleWord (signedWord, unsignedWord)
-import Data.Maybe      (fromMaybe)
-import Data.Semigroup  ((<>))
-import Data.Word       (Word8)
+import Lens.Micro.Platform ((^?), ix)
+import Data.Bits           (Bits (..), FiniteBits (..))
+import Data.ByteString     (ByteString)
+import Data.DoubleWord     (signedWord, unsignedWord)
+import Data.Maybe          (fromMaybe)
+import Data.Semigroup      ((<>))
+import Data.Word           (Word8)
 
 import qualified Data.ByteString as BS
 

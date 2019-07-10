@@ -12,7 +12,7 @@ module EVM.Facts.Git
 import EVM.Facts (Fact (..), File (..), Path (..), Data (..))
 import EVM.Facts (fileToFact, factToFile)
 
-import Control.Lens
+import Lens.Micro.Platform
 import Data.Set   (Set)
 import Data.Maybe (catMaybes)
 

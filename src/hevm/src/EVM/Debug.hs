@@ -7,7 +7,7 @@ import EVM.Solidity (SourceCache, sourceFiles)
 import EVM.Types    (Addr)
 
 import Control.Arrow   (second)
-import Control.Lens
+import Lens.Micro.Platform
 import Data.ByteString (ByteString)
 import Data.Map        (Map)
 import Data.Text       (Text)

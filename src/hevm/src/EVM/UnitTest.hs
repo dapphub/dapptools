@@ -21,7 +21,7 @@ import EVM.Stepper (Stepper)
 import qualified EVM.Stepper as Stepper
 import qualified Control.Monad.Operational as Operational
 
-import Control.Lens hiding (Indexed)
+import Lens.Micro.Platform
 import Control.Monad.State.Strict hiding (state)
 import qualified Control.Monad.State.Strict as State
 

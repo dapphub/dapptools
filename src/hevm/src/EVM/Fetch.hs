@@ -11,7 +11,7 @@ import EVM          (EVM, Contract, initialContract, nonce, balance, external)
 
 import qualified EVM as EVM
 
-import Control.Lens hiding ((.=))
+import Lens.Micro.Platform hiding ((.=))
 import Control.Monad.Trans.Maybe
 import Data.Aeson
 import Data.Aeson.Lens

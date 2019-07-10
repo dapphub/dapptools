@@ -27,10 +27,11 @@ import qualified EVM.Precompiled
 import Data.Binary.Get (runGetOrFail)
 import Data.Bits (bit, testBit, complement)
 import Data.Bits (xor, shiftL, shiftR, (.&.), (.|.), FiniteBits (..))
+import Data.Functor.Const (Const)
 import Data.Text (Text)
 import Data.Word (Word8, Word32)
 
-import Control.Lens hiding (op, (:<), (|>))
+import Lens.Micro.Platform
 import Control.Monad.State.Strict hiding (state)
 
 import Data.ByteString              (ByteString)
@@ -283,7 +284,7 @@ makeLenses ''VM
 
 -- | An "external" view of a contract's bytecode, appropriate for
 -- e.g. @EXTCODEHASH@.
-bytecode :: Getter Contract ByteString
+bytecode :: SimpleGetter Contract ByteString
 bytecode = contractcode . to f
   where f (InitCode _)    = BS.empty
         f (RuntimeCode b) = b

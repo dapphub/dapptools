@@ -36,7 +36,7 @@ import qualified Control.Monad.Operational as Operational
 import EVM.Fetch (Fetcher)
 import qualified EVM.Fetch as Fetch
 
-import Control.Lens
+import Lens.Micro.Platform
 import Control.Monad.State.Strict hiding (state)
 
 import Data.Aeson.Lens

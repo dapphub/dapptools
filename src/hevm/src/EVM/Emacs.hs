@@ -4,7 +4,7 @@
 
 module EVM.Emacs where
 
-import Control.Lens
+import Lens.Micro.Platform
 import Control.Monad.IO.Class
 import Control.Monad.State.Strict hiding (state)
 import Data.ByteString (ByteString)

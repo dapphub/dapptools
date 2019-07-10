@@ -30,7 +30,7 @@ import EVM.Transaction
 import EVM.Types
 
 import Control.Arrow ((***), (&&&))
-import Control.Lens
+import Lens.Micro.Platform
 import Control.Monad
 
 import IPPrint.Colored (cpprint)
@@ -89,7 +89,7 @@ data Expectation = Expectation
 
 makeLenses ''Contract
 
-accountAt :: Addr -> Getter (Map Addr Contract) Contract
+accountAt :: Addr -> SimpleGetter (Map Addr Contract) Contract
 accountAt a = (at a) . (to $ fromMaybe newAccount)
 
 touchAccount :: Addr -> Map Addr Contract -> Map Addr Contract

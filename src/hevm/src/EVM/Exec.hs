@@ -6,7 +6,7 @@ import EVM.Types
 
 import qualified EVM.FeeSchedule as FeeSchedule
 
-import Control.Lens
+import Lens.Micro.Platform
 import Control.Monad.State.Class (MonadState)
 import Control.Monad.State.Strict (runState)
 import Data.ByteString (ByteString)

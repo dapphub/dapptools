@@ -16,9 +16,9 @@ import EVM.Demand (demand)
 
 -- We query and alter the Solidity code using the compiler's AST.
 -- The AST is a deep JSON structure, so we use Aeson and Lens.
-import Control.Lens (preview, view, universe)
+import Lens.Micro.Platform (preview, view, universe)
+import Lens.Micro.Aeson (key, _String, _Array)
 import Data.Aeson (Value (String))
-import Data.Aeson.Lens (key, _String, _Array)
 
 -- We use the FGL graph library for the topological sort.
 -- (We use four FGL functions and they're all in different modules!)

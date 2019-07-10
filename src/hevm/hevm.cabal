@@ -100,6 +100,8 @@ library
     lens-aeson                        >= 1.0,
     megaparsec                        >= 6.0,
     memory                            >= 0.14,
+    microlens-platform                >= 0.3.0,
+    microlens-aeson                   >= 2.3.0,
     monad-par                         >= 0.3,
     mtl                               >= 2.2,
     multiset                          >= 0.3,
