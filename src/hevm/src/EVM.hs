@@ -1683,7 +1683,7 @@ finishFrame how = do
             -- Case 1: Returning from a call?
             FrameReturned output -> do
               assign (state . returndata) output
-              copyBytesToMemory output outSize 0 outOffset
+              copyCallBytesToMemory output outSize 0 outOffset
               reclaimRemainingGasAllowance
               push 1
 
@@ -1765,6 +1765,15 @@ copyBytesToMemory bs size xOffset yOffset =
     mem <- use (state . memory)
     assign (state . memory) $
       writeMemory bs size xOffset yOffset mem
+
+copyCallBytesToMemory
+  :: ByteString -> Word -> Word -> Word -> EVM ()
+copyCallBytesToMemory bs size xOffset yOffset =
+  if size == 0 then noop
+  else do
+    mem <- use (state . memory)
+    assign (state . memory) $
+      writeMemory bs (min size (num (BS.length bs))) xOffset yOffset mem
 
 readMemory :: Word -> Word -> VM -> ByteString
 readMemory offset size vm = sliceMemory offset size (view (state . memory) vm)
