@@ -126,9 +126,13 @@ checkExpectation diff execmode x vm =
       putStr (intercalate " " ss)
       if diff && not b1 then do
         putStrLn "\nExpected balance/state: "
-        printField (\v -> (show . toInteger $ _balance v) ++ " " ++ (show . Map.toList $ _storage v) ) expected
+        printField (\v -> (show . toInteger  $ _nonce v) ++ " "
+                       ++ (show . toInteger  $ _balance v) ++ " "
+                       ++ (show . Map.toList $ _storage v)) expected
         putStrLn "\nActual balance/state: "
-        printField (\v -> (show . toInteger $ EVM._balance v) ++ " " ++ (show . Map.toList $ EVM._storage v)) actual
+        printField (\v -> (show . toInteger  $ EVM._nonce v) ++ " "
+                       ++ (show . toInteger  $ EVM._balance v) ++ " "
+                       ++ (show . Map.toList $ EVM._storage v)) actual
       else return ()
       return b1
     (_, Just expectation, Just (EVM.VMSuccess output)) -> do
