@@ -119,12 +119,16 @@ checkExpectation diff execmode x vm =
         printField f d = putStrLn $ Map.foldrWithKey (\k v acc ->
           acc ++ showAddrWith0x k ++ " : " ++ f v ++ "\n") "" d
 
-        ((s1, s1'), (b1, b1')) = (("bad-state", "bad-balance"), checkExpectedContracts vm (expectedContracts expectation))
-        ss = map fst (filter (not . snd) [(s1, b1 || b1'), (s1', b1 || not b1')])
+        (state, money, nonce) = checkExpectedContracts vm (expectedContracts expectation)
+        reason = map fst (filter (snd) [ ("bad-state",   not state && not nonce && not money)
+                                       , ("bad-balance", not state && not nonce && money)
+                                       , ("bad-nonce",   not state && not money && nonce)
+                                       ])
         expected = expectedContracts expectation
         actual = view (EVM.env . EVM.contracts . to (fmap clearZeroStorage)) vm
-      putStr (intercalate " " ss)
-      if diff && not b1 then do
+
+      putStr (intercalate " " reason)
+      if diff && (not state) then do
         putStrLn "\nExpected balance/state: "
         printField (\v -> (show . toInteger  $ _nonce v) ++ " "
                        ++ (show . toInteger  $ _balance v) ++ " "
@@ -134,23 +138,28 @@ checkExpectation diff execmode x vm =
                        ++ (show . toInteger  $ EVM._balance v) ++ " "
                        ++ (show . Map.toList $ EVM._storage v)) actual
       else return ()
-      return b1
+      return state
+
     (_, Just expectation, Just (EVM.VMSuccess output)) -> do
       let
-        (s1, (b1, _)) = ("bad-state", checkExpectedContracts vm (expectedContracts expectation))
+        (s1, (b1, _, _)) = ("bad-state", checkExpectedContracts vm (expectedContracts expectation))
         (s2, b2) = ("bad-output", checkExpectedOut output (expectedOut expectation))
         (s3, b3) = ("bad-gas", checkExpectedGas vm (expectedGas expectation))
         ss = map fst (filter (not . snd) [(s1, b1), (s2, b2), (s3, b3)])
       putStr (intercalate " " ss)
       return (b1 && b2 && b3)
+
     (_, Nothing, Just (EVM.VMSuccess _)) -> do
       putStr "unexpected-success"
       return False
+
     (_, Nothing, Just (EVM.VMFailure _)) ->
       return True
+
     (_, Just _, Just (EVM.VMFailure _)) -> do
       putStr "unexpected-failure"
       return False
+
     (_, _, Nothing) -> do
       cpprint (view EVM.result vm)
       error "internal error"
@@ -169,12 +178,14 @@ checkExpectedOut output ex = case ex of
         padded_cs  = padNewAccounts cs  (Map.keys cs')
     in padded_cs == padded_cs'
 
-checkExpectedContracts :: EVM.VM -> Map Addr Contract -> (Bool,Bool)
+checkExpectedContracts :: EVM.VM -> Map Addr Contract -> (Bool, Bool, Bool)
 checkExpectedContracts vm expected =
   let cs = vm ^. EVM.env . EVM.contracts . to (fmap clearZeroStorage)
       expectedCs = realizeContracts expected
-  in (expectedCs ~= cs,
-      (clearBalance <$> expectedCs) ~= (clearBalance <$> cs))
+  in ( (expectedCs ~= cs)
+     , (clearBalance <$> expectedCs) ~= (clearBalance <$> cs)
+     , (clearNonce   <$> expectedCs) ~= (clearNonce   <$> cs)
+     )
 
 clearZeroStorage :: EVM.Contract -> EVM.Contract
 clearZeroStorage =
@@ -182,6 +193,9 @@ clearZeroStorage =
 
 clearBalance :: EVM.Contract -> EVM.Contract
 clearBalance = set EVM.balance 0
+
+clearNonce :: EVM.Contract -> EVM.Contract
+clearNonce = set EVM.nonce 0
 
 checkExpectedGas :: EVM.VM -> Maybe W256 -> Bool
 checkExpectedGas vm ex = case ex of

@@ -43,13 +43,15 @@ shopt -s nocasematch
     case $outcome in
       ok)          passed+=$row ;;
       bad-balance) balancefailed+=$row ;;
+      bad-nonce)   noncefailed+=$row ;;
       skip)        skipped+=$row ;;
       *)           failed+=$row ;;
     esac
   done
 
   npass=$(echo -ne "$passed" | wc -l)
-  nbad=$(echo -ne "$balancefailed" | wc -l)
+  nbal=$(echo -ne "$balancefailed" | wc -l)
+  nnon=$(echo -ne "$noncefailed" | wc -l)
   nfail=$(echo -ne "$failed" | wc -l)
   nskip=$(echo -ne "$skipped" | wc -l)
 
@@ -86,7 +88,7 @@ $(date +%Y-%m-%d)
 <p>
 .
 
-  echo "$npass passed, $nbad bad-balance, $nfail failed, $nskip skipped"
+  echo "$npass passed, $nbal bad-balance, $nfail failed, $nskip skipped"
 
   cat <<.
 <p>
@@ -123,7 +125,8 @@ $(date +%Y-%m-%d)
 .
 
   echo >&2 "passed: $npass"
-  echo >&2 "bad-balance: $nbad"
+  echo >&2 "bad-balance: $nbal"
+  echo >&2 "bad-nonce: $nnon"
   echo >&2 "failed: $nfail"
   echo >&2 "skipped: $nskip"
 }
