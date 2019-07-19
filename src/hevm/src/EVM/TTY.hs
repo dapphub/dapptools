@@ -370,9 +370,9 @@ app opts =
           continue (UiVmScreen (view browserVm s))
 
         (UiVmScreen s, VtyEvent (Vty.EvKey Vty.KEsc [])) ->
-          continue . UiTestPickerScreen $
             case view uiVmDapp s of
               Just dapp ->
+                continue . UiTestPickerScreen $
                 UiTestPickerState
                   { _testPickerList =
                       list
@@ -385,7 +385,7 @@ app opts =
                   , _testPickerDapp = dapp
                   }
               Nothing ->
-                error "Sorry, we lost the dapp"
+                halt ui
 
         (_, VtyEvent (Vty.EvKey Vty.KEsc [])) ->
           halt ui
