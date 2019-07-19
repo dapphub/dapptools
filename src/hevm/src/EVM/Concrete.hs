@@ -31,6 +31,9 @@ byteStringSliceWithDefaultZeroes :: Int -> Int -> ByteString -> ByteString
 byteStringSliceWithDefaultZeroes offset size bs =
   if size == 0
   then ""
+  -- else if offset > BS.length bs
+  -- then BS.replicate size 0
+  -- todo: this ^^ should work, investigate why it causes more GST fails
   else
     let bs' = BS.take size (BS.drop offset bs)
     in bs' <> BS.replicate (size - BS.length bs') 0
@@ -98,21 +101,19 @@ sliceMemory o s m =
 
 writeMemory :: ByteString -> Word -> Word -> Word -> ByteString -> ByteString
 writeMemory bs1 (C _ n) (C _ src) (C _ dst) bs0 =
-  if src > num (BS.length bs1)
-  then
-    let
-      (a, b) = BS.splitAt (num dst) bs0
-      c      = BS.replicate (num n) 0
-      b'     = BS.drop (num n) b
-    in
-      a <> c <> b'
-  else
-    let
-      (a, b) = BS.splitAt (num dst) bs0
-      c      = BS.take (num n) (BS.drop (num src) bs1)
-      b'     = BS.drop (num n) b
-    in
-      a <> BS.replicate (num dst - BS.length a) 0 <> c <> b'
+  let
+    (a, b) = BS.splitAt (num dst) bs0
+    a'     = BS.replicate (num dst - BS.length a) 0
+    -- sliceMemory should work for both cases, but we are using 256 bit
+    -- words, whereas ByteString is only defined up to 64 bit. For large n,
+    -- src, dst this will cause problems (often in GeneralStateTests).
+    -- Later we could reimplement ByteString for 256 bit arguments.
+    c      = if src > num (BS.length bs1)
+             then BS.replicate (num n) 0
+             else sliceMemory src n bs1
+    b'     = BS.drop (num (n)) b
+  in
+    a <> a' <> c <> b'
 
 readMemoryWord :: Word -> ByteString -> Word
 readMemoryWord (C _ i) m =
