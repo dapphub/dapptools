@@ -563,7 +563,14 @@ drawVmBrowser ui =
           Just (_, (_, c)) = listSelectedElement (view browserContractList ui)
           Just dapp = view (browserVm . uiVmDapp) ui
         in case flip preview ui (browserVm . uiVmDapp . _Just . dappSolcByHash . ix (view codehash c) . _2) of
-          Nothing -> txt ("n/a; codehash " <> pack (show (view codehash c)))
+          Nothing ->
+            hBox
+              [ borderWithLabel (txt "Contract information") . padBottom Max . padRight Max $ vBox
+                  [ txt ("Codehash: " <>    pack (show (view codehash c)))
+                  , txt ("Nonce: "    <> showWordExact (view nonce    c))
+                  , txt ("Balance: "  <> showWordExact (view balance  c))
+                  ]
+                ]
           Just solc ->
             hBox
               [ borderWithLabel (txt "Contract information") . padBottom Max . padRight (Pad 2) $ vBox
@@ -577,9 +584,9 @@ drawVmBrowser ui =
                   , vBox . flip map (sort (Map.elems (view abiMap solc))) $
                       \method -> txt ("  " <> view methodSignature method)
                   ]
-                , borderWithLabel (txt "Storage slots") . padBottom Max . padRight Max $ vBox
-                    (map txt (storageLayout dapp solc))
-                ]
+              , borderWithLabel (txt "Storage slots") . padBottom Max . padRight Max $ vBox
+                  (map txt (storageLayout dapp solc))
+              ]
       ]
   ]
 
