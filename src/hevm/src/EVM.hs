@@ -75,6 +75,7 @@ data Error
   | IllegalOverflow
   | Query Query
   | StateChangeWhileStatic
+  | InvalidMemoryAccess
 
 deriving instance Show Error
 
@@ -663,7 +664,9 @@ exec1 = do
                 accessUnboundedMemoryRange fees xTo xSize $ do
                   next
                   assign (state . stack) xs
-                  copyBytesToMemory (the state returndata) xSize xFrom xTo
+                  if (BS.length (the state returndata) < (num xFrom) + (num xSize))
+                  then vmError InvalidMemoryAccess
+                  else copyBytesToMemory (the state returndata) xSize xFrom xTo
             _ -> underrun
 
         -- op: EXTCODEHASH
