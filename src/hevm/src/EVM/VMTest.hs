@@ -119,11 +119,13 @@ checkExpectation diff execmode x vm =
         printField f d = putStrLn $ Map.foldrWithKey (\k v acc ->
           acc ++ showAddrWith0x k ++ " : " ++ f v ++ "\n") "" d
 
-        (state, money, nonce) = checkExpectedContracts vm (expectedContracts expectation)
-        reason = map fst (filter (snd) [ ("bad-state",   not state && not nonce && not money)
-                                       , ("bad-balance", not state && not nonce && money)
-                                       , ("bad-nonce",   not state && not money && nonce)
-                                       ])
+        (state, money, nonce, storage) = checkExpectedContracts vm (expectedContracts expectation)
+        reason = map fst (filter (not . snd)
+            [ ("bad-state",   state || money || nonce || storage)
+            , ("bad-balance", not money || nonce || storage || state)
+            , ("bad-nonce",   not nonce || money || storage || state)
+            , ("bad-storage", not storage || money || nonce || state)
+            ])
         expected = expectedContracts expectation
         actual = view (EVM.env . EVM.contracts . to (fmap clearZeroStorage)) vm
 
@@ -142,7 +144,7 @@ checkExpectation diff execmode x vm =
 
     (_, Just expectation, Just (EVM.VMSuccess output)) -> do
       let
-        (s1, (b1, _, _)) = ("bad-state", checkExpectedContracts vm (expectedContracts expectation))
+        (s1, (b1, _, _, _)) = ("bad-state", checkExpectedContracts vm (expectedContracts expectation))
         (s2, b2) = ("bad-output", checkExpectedOut output (expectedOut expectation))
         (s3, b3) = ("bad-gas", checkExpectedGas vm (expectedGas expectation))
         ss = map fst (filter (not . snd) [(s1, b1), (s2, b2), (s3, b3)])
@@ -178,18 +180,22 @@ checkExpectedOut output ex = case ex of
         padded_cs  = padNewAccounts cs  (Map.keys cs')
     in padded_cs == padded_cs'
 
-checkExpectedContracts :: EVM.VM -> Map Addr Contract -> (Bool, Bool, Bool)
+checkExpectedContracts :: EVM.VM -> Map Addr Contract -> (Bool, Bool, Bool, Bool)
 checkExpectedContracts vm expected =
   let cs = vm ^. EVM.env . EVM.contracts . to (fmap clearZeroStorage)
       expectedCs = realizeContracts expected
   in ( (expectedCs ~= cs)
      , (clearBalance <$> expectedCs) ~= (clearBalance <$> cs)
      , (clearNonce   <$> expectedCs) ~= (clearNonce   <$> cs)
+     , (clearStorage <$> expectedCs) ~= (clearStorage <$> cs)
      )
 
 clearZeroStorage :: EVM.Contract -> EVM.Contract
 clearZeroStorage =
   over EVM.storage (Map.filterWithKey (\_ x -> x /= 0))
+
+clearStorage :: EVM.Contract -> EVM.Contract
+clearStorage = set EVM.storage mempty
 
 clearBalance :: EVM.Contract -> EVM.Contract
 clearBalance = set EVM.balance 0
