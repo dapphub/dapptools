@@ -587,7 +587,7 @@ exec1 = do
           case stk of
             ((num -> xTo) : (num -> xFrom) : (num -> xSize) :xs) -> do
               burn (g_verylow + g_copy * ceilDiv xSize 32) $ do
-                accessMemoryRange fees xTo xSize $ do
+                accessUnboundedMemoryRange fees xTo xSize $ do
                   next
                   assign (state . stack) xs
                   copyBytesToMemory (the state calldata) xSize xFrom xTo
@@ -603,7 +603,7 @@ exec1 = do
           case stk of
             ((num -> memOffset) : (num -> codeOffset) : (num -> n) : xs) -> do
               burn (g_verylow + g_copy * ceilDiv (num n) 32) $ do
-                accessMemoryRange fees memOffset n $ do
+                accessUnboundedMemoryRange fees memOffset n $ do
                   next
                   assign (state . stack) xs
                   copyBytesToMemory (the state code)
@@ -642,7 +642,7 @@ exec1 = do
               : (num -> codeSize)
               : xs ) -> do
               burn (g_extcode + g_copy * ceilDiv (num codeSize) 32) $
-                accessMemoryRange fees memOffset codeSize $ do
+                accessUnboundedMemoryRange fees memOffset codeSize $ do
                   touchAccount (num extAccount) $ \c -> do
                     next
                     assign (state . stack) xs
@@ -660,7 +660,7 @@ exec1 = do
           case stk of
             ((num -> xTo) : (num -> xFrom) : (num -> xSize) :xs) -> do
               burn (g_verylow + g_copy * ceilDiv xSize 32) $ do
-                accessMemoryRange fees xTo xSize $ do
+                accessUnboundedMemoryRange fees xTo xSize $ do
                   next
                   assign (state . stack) xs
                   copyBytesToMemory (the state returndata) xSize xFrom xTo
@@ -1736,6 +1736,21 @@ resultRefunds = \case
 
 -- * Memory helpers
 
+accessUnboundedMemoryRange
+  :: FeeSchedule Word
+  -> Word
+  -> Word
+  -> EVM ()
+  -> EVM ()
+accessUnboundedMemoryRange _ _ 0 continue = continue
+accessUnboundedMemoryRange fees f l continue = do
+  m0 <- num <$> use (state . memorySize)
+  do
+    let m1 = 32 * ceilDiv (max m0 (num(f) + num(l))) 32
+    burn (memoryCost fees m1 - memoryCost fees m0) $ do
+      assign (state . memorySize) (num m1)
+      continue
+
 accessMemoryRange
   :: FeeSchedule Word
   -> Word
@@ -1744,14 +1759,10 @@ accessMemoryRange
   -> EVM ()
 accessMemoryRange _ _ 0 continue = continue
 accessMemoryRange fees f l continue = do
-  m0 <- num <$> use (state . memorySize)
   if f + l < l
     then vmError IllegalOverflow
     else do
-      let m1 = 32 * ceilDiv (max m0 (f + l)) 32
-      burn (memoryCost fees m1 - memoryCost fees m0) $ do
-        assign (state . memorySize) (num m1)
-        continue
+      accessUnboundedMemoryRange fees f l continue
 
 accessMemoryWord
   :: FeeSchedule Word -> Word -> EVM () -> EVM ()
