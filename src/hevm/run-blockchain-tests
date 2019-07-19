@@ -3,19 +3,39 @@ set -e
 
 HEVM=${HEVM:-hevm}
 
-if [[ $# != 1 ]]; then
-  echo >&2 "usage: $(basename "$0") <tests-dir>"
-  exit 1
+skip=''
+test=''
+usage() { echo "Usage: $(basename "$0") [--skip=<pattern>] [--test=<pattern>] <tests-dir>" 1>&2; exit 1; }
+OPTS=$(getopt --name="$0" --options=d --longoptions="skip:,test:" -- "$@") || usage
+eval set -- "$OPTS"
+while true; do
+  case "$1" in
+    --skip) skip=$2; shift 2 ;;
+    --test) test=$2; shift 2 ;;
+    --) shift; break ;;
+    *) usage ;;
+  esac
+done
+if [[ $# -ne 1 ]]; then
+  usage
 fi
+tests=$1
 
+shopt -s nocasematch
 {
-  cd "$1"
+  cd "$tests"
   for x in BlockchainTests/GeneralStateTests/*/*; do
-    echo >&2 "$x"
-    echo -n "$x " ; "$HEVM" bc-test --file $x
+    if [[ $x =~ .*$test.* ]] && [[ -n $skip && $x =~ .*$skip.* ]]; then
+      for job in $(<$x jq '.|keys[]' -r); do
+        echo -n "$x " ; echo -n "$job " ; echo "skip"
+      done
+    elif [[ $x =~ .*$test.* ]]; then
+      echo -n "$x " ; "$HEVM" bc-test --file $x
+    fi
   done
 } | {
   while read path test outcome; do
+    echo >&2 "$path $test $outcome"
     category=$(dirname "$path")
     testcase=$(basename "${path%.json}")
     row="<tr><td class=testcase>$testcase<td>$outcome<td class=category>$category"
@@ -23,9 +43,15 @@ fi
     case $outcome in
       ok)          passed+=$row ;;
       bad-balance) balancefailed+=$row ;;
+      skip)        skipped+=$row ;;
       *)           failed+=$row ;;
     esac
   done
+
+  npass=$(echo -ne "$passed" | wc -l)
+  nbad=$(echo -ne "$balancefailed" | wc -l)
+  nfail=$(echo -ne "$failed" | wc -l)
+  nskip=$(echo -ne "$skipped" | wc -l)
 
   cat <<.
 <!doctype html>
@@ -51,6 +77,7 @@ h1, h2 { text-align: center; margin-top: 2rem  }
 #failed .testcase { color: rgb(200, 0, 0) }
 #balancefailed .testcase { color: rgb(200, 200, 0) }
 #passed .testcase { color: rgb(0, 150, 0) }
+#skipped .testcase { color: rgb(0, 100, 250) }
 </style>
 <header>
 <h1>hevm consensus test report</h1>
@@ -59,12 +86,7 @@ $(date +%Y-%m-%d)
 <p>
 .
 
-  wc -l <<<"$passed"
-  echo "passed, "
-  wc -l <<<"$balancefailed"
-  echo "bad-balance, "
-  wc -l <<<"$failed"
-  echo "failed"
+  echo "$npass passed, $nbad bad-balance, $nfail failed, $nskip skipped"
 
   cat <<.
 <p>
@@ -84,6 +106,13 @@ $(date +%Y-%m-%d)
   echo "$balancefailed"
   cat <<.
 </table>
+<h2>Skipped tests</h2>
+<table id=skipped>
+<tbody>
+.
+  echo "$skipped"
+  cat <<.
+</table>
 <h2>Passed tests</h2>
 <table id=passed>
 <tbody>
@@ -92,4 +121,9 @@ $(date +%Y-%m-%d)
   cat <<.
 </table>
 .
+
+  echo >&2 "passed: $npass"
+  echo >&2 "bad-balance: $nbad"
+  echo >&2 "failed: $nfail"
+  echo >&2 "skipped: $nskip"
 }
