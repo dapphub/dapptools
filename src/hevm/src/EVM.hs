@@ -1132,7 +1132,7 @@ executePrecompile fees preCompileAddr gasCap inOffset inSize outOffset outSize x
         0x4 -> do
             assign (state . stack) (1 : xs)
             assign (state . returndata) input
-            copyBytesToMemory (truncpad (num outSize) input) outSize 0 outOffset
+            copyCallBytesToMemory input outSize 0 outOffset
             next
 
         -- MODEXP
