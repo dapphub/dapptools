@@ -1702,6 +1702,7 @@ finishFrame how = do
             -- Case 3: Error during a call?
             FrameErrored _ -> do
               revertContracts
+              assign (state . returndata) mempty
               push 0
 
         -- Or were we creating?
@@ -1715,6 +1716,7 @@ finishFrame how = do
             FrameReturned output -> do
               burn (g_codedeposit * num (BS.length output)) $ do
                 replaceCode createe (RuntimeCode output)
+                assign (state . returndata) mempty
                 reclaimRemainingGasAllowance
                 push (num createe)
 
@@ -1728,6 +1730,7 @@ finishFrame how = do
             -- Case 6: Error during a creation?
             FrameErrored _ -> do
               revertContracts
+              assign (state . returndata) mempty
               push 0
 
 
