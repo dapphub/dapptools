@@ -1028,7 +1028,14 @@ exec1 = do
           notStatic $
           case stk of
             [] -> underrun
-            (x:_) -> do
+            (x:_) -> let
+              recipientExists = Map.member (num x) (view (env . contracts) vm)
+              c_new = if not recipientExists && view balance this /= 0
+                      then num g_selfdestruct_newaccount
+                      else 0
+              in burn (g_selfdestruct + c_new) $ do
+              destructs <- use (tx . selfdestructs)
+              if elem self destructs then noop else refund r_selfdestruct
               touchAccount (num x) $ \_ -> do
                 pushTo (tx . selfdestructs) self
                 assign (env . contracts . ix self . balance) 0
