@@ -569,6 +569,7 @@ drawVmBrowser ui =
                   [ txt ("Codehash: " <>    pack (show (view codehash c)))
                   , txt ("Nonce: "    <> showWordExact (view nonce    c))
                   , txt ("Balance: "  <> showWordExact (view balance  c))
+                  , txt ("Storage: "  <> pack ( show ( Map.toList (view storage c))))
                   ]
                 ]
           Just solc ->
