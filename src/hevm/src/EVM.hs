@@ -1672,6 +1672,8 @@ finishFrame how = do
             modifying burned (subtract remainingGas)
             modifying (state . gas) (+ remainingGas)
 
+          FeeSchedule {..} = view ( block . schedule ) oldVm
+
       -- Now dispatch on whether we were creating or calling,
       -- and whether we shall return, revert, or error (six cases).
       case view frameContext nextFrame of
@@ -1711,9 +1713,10 @@ finishFrame how = do
           case how of
             -- Case 4: Returning during a creation?
             FrameReturned output -> do
-              replaceCode createe (RuntimeCode output)
-              reclaimRemainingGasAllowance
-              push (num createe)
+              burn (g_codedeposit * num (BS.length output)) $ do
+                replaceCode createe (RuntimeCode output)
+                reclaimRemainingGasAllowance
+                push (num createe)
 
             -- Case 5: Reverting during a creation?
             FrameReverted output -> do
