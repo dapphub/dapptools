@@ -882,7 +882,7 @@ exec1 = do
                      accessMemoryRange fees xOutOffset xOutSize $ do
                       availableGas <- use (state . gas)
                       let
-                        recipientExists = Map.member xTo (view (env . contracts) vm)
+                        recipientExists = accountExists xTo vm
                         (cost, gas') = costOfCall fees recipientExists xValue availableGas xGas
                       burn (cost - gas') $
                         (if xValue > 0 then notStatic else id) $
@@ -1006,7 +1006,7 @@ exec1 = do
                      accessMemoryRange fees xOutOffset xOutSize $ do
                       availableGas <- use (state . gas)
                       let
-                        recipientExists = Map.member xTo (view (env . contracts) vm)
+                        recipientExists = accountExists xTo vm
                         (cost, gas') = costOfCall fees recipientExists 0 availableGas xGas
                       burn (cost - gas') $
                         case view execMode vm of
@@ -1031,7 +1031,7 @@ exec1 = do
           case stk of
             [] -> underrun
             (x:_) -> let
-              recipientExists = Map.member (num x) (view (env . contracts) vm)
+              recipientExists = accountExists (num x) vm
               c_new = if not recipientExists && view balance this /= 0
                       then num g_selfdestruct_newaccount
                       else 0
@@ -1076,7 +1076,7 @@ precompiledContract vm fees gasCap precompileAddr recipient xValue inOffset inSi
       let
         self = view (state . contract) vm
         Just this = view (env . contracts . at self) vm
-        recipientExists = Map.member recipient (view (env . contracts) vm)
+        recipientExists = accountExists recipient vm
         (cost, gas') = costOfCall fees recipientExists xValue availableGas gasCap
       burn (cost - gas') $
         (if xValue == 0 then notStatic else id) $
@@ -1419,6 +1419,12 @@ collision :: Maybe Contract -> Bool
 collision c' = case c' of
   Just c -> (view contractcode c /= RuntimeCode mempty) || (view nonce c /= 0)
   Nothing -> False
+
+accountExists :: Addr -> VM -> Bool
+accountExists addr vm =
+  case view (env . contracts . at addr) vm of
+    Just c -> not (accountEmpty c)
+    Nothing -> False
 
 -- EIP 161
 accountEmpty :: Contract -> Bool
