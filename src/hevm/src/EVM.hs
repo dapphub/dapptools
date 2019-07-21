@@ -899,7 +899,6 @@ exec1 = do
                                   assign callvalue xValue
                                   assign caller (the state contract)
                                   assign contract xTo
-                                  assign memorySize 0
                                 zoom (env . contracts) $ do
                                   ix self . balance -= xValue
                                   ix xTo  . balance += xValue
@@ -945,7 +944,6 @@ exec1 = do
                                 zoom state $ do
                                   assign callvalue xValue
                                   assign caller (the state contract)
-                                  assign memorySize 0
             _ ->
               underrun
 
@@ -1019,7 +1017,6 @@ exec1 = do
                                 assign callvalue 0
                                 assign caller (the state contract)
                                 assign contract xTo
-                                assign memorySize 0
                                 assign static True
                               modifying (tx . touchedAccounts) (self:)
                               modifying (tx . touchedAccounts) (xTo:)
@@ -1624,6 +1621,8 @@ delegateCall xGas xTo xInOffset xInSize xOutOffset xOutSize xs continue =
               assign codeContract xTo
               assign stack mempty
               assign memory mempty
+              assign memorySize 0
+              assign returndata mempty
               assign calldata (readMemory (num xInOffset) (num xInSize) vm0)
 
             continue
