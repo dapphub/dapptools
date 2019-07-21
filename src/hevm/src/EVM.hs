@@ -849,13 +849,19 @@ exec1 = do
           case stk of
             (xValue:xOffset:xSize:xs) ->
               do
-                accessMemoryRange fees xOffset xSize $ do
-                  availableGas <- use (state . gas)
-                  let
-                    (cost, gas') = costOfCreate fees availableGas 0
-                    newAddr      = newContractAddress self (wordValue (view nonce this))
-                  burn cost $
-                    create self this gas' xValue xOffset xSize xs newAddr
+                accessMemoryRange fees xOffset xSize $
+                  if xValue > view balance this
+                  then do
+                    burn g_create $ do
+                      assign (state . stack) (0 : xs)
+                      next
+                  else do
+                    availableGas <- use (state . gas)
+                    let
+                      (cost, gas') = costOfCreate fees availableGas 0
+                      newAddr      = newContractAddress self (wordValue (view nonce this))
+                    burn cost $
+                      create self this gas' xValue xOffset xSize xs newAddr
             _ -> underrun
 
         -- op: CALL
@@ -984,14 +990,20 @@ exec1 = do
           case stk of
             (xValue:xOffset:xSize:xSalt:xs) ->
               do
-                accessMemoryRange fees xOffset xSize $ do
-                  availableGas <- use (state . gas)
-                  let
-                    (cost, gas') = costOfCreate fees availableGas xSize
-                    initcode     = readMemory (num xOffset) (num xSize) vm
-                    newAddr      = newContractAddressCREATE2 self (num xSalt) initcode
-                  burn cost $
-                    create self this gas' xValue xOffset xSize xs newAddr
+                accessMemoryRange fees xOffset xSize $
+                  if xValue > view balance this
+                  then do
+                    burn g_create $ do
+                      assign (state . stack) (0 : xs)
+                      next
+                  else do
+                    availableGas <- use (state . gas)
+                    let
+                      (cost, gas') = costOfCreate fees availableGas xSize
+                      initcode     = readMemory (num xOffset) (num xSize) vm
+                      newAddr      = newContractAddressCREATE2 self (num xSalt) initcode
+                    burn cost $
+                      create self this gas' xValue xOffset xSize xs newAddr
             _ -> underrun
 
         -- op: STATICCALL
@@ -1330,11 +1342,7 @@ create self this xGas xValue xOffset xSize xs newAddr =
   modifying (tx . touchedAccounts) (self:)
   modifying (tx . touchedAccounts) (newAddr:)
   vm0 <- get
-  if xValue > view balance this
-    then do
-      assign (state . stack) (0 : xs)
-      next
-    else if collision $ view (env . contracts . at newAddr) vm0
+  if collision $ view (env . contracts . at newAddr) vm0
     then do
       modifying (env . contracts . ix self . nonce) succ
       assign (state . stack) (0 : xs)
