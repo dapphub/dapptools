@@ -2142,17 +2142,6 @@ costOfCall (FeeSchedule {..}) recipientExists xValue availableGas xGas =
       if availableGas >= c_extra
       then min xGas (allButOne64th (availableGas - c_extra))
       else xGas
-    c_foo = trace ("\n" <> " c_new:     " <> show c_new  <> "\n"
-                        <> " c_xfer:    " <> show c_xfer <> "\n"
-                        <> " c_extra:   " <> show c_extra <> "\n"
-                        <> " c_gascap:  " <> show c_gascap <> "\n"
-                        <> " c_callgas: " <> show c_callgas <> "\n"
-                        <> " c_call:    " <> show (c_gascap + c_extra)<> "\n"
-                        <> " available: " <> show availableGas <> "\n"
-                        <> " burn:      " <> show (c_gascap + c_extra - c_callgas) <> "\n"
-                        <> " remaining: " <> show (availableGas - (c_gascap + c_extra - c_callgas)) <> "\n"
-                        <> " xGas:      " <> show xGas         <> "\n"
-                  ) 0
 
 costOfCreate
   :: FeeSchedule Word
