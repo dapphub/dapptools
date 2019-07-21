@@ -679,7 +679,9 @@ exec1 = do
                 preuse (env . contracts . ix (num x)) >>=
                   \case
                     Nothing -> push (num (0 :: Int))
-                    Just c  -> push (num (keccak (view bytecode c)))
+                    Just c  -> if accountEmpty c
+                       then push (num (0 :: Int))
+                       else push (num (keccak (view bytecode c)))
             [] ->
               underrun
 
