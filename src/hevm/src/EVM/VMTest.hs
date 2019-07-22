@@ -475,12 +475,27 @@ initCreateTx tx block cs = do
    . touchAccount createdAddr
    . touchAccount coinbase $ cs, createdAddr)
 
+-- determine the appropriate state to revert to by resetting the txvalue
+-- transfer, back from toAddr to origin
+revertTxValue :: EVM.VMOpts -> Map Addr Contract -> Map Addr EVM.Contract
+revertTxValue opts =
+  let
+    value  = EVM.vmoptValue opts
+    origin = EVM.vmoptOrigin opts
+    toAddr = EVM.vmoptAddress opts
+  in
+    realizeContracts
+    . (Map.adjust (over balance (+ value)) origin)
+    . (Map.adjust (over balance (subtract value)) toAddr)
+
 vmForCase :: EVM.ExecMode -> Case -> EVM.VM
 vmForCase mode x =
-  let cs = realizeContracts (testContracts x) in
+  let
+    initState = testContracts x
+  in
     EVM.makeVm (testVmOpts x)
-    & EVM.env . EVM.contracts .~ cs
-    & EVM.tx . EVM.txReversion .~ cs
+    & EVM.env . EVM.contracts .~ realizeContracts initState
+    & EVM.tx . EVM.txReversion .~ revertTxValue (testVmOpts x) initState
     & EVM.execMode .~ mode
 
 interpret :: Stepper a -> EVM a
