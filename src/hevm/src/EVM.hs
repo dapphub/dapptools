@@ -1732,6 +1732,7 @@ finishFrame how = do
             FrameReverted output -> do
               revertContracts
               assign (state . returndata) output
+              copyCallBytesToMemory output outSize 0 outOffset
               reclaimRemainingGasAllowance
               push 0
 
