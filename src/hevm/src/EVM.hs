@@ -1096,7 +1096,7 @@ precompiledContract vm fees gasCap precompileAddr recipient xValue inOffset inSi
             assign (state . stack) (0 : xs)
             next
           else do
-            executePrecompile fees precompileAddr gasCap inOffset inSize outOffset outSize xs
+            executePrecompile fees precompileAddr gas' inOffset inSize outOffset outSize xs
             stk <- use (state . stack)
             case stk of
               (0:_) ->
