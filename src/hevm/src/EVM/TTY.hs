@@ -262,7 +262,7 @@ runFromVM vm = do
            , _uiVmDapp = Nothing
            , _uiVmStepCount = 0
            , _uiVmFirstState = undefined
-           , _uiVmMessage = Just "Executing EVM code"
+           , _uiVmMessage = Just $ "Executing EVM code in " <> show (view (state . contract) vm)
            , _uiVmNotes = []
            , _uiVmShowMemory = False
            }
@@ -727,6 +727,8 @@ updateUiVmState ui vm =
           (move $ list BytecodePane
              (view codeOps (fromJust (currentContract vm)))
              1)
+      & set uiVmMessage
+          (Just $ "Executing EVM code in " <> show (view (state . contract) vm))
   in
     case view uiVmDapp ui of
       Nothing ->
