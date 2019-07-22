@@ -895,6 +895,9 @@ exec1 = do
                         if xValue > view balance this
                         then do
                           assign (state . stack) (0 : xs)
+                          assign (state . returndata) mempty
+                          pushTrace $ ErrorTrace $ BalanceTooLow xValue (view balance this)
+                          -- todo: push to vm . result?
                           next
                         else
                           case view execMode vm of
@@ -941,6 +944,9 @@ exec1 = do
                         if xValue > view balance this
                         then do
                           assign (state . stack) (0 : xs)
+                          assign (state . returndata) mempty
+                          pushTrace $ ErrorTrace $ BalanceTooLow xValue (view balance this)
+                          -- todo: push to vm . result?
                           next
                         else
                           case view execMode vm of
