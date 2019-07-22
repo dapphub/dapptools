@@ -1750,9 +1750,12 @@ finishFrame how = do
 
         -- Or were we creating?
         CreationContext _ reversion -> do
+          creator <- use (state . contract)
           let
             createe = view (state . contract) oldVm
-            revertContracts = assign (env . contracts) reversion
+            revertContracts = assign (env . contracts) reversion'
+            -- persist the nonce through the reversion
+            reversion' = (Map.adjust (over nonce (+ 1)) creator) reversion
 
           case how of
             -- Case 4: Returning during a creation?
