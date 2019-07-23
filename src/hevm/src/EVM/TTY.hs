@@ -317,31 +317,33 @@ takeStep
   -> StepPolicy
   -> StepMode
   -> EventM n (Next UiState)
-takeStep ui policy mode = do
-  let m = interpret mode (view uiVmNextStep ui)
+takeStep ui policy mode =
+  if isJust (view (uiVm . result) ui)
+    -- we reached the end of the program, so persist the view
+    then continue (UiVmScreen ui)
+  else do
+    let m = interpret mode (view uiVmNextStep ui)
+    case runState (m <* modify renderVm) ui of
+      (Stepped stepper, ui') -> do
+        continue (UiVmScreen (ui' & set uiVmNextStep stepper))
 
-  case runState (m <* modify renderVm) ui of
+      (Blocked blocker, ui') ->
+        case policy of
+          StepNormally -> do
+            stepper <- liftIO blocker
+            takeStep
+              (execState (assign uiVmNextStep stepper) ui')
+              StepNormally StepNone
 
-    (Stepped stepper, ui') -> do
-      continue (UiVmScreen (ui' & set uiVmNextStep stepper))
+          StepTimidly ->
+            error "step blocked unexpectedly"
 
-    (Blocked blocker, ui') ->
-      case policy of
-        StepNormally -> do
-          stepper <- liftIO blocker
-          takeStep
-            (execState (assign uiVmNextStep stepper) ui')
-            StepNormally StepNone
-
-        StepTimidly ->
-          error "step blocked unexpectedly"
-
-    (Returned (), _) ->
-      case policy of
-        StepNormally ->
-          continue (UiVmScreen ui)
-        StepTimidly ->
-          error "step halted unexpectedly"
+      (Returned (), ui') ->
+        case policy of
+          StepNormally ->
+            continue (UiVmScreen ui')
+          StepTimidly ->
+            error "step halted unexpectedly"
 
 app :: UnitTestOptions -> App UiState () Name
 app opts =
@@ -716,9 +718,18 @@ renderVm ui = updateUiVmState ui (view uiVm ui)
 updateUiVmState :: UiVmState -> VM -> UiVmState
 updateUiVmState ui vm =
   let
-    move = case vmOpIx vm of
-             Nothing -> id
-             Just x -> listMoveTo x
+    move =
+      case vmOpIx vm of
+        Nothing -> id
+        Just x -> listMoveTo x
+    message =
+      case view result vm of
+        Just (VMSuccess msg) ->
+          Just ("VMSuccess: " <> show (msg))
+        Just (VMFailure err) ->
+          Just ("VMFailure: " <> show (err))
+        Nothing ->
+          Just ("Executing EVM code in " <> show (view (state . contract) vm))
     ui' = ui
       & set uiVm vm
       & set uiVmStackList
@@ -727,8 +738,7 @@ updateUiVmState ui vm =
           (move $ list BytecodePane
              (view codeOps (fromJust (currentContract vm)))
              1)
-      & set uiVmMessage
-          (Just $ "Executing EVM code in " <> show (view (state . contract) vm))
+      & set uiVmMessage message
   in
     case view uiVmDapp ui of
       Nothing ->
