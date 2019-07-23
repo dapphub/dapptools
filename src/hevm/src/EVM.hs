@@ -173,6 +173,9 @@ data FrameContext
   = CreationContext
     { creationContextCodehash :: W256
     , creationContextReversion :: Map Addr Contract
+    , creationContextSelfdestructs :: [Addr]
+    , creationContextRefunds       :: [(Addr, Word)]
+
     }
   | CallContext
     { callContextOffset   :: Word
@@ -181,6 +184,8 @@ data FrameContext
     , callContextAbi      :: Maybe Word
     , callContextData     :: ByteString
     , callContextReversion :: Map Addr Contract
+    , callContextSelfdestructs :: [Addr]
+    , callContextRefunds       :: [(Addr, Word)]
     }
 
 -- | The "registers" of the VM along with memory and data stack
@@ -1367,6 +1372,9 @@ create self this xGas xValue xOffset xSize xs newAddr =
             newContext  =
               CreationContext { creationContextCodehash  = view codehash newContract
                               , creationContextReversion = view (env . contracts) vm0
+                              , creationContextSelfdestructs = view (tx . selfdestructs) vm0
+                              , creationContextRefunds = view (tx . refunds) vm0
+
                               }
 
           zoom (env . contracts) $ do
@@ -1664,6 +1672,8 @@ delegateCall xGas xTo xInOffset xInSize xOutOffset xOutSize xs continue =
                   , callContextSize = xOutSize
                   , callContextCodehash = view codehash target
                   , callContextReversion = view (env . contracts) vm0
+                  , callContextSelfdestructs = view (tx . selfdestructs) vm0
+                  , callContextRefunds = view (tx . refunds) vm0
                   , callContextAbi =
                       if xInSize >= 4
                       then
@@ -1762,10 +1772,13 @@ finishFrame how = do
       case view frameContext nextFrame of
 
         -- Were we calling?
-        CallContext (num -> outOffset) (num -> outSize) _ _ _ reversion -> do
+        CallContext (num -> outOffset) (num -> outSize) _ _ _ reversion destructs refundz -> do
 
           let
             revertContracts = assign (env . contracts) reversion
+            revertDestructs = assign (tx . selfdestructs) destructs
+            revertRefunds   = assign (tx . refunds) refundz
+
 
           case how of
             -- Case 1: Returning from a call?
@@ -1778,6 +1791,8 @@ finishFrame how = do
             -- Case 2: Reverting during a call?
             FrameReverted output -> do
               revertContracts
+              revertDestructs
+              revertRefunds
               assign (state . returndata) output
               copyCallBytesToMemory output outSize 0 outOffset
               reclaimRemainingGasAllowance
@@ -1786,15 +1801,20 @@ finishFrame how = do
             -- Case 3: Error during a call?
             FrameErrored _ -> do
               revertContracts
+              revertDestructs
+              revertRefunds
               assign (state . returndata) mempty
               push 0
 
         -- Or were we creating?
-        CreationContext _ reversion -> do
+        CreationContext _ reversion destructs refundz -> do
           creator <- use (state . contract)
           let
             createe = view (state . contract) oldVm
             revertContracts = assign (env . contracts) reversion'
+            revertDestructs = assign (tx . selfdestructs) destructs
+            revertRefunds   = assign (tx . refunds) refundz
+
             -- persist the nonce through the reversion
             reversion' = (Map.adjust (over nonce (+ 1)) creator) reversion
 
@@ -1810,6 +1830,8 @@ finishFrame how = do
             -- Case 5: Reverting during a creation?
             FrameReverted output -> do
               revertContracts
+              revertDestructs
+              revertRefunds
               assign (state . returndata) output
               reclaimRemainingGasAllowance
               push 0
@@ -1817,6 +1839,8 @@ finishFrame how = do
             -- Case 6: Error during a creation?
             FrameErrored _ -> do
               revertContracts
+              revertDestructs
+              revertRefunds
               assign (state . returndata) mempty
               push 0
 
