@@ -859,6 +859,8 @@ exec1 = do
                   then do
                     burn g_create $ do
                       assign (state . stack) (0 : xs)
+                      assign (state . returndata) mempty
+                      pushTrace $ ErrorTrace $ BalanceTooLow xValue (view balance this)
                       next
                   else do
                     availableGas <- use (state . gas)
@@ -1005,6 +1007,8 @@ exec1 = do
                   then do
                     burn g_create $ do
                       assign (state . stack) (0 : xs)
+                      assign (state . returndata) mempty
+                      pushTrace $ ErrorTrace $ BalanceTooLow xValue (view balance this)
                       next
                   else do
                     availableGas <- use (state . gas)
