@@ -1449,11 +1449,6 @@ accountEmpty c =
 
 finalize :: Bool -> EVM ()
 finalize txmode = do
-  -- process selfdestructs
-  destroyedAddresses <- use (tx . selfdestructs)
-  modifying (env . contracts)
-    (Map.filterWithKey (\k _ -> not (elem k destroyedAddresses)))
-
   -- whether or not we "finalise the tx"
   case txmode of
     False -> return ()
@@ -1500,11 +1495,19 @@ finalize txmode = do
         (Map.adjust (over balance (+ minerPay)) miner)
       modifying (env . contracts)
         (Map.adjust (over balance (+ originPay)) txOrigin)
-      -- process state trie clearing (EIP 161)
-      touchedAddresses <- use (tx . touchedAccounts)
-      modifying (env . contracts)
-        (Map.filterWithKey
-          (\k a -> not ((elem k touchedAddresses) && accountEmpty a)))
+      case res of
+        Just (VMSuccess _) -> do
+          -- process selfdestructs
+          destroyedAddresses <- use (tx . selfdestructs)
+          modifying (env . contracts)
+            (Map.filterWithKey (\k _ -> not (elem k destroyedAddresses)))
+          -- process state trie clearing (EIP 161)
+          touchedAddresses <- use (tx . touchedAccounts)
+          modifying (env . contracts)
+            (Map.filterWithKey
+              (\k a -> not ((elem k touchedAddresses) && accountEmpty a)))
+        _ ->
+          return ()
 
 loadContract :: Addr -> EVM ()
 loadContract target =
