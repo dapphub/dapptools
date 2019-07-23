@@ -740,32 +740,32 @@ updateUiVmState ui vm =
              1)
       & set uiVmMessage message
   in
-    case view uiVmDapp ui of
-      Nothing ->
-        ui'
-          & set uiVmTraceList (list TracePane mempty 1)
-          & set uiVmSolidityList (list SolidityPane mempty 1)
-      Just dapp ->
-        ui'
-          & set uiVmTraceList
-              (list
-                TracePane
-                (Vec.fromList
-                 . Text.lines
-                 . showTraceTree dapp
-                 $ vm)
-                1)
-          & set uiVmSolidityList
-              (list SolidityPane
-                 (case currentSrcMap dapp vm of
-                    Nothing -> mempty
-                    Just x ->
-                      view (dappSources
-                            . sourceLines
-                            . ix (srcMapFile x)
-                            . to (Vec.imap (,)))
-                        dapp)
-                 1)
+    ui'
+      & set uiVmTraceList
+          (list
+            TracePane
+            (Vec.fromList
+              . Text.lines
+              . showTraceTree dapp
+              $ vm)
+            1)
+      & set uiVmSolidityList
+          (list SolidityPane
+              (case currentSrcMap dapp vm of
+                Nothing -> mempty
+                Just x ->
+                  view (dappSources
+                        . sourceLines
+                        . ix (srcMapFile x)
+                        . to (Vec.imap (,)))
+                    dapp)
+              1)
+      where
+        dapp =
+          case view uiVmDapp ui of
+            Just solcdapp -> solcdapp
+            Nothing ->
+              dappInfo "" mempty (SourceCache mempty mempty mempty mempty)
 
 drawStackPane :: UiVmState -> UiWidget
 drawStackPane ui =
