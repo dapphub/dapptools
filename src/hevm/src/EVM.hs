@@ -1448,66 +1448,104 @@ accountEmpty c =
   && (view balance c == 0)
 
 finalize :: Bool -> EVM ()
-finalize txmode = do
-  -- whether or not we "finalise the tx"
-  case txmode of
-    False -> return ()
-    True  -> do
-      res <- use result
-      -- burn remaining gas on error
-      case resultRefunds <$> res of
-        Just False -> use (state . gas) >>= (flip burn (return ()))
-        _          -> return ()
-      txOrigin <- use (tx . origin)
-      -- TODO: selfdestruct gas refunds
-      sumRefunds <- (sum . (snd <$>)) <$> (use (tx . refunds))
-      miner    <- use (block . coinbase)
-      blockReward  <- r_block <$> (use (block . schedule))
-      gasRemaining <- use (state . gas)
-      gasPrice     <- use (tx . gasprice)
-      gasLimit     <- use (tx . txgaslimit)
-      reversion    <- use (tx . txReversion)
-      let gasUsed      = gasLimit - gasRemaining
-          cappedRefund = min (quot gasUsed 2) sumRefunds
-          originPay    = (gasRemaining + cappedRefund) * gasPrice
-          minerPay     = blockReward + gasPrice * (gasUsed - cappedRefund)
-      -- revert all contracts on error
-      case res of
-        Just (VMFailure _) -> assign (env . contracts) reversion
-        _                  -> return ()
-      -- revert created contract on error
-      use (tx . isCreate) >>= \case
-        False -> return ()
+-- whether or not we "finalise the tx"
+finalize False = return ()
+finalize True = do
+  res <- use result
+
+  creation <- use (tx . isCreate)
+  -- we need to pay the code deposit gas cost following a
+  -- successful create tx
+  depositPrice <- g_codedeposit <$> (use (block . schedule))
+  let
+    depositCost =
+      case creation of
+        False -> 0
         True  -> case res of
-          Just (VMFailure _) -> do
-            createe <- use (state . contract)
-            modifying (env . contracts)
-              (Map.delete createe)
-          Just (VMSuccess output) -> do
-            createe <- use (state . contract)
-            createeExists <- (Map.member createe) <$> use (env . contracts)
-            if createeExists then
-              replaceCode createe (RuntimeCode output)
-              -- don't deploy code when createe selfdestructed
-              else return ()
-          Nothing -> error "Finalising an unfinished tx."
+          Just (VMSuccess output) ->
+             depositPrice * num (BS.length output)
+          _ -> 0
+
+  -- in the case that there isn't enough gas to pay the deposit
+  -- we alter the result to an oog failure
+  gasRemaining <- use (state . gas)
+  let
+    res' = if gasRemaining < depositCost
+           then Just (VMFailure (OutOfGas gasRemaining depositCost))
+           else res
+    gasRemaining' =
+      case res' of
+        Just (VMSuccess _) -> gasRemaining - depositCost
+        Just (VMFailure (Revert _)) -> gasRemaining
+        _ -> 0
+
+  -- burn remaining gas on error (not revert or success)
+  case resultRefunds <$> res' of
+    Just False -> use (state . gas) >>= (flip burn (return ()))
+    _          -> return ()
+  -- revert all contracts on error (any failure)
+  reversion    <- use (tx . txReversion)
+  case res' of
+    Just (VMFailure _) -> assign (env . contracts) reversion
+    _                  -> return ()
+
+  -- deposit the code, or not, depending on success
+  case creation of
+    False -> return ()
+    True  -> case res' of
+      Just (VMFailure _) -> do
+        createe <- use (state . contract)
+        modifying (env . contracts)
+          (Map.delete createe)
+      Just (VMSuccess output) -> do
+        createe <- use (state . contract)
+        createeExists <- (Map.member createe) <$> use (env . contracts)
+        if createeExists then replaceCode createe (RuntimeCode output)
+        else return ()
+      Nothing -> error "Finalising an unfinished tx."
+
+  -- compute and pay the refund to the caller and the
+  -- corresponding payment to the miner, including the
+  -- block reward
+  txOrigin     <- use (tx . origin)
+  sumRefunds   <- (sum . (snd <$>)) <$> (use (tx . refunds))
+  miner        <- use (block . coinbase)
+  blockReward  <- r_block <$> (use (block . schedule))
+  gasPrice     <- use (tx . gasprice)
+  gasLimit     <- use (tx . txgaslimit)
+
+  let
+    gasUsed       = gasLimit - gasRemaining'
+    cappedRefund  = min (quot gasUsed 2) sumRefunds
+    originPay     = (gasRemaining' + cappedRefund) * gasPrice
+    minerPay      = blockReward + gasPrice * (gasUsed - cappedRefund)
+
+  modifying (env . contracts)
+    (Map.adjust (over balance (+ originPay)) txOrigin)
+  modifying (env . contracts)
+    (Map.adjust (over balance (+ minerPay)) miner)
+
+  -- state trie clearing (EIP 161) clears touched
+  -- accounts in the case of success only
+  -- (see Yellow Paper "Accrued Substate")
+  case res' of
+    Just (VMSuccess _) -> do
+      -- addresses are cleared if they have
+      --    a) not already been cleared by selfdestruct,
+      --    b) been touched,
+      --    c) are empty.
+      --
+      -- first, remove any destructed addresses
+      destroyedAddresses <- use (tx . selfdestructs)
       modifying (env . contracts)
-        (Map.adjust (over balance (+ minerPay)) miner)
+        (Map.filterWithKey (\k _ -> not (elem k destroyedAddresses)))
+      -- then, clear any remaining empty and touched addresses
+      touchedAddresses <- use (tx . touchedAccounts)
       modifying (env . contracts)
-        (Map.adjust (over balance (+ originPay)) txOrigin)
-      case res of
-        Just (VMSuccess _) -> do
-          -- process selfdestructs
-          destroyedAddresses <- use (tx . selfdestructs)
-          modifying (env . contracts)
-            (Map.filterWithKey (\k _ -> not (elem k destroyedAddresses)))
-          -- process state trie clearing (EIP 161)
-          touchedAddresses <- use (tx . touchedAccounts)
-          modifying (env . contracts)
-            (Map.filterWithKey
-              (\k a -> not ((elem k touchedAddresses) && accountEmpty a)))
-        _ ->
-          return ()
+        (Map.filterWithKey
+          (\k a -> not ((elem k touchedAddresses) && accountEmpty a)))
+    _ ->
+      return ()
 
 loadContract :: Addr -> EVM ()
 loadContract target =
