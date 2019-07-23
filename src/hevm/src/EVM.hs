@@ -972,8 +972,25 @@ exec1 = do
           case stk of
             (xOffset:xSize:_) ->
               accessMemoryRange fees xOffset xSize $ do
-                let output = readMemory (num xOffset) (num xSize) vm
-                finishFrame (FrameReturned output)
+                let
+                  output = readMemory (num xOffset) (num xSize) vm
+                case view frames vm of
+                  [] ->
+                    case (the tx isCreate) of
+                      True ->
+                        burn (g_codedeposit * num (BS.length output)) $
+                          finishFrame (FrameReturned output)
+                      False ->
+                        finishFrame (FrameReturned output)
+                  (frame: _) -> do
+                    let
+                      context = view frameContext frame
+                    case context of
+                      CreationContext _ _ _ _ ->
+                        burn (g_codedeposit * num (BS.length output)) $
+                          finishFrame (FrameReturned output)
+                      CallContext _ _ _ _ _ _ _ _ ->
+                          finishFrame (FrameReturned output)
             _ -> underrun
 
         -- op: DELEGATECALL
@@ -1464,46 +1481,25 @@ finalize False = return ()
 finalize True = do
   res <- use result
 
-  creation <- use (tx . isCreate)
-  -- we need to pay the code deposit gas cost following a
-  -- successful create tx
-  depositPrice <- g_codedeposit <$> (use (block . schedule))
-  let
-    depositCost =
-      case creation of
-        False -> 0
-        True  -> case res of
-          Just (VMSuccess output) ->
-             depositPrice * num (BS.length output)
-          _ -> 0
-
-  -- in the case that there isn't enough gas to pay the deposit
-  -- we alter the result to an oog failure
-  gasRemaining <- use (state . gas)
-  let
-    res' = if gasRemaining < depositCost
-           then Just (VMFailure (OutOfGas gasRemaining depositCost))
-           else res
-    gasRemaining' =
-      case res' of
-        Just (VMSuccess _) -> gasRemaining - depositCost
-        Just (VMFailure (Revert _)) -> gasRemaining
-        _ -> 0
-
   -- burn remaining gas on error (not revert or success)
-  case resultRefunds <$> res' of
-    Just False -> use (state . gas) >>= (flip burn (return ()))
-    _          -> return ()
-  -- revert all contracts on error (any failure)
-  reversion    <- use (tx . txReversion)
-  case res' of
-    Just (VMFailure _) -> assign (env . contracts) reversion
-    _                  -> return ()
+  case resultRefunds <$> res of
+    Just False ->
+      use (state . gas) >>= (flip burn (return ()))
+    _ ->
+      return ()
 
-  -- deposit the code, or not, depending on success
-  case creation of
+  -- revert all contracts on error (any failure)
+  case res of
+    Just (VMFailure _) -> do
+      reversion <- use (tx . txReversion)
+      assign (env . contracts) reversion
+    _ ->
+      return ()
+
+  -- deposit the code from a creation tx, or not, depending on success
+  use (tx . isCreate) >>= \case
     False -> return ()
-    True  -> case res' of
+    True  -> case res of
       Just (VMFailure _) -> do
         createe <- use (state . contract)
         modifying (env . contracts)
@@ -1524,12 +1520,13 @@ finalize True = do
   blockReward  <- r_block <$> (use (block . schedule))
   gasPrice     <- use (tx . gasprice)
   gasLimit     <- use (tx . txgaslimit)
+  gasRemaining <- use (state . gas)
 
   let
-    gasUsed       = gasLimit - gasRemaining'
-    cappedRefund  = min (quot gasUsed 2) sumRefunds
-    originPay     = (gasRemaining' + cappedRefund) * gasPrice
-    minerPay      = blockReward + gasPrice * (gasUsed - cappedRefund)
+    gasUsed      = gasLimit - gasRemaining
+    cappedRefund = min (quot gasUsed 2) sumRefunds
+    originPay    = (gasRemaining + cappedRefund) * gasPrice
+    minerPay     = blockReward + gasPrice * (gasUsed - cappedRefund)
 
   modifying (env . contracts)
     (Map.adjust (over balance (+ originPay)) txOrigin)
@@ -1539,7 +1536,7 @@ finalize True = do
   -- state trie clearing (EIP 161) clears touched
   -- accounts in the case of success only
   -- (see Yellow Paper "Accrued Substate")
-  case res' of
+  case res of
     Just (VMSuccess _) -> do
       -- addresses are cleared if they have
       --    a) not already been cleared by selfdestruct,
@@ -1825,11 +1822,10 @@ finishFrame how = do
           case how of
             -- Case 4: Returning during a creation?
             FrameReturned output -> do
-              burn (g_codedeposit * num (BS.length output)) $ do
-                replaceCode createe (RuntimeCode output)
-                assign (state . returndata) mempty
-                reclaimRemainingGasAllowance
-                push (num createe)
+              replaceCode createe (RuntimeCode output)
+              assign (state . returndata) mempty
+              reclaimRemainingGasAllowance
+              push (num createe)
 
             -- Case 5: Reverting during a creation?
             FrameReverted output -> do
