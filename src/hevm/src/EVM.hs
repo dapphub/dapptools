@@ -315,7 +315,7 @@ makeVm o = VM
     , _toAddr = vmoptAddress o
     , _value = w256 $ vmoptValue o
     , _selfdestructs = mempty
-    , _touchedAccounts = mempty
+    , _touchedAccounts = [vmoptOrigin o, vmoptAddress o, vmoptCoinbase o]
     , _refunds = mempty
     , _isCreate = vmoptCreate o
     , _txReversion = Map.fromList
@@ -1453,11 +1453,7 @@ finalize txmode = do
   destroyedAddresses <- use (tx . selfdestructs)
   modifying (env . contracts)
     (Map.filterWithKey (\k _ -> not (elem k destroyedAddresses)))
-  -- process state trie clearing (EIP 161)
-  touchedAddresses <- use (tx . touchedAccounts)
-  modifying (env . contracts)
-    (Map.filterWithKey (\k a -> not ((elem k touchedAddresses)
-                                && accountEmpty a)))
+
   -- whether or not we "finalise the tx"
   case txmode of
     False -> return ()
@@ -1504,6 +1500,11 @@ finalize txmode = do
         (Map.adjust (over balance (+ minerPay)) miner)
       modifying (env . contracts)
         (Map.adjust (over balance (+ originPay)) txOrigin)
+      -- process state trie clearing (EIP 161)
+      touchedAddresses <- use (tx . touchedAccounts)
+      modifying (env . contracts)
+        (Map.filterWithKey
+          (\k a -> not ((elem k touchedAddresses) && accountEmpty a)))
 
 loadContract :: Addr -> EVM ()
 loadContract target =
