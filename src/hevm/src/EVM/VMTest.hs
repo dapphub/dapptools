@@ -393,14 +393,16 @@ fromNormalBlockchainCase :: Block -> Transaction
 fromNormalBlockchainCase block tx preState postState =
   let Just toAddr = txToAddr tx
       feeSchedule = EVM.FeeSchedule.metropolis
-    in case (toAddr
-           , Map.lookup toAddr preState
-           , sender 1 tx
-           , initNormalTx tx block preState) of
+      toCode = Map.lookup toAddr preState
+      theCode = case toCode of
+          Nothing -> ""
+          Just c -> case (view code c) of
+              EVM.RuntimeCode x  -> x
+              EVM.InitCode x     -> x
+  in case (toAddr , toCode , sender 1 tx , initNormalTx tx block preState) of
       (_, _, Nothing, _) -> Left SignatureUnverified
       (_, _, _, Nothing) -> Left InvalidTx
-      (_, Nothing, _, _) -> Left TargetMissing
-      (_, Just c, Just origin, Just initState) -> Right $ Case
+      (_, _, Just origin, Just initState) -> Right $ Case
         (EVM.VMOpts
          { vmoptCode          = theCode
          , vmoptCalldata      = txData tx
@@ -421,9 +423,7 @@ fromNormalBlockchainCase block tx preState postState =
          })
         initState
         (Just $ Expectation Nothing postState Nothing)
-        where theCode = case (view code c) of
-                EVM.RuntimeCode x  -> x
-                EVM.InitCode x     -> x
+
 
 validateTx :: Transaction -> Map Addr Contract -> Maybe Bool
 validateTx tx cs = do
