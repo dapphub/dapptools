@@ -877,44 +877,44 @@ exec1 = do
               : xs
              ) ->
               case xTo of
-                n | n > 0 && n <= 8 -> precompiledContract vm fees xGas xTo xTo xValue xInOffset xInSize xOutOffset xOutSize xs
+                n | n > 0 && n <= 8 ->
+                  precompiledContract vm fees xGas xTo xTo xValue xInOffset xInSize xOutOffset xOutSize xs
                 n | num n == cheatCode ->
                   do
                     assign (state . stack) xs
                     cheat (xInOffset, xInSize) (xOutOffset, xOutSize)
                 _ ->
-                 do
-                   accessMemoryRange fees xInOffset xInSize $ do
-                     accessMemoryRange fees xOutOffset xOutSize $ do
-                      availableGas <- use (state . gas)
-                      let
-                        recipientExists = accountExists xTo vm
-                        (cost, gas') = costOfCall fees recipientExists xValue availableGas xGas
-                      burn (cost - gas') $
-                        (if xValue > 0 then notStatic else id) $
-                        if xValue > view balance this
-                        then do
-                          assign (state . stack) (0 : xs)
-                          assign (state . returndata) mempty
-                          pushTrace $ ErrorTrace $ BalanceTooLow xValue (view balance this)
-                          -- todo: push to vm . result?
-                          next
-                        else
-                          case view execMode vm of
-                            ExecuteAsVMTest -> do
-                              assign (state . stack) (1 : xs)
-                              next
-                            _ -> do
-                              delegateCall gas' xTo xInOffset xInSize xOutOffset xOutSize xs $ do
-                                zoom state $ do
-                                  assign callvalue xValue
-                                  assign caller (the state contract)
-                                  assign contract xTo
-                                zoom (env . contracts) $ do
-                                  ix self . balance -= xValue
-                                  ix xTo  . balance += xValue
-                                modifying (tx . touchedAccounts) (self:)
-                                modifying (tx . touchedAccounts) (xTo:)
+                  (if xValue > 0 then notStatic else id) $
+                    accessMemoryRange fees xInOffset xInSize $
+                      accessMemoryRange fees xOutOffset xOutSize $ do
+                        availableGas <- use (state . gas)
+                        let
+                          recipientExists = accountExists xTo vm
+                          (cost, gas') = costOfCall fees recipientExists xValue availableGas xGas
+                        burn (cost - gas') $
+                          if xValue > view balance this
+                          then do
+                            assign (state . stack) (0 : xs)
+                            assign (state . returndata) mempty
+                            pushTrace $ ErrorTrace $ BalanceTooLow xValue (view balance this)
+                            -- todo: push to vm . result?
+                            next
+                          else
+                            case view execMode vm of
+                              ExecuteAsVMTest -> do
+                                assign (state . stack) (1 : xs)
+                                next
+                              _ -> do
+                                delegateCall gas' xTo xInOffset xInSize xOutOffset xOutSize xs $ do
+                                  zoom state $ do
+                                    assign callvalue xValue
+                                    assign caller (the state contract)
+                                    assign contract xTo
+                                  zoom (env . contracts) $ do
+                                    ix self . balance -= xValue
+                                    ix xTo  . balance += xValue
+                                  modifying (tx . touchedAccounts) (self:)
+                                  modifying (tx . touchedAccounts) (xTo:)
             _ ->
               underrun
 
@@ -931,16 +931,15 @@ exec1 = do
               : xs
               ) ->
               case xTo of
-                n | n > 0 && n <= 8 -> precompiledContract vm fees xGas xTo self xValue xInOffset xInSize xOutOffset xOutSize xs
+                n | n > 0 && n <= 8 ->
+                  precompiledContract vm fees xGas xTo self xValue xInOffset xInSize xOutOffset xOutSize xs
                 _ ->
-                 do
-                   accessMemoryRange fees xInOffset xInSize $ do
-                     accessMemoryRange fees xOutOffset xOutSize $ do
+                  accessMemoryRange fees xInOffset xInSize $
+                    accessMemoryRange fees xOutOffset xOutSize $ do
                       availableGas <- use (state . gas)
                       let
                         (cost, gas') = costOfCall fees True xValue availableGas xGas
                       burn (cost - gas') $
-                        (if xValue > 0 then notStatic else id) $
                         if xValue > view balance this
                         then do
                           assign (state . stack) (0 : xs)
@@ -975,20 +974,20 @@ exec1 = do
           case stk of
             (xGas:(num -> xTo):xInOffset:xInSize:xOutOffset:xOutSize:xs) ->
               case xTo of
-                n | n > 0 && n <= 8 -> precompiledContract vm fees xGas xTo self 0 xInOffset xInSize xOutOffset xOutSize xs
+                n | n > 0 && n <= 8 ->
+                  precompiledContract vm fees xGas xTo self 0 xInOffset xInSize xOutOffset xOutSize xs
                 n | num n == cheatCode -> do
                       assign (state . stack) xs
                       cheat (xInOffset, xInSize) (xOutOffset, xOutSize)
                 _ ->
-                  do
-                   accessMemoryRange fees xInOffset xInSize $ do
-                     accessMemoryRange fees xOutOffset xOutSize $ do
-                      availableGas <- use (state . gas)
-                      let
-                        (cost, gas') = costOfCall fees True 0 availableGas xGas
-                      burn (cost - gas') $
-                        delegateCall gas' xTo xInOffset xInSize xOutOffset xOutSize xs $ do
-                          modifying (tx . touchedAccounts) (self:)
+                  accessMemoryRange fees xInOffset xInSize $
+                    accessMemoryRange fees xOutOffset xOutSize $ do
+                    availableGas <- use (state . gas)
+                    let
+                      (cost, gas') = costOfCall fees True 0 availableGas xGas
+                    burn (cost - gas') $
+                      delegateCall gas' xTo xInOffset xInSize xOutOffset xOutSize xs $ do
+                        modifying (tx . touchedAccounts) (self:)
             _ -> underrun
 
         -- op: CREATE2
@@ -1017,11 +1016,11 @@ exec1 = do
           case stk of
             (xGas : (num -> xTo) : xInOffset : xInSize : xOutOffset : xOutSize : xs) ->
               case xTo of
-                n | n > 0 && n <= 8 -> precompiledContract vm fees xGas xTo xTo 0 xInOffset xInSize xOutOffset xOutSize xs
+                n | n > 0 && n <= 8 ->
+                  precompiledContract vm fees xGas xTo xTo 0 xInOffset xInSize xOutOffset xOutSize xs
                 _ ->
-                  do
-                   accessMemoryRange fees xInOffset xInSize $ do
-                     accessMemoryRange fees xOutOffset xOutSize $ do
+                  accessMemoryRange fees xInOffset xInSize $
+                    accessMemoryRange fees xOutOffset xOutSize $ do
                       availableGas <- use (state . gas)
                       let
                         recipientExists = accountExists xTo vm
@@ -1088,16 +1087,16 @@ precompiledContract
   -> [Word]
   -> EVM ()
 precompiledContract vm fees gasCap precompileAddr recipient xValue inOffset inSize outOffset outSize xs =
-  accessMemoryRange fees inOffset inSize $ do
-    accessMemoryRange fees outOffset outSize $ do
-      availableGas <- use (state . gas)
-      let
-        self = view (state . contract) vm
-        Just this = view (env . contracts . at self) vm
-        recipientExists = accountExists recipient vm
-        (cost, gas') = costOfCall fees recipientExists xValue availableGas gasCap
-      burn (cost - gas') $
-        (if xValue == 0 then notStatic else id) $
+  (if xValue == 0 then notStatic else id) $
+    accessMemoryRange fees inOffset inSize $
+      accessMemoryRange fees outOffset outSize $ do
+        availableGas <- use (state . gas)
+        let
+          self = view (state . contract) vm
+          Just this = view (env . contracts . at self) vm
+          recipientExists = accountExists recipient vm
+          (cost, gas') = costOfCall fees recipientExists xValue availableGas gasCap
+        burn (cost - gas') $
           if xValue > view balance this then do
             assign (state . stack) (0 : xs)
             next
