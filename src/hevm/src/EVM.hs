@@ -77,6 +77,7 @@ data Error
   | StateChangeWhileStatic
   | InvalidMemoryAccess
   | CallDepthLimitReached
+  | MaxCodeSizeExceeded Int Int
 
 deriving instance Show Error
 
@@ -997,12 +998,18 @@ exec1 = do
               accessMemoryRange fees xOffset xSize $ do
                 let
                   output = readMemory (num xOffset) (num xSize) vm
+                  codesize = BS.length output
+                  maxCodesize = 24576
                 case view frames vm of
                   [] ->
                     case (the tx isCreate) of
                       True ->
-                        burn (g_codedeposit * num (BS.length output)) $
-                          finishFrame (FrameReturned output)
+                        if codesize > maxCodesize
+                        then do
+                          finishFrame (FrameErrored (MaxCodeSizeExceeded maxCodesize codesize))
+                        else
+                          burn (g_codedeposit * num (BS.length output)) $
+                            finishFrame (FrameReturned output)
                       False ->
                         finishFrame (FrameReturned output)
                   (frame: _) -> do
@@ -1010,8 +1017,12 @@ exec1 = do
                       context = view frameContext frame
                     case context of
                       CreationContext _ _ _ _ ->
-                        burn (g_codedeposit * num (BS.length output)) $
-                          finishFrame (FrameReturned output)
+                        if codesize > maxCodesize
+                        then do
+                          finishFrame (FrameErrored (MaxCodeSizeExceeded maxCodesize codesize))
+                        else
+                          burn (g_codedeposit * num (BS.length output)) $
+                            finishFrame (FrameReturned output)
                       CallContext _ _ _ _ _ _ _ _ ->
                           finishFrame (FrameReturned output)
             _ -> underrun
