@@ -76,6 +76,7 @@ data Error
   | Query Query
   | StateChangeWhileStatic
   | InvalidMemoryAccess
+  | CallDepthLimitReached
 
 deriving instance Show Error
 
@@ -862,6 +863,14 @@ exec1 = do
                       assign (state . returndata) mempty
                       pushTrace $ ErrorTrace $ BalanceTooLow xValue (view balance this)
                       next
+                  else if length (view frames vm) >= 1024
+                  then do
+                    burn g_create $ do
+                      assign (state . stack) (0 : xs)
+                      assign (state . returndata) mempty
+                      pushTrace $ ErrorTrace $ CallDepthLimitReached
+                      -- todo: push to vm . result?
+                      next
                   else do
                     availableGas <- use (state . gas)
                     let
@@ -904,6 +913,13 @@ exec1 = do
                             assign (state . stack) (0 : xs)
                             assign (state . returndata) mempty
                             pushTrace $ ErrorTrace $ BalanceTooLow xValue (view balance this)
+                            -- todo: push to vm . result?
+                            next
+                          else if length (view frames vm) >= 1024
+                          then do
+                            assign (state . stack) (0 : xs)
+                            assign (state . returndata) mempty
+                            pushTrace $ ErrorTrace $ CallDepthLimitReached
                             -- todo: push to vm . result?
                             next
                           else
@@ -952,6 +968,13 @@ exec1 = do
                           assign (state . stack) (0 : xs)
                           assign (state . returndata) mempty
                           pushTrace $ ErrorTrace $ BalanceTooLow xValue (view balance this)
+                          -- todo: push to vm . result?
+                          next
+                        else if length (view frames vm) >= 1024
+                        then do
+                          assign (state . stack) (0 : xs)
+                          assign (state . returndata) mempty
+                          pushTrace $ ErrorTrace $ CallDepthLimitReached
                           -- todo: push to vm . result?
                           next
                         else
@@ -1010,8 +1033,16 @@ exec1 = do
                     let
                       (cost, gas') = costOfCall fees True 0 availableGas xGas
                     burn (cost - gas') $
-                      delegateCall gas' xTo xInOffset xInSize xOutOffset xOutSize xs $ do
-                        modifying (tx . touchedAccounts) (self:)
+                      if length (view frames vm) >= 1024
+                      then do
+                        assign (state . stack) (0 : xs)
+                        assign (state . returndata) mempty
+                        pushTrace $ ErrorTrace $ CallDepthLimitReached
+                        -- todo: push to vm . result?
+                        next
+                      else
+                        delegateCall gas' xTo xInOffset xInSize xOutOffset xOutSize xs $ do
+                          modifying (tx . touchedAccounts) (self:)
             _ -> underrun
 
         -- op: CREATE2
@@ -1026,6 +1057,14 @@ exec1 = do
                       assign (state . stack) (0 : xs)
                       assign (state . returndata) mempty
                       pushTrace $ ErrorTrace $ BalanceTooLow xValue (view balance this)
+                      next
+                  else if length (view frames vm) >= 1024
+                  then do
+                    burn g_create $ do
+                      assign (state . stack) (0 : xs)
+                      assign (state . returndata) mempty
+                      pushTrace $ ErrorTrace $ CallDepthLimitReached
+                      -- todo: push to vm . result?
                       next
                   else do
                     availableGas <- use (state . gas)
@@ -1052,19 +1091,27 @@ exec1 = do
                         recipientExists = accountExists xTo vm
                         (cost, gas') = costOfCall fees recipientExists 0 availableGas xGas
                       burn (cost - gas') $
-                        case view execMode vm of
-                          ExecuteAsVMTest -> do
-                            assign (state . stack) (1 : xs)
-                            next
-                          _ -> do
-                            delegateCall gas' xTo xInOffset xInSize xOutOffset xOutSize xs $ do
-                              zoom state $ do
-                                assign callvalue 0
-                                assign caller (the state contract)
-                                assign contract xTo
-                                assign static True
-                              modifying (tx . touchedAccounts) (self:)
-                              modifying (tx . touchedAccounts) (xTo:)
+                        if length (view frames vm) >= 1024
+                        then do
+                          assign (state . stack) (0 : xs)
+                          assign (state . returndata) mempty
+                          pushTrace $ ErrorTrace $ CallDepthLimitReached
+                          -- todo: push to vm . result?
+                          next
+                        else
+                          case view execMode vm of
+                            ExecuteAsVMTest -> do
+                              assign (state . stack) (1 : xs)
+                              next
+                            _ -> do
+                              delegateCall gas' xTo xInOffset xInSize xOutOffset xOutSize xs $ do
+                                zoom state $ do
+                                  assign callvalue 0
+                                  assign caller (the state contract)
+                                  assign contract xTo
+                                  assign static True
+                                modifying (tx . touchedAccounts) (self:)
+                                modifying (tx . touchedAccounts) (xTo:)
             _ ->
               underrun
 
