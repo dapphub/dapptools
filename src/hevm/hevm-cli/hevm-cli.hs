@@ -70,21 +70,22 @@ import qualified Data.Sequence as Seq
 -- automatically via the `optparse-generic` package.
 data Command
   = Exec
-      { code       :: ByteString
-      , calldata   :: Maybe ByteString
-      , address    :: Maybe Addr
-      , caller     :: Maybe Addr
-      , origin     :: Maybe Addr
-      , coinbase   :: Maybe Addr
-      , value      :: Maybe W256
-      , gas        :: Maybe W256
-      , number     :: Maybe W256
-      , timestamp  :: Maybe W256
-      , gaslimit   :: Maybe W256
-      , gasprice   :: Maybe W256
-      , difficulty :: Maybe W256
-      , debug      :: Bool
-      , state      :: Maybe String
+      { code        :: ByteString
+      , calldata    :: Maybe ByteString
+      , address     :: Maybe Addr
+      , caller      :: Maybe Addr
+      , origin      :: Maybe Addr
+      , coinbase    :: Maybe Addr
+      , value       :: Maybe W256
+      , gas         :: Maybe W256
+      , number      :: Maybe W256
+      , timestamp   :: Maybe W256
+      , gaslimit    :: Maybe W256
+      , gasprice    :: Maybe W256
+      , maxcodesize :: Maybe W256
+      , difficulty  :: Maybe W256
+      , debug       :: Bool
+      , state       :: Maybe String
       }
   | DappTest
       { jsonFile           :: Maybe String
@@ -328,6 +329,7 @@ vmFromCommand cmd =
       , EVM.vmoptTimestamp     = word timestamp 0
       , EVM.vmoptBlockGaslimit = word gaslimit 0
       , EVM.vmoptGasprice      = word gasprice 0
+      , EVM.vmoptMaxCodeSize   = word maxcodesize 0xffffffff
       , EVM.vmoptDifficulty    = word difficulty 0
       , EVM.vmoptSchedule      = FeeSchedule.metropolis
       , EVM.vmoptCreate        = False

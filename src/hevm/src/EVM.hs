@@ -77,7 +77,7 @@ data Error
   | StateChangeWhileStatic
   | InvalidMemoryAccess
   | CallDepthLimitReached
-  | MaxCodeSizeExceeded Int Int
+  | MaxCodeSizeExceeded Word Word
 
 deriving instance Show Error
 
@@ -155,6 +155,7 @@ data VMOpts = VMOpts
   , vmoptTimestamp :: W256
   , vmoptCoinbase :: Addr
   , vmoptDifficulty :: W256
+  , vmoptMaxCodeSize :: W256
   , vmoptBlockGaslimit :: W256
   , vmoptGasprice :: W256
   , vmoptSchedule :: FeeSchedule Word
@@ -254,12 +255,13 @@ data Env = Env
 
 -- | Data about the block
 data Block = Block
-  { _coinbase   :: Addr
-  , _timestamp  :: Word
-  , _number     :: Word
-  , _difficulty :: Word
-  , _gaslimit   :: Word
-  , _schedule   :: FeeSchedule Word
+  { _coinbase    :: Addr
+  , _timestamp   :: Word
+  , _number      :: Word
+  , _difficulty  :: Word
+  , _gaslimit    :: Word
+  , _maxCodeSize :: Word
+  , _schedule    :: FeeSchedule Word
   }
 
 blankState :: FrameState
@@ -335,6 +337,7 @@ makeVm o = VM
     , _timestamp = w256 $ vmoptTimestamp o
     , _number = w256 $ vmoptNumber o
     , _difficulty = w256 $ vmoptDifficulty o
+    , _maxCodeSize = w256 $ vmoptMaxCodeSize o
     , _gaslimit = w256 $ vmoptBlockGaslimit o
     , _schedule = vmoptSchedule o
     }
@@ -998,15 +1001,15 @@ exec1 = do
               accessMemoryRange fees xOffset xSize $ do
                 let
                   output = readMemory (num xOffset) (num xSize) vm
-                  codesize = BS.length output
-                  maxCodesize = 24576
+                  codesize = num (BS.length output)
+                  maxsize = the block maxCodeSize
                 case view frames vm of
                   [] ->
                     case (the tx isCreate) of
                       True ->
-                        if codesize > maxCodesize
+                        if codesize > maxsize
                         then do
-                          finishFrame (FrameErrored (MaxCodeSizeExceeded maxCodesize codesize))
+                          finishFrame (FrameErrored (MaxCodeSizeExceeded maxsize codesize))
                         else
                           burn (g_codedeposit * num (BS.length output)) $
                             finishFrame (FrameReturned output)
@@ -1017,9 +1020,9 @@ exec1 = do
                       context = view frameContext frame
                     case context of
                       CreationContext _ _ _ _ ->
-                        if codesize > maxCodesize
+                        if codesize > maxsize
                         then do
-                          finishFrame (FrameErrored (MaxCodeSizeExceeded maxCodesize codesize))
+                          finishFrame (FrameErrored (MaxCodeSizeExceeded maxsize codesize))
                         else
                           burn (g_codedeposit * num (BS.length output)) $
                             finishFrame (FrameReturned output)

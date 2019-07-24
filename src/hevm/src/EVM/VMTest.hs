@@ -52,12 +52,12 @@ import qualified Data.ByteString.Lazy  as Lazy
 data Which = Pre | Post
 
 data Block = Block
-  { blockCoinbase   :: Addr
-  , blockDifficulty :: W256
-  , blockGasLimit   :: W256
-  , blockNumber     :: W256
-  , blockTimestamp  :: W256
-  , blockTxs        :: [Transaction]
+  { blockCoinbase    :: Addr
+  , blockDifficulty  :: W256
+  , blockGasLimit    :: W256
+  , blockNumber      :: W256
+  , blockTimestamp   :: W256
+  , blockTxs         :: [Transaction]
   } deriving Show
 
 data Case = Case
@@ -271,6 +271,7 @@ parseVmOpts v =
            <*> wordField env  "currentTimestamp"
            <*> addrField env  "currentCoinbase"
            <*> wordField env  "currentDifficulty"
+           <*> pure 0xffffffff
            <*> wordField env  "currentGasLimit"
            <*> wordField exec "gasPrice"
            <*> pure (EVM.FeeSchedule.homestead)
@@ -378,6 +379,7 @@ fromCreateBlockchainCase block tx preState postState =
           , vmoptTimestamp     = blockTimestamp block
           , vmoptCoinbase      = blockCoinbase block
           , vmoptDifficulty    = blockDifficulty block
+          , vmoptMaxCodeSize   = 24576
           , vmoptBlockGaslimit = blockGasLimit block
           , vmoptGasprice      = txGasPrice tx
           , vmoptSchedule      = feeSchedule
@@ -416,6 +418,7 @@ fromNormalBlockchainCase block tx preState postState =
          , vmoptTimestamp     = blockTimestamp block
          , vmoptCoinbase      = blockCoinbase block
          , vmoptDifficulty    = blockDifficulty block
+         , vmoptMaxCodeSize   = 24576
          , vmoptBlockGaslimit = blockGasLimit block
          , vmoptGasprice      = txGasPrice tx
          , vmoptSchedule      = feeSchedule
