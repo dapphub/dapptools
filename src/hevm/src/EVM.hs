@@ -1559,18 +1559,16 @@ finalize True = do
 
   -- deposit the code from a creation tx, or not, depending on success
   use (tx . isCreate) >>= \case
-    False -> return ()
     True  -> case res of
-      Just (VMFailure _) -> do
-        createe <- use (state . contract)
-        modifying (env . contracts)
-          (Map.delete createe)
       Just (VMSuccess output) -> do
         createe <- use (state . contract)
         createeExists <- (Map.member createe) <$> use (env . contracts)
         if createeExists then replaceCode createe (RuntimeCode output)
         else return ()
+      Just (VMFailure _) -> do
+        return ()
       Nothing -> error "Finalising an unfinished tx."
+    False -> return ()
 
   -- compute and pay the refund to the caller and the
   -- corresponding payment to the miner, including the

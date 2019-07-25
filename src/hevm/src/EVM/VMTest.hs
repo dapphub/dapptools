@@ -119,12 +119,13 @@ checkExpectation diff execmode x vm =
         printField f d = putStrLn $ Map.foldrWithKey (\k v acc ->
           acc ++ showAddrWith0x k ++ " : " ++ f v ++ "\n") "" d
 
-        (state, money, nonce, storage) = checkExpectedContracts vm (expectedContracts expectation)
+        (state, money, nonce, storage, code) = checkExpectedContracts vm (expectedContracts expectation)
         reason = map fst (filter (not . snd)
-            [ ("bad-state",   state || money || nonce || storage)
-            , ("bad-balance", not money || nonce || storage || state)
-            , ("bad-nonce",   not nonce || money || storage || state)
-            , ("bad-storage", not storage || money || nonce || state)
+            [ ("bad-state",   state || money || nonce || storage || code)
+            , ("bad-balance", not money || nonce || storage || code || state)
+            , ("bad-nonce",   not nonce || money || storage || code || state)
+            , ("bad-storage", not storage || money || nonce || code || state)
+            , ("bad-code",    not code || money || nonce || storage || state)
             ])
         expected = expectedContracts expectation
         actual = view (EVM.env . EVM.contracts . to (fmap clearZeroStorage)) vm
@@ -144,7 +145,7 @@ checkExpectation diff execmode x vm =
 
     (_, Just expectation, Just (EVM.VMSuccess output)) -> do
       let
-        (s1, (b1, _, _, _)) = ("bad-state", checkExpectedContracts vm (expectedContracts expectation))
+        (s1, (b1, _, _, _, _)) = ("bad-state", checkExpectedContracts vm (expectedContracts expectation))
         (s2, b2) = ("bad-output", checkExpectedOut output (expectedOut expectation))
         (s3, b3) = ("bad-gas", checkExpectedGas vm (expectedGas expectation))
         ss = map fst (filter (not . snd) [(s1, b1), (s2, b2), (s3, b3)])
@@ -180,7 +181,7 @@ checkExpectedOut output ex = case ex of
         padded_cs  = padNewAccounts cs  (Map.keys cs')
     in padded_cs == padded_cs'
 
-checkExpectedContracts :: EVM.VM -> Map Addr Contract -> (Bool, Bool, Bool, Bool)
+checkExpectedContracts :: EVM.VM -> Map Addr Contract -> (Bool, Bool, Bool, Bool, Bool)
 checkExpectedContracts vm expected =
   let cs = vm ^. EVM.env . EVM.contracts . to (fmap clearZeroStorage)
       expectedCs = realizeContracts expected
@@ -188,6 +189,7 @@ checkExpectedContracts vm expected =
      , (clearBalance <$> expectedCs) ~= (clearBalance <$> cs)
      , (clearNonce   <$> expectedCs) ~= (clearNonce   <$> cs)
      , (clearStorage <$> expectedCs) ~= (clearStorage <$> cs)
+     , (clearCode    <$> expectedCs) ~= (clearCode    <$> cs)
      )
 
 clearZeroStorage :: EVM.Contract -> EVM.Contract
@@ -202,6 +204,9 @@ clearBalance = set EVM.balance 0
 
 clearNonce :: EVM.Contract -> EVM.Contract
 clearNonce = set EVM.nonce 0
+
+clearCode :: EVM.Contract -> EVM.Contract
+clearCode = set EVM.contractcode (EVM.RuntimeCode mempty)
 
 checkExpectedGas :: EVM.VM -> Maybe W256 -> Bool
 checkExpectedGas vm ex = case ex of
@@ -478,18 +483,26 @@ initCreateTx tx block cs = do
    . touchAccount createdAddr
    . touchAccount coinbase $ cs, createdAddr)
 
--- determine the appropriate state to revert to by resetting the txvalue
--- transfer, back from toAddr to origin
-revertTxValue :: EVM.VMOpts -> Map Addr Contract -> Map Addr EVM.Contract
-revertTxValue opts =
+-- determine the appropriate state to revert to by
+-- resetting the txvalue transfer and the nonce.
+-- in the future we should refactor this and have
+-- something like Transaction.create,call which
+-- correctly deal with the reversion.
+revertInit :: EVM.VMOpts -> Map Addr Contract -> Map Addr EVM.Contract
+revertInit opts =
   let
     value  = EVM.vmoptValue opts
     origin = EVM.vmoptOrigin opts
     toAddr = EVM.vmoptAddress opts
+    create = EVM.vmoptCreate opts
   in
     realizeContracts
     . (Map.adjust (over balance (+ value)) origin)
     . (Map.adjust (over balance (subtract value)) toAddr)
+    . (if create
+       then (Map.adjust (set nonce 0) toAddr)
+          . (Map.adjust (set code (EVM.RuntimeCode mempty)) toAddr)
+       else id)
 
 vmForCase :: EVM.ExecMode -> Case -> EVM.VM
 vmForCase mode x =
@@ -498,7 +511,7 @@ vmForCase mode x =
   in
     EVM.makeVm (testVmOpts x)
     & EVM.env . EVM.contracts .~ realizeContracts initState
-    & EVM.tx . EVM.txReversion .~ revertTxValue (testVmOpts x) initState
+    & EVM.tx . EVM.txReversion .~ revertInit (testVmOpts x) initState
     & EVM.execMode .~ mode
 
 interpret :: Stepper a -> EVM a
