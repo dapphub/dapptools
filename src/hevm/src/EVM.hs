@@ -1545,17 +1545,19 @@ finalize True = do
   -- burn remaining gas on error (not revert or success)
   case resultRefunds <$> res of
     Just False ->
-      use (state . gas) >>= (flip burn (return ()))
+      use (state . gas) >>= (flip burn (noop))
     _ ->
-      return ()
+      noop
 
   -- revert all contracts on error (any failure)
   case res of
     Just (VMFailure _) -> do
       reversion <- use (tx . txReversion)
       assign (env . contracts) reversion
+      assign (tx . selfdestructs) mempty
+      assign (tx . refunds) mempty
     _ ->
-      return ()
+      noop
 
   -- deposit the code from a creation tx, or not, depending on success
   use (tx . isCreate) >>= \case
@@ -1564,11 +1566,11 @@ finalize True = do
         createe <- use (state . contract)
         createeExists <- (Map.member createe) <$> use (env . contracts)
         if createeExists then replaceCode createe (RuntimeCode output)
-        else return ()
+        else noop
       Just (VMFailure _) -> do
-        return ()
+        noop
       Nothing -> error "Finalising an unfinished tx."
-    False -> return ()
+    False -> noop
 
   -- compute and pay the refund to the caller and the
   -- corresponding payment to the miner, including the
@@ -1612,7 +1614,7 @@ finalize True = do
         (Map.filterWithKey
           (\k a -> not ((elem k touchedAddresses) && accountEmpty a)))
     _ ->
-      return ()
+      noop
 
 loadContract :: Addr -> EVM ()
 loadContract target =
