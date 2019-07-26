@@ -1134,21 +1134,23 @@ exec1 = do
           notStatic $
           case stk of
             [] -> underrun
-            (x:_) -> let
-              recipientExists = accountExists (num x) vm
-              c_new = if not recipientExists && view balance this /= 0
-                      then num g_selfdestruct_newaccount
-                      else 0
+            ((num -> xTo):_) ->
+              let
+                recipientExists = accountExists xTo vm
+                c_new = if not recipientExists && view balance this /= 0
+                        then num g_selfdestruct_newaccount
+                        else 0
               in burn (g_selfdestruct + c_new) $ do
-              destructs <- use (tx . selfdestructs)
-              if elem self destructs then noop else refund r_selfdestruct
-              touchAccount (num x) $ \_ -> do
-                pushTo (tx . selfdestructs) self
-                assign (env . contracts . ix self . balance) 0
-                modifying
-                  (env . contracts . ix (num x) . balance)
-                  (+ (vm ^?! env . contracts . ix self . balance))
-                doStop
+                destructs <- use (tx . selfdestructs)
+                if elem self destructs then noop else refund r_selfdestruct
+                touchAccount xTo $ \_ -> do
+                  pushTo (tx . selfdestructs) self
+                  assign (env . contracts . ix self . balance) 0
+                  modifying
+                    (env . contracts . ix xTo . balance)
+                    (+ (vm ^?! env . contracts . ix self . balance))
+                  modifying (tx . touchedAccounts) (xTo:)
+                  doStop
 
         -- op: REVERT
         0xfd ->
