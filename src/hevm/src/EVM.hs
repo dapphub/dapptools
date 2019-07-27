@@ -1226,9 +1226,11 @@ executePrecompile fees preCompileAddr gasCap inOffset inSize outOffset outSize x
       case preCompileAddr of
         -- ECRECOVER
         0x1 ->
-          case EVM.Precompiled.execute 0x1 input (num outSize) of
+          case EVM.Precompiled.execute 0x1 (truncpad 128 input) 32 of
             Nothing -> do
-              assign (state . stack) (0 : xs)
+              -- return no output for invalid signature
+              assign (state . stack) (1 : xs)
+              assign (state . returndata) mempty
               next
             Just output -> do
               assign (state . stack) (1 : xs)
