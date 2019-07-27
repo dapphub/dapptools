@@ -62,7 +62,7 @@ data Block = Block
 
 data Case = Case
   { testVmOpts      :: EVM.VMOpts
-  , testContracts   :: Map Addr Contract
+  , checkContracts  :: Map Addr Contract
   , testExpectation :: Maybe Expectation
   } deriving Show
 
@@ -127,7 +127,7 @@ checkExpectation diff execmode x vm =
             , ("bad-storage", not storage || money || nonce || code || state)
             , ("bad-code",    not code || money || nonce || storage || state)
             ])
-        initial = testContracts x
+        initial = initTx x
         expected = expectedContracts expectation
         actual = view (EVM.env . EVM.contracts . to (fmap clearZeroStorage)) vm
 
@@ -344,7 +344,16 @@ realizeContract x =
         Map.toList $ x ^. storage
         )
 
-data BlockchainError = TooManyBlocks | TooManyTxs | NoTxs | TargetMissing | SignatureUnverified | InvalidTx | OldNetwork | FailedCreate deriving Show
+data BlockchainError
+  = TooManyBlocks
+  | TooManyTxs
+  | NoTxs
+  | TargetMissing
+  | SignatureUnverified
+  | InvalidTx
+  | OldNetwork
+  | FailedCreate
+  deriving Show
 
 errorFatal :: BlockchainError -> Bool
 errorFatal TooManyBlocks = True
@@ -370,10 +379,10 @@ fromCreateBlockchainCase :: Block -> Transaction
                          -> Either BlockchainError Case
 fromCreateBlockchainCase block tx preState postState =
   case (sender 1 tx,
-        initCreateTx tx block preState) of
+        checkCreateTx tx block preState) of
     (Nothing, _) -> Left SignatureUnverified
     (_, Nothing) -> Left FailedCreate
-    (Just origin, Just (initState, createdAddr)) -> let
+    (Just origin, Just (checkState, createdAddr)) -> let
       feeSchedule = EVM.FeeSchedule.metropolis
       in Right $ Case
          (EVM.VMOpts
@@ -395,7 +404,7 @@ fromCreateBlockchainCase block tx preState postState =
           , vmoptSchedule      = feeSchedule
           , vmoptCreate        = True
           })
-        initState
+        checkState
         (Just $ Expectation Nothing postState Nothing)
 
 
@@ -411,10 +420,10 @@ fromNormalBlockchainCase block tx preState postState =
           Just c -> case (view code c) of
               EVM.RuntimeCode x  -> x
               EVM.InitCode x     -> x
-  in case (toAddr , toCode , sender 1 tx , initNormalTx tx block preState) of
+  in case (toAddr , toCode , sender 1 tx , checkNormalTx tx block preState) of
       (_, _, Nothing, _) -> Left SignatureUnverified
       (_, _, _, Nothing) -> Left InvalidTx
-      (_, _, Just origin, Just initState) -> Right $ Case
+      (_, _, Just origin, Just checkState) -> Right $ Case
         (EVM.VMOpts
          { vmoptCode          = theCode
          , vmoptCalldata      = txData tx
@@ -434,7 +443,7 @@ fromNormalBlockchainCase block tx preState postState =
          , vmoptSchedule      = feeSchedule
          , vmoptCreate        = False
          })
-        initState
+        checkState
         (Just $ Expectation Nothing postState Nothing)
 
 
@@ -447,77 +456,72 @@ validateTx tx cs = do
   return $ gasDeposit + (txValue tx) <= originBalance
     && (txNonce tx) == originNonce
 
-initNormalTx :: Transaction -> Block -> Map Addr Contract -> Maybe (Map Addr Contract)
-initNormalTx tx block cs = do
+checkNormalTx :: Transaction -> Block -> Map Addr Contract -> Maybe (Map Addr Contract)
+checkNormalTx tx block prestate = do
   toAddr <- txToAddr tx
   origin <- sender 1 tx
-  valid  <- validateTx tx cs
+  valid  <- validateTx tx prestate
   let gasDeposit = fromIntegral (txGasPrice tx) * (txGasLimit tx)
       coinbase   = blockCoinbase block
   if not valid then mzero else
     return $
     (Map.adjust ((over nonce   (+ 1))
-               . (over balance (subtract gasDeposit))
-               . (over balance (subtract $ txValue tx))) origin)
-    . (Map.adjust (over balance (+ (txValue tx))) toAddr)
+               . (over balance (subtract gasDeposit))) origin)
     . touchAccount origin
     . touchAccount toAddr
-    . touchAccount coinbase $ cs
+    . touchAccount coinbase $ prestate
 
-initCreateTx :: Transaction -> Block -> Map Addr Contract -> Maybe ((Map Addr Contract), Addr)
-initCreateTx tx block cs = do
+checkCreateTx :: Transaction -> Block -> Map Addr Contract -> Maybe ((Map Addr Contract), Addr)
+checkCreateTx tx block prestate = do
   origin <- sender 1 tx
-  valid  <- validateTx tx cs
+  valid  <- validateTx tx prestate
   let gasDeposit  = fromIntegral (txGasPrice tx) * (txGasLimit tx)
       coinbase    = blockCoinbase block
-      senderNonce = view (accountAt origin . nonce) cs
+      senderNonce = view (accountAt origin . nonce) prestate
       createdAddr = newContractAddress origin senderNonce
-      prevCode    = view (accountAt createdAddr .  code) cs
-      prevNonce   = view (accountAt createdAddr . nonce) cs
-  guard $ (prevCode == EVM.RuntimeCode mempty) && (prevNonce == 0)
-  if not valid then mzero else
+      prevCode    = view (accountAt createdAddr .  code) prestate
+      prevNonce   = view (accountAt createdAddr . nonce) prestate
+  if ((prevCode /= EVM.RuntimeCode mempty) || (prevNonce /= 0) || (not valid))
+  then mzero
+  else
     return $
     ((Map.adjust ((over nonce   (+ 1))
-                . (over balance (subtract gasDeposit))
-                . (over balance (subtract $ txValue tx))) origin)
-   . (Map.adjust ((over balance (+ (txValue tx)))
-                . (set code (EVM.InitCode $ txData tx))
-                . (set nonce 1)
-                . (set storage mempty)
-                . (set create True)) createdAddr)
-   . touchAccount origin
-   . touchAccount createdAddr
-   . touchAccount coinbase $ cs, createdAddr)
+                 . (over balance (subtract gasDeposit))) origin)
+    . touchAccount origin
+    . touchAccount createdAddr
+    . touchAccount coinbase $ prestate, createdAddr)
 
--- determine the appropriate state to revert to by
--- resetting the txvalue transfer and the nonce.
--- in the future we should refactor this and have
--- something like Transaction.create,call which
--- correctly deal with the reversion.
-revertInit :: EVM.VMOpts -> Map Addr Contract -> Map Addr EVM.Contract
-revertInit opts =
+initTx :: Case -> Map Addr Contract
+initTx x =
   let
-    value  = EVM.vmoptValue opts
-    origin = EVM.vmoptOrigin opts
-    toAddr = EVM.vmoptAddress opts
-    create = EVM.vmoptCreate opts
+    checkState = checkContracts x
+    opts     = testVmOpts x
+    toAddr   = EVM.vmoptAddress opts
+    origin   = EVM.vmoptOrigin  opts
+    value    = EVM.vmoptValue   opts
+    initcode = EVM.vmoptCode    opts
+    creation = EVM.vmoptCreate  opts
   in
-    realizeContracts
-    . (Map.adjust (over balance (+ value)) origin)
-    . (Map.adjust (over balance (subtract value)) toAddr)
-    . (if create
-       then (Map.adjust (set nonce 0) toAddr)
-          . (Map.adjust (set code (EVM.RuntimeCode mempty)) toAddr)
+    id
+    . (Map.adjust (over balance (subtract value)) origin)
+    . (Map.adjust (over balance (+ value)) toAddr)
+    . (if creation
+       then (Map.adjust (set code (EVM.InitCode initcode)) toAddr)
+          . (Map.adjust (set nonce 1) toAddr)
+          . (Map.adjust (set storage mempty) toAddr)
+          . (Map.adjust (set create True) toAddr)
        else id)
+    $ checkState
 
 vmForCase :: EVM.ExecMode -> Case -> EVM.VM
 vmForCase mode x =
   let
-    initState = testContracts x
+    checkState = checkContracts x
+    initState = initTx x
   in
     EVM.makeVm (testVmOpts x)
     & EVM.env . EVM.contracts .~ realizeContracts initState
-    & EVM.tx . EVM.txReversion .~ revertInit (testVmOpts x) initState
+    & EVM.tx . EVM.txReversion .~ realizeContracts checkState
     & EVM.execMode .~ mode
 
 interpret :: Stepper a -> EVM a
