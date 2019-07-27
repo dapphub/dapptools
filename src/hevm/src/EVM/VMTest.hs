@@ -483,6 +483,7 @@ initCreateTx tx block cs = do
    . (Map.adjust ((over balance (+ (txValue tx)))
                 . (set code (EVM.InitCode $ txData tx))
                 . (set nonce 1)
+                . (set storage mempty)
                 . (set create True)) createdAddr)
    . touchAccount origin
    . touchAccount createdAddr
