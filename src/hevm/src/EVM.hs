@@ -78,6 +78,7 @@ data Error
   | InvalidMemoryAccess
   | CallDepthLimitReached
   | MaxCodeSizeExceeded Word Word
+  | PrecompileFailure
 
 deriving instance Show Error
 
@@ -1283,8 +1284,10 @@ executePrecompile fees preCompileAddr gasCap inOffset inSize outOffset outSize x
         -- ECADD
         0x6 -> case EVM.Precompiled.execute 0x6 (truncpad 128 input) 64 of
           Nothing -> do
-            assign (state . stack) (0 : xs)
-            next
+            burn (gasCap - cost) $ do
+              assign (state . stack) (0 : xs)
+              pushTrace $ ErrorTrace $ PrecompileFailure
+              next
           Just output -> do
             let truncpaddedOutput = truncpad 64 output
             assign (state . stack) (1 : xs)
@@ -1295,8 +1298,10 @@ executePrecompile fees preCompileAddr gasCap inOffset inSize outOffset outSize x
         -- ECMUL
         0x7 -> case EVM.Precompiled.execute 0x7 (truncpad 96 input) 64 of
           Nothing -> do
-            assign (state . stack) (0 : xs)
-            next
+            burn (gasCap - cost) $ do
+              assign (state . stack) (0 : xs)
+              pushTrace $ ErrorTrace $ PrecompileFailure
+              next
           Just output -> do
             let truncpaddedOutput = truncpad 64 output
             assign (state . stack) (1 : xs)
@@ -1307,8 +1312,10 @@ executePrecompile fees preCompileAddr gasCap inOffset inSize outOffset outSize x
         -- ECPAIRING
         0x8 -> case EVM.Precompiled.execute 0x8 input 32 of
           Nothing -> do
-            assign (state . stack) (0 : xs)
-            next
+            burn (gasCap - cost) $ do
+              assign (state . stack) (0 : xs)
+              pushTrace $ ErrorTrace $ PrecompileFailure
+              next
           Just output -> do
             let truncpaddedOutput = truncpad 32 output
             assign (state . stack) (1 : xs)
