@@ -1370,7 +1370,7 @@ costOfPrecompile (FeeSchedule {..}) precompileAddr input =
     -- ECMUL
     0x7 -> 40000
     -- ECPAIRING
-    0x8 -> num $ ((BS.length input) `div` 192) * 60000 + 40000
+    0x8 -> num $ ((BS.length input) `div` 192) * 80000 + 100000
     _ -> error ("unimplemented precompiled contract " ++ show precompileAddr)
 
 
