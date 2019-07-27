@@ -127,11 +127,16 @@ checkExpectation diff execmode x vm =
             , ("bad-storage", not storage || money || nonce || code || state)
             , ("bad-code",    not code || money || nonce || storage || state)
             ])
+        initial = testContracts x
         expected = expectedContracts expectation
         actual = view (EVM.env . EVM.contracts . to (fmap clearZeroStorage)) vm
 
       putStr (intercalate " " reason)
       if diff && (not state) then do
+        putStrLn "\nInitial balance/state: "
+        printField (\v -> (show . toInteger  $ _nonce v) ++ " "
+                       ++ (show . toInteger  $ _balance v) ++ " "
+                       ++ (show . Map.toList $ _storage v)) initial
         putStrLn "\nExpected balance/state: "
         printField (\v -> (show . toInteger  $ _nonce v) ++ " "
                        ++ (show . toInteger  $ _balance v) ++ " "
