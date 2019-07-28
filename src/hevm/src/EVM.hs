@@ -1360,18 +1360,18 @@ costOfPrecompile (FeeSchedule {..}) precompileAddr input =
     -- MODEXP
     0x5 -> num $ ((f $ max lenm lenb) * (max lene' 1)) `div` (num g_quaddivisor)
       where (lenb, lene, lenm, _, e, _) = parseModexpInput input
-            nextWord = word $ (BS.take 32) . (BS.drop (96 + lenb)) $ input
-            lene' = if e == 0 then 0
-                    else if lene <= 32
-                         then log2 lene
-                         else if nextWord == 0
-                              then 8 * (lene - 32)
-                              else 8 * (lene - 32) + log2 nextWord
+            input' = truncpad (96 + lenb + lene + lenm) input
+            e'     = w256 $ word $ (BS.take lene) . (BS.drop (96 + lenb)) $ input'
+            e32    = w256 $ word $ (BS.take 32)   . (BS.drop (96 + lenb)) $ input'
+            lene'  = if e <= 1 then 0
+                     else if lene <= 32
+                       then log2 e'
+                       else log2 e32 + 8 * (lene - 32)
             f :: Int -> Int
             f x = if x <= 64 then x * x
                   else if x <= 1024
-                       then (x * x) `div` 4 + 96 * x - 3072
-                       else (x * x) `div` 16 + 480 * x - 199680
+                   then (x * x) `div` 4 + 96 * x - 3072
+                   else (x * x) `div` 16 + 480 * x - 199680
     -- ECADD
     0x6 -> 500
     -- ECMUL

@@ -103,7 +103,7 @@ homestead = FeeSchedule
   , g_copy = 3
   , g_blockhash = 20
   , g_extcodehash = 400
-  , g_quaddivisor = 100
+  , g_quaddivisor = 20
   , r_block = 2000000000000000000
   }
 
