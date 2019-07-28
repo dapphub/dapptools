@@ -2302,9 +2302,9 @@ costOfCreate
   :: FeeSchedule Word
   -> Word -> Word -> (Word, Word)
 costOfCreate (FeeSchedule {..}) availableGas hashSize =
-  (createCost + hashCost + initGas, initGas)
+  (createCost + initGas, initGas)
   where
-    createCost = g_create
+    createCost = g_create + hashCost
     hashCost   = g_sha3word * ceilDiv (hashSize) 32
     initGas    = allButOne64th (availableGas - createCost)
 
