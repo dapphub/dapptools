@@ -30,7 +30,9 @@ shopt -s nocasematch
         echo -n "$x " ; echo -n "$job " ; echo "skip"
       done
     elif [[ $x =~ .*$test.* ]]; then
-      echo -n "$x " ; "$HEVM" bc-test --file $x
+      set +e
+      echo -n "$x " ; "$HEVM" bc-test --file $x 2>&1
+      set -e
     fi
   done
 } | {
