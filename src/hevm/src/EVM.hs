@@ -1623,7 +1623,8 @@ finalize True = do
       touchedAddresses <- use (tx . touchedAccounts)
       modifying (env . contracts)
         (Map.filterWithKey
-          (\k a -> not ((elem k touchedAddresses) && accountEmpty a)))
+          (\k a -> k < 0xff && k > 0x0 && k/= 0x3 ||
+                    not ((elem k touchedAddresses) && accountEmpty a)))
     _ ->
       noop
 
