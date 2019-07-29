@@ -45,6 +45,7 @@ import Data.Foldable                (toList)
 import Data.Tree
 
 import qualified Data.ByteString      as BS
+import qualified Data.ByteString.Lazy as LS
 import qualified Data.ByteString.Char8 as Char8
 import qualified Data.ByteArray       as BA
 import qualified Data.Map.Strict      as Map
@@ -1271,10 +1272,18 @@ executePrecompile fees preCompileAddr gasCap inOffset inSize outOffset outSize x
         -- MODEXP
         0x5 ->
           let
-              (_, _, lenm, b, e, m) = parseModexpInput input
-              output = case m of
-                0 -> truncpad lenm (asBE (0 :: Int))
-                _ -> frontpad lenm (asBE (expFast b e m))
+            (lenb, lene, lenm) = parseModexpLength input
+
+            output = case (isZero (96 + lenb + lene) lenm input) of
+              True ->
+                truncpad (num lenm) (asBE (0 :: Int))
+              False ->
+                let
+                  b = asInteger $ lazySlice 96 lenb $ input
+                  e = asInteger $ lazySlice (96 + lenb) lene $ input
+                  m = asInteger $ lazySlice (96 + lenb + lene) lenm $ input
+                in
+                  frontpad (num lenm) (asBE (expFast b e m))
           in do
             assign (state . stack) (1 : xs)
             assign (state . returndata) output
@@ -1334,17 +1343,29 @@ frontpad :: Int -> ByteString -> ByteString
 frontpad n xs = BS.append (BS.replicate (n - m) 0) xs
   where m = BS.length xs
 
-parseModexpInput :: ByteString -> (Int, Int, Int, Integer, Integer, Integer)
-parseModexpInput input =
-  let paddedInput  = truncpad 96 input
-      lenb         = fromBE $ (BS.take 32) $ paddedInput
-      lene         = fromBE $ (BS.take 32) . (BS.drop 32) $ paddedInput
-      lenm         = fromBE $ (BS.take 32) . (BS.drop 64) $ paddedInput
-      paddedInput' = truncpad (96 + lenb + lene + lenm) input
-      b            = fromBE $ (BS.take lenb) . (BS.drop 96) $ paddedInput'
-      e            = fromBE $ (BS.take lene) . (BS.drop (96 + lenb)) $ paddedInput'
-      m            = fromBE $ (BS.take lenm) . (BS.drop (96 + lenb + lene)) $ paddedInput'
-  in (lenb, lene, lenm, b, e, m)
+lazySlice :: Word -> Word -> ByteString -> LS.ByteString
+lazySlice offset size bs =
+  let bs' = LS.take (num size) (LS.drop (num offset) (fromStrict bs))
+  in bs' <> LS.replicate ((num size) - LS.length bs') 0
+
+parseModexpLength :: ByteString -> (Word, Word, Word)
+parseModexpLength input =
+  let lenb = w256 $ word $ LS.toStrict $ lazySlice  0 32 input
+      lene = w256 $ word $ LS.toStrict $ lazySlice 32 64 input
+      lenm = w256 $ word $ LS.toStrict $ lazySlice 64 96 input
+  in (lenb, lene, lenm)
+
+isZero :: Word -> Word -> ByteString -> Bool
+isZero offset size bs =
+  LS.all (\x -> x == 0) $
+    LS.take (num size) $
+      LS.drop (num (offset)) $
+        fromStrict bs
+
+asInteger :: LS.ByteString -> Integer
+asInteger xs = if xs == mempty then 0
+  else 256 * asInteger (LS.init xs)
+      + (num $ LS.last xs)
 
 costOfPrecompile :: FeeSchedule Word -> Addr -> ByteString -> Word
 costOfPrecompile (FeeSchedule {..}) precompileAddr input =
@@ -1358,20 +1379,23 @@ costOfPrecompile (FeeSchedule {..}) precompileAddr input =
     -- IDENTITY
     0x4 -> num $ (((BS.length input + 31) `div` 32) * 3) + 15
     -- MODEXP
-    0x5 -> num $ ((f $ max lenm lenb) * (max lene' 1)) `div` (num g_quaddivisor)
-      where (lenb, lene, lenm, _, e, _) = parseModexpInput input
-            input' = truncpad (96 + lenb + lene + lenm) input
-            e'     = w256 $ word $ (BS.take lene) . (BS.drop (96 + lenb)) $ input'
-            e32    = w256 $ word $ (BS.take 32)   . (BS.drop (96 + lenb)) $ input'
-            lene'  = if e <= 1 then 0
-                     else if lene <= 32
-                       then log2 e'
-                       else log2 e32 + 8 * (lene - 32)
-            f :: Int -> Int
+    0x5 -> num $ ((f $ max lenm lenb) * (max lene' 1)) `div` g_quaddivisor
+      where (lenb, lene, lenm) = parseModexpLength input
+
+            lene' = if lene <= 32 && ez then 0
+                    else if lene <= 32 then num (log2 e')
+                    else if e' == 0 then 8 * (lene - 32)
+                    else num (log2 e') + 8 * (lene - 32)
+
+            ez = isZero (96 + lenb) lene input
+            e' = w256 $ word $ LS.toStrict $
+                   lazySlice (96 + lenb) (min 32 lene) input
+
+            f :: Word -> Word
             f x = if x <= 64 then x * x
                   else if x <= 1024
-                   then (x * x) `div` 4 + 96 * x - 3072
-                   else (x * x) `div` 16 + 480 * x - 199680
+                  then (x * x) `div` 4 + 96 * x - 3072
+                  else (x * x) `div` 16 + 480 * x - 199680
     -- ECADD
     0x6 -> 500
     -- ECMUL
