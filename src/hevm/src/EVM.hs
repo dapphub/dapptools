@@ -180,7 +180,7 @@ data FrameContext
     , creationContextReversion :: Map Addr Contract
     , creationContextSelfdestructs :: [Addr]
     , creationContextRefunds       :: [(Addr, Word)]
-
+    , creationContextTouched       :: [Addr]
     }
   | CallContext
     { callContextOffset   :: Word
@@ -191,6 +191,7 @@ data FrameContext
     , callContextReversion :: Map Addr Contract
     , callContextSelfdestructs :: [Addr]
     , callContextRefunds       :: [(Addr, Word)]
+    , callContextTouched       :: [Addr]
     }
 
 -- | The "registers" of the VM along with memory and data stack
@@ -1021,14 +1022,14 @@ exec1 = do
                     let
                       context = view frameContext frame
                     case context of
-                      CreationContext _ _ _ _ ->
+                      CreationContext _ _ _ _ _ ->
                         if codesize > maxsize
                         then do
                           finishFrame (FrameErrored (MaxCodeSizeExceeded maxsize codesize))
                         else
                           burn (g_codedeposit * num (BS.length output)) $
                             finishFrame (FrameReturned output)
-                      CallContext _ _ _ _ _ _ _ _ ->
+                      CallContext _ _ _ _ _ _ _ _ _ ->
                           finishFrame (FrameReturned output)
             _ -> underrun
 
@@ -1205,6 +1206,7 @@ precompiledContract vm fees gasCap precompileAddr recipient xValue inOffset inSi
                   ix recipient  . balance += xValue
                 modifying (tx . touchedAccounts) (self:)
                 modifying (tx . touchedAccounts) (recipient:)
+                modifying (tx . touchedAccounts) (precompileAddr:)
               _ ->
                 underrun
 
@@ -1491,7 +1493,7 @@ create self this xGas xValue xOffset xSize xs newAddr =
                               , creationContextReversion = view (env . contracts) vm0
                               , creationContextSelfdestructs = view (tx . selfdestructs) vm0
                               , creationContextRefunds = view (tx . refunds) vm0
-
+                              , creationContextTouched = view (tx . touchedAccounts) vm0
                               }
 
           zoom (env . contracts) $ do
@@ -1629,28 +1631,25 @@ finalize True = do
   modifying (env . contracts)
     (Map.adjust (over balance (+ minerPay)) miner)
 
-  -- state trie clearing (EIP 161) clears touched
-  -- accounts in the case of success only
+  -- finally, perform state trie clearing (EIP 161), of selfdestructs
+  -- and touched accounts. addresses are cleared if they have
+  --    a) selfdestructed, or
+  --    b) been touched and
+  --    c) are empty.
   -- (see Yellow Paper "Accrued Substate")
-  case res of
-    Just (VMSuccess _) -> do
-      -- addresses are cleared if they have
-      --    a) not already been cleared by selfdestruct,
-      --    b) been touched,
-      --    c) are empty.
-      --
-      -- first, remove any destructed addresses
-      destroyedAddresses <- use (tx . selfdestructs)
-      modifying (env . contracts)
-        (Map.filterWithKey (\k _ -> not (elem k destroyedAddresses)))
-      -- then, clear any remaining empty and touched addresses
-      touchedAddresses <- use (tx . touchedAccounts)
-      modifying (env . contracts)
-        (Map.filterWithKey
-          (\k a -> k < 0xff && k > 0x0 && k/= 0x3 ||
-                    not ((elem k touchedAddresses) && accountEmpty a)))
-    _ ->
-      noop
+  --
+  -- first, remove any destructed addresses
+  destroyedAddresses <- use (tx . selfdestructs)
+  modifying (env . contracts)
+    (Map.filterWithKey (\k _ -> not (elem k destroyedAddresses)))
+  --
+  -- then, clear any remaining empty and touched addresses
+  touchedAddresses <- use (tx . touchedAccounts)
+  modifying (env . contracts)
+    (Map.filterWithKey
+      (\k a -> not ((elem k touchedAddresses) && accountEmpty a)))
+      -- (\k a -> not ((elem k touchedAddresses) && (accountEmpty a || k == 0x3))))
+
 
 loadContract :: Addr -> EVM ()
 loadContract target =
@@ -1772,6 +1771,7 @@ delegateCall xGas xTo xInOffset xInSize xOutOffset xOutSize xs continue =
                   , callContextReversion = view (env . contracts) vm0
                   , callContextSelfdestructs = view (tx . selfdestructs) vm0
                   , callContextRefunds = view (tx . refunds) vm0
+                  , callContextTouched = view (tx . touchedAccounts) vm0
                   , callContextAbi =
                       if xInSize >= 4
                       then
@@ -1870,13 +1870,18 @@ finishFrame how = do
       case view frameContext nextFrame of
 
         -- Were we calling?
-        CallContext (num -> outOffset) (num -> outSize) _ _ _ reversion destructs refundz -> do
+        CallContext (num -> outOffset) (num -> outSize) _ _ _ reversion destructs refundz touched -> do
 
           let
             revertContracts = assign (env . contracts) reversion
             revertDestructs = assign (tx . selfdestructs) destructs
             revertRefunds   = assign (tx . refunds) refundz
-
+            revertTouched   = do
+              -- preserve touch of 0x3 in all cases
+              tA <- use (tx . touchedAccounts)
+              let
+                ripemd = [ a | a <- tA, a == 0x3]
+              assign (tx . touchedAccounts) (touched <> ripemd)
 
           case how of
             -- Case 1: Returning from a call?
@@ -1891,6 +1896,7 @@ finishFrame how = do
               revertContracts
               revertDestructs
               revertRefunds
+              revertTouched
               assign (state . returndata) output
               copyCallBytesToMemory output outSize 0 outOffset
               reclaimRemainingGasAllowance
@@ -1901,17 +1907,24 @@ finishFrame how = do
               revertContracts
               revertDestructs
               revertRefunds
+              revertTouched
               assign (state . returndata) mempty
               push 0
 
         -- Or were we creating?
-        CreationContext _ reversion destructs refundz -> do
+        CreationContext _ reversion destructs refundz touched -> do
           creator <- use (state . contract)
           let
             createe = view (state . contract) oldVm
             revertContracts = assign (env . contracts) reversion'
             revertDestructs = assign (tx . selfdestructs) destructs
             revertRefunds   = assign (tx . refunds) refundz
+            revertTouched   = do
+              -- preserve touch of 0x3 in all cases
+              tA <- use (tx . touchedAccounts)
+              let
+                ripemd = [ a | a <- tA, a == 0x3 ]
+              assign (tx . touchedAccounts) (touched <> ripemd)
 
             -- persist the nonce through the reversion
             reversion' = (Map.adjust (over nonce (+ 1)) creator) reversion
@@ -1929,6 +1942,7 @@ finishFrame how = do
               revertContracts
               revertDestructs
               revertRefunds
+              revertTouched
               assign (state . returndata) output
               reclaimRemainingGasAllowance
               push 0
@@ -1938,6 +1952,7 @@ finishFrame how = do
               revertContracts
               revertDestructs
               revertRefunds
+              revertTouched
               assign (state . returndata) mempty
               push 0
 
