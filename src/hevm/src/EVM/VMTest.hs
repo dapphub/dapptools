@@ -127,12 +127,17 @@ checkExpectation diff execmode x vm =
             , ("bad-storage", not storage || money || nonce || code || state)
             , ("bad-code",    not code || money || nonce || storage || state)
             ])
+        check = checkContracts x
         initial = initTx x
         expected = expectedContracts expectation
         actual = view (EVM.env . EVM.contracts . to (fmap clearZeroStorage)) vm
 
       putStr (intercalate " " reason)
       if diff && (not state) then do
+        putStrLn "\nCheck balance/state: "
+        printField (\v -> (show . toInteger  $ _nonce v) ++ " "
+                       ++ (show . toInteger  $ _balance v) ++ " "
+                       ++ (show . Map.toList $ _storage v)) check
         putStrLn "\nInitial balance/state: "
         printField (\v -> (show . toInteger  $ _nonce v) ++ " "
                        ++ (show . toInteger  $ _balance v) ++ " "
@@ -518,10 +523,18 @@ vmForCase mode x =
   let
     checkState = checkContracts x
     initState = initTx x
+    opts = testVmOpts x
+    creation = EVM.vmoptCreate opts
+    touchedAccounts =
+      if creation then
+        [EVM.vmoptOrigin opts]
+      else
+        [EVM.vmoptOrigin opts, EVM.vmoptAddress opts]
   in
     EVM.makeVm (testVmOpts x)
     & EVM.env . EVM.contracts .~ realizeContracts initState
     & EVM.tx . EVM.txReversion .~ realizeContracts checkState
+    & EVM.tx . EVM.touchedAccounts .~ touchedAccounts
     & EVM.execMode .~ mode
 
 interpret :: Stepper a -> EVM a
