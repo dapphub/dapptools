@@ -411,7 +411,27 @@ exec1 = do
 
   if the state pc >= num (BS.length (the state code))
     then
-      doStop
+      if self == 0x0 || self > 0x8
+        then doStop
+      else do
+        -- call to precompile
+        let ?op = 0x00 -- dummy value
+        let
+          calldatasize = num $ BS.length (the state calldata)
+        copyBytesToMemory (the state calldata) calldatasize 0 0
+        executePrecompile fees self (the state gas) 0 calldatasize 0 0 []
+        stk <- use (state . stack)
+        case stk of
+          (0:_) -> do
+            touchAccount self $ \_ -> do
+              modifying (tx . touchedAccounts) (self:)
+              vmError PrecompileFailure
+          (1:_) ->
+            touchAccount self $ \_ -> do
+              modifying (tx . touchedAccounts) (self:)
+              doStop
+          _ ->
+            underrun
 
     else do
       let ?op = BS.index (the state code) (the state pc)
@@ -1379,9 +1399,8 @@ costOfPrecompile (FeeSchedule {..}) precompileAddr input =
     -- IDENTITY
     0x4 -> num $ (((BS.length input + 31) `div` 32) * 3) + 15
     -- MODEXP
-    0x5 -> num $ ((f $ max lenm lenb) * (max lene' 1)) `div` g_quaddivisor
+    0x5 -> num $ (f (num (max lenm lenb)) * num (max lene' 1)) `div` (num g_quaddivisor)
       where (lenb, lene, lenm) = parseModexpLength input
-
             lene' = if lene <= 32 && ez then 0
                     else if lene <= 32 then num (log2 e')
                     else if e' == 0 then 8 * (lene - 32)
@@ -1391,7 +1410,7 @@ costOfPrecompile (FeeSchedule {..}) precompileAddr input =
             e' = w256 $ word $ LS.toStrict $
                    lazySlice (96 + lenb) (min 32 lene) input
 
-            f :: Word -> Word
+            f :: Integer -> Integer
             f x = if x <= 64 then x * x
                   else if x <= 1024
                   then (x * x) `div` 4 + 96 * x - 3072
