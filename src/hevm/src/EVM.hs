@@ -327,7 +327,7 @@ makeVm o = VM
     , _toAddr = vmoptAddress o
     , _value = w256 $ vmoptValue o
     , _selfdestructs = mempty
-    , _touchedAccounts = [vmoptOrigin o, vmoptAddress o, vmoptCoinbase o]
+    , _touchedAccounts = mempty
     , _refunds = mempty
     , _isCreate = vmoptCreate o
     , _txReversion = Map.fromList
@@ -994,6 +994,7 @@ exec1 = do
                                 zoom state $ do
                                   assign callvalue xValue
                                   assign caller (the state contract)
+                                modifying (tx . touchedAccounts) (self:)
             _ ->
               underrun
 
@@ -1057,8 +1058,10 @@ exec1 = do
                         pushTrace $ ErrorTrace $ CallDepthLimitReached
                         -- todo: push to vm . result?
                         next
-                      else
+                      else do
+                        caller <- use (state . caller)
                         delegateCall gas' xTo xInOffset xInSize xOutOffset xOutSize xs $ do
+                          modifying (tx . touchedAccounts) (caller:)
                           modifying (tx . touchedAccounts) (self:)
             _ -> underrun
 
@@ -1152,6 +1155,7 @@ exec1 = do
                   modifying
                     (env . contracts . ix xTo . balance)
                     (+ (vm ^?! env . contracts . ix self . balance))
+                  modifying (tx . touchedAccounts) (self:)
                   modifying (tx . touchedAccounts) (xTo:)
                   doStop
 
@@ -1630,6 +1634,7 @@ finalize True = do
     (Map.adjust (over balance (+ originPay)) txOrigin)
   modifying (env . contracts)
     (Map.adjust (over balance (+ minerPay)) miner)
+  modifying (tx . touchedAccounts) (miner:)
 
   -- finally, perform state trie clearing (EIP 161), of selfdestructs
   -- and touched accounts. addresses are cleared if they have
@@ -1648,7 +1653,6 @@ finalize True = do
   modifying (env . contracts)
     (Map.filterWithKey
       (\k a -> not ((elem k touchedAddresses) && accountEmpty a)))
-      -- (\k a -> not ((elem k touchedAddresses) && (accountEmpty a || k == 0x3))))
 
 
 loadContract :: Addr -> EVM ()
@@ -1876,12 +1880,7 @@ finishFrame how = do
             revertContracts = assign (env . contracts) reversion
             revertDestructs = assign (tx . selfdestructs) destructs
             revertRefunds   = assign (tx . refunds) refundz
-            revertTouched   = do
-              -- preserve touch of 0x3 in all cases
-              tA <- use (tx . touchedAccounts)
-              let
-                ripemd = [ a | a <- tA, a == 0x3]
-              assign (tx . touchedAccounts) (touched <> ripemd)
+            revertTouched   = assign (tx . touchedAccounts) touched
 
           case how of
             -- Case 1: Returning from a call?
@@ -1919,12 +1918,7 @@ finishFrame how = do
             revertContracts = assign (env . contracts) reversion'
             revertDestructs = assign (tx . selfdestructs) destructs
             revertRefunds   = assign (tx . refunds) refundz
-            revertTouched   = do
-              -- preserve touch of 0x3 in all cases
-              tA <- use (tx . touchedAccounts)
-              let
-                ripemd = [ a | a <- tA, a == 0x3 ]
-              assign (tx . touchedAccounts) (touched <> ripemd)
+            revertTouched   = assign (tx . touchedAccounts) touched
 
             -- persist the nonce through the reversion
             reversion' = (Map.adjust (over nonce (+ 1)) creator) reversion
