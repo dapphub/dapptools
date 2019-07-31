@@ -1168,16 +1168,24 @@ exec1 = do
                         else 0
               in burn (g_selfdestruct + c_new) $ do
                 destructs <- use (tx . selfdestructs)
-                if elem self destructs then noop else refund r_selfdestruct
-                touchAccount xTo $ \_ -> do
-                  pushTo (tx . selfdestructs) self
-                  assign (env . contracts . ix self . balance) 0
-                  modifying
-                    (env . contracts . ix xTo . balance)
-                    (+ (vm ^?! env . contracts . ix self . balance))
-                  modifying (tx . touchedAccounts) (self:)
-                  modifying (tx . touchedAccounts) (xTo:)
-                  doStop
+                if elem self destructs then noop else do refund r_selfdestruct
+                modifying (tx . selfdestructs) (self:)
+                modifying (tx . touchedAccounts) (xTo:)
+
+                let funds = (vm ^?! env . contracts . ix self . balance)
+                if funds == 0
+                  then
+                    doStop
+                else if self == xTo
+                  then do
+                    assign (env . contracts . ix self . balance) 0
+                    doStop
+                else
+                  touchAccount xTo $ \_ -> do
+                    assign (env . contracts . ix self . balance) 0
+                    modifying (env . contracts . ix xTo . balance)
+                      (+ (vm ^?! env . contracts . ix self . balance))
+                    doStop
 
         -- op: REVERT
         0xfd ->
