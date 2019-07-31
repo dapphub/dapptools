@@ -1634,8 +1634,7 @@ finalize True = do
     False -> noop
 
   -- compute and pay the refund to the caller and the
-  -- corresponding payment to the miner, including the
-  -- block reward
+  -- corresponding payment to the miner
   txOrigin     <- use (tx . origin)
   sumRefunds   <- (sum . (snd <$>)) <$> (use (tx . refunds))
   miner        <- use (block . coinbase)
@@ -1648,7 +1647,7 @@ finalize True = do
     gasUsed      = gasLimit - gasRemaining
     cappedRefund = min (quot gasUsed 2) sumRefunds
     originPay    = (gasRemaining + cappedRefund) * gasPrice
-    minerPay     = blockReward + gasPrice * (gasUsed - cappedRefund)
+    minerPay     = gasPrice * (gasUsed - cappedRefund)
 
   modifying (env . contracts)
     (Map.adjust (over balance (+ originPay)) txOrigin)
@@ -1656,7 +1655,7 @@ finalize True = do
     (Map.adjust (over balance (+ minerPay)) miner)
   modifying (tx . touchedAccounts) (miner:)
 
-  -- finally, perform state trie clearing (EIP 161), of selfdestructs
+  -- perform state trie clearing (EIP 161), of selfdestructs
   -- and touched accounts. addresses are cleared if they have
   --    a) selfdestructed, or
   --    b) been touched and
@@ -1667,13 +1666,19 @@ finalize True = do
   destroyedAddresses <- use (tx . selfdestructs)
   modifying (env . contracts)
     (Map.filterWithKey (\k _ -> not (elem k destroyedAddresses)))
-  --
   -- then, clear any remaining empty and touched addresses
   touchedAddresses <- use (tx . touchedAccounts)
   modifying (env . contracts)
     (Map.filterWithKey
       (\k a -> not ((elem k touchedAddresses) && accountEmpty a)))
 
+  -- finally, pay out the block reward, recreating the miner if necessary
+  preuse (env . contracts . ix miner) >>= \case
+    Nothing -> modifying (env . contracts)
+      (Map.insert miner (initialContract (EVM.RuntimeCode mempty)))
+    Just _  -> noop
+  modifying (env . contracts)
+    (Map.adjust (over balance (+ blockReward)) miner)
 
 loadContract :: Addr -> EVM ()
 loadContract target =
