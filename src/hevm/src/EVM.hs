@@ -881,29 +881,26 @@ exec1 = do
           notStatic $
           case stk of
             (xValue:xOffset:xSize:xs) ->
-              do
-                accessMemoryRange fees xOffset xSize $
+              accessMemoryRange fees xOffset xSize $ do
+                availableGas <- use (state . gas)
+                let
+                  newAddr = newContractAddress self (wordValue (view nonce this))
+                  (cost, gas') = costOfCreate fees availableGas 0
+                burn (cost - gas') $
                   if xValue > view balance this
                   then do
-                    burn g_create $ do
-                      assign (state . stack) (0 : xs)
-                      assign (state . returndata) mempty
-                      pushTrace $ ErrorTrace $ BalanceTooLow xValue (view balance this)
-                      next
+                    assign (state . stack) (0 : xs)
+                    assign (state . returndata) mempty
+                    pushTrace $ ErrorTrace $ BalanceTooLow xValue (view balance this)
+                    next
                   else if length (view frames vm) >= 1024
                   then do
-                    burn g_create $ do
-                      assign (state . stack) (0 : xs)
-                      assign (state . returndata) mempty
-                      pushTrace $ ErrorTrace $ CallDepthLimitReached
-                      -- todo: push to vm . result?
-                      next
+                    assign (state . stack) (0 : xs)
+                    assign (state . returndata) mempty
+                    pushTrace $ ErrorTrace $ CallDepthLimitReached
+                    next
                   else do
-                    availableGas <- use (state . gas)
-                    let
-                      (cost, gas') = costOfCreate fees availableGas 0
-                      newAddr      = newContractAddress self (wordValue (view nonce this))
-                    burn cost $
+                    burn gas' $
                       create self this gas' xValue xOffset xSize xs newAddr
             _ -> underrun
 
@@ -1089,30 +1086,27 @@ exec1 = do
         0xf5 -> notStatic $
           case stk of
             (xValue:xOffset:xSize:xSalt:xs) ->
-              do
-                accessMemoryRange fees xOffset xSize $
+              accessMemoryRange fees xOffset xSize $ do
+                availableGas <- use (state . gas)
+                let
+                  initcode = readMemory (num xOffset) (num xSize) vm
+                  newAddr  = newContractAddressCREATE2 self (num xSalt) initcode
+                  (cost, gas') = costOfCreate fees availableGas xSize
+                burn (cost - gas') $
                   if xValue > view balance this
                   then do
-                    burn g_create $ do
-                      assign (state . stack) (0 : xs)
-                      assign (state . returndata) mempty
-                      pushTrace $ ErrorTrace $ BalanceTooLow xValue (view balance this)
-                      next
+                    assign (state . stack) (0 : xs)
+                    assign (state . returndata) mempty
+                    pushTrace $ ErrorTrace $ BalanceTooLow xValue (view balance this)
+                    next
                   else if length (view frames vm) >= 1024
                   then do
-                    burn g_create $ do
-                      assign (state . stack) (0 : xs)
-                      assign (state . returndata) mempty
-                      pushTrace $ ErrorTrace $ CallDepthLimitReached
-                      -- todo: push to vm . result?
-                      next
+                    assign (state . stack) (0 : xs)
+                    assign (state . returndata) mempty
+                    pushTrace $ ErrorTrace $ CallDepthLimitReached
+                    next
                   else do
-                    availableGas <- use (state . gas)
-                    let
-                      (cost, gas') = costOfCreate fees availableGas xSize
-                      initcode     = readMemory (num xOffset) (num xSize) vm
-                      newAddr      = newContractAddressCREATE2 self (num xSalt) initcode
-                    burn cost $
+                    burn gas' $
                       create self this gas' xValue xOffset xSize xs newAddr
             _ -> underrun
 
