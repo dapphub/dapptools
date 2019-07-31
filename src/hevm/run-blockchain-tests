@@ -5,13 +5,15 @@ HEVM=${HEVM:-hevm}
 
 skip=''
 test=''
-usage() { echo "Usage: $(basename "$0") [--skip=<pattern>] [--test=<pattern>] <tests-dir>" 1>&2; exit 1; }
-OPTS=$(getopt --name="$0" --options=d --longoptions="skip:,test:" -- "$@") || usage
+timeout=10
+usage() { echo "Usage: $(basename "$0") [--skip=<pattern>] [--test=<pattern>] [--timeout=<seconds>] <tests-dir>" 1>&2; exit 1; }
+OPTS=$(getopt --name="$0" --options=d --longoptions="skip:,test:,timeout:" -- "$@") || usage
 eval set -- "$OPTS"
 while true; do
   case "$1" in
-    --skip) skip=$2; shift 2 ;;
-    --test) test=$2; shift 2 ;;
+    --skip)    skip=$2; shift 2 ;;
+    --test)    test=$2; shift 2 ;;
+    --timeout) timeout=$2; shift 2 ;;
     --) shift; break ;;
     *) usage ;;
   esac
@@ -31,7 +33,7 @@ shopt -s nocasematch
       done
     elif [[ $x =~ .*$test.* ]]; then
       set +e
-      echo -n "$x " ; "$HEVM" bc-test --file $x 2>&1
+      echo -n "$x " ; "$HEVM" bc-test --file $x --timeout $timeout 2>&1
       set -e
     fi
   done

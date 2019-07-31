@@ -51,7 +51,6 @@ import System.Directory           (withCurrentDirectory, listDirectory)
 import System.Exit                (die, exitFailure)
 import System.IO                  (hFlush, stdout)
 import System.Process             (callProcess)
-import System.Timeout             (timeout)
 
 import qualified Data.ByteString        as ByteString
 import qualified Data.ByteString.Base16 as BS16
@@ -59,6 +58,7 @@ import qualified Data.ByteString.Char8  as Char8
 import qualified Data.ByteString.Lazy   as LazyByteString
 import qualified Data.Map               as Map
 import qualified Options.Generic        as Options
+import qualified System.Timeout         as Timeout
 
 import qualified EVM.Facts     as Facts
 import qualified EVM.Facts.Git as Git
@@ -104,19 +104,21 @@ data Command
       , state              :: Maybe String
       }
   | VmTest
-      { file  :: String
-      , test  :: [String]
-      , debug :: Bool
-      , diff  :: Bool
+      { file    :: String
+      , test    :: [String]
+      , debug   :: Bool
+      , diff    :: Bool
+      , timeout :: Maybe Int
       }
   | VmTestReport
       { tests :: String
       }
   | BcTest
-      { file  :: String
-      , test  :: [String]
-      , debug :: Bool
-      , diff  :: Bool
+      { file    :: String
+      , test    :: [String]
+      , debug   :: Bool
+      , diff    :: Bool
+      , timeout :: Maybe Int
       }
   | Flatten
     { sourceFile :: String
@@ -354,15 +356,15 @@ launchTest execmode cmd = do
              then id
              else filter (\(x, _) -> elem x (test cmd))
        in
-         mapM_ (runVMTest (diff cmd) execmode (optsMode cmd)) $
+         mapM_ (runVMTest (diff cmd) execmode (optsMode cmd) (timeout cmd)) $
            testFilter (Map.toList allTests)
 #else
   putStrLn "Not supported"
 #endif
 
 #if MIN_VERSION_aeson(1, 0, 0)
-runVMTest :: Bool -> ExecMode -> Mode -> (String, VMTest.Case) -> IO Bool
-runVMTest diffmode execmode mode (name, x) = do
+runVMTest :: Bool -> ExecMode -> Mode -> Maybe Int -> (String, VMTest.Case) -> IO Bool
+runVMTest diffmode execmode mode timelimit (name, x) = do
   let
     vm0 = VMTest.vmForCase execmode x
     m = case execmode of
@@ -376,7 +378,7 @@ runVMTest diffmode execmode mode (name, x) = do
     action <- async $
       case mode of
         Run ->
-          timeout (1e7) . evaluate $ do
+          Timeout.timeout (1e6 * (fromMaybe 10 timelimit)) . evaluate $ do
             execState (VMTest.interpret m) vm0
         Debug ->
           Just <$> EVM.TTY.runFromVM vm0
