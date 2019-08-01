@@ -26,7 +26,7 @@ import qualified EVM.Precompiled
 
 import Data.Binary.Get (runGetOrFail)
 import Data.Bits (bit, testBit, complement)
-import Data.Bits (xor, shiftL, shiftR, (.&.), (.|.), FiniteBits (..))
+import Data.Bits (xor, shiftR, (.&.), (.|.), FiniteBits (..))
 import Data.Text (Text)
 import Data.Word (Word8, Word32)
 
@@ -556,11 +556,11 @@ exec1 = do
             0xff .&. shiftR x (8 * (31 - num n))
 
         -- op: SHL
-        0x1b -> stackOp2 (const g_verylow) $ \(n, x) -> shiftL x (num n)
+        0x1b -> stackOp2 (const g_verylow) $ \(n, x) -> shl x n
         -- op: SHR
-        0x1c -> stackOp2 (const g_verylow) $ \(n, x) -> shiftR x (num n)
+        0x1c -> stackOp2 (const g_verylow) $ \(n, x) -> shr x n
         -- op: SAR
-        0x1d -> stackOp2 (const g_verylow) $ uncurry sar
+        0x1d -> stackOp2 (const g_verylow) $ \(n, x) -> sar x n
 
         -- op: SHA3
         0x20 ->

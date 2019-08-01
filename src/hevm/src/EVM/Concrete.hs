@@ -11,7 +11,7 @@ import EVM.Types (word, padRight)
 import EVM.Keccak (keccak, word256Bytes)
 
 import Control.Lens    ((^?), ix)
-import Data.Bits       (Bits (..), FiniteBits (..))
+import Data.Bits       (Bits (..), FiniteBits (..), shiftL, shiftR)
 import Data.ByteString (ByteString)
 import Data.DoubleWord (signedWord, unsignedWord)
 import Data.Maybe      (fromMaybe)
@@ -88,9 +88,24 @@ sgt :: Word -> Word -> Word
 sgt (C _ (W256 x)) (C _ (W256 y)) =
   if signedWord x > signedWord y then w256 1 else w256 0
 
+shr :: Word -> Word -> Word
+shr x n =
+  if n > 255 then 0
+  else shiftR x (num n)
+
+shl :: Word -> Word -> Word
+shl x n =
+  if n > 255 then 0
+  else shiftL x (num n)
+
 sar :: Word -> Word -> Word
-sar (C _ (W256 x)) (C _ (W256 y)) =
-  w256 (num (shiftR (signedWord y) (num x)))
+sar (C _ (W256 x)) (C _ (W256 n)) =
+  let
+    sx = signedWord x
+  in
+    if n > 255 && sx > 0 then 0
+    else if n > 255 && sx < 0 then -1
+    else w256 (num (unsignedWord (shiftR sx (num n))))
 
 wordValue :: Word -> W256
 wordValue (C _ x) = x
