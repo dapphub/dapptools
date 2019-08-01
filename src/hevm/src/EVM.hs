@@ -421,8 +421,7 @@ exec1 = do
           calldatasize = num $ BS.length (the state calldata)
         copyBytesToMemory (the state calldata) calldatasize 0 0
         executePrecompile fees self (the state gas) 0 calldatasize 0 0 []
-        stk <- use (state . stack)
-        case stk of
+        use (state . stack) >>= \case
           (0:_) -> do
             touchAccount self $ \_ -> do
               modifying (tx . touchedAccounts) (self:)
@@ -1063,9 +1062,9 @@ exec1 = do
                         -- todo: push to vm . result?
                         next
                       else do
-                        caller <- use (state . caller)
+                        theCaller <- use (state . caller)
                         delegateCall gas' xTo xInOffset xInSize xOutOffset xOutSize xs $ do
-                          modifying (tx . touchedAccounts) (caller:)
+                          modifying (tx . touchedAccounts) (theCaller:)
                           modifying (tx . touchedAccounts) (self:)
             _ -> underrun
 

@@ -119,13 +119,14 @@ checkExpectation diff execmode x vm =
         printField f d = putStrLn $ Map.foldrWithKey (\k v acc ->
           acc ++ showAddrWith0x k ++ " : " ++ f v ++ "\n") "" d
 
-        (state, money, nonce, storage, code) = checkExpectedContracts vm (expectedContracts expectation)
+        (okState, okMoney, okNonce, okData, okCode)
+          = checkExpectedContracts vm (expectedContracts expectation)
         reason = map fst (filter (not . snd)
-            [ ("bad-state",   state || money || nonce || storage || code)
-            , ("bad-balance", not money || nonce || storage || code || state)
-            , ("bad-nonce",   not nonce || money || storage || code || state)
-            , ("bad-storage", not storage || money || nonce || code || state)
-            , ("bad-code",    not code || money || nonce || storage || state)
+            [ ("bad-state",       okMoney || okNonce || okData  || okCode || okState)
+            , ("bad-balance", not okMoney || okNonce || okData  || okCode || okState)
+            , ("bad-nonce",   not okNonce || okMoney || okData  || okCode || okState)
+            , ("bad-storage", not okData  || okMoney || okNonce || okCode || okState)
+            , ("bad-code",    not okCode  || okMoney || okNonce || okData || okState)
             ])
         check = checkContracts x
         initial = initTx x
@@ -133,7 +134,7 @@ checkExpectation diff execmode x vm =
         actual = view (EVM.env . EVM.contracts . to (fmap clearZeroStorage)) vm
 
       putStr (intercalate " " reason)
-      if diff && (not state) then do
+      if diff && (not okState) then do
         putStrLn "\nCheck balance/state: "
         printField (\v -> (show . toInteger  $ _nonce v) ++ " "
                        ++ (show . toInteger  $ _balance v) ++ " "
@@ -151,7 +152,7 @@ checkExpectation diff execmode x vm =
                        ++ (show . toInteger  $ EVM._balance v) ++ " "
                        ++ (show . Map.toList $ EVM._storage v)) actual
       else return ()
-      return state
+      return okState
 
     (_, Just expectation, Just (EVM.VMSuccess output)) -> do
       let
