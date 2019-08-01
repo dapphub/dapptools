@@ -918,36 +918,16 @@ exec1 = do
                           recipientExists = accountExists xTo vm
                           (cost, gas') = costOfCall fees recipientExists xValue availableGas xGas
                         burn (cost - gas') $
-                          if xValue > view balance this
-                          then do
-                            assign (state . stack) (0 : xs)
-                            assign (state . returndata) mempty
-                            pushTrace $ ErrorTrace $ BalanceTooLow xValue (view balance this)
-                            -- todo: push to vm . result?
-                            next
-                          else if length (view frames vm) >= 1024
-                          then do
-                            assign (state . stack) (0 : xs)
-                            assign (state . returndata) mempty
-                            pushTrace $ ErrorTrace $ CallDepthLimitReached
-                            -- todo: push to vm . result?
-                            next
-                          else
-                            case view execMode vm of
-                              ExecuteAsVMTest -> do
-                                assign (state . stack) (1 : xs)
-                                next
-                              _ -> do
-                                delegateCall gas' xTo xInOffset xInSize xOutOffset xOutSize xs $ do
-                                  zoom state $ do
-                                    assign callvalue xValue
-                                    assign caller (the state contract)
-                                    assign contract xTo
-                                  zoom (env . contracts) $ do
-                                    ix self . balance -= xValue
-                                    ix xTo  . balance += xValue
-                                  modifying (tx . touchedAccounts) (self:)
-                                  modifying (tx . touchedAccounts) (xTo:)
+                          delegateCall this gas' xTo xValue xInOffset xInSize xOutOffset xOutSize xs $ do
+                            zoom state $ do
+                              assign callvalue xValue
+                              assign caller (the state contract)
+                              assign contract xTo
+                            zoom (env . contracts) $ do
+                              ix self . balance -= xValue
+                              ix xTo  . balance += xValue
+                            modifying (tx . touchedAccounts) (self:)
+                            modifying (tx . touchedAccounts) (xTo:)
             _ ->
               underrun
 
@@ -973,31 +953,11 @@ exec1 = do
                       let
                         (cost, gas') = costOfCall fees True xValue availableGas xGas
                       burn (cost - gas') $
-                        if xValue > view balance this
-                        then do
-                          assign (state . stack) (0 : xs)
-                          assign (state . returndata) mempty
-                          pushTrace $ ErrorTrace $ BalanceTooLow xValue (view balance this)
-                          -- todo: push to vm . result?
-                          next
-                        else if length (view frames vm) >= 1024
-                        then do
-                          assign (state . stack) (0 : xs)
-                          assign (state . returndata) mempty
-                          pushTrace $ ErrorTrace $ CallDepthLimitReached
-                          -- todo: push to vm . result?
-                          next
-                        else
-                          case view execMode vm of
-                            ExecuteAsVMTest -> do
-                              assign (state . stack) (1 : xs)
-                              next
-                            _ -> do
-                              delegateCall gas' xTo xInOffset xInSize xOutOffset xOutSize xs $ do
-                                zoom state $ do
-                                  assign callvalue xValue
-                                  assign caller (the state contract)
-                                modifying (tx . touchedAccounts) (self:)
+                        delegateCall this gas' xTo xValue xInOffset xInSize xOutOffset xOutSize xs $ do
+                          zoom state $ do
+                            assign callvalue xValue
+                            assign caller (the state contract)
+                          modifying (tx . touchedAccounts) (self:)
             _ ->
               underrun
 
@@ -1053,19 +1013,11 @@ exec1 = do
                     availableGas <- use (state . gas)
                     let
                       (cost, gas') = costOfCall fees True 0 availableGas xGas
-                    burn (cost - gas') $
-                      if length (view frames vm) >= 1024
-                      then do
-                        assign (state . stack) (0 : xs)
-                        assign (state . returndata) mempty
-                        pushTrace $ ErrorTrace $ CallDepthLimitReached
-                        -- todo: push to vm . result?
-                        next
-                      else do
-                        theCaller <- use (state . caller)
-                        delegateCall gas' xTo xInOffset xInSize xOutOffset xOutSize xs $ do
-                          modifying (tx . touchedAccounts) (theCaller:)
-                          modifying (tx . touchedAccounts) (self:)
+                    burn (cost - gas') $ do
+                      theCaller <- use (state . caller)
+                      delegateCall this gas' xTo 0 xInOffset xInSize xOutOffset xOutSize xs $ do
+                        modifying (tx . touchedAccounts) (theCaller:)
+                        modifying (tx . touchedAccounts) (self:)
             _ -> underrun
 
         -- op: CREATE2
@@ -1097,27 +1049,14 @@ exec1 = do
                         recipientExists = accountExists xTo vm
                         (cost, gas') = costOfCall fees recipientExists 0 availableGas xGas
                       burn (cost - gas') $
-                        if length (view frames vm) >= 1024
-                        then do
-                          assign (state . stack) (0 : xs)
-                          assign (state . returndata) mempty
-                          pushTrace $ ErrorTrace $ CallDepthLimitReached
-                          -- todo: push to vm . result?
-                          next
-                        else
-                          case view execMode vm of
-                            ExecuteAsVMTest -> do
-                              assign (state . stack) (1 : xs)
-                              next
-                            _ -> do
-                              delegateCall gas' xTo xInOffset xInSize xOutOffset xOutSize xs $ do
-                                zoom state $ do
-                                  assign callvalue 0
-                                  assign caller (the state contract)
-                                  assign contract xTo
-                                  assign static True
-                                modifying (tx . touchedAccounts) (self:)
-                                modifying (tx . touchedAccounts) (xTo:)
+                        delegateCall this gas' xTo 0 xInOffset xInSize xOutOffset xOutSize xs $ do
+                          zoom state $ do
+                            assign callvalue 0
+                            assign caller (the state contract)
+                            assign contract xTo
+                            assign static True
+                          modifying (tx . touchedAccounts) (self:)
+                          modifying (tx . touchedAccounts) (xTo:)
             _ ->
               underrun
 
@@ -1759,61 +1698,76 @@ cheatActions =
 
 
 -- * General call implementation ("delegateCall")
-
 delegateCall
   :: (?op :: Word8)
-  => Word -> Addr -> Word -> Word -> Word -> Word -> [Word]
+  => Contract -> Word -> Addr -> Word -> Word -> Word -> Word -> Word -> [Word]
   -> EVM ()
   -> EVM ()
-delegateCall xGas xTo xInOffset xInSize xOutOffset xOutSize xs continue =
-  touchAccount xTo . const $
-    preuse (env . contracts . ix xTo) >>=
-      \case
-        Nothing ->
-          vmError (NoSuchContract xTo)
-        Just target ->
-          burn xGas $ do
-            vm0 <- get
-            let newContext = CallContext
-                  { callContextOffset = xOutOffset
-                  , callContextSize = xOutSize
-                  , callContextCodehash = view codehash target
-                  , callContextReversion = view (env . contracts) vm0
-                  , callContextSelfdestructs = view (tx . selfdestructs) vm0
-                  , callContextRefunds = view (tx . refunds) vm0
-                  , callContextTouched = view (tx . touchedAccounts) vm0
-                  , callContextAbi =
-                      if xInSize >= 4
-                      then
-                        let
-                          w = wordValue
-                                (readMemoryWord32 xInOffset (view (state . memory) vm0))
-                        in Just $! num w
-                      else Nothing
-                  , callContextData = (readMemory (num xInOffset) (num xInSize) vm0)
-                  }
+delegateCall this xGas xTo xValue xInOffset xInSize xOutOffset xOutSize xs continue = do
+  vm0 <- get
+  if xValue > view balance this
+  then do
+    assign (state . stack) (0 : xs)
+    assign (state . returndata) mempty
+    pushTrace $ ErrorTrace $ BalanceTooLow xValue (view balance this)
+    next
+  else if length (view frames vm0) >= 1024
+  then do
+    assign (state . stack) (0 : xs)
+    assign (state . returndata) mempty
+    pushTrace $ ErrorTrace $ CallDepthLimitReached
+    next
+  else case view execMode vm0 of
+    ExecuteAsVMTest -> do
+      assign (state . stack) (1 : xs)
+      next
+    _ ->
+      touchAccount xTo . const $
+        preuse (env . contracts . ix xTo) >>= \case
+          Nothing ->
+            vmError (NoSuchContract xTo)
+          Just target ->
+            burn xGas $ do
+              let newContext = CallContext
+                    { callContextOffset = xOutOffset
+                    , callContextSize = xOutSize
+                    , callContextCodehash = view codehash target
+                    , callContextReversion = view (env . contracts) vm0
+                    , callContextSelfdestructs = view (tx . selfdestructs) vm0
+                    , callContextRefunds = view (tx . refunds) vm0
+                    , callContextTouched = view (tx . touchedAccounts) vm0
+                    , callContextAbi =
+                        if xInSize >= 4
+                        then
+                          let
+                            w = wordValue
+                                  (readMemoryWord32 xInOffset (view (state . memory) vm0))
+                          in Just $! num w
+                        else Nothing
+                    , callContextData = (readMemory (num xInOffset) (num xInSize) vm0)
+                    }
 
-            pushTrace (FrameTrace newContext)
-            next
-            vm1 <- get
+              pushTrace (FrameTrace newContext)
+              next
+              vm1 <- get
 
-            pushTo frames $ Frame
-              { _frameState = (set stack xs) (view state vm1)
-              , _frameContext = newContext
-              }
+              pushTo frames $ Frame
+                { _frameState = (set stack xs) (view state vm1)
+                , _frameContext = newContext
+                }
 
-            zoom state $ do
-              assign gas xGas
-              assign pc 0
-              assign code (view bytecode target)
-              assign codeContract xTo
-              assign stack mempty
-              assign memory mempty
-              assign memorySize 0
-              assign returndata mempty
-              assign calldata (readMemory (num xInOffset) (num xInSize) vm0)
+              zoom state $ do
+                assign gas xGas
+                assign pc 0
+                assign code (view bytecode target)
+                assign codeContract xTo
+                assign stack mempty
+                assign memory mempty
+                assign memorySize 0
+                assign returndata mempty
+                assign calldata (readMemory (num xInOffset) (num xInSize) vm0)
 
-            continue
+              continue
 
 
 -- * VM error implementation
