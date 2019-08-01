@@ -884,24 +884,11 @@ exec1 = do
               accessMemoryRange fees xOffset xSize $ do
                 availableGas <- use (state . gas)
                 let
+                  initCode = readMemory (num xOffset) (num xSize) vm
                   newAddr = newContractAddress self (wordValue (view nonce this))
                   (cost, gas') = costOfCreate fees availableGas 0
                 burn (cost - gas') $
-                  if xValue > view balance this
-                  then do
-                    assign (state . stack) (0 : xs)
-                    assign (state . returndata) mempty
-                    pushTrace $ ErrorTrace $ BalanceTooLow xValue (view balance this)
-                    next
-                  else if length (view frames vm) >= 1024
-                  then do
-                    assign (state . stack) (0 : xs)
-                    assign (state . returndata) mempty
-                    pushTrace $ ErrorTrace $ CallDepthLimitReached
-                    next
-                  else do
-                    burn gas' $
-                      create self this gas' xValue xOffset xSize xs newAddr
+                  create self this gas' xValue xs newAddr initCode
             _ -> underrun
 
         -- op: CALL
@@ -1089,25 +1076,11 @@ exec1 = do
               accessMemoryRange fees xOffset xSize $ do
                 availableGas <- use (state . gas)
                 let
-                  initcode = readMemory (num xOffset) (num xSize) vm
-                  newAddr  = newContractAddressCREATE2 self (num xSalt) initcode
+                  initCode = readMemory (num xOffset) (num xSize) vm
+                  newAddr  = newContractAddressCREATE2 self (num xSalt) initCode
                   (cost, gas') = costOfCreate fees availableGas xSize
                 burn (cost - gas') $
-                  if xValue > view balance this
-                  then do
-                    assign (state . stack) (0 : xs)
-                    assign (state . returndata) mempty
-                    pushTrace $ ErrorTrace $ BalanceTooLow xValue (view balance this)
-                    next
-                  else if length (view frames vm) >= 1024
-                  then do
-                    assign (state . stack) (0 : xs)
-                    assign (state . returndata) mempty
-                    pushTrace $ ErrorTrace $ CallDepthLimitReached
-                    next
-                  else do
-                    burn gas' $
-                      create self this gas' xValue xOffset xSize xs newAddr
+                  create self this gas' xValue xs newAddr initCode
             _ -> underrun
 
         -- op: STATICCALL
@@ -1490,65 +1463,72 @@ accessStorage addr slot continue =
 
 create :: (?op :: Word8)
   => Addr -> Contract
-  -> Word -> Word -> Word -> Word -> [Word] -> Addr -> EVM ()
-create self this xGas xValue xOffset xSize xs newAddr =
- do
-  modifying (tx . touchedAccounts) (self:)
-  modifying (tx . touchedAccounts) (newAddr:)
+  -> Word -> Word -> [Word] -> Addr -> ByteString -> EVM ()
+create self this xGas xValue xs newAddr initCode = do
   vm0 <- get
-  if collision $ view (env . contracts . at newAddr) vm0
-    then do
-      modifying (env . contracts . ix self . nonce) succ
-      assign (state . stack) (0 : xs)
-      next
-    else do
-      case view execMode vm0 of
-        ExecuteAsVMTest -> do
-          assign (state . stack) (num newAddr : xs)
-          next
+  if xValue > view balance this
+  then do
+    assign (state . stack) (0 : xs)
+    assign (state . returndata) mempty
+    pushTrace $ ErrorTrace $ BalanceTooLow xValue (view balance this)
+    next
+  else if length (view frames vm0) >= 1024
+  then do
+    assign (state . stack) (0 : xs)
+    assign (state . returndata) mempty
+    pushTrace $ ErrorTrace $ CallDepthLimitReached
+    next
+  else if collision $ view (env . contracts . at newAddr) vm0
+  then burn xGas $ do
+    assign (state . stack) (0 : xs)
+    modifying (env . contracts . ix self . nonce) succ
+    next
+  else burn xGas $
+    case (view execMode vm0) of
+      ExecuteAsVMTest -> do
+        assign (state . stack) (num newAddr : xs)
+        next
+      _ -> do
+        modifying (tx . touchedAccounts) (self:)
+        modifying (tx . touchedAccounts) (newAddr:)
+        let
+          newContract =
+            initialContract (InitCode initCode)
+          newContext  =
+            CreationContext { creationContextCodehash  = view codehash newContract
+                            , creationContextReversion = view (env . contracts) vm0
+                            , creationContextSelfdestructs = view (tx . selfdestructs) vm0
+                            , creationContextRefunds = view (tx . refunds) vm0
+                            , creationContextTouched = view (tx . touchedAccounts) vm0
+                            }
 
-        _ -> do
-          let
-            initCode =
-              readMemory (num xOffset) (num xSize) vm0
-            newContract =
-              initialContract (InitCode initCode)
-            newContext  =
-              CreationContext { creationContextCodehash  = view codehash newContract
-                              , creationContextReversion = view (env . contracts) vm0
-                              , creationContextSelfdestructs = view (tx . selfdestructs) vm0
-                              , creationContextRefunds = view (tx . refunds) vm0
-                              , creationContextTouched = view (tx . touchedAccounts) vm0
-                              }
+        zoom (env . contracts) $ do
+          oldAcc <- use (at newAddr)
+          let oldBal = case oldAcc of
+                Nothing -> 0
+                Just c  -> view balance c
+          assign (at newAddr) (Just newContract)
+          assign (ix newAddr . balance) (oldBal + xValue)
+          assign (ix newAddr . nonce) 1
+          modifying (ix self . balance) (flip (-) xValue)
+          modifying (ix self . nonce) succ
 
-          zoom (env . contracts) $ do
-            oldAcc <- use (at newAddr)
-            let oldBal = case oldAcc of
-                  Nothing -> 0
-                  Just c  -> view balance c
-            assign (at newAddr) (Just newContract)
-            assign (ix newAddr . balance) (oldBal + xValue)
-            assign (ix newAddr . nonce) 1
-            modifying (ix self . balance) (flip (-) xValue)
-            modifying (ix self . nonce) succ
+        pushTrace (FrameTrace newContext)
+        next
+        vm1 <- get
+        pushTo frames $ Frame
+          { _frameContext = newContext
+          , _frameState   = (set stack xs) (view state vm1)
+          }
 
-          pushTrace (FrameTrace newContext)
-          next
-          vm1 <- get
-          pushTo frames $ Frame
-            { _frameContext = newContext
-            , _frameState   = (set stack xs) (view state vm1)
-            }
-
-          assign state $
-            blankState
-              & set contract   newAddr
-              & set codeContract newAddr
-              & set code       initCode
-              & set callvalue  xValue
-              & set caller     self
-              & set gas        xGas
-
+        assign state $
+          blankState
+            & set contract   newAddr
+            & set codeContract newAddr
+            & set code       initCode
+            & set callvalue  xValue
+            & set caller     self
+            & set gas        xGas
 
 -- | Replace a contract's code, like when CREATE returns
 -- from the constructor code.
