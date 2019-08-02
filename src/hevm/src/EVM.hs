@@ -176,22 +176,18 @@ data Frame = Frame
 -- | Call/create info
 data FrameContext
   = CreationContext
-    { creationContextCodehash :: W256
+    { creationContextCodehash  :: W256
     , creationContextReversion :: Map Addr Contract
-    , creationContextSelfdestructs :: [Addr]
-    , creationContextRefunds       :: [(Addr, Word)]
-    , creationContextTouched       :: [Addr]
+    , creationContextSubstate  :: SubState
     }
   | CallContext
-    { callContextOffset   :: Word
-    , callContextSize     :: Word
-    , callContextCodehash :: W256
-    , callContextAbi      :: Maybe Word
-    , callContextData     :: ByteString
+    { callContextOffset    :: Word
+    , callContextSize      :: Word
+    , callContextCodehash  :: W256
+    , callContextAbi       :: Maybe Word
+    , callContextData      :: ByteString
     , callContextReversion :: Map Addr Contract
-    , callContextSelfdestructs :: [Addr]
-    , callContextRefunds       :: [(Addr, Word)]
-    , callContextTouched       :: [Addr]
+    , callContextSubState  :: SubState
     }
 
 -- | The "registers" of the VM along with memory and data stack
@@ -218,11 +214,16 @@ data TxState = TxState
   , _origin          :: Addr
   , _toAddr          :: Addr
   , _value           :: Word
-  , _selfdestructs   :: [Addr]
-  , _touchedAccounts :: [Addr]
-  , _refunds         :: [(Addr, Word)]
+  , _substate        :: SubState
   , _isCreate        :: Bool
   , _txReversion     :: Map Addr Contract
+  }
+
+-- | The "accrued substate" across a transaction
+data SubState = SubState
+  { _selfdestructs   :: [Addr]
+  , _touchedAccounts :: [Addr]
+  , _refunds         :: [(Addr, Word)]
   }
 
 -- | A contract is either in creation (running its "constructor") or
@@ -288,6 +289,7 @@ makeLenses ''FrameState
 makeLenses ''Frame
 makeLenses ''Block
 makeLenses ''TxState
+makeLenses ''SubState
 makeLenses ''Contract
 makeLenses ''Env
 makeLenses ''Cache
@@ -326,9 +328,7 @@ makeVm o = VM
     , _origin = vmoptOrigin o
     , _toAddr = vmoptAddress o
     , _value = w256 $ vmoptValue o
-    , _selfdestructs = mempty
-    , _touchedAccounts = mempty
-    , _refunds = mempty
+    , _substate = SubState mempty mempty mempty
     , _isCreate = vmoptCreate o
     , _txReversion = Map.fromList
       [(vmoptAddress o, initialContract (InitCode (vmoptCode o)))]
@@ -423,12 +423,12 @@ exec1 = do
         executePrecompile fees self (the state gas) 0 calldatasize 0 0 []
         use (state . stack) >>= \case
           (0:_) -> do
-            touchAccount self $ \_ -> do
-              modifying (tx . touchedAccounts) (self:)
+            fetchAccount self $ \_ -> do
+              touchAccount self
               vmError PrecompileFailure
           (1:_) ->
-            touchAccount self $ \_ -> do
-              modifying (tx . touchedAccounts) (self:)
+            fetchAccount self $ \_ -> do
+              touchAccount self
               doStop
           _ ->
             underrun
@@ -584,7 +584,7 @@ exec1 = do
           case stk of
             (x:xs) -> do
               burn g_balance $ do
-                touchAccount (num x) $ \c -> do
+                fetchAccount (num x) $ \c -> do
                   next
                   assign (state . stack) xs
                   push (view balance c)
@@ -659,7 +659,7 @@ exec1 = do
                   push (w256 1)
                 else
                   burn g_extcode $ do
-                    touchAccount (num x) $ \c -> do
+                    fetchAccount (num x) $ \c -> do
                       next
                       assign (state . stack) xs
                       push (num (BS.length (view bytecode c)))
@@ -676,7 +676,7 @@ exec1 = do
               : xs ) -> do
               burn (g_extcode + g_copy * ceilDiv (num codeSize) 32) $
                 accessUnboundedMemoryRange fees memOffset codeSize $ do
-                  touchAccount (num extAccount) $ \c -> do
+                  fetchAccount (num extAccount) $ \c -> do
                     next
                     assign (state . stack) xs
                     copyBytesToMemory (view bytecode c)
@@ -926,8 +926,8 @@ exec1 = do
                             zoom (env . contracts) $ do
                               ix self . balance -= xValue
                               ix xTo  . balance += xValue
-                            modifying (tx . touchedAccounts) (self:)
-                            modifying (tx . touchedAccounts) (xTo:)
+                            touchAccount self
+                            touchAccount xTo
             _ ->
               underrun
 
@@ -957,7 +957,7 @@ exec1 = do
                           zoom state $ do
                             assign callvalue xValue
                             assign caller (the state contract)
-                          modifying (tx . touchedAccounts) (self:)
+                          touchAccount self
             _ ->
               underrun
 
@@ -986,14 +986,14 @@ exec1 = do
                     let
                       context = view frameContext frame
                     case context of
-                      CreationContext _ _ _ _ _ ->
+                      CreationContext _ _ _ ->
                         if codesize > maxsize
                         then do
                           finishFrame (FrameErrored (MaxCodeSizeExceeded maxsize codesize))
                         else
                           burn (g_codedeposit * num (BS.length output)) $
                             finishFrame (FrameReturned output)
-                      CallContext _ _ _ _ _ _ _ _ _ ->
+                      CallContext _ _ _ _ _ _ _ ->
                           finishFrame (FrameReturned output)
             _ -> underrun
 
@@ -1016,8 +1016,8 @@ exec1 = do
                     burn (cost - gas') $ do
                       theCaller <- use (state . caller)
                       delegateCall this gas' xTo 0 xInOffset xInSize xOutOffset xOutSize xs $ do
-                        modifying (tx . touchedAccounts) (theCaller:)
-                        modifying (tx . touchedAccounts) (self:)
+                        touchAccount theCaller
+                        touchAccount self
             _ -> underrun
 
         -- op: CREATE2
@@ -1055,8 +1055,8 @@ exec1 = do
                             assign caller (the state contract)
                             assign contract xTo
                             assign static True
-                          modifying (tx . touchedAccounts) (self:)
-                          modifying (tx . touchedAccounts) (xTo:)
+                          touchAccount self
+                          touchAccount xTo
             _ ->
               underrun
 
@@ -1072,10 +1072,10 @@ exec1 = do
                         then num g_selfdestruct_newaccount
                         else 0
               in burn (g_selfdestruct + c_new) $ do
-                destructs <- use (tx . selfdestructs)
+                destructs <- use (tx . substate . selfdestructs)
                 if elem self destructs then noop else do refund r_selfdestruct
-                modifying (tx . selfdestructs) (self:)
-                modifying (tx . touchedAccounts) (xTo:)
+                selfdestruct self
+                touchAccount xTo
 
                 let funds = (vm ^?! env . contracts . ix self . balance)
                 if funds == 0
@@ -1086,7 +1086,7 @@ exec1 = do
                     assign (env . contracts . ix self . balance) 0
                     doStop
                 else
-                  touchAccount xTo $ \_ -> do
+                  fetchAccount xTo $ \_ -> do
                     assign (env . contracts . ix self . balance) 0
                     modifying (env . contracts . ix xTo . balance)
                       (+ (vm ^?! env . contracts . ix self . balance))
@@ -1136,14 +1136,14 @@ precompiledContract vm fees gasCap precompileAddr recipient xValue inOffset inSi
               (0:_) ->
                 return ()
               (1:_) ->
-                touchAccount recipient $ \_ -> do
+                fetchAccount recipient $ \_ -> do
 
                 zoom (env . contracts) $ do
                   ix self . balance -= xValue
                   ix recipient  . balance += xValue
-                modifying (tx . touchedAccounts) (self:)
-                modifying (tx . touchedAccounts) (recipient:)
-                modifying (tx . touchedAccounts) (precompileAddr:)
+                touchAccount self
+                touchAccount recipient
+                touchAccount precompileAddr
               _ ->
                 underrun
 
@@ -1354,8 +1354,8 @@ pushTo f x = f %= (x :)
 pushToSequence :: MonadState s m => ASetter s s (Seq a) (Seq a) -> a -> m ()
 pushToSequence f x = f %= (Seq.|> x)
 
-touchAccount :: Addr -> (Contract -> EVM ()) -> EVM ()
-touchAccount addr continue = do
+fetchAccount :: Addr -> (Contract -> EVM ()) -> EVM ()
+fetchAccount addr continue = do
   use (env . contracts . at addr) >>= \case
     Just c -> continue c
     Nothing ->
@@ -1396,7 +1396,7 @@ accessStorage addr slot continue =
             assign (env . contracts . ix addr . storage . at slot) (Just 0)
             continue 0
     Nothing ->
-      touchAccount addr $ \_ ->
+      fetchAccount addr $ \_ ->
         accessStorage addr slot continue
 
 create :: (?op :: Word8)
@@ -1427,17 +1427,15 @@ create self this xGas xValue xs newAddr initCode = do
         assign (state . stack) (num newAddr : xs)
         next
       _ -> do
-        modifying (tx . touchedAccounts) (self:)
-        modifying (tx . touchedAccounts) (newAddr:)
+        touchAccount self
+        touchAccount newAddr
         let
           newContract =
             initialContract (InitCode initCode)
           newContext  =
             CreationContext { creationContextCodehash  = view codehash newContract
                             , creationContextReversion = view (env . contracts) vm0
-                            , creationContextSelfdestructs = view (tx . selfdestructs) vm0
-                            , creationContextRefunds = view (tx . refunds) vm0
-                            , creationContextTouched = view (tx . touchedAccounts) vm0
+                            , creationContextSubstate = view (tx . substate) vm0
                             }
 
         zoom (env . contracts) $ do
@@ -1534,9 +1532,7 @@ finalize True = do
     Just (VMFailure _) -> do
       reversion <- use (tx . txReversion)
       assign (env . contracts) reversion
-      assign (tx . selfdestructs) mempty
-      assign (tx . refunds) mempty
-      assign (tx . touchedAccounts) mempty
+      assign (tx . substate) (SubState mempty mempty mempty)
     _ ->
       noop
 
@@ -1556,7 +1552,7 @@ finalize True = do
   -- compute and pay the refund to the caller and the
   -- corresponding payment to the miner
   txOrigin     <- use (tx . origin)
-  sumRefunds   <- (sum . (snd <$>)) <$> (use (tx . refunds))
+  sumRefunds   <- (sum . (snd <$>)) <$> (use (tx . substate . refunds))
   miner        <- use (block . coinbase)
   blockReward  <- r_block <$> (use (block . schedule))
   gasPrice     <- use (tx . gasprice)
@@ -1573,7 +1569,7 @@ finalize True = do
     (Map.adjust (over balance (+ originPay)) txOrigin)
   modifying (env . contracts)
     (Map.adjust (over balance (+ minerPay)) miner)
-  modifying (tx . touchedAccounts) (miner:)
+  touchAccount miner
 
   -- perform state trie clearing (EIP 161), of selfdestructs
   -- and touched accounts. addresses are cleared if they have
@@ -1583,11 +1579,11 @@ finalize True = do
   -- (see Yellow Paper "Accrued Substate")
   --
   -- first, remove any destructed addresses
-  destroyedAddresses <- use (tx . selfdestructs)
+  destroyedAddresses <- use (tx . substate . selfdestructs)
   modifying (env . contracts)
     (Map.filterWithKey (\k _ -> not (elem k destroyedAddresses)))
   -- then, clear any remaining empty and touched addresses
-  touchedAddresses <- use (tx . touchedAccounts)
+  touchedAddresses <- use (tx . substate . touchedAccounts)
   modifying (env . contracts)
     (Map.filterWithKey
       (\k a -> not ((elem k touchedAddresses) && accountEmpty a)))
@@ -1639,7 +1635,15 @@ burn n continue = do
 refund :: Word -> EVM ()
 refund n = do
   self <- use (state . contract)
-  pushTo (tx . refunds) (self, n)
+  pushTo (tx . substate . refunds) (self, n)
+
+touchAccount :: Addr -> EVM()
+touchAccount a =
+  pushTo ((tx . substate) . touchedAccounts) a
+
+selfdestruct :: Addr -> EVM()
+selfdestruct a =
+  pushTo ((tx . substate) . selfdestructs) a
 
 -- * Cheat codes
 
@@ -1722,7 +1726,7 @@ delegateCall this xGas xTo xValue xInOffset xInSize xOutOffset xOutSize xs conti
       assign (state . stack) (1 : xs)
       next
     _ ->
-      touchAccount xTo . const $
+      fetchAccount xTo . const $
         preuse (env . contracts . ix xTo) >>= \case
           Nothing ->
             vmError (NoSuchContract xTo)
@@ -1733,9 +1737,7 @@ delegateCall this xGas xTo xValue xInOffset xInSize xOutOffset xOutSize xs conti
                     , callContextSize = xOutSize
                     , callContextCodehash = view codehash target
                     , callContextReversion = view (env . contracts) vm0
-                    , callContextSelfdestructs = view (tx . selfdestructs) vm0
-                    , callContextRefunds = view (tx . refunds) vm0
-                    , callContextTouched = view (tx . touchedAccounts) vm0
+                    , callContextSubState = view (tx . substate) vm0
                     , callContextAbi =
                         if xInSize >= 4
                         then
@@ -1834,13 +1836,11 @@ finishFrame how = do
       case view frameContext nextFrame of
 
         -- Were we calling?
-        CallContext (num -> outOffset) (num -> outSize) _ _ _ reversion destructs refundz touched -> do
+        CallContext (num -> outOffset) (num -> outSize) _ _ _ reversion substate' -> do
 
           let
             revertContracts = assign (env . contracts) reversion
-            revertDestructs = assign (tx . selfdestructs) destructs
-            revertRefunds   = assign (tx . refunds) refundz
-            revertTouched   = assign (tx . touchedAccounts) touched
+            revertSubstate  = assign (tx . substate) substate'
 
           case how of
             -- Case 1: Returning from a call?
@@ -1853,9 +1853,7 @@ finishFrame how = do
             -- Case 2: Reverting during a call?
             FrameReverted output -> do
               revertContracts
-              revertDestructs
-              revertRefunds
-              revertTouched
+              revertSubstate
               assign (state . returndata) output
               copyCallBytesToMemory output outSize 0 outOffset
               reclaimRemainingGasAllowance
@@ -1864,21 +1862,17 @@ finishFrame how = do
             -- Case 3: Error during a call?
             FrameErrored _ -> do
               revertContracts
-              revertDestructs
-              revertRefunds
-              revertTouched
+              revertSubstate
               assign (state . returndata) mempty
               push 0
 
         -- Or were we creating?
-        CreationContext _ reversion destructs refundz touched -> do
+        CreationContext _ reversion substate' -> do
           creator <- use (state . contract)
           let
             createe = view (state . contract) oldVm
             revertContracts = assign (env . contracts) reversion'
-            revertDestructs = assign (tx . selfdestructs) destructs
-            revertRefunds   = assign (tx . refunds) refundz
-            revertTouched   = assign (tx . touchedAccounts) touched
+            revertSubstate  = assign (tx . substate) substate'
 
             -- persist the nonce through the reversion
             reversion' = (Map.adjust (over nonce (+ 1)) creator) reversion
@@ -1894,9 +1888,7 @@ finishFrame how = do
             -- Case 5: Reverting during a creation?
             FrameReverted output -> do
               revertContracts
-              revertDestructs
-              revertRefunds
-              revertTouched
+              revertSubstate
               assign (state . returndata) output
               reclaimRemainingGasAllowance
               push 0
@@ -1904,9 +1896,7 @@ finishFrame how = do
             -- Case 6: Error during a creation?
             FrameErrored _ -> do
               revertContracts
-              revertDestructs
-              revertRefunds
-              revertTouched
+              revertSubstate
               assign (state . returndata) mempty
               push 0
 
