@@ -2,12 +2,16 @@
 
 {-# Language BangPatterns #-}
 {-# Language CPP #-}
+{-# Language DataKinds #-}
+{-# Language FlexibleInstances #-}
 {-# Language DeriveGeneric #-}
 {-# Language GeneralizedNewtypeDeriving #-}
 {-# Language LambdaCase #-}
 {-# Language NumDecimals #-}
 {-# Language OverloadedStrings #-}
+{-# Language StandaloneDeriving #-}
 {-# Language TemplateHaskell #-}
+{-# Language TypeOperators #-}
 
 import EVM.Concrete (w256)
 
@@ -33,9 +37,9 @@ import EVM.UnitTest (runUnitTestContract)
 import EVM.UnitTest (getParametersFromEnvironmentVariables, testNumber)
 import EVM.Dapp (findUnitTests, dappInfo)
 
-import qualified EVM.UnitTest as EVM.UnitTest
-
-import qualified Paths_hevm as Paths
+import qualified EVM.Facts     as Facts
+import qualified EVM.Facts.Git as Git
+import qualified EVM.UnitTest  as EVM.UnitTest
 
 import Control.Concurrent.Async   (async, waitCatch)
 import Control.Exception          (evaluate)
@@ -57,88 +61,87 @@ import qualified Data.ByteString.Base16 as BS16
 import qualified Data.ByteString.Char8  as Char8
 import qualified Data.ByteString.Lazy   as LazyByteString
 import qualified Data.Map               as Map
-import qualified Options.Generic        as Options
+import qualified Data.Sequence          as Seq
 import qualified System.Timeout         as Timeout
 
-import qualified EVM.Facts     as Facts
-import qualified EVM.Facts.Git as Git
-
+import qualified Paths_hevm      as Paths
 import qualified Text.Regex.TDFA as Regex
-import qualified Data.Sequence as Seq
+
+import Options.Generic as Options
 
 -- This record defines the program's command-line options
 -- automatically via the `optparse-generic` package.
-data Command
-  = Exec
-      { code        :: ByteString
-      , calldata    :: Maybe ByteString
-      , address     :: Maybe Addr
-      , caller      :: Maybe Addr
-      , origin      :: Maybe Addr
-      , coinbase    :: Maybe Addr
-      , value       :: Maybe W256
-      , gas         :: Maybe W256
-      , number      :: Maybe W256
-      , timestamp   :: Maybe W256
-      , gaslimit    :: Maybe W256
-      , gasprice    :: Maybe W256
-      , maxcodesize :: Maybe W256
-      , difficulty  :: Maybe W256
-      , debug       :: Bool
-      , state       :: Maybe String
+data Command w
+  = Exec -- Execute a given program with specified env & calldata
+      { code        :: w ::: ByteString       <?> "Program bytecode"
+      , calldata    :: w ::: Maybe ByteString <?> "Tx: calldata"
+      , address     :: w ::: Maybe Addr       <?> "Tx: address"
+      , caller      :: w ::: Maybe Addr       <?> "Tx: caller"
+      , origin      :: w ::: Maybe Addr       <?> "Tx: origin"
+      , coinbase    :: w ::: Maybe Addr       <?> "Block: coinbase"
+      , value       :: w ::: Maybe W256       <?> "Tx: Eth amount"
+      , gas         :: w ::: Maybe W256       <?> "Tx: gas amount"
+      , number      :: w ::: Maybe W256       <?> "Block: number"
+      , timestamp   :: w ::: Maybe W256       <?> "Block: timestamp"
+      , gaslimit    :: w ::: Maybe W256       <?> "Tx: gas limit"
+      , gasprice    :: w ::: Maybe W256       <?> "Tx: gas price"
+      , maxcodesize :: w ::: Maybe W256       <?> "Block: max code size"
+      , difficulty  :: w ::: Maybe W256       <?> "Block: difficulty"
+      , debug       :: w ::: Bool             <?> "Run interactively"
+      , state       :: w ::: Maybe String     <?> "Path to state repository"
       }
-  | DappTest
-      { jsonFile           :: Maybe String
-      , dappRoot           :: Maybe String
-      , debug              :: Bool
-      , rpc                :: Maybe URL
-      , verbose            :: Maybe Int
-      , coverage           :: Bool
-      , state              :: Maybe String
-      , match              :: Maybe String
+  | DappTest -- Run DSTest unit tests
+      { jsonFile    :: w ::: Maybe String <?> "Filename or path to dapp build output (default: out/*.solc.json)"
+      , dappRoot    :: w ::: Maybe String <?> "Path to dapp project root directory (default: . )"
+      , debug       :: w ::: Bool         <?> "Run interactively"
+      , rpc         :: w ::: Maybe URL    <?> "Fetch state from a remote node"
+      , verbose     :: w ::: Maybe Int    <?> "Append call trace: {1} failures {2} all"
+      , coverage    :: w ::: Bool         <?> "Coverage analysis"
+      , state       :: w ::: Maybe String <?> "Path to state repository"
+      , match       :: w ::: Maybe String <?> "Test case filter - only run methods matching regex"
       }
-  | Interactive
-      { jsonFile           :: Maybe String
-      , dappRoot           :: Maybe String
-      , rpc                :: Maybe URL
-      , state              :: Maybe String
+  | Interactive -- Browse & run unit tests interactively
+      { jsonFile :: w ::: Maybe String <?> "Filename or path to dapp build output (default: out/*.solc.json)"
+      , dappRoot :: w ::: Maybe String <?> "Path to dapp project root directory (default: . )"
+      , rpc      :: w ::: Maybe URL    <?> "Fetch state from a remote node"
+      , state    :: w ::: Maybe String <?> "Path to state repository"
       }
-  | VmTest
-      { file    :: String
-      , test    :: [String]
-      , debug   :: Bool
-      , diff    :: Bool
-      , timeout :: Maybe Int
+  | VmTest -- Run an Ethereum VMTest
+      { file    :: w ::: String    <?> "Path to .json test file"
+      , test    :: w ::: [String]  <?> "Test case filter - only run specified test method(s)"
+      , debug   :: w ::: Bool      <?> "Run interactively"
+      , diff    :: w ::: Bool      <?> "Print expected vs. actual state on failure"
+      , timeout :: w ::: Maybe Int <?> "Execution timeout (default: 10 sec.)"
       }
-  | VmTestReport
-      { tests :: String
+  | VmTestReport -- Run all Ethereum VMTests
+      { tests :: w ::: String <?> "Path to Ethereum VMTests directory"
       }
-  | BcTest
-      { file    :: String
-      , test    :: [String]
-      , debug   :: Bool
-      , diff    :: Bool
-      , timeout :: Maybe Int
+  | BcTest -- Run Ethereum Blockhain/GeneralState test
+      { file    :: w ::: String    <?> "Path to .json test file"
+      , test    :: w ::: [String]  <?> "Test case filter - only run specified test method(s)"
+      , debug   :: w ::: Bool      <?> "Run interactively"
+      , diff    :: w ::: Bool      <?> "Print expected vs. actual state on failure"
+      , timeout :: w ::: Maybe Int <?> "Execution timeout (default: 10 sec.)"
       }
-  | Flatten
-    { sourceFile :: String
-    , jsonFile   :: Maybe String
-    , dappRoot   :: Maybe String
+  | Flatten -- Concat all dependencies for a given source file
+    { sourceFile :: w ::: String       <?> "Path to solidity source file e.g. src/contract.sol"
+    , jsonFile   :: w ::: Maybe String <?> "Filename or path to dapp build output (default: out/*.solc.json)"
+    , dappRoot   :: w ::: Maybe String <?> "Path to dapp project root directory (default: . )"
     }
   | Emacs
   | Version
-  deriving (Show, Options.Generic, Eq)
+  deriving (Options.Generic)
 
 type URL = Text
 
-instance Options.ParseRecord Command where
+instance Options.ParseRecord (Command Options.Wrapped) where
   parseRecord =
     Options.parseRecordWithModifiers Options.lispCaseModifiers
 
-optsMode :: Command -> Mode
+optsMode :: Command Options.Unwrapped -> Mode
 optsMode x = if debug x then Debug else Run
 
-unitTestOptions :: Command -> IO UnitTestOptions
+unitTestOptions :: Command Options.Unwrapped -> IO UnitTestOptions
 unitTestOptions cmd = do
   vmModifier <-
     case state cmd of
@@ -163,7 +166,7 @@ unitTestOptions cmd = do
 
 main :: IO ()
 main = do
-  cmd <- Options.getRecord "hevm -- Ethereum evaluator"
+  cmd <- Options.unwrapRecord "hevm -- Ethereum evaluator"
   let
     root = fromMaybe "." (dappRoot cmd)
   case cmd of
@@ -278,7 +281,7 @@ dappCoverage opts _ solcFile = do
       Nothing ->
         error ("Failed to read Solidity JSON for `" ++ solcFile ++ "'")
 
-launchExec :: Command -> IO ()
+launchExec :: Command Options.Unwrapped -> IO ()
 launchExec cmd = do
   let vm = vmFromCommand cmd
   vm1 <- case state cmd of
@@ -310,7 +313,7 @@ launchExec cmd = do
     Debug ->
       void (EVM.TTY.runFromVM vm1)
 
-vmFromCommand :: Command -> EVM.VM
+vmFromCommand :: Command Options.Unwrapped -> EVM.VM
 vmFromCommand cmd =
   vm1 & EVM.env . EVM.contracts . ix address' . EVM.balance +~ (w256 value')
   where
@@ -339,7 +342,7 @@ vmFromCommand cmd =
     word f def = maybe def id (f cmd)
     addr f def = maybe def id (f cmd)
 
-launchTest :: ExecMode -> Command ->  IO ()
+launchTest :: ExecMode -> Command Options.Unwrapped ->  IO ()
 launchTest execmode cmd = do
 #if MIN_VERSION_aeson(1, 0, 0)
   let parser = case execmode of
