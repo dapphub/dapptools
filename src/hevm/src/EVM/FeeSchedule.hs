@@ -1,6 +1,6 @@
 module EVM.FeeSchedule where
 
-data Num n => FeeSchedule n = FeeSchedule
+data FeeSchedule n = FeeSchedule
   { g_zero :: n
   , g_base :: n
   , g_verylow :: n
