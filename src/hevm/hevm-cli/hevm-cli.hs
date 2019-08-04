@@ -114,7 +114,7 @@ data Command w
       , timeout :: w ::: Maybe Int <?> "Execution timeout (default: 10 sec.)"
       }
   | VmTestReport -- Run all Ethereum VMTests
-      { tests :: w ::: String <?> "Path to Ethereum VMTests directory"
+      { tests :: w ::: String <?> "Path to Ethereum Tests directory"
       }
   | BcTest -- Run Ethereum Blockhain/GeneralState test
       { file    :: w ::: String    <?> "Path to .json test file"
@@ -122,6 +122,9 @@ data Command w
       , debug   :: w ::: Bool      <?> "Run interactively"
       , diff    :: w ::: Bool      <?> "Print expected vs. actual state on failure"
       , timeout :: w ::: Maybe Int <?> "Execution timeout (default: 10 sec.)"
+      }
+  | BcTestReport -- Run all Ethereum Blockchain/GeneralState tests
+      { tests :: w ::: String <?> "Path to Ethereum Tests directory"
       }
   | Flatten -- Concat all dependencies for a given source file
     { sourceFile :: w ::: String       <?> "Path to solidity source file e.g. src/contract.sol"
@@ -193,6 +196,10 @@ main = do
         testFile <- findJsonFile (jsonFile cmd)
         testOpts <- unitTestOptions cmd
         EVM.TTY.main testOpts root testFile
+    BcTestReport {} ->
+      withCurrentDirectory (tests cmd) $ do
+        dataDir <- Paths.getDataDir
+        callProcess "bash" [dataDir ++ "/run-blockchain-tests", "."]
     VmTestReport {} ->
       withCurrentDirectory (tests cmd) $ do
         dataDir <- Paths.getDataDir
