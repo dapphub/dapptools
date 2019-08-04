@@ -181,10 +181,12 @@ main = do
       withCurrentDirectory root $ do
         testFile <- findJsonFile (jsonFile cmd)
         testOpts <- unitTestOptions cmd
-        case coverage cmd of
-          False ->
+        case (coverage cmd, optsMode cmd) of
+          (False, Run) ->
             dappTest testOpts (optsMode cmd) testFile
-          True ->
+          (False, Debug) ->
+            EVM.TTY.main testOpts root testFile
+          (True, _) ->
             dappCoverage testOpts (optsMode cmd) testFile
     Interactive {} ->
       withCurrentDirectory root $ do
