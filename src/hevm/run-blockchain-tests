@@ -3,25 +3,15 @@ set -e
 
 HEVM=${HEVM:-hevm}
 
-skip=''
-test=''
-timeout=10
-usage() { echo "Usage: $(basename "$0") [--skip=<pattern>] [--test=<pattern>] [--timeout=<seconds>] <tests-dir>" 1>&2; exit 1; }
-OPTS=$(getopt --name="$0" --options=d --longoptions="skip:,test:,timeout:" -- "$@") || usage
-eval set -- "$OPTS"
-while true; do
-  case "$1" in
-    --skip)    skip=$2; shift 2 ;;
-    --test)    test=$2; shift 2 ;;
-    --timeout) timeout=$2; shift 2 ;;
-    --) shift; break ;;
-    *) usage ;;
-  esac
-done
-if [[ $# -ne 1 ]]; then
-  usage
+if [[ $# != 1 ]]; then
+  echo >&2 "usage: $(basename "$0") <tests-dir>"
+  exit 1
 fi
+
 tests=$1
+test=$2
+skip=$3
+timeout=${4:-10}
 
 shopt -s nocasematch
 {

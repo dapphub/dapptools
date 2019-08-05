@@ -113,9 +113,6 @@ data Command w
       , diff    :: w ::: Bool      <?> "Print expected vs. actual state on failure"
       , timeout :: w ::: Maybe Int <?> "Execution timeout (default: 10 sec.)"
       }
-  | VmTestReport -- Run all Ethereum VMTests
-      { tests :: w ::: String <?> "Path to Ethereum Tests directory"
-      }
   | BcTest -- Run Ethereum Blockhain/GeneralState test
       { file    :: w ::: String    <?> "Path to .json test file"
       , test    :: w ::: [String]  <?> "Test case filter - only run specified test method(s)"
@@ -123,8 +120,12 @@ data Command w
       , diff    :: w ::: Bool      <?> "Print expected vs. actual state on failure"
       , timeout :: w ::: Maybe Int <?> "Execution timeout (default: 10 sec.)"
       }
-  | BcTestReport -- Run all Ethereum Blockchain/GeneralState tests
-      { tests :: w ::: String <?> "Path to Ethereum Tests directory"
+  | ComplianceReport -- Run Ethereum Blockhain/VMTest compliance reports
+      { tests   :: w ::: String       <?> "Path to Ethereum Tests directory"
+      , group   :: w ::: Maybe String <?> "Report group to run: VM or Blockchain (default: Blockchain)"
+      , match   :: w ::: Maybe String <?> "Test case filter - only run methods matching regex"
+      , skip    :: w ::: Maybe String <?> "Test case filter - skip methods matching regex"
+      , timeout :: w ::: Maybe Int    <?> "Execution timeout (default: 10 sec.)"
       }
   | Flatten -- Concat all dependencies for a given source file
     { sourceFile :: w ::: String       <?> "Path to solidity source file e.g. src/contract.sol"
@@ -196,14 +197,11 @@ main = do
         testFile <- findJsonFile (jsonFile cmd)
         testOpts <- unitTestOptions cmd
         EVM.TTY.main testOpts root testFile
-    BcTestReport {} ->
-      withCurrentDirectory (tests cmd) $ do
-        dataDir <- Paths.getDataDir
-        callProcess "bash" [dataDir ++ "/run-blockchain-tests", "."]
-    VmTestReport {} ->
-      withCurrentDirectory (tests cmd) $ do
-        dataDir <- Paths.getDataDir
-        callProcess "bash" [dataDir ++ "/run-consensus-tests", "."]
+    ComplianceReport {} ->
+      case (group cmd) of
+        Just "Blockchain" -> launchReport "/run-blockchain-tests" cmd
+        Just "VM" -> launchReport "/run-consensus-tests" cmd
+        _ -> launchReport "/run-blockchain-tests" cmd
     Flatten {} ->
       withCurrentDirectory root $ do
         theJson <- findJsonFile (jsonFile cmd)
@@ -216,6 +214,18 @@ main = do
               error ("Failed to read Solidity JSON for `" ++ theJson ++ "'")
     Emacs ->
       EVM.Emacs.main
+
+launchReport :: String -> Command Options.Unwrapped -> IO ()
+launchReport script cmd = do
+  withCurrentDirectory (tests cmd) $ do
+    dataDir <- Paths.getDataDir
+    callProcess "bash"
+      [ dataDir ++ script
+      , "."
+      , fromMaybe "" (match cmd)
+      , fromMaybe "" (skip cmd)
+      , show $ fromMaybe 10 (timeout cmd)
+      ]
 
 findJsonFile :: Maybe String -> IO String
 findJsonFile (Just s) = pure s

@@ -8,6 +8,11 @@ if [[ $# != 1 ]]; then
   exit 1
 fi
 
+tests=$1
+test=$2 # Not implemented
+skip=$3 # Not implemented
+timeout=${4:-10} # Not implemented
+
 {
   cd "$1"
   for x in VMTests/*/*; do
@@ -25,7 +30,7 @@ fi
       *)  failed+=$row ;;
     esac
   done
-  
+
   cat <<.
 <!doctype html>
 <title>hevm test results</title>
@@ -61,7 +66,7 @@ $(date +%Y-%m-%d)
   echo "passed, "
   wc -l <<<"$failed"
   echo "failed"
-  
+
   cat <<.
 <p>
 (Test suite: <span class=VMTests</span>VMTests</span> for Homestead)
