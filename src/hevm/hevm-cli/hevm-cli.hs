@@ -123,6 +123,7 @@ data Command w
   | Compliance -- Run Ethereum Blockhain or VMTest compliance report
       { tests   :: w ::: String       <?> "Path to Ethereum Tests directory"
       , group   :: w ::: Maybe String <?> "Report group to run: VM or Blockchain (default: Blockchain)"
+      , match   :: w ::: Maybe String <?> "Test case filter - only run methods matching regex"
       , skip    :: w ::: Maybe String <?> "Test case filter - skip tests containing string"
       , html    :: w ::: Bool         <?> "Output html report"
       , timeout :: w ::: Maybe Int    <?> "Execution timeout (default: 10 sec.)"
@@ -223,6 +224,7 @@ launchScript script cmd = do
       [ dataDir ++ script
       , "."
       , show (html cmd)
+      , fromMaybe "" (match cmd)
       , fromMaybe "" (skip cmd)
       , show $ fromMaybe 10 (timeout cmd)
       ]

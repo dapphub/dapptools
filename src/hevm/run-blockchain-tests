@@ -2,7 +2,7 @@
 set -e
 
 # Invoke with hevm e.g.
-# hevm compliance --tests ~/ethereum-tests --skip quadratic --timeout 20 --html
+# hevm compliance --tests ~/ethereum-tests --skip modexp --timeout 20 --html
 
 HEVM=${HEVM:-hevm}
 
@@ -13,22 +13,20 @@ fi
 
 tests=$1
 html=$2
-skip=$3
-timeout=${4:-10}
+match=$3
+skip=$4
+timeout=${5:-10}
 
 _html () {
 cat <<.
 <!doctype html>
 <title>hevm test results</title>
 <style>
-* {
-  font-family:
-    "latin modern mono", "fantasque sans mono",
-    inconsolata, menlo, monospace;
-  font-size: 22px;
-  line-height: 26px;
-}
-
+* { font-family:
+"latin modern mono", "fantasque sans mono",
+inconsolata, menlo, monospace;
+font-size: 22px;
+line-height: 26px; }
 body { margin: 2rem; }
 header { text-align: center; margin: 4rem 0; }
 table { border-collapse: collapse; width: 100%; }
@@ -76,11 +74,11 @@ shopt -s nocasematch
 {
   cd "$tests"
   for x in BlockchainTests/GeneralStateTests/*/*; do
-    if [[ $x =~ .*$test.* ]] && [[ -n $skip && $x =~ .*$skip.* ]]; then
+    if [[ $x =~ .*$match.* ]] && [[ -n $skip && $x =~ .*$skip.* ]]; then
       for job in $(<$x jq '.|keys[]' -r); do
         echo -n "$x " ; echo -n "$job " ; echo "skip"
       done
-    elif [[ $x =~ .*$test.* ]]; then
+    elif [[ $x =~ .*$match.* ]]; then
       set +e
       echo -n "$x " ; "$HEVM" bc-test --file $x --timeout $timeout 2>&1
       set -e

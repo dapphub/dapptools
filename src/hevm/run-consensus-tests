@@ -13,21 +13,20 @@ fi
 
 tests=$1
 html=$2
-skip=$3
-timeout=$4 # Not implemented
+match=$3
+skip=$4
+timeout=${5:-10}
 
 _html() {
 cat <<.
 <!doctype html>
 <title>hevm test results</title>
 <style>
-* {
-  font-family:
-    "latin modern mono", "fantasque sans mono",
-    inconsolata, menlo, monospace;
-  font-size: 22px;
-  line-height: 26px;
-}
+* { font-family:
+"latin modern mono", "fantasque sans mono",
+inconsolata, menlo, monospace;
+font-size: 22px;
+line-height: 26px; }
 body { margin: 2rem; }
 header { text-align: center; margin: 4rem 0; }
 table { border-collapse: collapse; width: 100%; }
@@ -68,12 +67,12 @@ $(echo $passed)
 {
   cd "$tests"
   for x in VMTests/*/*; do
-    if [[ -n $skip && $x =~ .*$skip.* ]]; then
+    if [[ $x =~ .*$match.* ]] && [[ -n $skip && $x =~ .*$skip.* ]]; then
       for job in $(<$x jq '.|keys[]' -r); do
         echo "$x $job skip"
       done
-    else
-      echo -n "$x " ; "$HEVM" vm-test --file $x
+    elif [[ $x =~ .*$match.* ]]; then
+      echo -n "$x " ; "$HEVM" vm-test --file $x --timeout $timeout 2>&1
     fi
   done
 } | {
