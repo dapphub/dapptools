@@ -23,15 +23,17 @@ or you can enter the interactive debugger using
 
     Commands:
 
-      exec            Execute a given program with specified env & calldata
-      dapp-test       Run unit tests
-      interactive     Browse and run unit tests interactively
-      vm-test         Run an Ethereum VMTest
-      vm-test-report  Run all VM Tests
-      bc-test         Run an Ethereum GeneralState test
-      flatten         Concat all dependencies for a given source file
-      emacs           Emacs console
-      version         Show hevm version
+      exec         Execute a given program with specified env & calldata
+      dapp-test    Run unit tests
+      interactive  Browse and run unit tests interactively
+      flatten      Concat all dependencies for a given source file
+
+      bc-test      Run an Ethereum Blockchain/GeneralState test
+      vm-test      Run an Ethereum VMTest
+      compliance   Run Blockchain or VMTest compliance report
+
+      emacs        Emacs console
+      version      Show hevm version
 
 ### Interactive debugger key bindings
 

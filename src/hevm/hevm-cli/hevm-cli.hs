@@ -106,6 +106,13 @@ data Command w
       , rpc      :: w ::: Maybe URL    <?> "Fetch state from a remote node"
       , state    :: w ::: Maybe String <?> "Path to state repository"
       }
+  | BcTest -- Run an Ethereum Blockhain/GeneralState test
+      { file    :: w ::: String    <?> "Path to .json test file"
+      , test    :: w ::: [String]  <?> "Test case filter - only run specified test method(s)"
+      , debug   :: w ::: Bool      <?> "Run interactively"
+      , diff    :: w ::: Bool      <?> "Print expected vs. actual state on failure"
+      , timeout :: w ::: Maybe Int <?> "Execution timeout (default: 10 sec.)"
+      }
   | VmTest -- Run an Ethereum VMTest
       { file    :: w ::: String    <?> "Path to .json test file"
       , test    :: w ::: [String]  <?> "Test case filter - only run specified test method(s)"
@@ -113,14 +120,7 @@ data Command w
       , diff    :: w ::: Bool      <?> "Print expected vs. actual state on failure"
       , timeout :: w ::: Maybe Int <?> "Execution timeout (default: 10 sec.)"
       }
-  | BcTest -- Run Ethereum Blockhain/GeneralState test
-      { file    :: w ::: String    <?> "Path to .json test file"
-      , test    :: w ::: [String]  <?> "Test case filter - only run specified test method(s)"
-      , debug   :: w ::: Bool      <?> "Run interactively"
-      , diff    :: w ::: Bool      <?> "Print expected vs. actual state on failure"
-      , timeout :: w ::: Maybe Int <?> "Execution timeout (default: 10 sec.)"
-      }
-  | ComplianceReport -- Run Ethereum Blockhain/VMTest compliance reports
+  | Compliance -- Run Ethereum Blockhain or VMTest compliance report
       { tests   :: w ::: String       <?> "Path to Ethereum Tests directory"
       , group   :: w ::: Maybe String <?> "Report group to run: VM or Blockchain (default: Blockchain)"
       , match   :: w ::: Maybe String <?> "Test case filter - only run methods matching regex"
@@ -197,11 +197,11 @@ main = do
         testFile <- findJsonFile (jsonFile cmd)
         testOpts <- unitTestOptions cmd
         EVM.TTY.main testOpts root testFile
-    ComplianceReport {} ->
+    Compliance {} ->
       case (group cmd) of
-        Just "Blockchain" -> launchReport "/run-blockchain-tests" cmd
-        Just "VM" -> launchReport "/run-consensus-tests" cmd
-        _ -> launchReport "/run-blockchain-tests" cmd
+        Just "Blockchain" -> launchScript "/run-blockchain-tests" cmd
+        Just "VM" -> launchScript "/run-consensus-tests" cmd
+        _ -> launchScript "/run-blockchain-tests" cmd
     Flatten {} ->
       withCurrentDirectory root $ do
         theJson <- findJsonFile (jsonFile cmd)
@@ -215,8 +215,8 @@ main = do
     Emacs ->
       EVM.Emacs.main
 
-launchReport :: String -> Command Options.Unwrapped -> IO ()
-launchReport script cmd = do
+launchScript :: String -> Command Options.Unwrapped -> IO ()
+launchScript script cmd = do
   withCurrentDirectory (tests cmd) $ do
     dataDir <- Paths.getDataDir
     callProcess "bash"
