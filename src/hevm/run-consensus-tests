@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 set -e
 
+# Invoke with hevm e.g.
+# hevm compliance --tests ~/ethereum-tests --group VM --skip quadratic --html
+
 HEVM=${HEVM:-hevm}
 
 if [[ "$#" -lt 1 ]]; then
@@ -9,28 +12,12 @@ if [[ "$#" -lt 1 ]]; then
 fi
 
 tests=$1
-timeout=${2:-10} # Not implemented
-skip=$3 # Not implemented
+html=$2
+skip=$3
+timeout=$4 # Not implemented
 
-{
-  cd "$1"
-  for x in VMTests/*/*; do
-    echo >&2 "$x"
-    echo -n "$x " ; "$HEVM" vm-test --file $x
-  done
-} | {
-  while read path test outcome; do
-    category=$(dirname "$path")
-    testcase=$(basename "${path%.json}")
-    row="<tr><td class=testcase>$testcase<td>$outcome<td class=category>$category"
-    row+=$'\n'
-    case $outcome in
-      ok) passed+=$row ;;
-      *)  failed+=$row ;;
-    esac
-  done
-
-  cat <<.
+_html() {
+cat <<.
 <!doctype html>
 <title>hevm test results</title>
 <style>
@@ -41,7 +28,6 @@ skip=$3 # Not implemented
   font-size: 22px;
   line-height: 26px;
 }
-
 body { margin: 2rem; }
 header { text-align: center; margin: 4rem 0; }
 table { border-collapse: collapse; width: 100%; }
@@ -53,36 +39,66 @@ h1, h2 { text-align: center; margin-top: 2rem  }
 .testcase { font-weight: bold }
 #failed .testcase { color: rgb(200, 0, 0) }
 #passed .testcase { color: rgb(0, 150, 0) }
+#skipped .testcase { color: rgb(0, 100, 250) }
 </style>
 <header>
 <h1>hevm consensus test report</h1>
-<p>
-$(date +%Y-%m-%d)
-<p>
-.
-
-  wc -l <<<"$passed"
-  echo "passed, "
-  wc -l <<<"$failed"
-  echo "failed"
-
-  cat <<.
-<p>
-(Test suite: <span class=VMTests</span>VMTests</span> for Homestead)
+<p>$(date +%Y-%m-%d)</p>
+<p>$(echo "$npass passed, $nfail failed, $nskip skipped")</p>
+(Test suite: <span class=VMTests</span>VMTests</span> for ConstantinopleFix)
 </header>
 <h2>Failed tests</h2>
 <table id=failed>
 <tbody>
-.
-  echo "$failed"
-  cat <<.
+$(echo $failed)
+</table>
+<h2>Skipped tests</h2>
+<table id=skipped>
+<tbody>
+$(echo $skipped)
 </table>
 <h2>Passed tests</h2>
 <table id=passed>
 <tbody>
-.
-  echo "$passed"
-  cat <<.
+$(echo $passed)
 </table>
 .
+}
+
+{
+  cd "$tests"
+  for x in VMTests/*/*; do
+    if [[ -n $skip && $x =~ .*$skip.* ]]; then
+      for job in $(<$x jq '.|keys[]' -r); do
+        echo "$x $job skip"
+      done
+    else
+      echo -n "$x " ; "$HEVM" vm-test --file $x
+    fi
+  done
+} | {
+  while read path test outcome; do
+    echo >&2 "$path $test $outcome"
+    category=$(dirname "$path")
+    testcase=$(basename "${path%.json}")
+    row="<tr><td class=testcase>$testcase<td>$outcome<td class=category>$category"
+    row+=$'\n'
+    case $outcome in
+      ok)   passed+=$row ;;
+      skip) skipped+=$row ;;
+      *)    failed+=$row ;;
+    esac
+  done
+
+  nfail=$(echo -ne "$failed" | wc -l | awk '{print $1}')
+  npass=$(echo -ne "$passed" | wc -l | awk '{print $1}')
+  nskip=$(echo -ne "$skipped" | wc -l | awk '{print $1}')
+
+  echo >&2 "failed: $nfail"
+  echo >&2 "passed: $npass"
+  echo >&2 "skipped: $nskip"
+
+  if [[ $html == "True" ]]; then
+    _html
+  fi
 }

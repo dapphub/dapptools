@@ -123,7 +123,8 @@ data Command w
   | Compliance -- Run Ethereum Blockhain or VMTest compliance report
       { tests   :: w ::: String       <?> "Path to Ethereum Tests directory"
       , group   :: w ::: Maybe String <?> "Report group to run: VM or Blockchain (default: Blockchain)"
-      , skip    :: w ::: Maybe String <?> "Test case filter - skip tests containing word"
+      , skip    :: w ::: Maybe String <?> "Test case filter - skip tests containing string"
+      , html    :: w ::: Bool         <?> "Output html report"
       , timeout :: w ::: Maybe Int    <?> "Execution timeout (default: 10 sec.)"
       }
   | Flatten -- Concat all dependencies for a given source file
@@ -221,8 +222,9 @@ launchScript script cmd = do
     callProcess "bash"
       [ dataDir ++ script
       , "."
-      , show $ fromMaybe 10 (timeout cmd)
+      , show (html cmd)
       , fromMaybe "" (skip cmd)
+      , show $ fromMaybe 10 (timeout cmd)
       ]
 
 findJsonFile :: Maybe String -> IO String
