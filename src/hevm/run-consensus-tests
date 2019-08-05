@@ -90,9 +90,11 @@ $(echo $passed)
     esac
   done
 
-  nfail=$(echo -ne "$failed" | wc -l | awk '{print $1}')
-  npass=$(echo -ne "$passed" | wc -l | awk '{print $1}')
-  nskip=$(echo -ne "$skipped" | wc -l | awk '{print $1}')
+  sum () { echo -ne "$1" | wc -l | awk '{print $1}'; }
+
+  nfail=$(sum "$failed")
+  npass=$(sum "$passed")
+  nskip=$(sum "$skipped")
 
   echo >&2 "failed: $nfail"
   echo >&2 "passed: $npass"

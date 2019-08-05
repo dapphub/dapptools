@@ -103,12 +103,14 @@ shopt -s nocasematch
     esac
   done
 
-  npass=$(echo -ne "$passed" | wc -l | awk '{print $1}')
-  nbal=$(echo -ne "$balancefailed" | wc -l | awk '{print $1}')
-  nnon=$(echo -ne "$noncefailed" | wc -l | awk '{print $1}')
-  nstr=$(echo -ne "$storagefailed" | wc -l | awk '{print $1}')
-  nfail=$(echo -ne "$failed" | wc -l | awk '{print $1}')
-  nskip=$(echo -ne "$skipped" | wc -l | awk '{print $1}')
+  sum () { echo -ne "$1" | wc -l | awk '{print $1}'; }
+
+  npass=$(sum "$passed")
+  nbal=$(sum "$balancefailed")
+  nnon=$(sum "$noncefailed")
+  nstr=$(sum "$storagefailed")
+  nfail=$(sum "$failed")
+  nskip=$(sum "$skipped")
 
   echo >&2 "passed: $npass"
   echo >&2 "bad-balance: $nbal"
