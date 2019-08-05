@@ -3,15 +3,14 @@ set -e
 
 HEVM=${HEVM:-hevm}
 
-if [[ $# != 1 ]]; then
+if [[ "$#" -lt 1 ]]; then
   echo >&2 "usage: $(basename "$0") <tests-dir>"
   exit 1
 fi
 
 tests=$1
-test=$2 # Not implemented
+timeout=${2:-10} # Not implemented
 skip=$3 # Not implemented
-timeout=${4:-10} # Not implemented
 
 {
   cd "$1"
