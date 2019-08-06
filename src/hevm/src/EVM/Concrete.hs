@@ -11,7 +11,7 @@ import EVM.Types (word, padRight)
 import EVM.Keccak (keccak, word256Bytes)
 
 import Control.Lens    ((^?), ix)
-import Data.Bits       (Bits (..), FiniteBits (..))
+import Data.Bits       (Bits (..), FiniteBits (..), shiftL, shiftR)
 import Data.ByteString (ByteString)
 import Data.DoubleWord (signedWord, unsignedWord)
 import Data.Maybe      (fromMaybe)
@@ -31,6 +31,9 @@ byteStringSliceWithDefaultZeroes :: Int -> Int -> ByteString -> ByteString
 byteStringSliceWithDefaultZeroes offset size bs =
   if size == 0
   then ""
+  -- else if offset > BS.length bs
+  -- then BS.replicate size 0
+  -- todo: this ^^ should work, investigate why it causes more GST fails
   else
     let bs' = BS.take size (BS.drop offset bs)
     in bs' <> BS.replicate (size - BS.length bs') 0
@@ -85,9 +88,24 @@ sgt :: Word -> Word -> Word
 sgt (C _ (W256 x)) (C _ (W256 y)) =
   if signedWord x > signedWord y then w256 1 else w256 0
 
+shr :: Word -> Word -> Word
+shr x n =
+  if n > 255 then 0
+  else shiftR x (num n)
+
+shl :: Word -> Word -> Word
+shl x n =
+  if n > 255 then 0
+  else shiftL x (num n)
+
 sar :: Word -> Word -> Word
-sar (C _ (W256 x)) (C _ (W256 y)) =
-  w256 (num (shiftR (signedWord y) (num x)))
+sar (C _ (W256 x)) (C _ (W256 n)) =
+  let
+    sx = signedWord x
+  in
+    if n > 255 && sx > 0 then 0
+    else if n > 255 && sx < 0 then -1
+    else w256 (num (unsignedWord (shiftR sx (num n))))
 
 wordValue :: Word -> W256
 wordValue (C _ x) = x
@@ -98,21 +116,19 @@ sliceMemory o s m =
 
 writeMemory :: ByteString -> Word -> Word -> Word -> ByteString -> ByteString
 writeMemory bs1 (C _ n) (C _ src) (C _ dst) bs0 =
-  if src > num (BS.length bs1)
-  then
-    let
-      (a, b) = BS.splitAt (num dst) bs0
-      c      = BS.replicate (num n) 0
-      b'     = BS.drop (num n) b
-    in
-      a <> c <> b'
-  else
-    let
-      (a, b) = BS.splitAt (num dst) bs0
-      c      = BS.take (num n) (BS.drop (num src) bs1)
-      b'     = BS.drop (num n) b
-    in
-      a <> BS.replicate (num dst - BS.length a) 0 <> c <> b'
+  let
+    (a, b) = BS.splitAt (num dst) bs0
+    a'     = BS.replicate (num dst - BS.length a) 0
+    -- sliceMemory should work for both cases, but we are using 256 bit
+    -- words, whereas ByteString is only defined up to 64 bit. For large n,
+    -- src, dst this will cause problems (often in GeneralStateTests).
+    -- Later we could reimplement ByteString for 256 bit arguments.
+    c      = if src > num (BS.length bs1)
+             then BS.replicate (num n) 0
+             else sliceMemory src n bs1
+    b'     = BS.drop (num (n)) b
+  in
+    a <> a' <> c <> b'
 
 readMemoryWord :: Word -> ByteString -> Word
 readMemoryWord (C _ i) m =

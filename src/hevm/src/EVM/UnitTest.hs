@@ -78,6 +78,7 @@ data TestVMParams = TestVMParams
   , testTimestamp     :: W256
   , testGaslimit      :: W256
   , testGasprice      :: W256
+  , testMaxCodeSize   :: W256
   , testDifficulty    :: W256
   }
 
@@ -92,6 +93,9 @@ defaultBalanceForCreator = 0xffffffffffffffffffffffff
 
 defaultBalanceForCreated :: W256
 defaultBalanceForCreated = 0xffffffffffffffffffffffff
+
+defaultMaxCodeSize :: W256
+defaultMaxCodeSize = 0xffffffff
 
 type ABIMethod = Text
 
@@ -549,6 +553,7 @@ initialUnitTestVm (UnitTestOptions {..}) theContract _ =
            , vmoptTimestamp = testTimestamp
            , vmoptBlockGaslimit = testGaslimit
            , vmoptGasprice = testGasprice
+           , vmoptMaxCodeSize = testMaxCodeSize
            , vmoptDifficulty = testDifficulty
            , vmoptSchedule = FeeSchedule.metropolis
            , vmoptCreate = False
@@ -579,4 +584,5 @@ getParametersFromEnvironmentVariables = do
     <*> getWord "DAPP_TEST_TIMESTAMP" 1
     <*> getWord "DAPP_TEST_GAS_LIMIT" 0
     <*> getWord "DAPP_TEST_GAS_PRICE" 0
+    <*> getWord "DAPP_TEST_MAXCODESIZE" defaultMaxCodeSize
     <*> getWord "DAPP_TEST_DIFFICULTY" 1

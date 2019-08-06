@@ -262,7 +262,7 @@ runFromVM vm = do
            , _uiVmDapp = Nothing
            , _uiVmStepCount = 0
            , _uiVmFirstState = undefined
-           , _uiVmMessage = Just "Executing EVM code"
+           , _uiVmMessage = Just $ "Executing EVM code in " <> show (view (state . contract) vm)
            , _uiVmNotes = []
            , _uiVmShowMemory = False
            }
@@ -317,31 +317,33 @@ takeStep
   -> StepPolicy
   -> StepMode
   -> EventM n (Next UiState)
-takeStep ui policy mode = do
-  let m = interpret mode (view uiVmNextStep ui)
+takeStep ui policy mode =
+  if isJust (view (uiVm . result) ui)
+    -- we reached the end of the program, so persist the view
+    then continue (UiVmScreen ui)
+  else do
+    let m = interpret mode (view uiVmNextStep ui)
+    case runState (m <* modify renderVm) ui of
+      (Stepped stepper, ui') -> do
+        continue (UiVmScreen (ui' & set uiVmNextStep stepper))
 
-  case runState (m <* modify renderVm) ui of
+      (Blocked blocker, ui') ->
+        case policy of
+          StepNormally -> do
+            stepper <- liftIO blocker
+            takeStep
+              (execState (assign uiVmNextStep stepper) ui')
+              StepNormally StepNone
 
-    (Stepped stepper, ui') -> do
-      continue (UiVmScreen (ui' & set uiVmNextStep stepper))
+          StepTimidly ->
+            error "step blocked unexpectedly"
 
-    (Blocked blocker, ui') ->
-      case policy of
-        StepNormally -> do
-          stepper <- liftIO blocker
-          takeStep
-            (execState (assign uiVmNextStep stepper) ui')
-            StepNormally StepNone
-
-        StepTimidly ->
-          error "step blocked unexpectedly"
-
-    (Returned (), _) ->
-      case policy of
-        StepNormally ->
-          continue (UiVmScreen ui)
-        StepTimidly ->
-          error "step halted unexpectedly"
+      (Returned (), ui') ->
+        case policy of
+          StepNormally ->
+            continue (UiVmScreen ui')
+          StepTimidly ->
+            error "step halted unexpectedly"
 
 app :: UnitTestOptions -> App UiState () Name
 app opts =
@@ -370,9 +372,9 @@ app opts =
           continue (UiVmScreen (view browserVm s))
 
         (UiVmScreen s, VtyEvent (Vty.EvKey Vty.KEsc [])) ->
-          continue . UiTestPickerScreen $
             case view uiVmDapp s of
               Just dapp ->
+                continue . UiTestPickerScreen $
                 UiTestPickerState
                   { _testPickerList =
                       list
@@ -385,7 +387,7 @@ app opts =
                   , _testPickerDapp = dapp
                   }
               Nothing ->
-                error "Sorry, we lost the dapp"
+                halt ui
 
         (_, VtyEvent (Vty.EvKey Vty.KEsc [])) ->
           halt ui
@@ -563,7 +565,15 @@ drawVmBrowser ui =
           Just (_, (_, c)) = listSelectedElement (view browserContractList ui)
           Just dapp = view (browserVm . uiVmDapp) ui
         in case flip preview ui (browserVm . uiVmDapp . _Just . dappSolcByHash . ix (view codehash c) . _2) of
-          Nothing -> txt ("n/a; codehash " <> pack (show (view codehash c)))
+          Nothing ->
+            hBox
+              [ borderWithLabel (txt "Contract information") . padBottom Max . padRight Max $ vBox
+                  [ txt ("Codehash: " <>    pack (show (view codehash c)))
+                  , txt ("Nonce: "    <> showWordExact (view nonce    c))
+                  , txt ("Balance: "  <> showWordExact (view balance  c))
+                  , txt ("Storage: "  <> pack ( show ( Map.toList (view storage c))))
+                  ]
+                ]
           Just solc ->
             hBox
               [ borderWithLabel (txt "Contract information") . padBottom Max . padRight (Pad 2) $ vBox
@@ -577,9 +587,9 @@ drawVmBrowser ui =
                   , vBox . flip map (sort (Map.elems (view abiMap solc))) $
                       \method -> txt ("  " <> view methodSignature method)
                   ]
-                , borderWithLabel (txt "Storage slots") . padBottom Max . padRight Max $ vBox
-                    (map txt (storageLayout dapp solc))
-                ]
+              , borderWithLabel (txt "Storage slots") . padBottom Max . padRight Max $ vBox
+                  (map txt (storageLayout dapp solc))
+              ]
       ]
   ]
 
@@ -708,9 +718,18 @@ renderVm ui = updateUiVmState ui (view uiVm ui)
 updateUiVmState :: UiVmState -> VM -> UiVmState
 updateUiVmState ui vm =
   let
-    move = case vmOpIx vm of
-             Nothing -> id
-             Just x -> listMoveTo x
+    move =
+      case vmOpIx vm of
+        Nothing -> id
+        Just x -> listMoveTo x
+    message =
+      case view result vm of
+        Just (VMSuccess msg) ->
+          Just ("VMSuccess: " <> show (msg))
+        Just (VMFailure err) ->
+          Just ("VMFailure: " <> show (err))
+        Nothing ->
+          Just ("Executing EVM code in " <> show (view (state . contract) vm))
     ui' = ui
       & set uiVm vm
       & set uiVmStackList
@@ -719,33 +738,34 @@ updateUiVmState ui vm =
           (move $ list BytecodePane
              (view codeOps (fromJust (currentContract vm)))
              1)
+      & set uiVmMessage message
   in
-    case view uiVmDapp ui of
-      Nothing ->
-        ui'
-          & set uiVmTraceList (list TracePane mempty 1)
-          & set uiVmSolidityList (list SolidityPane mempty 1)
-      Just dapp ->
-        ui'
-          & set uiVmTraceList
-              (list
-                TracePane
-                (Vec.fromList
-                 . Text.lines
-                 . showTraceTree dapp
-                 $ vm)
-                1)
-          & set uiVmSolidityList
-              (list SolidityPane
-                 (case currentSrcMap dapp vm of
-                    Nothing -> mempty
-                    Just x ->
-                      view (dappSources
-                            . sourceLines
-                            . ix (srcMapFile x)
-                            . to (Vec.imap (,)))
-                        dapp)
-                 1)
+    ui'
+      & set uiVmTraceList
+          (list
+            TracePane
+            (Vec.fromList
+              . Text.lines
+              . showTraceTree dapp
+              $ vm)
+            1)
+      & set uiVmSolidityList
+          (list SolidityPane
+              (case currentSrcMap dapp vm of
+                Nothing -> mempty
+                Just x ->
+                  view (dappSources
+                        . sourceLines
+                        . ix (srcMapFile x)
+                        . to (Vec.imap (,)))
+                    dapp)
+              1)
+      where
+        dapp =
+          case view uiVmDapp ui of
+            Just solcdapp -> solcdapp
+            Nothing ->
+              dappInfo "" mempty (SourceCache mempty mempty mempty mempty)
 
 drawStackPane :: UiVmState -> UiWidget
 drawStackPane ui =

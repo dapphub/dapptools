@@ -6,15 +6,21 @@ import EVM.Dapp
 import EVM.Solidity
 import EVM.UnitTest
 
+import qualified EVM
 import qualified EVM.Fetch
 import qualified EVM.TTY
 import qualified EVM.Emacs
 import qualified EVM.Facts     as Facts
 import qualified EVM.Facts.Git as Git
+import qualified EVM.Stepper
+import qualified EVM.VMTest    as VMTest
 
+import Control.Exception          (evaluate)
+import Control.Monad.State.Strict (execState)
 import Data.Text (isPrefixOf)
 
 import qualified Data.Map as Map
+import qualified Data.ByteString.Lazy   as LazyByteString
 
 loadDappInfo :: String -> String -> IO DappInfo
 loadDappInfo path file =
@@ -52,6 +58,29 @@ ghciTest root path state =
           mapM (runUnitTestContract opts contractMap cache) unitTests
         Nothing ->
           error ("Failed to read Solidity JSON for `" ++ path ++ "'")
+
+runBCTest :: (String, VMTest.Case) -> IO Bool
+runBCTest (name, x) = do
+  let
+    vm0 = VMTest.vmForCase EVM.ExecuteAsBlockchainTest x
+    m = EVM.Stepper.execFully >> EVM.Stepper.evm (EVM.finalize True)
+  putStr (name ++ " ")
+  result <- do
+    evaluate $ do
+      execState (VMTest.interpret m) vm0
+  ok <- VMTest.checkExpectation False EVM.ExecuteAsBlockchainTest x result
+  putStrLn (if ok then "ok" else "")
+  return ok
+
+ghciBCTest :: String -> IO ()
+ghciBCTest file = do
+  let parser = VMTest.parseBCSuite
+  parsed <- parser <$> LazyByteString.readFile file
+  case parsed of
+     Left "No cases to check." -> putStrLn "no-cases ok"
+     Left err -> putStrLn (show err)
+     Right allTests ->
+        mapM_ runBCTest (Map.toList allTests)
 
 ghciTty :: String -> String -> Maybe String -> IO ()
 ghciTty root path state =

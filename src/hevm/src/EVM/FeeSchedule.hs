@@ -1,6 +1,6 @@
 module EVM.FeeSchedule where
 
-data Num n => FeeSchedule n = FeeSchedule
+data FeeSchedule n = FeeSchedule
   { g_zero :: n
   , g_base :: n
   , g_verylow :: n
@@ -14,8 +14,9 @@ data Num n => FeeSchedule n = FeeSchedule
   , g_sset :: n
   , g_sreset :: n
   , r_sclear :: n
+  , g_selfdestruct :: n
+  , g_selfdestruct_newaccount :: n
   , r_selfdestruct :: n
-  , r_selfdestruct_newaccount :: n
   , g_create :: n
   , g_codedeposit :: n
   , g_call :: n
@@ -53,8 +54,8 @@ eip150 fees = fees
   , g_balance = 400
   , g_sload = 200
   , g_call = 700
-  , r_selfdestruct = 5000
-  , r_selfdestruct_newaccount = 25000
+  , g_selfdestruct = 5000
+  , g_selfdestruct_newaccount = 25000
   }
 
 -- EIP160: EXP cost increase
@@ -78,8 +79,9 @@ homestead = FeeSchedule
   , g_sset = 20000
   , g_sreset = 5000
   , r_sclear = 15000
-  , r_selfdestruct = 0
-  , r_selfdestruct_newaccount = 0
+  , g_selfdestruct = 0
+  , g_selfdestruct_newaccount = 0
+  , r_selfdestruct = 24000
   , g_create = 32000
   , g_codedeposit = 200
   , g_call = 40
@@ -101,7 +103,7 @@ homestead = FeeSchedule
   , g_copy = 3
   , g_blockhash = 20
   , g_extcodehash = 400
-  , g_quaddivisor = 100
+  , g_quaddivisor = 20
   , r_block = 2000000000000000000
   }
 

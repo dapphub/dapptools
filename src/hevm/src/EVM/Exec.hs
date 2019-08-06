@@ -34,6 +34,7 @@ vmForEthrunCreation creationCode =
     , vmoptDifficulty = 0
     , vmoptGas = 0xffffffffffffffff
     , vmoptGaslimit = 0xffffffffffffffff
+    , vmoptMaxCodeSize = 0xffffffff
     , vmoptSchedule = FeeSchedule.metropolis
     , vmoptCreate = False
     }) & set (env . contracts . at ethrunAddress)

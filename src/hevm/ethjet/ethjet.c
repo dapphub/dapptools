@@ -69,6 +69,11 @@ ethjet_ecrecover (secp256k1_context *ctx,
   input64 = in + 64;
   recid = in[63] - 27;
 
+  /* higher bytes of V should be zero  */
+  static const char z31 [31];
+  if (memcmp (z31, in + 32, 31))
+    return 0;
+
   if (recid < 0 || recid > 3)
     return 0;
 
