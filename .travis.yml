@@ -22,7 +22,7 @@ script:
   - |
     [[ "$TRAVIS_OS_NAME" == "osx" ]] && PLATFORM=darwin || PLATFORM=linux
 
-    nix-build -j auto release.nix -A dapphub.$PLATFORM.stable
+    nix-build -j auto release.nix -A dapphub.$PLATFORM.stable &&
 
     # this is here to let cachix finish pushing the last artifact before the script is killed
     sleep 10
