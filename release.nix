@@ -18,7 +18,7 @@ let
     export PATH=${x.pkgs.hevm}/bin:${x.pkgs.jq}/bin:$PATH
     ${x.pkgs.hevm}/bin/hevm compliance \
       --tests ${ethereum-test-suite x} \
-      --skip "modexp"
+      --skip "(modexp|RevertPrecompiledTouch_storage_d0g0v0|RevertPrecompiledTouch_storage_d3g0v0)"
   '';
 
   # These packages should always work and be available in the binary cache.
