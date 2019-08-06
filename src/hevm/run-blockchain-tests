@@ -45,7 +45,7 @@ h1, h2 { text-align: center; margin-top: 2rem  }
 <header>
 <h1>hevm consensus test report</h1>
 <p>$(date +%Y-%m-%d)</p>
-<p>$(echo "$npass passed, $nbal bad-balance, $nfail failed, $nskip skipped, $ntime timeout")</p>
+<p>$(echo "$npass passed, $nbal bad-balance, $nnon bad-nonce, $nstr bad-storage, $nfail failed, $nskip skipped, $ntime timeout")</p>
 (Test suite: <span class=GeneralStateTests</span>GeneralStateTests</span> for ConstantinopleFix)
 </header>
 <h2>Failed tests</h2>
