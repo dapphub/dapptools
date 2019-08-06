@@ -15,10 +15,12 @@ let
   # run all General State Tests, skipping modexp as it is
   # problematic for darwin. todo: don't skip for linux
   hevmCompliance = x: x.runCommand "hevm-compliance" {} ''
+    mkdir "$out"
     export PATH=${x.pkgs.hevm}/bin:${x.pkgs.jq}/bin:$PATH
     ${x.pkgs.hevm}/bin/hevm compliance \
       --tests ${ethereum-test-suite x} \
-      --skip "(modexp|RevertPrecompiledTouch_storage_d0g0v0|RevertPrecompiledTouch_storage_d3g0v0)"
+      --skip "(modexp|RevertPrecompiledTouch_storage_d0g0v0|RevertPrecompiledTouch_storage_d3g0v0)" \
+      --html > $out/index.html
   '';
 
   # These packages should always work and be available in the binary cache.
