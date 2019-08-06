@@ -1,5 +1,21 @@
 # hevm changelog
 
+## 0.33 - 2019-08-06
+ - Full compliance with the [General State Tests][245] (with the
+   BlockchainTest format), using the Yellow and Jello papers as
+   reference, for Constantinople Fix (aka Petersburg). Including:
+  - full precompile support
+  - correct substate accounting, including touched accounts,
+    selfdestructs and refunds
+  - memory read/write semantics
+  - many gas cost corrections
+ - Show more information for non solc bytecode in interactive view
+   (trace and storage)
+ - Help text for all cli options
+ - Enable `--debug` flag in `hevm dapp-test`
+
+[245]: https://github.com/dapphub/dapptools/pull/245
+
 ## 0.32 - 2019-06-14
  - Fix dapp-test [nonce initialisation bug][224]
 
