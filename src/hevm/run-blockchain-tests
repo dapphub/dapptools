@@ -129,4 +129,8 @@ shopt -s nocasematch
   if [[ $html == "True" ]]; then
     _html
   fi
+
+  nbad=$(($nbal + $nnon + $nstr + $nfail))
+
+  [[ $nbad -gt 0 ]] && exit 1 || exit 0
 }
