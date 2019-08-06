@@ -61,7 +61,7 @@ $(echo $balancefailed)
 <h2>Timeout tests</h2>
 <table id=timeout>
 <tbody>
-$(echo $timeout)
+$(echo $timeouts)
 </table>
 <h2>Skipped tests</h2>
 <table id=skipped>
@@ -102,7 +102,7 @@ shopt -s nocasematch
       bad-balance) balancefailed+=$row ;;
       bad-nonce)   noncefailed+=$row ;;
       bad-storage) storagefailed+=$row ;;
-      timeout)     timeout+=$row ;;
+      timeout)     timeouts+=$row ;;
       skip)        skipped+=$row ;;
       *)           failed+=$row ;;
     esac
@@ -115,7 +115,7 @@ shopt -s nocasematch
   nnon=$(sum "$noncefailed")
   nstr=$(sum "$storagefailed")
   nfail=$(sum "$failed")
-  ntime=$(sum "$timeout")
+  ntime=$(sum "$timeouts")
   nskip=$(sum "$skipped")
 
   echo >&2 "passed: $npass"
