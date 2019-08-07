@@ -1,17 +1,22 @@
-#!/usr/bin/env bash
-### seth-abi -- convert an ABI from Solidity syntax to JSON form
-### Usage: seth abi <solidity-fragment>
-set -e
+#!/usr/bin/env node
 
-solc_version=$(solc --version)
-solc_version=$(<<<"$solc_version" grep ^Version:)
-solc_version=${solc_version#* }
-solc_version=${solc_version%%+*}
+// silence warnings we don't care about
+const log = console.log
+console.log = () => {};
 
-[[ $1 ]] || seth --fail-usage "$0"
-input="pragma solidity ^${solc_version}; contract A { $1 }"
-json=$(solc --combined-json=abi - <<<"$input")
-# Changed from "A" to "<stdin>:A" in solc 0.4.10:
-name=$(jshon <<<"$json" -e contracts -k)
-abi=$(jshon <<<"$json" -e contracts -e "$name" -e abi -u)
-seth --decorate-abi "$abi"
+const ethers = require("./ethers.min.js");
+
+console.log = log;
+
+const sig = process.argv[2];
+if (!sig) {
+  console.error("Usage: seth-abi <solidity-fragment>")
+  process.exit(1);
+}
+
+try {
+  console.log(JSON.stringify([ethers.utils.parseSignature(sig)]));
+} catch (e) {
+  console.error(`seth-abi: error: ${e.message}`);
+  process.exit(1);
+}
