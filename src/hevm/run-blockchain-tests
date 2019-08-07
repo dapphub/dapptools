@@ -51,6 +51,8 @@ h1, h2 { text-align: center; margin-top: 2rem  }
 <h2>Failed tests</h2>
 <table id=failed>
 <tbody>
+$(echo $noncefailed)
+$(echo $storagefailed)
 $(echo $failed)
 </table>
 <h2>Failed tests (due to balance only)</h2>

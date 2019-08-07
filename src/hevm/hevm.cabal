@@ -150,6 +150,8 @@ executable hevm
     -Wall -threaded -with-rtsopts=-N
   other-modules:
     Paths_hevm
+  if os(darwin)
+    ld-options: -Wl,-keep_dwarf_unwind
   build-depends:
     QuickCheck                        >= 2.9,
     aeson                             >= 1.0,
