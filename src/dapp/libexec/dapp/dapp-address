@@ -1,19 +1,32 @@
-#!/usr/bin/env node
-/*
+#!/usr/bin/env bash
 ### dapp-address -- determine address of newly generated contract
-### Usage: dapp address
-*/
+### Usage: dapp address <sender> <nonce>
+set -e
+[[ $# -ne 2 ]] && echo "Usage: dapp address <sender> <nonce>" >&2 && exit 1
 
-var PROGRAM_NAME = process.argv[1].replace(/.*\//, "")
-var PROGRAM_ARGS = process.argv.slice(2)
+sender=$1
+nonce=$(seth --to-hex "$2")
 
-// shut up secp256k1
-const log = console.log
-console.log = () => {}
-const generateAddress = require("ethereumjs-util").generateAddress
-console.log = log
+# manually create the rlp encoding of [sender,nonce], with length prefix
+# `192+len(sender)+len(nonce):len(sender):sender:128+len(nonce):nonce`
+if [[ $nonce -eq 0x00 ]]; then
+  # encoding of scalar 0 is special and requires the length prefix
+  rlp="0xd694${sender##0x}80"
+elif [[ $nonce -lt 0x80 ]]; then
+  nonce=$(printf "0x%02x" "$nonce")
+  # no length prefix if nonce < 128
+  rlp="0xd694${sender##0x}${nonce##0x}"
+elif [[ $nonce -lt 0x100 ]]; then
+  # even padding for hex
+  nonce=$(printf "0x%02x" "$nonce")
+  rlp="0xd794${sender##0x}81${nonce##0x}"
+elif [[ $nonce -lt 0x10000 ]]; then
+  # even padding for hex
+  nonce=$(printf "0x%04x" "$nonce")
+  rlp="0xd894${sender##0x}82${nonce##0x}"
+else
+  echo "dapp-address: only supports nonce < 65536" >&2
+  exit 1
+fi
 
-var sender = PROGRAM_ARGS[0]
-var nonce = PROGRAM_ARGS[1]
-
-console.log(generateAddress(sender, nonce).toString("hex"))
+seth keccak "$rlp" | cut -b 27-66
