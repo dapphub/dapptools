@@ -110,58 +110,72 @@ splitEithers =
   . (fmap fst &&& fmap snd)
   . (fmap (preview _Left &&& preview _Right))
 
+checkStateFail :: Bool -> Case -> Expectation -> EVM.VM -> (Bool, Bool, Bool, Bool, Bool) -> IO Bool
+checkStateFail diff x expectation vm (okState, okMoney, okNonce, okData, okCode) = do
+  let
+    printField :: (v -> String) -> Map Addr v -> IO ()
+    printField f d = putStrLn $ Map.foldrWithKey (\k v acc ->
+      acc ++ showAddrWith0x k ++ " : " ++ f v ++ "\n") "" d
+
+    reason = map fst (filter (not . snd)
+        [ ("bad-state",       okMoney || okNonce || okData  || okCode || okState)
+        , ("bad-balance", not okMoney || okNonce || okData  || okCode || okState)
+        , ("bad-nonce",   not okNonce || okMoney || okData  || okCode || okState)
+        , ("bad-storage", not okData  || okMoney || okNonce || okCode || okState)
+        , ("bad-code",    not okCode  || okMoney || okNonce || okData || okState)
+        ])
+    check = checkContracts x
+    initial = initTx x
+    expected = expectedContracts expectation
+    actual = view (EVM.env . EVM.contracts . to (fmap clearZeroStorage)) vm
+
+  putStr (intercalate " " reason)
+  if diff && (not okState) then do
+    putStrLn "\nCheck balance/state: "
+    printField (\v -> (show . toInteger  $ _nonce v) ++ " "
+                   ++ (show . toInteger  $ _balance v) ++ " "
+                   ++ (show . Map.toList $ _storage v)) check
+    putStrLn "\nInitial balance/state: "
+    printField (\v -> (show . toInteger  $ _nonce v) ++ " "
+                   ++ (show . toInteger  $ _balance v) ++ " "
+                   ++ (show . Map.toList $ _storage v)) initial
+    putStrLn "\nExpected balance/state: "
+    printField (\v -> (show . toInteger  $ _nonce v) ++ " "
+                   ++ (show . toInteger  $ _balance v) ++ " "
+                   ++ (show . Map.toList $ _storage v)) expected
+    putStrLn "\nActual balance/state: "
+    printField (\v -> (show . toInteger  $ EVM._nonce v) ++ " "
+                   ++ (show . toInteger  $ EVM._balance v) ++ " "
+                   ++ (show . Map.toList $ EVM._storage v)) actual
+  else return ()
+  return okState
+
 checkExpectation :: Bool -> EVM.ExecMode -> Case -> EVM.VM -> IO Bool
 checkExpectation diff execmode x vm =
   case (execmode, testExpectation x, view EVM.result vm) of
     (EVM.ExecuteAsBlockchainTest, Just expectation, _) -> do
-      let
-        printField :: (v -> String) -> Map Addr v -> IO ()
-        printField f d = putStrLn $ Map.foldrWithKey (\k v acc ->
-          acc ++ showAddrWith0x k ++ " : " ++ f v ++ "\n") "" d
-
-        (okState, okMoney, okNonce, okData, okCode)
-          = checkExpectedContracts vm (expectedContracts expectation)
-        reason = map fst (filter (not . snd)
-            [ ("bad-state",       okMoney || okNonce || okData  || okCode || okState)
-            , ("bad-balance", not okMoney || okNonce || okData  || okCode || okState)
-            , ("bad-nonce",   not okNonce || okMoney || okData  || okCode || okState)
-            , ("bad-storage", not okData  || okMoney || okNonce || okCode || okState)
-            , ("bad-code",    not okCode  || okMoney || okNonce || okData || okState)
-            ])
-        check = checkContracts x
-        initial = initTx x
-        expected = expectedContracts expectation
-        actual = view (EVM.env . EVM.contracts . to (fmap clearZeroStorage)) vm
-
-      putStr (intercalate " " reason)
-      if diff && (not okState) then do
-        putStrLn "\nCheck balance/state: "
-        printField (\v -> (show . toInteger  $ _nonce v) ++ " "
-                       ++ (show . toInteger  $ _balance v) ++ " "
-                       ++ (show . Map.toList $ _storage v)) check
-        putStrLn "\nInitial balance/state: "
-        printField (\v -> (show . toInteger  $ _nonce v) ++ " "
-                       ++ (show . toInteger  $ _balance v) ++ " "
-                       ++ (show . Map.toList $ _storage v)) initial
-        putStrLn "\nExpected balance/state: "
-        printField (\v -> (show . toInteger  $ _nonce v) ++ " "
-                       ++ (show . toInteger  $ _balance v) ++ " "
-                       ++ (show . Map.toList $ _storage v)) expected
-        putStrLn "\nActual balance/state: "
-        printField (\v -> (show . toInteger  $ EVM._nonce v) ++ " "
-                       ++ (show . toInteger  $ EVM._balance v) ++ " "
-                       ++ (show . Map.toList $ EVM._storage v)) actual
-      else return ()
+      let (okState, b2, b3, b4, b5) =
+            checkExpectedContracts vm (expectedContracts expectation)
+      _ <- if (not okState) then
+               checkStateFail
+                 diff x expectation vm (okState, b2, b3, b4, b5)
+           else return True
       return okState
 
     (_, Just expectation, Just (EVM.VMSuccess output)) -> do
       let
-        (s1, (b1, _, _, _, _)) = ("bad-state", checkExpectedContracts vm (expectedContracts expectation))
+        (okState, ok2, ok3, ok4, ok5) =
+          checkExpectedContracts vm (expectedContracts expectation)
         (s2, b2) = ("bad-output", checkExpectedOut output (expectedOut expectation))
         (s3, b3) = ("bad-gas", checkExpectedGas vm (expectedGas expectation))
-        ss = map fst (filter (not . snd) [(s1, b1), (s2, b2), (s3, b3)])
+        ss = map fst (filter (not . snd) [(s2, b2), (s3, b3)])
+      _ <- if (not okState) then
+               do checkStateFail
+                    diff x expectation vm (okState, ok2, ok3, ok4, ok5)
+               else
+                   return True
       putStr (intercalate " " ss)
-      return (b1 && b2 && b3)
+      return (okState && b2 && b3)
 
     (_, Nothing, Just (EVM.VMSuccess _)) -> do
       putStr "unexpected-success"
