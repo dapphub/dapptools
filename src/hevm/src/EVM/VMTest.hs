@@ -537,7 +537,11 @@ vmForCase :: EVM.ExecMode -> Case -> EVM.VM
 vmForCase mode x =
   let
     checkState = checkContracts x
-    initState = initTx x
+    initState =
+      case mode of
+        EVM.ExecuteAsBlockchainTest -> initTx x
+        EVM.ExecuteAsVMTest         -> checkState
+        EVM.ExecuteNormally         -> error "cannot initialize VM normally"
     opts = testVmOpts x
     creation = EVM.vmoptCreate opts
     touchedAccounts =
