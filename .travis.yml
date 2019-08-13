@@ -16,7 +16,7 @@ install:
 script:
   - |
     nix-env -i ShellCheck
-    grep -RHL --exclude-dir node_modules node src/*/libexec | xargs shellcheck
+    grep -RHL --exclude-dir node_modules node src/*/libexec | xargs shellcheck --exclude=2001
   - |
     [[ -z "$TRAVIS_PULL_REQUEST_SLUG" || "$TRAVIS_PULL_REQUEST_SLUG" == "dapphub/dapptools" ]] && cachix push --watch-store dapp &
   - |
