@@ -1378,8 +1378,28 @@ accountEmpty c =
 
 -- * How to finalize a transaction
 finalize :: Bool -> EVM ()
-finalize False = noop
-finalize True = do
+finalize x = do
+  -- perform state trie clearing (EIP 161), of selfdestructs
+  -- and touched accounts. addresses are cleared if they have
+  --    a) selfdestructed, or
+  --    b) been touched and
+  --    c) are empty.
+  -- (see Yellow Paper "Accrued Substate")
+  --
+  -- remove any destructed addresses
+  destroyedAddresses <- use (tx . substate . selfdestructs)
+  modifying (env . contracts)
+    (Map.filterWithKey (\k _ -> not (elem k destroyedAddresses)))
+  -- then, clear any remaining empty and touched addresses
+  touchedAddresses <- use (tx . substate . touchedAccounts)
+  modifying (env . contracts)
+    (Map.filterWithKey
+      (\k a -> not ((elem k touchedAddresses) && accountEmpty a)))
+  _finalize x
+
+_finalize :: Bool -> EVM ()
+_finalize False = noop
+_finalize True = do
   res <- use result
 
   -- burn remaining gas on error (not revert or success)
@@ -1436,23 +1456,6 @@ finalize True = do
   modifying (env . contracts)
     (Map.adjust (over balance (+ minerPay)) miner)
   touchAccount miner
-
-  -- perform state trie clearing (EIP 161), of selfdestructs
-  -- and touched accounts. addresses are cleared if they have
-  --    a) selfdestructed, or
-  --    b) been touched and
-  --    c) are empty.
-  -- (see Yellow Paper "Accrued Substate")
-  --
-  -- first, remove any destructed addresses
-  destroyedAddresses <- use (tx . substate . selfdestructs)
-  modifying (env . contracts)
-    (Map.filterWithKey (\k _ -> not (elem k destroyedAddresses)))
-  -- then, clear any remaining empty and touched addresses
-  touchedAddresses <- use (tx . substate . touchedAccounts)
-  modifying (env . contracts)
-    (Map.filterWithKey
-      (\k a -> not ((elem k touchedAddresses) && accountEmpty a)))
 
   -- finally, pay out the block reward, recreating the miner if necessary
   preuse (env . contracts . ix miner) >>= \case
