@@ -61,13 +61,11 @@ ghciTest root path state =
 
 runBCTest :: (String, VMTest.Case) -> IO Bool
 runBCTest (name, x) = do
-  let
-    vm0 = VMTest.vmForCase EVM.ExecuteAsBlockchainTest x
-    m = EVM.Stepper.execFully >> EVM.Stepper.evm (EVM.finalize True)
+  let vm0 = VMTest.vmForCase EVM.ExecuteAsBlockchainTest x
   putStr (name ++ " ")
   result <- do
     evaluate $ do
-      execState (VMTest.interpret m) vm0
+      execState (VMTest.interpret $ EVM.Stepper.execFully) vm0
   ok <- VMTest.checkExpectation False EVM.ExecuteAsBlockchainTest x result
   putStrLn (if ok then "ok" else "")
   return ok

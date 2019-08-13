@@ -1377,29 +1377,8 @@ accountEmpty c =
   && (view balance c == 0)
 
 -- * How to finalize a transaction
-finalize :: Bool -> EVM ()
-finalize x = do
-  -- perform state trie clearing (EIP 161), of selfdestructs
-  -- and touched accounts. addresses are cleared if they have
-  --    a) selfdestructed, or
-  --    b) been touched and
-  --    c) are empty.
-  -- (see Yellow Paper "Accrued Substate")
-  --
-  -- remove any destructed addresses
-  destroyedAddresses <- use (tx . substate . selfdestructs)
-  modifying (env . contracts)
-    (Map.filterWithKey (\k _ -> not (elem k destroyedAddresses)))
-  -- then, clear any remaining empty and touched addresses
-  touchedAddresses <- use (tx . substate . touchedAccounts)
-  modifying (env . contracts)
-    (Map.filterWithKey
-      (\k a -> not ((elem k touchedAddresses) && accountEmpty a)))
-  _finalize x
-
-_finalize :: Bool -> EVM ()
-_finalize False = noop
-_finalize True = do
+finalize :: EVM ()
+finalize = do
   res <- use result
 
   -- burn remaining gas on error (not revert or success)
@@ -1437,33 +1416,53 @@ _finalize True = do
 
   -- compute and pay the refund to the caller and the
   -- corresponding payment to the miner
-  txOrigin     <- use (tx . origin)
-  sumRefunds   <- (sum . (snd <$>)) <$> (use (tx . substate . refunds))
-  miner        <- use (block . coinbase)
-  blockReward  <- r_block <$> (use (block . schedule))
-  gasPrice     <- use (tx . gasprice)
-  gasLimit     <- use (tx . txgaslimit)
-  gasRemaining <- use (state . gas)
+  use execMode >>= \case
+    ExecuteAsVMTest -> noop
+    _ -> do
+      txOrigin     <- use (tx . origin)
+      sumRefunds   <- (sum . (snd <$>)) <$> (use (tx . substate . refunds))
+      miner        <- use (block . coinbase)
+      blockReward  <- r_block <$> (use (block . schedule))
+      gasPrice     <- use (tx . gasprice)
+      gasLimit     <- use (tx . txgaslimit)
+      gasRemaining <- use (state . gas)
 
-  let
-    gasUsed      = gasLimit - gasRemaining
-    cappedRefund = min (quot gasUsed 2) sumRefunds
-    originPay    = (gasRemaining + cappedRefund) * gasPrice
-    minerPay     = gasPrice * (gasUsed - cappedRefund)
+      let
+        gasUsed      = gasLimit - gasRemaining
+        cappedRefund = min (quot gasUsed 2) sumRefunds
+        originPay    = (gasRemaining + cappedRefund) * gasPrice
+        minerPay     = gasPrice * (gasUsed - cappedRefund)
 
-  modifying (env . contracts)
-    (Map.adjust (over balance (+ originPay)) txOrigin)
-  modifying (env . contracts)
-    (Map.adjust (over balance (+ minerPay)) miner)
-  touchAccount miner
+      modifying (env . contracts)
+        (Map.adjust (over balance (+ originPay)) txOrigin)
+      modifying (env . contracts)
+        (Map.adjust (over balance (+ minerPay)) miner)
+      touchAccount miner
 
-  -- finally, pay out the block reward, recreating the miner if necessary
-  preuse (env . contracts . ix miner) >>= \case
-    Nothing -> modifying (env . contracts)
-      (Map.insert miner (initialContract (EVM.RuntimeCode mempty)))
-    Just _  -> noop
+      -- pay out the block reward, recreating the miner if necessary
+      preuse (env . contracts . ix miner) >>= \case
+        Nothing -> modifying (env . contracts)
+          (Map.insert miner (initialContract (EVM.RuntimeCode mempty)))
+        Just _  -> noop
+      modifying (env . contracts)
+        (Map.adjust (over balance (+ blockReward)) miner)
+
+  -- perform state trie clearing (EIP 161), of selfdestructs
+  -- and touched accounts. addresses are cleared if they have
+  --    a) selfdestructed, or
+  --    b) been touched and
+  --    c) are empty.
+  -- (see Yellow Paper "Accrued Substate")
+  --
+  -- remove any destructed addresses
+  destroyedAddresses <- use (tx . substate . selfdestructs)
   modifying (env . contracts)
-    (Map.adjust (over balance (+ blockReward)) miner)
+    (Map.filterWithKey (\k _ -> not (elem k destroyedAddresses)))
+  -- then, clear any remaining empty and touched addresses
+  touchedAddresses <- use (tx . substate . touchedAccounts)
+  modifying (env . contracts)
+    (Map.filterWithKey
+      (\k a -> not ((elem k touchedAddresses) && accountEmpty a)))
 
 loadContract :: Addr -> EVM ()
 loadContract target =
@@ -1772,12 +1771,13 @@ finishFrame how = do
 
   case view frames oldVm of
     -- Is the current frame the only one?
-    [] ->
+    [] -> do
       assign result . Just $
         case how of
           FrameReturned output -> VMSuccess output
           FrameReverted output -> VMFailure (Revert output)
           FrameErrored e       -> VMFailure e
+      finalize
 
     -- Are there some remaining frames?
     nextFrame : remainingFrames -> do
