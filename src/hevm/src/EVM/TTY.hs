@@ -46,6 +46,7 @@ import Data.Monoid ((<>))
 import Data.Text (Text, unpack, pack)
 import Data.Text.Encoding (decodeUtf8)
 import Data.List (sort)
+import Data.Version (showVersion)
 import Numeric (showHex)
 
 import qualified Data.ByteString as BS
@@ -53,10 +54,12 @@ import qualified Data.Map as Map
 import qualified Data.Text as Text
 import qualified Data.Vector as Vec
 import qualified Data.Vector.Storable as SVec
-import qualified Graphics.Vty as Vty
+import qualified Graphics.Vty as V
 import qualified System.Console.Haskeline as Readline
 
 import qualified EVM.TTYCenteredList as Centered
+
+import qualified Paths_hevm as Paths
 
 data Name
   = AbiPane
@@ -64,9 +67,9 @@ data Name
   | BytecodePane
   | TracePane
   | SolidityPane
-  | SolidityViewport
   | TestPickerPane
   | BrowserPane
+  | Pager
   deriving (Eq, Show, Ord)
 
 type UiWidget = Widget Name
@@ -85,11 +88,13 @@ data UiVmState = UiVmState
   , _uiVmMessage      :: Maybe String
   , _uiVmNotes        :: [String]
   , _uiVmShowMemory   :: Bool
+  , _uiVmTestOpts     :: UnitTestOptions
   }
 
 data UiTestPickerState = UiTestPickerState
   { _testPickerList :: List Name (Text, Text)
   , _testPickerDapp :: DappInfo
+  , _testOpts       :: UnitTestOptions
   }
 
 data UiBrowserState = UiBrowserState
@@ -98,9 +103,10 @@ data UiBrowserState = UiBrowserState
   }
 
 data UiState
-  = UiVmScreen UiVmState
-  | UiVmBrowserScreen UiBrowserState
-  | UiTestPickerScreen UiTestPickerState
+  = ViewVm UiVmState
+  | ViewContracts UiBrowserState
+  | ViewPicker UiTestPickerState
+  | ViewHelp UiVmState
 
 makeLenses ''UiVmState
 makeLenses ''UiTestPickerState
@@ -241,15 +247,23 @@ isUnitTestContract :: Text -> DappInfo -> Bool
 isUnitTestContract name dapp =
   elem name (map fst (view dappUnitTests dapp))
 
-mkVty :: IO Vty.Vty
+mkVty :: IO V.Vty
 mkVty = do
-  vty <- Vty.mkVty Vty.defaultConfig
-  Vty.setMode (Vty.outputIface vty) Vty.BracketedPaste True
+  vty <- V.mkVty V.defaultConfig
+  V.setMode (V.outputIface vty) V.BracketedPaste True
   return vty
 
 runFromVM :: VM -> IO VM
 runFromVM vm = do
   let
+    opts = UnitTestOptions
+      { oracle            = Fetch.zero
+      , verbose           = Nothing
+      , match             = ""
+      , vmModifier        = id
+      , testParams        = error "irrelevant"
+      }
+
     ui0 = UiVmState
            { _uiVm = vm
            , _uiVmNextStep = void Stepper.execFully
@@ -264,20 +278,13 @@ runFromVM vm = do
            , _uiVmMessage = Just $ "Executing EVM code in " <> show (view (state . contract) vm)
            , _uiVmNotes = []
            , _uiVmShowMemory = False
+           , _uiVmTestOpts = opts
            }
     ui1 = updateUiVmState ui0 vm & set uiVmFirstState ui1
 
-    testOpts = UnitTestOptions
-      { oracle            = Fetch.zero
-      , verbose           = Nothing
-      , match             = ""
-      , vmModifier        = id
-      , testParams        = error "irrelevant"
-      }
-
-  ui2 <- customMain mkVty Nothing (app testOpts) (UiVmScreen ui1)
+  ui2 <- customMain mkVty Nothing (app opts) (ViewVm ui1)
   case ui2 of
-    UiVmScreen ui -> return (view uiVm ui)
+    ViewVm ui -> return (view uiVm ui)
     _ -> error "internal error: customMain returned prematurely"
 
 main :: UnitTestOptions -> FilePath -> FilePath -> IO ()
@@ -289,7 +296,7 @@ main opts root jsonFilePath = do
       Just (contractMap, sourceCache) -> do
         let
           dapp = dappInfo root contractMap sourceCache
-          ui = UiTestPickerScreen $ UiTestPickerState
+          ui = ViewPicker $ UiTestPickerState
             { _testPickerList =
                 list
                   TestPickerPane
@@ -299,6 +306,7 @@ main opts root jsonFilePath = do
                     (view dappUnitTests dapp)))
                   1
             , _testPickerDapp = dapp
+            , _testOpts = opts
             }
 
         _ <- customMain mkVty Nothing (app opts) (ui :: UiState)
@@ -319,12 +327,12 @@ takeStep
 takeStep ui policy mode =
   if isJust (view (uiVm . result) ui)
     -- we reached the end of the program, so persist the view
-    then continue (UiVmScreen ui)
+    then continue (ViewVm ui)
   else do
     let m = interpret mode (view uiVmNextStep ui)
     case runState (m <* modify renderVm) ui of
       (Stepped stepper, ui') -> do
-        continue (UiVmScreen (ui' & set uiVmNextStep stepper))
+        continue (ViewVm (ui' & set uiVmNextStep stepper))
 
       (Blocked blocker, ui') ->
         case policy of
@@ -340,9 +348,177 @@ takeStep ui policy mode =
       (Returned (), ui') ->
         case policy of
           StepNormally ->
-            continue (UiVmScreen ui')
+            continue (ViewVm ui')
           StepTimidly ->
             error "step halted unexpectedly"
+
+appEvent
+  :: (?fetcher::Fetcher) =>
+  UiState ->
+  BrickEvent Name e ->
+  EventM Name (Next UiState)
+
+-- Contracts: Down - list down
+appEvent (ViewContracts s) (VtyEvent e@(V.EvKey V.KDown [])) = do
+  s' <- handleEventLensed s
+    browserContractList
+    handleListEvent
+    e
+  continue (ViewContracts s')
+
+-- Contracts: Up - list up
+appEvent (ViewContracts s) (VtyEvent e@(V.EvKey V.KUp [])) = do
+  s' <- handleEventLensed s
+    browserContractList
+    handleListEvent
+    e
+  continue (ViewContracts s')
+
+-- Vm Overview: Esc - return to test picker or exit
+appEvent st@(ViewVm s) (VtyEvent (V.EvKey V.KEsc [])) =
+  case view uiVmDapp s of
+    Just dapp ->
+      continue . ViewPicker $
+      UiTestPickerState
+        { _testPickerList =
+            list
+              TestPickerPane
+              (Vec.fromList
+               (concatMap
+                (\(a, xs) -> [(a, x) | x <- xs])
+                (view dappUnitTests dapp)))
+              1
+        , _testPickerDapp = dapp
+        , _testOpts = view uiVmTestOpts s
+        }
+    Nothing ->
+      halt st
+
+-- Vm Overview: C - open contracts view
+appEvent (ViewVm s) (VtyEvent (V.EvKey V.KEnter [])) =
+  continue . ViewContracts $ UiBrowserState
+    { _browserContractList =
+        list
+          BrowserPane
+          (Vec.fromList (Map.toList (view (uiVm . env . contracts) s)))
+          2
+    , _browserVm = s
+    }
+
+-- Vm Overview: m - toggle memory pane
+appEvent (ViewVm s) (VtyEvent (V.EvKey (V.KChar 'm') [])) =
+  continue (ViewVm (over uiVmShowMemory not s))
+
+-- Vm Overview: h - open help view
+appEvent (ViewVm s) (VtyEvent (V.EvKey (V.KChar 'h') []))
+  = continue . ViewHelp $ s
+
+-- Vm Overview: spacebar - read input
+appEvent (ViewVm s) (VtyEvent (V.EvKey (V.KChar ' ') [])) =
+  let
+    loop = do
+      Readline.getInputLine "% " >>= \case
+        Just hey -> Readline.outputStrLn hey
+        Nothing  -> pure ()
+      Readline.getInputLine "% " >>= \case
+        Just hey' -> Readline.outputStrLn hey'
+        Nothing   -> pure ()
+      return (ViewVm s)
+  in
+    suspendAndResume $
+      Readline.runInputT Readline.defaultSettings loop
+
+-- Vm Overview: n - step
+appEvent (ViewVm s) (VtyEvent (V.EvKey (V.KChar 'n') [])) =
+  takeStep s StepNormally StepOne
+
+-- Vm Overview: N - step
+appEvent (ViewVm s) (VtyEvent (V.EvKey (V.KChar 'N') [])) =
+  takeStep s
+    StepNormally
+    (StepUntil (isNextSourcePosition s))
+
+-- Vm Overview: C-n - step
+appEvent (ViewVm s) (VtyEvent (V.EvKey (V.KChar 'n') [V.MCtrl])) =
+  takeStep s
+    StepNormally
+    (StepUntil (isNextSourcePositionWithoutEntering s))
+
+-- Vm Overview: e - step
+appEvent (ViewVm s) (VtyEvent (V.EvKey (V.KChar 'e') [])) =
+  takeStep s
+    StepNormally
+    (StepUntil (isExecutionHalted s))
+
+-- Vm Overview: a - step
+appEvent (ViewVm s) (VtyEvent (V.EvKey (V.KChar 'a') [])) =
+  takeStep (view uiVmFirstState s) StepTimidly StepNone
+
+-- Vm Overview: p - step
+appEvent st@(ViewVm s) (VtyEvent (V.EvKey (V.KChar 'p') [])) =
+  case view uiVmStepCount s of
+    0 ->
+      -- We're already at the first step; ignore command.
+      continue st
+    n -> do
+      -- To step backwards, we revert to the first state
+      -- and execute n - 1 instructions from there.
+      --
+      -- We keep the current cache so we don't have to redo
+      -- any blocking queries, and also the memory view.
+      let
+        s0 = view uiVmFirstState s
+        s1 = set (uiVm . cache)   (view (uiVm . cache) s) s0
+        s2 = set (uiVmShowMemory) (view uiVmShowMemory s) s1
+
+      -- Take n steps; "timidly," because all queries
+      -- ought to be cached.
+      takeStep s2 StepTimidly (StepMany (n - 1))
+
+-- Any: Esc - return to Vm Overview or Exit
+appEvent s (VtyEvent (V.EvKey V.KEsc [])) =
+  case s of
+    (ViewHelp x) -> overview x
+    (ViewContracts x) -> overview $ view browserVm x
+    _ -> halt s
+  where
+    overview(s') = continue . ViewVm $ s'
+
+-- UnitTest Picker: Enter - select from list
+appEvent (ViewPicker s) (VtyEvent (V.EvKey (V.KEnter) [])) = do
+  case listSelectedElement (view testPickerList s) of
+    Nothing -> error "nothing selected"
+    Just (_, x) ->
+      continue . ViewVm $
+        initialUiVmStateForTest (view testOpts s)
+          (view testPickerDapp s) x
+
+-- UnitTest Picker: (main) - render list
+appEvent (ViewPicker s) (VtyEvent e) = do
+  s' <- handleEventLensed s
+    testPickerList
+    handleListEvent
+    e
+  continue (ViewPicker s')
+
+-- Page: Down - scroll
+appEvent s (VtyEvent (V.EvKey (V.KDown) [])) = do
+  vScrollBy (viewportScroll TracePane) 1 >> continue s
+
+-- Page: Up - scroll
+appEvent s (VtyEvent (V.EvKey (V.KUp) [])) = do
+  vScrollBy (viewportScroll TracePane) (-1) >> continue s
+
+-- Page: C-f - Page down
+appEvent s (VtyEvent (V.EvKey (V.KChar 'f') [V.MCtrl])) = do
+  vScrollPage (viewportScroll TracePane) Down >> continue s
+
+-- Page: C-b - Page up
+appEvent s (VtyEvent (V.EvKey (V.KChar 'b') [V.MCtrl])) = do
+  vScrollPage (viewportScroll TracePane) Up >> continue s
+
+-- Default
+appEvent s _ = continue s
 
 app :: UnitTestOptions -> App UiState () Name
 app opts =
@@ -350,135 +526,9 @@ app opts =
   in App
   { appDraw = drawUi
   , appChooseCursor = neverShowCursor
-  , appHandleEvent = \ui e ->
-
-      case (ui, e) of
-        (UiVmBrowserScreen s, VtyEvent e'@(Vty.EvKey Vty.KDown [])) -> do
-          s' <- handleEventLensed s
-            browserContractList
-            handleListEvent
-            e'
-          continue (UiVmBrowserScreen s')
-
-        (UiVmBrowserScreen s, VtyEvent e'@(Vty.EvKey Vty.KUp [])) -> do
-          s' <- handleEventLensed s
-            browserContractList
-            handleListEvent
-            e'
-          continue (UiVmBrowserScreen s')
-
-        (UiVmBrowserScreen s, VtyEvent (Vty.EvKey Vty.KEsc [])) ->
-          continue (UiVmScreen (view browserVm s))
-
-        (UiVmScreen s, VtyEvent (Vty.EvKey Vty.KEsc [])) ->
-            case view uiVmDapp s of
-              Just dapp ->
-                continue . UiTestPickerScreen $
-                UiTestPickerState
-                  { _testPickerList =
-                      list
-                        TestPickerPane
-                        (Vec.fromList
-                         (concatMap
-                          (\(a, xs) -> [(a, x) | x <- xs])
-                          (view dappUnitTests dapp)))
-                        1
-                  , _testPickerDapp = dapp
-                  }
-              Nothing ->
-                halt ui
-
-        (_, VtyEvent (Vty.EvKey Vty.KEsc [])) ->
-          halt ui
-
-        (UiVmScreen s, VtyEvent (Vty.EvKey Vty.KEnter [])) ->
-            continue . UiVmBrowserScreen $ UiBrowserState
-              { _browserContractList =
-                  list
-                    BrowserPane
-                    (Vec.fromList (Map.toList (view (uiVm . env . contracts) s)))
-                    2
-              , _browserVm = s
-              }
-
-        (UiVmScreen s, VtyEvent (Vty.EvKey (Vty.KChar ' ') [])) ->
-          let
-            loop = do
-              Readline.getInputLine "% " >>= \case
-                Just hey -> Readline.outputStrLn hey
-                Nothing  -> pure ()
-              Readline.getInputLine "% " >>= \case
-                Just hey' -> Readline.outputStrLn hey'
-                Nothing   -> pure ()
-              return (UiVmScreen s)
-          in
-            suspendAndResume $
-              Readline.runInputT Readline.defaultSettings loop
-
-        (UiVmScreen s, VtyEvent (Vty.EvKey (Vty.KChar 'n') [])) ->
-          takeStep s StepNormally StepOne
-
-        (UiVmScreen s, VtyEvent (Vty.EvKey (Vty.KChar 'N') [])) ->
-          takeStep s
-            StepNormally
-            (StepUntil (isNextSourcePosition s))
-
-        (UiVmScreen s, VtyEvent (Vty.EvKey (Vty.KChar 'n') [Vty.MCtrl])) ->
-          takeStep s
-            StepNormally
-            (StepUntil (isNextSourcePositionWithoutEntering s))
-
-        (UiVmScreen s, VtyEvent (Vty.EvKey (Vty.KChar 'e') [])) ->
-          takeStep s
-            StepNormally
-            (StepUntil (isExecutionHalted s))
-
-        (UiVmScreen s, VtyEvent (Vty.EvKey (Vty.KChar 'a') [])) ->
-            takeStep (view uiVmFirstState s) StepTimidly StepNone
-
-        (UiVmScreen s, VtyEvent (Vty.EvKey (Vty.KChar 'p') [])) ->
-          case view uiVmStepCount s of
-            0 ->
-              -- We're already at the first step; ignore command.
-              continue ui
-
-            n -> do
-              -- To step backwards, we revert to the first state
-              -- and execute n - 1 instructions from there.
-              --
-              -- We keep the current cache so we don't have to redo
-              -- any blocking queries, and also the memory view.
-              let
-                s0 = view uiVmFirstState s
-                s1 = set (uiVm . cache)   (view (uiVm . cache) s) s0
-                s2 = set (uiVmShowMemory) (view uiVmShowMemory s) s1
-
-              -- Take n steps; "timidly," because all queries
-              -- ought to be cached.
-              takeStep s2 StepTimidly (StepMany (n - 1))
-
-        (UiVmScreen s, VtyEvent (Vty.EvKey (Vty.KChar 'm') [])) ->
-          continue (UiVmScreen (over uiVmShowMemory not s))
-
-        (UiTestPickerScreen s', VtyEvent (Vty.EvKey (Vty.KEnter) [])) -> do
-          case listSelectedElement (view testPickerList s') of
-            Nothing -> error "nothing selected"
-            Just (_, x) ->
-              continue . UiVmScreen $
-                initialUiVmStateForTest opts (view testPickerDapp s') x
-
-        (UiTestPickerScreen s', VtyEvent e') -> do
-          s'' <- handleEventLensed s'
-            testPickerList
-            handleListEvent
-            e'
-          continue (UiTestPickerScreen s'')
-
-        _ ->
-          continue ui
-
+  , appHandleEvent = appEvent
   , appStartEvent = return
-  , appAttrMap = const (attrMap Vty.defAttr myTheme)
+  , appAttrMap = const (attrMap V.defAttr myTheme)
   }
 
 initialUiVmStateForTest
@@ -486,7 +536,7 @@ initialUiVmStateForTest
   -> DappInfo
   -> (Text, Text)
   -> UiVmState
-initialUiVmStateForTest opts@(UnitTestOptions {..}) dapp (theContractName, theTestName) =
+initialUiVmStateForTest opts dapp (theContractName, theTestName) =
   ui1
   where
     script = do
@@ -509,6 +559,7 @@ initialUiVmStateForTest opts@(UnitTestOptions {..}) dapp (theContractName, theTe
         , _uiVmMessage      = Just "Creating unit test contract"
         , _uiVmNotes        = []
         , _uiVmShowMemory   = False
+        , _uiVmTestOpts     = opts
         }
     Just testContract =
       view (dappSolcByName . at theContractName) dapp
@@ -517,20 +568,45 @@ initialUiVmStateForTest opts@(UnitTestOptions {..}) dapp (theContractName, theTe
     ui1 =
       updateUiVmState ui0 vm0 & set uiVmFirstState ui1
 
-myTheme :: [(AttrName, Vty.Attr)]
+myTheme :: [(AttrName, V.Attr)]
 myTheme =
-  [ (selectedAttr, Vty.defAttr `Vty.withStyle` Vty.standout)
-  , (dimAttr, Vty.defAttr `Vty.withStyle` Vty.dim)
-  , (borderAttr, Vty.defAttr `Vty.withStyle` Vty.dim)
-  , (wordAttr, fg Vty.yellow)
-  , (boldAttr, Vty.defAttr `Vty.withStyle` Vty.bold)
-  , (activeAttr, Vty.defAttr `Vty.withStyle` Vty.standout)
+  [ (selectedAttr, V.defAttr `V.withStyle` V.standout)
+  , (dimAttr, V.defAttr `V.withStyle` V.dim)
+  , (borderAttr, V.defAttr `V.withStyle` V.dim)
+  , (wordAttr, fg V.yellow)
+  , (boldAttr, V.defAttr `V.withStyle` V.bold)
+  , (activeAttr, V.defAttr `V.withStyle` V.standout)
   ]
 
 drawUi :: UiState -> [UiWidget]
-drawUi (UiVmScreen s) = drawVm s
-drawUi (UiTestPickerScreen s) = drawTestPicker s
-drawUi (UiVmBrowserScreen s) = drawVmBrowser s
+drawUi (ViewVm s) = drawVm s
+drawUi (ViewPicker s) = drawTestPicker s
+drawUi (ViewContracts s) = drawVmBrowser s
+drawUi (ViewHelp _) = drawHelpView
+
+drawHelpView :: [UiWidget]
+drawHelpView =
+    [ center . borderWithLabel version .
+      padLeftRight 4 . padTopBottom 2 .  str $
+        "Esc    Exit the debugger\n\n" <>
+        "a      Step to start\n" <>
+        "e      Step to end\n" <>
+        "n      Step fwds by one instruction\n" <>
+        "N      Step fwds to the next source position\n" <>
+        "C-n    Step fwds to the next source position skipping CALL & CREATE\n" <>
+        "p      Step back by one instruction\n\n" <>
+        "m      Toggle memory pane\n" <>
+        "Down   Scroll memory pane fwds\n" <>
+        "Up     Scroll memory pane back\n" <>
+        "C-f    Page memory pane fwds\n" <>
+        "C-b    Page memory pane back\n\n" <>
+        "Enter  Contracts browser"
+    ]
+    where
+      version =
+        txt "Hevm " <+>
+        str (showVersion Paths.version) <+>
+        txt " - Key bindings"
 
 drawTestPicker :: UiTestPickerState -> [UiWidget]
 drawTestPicker ui =
@@ -634,13 +710,11 @@ drawHelpBar = hBorder <=> hCenter help
       [
         ("n", "step")
       , ("p", "step back")
-      , ("N", "step more")
-      , ("C-n", "step over")
       , ("a", "step to start")
       , ("e", "step to end")
       , ("m", "toggle memory")
       , ("Esc", "exit")
---      , ("Enter", "browse")
+      , ("h", "more help")
       ]
 
 stepOneOpcode :: UiVmState -> UiVmState
@@ -813,23 +887,22 @@ withHighlight False = withDefAttr dimAttr
 withHighlight True  = withDefAttr boldAttr
 
 drawTracePane :: UiVmState -> UiWidget
-drawTracePane ui =
-  case view uiVmShowMemory ui of
-    False ->
-      hBorderWithLabel (txt "Trace") <=>
-        renderList
-          (\_ x -> txt x)
-          False
-          (view uiVmTraceList ui)
+drawTracePane s =
+  case view uiVmShowMemory s of
     True ->
-      vBox
-      [ hBorderWithLabel (txt "Calldata") <=>
-          str (prettyHex 40 (view (uiVm . state . calldata) ui))
-      , hBorderWithLabel (txt "Returndata") <=>
-          str (prettyHex 40 (view (uiVm . state . returndata) ui))
-      , hBorderWithLabel (txt "Memory") <=>
-          str (prettyHex 40 (view (uiVm . state . memory) ui))
-      ]
+      hBorderWithLabel (txt "Calldata")
+      <=> str (prettyHex 40 (view (uiVm . state . calldata) s))
+      <=> hBorderWithLabel (txt "Returndata")
+      <=> str (prettyHex 40 (view (uiVm . state . returndata) s))
+      <=> hBorderWithLabel (txt "Memory")
+      <=> viewport TracePane Vertical
+            (str (prettyHex 40 (view (uiVm . state . memory) s)))
+    False ->
+      hBorderWithLabel (txt "Trace")
+      <=> renderList
+            (\_ x -> txt x)
+            False
+            (view uiVmTraceList s)
 
 drawSolidityPane :: UiVmState -> UiWidget
 drawSolidityPane ui@(view uiVmDapp -> Just dapp) =
