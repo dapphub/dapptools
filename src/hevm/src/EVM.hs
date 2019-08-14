@@ -1379,46 +1379,36 @@ accountEmpty c =
 -- * How to finalize a transaction
 finalize :: EVM ()
 finalize = do
-  res <- use result
+  let
+    burnRemainingGas = use (state . gas) >>= (flip burn (noop))
+    revertContracts  = use (tx . txReversion) >>= assign (env . contracts)
+    revertSubstate   = assign (tx . substate) (SubState mempty mempty mempty)
 
-  -- burn remaining gas on error (not revert or success)
-  case res of
+  use result >>= \case
     Nothing ->
-      noop
-    Just (VMSuccess _) ->
-      noop
-    Just (VMFailure (Revert _)) ->
-      noop
-    Just (VMFailure _) ->
-      use (state . gas) >>= (flip burn (noop))
-
-  -- revert all contracts on error (any failure)
-  case res of
+      error "Finalising an unfinished tx."
+    Just (VMFailure (Revert _)) -> do
+      revertContracts
+      revertSubstate
     Just (VMFailure _) -> do
-      reversion <- use (tx . txReversion)
-      assign (env . contracts) reversion
-      assign (tx . substate) (SubState mempty mempty mempty)
-    _ ->
-      noop
+      burnRemainingGas
+      revertContracts
+      revertSubstate
+    Just (VMSuccess output) -> do
+      -- deposit the code from a creation tx
+      creation <- use (tx . isCreate)
+      createe  <- use (state . contract)
+      createeExists <- (Map.member createe) <$> use (env . contracts)
+      if (creation && createeExists)
+      then replaceCode createe (RuntimeCode output)
+      else noop
 
-  -- deposit the code from a creation tx, or not, depending on success
-  use (tx . isCreate) >>= \case
-    True  -> case res of
-      Just (VMSuccess output) -> do
-        createe <- use (state . contract)
-        createeExists <- (Map.member createe) <$> use (env . contracts)
-        if createeExists then replaceCode createe (RuntimeCode output)
-        else noop
-      Just (VMFailure _) -> do
-        noop
-      Nothing -> error "Finalising an unfinished tx."
-    False -> noop
-
-  -- compute and pay the refund to the caller and the
-  -- corresponding payment to the miner
   use execMode >>= \case
-    ExecuteAsVMTest -> noop
+    ExecuteAsVMTest ->
+      noop
     _ -> do
+      -- compute and pay the refund to the caller and the
+      -- corresponding payment to the miner
       txOrigin     <- use (tx . origin)
       sumRefunds   <- (sum . (snd <$>)) <$> (use (tx . substate . refunds))
       miner        <- use (block . coinbase)
