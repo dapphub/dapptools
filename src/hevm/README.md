@@ -1,4 +1,4 @@
-# hevm [![Build Status](https://travis-ci.org/dapphub/hevm.svg?branch=master)](https://travis-ci.org/dapphub/hevm) [![GitHub (pre-)release](https://img.shields.io/github/release/dapphub/hevm/all.svg)](https://github.com/dapphub/hevm/releases)
+# hevm [![Build Status](https://travis-ci.com/dapphub/dapptools.svg?branch=master)](https://travis-ci.com/dapphub/dapptools)
 
 The `hevm` project is an implementation of the Ethereum virtual machine (EVM) made specifically for unit testing and debugging smart contracts.  It is developed by [DappHub](https://github.com/dapphub) and integrates especially well with the [`dapp` tool suite](https://github.com/dapphub/dapp). The `hevm` command line program can run unit tests, interactively debug contracts while showing the Solidity source, or run arbitrary EVM code.
 
