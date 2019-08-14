@@ -196,7 +196,7 @@ func main() {
   app := cli.NewApp()
   app.Name = "ethsign"
   app.Usage = "sign Ethereum transactions using a JSON keyfile"
-  app.Version = "0.12"
+  app.Version = "0.13"
   app.Commands = []cli.Command {
     cli.Command {
       Name: "list-accounts",
@@ -531,6 +531,60 @@ func main() {
 
         fmt.Println(recoveredAddr.String())
 
+        return nil
+      },
+    },
+
+    cli.Command{
+      Name: "import",
+      Usage: "import hexadecimal private key into keystore",
+      Flags: []cli.Flag{
+        cli.StringFlag{
+          Name:  "keystore",
+          Usage: "path to keystore",
+        },
+      },
+      Action: func(c *cli.Context) error {
+        requireds := []string{
+          "keystore",
+        }
+
+        for _, required := range requireds {
+          if c.String(required) == "" {
+            return cli.NewExitError("ethsign: missing required parameter --"+required, 1)
+          }
+        }
+
+        ks := keystore.NewKeyStore(
+          c.String("keystore"),
+          keystore.StandardScryptN, keystore.StandardScryptP)
+
+        fmt.Fprintf(os.Stderr, "Private key as 64 hexadecimal digits (not echoed): ")
+        keyBytes, err := terminal.ReadPassword(int(syscall.Stdin))
+        fmt.Fprintf(os.Stderr, "\n")
+        if err != nil {
+          return cli.NewExitError("ethsign: failed to read private key", 1)
+        }
+
+        privatekey, err := crypto.HexToECDSA(string(keyBytes))
+        if err != nil {
+          return cli.NewExitError("ethsign: failed to decode private key", 1)
+        }
+
+        fmt.Fprintf(os.Stderr, "Choose a passphrase (not echoed): ")
+        passphraseBytes, err := terminal.ReadPassword(int(syscall.Stdin))
+        fmt.Fprintf(os.Stderr, "\n")
+        if err != nil {
+          return cli.NewExitError("ethsign: failed to read private key", 1)
+        }
+
+	acct, err := ks.ImportECDSA(privatekey, string(passphraseBytes))
+        if err != nil {
+          fmt.Fprintf(os.Stderr, "keystore error: %v\n", err)
+          return cli.NewExitError("ethsign: failed to import key", 1)
+        }
+
+        fmt.Printf("%x\n", acct.Address)
         return nil
       },
     },
