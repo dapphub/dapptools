@@ -83,9 +83,10 @@ $(echo $passed)
     row="<tr><td class=testcase>$testcase<td>$outcome<td class=category>$category"
     row+=$'\n'
     case $outcome in
-      ok)   passed+=$row ;;
-      skip) skipped+=$row ;;
-      *)    failed+=$row ;;
+      ok)      passed+=$row ;;
+      skip)    skipped+=$row ;;
+      timeout) timouts+=row ;;
+      *)       failed+=$row ;;
     esac
   done
 
@@ -94,12 +95,16 @@ $(echo $passed)
   nfail=$(sum "$failed")
   npass=$(sum "$passed")
   nskip=$(sum "$skipped")
+  ntime=$(sum "$timeouts")
 
-  echo >&2 "failed: $nfail"
   echo >&2 "passed: $npass"
+  echo >&2 "failed: $nfail"
+  echo >&2 "timeout: $ntime"
   echo >&2 "skipped: $nskip"
 
   if [[ $html == "True" ]]; then
     _html
   fi
+
+  [[ $nfail -gt 0 ]] && exit 1 || exit 0
 }

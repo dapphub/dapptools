@@ -20,7 +20,11 @@ let
     ${x.pkgs.hevm}/bin/hevm compliance \
       --tests ${ethereum-test-suite x} \
       --skip "(modexp|RevertPrecompiledTouch_storage_d0g0v0|RevertPrecompiledTouch_storage_d3g0v0)" \
+      --timeout 20 \
       --html > $out/index.html
+    ${x.pkgs.hevm}/bin/hevm compliance \
+      --tests ${ethereum-test-suite x} \
+      --group "VM"
   '';
 
   # These packages should always work and be available in the binary cache.

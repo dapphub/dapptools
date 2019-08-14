@@ -1,5 +1,8 @@
 # hevm changelog
 
+## Unreleased
+ - Fix regression in VMTest compliance.
+
 ## 0.33 - 2019-08-06
  - Full compliance with the [General State Tests][245] (with the
    BlockchainTest format), using the Yellow and Jello papers as

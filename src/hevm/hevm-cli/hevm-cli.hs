@@ -389,13 +389,7 @@ launchTest execmode cmd = do
 #if MIN_VERSION_aeson(1, 0, 0)
 runVMTest :: Bool -> ExecMode -> Mode -> Maybe Int -> (String, VMTest.Case) -> IO Bool
 runVMTest diffmode execmode mode timelimit (name, x) = do
-  let
-    vm0 = VMTest.vmForCase execmode x
-    m = case execmode of
-      -- whether or not to "finalize the tx"
-      ExecuteAsVMTest -> void EVM.Stepper.execFully >> EVM.Stepper.evm (EVM.finalize False)
-      ExecuteAsBlockchainTest -> void EVM.Stepper.execFully >> EVM.Stepper.evm (EVM.finalize True)
-      ExecuteNormally -> error "cannot launchTest normally"
+  let vm0 = VMTest.vmForCase execmode x
   putStr (name ++ " ")
   hFlush stdout
   result <- do
@@ -403,7 +397,7 @@ runVMTest diffmode execmode mode timelimit (name, x) = do
       case mode of
         Run ->
           Timeout.timeout (1e6 * (fromMaybe 10 timelimit)) . evaluate $ do
-            execState (VMTest.interpret m) vm0
+            execState (VMTest.interpret . void $ EVM.Stepper.execFully) vm0
         Debug ->
           Just <$> EVM.TTY.runFromVM vm0
     waitCatch action

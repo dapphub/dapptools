@@ -1377,65 +1377,65 @@ accountEmpty c =
   && (view balance c == 0)
 
 -- * How to finalize a transaction
-finalize :: Bool -> EVM ()
-finalize False = noop
-finalize True = do
-  res <- use result
-
-  -- burn remaining gas on error (not revert or success)
-  case res of
-    Nothing ->
-      noop
-    Just (VMSuccess _) ->
-      noop
-    Just (VMFailure (Revert _)) ->
-      noop
-    Just (VMFailure _) ->
-      use (state . gas) >>= (flip burn (noop))
-
-  -- revert all contracts on error (any failure)
-  case res of
-    Just (VMFailure _) -> do
-      reversion <- use (tx . txReversion)
-      assign (env . contracts) reversion
-      assign (tx . substate) (SubState mempty mempty mempty)
-    _ ->
-      noop
-
-  -- deposit the code from a creation tx, or not, depending on success
-  use (tx . isCreate) >>= \case
-    True  -> case res of
-      Just (VMSuccess output) -> do
-        createe <- use (state . contract)
-        createeExists <- (Map.member createe) <$> use (env . contracts)
-        if createeExists then replaceCode createe (RuntimeCode output)
-        else noop
-      Just (VMFailure _) -> do
-        noop
-      Nothing -> error "Finalising an unfinished tx."
-    False -> noop
-
-  -- compute and pay the refund to the caller and the
-  -- corresponding payment to the miner
-  txOrigin     <- use (tx . origin)
-  sumRefunds   <- (sum . (snd <$>)) <$> (use (tx . substate . refunds))
-  miner        <- use (block . coinbase)
-  blockReward  <- r_block <$> (use (block . schedule))
-  gasPrice     <- use (tx . gasprice)
-  gasLimit     <- use (tx . txgaslimit)
-  gasRemaining <- use (state . gas)
-
+finalize :: EVM ()
+finalize = do
   let
-    gasUsed      = gasLimit - gasRemaining
-    cappedRefund = min (quot gasUsed 2) sumRefunds
-    originPay    = (gasRemaining + cappedRefund) * gasPrice
-    minerPay     = gasPrice * (gasUsed - cappedRefund)
+    burnRemainingGas = use (state . gas) >>= (flip burn (noop))
+    revertContracts  = use (tx . txReversion) >>= assign (env . contracts)
+    revertSubstate   = assign (tx . substate) (SubState mempty mempty mempty)
 
-  modifying (env . contracts)
-    (Map.adjust (over balance (+ originPay)) txOrigin)
-  modifying (env . contracts)
-    (Map.adjust (over balance (+ minerPay)) miner)
-  touchAccount miner
+  use result >>= \case
+    Nothing ->
+      error "Finalising an unfinished tx."
+    Just (VMFailure (Revert _)) -> do
+      revertContracts
+      revertSubstate
+    Just (VMFailure _) -> do
+      burnRemainingGas
+      revertContracts
+      revertSubstate
+    Just (VMSuccess output) -> do
+      -- deposit the code from a creation tx
+      creation <- use (tx . isCreate)
+      createe  <- use (state . contract)
+      createeExists <- (Map.member createe) <$> use (env . contracts)
+      if (creation && createeExists)
+      then replaceCode createe (RuntimeCode output)
+      else noop
+
+  use execMode >>= \case
+    ExecuteAsVMTest ->
+      noop
+    _ -> do
+      -- compute and pay the refund to the caller and the
+      -- corresponding payment to the miner
+      txOrigin     <- use (tx . origin)
+      sumRefunds   <- (sum . (snd <$>)) <$> (use (tx . substate . refunds))
+      miner        <- use (block . coinbase)
+      blockReward  <- r_block <$> (use (block . schedule))
+      gasPrice     <- use (tx . gasprice)
+      gasLimit     <- use (tx . txgaslimit)
+      gasRemaining <- use (state . gas)
+
+      let
+        gasUsed      = gasLimit - gasRemaining
+        cappedRefund = min (quot gasUsed 2) sumRefunds
+        originPay    = (gasRemaining + cappedRefund) * gasPrice
+        minerPay     = gasPrice * (gasUsed - cappedRefund)
+
+      modifying (env . contracts)
+        (Map.adjust (over balance (+ originPay)) txOrigin)
+      modifying (env . contracts)
+        (Map.adjust (over balance (+ minerPay)) miner)
+      touchAccount miner
+
+      -- pay out the block reward, recreating the miner if necessary
+      preuse (env . contracts . ix miner) >>= \case
+        Nothing -> modifying (env . contracts)
+          (Map.insert miner (initialContract (EVM.RuntimeCode mempty)))
+        Just _  -> noop
+      modifying (env . contracts)
+        (Map.adjust (over balance (+ blockReward)) miner)
 
   -- perform state trie clearing (EIP 161), of selfdestructs
   -- and touched accounts. addresses are cleared if they have
@@ -1444,7 +1444,7 @@ finalize True = do
   --    c) are empty.
   -- (see Yellow Paper "Accrued Substate")
   --
-  -- first, remove any destructed addresses
+  -- remove any destructed addresses
   destroyedAddresses <- use (tx . substate . selfdestructs)
   modifying (env . contracts)
     (Map.filterWithKey (\k _ -> not (elem k destroyedAddresses)))
@@ -1453,14 +1453,6 @@ finalize True = do
   modifying (env . contracts)
     (Map.filterWithKey
       (\k a -> not ((elem k touchedAddresses) && accountEmpty a)))
-
-  -- finally, pay out the block reward, recreating the miner if necessary
-  preuse (env . contracts . ix miner) >>= \case
-    Nothing -> modifying (env . contracts)
-      (Map.insert miner (initialContract (EVM.RuntimeCode mempty)))
-    Just _  -> noop
-  modifying (env . contracts)
-    (Map.adjust (over balance (+ blockReward)) miner)
 
 loadContract :: Addr -> EVM ()
 loadContract target =
@@ -1769,12 +1761,13 @@ finishFrame how = do
 
   case view frames oldVm of
     -- Is the current frame the only one?
-    [] ->
+    [] -> do
       assign result . Just $
         case how of
           FrameReturned output -> VMSuccess output
           FrameReverted output -> VMFailure (Revert output)
           FrameErrored e       -> VMFailure e
+      finalize
 
     -- Are there some remaining frames?
     nextFrame : remainingFrames -> do
