@@ -21,6 +21,12 @@ All dependencies and tools can be automaticaly installed by running:
 curl https://dapp.tools/install | sh
 ```
 
+You may also need to add the nix binaries to your path:
+
+```sh
+export PATH="$PATH:$HOME/.nix-profile/bin"
+```
+
 For a manual install, please follow the instructions below.
 
 ### Install Nix
