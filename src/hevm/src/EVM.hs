@@ -411,28 +411,28 @@ exec1 = do
 
     doStop = finishFrame (FrameReturned "")
 
-  if the state pc >= num (BS.length (the state code))
-    then
-      if self == 0x0 || self > 0x8
-        then doStop
-      else do
-        -- call to precompile
-        let ?op = 0x00 -- dummy value
-        let
-          calldatasize = num $ BS.length (the state calldata)
-        copyBytesToMemory (the state calldata) calldatasize 0 0
-        executePrecompile fees self (the state gas) 0 calldatasize 0 0 []
-        use (state . stack) >>= \case
-          (0:_) -> do
-            fetchAccount self $ \_ -> do
-              touchAccount self
-              vmError PrecompileFailure
-          (1:_) ->
-            fetchAccount self $ \_ -> do
-              touchAccount self
-              doStop
-          _ ->
-            underrun
+  if self > 0x0 && self < 0x9 then do
+    -- call to precompile
+    let ?op = 0x00 -- dummy value
+    let
+      calldatasize = num $ BS.length (the state calldata)
+    copyBytesToMemory (the state calldata) calldatasize 0 0
+    executePrecompile fees self (the state gas) 0 calldatasize 0 0 []
+    use (state . stack) >>= \case
+      (0:_) -> do
+        fetchAccount self $ \_ -> do
+          touchAccount self
+          vmError PrecompileFailure
+      (1:_) ->
+        fetchAccount self $ \_ -> do
+          touchAccount self
+          out <- use (state . returndata)
+          finishFrame (FrameReturned out)
+      _ ->
+        underrun
+
+  else if the state pc >= num (BS.length (the state code))
+    then doStop
 
     else do
       let ?op = BS.index (the state code) (the state pc)
