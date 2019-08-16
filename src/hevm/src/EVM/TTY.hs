@@ -721,14 +721,15 @@ updateUiVmState ui vm =
       case vmOpIx vm of
         Nothing -> id
         Just x -> listMoveTo x
+    address = view (state . contract) vm
     message =
       case view result vm of
         Just (VMSuccess msg) ->
-          Just ("VMSuccess: " <> show (msg))
+          Just ("VMSuccess: " <> showByteStringWith0x msg)
         Just (VMFailure err) ->
           Just ("VMFailure: " <> show (err))
         Nothing ->
-          Just ("Executing EVM code in " <> show (view (state . contract) vm))
+          Just ("Executing EVM code in " <> showAddrWith0x address)
     ui' = ui
       & set uiVm vm
       & set uiVmStackList

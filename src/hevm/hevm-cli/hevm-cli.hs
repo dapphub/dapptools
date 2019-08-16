@@ -57,7 +57,6 @@ import System.IO                  (hFlush, stdout)
 import System.Process             (callProcess)
 
 import qualified Data.ByteString        as ByteString
-import qualified Data.ByteString.Base16 as BS16
 import qualified Data.ByteString.Char8  as Char8
 import qualified Data.ByteString.Lazy   as LazyByteString
 import qualified Data.Map               as Map
@@ -319,14 +318,10 @@ launchExec cmd = do
       in case view EVM.result vm' of
         Nothing ->
           error "internal error; no EVM result"
-        Just (EVM.VMFailure e) -> do
-          die (show e)
-        Just (EVM.VMSuccess x) -> do
-          let hex = BS16.encode x
-          if ByteString.null hex then pure ()
-            else do
-              ByteString.putStr hex
-              putStrLn ""
+        Just (EVM.VMFailure err) -> do
+          die (show err)
+        Just (EVM.VMSuccess msg) -> do
+          putStrLn $ showByteStringWith0x msg
           case state cmd of
             Nothing -> pure ()
             Just path ->

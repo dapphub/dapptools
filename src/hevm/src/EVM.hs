@@ -81,7 +81,10 @@ data Error
   | MaxCodeSizeExceeded Word Word
   | PrecompileFailure
 
-deriving instance Show Error
+instance Show Error
+  where
+    show (Revert msg) = "Revert " ++ showByteStringWith0x msg
+    show err = show err
 
 -- | The possible result states of a VM
 data VMResult

@@ -67,7 +67,7 @@ showWordWith0x :: W256 -> String
 showWordWith0x addr = show addr
 
 showByteStringWith0x :: ByteString -> String
-showByteStringWith0x bs = Text.unpack (Text.decodeUtf8 (BS16.encode bs))
+showByteStringWith0x bs = "0x" ++ Text.unpack (Text.decodeUtf8 (BS16.encode bs))
 
 instance FromJSON W256 where
   parseJSON v = do
