@@ -1,32 +1,30 @@
-[![built with nix](https://builtwithnix.org/badge.svg)](https://builtwithnix.org)
-[![Chat](https://img.shields.io/badge/community-chat-blue.svg?style=flat-square)](https://dapphub.chat)
-
-# Dapp tools by DappHub
+# Dapp tools by DappHub [![Chat](https://img.shields.io/badge/community-chat-blue.svg?style=flat-square)](https://dapphub.chat)
 
 Hello!
 
-This repository contains the source code of several dapp tools
-hand-crafted and maintained by DappHub, along with various Nix
-expressions which are all bundled up into a Nix overlay.
+This repository contains the source code for several Ethereum tools
+hand-crafted and maintained by DappHub, along with dependency management, courtesy of Nix.
 
 Contents:
 
-- [Dapp](./src/dapp)
-- [Seth](./src/seth)
-- [Hevm](./src/hevm)
-- [Ethsign](./src/ethsign)
+- [Dapp](./src/dapp) - all you need Ethereum development tool. Build, test, debug & deploy solidity contracts.
+- [Seth](./src/seth) - Ethereum CLI. Query contracts, send transactions, follow logs, slice & dice data.
+- [Hevm](./src/hevm) - Ethereum evaluator. Fully complient Haskell EVM implementation.
+- [Ethsign](./src/ethsign) - sign Ethereum transactions from a local keystore.
 
-All dependencies and tools can be automaticaly installed by running:
+## Easy install
+All tools and dependencies can be automaticaly installed by running:
 ```sh
 curl https://dapp.tools/install | sh
 ```
 
-You may also need to add the nix binaries to your path:
+You _may_ also need to add the nix binaries to your path:
 
 ```sh
 export PATH="$PATH:$HOME/.nix-profile/bin"
 ```
 
+## Manual install
 For a manual install, please follow the instructions below.
 
 ### Install Nix
@@ -54,7 +52,7 @@ then running
 
 followed by restarting your Nix daemon (if on a multi-user Nix installation)
 
-### Manual install
+### Install tools
 
 To install tools from this repository, you need to run
 
@@ -88,3 +86,6 @@ NOTE: not all versions are supported on macOS platforms.
 
 Instructions for adding new versions of `solc` can be found at
 [`nix/solc-updates.md`](./nix/solc-updates.md)
+
+---
+[![built with nix](https://builtwithnix.org/badge.svg)](https://builtwithnix.org)
