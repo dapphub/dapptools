@@ -30,6 +30,7 @@ import qualified EVM.VMTest as VMTest
 import EVM (ExecMode(..))
 import EVM.Debug
 import EVM.Exec
+import EVM.Keccak (newContractAddress)
 import EVM.Solidity
 import EVM.Types hiding (word)
 import EVM.UnitTest (UnitTestOptions, coverageReport, coverageForUnitTestContract)
@@ -79,11 +80,13 @@ data Command w
       , origin      :: w ::: Maybe Addr       <?> "Tx: origin"
       , coinbase    :: w ::: Maybe Addr       <?> "Block: coinbase"
       , value       :: w ::: Maybe W256       <?> "Tx: Eth amount"
+      , nonce       :: w ::: Maybe W256       <?> "Nonce of origin"
       , gas         :: w ::: Maybe W256       <?> "Tx: gas amount"
       , number      :: w ::: Maybe W256       <?> "Block: number"
       , timestamp   :: w ::: Maybe W256       <?> "Block: timestamp"
       , gaslimit    :: w ::: Maybe W256       <?> "Tx: gas limit"
       , gasprice    :: w ::: Maybe W256       <?> "Tx: gas price"
+      , create      :: w ::: Bool             <?> "Tx: creation"
       , maxcodesize :: w ::: Maybe W256       <?> "Block: max code size"
       , difficulty  :: w ::: Maybe W256       <?> "Block: difficulty"
       , debug       :: w ::: Bool             <?> "Run interactively"
@@ -334,15 +337,23 @@ vmFromCommand cmd =
   vm1 & EVM.env . EVM.contracts . ix address' . EVM.balance +~ (w256 value')
   where
     value'   = word value 0
-    address' = addr address 1
+    caller'  = addr caller 0
+    origin'  = addr origin caller'
+    address' = if create cmd
+          then newContractAddress origin' (word nonce 0)
+          else addr address 0xacab
+
+    strip0x :: ByteString -> ByteString
+    strip0x bs = if "0x" `Char8.isPrefixOf` bs then Char8.drop 2 bs else bs
+
     vm1 = EVM.makeVm $ EVM.VMOpts
-      { EVM.vmoptCode          = hexByteString "--code" (code cmd)
-      , EVM.vmoptCalldata      = maybe "" (hexByteString "--calldata")
+      { EVM.vmoptCode          = hexByteString "--code" (strip0x (code cmd))
+      , EVM.vmoptCalldata      = maybe "" (hexByteString "--calldata" . strip0x)
                                    (calldata cmd)
       , EVM.vmoptValue         = value'
       , EVM.vmoptAddress       = address'
-      , EVM.vmoptCaller        = addr caller 2
-      , EVM.vmoptOrigin        = addr origin 3
+      , EVM.vmoptCaller        = caller'
+      , EVM.vmoptOrigin        = origin'
       , EVM.vmoptGas           = word gas 0
       , EVM.vmoptGaslimit      = word gas 0
       , EVM.vmoptCoinbase      = addr coinbase 0
@@ -353,7 +364,7 @@ vmFromCommand cmd =
       , EVM.vmoptMaxCodeSize   = word maxcodesize 0xffffffff
       , EVM.vmoptDifficulty    = word difficulty 0
       , EVM.vmoptSchedule      = FeeSchedule.metropolis
-      , EVM.vmoptCreate        = False
+      , EVM.vmoptCreate        = create cmd
       }
     word f def = maybe def id (f cmd)
     addr f def = maybe def id (f cmd)
