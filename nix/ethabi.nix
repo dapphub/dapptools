@@ -1,4 +1,4 @@
-{ stdenv, fetchFromGitHub, rustPlatform }:
+{ stdenv, fetchFromGitHub, rustPlatform, Security }:
 
 with rustPlatform;
 
@@ -14,6 +14,8 @@ buildRustPackage rec {
   };
 
   cargoSha256 = "0zkdai31jf8f5syklaxq43ydjvp5xclr8pd6y1q6vkwjz6z49hzm";
+
+  buildInputs = stdenv.lib.optionals stdenv.isDarwin [ Security ];
 
   cargoBuildFlags = ["--features cli"];
 
