@@ -5,6 +5,8 @@
  - `hevm exec` ergonomics:
   - Allow code/calldata prefixed with 0x
   - create transactions with specific caller nonce
+  - interactive help pane
+  - memory pane scrolling
 
 ## 0.33 - 2019-08-06
  - Full compliance with the [General State Tests][245] (with the

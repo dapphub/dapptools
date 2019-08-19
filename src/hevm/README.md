@@ -45,6 +45,7 @@ or you can enter the interactive debugger using
   - `N`: step to the next source position
   - `C-n`: step to the next source position and don't enter `CALL` or `CREATE`
   - `m`: toggle memory view
+  - `h`: show key-binding help
 
 ## Installing
 
