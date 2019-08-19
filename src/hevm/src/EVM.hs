@@ -1770,7 +1770,11 @@ finishFrame how = do
           FrameReturned output -> VMSuccess output
           FrameReverted output -> VMFailure (Revert output)
           FrameErrored e       -> VMFailure e
-      finalize
+      use execMode >>= \case
+        ExecuteNormally ->
+          noop
+        _ -> do
+          finalize
 
     -- Are there some remaining frames?
     nextFrame : remainingFrames -> do
