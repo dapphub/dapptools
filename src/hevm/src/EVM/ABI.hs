@@ -444,5 +444,4 @@ instance Arbitrary AbiValue where
         map (\x -> AbiArray (length x) t (Vector.fromList x))
             (shrinkList shrink (Vector.toList v))
     AbiTuple v -> Vector.toList $ AbiTuple . Vector.fromList . shrink <$> v
-      --AbiTuple <$> (shrink <$> v)
     _ -> []
