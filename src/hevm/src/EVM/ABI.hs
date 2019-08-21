@@ -403,34 +403,22 @@ genAbiValue = \case
             if n == 256 then x else mod x (2 ^ n)
 
 instance Arbitrary AbiType where
-  arbitrary = sized arbitrary'
-    where arbitrary' 0 = oneof -- prevent empty tuples
-            [ (AbiUIntType . (* 8)) <$> choose (1, 32)
-            , (AbiIntType . (* 8)) <$> choose (1, 32)
-            , pure AbiAddressType
-            , pure AbiBoolType
-            , AbiBytesType . getPositive <$> arbitrary
-            , pure AbiBytesDynamicType
-            , pure AbiStringType
-            , AbiArrayDynamicType <$> scale (`div` 2) arbitrary
-            , AbiArrayType
-            <$> (getPositive <$> arbitrary)
-            <*> scale (`div` 2) arbitrary
-            ]
-          arbitrary' _ = oneof
-            [ (AbiUIntType . (* 8)) <$> choose (1, 32)
-            , (AbiIntType . (* 8)) <$> choose (1, 32)
-            , pure AbiAddressType
-            , pure AbiBoolType
-            , AbiBytesType . getPositive <$> arbitrary
-            , pure AbiBytesDynamicType
-            , pure AbiStringType
-            , AbiArrayDynamicType <$> scale (`div` 2) arbitrary
-            , AbiArrayType
-                <$> (getPositive <$> arbitrary)
-                <*> scale (`div` 2) arbitrary
-            , AbiTupleType <$> scale (`div` 2) (Vector.fromList <$> arbitrary)
-            ]
+  arbitrary = sized $ \n -> oneof $ -- prevent empty tuples
+    [ (AbiUIntType . (* 8)) <$> choose (1, 32)
+    , (AbiIntType . (* 8)) <$> choose (1, 32)
+    , pure AbiAddressType
+    , pure AbiBoolType
+    , AbiBytesType . getPositive <$> arbitrary
+    , pure AbiBytesDynamicType
+    , pure AbiStringType
+    , AbiArrayDynamicType <$> scale (`div` 2) arbitrary
+    , AbiArrayType
+    <$> (getPositive <$> arbitrary)
+    <*> scale (`div` 2) arbitrary
+    ] <>
+    if n == 0
+    then []
+    else [AbiTupleType <$> scale (`div` 2) (Vector.fromList <$> arbitrary)]
 
 instance Arbitrary AbiValue where
   arbitrary = arbitrary >>= genAbiValue
