@@ -413,8 +413,8 @@ instance Arbitrary AbiType where
     , pure AbiStringType
     , AbiArrayDynamicType <$> scale (`div` 2) arbitrary
     , AbiArrayType
-    <$> (getPositive <$> arbitrary)
-    <*> scale (`div` 2) arbitrary
+        <$> (getPositive <$> arbitrary)
+        <*> scale (`div` 2) arbitrary
     ] <>
     if n == 0
     then []
