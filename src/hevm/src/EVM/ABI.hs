@@ -303,8 +303,6 @@ abiCalldata s xs = BSLazy.toStrict . runPut $ do
   putWord32be (abiKeccak (encodeUtf8 s))
   putAbiSeq xs
 
---parseTypeName :: AsValue s => s -> Maybe AbiType
---parseTypeName s = parseTypeName' (s ^? key "components" . _Array) (s ^?! key "type" . _String)
 parseTypeName :: Vector AbiType -> Text -> Maybe AbiType
 parseTypeName = P.parseMaybe . typeWithArraySuffix
 
