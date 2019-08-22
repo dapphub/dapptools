@@ -345,8 +345,8 @@ stripBytecodeMetadata bs =
 
 bzzrPrefix :: ByteString
 bzzrPrefix =
-  -- a1 65 "bzzr0" 0x58 0x20
-  BS.reverse $ BS.pack [0xa1, 0x65, 98, 122, 122, 114, 48, 0x58, 0x20]
+  -- a2 65 "bzzr0" 0x58 0x20
+  BS.reverse $ BS.pack [0xa2, 0x65, 98, 122, 122, 114, 48, 0x58, 0x20]
 
 -- | Every node in the AST has an ID, and other nodes reference those
 -- IDs.  This function recurses through the tree looking for objects
