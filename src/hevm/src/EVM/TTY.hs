@@ -325,32 +325,36 @@ takeStep
   -> StepMode
   -> EventM n (Next UiState)
 takeStep ui policy mode =
-  if isJust (view (uiVm . result) ui)
-    -- we reached the end of the program, so persist the view
-    then continue (ViewVm ui)
-  else do
-    let m = interpret mode (view uiVmNextStep ui)
-    case runState (m <* modify renderVm) ui of
-      (Stepped stepper, ui') -> do
+  case nxt of
+    (Stepped stepper, ui') -> do
+      if vmResult (view (uiVm . result) ui)
+        then continue (ViewVm ui)
+      else
         continue (ViewVm (ui' & set uiVmNextStep stepper))
 
-      (Blocked blocker, ui') ->
-        case policy of
-          StepNormally -> do
-            stepper <- liftIO blocker
-            takeStep
-              (execState (assign uiVmNextStep stepper) ui')
-              StepNormally StepNone
+    (Blocked blocker, ui') ->
+      case policy of
+        StepNormally -> do
+          stepper <- liftIO blocker
+          takeStep
+            (execState (assign uiVmNextStep stepper) ui')
+            StepNormally StepNone
 
-          StepTimidly ->
-            error "step blocked unexpectedly"
+        StepTimidly ->
+          error "step blocked unexpectedly"
 
-      (Returned (), ui') ->
-        case policy of
-          StepNormally ->
-            continue (ViewVm ui')
-          StepTimidly ->
-            error "step halted unexpectedly"
+    (Returned (), ui') ->
+      case policy of
+        StepNormally ->
+          continue (ViewVm ui')
+        StepTimidly ->
+          error "step halted unexpectedly"
+  where
+    vmResult Nothing = False
+    vmResult (Just (VMFailure (Query _))) = False
+    vmResult (Just _) = True
+    m = interpret mode (view uiVmNextStep ui)
+    nxt = runState (m <* modify renderVm) ui
 
 appEvent
   :: (?fetcher::Fetcher) =>
@@ -432,6 +436,7 @@ appEvent (ViewVm s) (VtyEvent (V.EvKey (V.KChar ' ') [])) =
 appEvent (ViewVm s) (VtyEvent (V.EvKey (V.KChar 'n') [])) =
   takeStep s StepNormally StepOne
 
+
 -- Vm Overview: N - step
 appEvent (ViewVm s) (VtyEvent (V.EvKey (V.KChar 'N') [])) =
   takeStep s
@@ -470,10 +475,11 @@ appEvent st@(ViewVm s) (VtyEvent (V.EvKey (V.KChar 'p') [])) =
         s0 = view uiVmFirstState s
         s1 = set (uiVm . cache)   (view (uiVm . cache) s) s0
         s2 = set (uiVmShowMemory) (view uiVmShowMemory s) s1
+        s3 = set (uiVmTestOpts)   (view uiVmTestOpts s) s2
 
       -- Take n steps; "timidly," because all queries
       -- ought to be cached.
-      takeStep s2 StepTimidly (StepMany (n - 1))
+      takeStep s3 StepTimidly (StepMany (n - 1))
 
 -- Any: Esc - return to Vm Overview or Exit
 appEvent s (VtyEvent (V.EvKey V.KEsc [])) =
