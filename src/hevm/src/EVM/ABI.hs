@@ -303,12 +303,14 @@ abiCalldata s xs = BSLazy.toStrict . runPut $ do
   putWord32be (abiKeccak (encodeUtf8 s))
   putAbiSeq xs
 
-parseTypeName :: Text -> Maybe AbiType
-parseTypeName = P.parseMaybe typeWithArraySuffix
+--parseTypeName :: AsValue s => s -> Maybe AbiType
+--parseTypeName s = parseTypeName' (s ^? key "components" . _Array) (s ^?! key "type" . _String)
+parseTypeName :: Vector AbiType -> Text -> Maybe AbiType
+parseTypeName = P.parseMaybe . typeWithArraySuffix
 
-typeWithArraySuffix :: P.Parsec () Text AbiType
-typeWithArraySuffix = do
-  base <- basicType
+typeWithArraySuffix :: Vector AbiType -> P.Parsec () Text AbiType
+typeWithArraySuffix v = do
+  base <- basicType v
   sizes <-
     P.many $
       P.between
@@ -322,8 +324,8 @@ typeWithArraySuffix = do
 
   pure (foldl parseSize base sizes)
 
-basicType :: P.Parsec () Text AbiType
-basicType =
+basicType :: Vector AbiType -> P.Parsec () Text AbiType
+basicType v =
   P.choice
     [ P.string "address" *> pure AbiAddressType
     , P.string "bool"    *> pure AbiBoolType
@@ -334,6 +336,7 @@ basicType =
     , sizedType "bytes" AbiBytesType
 
     , P.string "bytes" *> pure AbiBytesDynamicType
+    , P.string "tuple" *> pure (AbiTupleType v)
     ]
 
   where

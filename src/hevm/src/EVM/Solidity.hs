@@ -284,7 +284,7 @@ readJSON json = do
                   (case abi ^?! key "anonymous" . _Bool of
                      True -> Anonymous
                      False -> NotAnonymous)
-                  (map (\y -> ( force "internal error: type" (parseTypeName (y ^?! key "type" . _String))
+                  (map (\y -> ( force "internal error: type" (parseTypeName' y)
                               , if y ^?! key "indexed" . _Bool
                                 then Indexed
                                 else NotIndexed ))
@@ -305,11 +305,19 @@ signature abi =
         ")"
       ]
 
+-- Helper funcntion to convert the fields to the desired type
+parseTypeName' :: AsValue s => s -> Maybe AbiType
+parseTypeName' x =
+  parseTypeName
+    (fromMaybe mempty $ x ^? key "components" . _Array . to parseComponents)
+    (x ^?! key "type" . _String)
+  where parseComponents = fmap $ snd . parseMethodInput
+
 -- This actually can also parse a method output! :O
-parseMethodInput :: (Show s, AsValue s) => s -> (Text, AbiType)
+parseMethodInput :: AsValue s => s -> (Text, AbiType)
 parseMethodInput x =
   ( x ^?! key "name" . _String
-  , force "internal error: method type" (parseTypeName (x ^?! key "type" . _String))
+  , force "internal error: method type" (parseTypeName' x)
   )
 
 toCode :: Text -> ByteString
