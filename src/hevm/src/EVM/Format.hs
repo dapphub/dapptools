@@ -93,6 +93,8 @@ showAbiValue (AbiArray _ _ xs) =
   showAbiArray xs
 showAbiValue (AbiArrayDynamic _ xs) =
   showAbiArray xs
+showAbiValue (AbiTuple v) =
+  showAbiValues v
 
 isPrintable :: ByteString -> Bool
 isPrintable =
@@ -221,7 +223,7 @@ getAbiMethodOutput dapp hash abi =
     dapp
 
 getAbiTypes :: Text -> [Maybe AbiType]
-getAbiTypes abi = map parseTypeName types
+getAbiTypes abi = map (parseTypeName mempty) types
   where
     types =
       filter (/= "") $
