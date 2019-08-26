@@ -805,7 +805,9 @@ updateUiVmState ui vm =
     message =
       case view result vm of
         Just (VMSuccess msg) ->
-          Just ("VMSuccess: " <> showByteStringWith0x msg)
+          Just ("VMSuccess: " <> (show . ByteStringS $ msg))
+        Just (VMFailure (Revert msg)) ->
+          Just ("VMFailure: " <> (show . ByteStringS $ msg))
         Just (VMFailure err) ->
           Just ("VMFailure: " <> show (err))
         Nothing ->

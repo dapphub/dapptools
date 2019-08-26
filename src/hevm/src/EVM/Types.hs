@@ -14,6 +14,8 @@ import Data.Monoid ((<>))
 import Data.Bits
 import Data.ByteString (ByteString)
 import Data.ByteString.Base16 as BS16
+import Data.ByteString.Builder (byteStringHex, toLazyByteString)
+import Data.ByteString.Lazy (toStrict)
 import Data.DoubleWord
 import Data.DoubleWord.TH
 import Data.Word (Word8)
@@ -66,8 +68,13 @@ showAddrWith0x addr = "0x" ++ show addr
 showWordWith0x :: W256 -> String
 showWordWith0x addr = show addr
 
-showByteStringWith0x :: ByteString -> String
-showByteStringWith0x bs = "0x" ++ Text.unpack (Text.decodeUtf8 (BS16.encode bs))
+newtype ByteStringS = ByteStringS ByteString
+
+instance Show ByteStringS where
+  show (ByteStringS x) = ("0x" ++) . Text.unpack . fromBinary $ x
+    where
+      fromBinary =
+        Text.decodeUtf8 . toStrict . toLazyByteString . byteStringHex
 
 instance FromJSON W256 where
   parseJSON v = do

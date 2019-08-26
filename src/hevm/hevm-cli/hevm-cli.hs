@@ -321,10 +321,12 @@ launchExec cmd = do
       in case view EVM.result vm' of
         Nothing ->
           error "internal error; no EVM result"
+        Just (EVM.VMFailure (EVM.Revert msg)) -> do
+          die . show . ByteStringS $ msg
         Just (EVM.VMFailure err) -> do
-          die (show err)
+          die . show $ err
         Just (EVM.VMSuccess msg) -> do
-          putStrLn $ showByteStringWith0x msg
+          putStrLn . show . ByteStringS $ msg
           case state cmd of
             Nothing -> pure ()
             Just path ->
