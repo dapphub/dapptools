@@ -19,7 +19,7 @@ let
     export PATH=${x.pkgs.hevm}/bin:${x.pkgs.jq}/bin:$PATH
     ${x.pkgs.hevm}/bin/hevm compliance \
       --tests ${ethereum-test-suite x} \
-      --skip "(modexp|RevertPrecompiledTouch_storage_d0g0v0|RevertPrecompiledTouch_storage_d3g0v0)" \
+      --skip "(modexp|RevertPrecompiledTouch_storage_d0g0v0|RevertPrecompiledTouch_storage_d3g0v0|Create1000Byzantium_d0g1v0)" \
       --timeout 20 \
       --html > $out/index.html
     ${x.pkgs.hevm}/bin/hevm compliance \

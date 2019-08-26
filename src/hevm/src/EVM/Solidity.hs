@@ -55,6 +55,7 @@ import Data.Sequence        (Seq)
 import Data.Text            (Text, pack, intercalate)
 import Data.Text.Encoding   (encodeUtf8)
 import Data.Text.IO         (readFile, writeFile)
+import Data.Tuple           (swap)
 import Data.Vector          (Vector)
 import Data.Word
 import GHC.Generics         (Generic)
@@ -340,13 +341,19 @@ solidity' src = withSystemTempFile "hevm.sol" $ \path handle -> do
 -- difference there.
 stripBytecodeMetadata :: ByteString -> ByteString
 stripBytecodeMetadata bs =
-  let (_, b) = BS.breakSubstring bzzrPrefix (BS.reverse bs)
-  in BS.reverse b
+  let breakSubstringFromEnd x suff = swap $ (bimap BS.reverse BS.reverse) $ BS.breakSubstring (BS.reverse suff) (BS.reverse x)
+      stripCandidates = breakSubstringFromEnd bs <$> knownBzzrPrefixes in
+    case find ((/= mempty) . fst) stripCandidates of
+      Nothing -> bs
+      Just (b, _) -> b
 
-bzzrPrefix :: ByteString
-bzzrPrefix =
-  -- a1 65 "bzzr0" 0x58 0x20
-  BS.reverse $ BS.pack [0xa1, 0x65, 98, 122, 122, 114, 48, 0x58, 0x20]
+knownBzzrPrefixes :: [ByteString]
+knownBzzrPrefixes = [
+  -- a1 65 "bzzr0" 0x58 0x20 (solc <= 0.5.8)
+  BS.pack [0xa1, 0x65, 98, 122, 122, 114, 48, 0x58, 0x20],
+  -- a2 65 "bzzr0" 0x58 0x20 (solc >= 0.5.9)
+  BS.pack [0xa2, 0x65, 98, 122, 122, 114, 48, 0x58, 0x20]
+  ]
 
 -- | Every node in the AST has an ID, and other nodes reference those
 -- IDs.  This function recurses through the tree looking for objects
