@@ -40,8 +40,8 @@ chaindir=$gethdir/$RPC_PORT
 if [[ $LOAD ]]; then
   mkdir -p "$chaindir"
   cp -r "$gethdir/snapshots/$LOAD"/{keystore,config} "$chaindir"
-  geth >/dev/null 2>&1 --datadir "$chaindir" init "$chaindir/config/genesis.json"
-  geth >/dev/null 2>&1 --datadir "$chaindir" import "$gethdir/snapshots/$LOAD/backup"
+  nohup geth >/dev/null 2>&1 --datadir "$chaindir" init "$chaindir/config/genesis.json"
+  nohup geth >/dev/null 2>&1 --datadir "$chaindir" import "$gethdir/snapshots/$LOAD/backup"
   address+=( "$(jq <"$chaindir/config/genesis.json" -r ".alloc | keys | .[]")" )
   CHAINID=$(jq <"$chaindir/config/genesis.json" -r ".config.chainId")
 else
@@ -53,7 +53,7 @@ else
   mkdir -p "$chaindir/config"
   for i in $(seq 0 "$ACCOUNTS"); do
     address+=( "$(
-      geth 2>/dev/null account new --datadir "$chaindir" --password=<(exit) 2>/dev/null \
+      nohup geth 2>/dev/null account new --datadir "$chaindir" --password=<(exit) 2>/dev/null \
         | grep Address | sed 's/Address: {\(.*\)}/\1/')" )
     balance+=(-n {} -s "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff" -i balance \
       -i "${address[i]}")
@@ -78,7 +78,7 @@ else
     -n {} \
       "${balance[@]}" \
     -i alloc
-  geth 2>/dev/null --datadir "$chaindir" init "$chaindir/config/genesis.json"
+  nohup geth 2>/dev/null --datadir "$chaindir" init "$chaindir/config/genesis.json" > /dev/tty
 fi
 
 export ETH_RPC_URL=http://127.0.0.1:$RPC_PORT
@@ -95,8 +95,7 @@ printf "%s\\n" "${address[@]}" > "$chaindir/config/account"
 echo "$ETH_RPC_URL"           > "$chaindir/config/rpc-url"
 echo "$port"                  > "$chaindir/config/node-port"
 
-set +m
-geth \
+nohup >/dev/tty geth \
   2> >(tee "$chaindir/geth.log" | grep --line-buffered Success | sed 's/^/geth: /' >&2) \
   --datadir "$chaindir" --networkid "$CHAINID" --port="$port" \
   --mine --minerthreads=1 \
@@ -112,7 +111,7 @@ clean() {
     mkdir -p "$gethdir/snapshots/$SAVE"
     cp -r "$chaindir/keystore" "$gethdir/snapshots/$SAVE"
     cp -r "$chaindir/config" "$gethdir/snapshots/$SAVE"
-    geth >/dev/null 2>&1 --datadir "$chaindir" \
+    nohup geth >/dev/null 2>&1 --datadir "$chaindir" \
        export "$gethdir/snapshots/$SAVE/backup"
   fi
   ( set -x; rm -rf "$chaindir" )
