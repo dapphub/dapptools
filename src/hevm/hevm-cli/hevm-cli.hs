@@ -160,10 +160,16 @@ unitTestOptions cmd = do
 
   params <- getParametersFromEnvironmentVariables
 
+  let
+    testn = testNumber params
+    block = if (0 ==) testn
+       then EVM.Fetch.Latest
+       else EVM.Fetch.BlockNumber testn
+
   pure EVM.UnitTest.UnitTestOptions
     { EVM.UnitTest.oracle =
         case rpc cmd of
-         Just url -> EVM.Fetch.http (EVM.Fetch.BlockNumber (testNumber params)) url
+         Just url -> EVM.Fetch.http block url
          Nothing  -> EVM.Fetch.zero
     , EVM.UnitTest.verbose = verbose cmd
     , EVM.UnitTest.match   = pack $ fromMaybe "^test" (match cmd)
