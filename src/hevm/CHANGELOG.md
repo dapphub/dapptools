@@ -1,6 +1,12 @@
 # hevm changelog
 
-## Unreleased
+## 0.34 - 2019-08-28
+ - handle new solc bzzr metadata in codehash for source map
+ - show VM hex outputs as hexadecimal
+ - rpc defaults to latest block
+ - `hevm interactive`:
+  - fix rpc fetch
+  - scrollable memory pane
  - Fix regression in VMTest compliance.
  - `hevm exec` ergonomics:
   - Allow code/calldata prefixed with 0x
