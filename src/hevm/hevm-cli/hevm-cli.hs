@@ -160,10 +160,16 @@ unitTestOptions cmd = do
 
   params <- getParametersFromEnvironmentVariables
 
+  let
+    testn = testNumber params
+    block = if (0 ==) testn
+       then EVM.Fetch.Latest
+       else EVM.Fetch.BlockNumber testn
+
   pure EVM.UnitTest.UnitTestOptions
     { EVM.UnitTest.oracle =
         case rpc cmd of
-         Just url -> EVM.Fetch.http (EVM.Fetch.BlockNumber (testNumber params)) url
+         Just url -> EVM.Fetch.http block url
          Nothing  -> EVM.Fetch.zero
     , EVM.UnitTest.verbose = verbose cmd
     , EVM.UnitTest.match   = pack $ fromMaybe "^test" (match cmd)
@@ -321,10 +327,12 @@ launchExec cmd = do
       in case view EVM.result vm' of
         Nothing ->
           error "internal error; no EVM result"
+        Just (EVM.VMFailure (EVM.Revert msg)) -> do
+          die . show . ByteStringS $ msg
         Just (EVM.VMFailure err) -> do
-          die (show err)
+          die . show $ err
         Just (EVM.VMSuccess msg) -> do
-          putStrLn $ showByteStringWith0x msg
+          putStrLn . show . ByteStringS $ msg
           case state cmd of
             Nothing -> pure ()
             Just path ->

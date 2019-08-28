@@ -45,10 +45,10 @@ data Action a where
 
   -- | Keep executing until an intermediate result is reached
   Exec ::            Action VMResult
-  
+
   -- | Short-circuit with a failure
   Fail :: Failure -> Action a
-  
+
   -- | Wait for a query to be resolved
   Wait :: Query   -> Action ()
 

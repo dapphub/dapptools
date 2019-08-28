@@ -81,10 +81,7 @@ data Error
   | MaxCodeSizeExceeded Word Word
   | PrecompileFailure
 
-instance Show Error
-  where
-    show (Revert msg) = "Revert " ++ showByteStringWith0x msg
-    show err = show err
+deriving instance Show Error
 
 -- | The possible result states of a VM
 data VMResult
@@ -712,12 +709,10 @@ exec1 = do
               burn g_extcodehash $ do
                 next
                 assign (state . stack) xs
-                preuse (env . contracts . ix (num x)) >>=
-                  \case
-                    Nothing -> push (num (0 :: Int))
-                    Just c  -> if accountEmpty c
-                       then push (num (0 :: Int))
-                       else push (num (keccak (view bytecode c)))
+                fetchAccount (num x) $ \c -> do
+                   if accountEmpty c
+                     then push (num (0 :: Int))
+                     else push (num (keccak (view bytecode c)))
             [] ->
               underrun
 
@@ -1336,7 +1331,12 @@ fetchAccount addr continue = do
               (\c -> do assign (cache . fetched . at addr) (Just c)
                         assign (env . contracts . at addr) (Just c)
                         assign result Nothing
-                        continue c)
+                        tryContinue c)
+  where
+    tryContinue c =
+      if (view external c) && (accountEmpty c)
+        then vmError . NoSuchContract $ addr
+        else continue c
 
 accessStorage
   :: Addr             -- ^ Contract address

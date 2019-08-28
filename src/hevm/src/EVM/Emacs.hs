@@ -491,7 +491,7 @@ instance SDisplay Word where
     L [A "hash", A (txt x), sexp bs]
 
 instance SDisplay ByteString where
-  sexp = A . txt . pack . showByteStringWith0x
+  sexp = A . txt . pack . show . ByteStringS
 
 sexpMemory :: ByteString -> SExpr Text
 sexpMemory bs =

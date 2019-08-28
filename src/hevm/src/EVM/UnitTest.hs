@@ -580,7 +580,7 @@ getParametersFromEnvironmentVariables = do
     <*> getWord "DAPP_TEST_BALANCE_CREATE" defaultBalanceForCreator
     <*> getWord "DAPP_TEST_BALANCE_CALL" defaultBalanceForCreated
     <*> getAddr "DAPP_TEST_COINBASE" 0
-    <*> getWord "DAPP_TEST_NUMBER" 512
+    <*> getWord "DAPP_TEST_NUMBER" 0
     <*> getWord "DAPP_TEST_TIMESTAMP" 1
     <*> getWord "DAPP_TEST_GAS_LIMIT" 0
     <*> getWord "DAPP_TEST_GAS_PRICE" 0
