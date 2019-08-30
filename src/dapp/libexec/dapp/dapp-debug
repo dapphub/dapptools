@@ -1,6 +1,11 @@
 #!/usr/bin/env bash
-### dapp-debug -- start an interactive debugger for unit tests (hevm)
-### Usage: dapp debug
+### dapp-debug -- run unit tests interactively (hevm)
+### Usage: dapp debug [<options>]
+###
+### Options:
+###   --rpc                 fetch remote state via ETH_RPC_URL
+###   --rpc-url=<url>       fetch remote state via <url>
+###   --rpc-block=<number>  block number (latest if not specified)
 
 set -e
 
@@ -12,7 +17,6 @@ have hevm || {
 }
 
 # Make sure the dapp is built with libraries linked.
-
 ( set -x; DAPP_LINK_TEST_LIBRARIES=1 dapp build || exit )
 
 # Create the state directory for linked libraries.
@@ -47,4 +51,6 @@ fi
 
 # Launch the debugger!
 
-( set -x; hevm interactive --dapp-root=. --state="$state" --json-file="$target" "$@" )
+opts=$(dapp --hevm-opts "$0" "$@")
+# shellcheck disable=SC2068
+(set -x; hevm dapp-test --debug --dapp-root=. --state="$state" --json-file="$target" ${opts[@]})
