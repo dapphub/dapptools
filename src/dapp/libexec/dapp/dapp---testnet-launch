@@ -42,7 +42,8 @@ if [[ $LOAD ]]; then
   cp -r "$gethdir/snapshots/$LOAD"/{keystore,config} "$chaindir"
   geth >/dev/null 2>&1 --datadir "$chaindir" init "$chaindir/config/genesis.json"
   geth >/dev/null 2>&1 --datadir "$chaindir" import "$gethdir/snapshots/$LOAD/backup"
-  address+=( "$(jq <"$chaindir/config/genesis.json" -r ".alloc | keys | .[]")" )
+  keys=$(jq <"$chaindir/config/genesis.json" -r '.alloc | keys | join(" ")')
+  IFS=" " read -r -a address <<< "$keys"
   CHAINID=$(jq <"$chaindir/config/genesis.json" -r ".config.chainId")
 else
   while true; do
@@ -91,7 +92,7 @@ echo >&2 "dapp-testnet:  Chain ID: $CHAINID"
 echo >&2 "dapp-testnet:  Database: $chaindir"
 echo >&2 "dapp-testnet:  Geth log: $chaindir/geth.log"
 
-printf "%s\\n" "${address[@]}" > "$chaindir/config/account"
+printf "%s\n" "${address[@]}" > "$chaindir/config/account"
 echo "$ETH_RPC_URL"           > "$chaindir/config/rpc-url"
 echo "$port"                  > "$chaindir/config/node-port"
 
