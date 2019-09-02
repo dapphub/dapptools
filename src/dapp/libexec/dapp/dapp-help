@@ -5,7 +5,8 @@
 BUGS=https://github.com/dapphub/dapptools/issues
 
 name=dapp
-file=${0%-*}${1+-$1}
+cmd=${1##*-}
+file=${0%-help}${1+-$cmd}
 header=$(perl -ne 'print "$2\n" if /^(\S)\1\1(?: (.*))?/' "$file")
 
 if ! [[ $header ]]; then

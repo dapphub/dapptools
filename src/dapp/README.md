@@ -43,7 +43,6 @@ These variables can be set at the prompt or in a `.dapprc` file.
 | `DAPP_SOLC_VERSION`        | n/a                        | Solidity compiler version to use      |
 | `DAPP_VERBOSE`             | n/a                        | Produce more `dapp test` output       |
 | `DAPP_SKIP_BUILD`          | n/a                        | Avoid compiling this time             |
-| `DAPP_NO_HEVM`             | n/a                        | Skip HEVM tests                       |
 | `DAPP_LINK_TEST_LIBRARIES` | `1` when testing; else `0` | Compile with libraries                |
 | `DAPP_VERIFY_CONTRACT`     | `yes`                      | Attempt Etherscan verification        |
 | `SOLC_FLAGS`               | n/a                        | Compilation flags passed to `solc`    |

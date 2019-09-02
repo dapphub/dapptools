@@ -8,6 +8,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - `dapp address` is now implemented in bash rather than depending on
   ethereumjs-util
+- Support hevm RPC - options added to `dapp test` and `dapp debug` to
+  allow unit tests to reference remote contracts.
 
 ## [0.24.0] - 2019-07-09
 ### Added
