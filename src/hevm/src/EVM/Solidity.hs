@@ -305,7 +305,7 @@ signature abi =
         ")"
       ]
 
--- Helper funcntion to convert the fields to the desired type
+-- Helper function to convert the fields to the desired type
 parseTypeName' :: AsValue s => s -> Maybe AbiType
 parseTypeName' x =
   parseTypeName
