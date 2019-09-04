@@ -124,7 +124,7 @@ initializeUnitTest UnitTestOptions { .. } = do
   -- Initialize the test contract
   Stepper.evm (popTrace >> pushTrace (EntryTrace "initialize test"))
   Stepper.evm $
-    setupCall addr "setUp()" (testBalanceCall testParams)
+    setupCall addr "setUp()" (testGasCall testParams)
 
   Stepper.note "Running `setUp()'"
 
