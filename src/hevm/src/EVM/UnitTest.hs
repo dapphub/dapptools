@@ -124,7 +124,7 @@ initializeUnitTest UnitTestOptions { .. } = do
   -- Initialize the test contract
   Stepper.evm (popTrace >> pushTrace (EntryTrace "initialize test"))
   Stepper.evm $
-    setupCall addr "setUp()" (testBalanceCall testParams)
+    setupCall testParams addr "setUp()"
 
   Stepper.note "Running `setUp()'"
 
@@ -152,7 +152,7 @@ runUnitTest UnitTestOptions { .. } method = do
 
         -- Set up the call to the test method
         Stepper.evm $
-          setupCall addr method (testGasCall testParams)
+          setupCall testParams addr method
         Stepper.evm (pushTrace (EntryTrace method))
         Stepper.note "Running unit test"
 
@@ -171,7 +171,7 @@ runUnitTest UnitTestOptions { .. } method = do
 
         -- Ask whether any assertions failed
         Stepper.evm $ popTrace
-        Stepper.evm $ setupCall addr "failed()" 10000
+        Stepper.evm $ setupCall testParams addr "failed()"
         Stepper.note "Checking whether assertions failed"
         res <- Stepper.execFullyOrFail >>= Stepper.decode AbiBoolType
         let AbiBool failed = res
@@ -528,12 +528,14 @@ formatTestLog events (Log _ args (topic:_)) =
 word32Bytes :: Word32 -> ByteString
 word32Bytes x = BS.pack [byteAt x (3 - i) | i <- [0..3]]
 
-setupCall :: Addr -> Text -> W256 -> EVM ()
-setupCall target abi allowance = do
+setupCall :: TestVMParams -> Addr -> Text -> EVM ()
+setupCall params target abi = do
+  let TestVMParams {..} = params
   resetState
   loadContract target
   assign (state . calldata) (word32Bytes (abiKeccak (encodeUtf8 abi)))
-  assign (state . gas) (w256 allowance)
+  assign (state . caller) testCaller
+  assign (state . gas) (w256 testGasCall)
 
 initialUnitTestVm :: UnitTestOptions -> SolcContract -> [SolcContract] -> VM
 initialUnitTestVm (UnitTestOptions {..}) theContract _ =
