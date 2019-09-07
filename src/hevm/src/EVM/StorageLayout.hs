@@ -165,7 +165,7 @@ grokValueType x =
        , preview (key "attributes" . key "type" . _String) x
        ) of
     (Just "ElementaryTypeName", _, Just typeName) ->
-      case parseTypeName (head (words typeName)) of
+      case parseTypeName mempty (head (words typeName)) of
         Just t -> t
         Nothing ->
           error ("ungrokked value type: " ++ show typeName)
