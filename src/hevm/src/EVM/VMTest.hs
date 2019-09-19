@@ -24,7 +24,6 @@ import qualified Control.Monad.Operational as Operational
 import qualified Control.Monad.State.Class as State
 
 import EVM (EVM)
-import EVM.Keccak (newContractAddress)
 import EVM.Stepper (Stepper)
 import EVM.Transaction
 import EVM.Types
@@ -498,7 +497,7 @@ checkCreateTx tx block prestate = do
   let gasDeposit  = fromIntegral (txGasPrice tx) * (txGasLimit tx)
       coinbase    = blockCoinbase block
       senderNonce = view (accountAt origin . nonce) prestate
-      createdAddr = newContractAddress origin senderNonce
+      createdAddr = EVM.createAddress origin senderNonce
       prevCode    = view (accountAt createdAddr .  code) prestate
       prevNonce   = view (accountAt createdAddr . nonce) prestate
   if ((prevCode /= EVM.RuntimeCode mempty) || (prevNonce /= 0) || (not valid))

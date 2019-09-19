@@ -1,11 +1,13 @@
+{-# LANGUAGE TemplateHaskell #-}
 module EVM.Transaction where
 
-import Prelude hiding (Word)
+import Prelude hiding (Word, drop, length, take, head, tail)
 
 import EVM.Concrete
 import EVM.FeeSchedule
-import EVM.Keccak (keccak, word160Bytes, word256Bytes, rlpWord256, rlpBytes, rlpList)
+import EVM.Keccak (keccak)
 import EVM.Precompiled (execute)
+import EVM.RLP
 import EVM.Types
 
 import Data.Aeson (FromJSON (..))
@@ -39,31 +41,6 @@ sender chainId tx = ecrec hash v' (txR tx) (txS tx)
         v'   = if v == 27 || v == 28 then v
                else 28 - mod v 2
 
-signingData :: Int -> Transaction -> ByteString
-signingData chainId tx =
-  if v == (chainId * 2 + 35) || v == (chainId * 2 + 36)
-  then eip155Data
-  else normalData
-  where v          = fromIntegral (txV tx)
-        to'        = case txToAddr tx of
-          Just a  -> rlpBytes $ word160Bytes a
-          Nothing -> rlpBytes mempty
-        normalData = rlpList [rlpWord256 (txNonce tx),
-                              rlpWord256 (txGasPrice tx),
-                              rlpWord256 (txGasLimit tx),
-                              to',
-                              rlpWord256 (txValue tx),
-                              rlpBytes   (txData tx)]
-        eip155Data = rlpList [rlpWord256 (txNonce tx),
-                              rlpWord256 (txGasPrice tx),
-                              rlpWord256 (txGasLimit tx),
-                              to',
-                              rlpWord256 (txValue tx),
-                              rlpBytes   (txData tx),
-                              rlpWord256 (fromIntegral chainId),
-                              rlpWord256 0x0,
-                              rlpWord256 0x0]
-
 txGasCost :: FeeSchedule Word -> Transaction -> Word
 txGasCost fs tx =
   let calldata     = txData tx
@@ -74,6 +51,31 @@ txGasCost fs tx =
       zeroCost     = g_txdatazero fs
       nonZeroCost  = g_txdatanonzero fs
   in baseCost + zeroCost * (fromIntegral zeroBytes) + nonZeroCost * (fromIntegral nonZeroBytes)
+
+signingData :: Int -> Transaction -> ByteString
+signingData chainId tx =
+  if v == (chainId * 2 + 35) || v == (chainId * 2 + 36)
+  then eip155Data
+  else normalData
+  where v          = fromIntegral (txV tx)
+        to'        = case txToAddr tx of
+          Just a  -> rlpWord160 a
+          Nothing -> rlpencode $ BS mempty
+        normalData = rlpList [rlpWord256 (txNonce tx),
+                              rlpWord256 (txGasPrice tx),
+                              rlpWord256 (txGasLimit tx),
+                              to',
+                              rlpWord256 (txValue tx),
+                              rlpencode (BS (txData tx))]
+        eip155Data = rlpList [rlpWord256 (txNonce tx),
+                              rlpWord256 (txGasPrice tx),
+                              rlpWord256 (txGasLimit tx),
+                              to',
+                              rlpWord256 (txValue tx),
+                              rlpencode (BS (txData tx)),
+                              rlpWord256 (fromIntegral chainId),
+                              rlpWord256 0x0,
+                              rlpWord256 0x0]
 
 instance FromJSON Transaction where
   parseJSON (JSON.Object val) = do

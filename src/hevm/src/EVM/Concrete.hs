@@ -6,9 +6,10 @@ module EVM.Concrete where
 
 import Prelude hiding (Word, (^))
 
-import EVM.Types (W256 (..), num, toWord512, fromWord512)
-import EVM.Types (word, padRight)
-import EVM.Keccak (keccak, word256Bytes)
+import EVM.Keccak (keccak)
+import EVM.RLP
+import EVM.Types (Addr, W256 (..), num, toWord512, fromWord512)
+import EVM.Types (word, padRight, word160Bytes, word256Bytes)
 
 import Control.Lens    ((^?), ix)
 import Data.Bits       (Bits (..), FiniteBits (..), shiftL, shiftR)
@@ -242,3 +243,10 @@ x0 ^ y0 | y0 < 0    = errorWithoutStackTrace "Negative exponent"
           g x y z | not (testBit y 0) = g (x * x) (y `shiftR` 1) z
                   | y == 1      = x * z
                   | otherwise   = g (x * x) ((y - 1) `shiftR` 1) (x * z)
+
+createAddress :: Addr -> W256 -> Addr
+createAddress a n = num $ keccak $ rlpList [rlpencode $ BS $ word160Bytes a, rlpWord256 n]
+
+create2Address :: Addr -> W256 -> ByteString -> Addr
+create2Address a s b = num $ keccak $ mconcat $
+  [BS.singleton 0xff, word160Bytes a, word256Bytes $ num s, word256Bytes $ keccak b]
