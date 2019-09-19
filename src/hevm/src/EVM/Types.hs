@@ -188,3 +188,9 @@ asBE :: (Integral a) => a -> ByteString
 asBE 0 = mempty
 asBE x = asBE (x `div` 256)
   <> BS.pack [num $ x `mod` 256]
+
+word256Bytes :: W256 -> ByteString
+word256Bytes x = BS.pack [byteAt x (31 - i) | i <- [0..31]]
+
+word160Bytes :: Addr -> ByteString
+word160Bytes x = BS.pack [byteAt (addressWord160 x) (19 - i) | i <- [0..19]]

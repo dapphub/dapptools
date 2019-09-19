@@ -6,6 +6,7 @@ import Prelude hiding (Word)
 
 import EVM
 import EVM.ABI
+import EVM.Concrete
 import EVM.Dapp
 import EVM.Debug (srcMapCodePos)
 import EVM.Exec
@@ -574,7 +575,7 @@ getParametersFromEnvironmentVariables = do
     getAddr s def = maybe def read <$> lookupEnv s
 
   TestVMParams
-    <$> getAddr "DAPP_TEST_ADDRESS" (newContractAddress ethrunAddress 1)
+    <$> getAddr "DAPP_TEST_ADDRESS" (createAddress ethrunAddress 1)
     <*> getAddr "DAPP_TEST_CALLER" ethrunAddress
     <*> getAddr "DAPP_TEST_ORIGIN" ethrunAddress
     <*> getWord "DAPP_TEST_GAS_CREATE" defaultGasForCreating

@@ -1,7 +1,7 @@
 module EVM.Exec where
 
 import EVM
-import EVM.Keccak (newContractAddress)
+import EVM.Concrete (createAddress)
 import EVM.Types
 
 import qualified EVM.FeeSchedule as FeeSchedule
@@ -23,7 +23,7 @@ vmForEthrunCreation creationCode =
     { vmoptCode = creationCode
     , vmoptCalldata = ""
     , vmoptValue = 0
-    , vmoptAddress = newContractAddress ethrunAddress 1
+    , vmoptAddress = createAddress ethrunAddress 1
     , vmoptCaller = ethrunAddress
     , vmoptOrigin = ethrunAddress
     , vmoptCoinbase = 0

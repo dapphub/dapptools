@@ -1,5 +1,6 @@
 {-# Language OverloadedStrings #-}
 {-# Language QuasiQuotes #-}
+{-# Language GeneralizedNewtypeDeriving #-}
 
 import Data.Text (Text)
 import Data.ByteString (ByteString)
@@ -9,11 +10,11 @@ import qualified Data.ByteString as BS
 import qualified Data.ByteString.Base16 as Hex
 
 import Test.Tasty
-import Test.Tasty.QuickCheck (testProperty, Arbitrary (..), NonNegative (..))
+import Test.Tasty.QuickCheck
 import Test.Tasty.HUnit
 
 import Control.Monad.State.Strict (execState, runState)
-import Control.Lens
+import Control.Lens hiding (List)
 
 import qualified Data.Vector as Vector
 import Data.String.Here
@@ -27,6 +28,8 @@ import EVM.Exec
 import EVM.Solidity
 import EVM.Types
 import EVM.Precompiled
+import EVM.Transaction
+import EVM.RLP
 
 main :: IO ()
 main = defaultMain $ testGroup "hevm"
@@ -36,7 +39,6 @@ main = defaultMain $ testGroup "hevm"
           Right ("", _, x') -> x' == x
           _ -> False
     ]
-
   , testGroup "Solidity expressions"
     [ testCase "Trivial" $ do
         SolidityCall "x = 3;" []
@@ -84,7 +86,6 @@ main = defaultMain $ testGroup "hevm"
                 Nothing
                 (execute 1 (h <> v <> r <> s) 32)
           ]
-      ]
 
   , testGroup "Byte/word manipulations"
     [ testProperty "padLeft length" $ \n (Bytes bs) ->
@@ -99,6 +100,20 @@ main = defaultMain $ testGroup "hevm"
         let x = BS.take n (padLeft (BS.length bs + n) bs)
             y = BS.replicate n 0
         in x == y
+    ]
+  ]
+  , testGroup "RLP encodings"
+    [ testProperty "rlp decode is a retraction (bytes)" $ \(Bytes bs) ->
+--      withMaxSuccess 100000 $
+      rlpdecode (rlpencode (BS bs)) == Just (BS bs)
+    , testProperty "rlp encode is a partial inverse (bytes)" $ \(Bytes bs) ->
+--      withMaxSuccess 100000 $
+        case rlpdecode bs of
+          Just r -> rlpencode r == bs
+          Nothing -> True
+    ,  testProperty "rlp decode is a retraction (RLP)" $ \(RLPData r) ->
+--       withMaxSuccess 100000 $
+       rlpdecode (rlpencode r) == Just r
     ]
   ]
 
@@ -175,6 +190,21 @@ instance Show Bytes where
 
 instance Arbitrary Bytes where
   arbitrary = fmap (Bytes . BS.pack) arbitrary
+
+newtype RLPData = RLPData RLP
+  deriving (Eq, Show)
+
+-- bias towards bytestring to try to avoid infinite recursion
+instance Arbitrary RLPData where
+  arbitrary = frequency
+   [(5, do
+           Bytes bytes <- arbitrary
+           return $ RLPData $ BS bytes)
+   , (1, do
+         k <- choose (0,10)
+         ls <- vectorOf k arbitrary
+         return $ RLPData $ List [r | RLPData r <- ls])
+   ]
 
 data Invocation
   = SolidityCall Text [AbiValue]
