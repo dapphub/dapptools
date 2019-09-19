@@ -1,6 +1,7 @@
+{-# LANGUAGE TemplateHaskell #-}
 module EVM.Transaction where
 
-import Prelude hiding (Word)
+import Prelude hiding (Word, drop, length, take, head, tail)
 
 import EVM.Concrete
 import EVM.FeeSchedule
@@ -9,7 +10,7 @@ import EVM.Precompiled (execute)
 import EVM.Types
 
 import Data.Aeson (FromJSON (..))
-import Data.ByteString (ByteString)
+import Data.ByteString (ByteString, drop, length, head)
 import Data.Maybe (isNothing)
 
 import qualified Data.Aeson        as JSON
@@ -74,6 +75,37 @@ txGasCost fs tx =
       zeroCost     = g_txdatazero fs
       nonZeroCost  = g_txdatanonzero fs
   in baseCost + zeroCost * (fromIntegral zeroBytes) + nonZeroCost * (fromIntegral nonZeroBytes)
+
+data RLP = BS ByteString | List [RLP]
+instance Show RLP where
+  show (BS str) = show (ByteStringS str)
+  show (List list) = show list
+
+--helper function returning (the length of the prefix, the length of the content, isList boolean)
+itemInfo :: ByteString -> (Int, Int, Bool)
+itemInfo bs = case head bs of
+  x | 0 <= x && x < 128   -> (0, 1, False)
+  x | 128 <= x && x < 184 -> (1, num x - 128, False)
+  x | 184 <= x && x < 192 -> (1 + pre, num $ word $ slice 1 pre bs, False) where pre = num $ x - 183
+  x | 192 <= x && x < 248 -> (1, num $ x - 192, True)
+  x                       -> (1 + pre, num $ word $ slice 1 pre bs, True)  where pre = num $ x - 247
+
+-- rlp decoding, not fully compliant (suboptimal encodings accepted)
+rlpdecode :: ByteString -> Maybe RLP
+rlpdecode bs = let (pre, len, isList) = itemInfo bs
+               in if pre + len == length bs
+                  then if isList
+                    then let content = drop pre bs
+                         in do
+                           items <- sequence $ fmap (\(s, e) -> rlpdecode $ slice s e content) $ rlplengths content 0 $ len
+                           Just (List items)
+                   else Just (BS $ drop (pre) bs)
+                 else Nothing
+
+rlplengths :: ByteString -> Int -> Int -> [(Int,Int)]
+rlplengths bs acc top | acc < top = let (pre, len, _) = itemInfo bs
+                                    in (acc, pre + len) : rlplengths (drop (pre + len) bs) (acc + pre + len) top
+                      | otherwise = []
 
 instance FromJSON Transaction where
   parseJSON (JSON.Object val) = do

@@ -168,6 +168,9 @@ blobSize x = w256 (num (BS.length x))
 keccakBlob :: ByteString -> Word
 keccakBlob x = C (FromKeccak x) (keccak x)
 
+slice :: Int -> Int -> ByteString -> ByteString
+slice offset size bs = BS.take size $ BS.drop offset bs
+
 instance Show Word where
   show (C Dull x) = show x
   show (C whiff x) = show whiff ++ ": " ++ show x

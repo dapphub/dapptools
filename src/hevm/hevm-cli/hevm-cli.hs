@@ -37,6 +37,7 @@ import EVM.UnitTest (UnitTestOptions, coverageReport, coverageForUnitTestContrac
 import EVM.UnitTest (runUnitTestContract)
 import EVM.UnitTest (getParametersFromEnvironmentVariables, testNumber)
 import EVM.Dapp (findUnitTests, dappInfo)
+import EVM.Transaction (rlpdecode)
 
 import qualified EVM.Facts     as Facts
 import qualified EVM.Facts.Git as Git
@@ -137,6 +138,8 @@ data Command w
     }
   | Emacs
   | Version
+  | Rlpdecode -- RLP decode a string and print the result
+  { rlphexstring :: w ::: ByteString <?> "RLP encoded hexstring" }
   deriving (Options.Generic)
 
 type URL = Text
@@ -223,6 +226,10 @@ main = do
               error ("Failed to read Solidity JSON for `" ++ theJson ++ "'")
     Emacs ->
       EVM.Emacs.main
+    Rlpdecode {} ->
+      case EVM.Transaction.rlpdecode $ hexByteString "--rlphexstring" $ strip0x $ rlphexstring cmd of
+        Nothing -> error("Malformed RLP string")
+        Just c -> putStrLn $ show c
 
 launchScript :: String -> Command Options.Unwrapped -> IO ()
 launchScript script cmd = do
@@ -340,6 +347,10 @@ launchExec cmd = do
     Debug ->
       void (EVM.TTY.runFromVM vm1)
 
+strip0x :: ByteString -> ByteString
+strip0x bs = if "0x" `Char8.isPrefixOf` bs then Char8.drop 2 bs else bs
+
+
 vmFromCommand :: Command Options.Unwrapped -> EVM.VM
 vmFromCommand cmd =
   vm1 & EVM.env . EVM.contracts . ix address' . EVM.balance +~ (w256 value')
@@ -350,9 +361,6 @@ vmFromCommand cmd =
     address' = if create cmd
           then newContractAddress origin' (word nonce 0)
           else addr address 0xacab
-
-    strip0x :: ByteString -> ByteString
-    strip0x bs = if "0x" `Char8.isPrefixOf` bs then Char8.drop 2 bs else bs
 
     vm1 = EVM.makeVm $ EVM.VMOpts
       { EVM.vmoptCode          = hexByteString "--code" (strip0x (code cmd))
