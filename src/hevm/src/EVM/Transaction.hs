@@ -107,6 +107,20 @@ rlplengths bs acc top | acc < top = let (pre, len, _) = itemInfo bs
                                     in (acc, pre + len) : rlplengths (drop (pre + len) bs) (acc + pre + len) top
                       | otherwise = []
 
+rlpencode :: RLP -> ByteString
+rlpencode (BS bs) = if length bs == 1 && head bs < 128 then bs
+                    else encodeLen 128 bs
+rlpencode (List items) = encodeLen 192 (mconcat $ map rlpencode items)
+
+encodeLen :: Int -> ByteString -> ByteString
+encodeLen offset bs 
+      | length bs <= 55 = prefix (length bs) <> bs
+      | otherwise = prefix lenLen <> lenBytes <> bs
+      where
+        lenBytes = asBE $ length bs
+        prefix n = BS.singleton $ num $ offset + n
+        lenLen = length lenBytes + 55
+
 instance FromJSON Transaction where
   parseJSON (JSON.Object val) = do
     tdata    <- dataField val "data"
