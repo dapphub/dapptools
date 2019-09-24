@@ -5,7 +5,7 @@ import Prelude hiding (Word, drop, length, take, head, tail)
 
 import EVM.Concrete
 import EVM.FeeSchedule
-import EVM.Keccak (keccak, word160Bytes, word256Bytes, rlpWord256, rlpBytes, rlpList)
+import EVM.Keccak (keccak)--, word160Bytes, word256Bytes, rlpWord256, rlpBytes, rlpList)
 import EVM.Precompiled (execute)
 import EVM.Types
 
@@ -40,31 +40,6 @@ sender chainId tx = ecrec hash v' (txR tx) (txS tx)
         v'   = if v == 27 || v == 28 then v
                else 28 - mod v 2
 
-signingData :: Int -> Transaction -> ByteString
-signingData chainId tx =
-  if v == (chainId * 2 + 35) || v == (chainId * 2 + 36)
-  then eip155Data
-  else normalData
-  where v          = fromIntegral (txV tx)
-        to'        = case txToAddr tx of
-          Just a  -> rlpBytes $ word160Bytes a
-          Nothing -> rlpBytes mempty
-        normalData = rlpList [rlpWord256 (txNonce tx),
-                              rlpWord256 (txGasPrice tx),
-                              rlpWord256 (txGasLimit tx),
-                              to',
-                              rlpWord256 (txValue tx),
-                              rlpBytes   (txData tx)]
-        eip155Data = rlpList [rlpWord256 (txNonce tx),
-                              rlpWord256 (txGasPrice tx),
-                              rlpWord256 (txGasLimit tx),
-                              to',
-                              rlpWord256 (txValue tx),
-                              rlpBytes   (txData tx),
-                              rlpWord256 (fromIntegral chainId),
-                              rlpWord256 0x0,
-                              rlpWord256 0x0]
-
 txGasCost :: FeeSchedule Word -> Transaction -> Word
 txGasCost fs tx =
   let calldata     = txData tx
@@ -92,15 +67,15 @@ itemInfo bs = case head bs of
 
 -- rlp decoding, not fully compliant (suboptimal encodings accepted)
 rlpdecode :: ByteString -> Maybe RLP
-rlpdecode bs = let (pre, len, isList) = itemInfo bs
-               in if pre + len == length bs
-                  then if isList
-                    then let content = drop pre bs
-                         in do
-                           items <- sequence $ fmap (\(s, e) -> rlpdecode $ slice s e content) $ rlplengths content 0 $ len
-                           Just (List items)
-                   else Just (BS $ drop (pre) bs)
+rlpdecode bs = if pre + len == length bs
+                 then if isList
+                   then do
+                     items <- sequence $ fmap (\(s, e) -> rlpdecode $ slice s e content) $ rlplengths content 0 $ len
+                     Just (List items)
+                   else Just (BS content)
                  else Nothing
+  where (pre, len, isList) = itemInfo bs
+        content = drop pre bs
 
 rlplengths :: ByteString -> Int -> Int -> [(Int,Int)]
 rlplengths bs acc top | acc < top = let (pre, len, _) = itemInfo bs
@@ -113,13 +88,50 @@ rlpencode (BS bs) = if length bs == 1 && head bs < 128 then bs
 rlpencode (List items) = encodeLen 192 (mconcat $ map rlpencode items)
 
 encodeLen :: Int -> ByteString -> ByteString
-encodeLen offset bs 
-      | length bs <= 55 = prefix (length bs) <> bs
-      | otherwise = prefix lenLen <> lenBytes <> bs
-      where
-        lenBytes = asBE $ length bs
-        prefix n = BS.singleton $ num $ offset + n
-        lenLen = length lenBytes + 55
+encodeLen offset bs | length bs <= 55 = prefix (length bs) <> bs
+                    | otherwise = prefix lenLen <> lenBytes <> bs
+          where
+            lenBytes = asBE $ length bs
+            prefix n = BS.singleton $ num $ offset + n
+            lenLen = length lenBytes + 55
+
+signingData :: Int -> Transaction -> ByteString
+signingData chainId tx =
+  if v == (chainId * 2 + 35) || v == (chainId * 2 + 36)
+  then eip155Data
+  else normalData
+  where v          = fromIntegral (txV tx)
+        to'        = case txToAddr tx of
+          Just a  -> rlpWord160 a
+          Nothing -> BS (rlpencode (BS mempty))
+        normalData = rlpencode (List [rlpWord256 (txNonce tx),
+                              rlpWord256 (txGasPrice tx),
+                              rlpWord256 (txGasLimit tx),
+                              to',
+                              rlpWord256 (txValue tx),
+                              BS (rlpencode (BS (txData tx)))])
+        eip155Data = rlpencode (List [rlpWord256 (txNonce tx),
+                              rlpWord256 (txGasPrice tx),
+                              rlpWord256 (txGasLimit tx),
+                              to',
+                              rlpWord256 (txValue tx),
+                              BS (rlpencode (BS (txData tx))),
+                              rlpWord256 (fromIntegral chainId),
+                              rlpWord256 0x0,
+                              rlpWord256 0x0])
+
+rlpWord256 :: W256 -> RLP 
+rlpWord256 n = BS (rlpencode (BS $ word256Bytes n))
+
+rlpWord160 :: Addr -> RLP 
+rlpWord160 n = BS (rlpencode (BS $ word160Bytes n))
+
+newContractAddress :: Addr -> W256 -> Addr
+newContractAddress a n = num $ keccak $ rlpencode (List [rlpWord160 a, rlpWord256 n])
+
+newContractAddressCREATE2 :: Addr -> W256 -> ByteString -> Addr
+newContractAddressCREATE2 a s b =
+  fromIntegral (keccak $ BS.cons (fromIntegral (0xff :: Integer)) (BS.concat $ [word160Bytes a, word256Bytes $ num s, word256Bytes $ keccak b]))
 
 instance FromJSON Transaction where
   parseJSON (JSON.Object val) = do
@@ -135,3 +147,4 @@ instance FromJSON Transaction where
     return $ Transaction tdata gasLimit gasPrice nonce r s toAddr v value
   parseJSON invalid =
     JSON.typeMismatch "Transaction" invalid
+

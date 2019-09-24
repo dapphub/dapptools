@@ -11,6 +11,7 @@ import EVM.Debug (srcMapCodePos)
 import EVM.Exec
 import EVM.Format
 import EVM.Keccak
+import EVM.Transaction
 import EVM.Solidity
 import EVM.Types
 import EVM.Concrete (w256, wordAt, wordValue)

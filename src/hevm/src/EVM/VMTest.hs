@@ -24,7 +24,6 @@ import qualified Control.Monad.Operational as Operational
 import qualified Control.Monad.State.Class as State
 
 import EVM (EVM)
-import EVM.Keccak (newContractAddress)
 import EVM.Stepper (Stepper)
 import EVM.Transaction
 import EVM.Types

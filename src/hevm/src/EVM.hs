@@ -18,6 +18,7 @@ import EVM.ABI
 import EVM.Types
 import EVM.Solidity
 import EVM.Keccak
+import EVM.Transaction
 import EVM.Concrete hiding ((^))
 import EVM.Op
 import EVM.FeeSchedule (FeeSchedule (..))

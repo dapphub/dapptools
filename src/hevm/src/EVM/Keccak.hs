@@ -4,7 +4,7 @@
 {-# Language JavaScriptFFI #-}
 #endif
 
-module EVM.Keccak (word160Bytes, word256Bytes, keccak, abiKeccak, newContractAddress, newContractAddressCREATE2, rlpWord160, rlpWord256, rlpBytes, rlpList) where
+module EVM.Keccak (keccak, abiKeccak) where
 
 import EVM.Types
 
@@ -50,23 +50,9 @@ keccakBytes =
 
 keccakBytes :: ByteString -> ByteString
 
-word256Bytes :: W256 -> ByteString
-word256Bytes x = BS.pack [byteAt x (31 - i) | i <- [0..31]]
-
-word160Bytes :: Addr -> ByteString
-word160Bytes x = BS.pack [byteAt (addressWord160 x) (19 - i) | i <- [0..19]]
-
 word32 :: [Word8] -> Word32
 word32 xs = sum [ fromIntegral x `shiftL` (8*n)
                 | (n, x) <- zip [0..] (reverse xs) ]
-
-octets :: W256 -> [Word8]
-octets x =
-  dropWhile (== 0) [fromIntegral (shiftR x (8 * i)) | i <- reverse [0..31]]
-
-octets160 :: Addr -> [Word8]
-octets160 x =
-  dropWhile (== 0) [fromIntegral (shiftR x (8 * i)) | i <- reverse [0..19]]
 
 keccak :: ByteString -> W256
 keccak =
@@ -80,42 +66,3 @@ abiKeccak =
     >>> BS.take 4
     >>> BS.unpack
     >>> word32
-
-rlpBytes :: ByteString -> ByteString
-rlpBytes x | (BS.length x == 1) && (head . BS.unpack) x < 128 = x
-rlpBytes x = let n = BS.length x
-  in if n <= 55
-     then BS.cons (fromIntegral (0x80 + n)) x
-     else let ns = BS.pack $ octets (fromIntegral n)
-  in BS.cons (fromIntegral (0xb7 + BS.length ns)) (BS.concat [ns, x])
-
-rlpWord256 :: W256 -> ByteString
-rlpWord256 0 = BS.pack [0x80]
-rlpWord256 x | x <= 0x7f = BS.pack [fromIntegral x]
-rlpWord256 x =
-  let xs = octets x
-  in BS.pack ([0x80 + fromIntegral (length xs)] ++ xs)
-
-rlpWord160 :: Addr -> ByteString
-rlpWord160 0 = BS.pack [0x80]
-rlpWord160 x =
-  let xs = octets160 x
-  in BS.pack ([0x80 + fromIntegral (length xs)] ++ xs)
-
-rlpList :: [ByteString] -> ByteString
-rlpList xs =
-  let n = sum (map BS.length xs)
-  in if n <= 55
-     then BS.cons (fromIntegral (0xc0 + n)) (BS.concat xs)
-     else
-       let ns = BS.pack $ octets (fromIntegral n)
-       in BS.cons (fromIntegral (0xf7 + BS.length ns)) (BS.concat (ns : xs))
-
-newContractAddress :: Addr -> W256 -> Addr
-newContractAddress a n =
-  fromIntegral
-    (keccak $ rlpList [rlpWord160 a, rlpWord256 n])
-
-newContractAddressCREATE2 :: Addr -> W256 -> ByteString -> Addr
-newContractAddressCREATE2 a s b =
-  fromIntegral (keccak $ BS.cons (fromIntegral (0xff :: Integer)) (BS.concat $ [word160Bytes a, word256Bytes $ num s, word256Bytes $ keccak b]))

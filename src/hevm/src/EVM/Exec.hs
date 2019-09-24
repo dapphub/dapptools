@@ -1,7 +1,7 @@
 module EVM.Exec where
 
 import EVM
-import EVM.Keccak (newContractAddress)
+import EVM.Transaction (newContractAddress)
 import EVM.Types
 
 import qualified EVM.FeeSchedule as FeeSchedule
