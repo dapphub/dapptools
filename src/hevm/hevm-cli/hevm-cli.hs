@@ -38,6 +38,8 @@ import EVM.UnitTest (runUnitTestContract)
 import EVM.UnitTest (getParametersFromEnvironmentVariables, testNumber)
 import EVM.Dapp (findUnitTests, dappInfo)
 import EVM.RLP (rlpdecode)
+import qualified EVM.Patricia as Patricia
+import Data.Map (Map)
 
 import qualified EVM.Facts     as Facts
 import qualified EVM.Facts.Git as Git
@@ -46,17 +48,24 @@ import qualified EVM.UnitTest  as EVM.UnitTest
 import Control.Concurrent.Async   (async, waitCatch)
 import Control.Exception          (evaluate)
 import Control.Lens
+import Control.Applicative
 import Control.Monad              (void, when, forM_)
 import Control.Monad.State.Strict (execState)
 import Data.ByteString            (ByteString)
 import Data.List                  (intercalate, isSuffixOf)
 import Data.Text                  (Text, unpack, pack)
+import Data.Text.Encoding   (encodeUtf8)
 import Data.Maybe                 (fromMaybe)
 import Data.Version               (showVersion)
 import System.Directory           (withCurrentDirectory, listDirectory)
 import System.Exit                (die, exitFailure)
 import System.IO                  (hFlush, stdout)
 import System.Process             (callProcess)
+import qualified Data.Aeson        as JSON
+import qualified Data.Aeson.Types  as JSON
+import Data.Aeson (FromJSON (..), (.:))
+import qualified Data.Vector as V
+import qualified Data.ByteString.Lazy  as Lazy
 
 import qualified Data.ByteString        as ByteString
 import qualified Data.ByteString.Char8  as Char8
@@ -141,6 +150,10 @@ data Command w
   | Rlp  -- RLP decode a string and print the result
   { decode :: w ::: ByteString <?> "RLP encoded hexstring"
   }
+  | MerkleTest -- Insert a set of key values and check against the given root
+  { file :: w ::: String <?> "Path to .json test file"
+  }
+
   deriving (Options.Generic)
 
 type URL = Text
@@ -231,6 +244,7 @@ main = do
       case rlpdecode $ hexByteString "--decode" $ strip0x $ decode cmd of
         Nothing -> error("Malformed RLP string")
         Just c -> putStrLn $ show c
+    MerkleTest {} -> merkleTest cmd
 
 launchScript :: String -> Command Options.Unwrapped -> IO ()
 launchScript script cmd = do
@@ -350,6 +364,60 @@ launchExec cmd = do
 
 strip0x :: ByteString -> ByteString
 strip0x bs = if "0x" `Char8.isPrefixOf` bs then Char8.drop 2 bs else bs
+
+data Testcase = Testcase {
+  _entries :: [(Text, Maybe Text)],
+  _root :: Text
+} deriving Show
+
+parseTups :: JSON.Value -> JSON.Parser [(Text, Maybe Text)]
+parseTups (JSON.Array arr) = do
+  tupList <- mapM parseJSON (V.toList arr)
+  mapM (\[k, v] -> do
+                  rhs <- parseJSON v <|> empty
+                  key <- parseJSON k
+                  return (key, rhs))
+         tupList
+parseTups invalid = JSON.typeMismatch "Malformed array" invalid
+
+
+parseTrieTest :: JSON.Object -> JSON.Parser Testcase
+parseTrieTest p = do
+  kvlist <- p .: "in"
+  entries <- parseTups kvlist
+  root <- p .: "root"
+  return $ Testcase entries root
+
+instance FromJSON Testcase where
+  parseJSON (JSON.Object p) = parseTrieTest p
+  parseJSON invalid = JSON.typeMismatch "Merkle test case" invalid
+
+parseTrieTests :: Lazy.ByteString -> Either String (Map String Testcase)
+parseTrieTests = JSON.eitherDecode'
+
+merkleTest :: Command Options.Unwrapped -> IO ()
+merkleTest cmd = do
+  parsed <- parseTrieTests <$> LazyByteString.readFile (file cmd)
+  case parsed of 
+    Left err -> print err
+    Right testcases -> mapM_ runMerkleTest testcases
+
+runMerkleTest :: Testcase -> IO ()
+runMerkleTest (Testcase entries root) = case Patricia.calcRoot entries' of
+                                          Nothing -> error ("Test case failed")
+                                          Just n -> case n == strip0x (hexText root) of
+                                            True -> putStrLn "Test case success"
+                                            False -> error ("Test case failure; expected "
+                                                            <> show root <> " but got " <> show (ByteStringS n))
+  where entries' = fmap (\(k, v) ->
+                           (tohexOrText k,
+                            tohexOrText (fromMaybe mempty v)))
+                   entries
+
+tohexOrText :: Text -> ByteString
+tohexOrText s = case "0x" `Char8.isPrefixOf` encodeUtf8 s of
+                  True -> hexText s
+                  False -> encodeUtf8 s
 
 
 vmFromCommand :: Command Options.Unwrapped -> EVM.VM

@@ -25,11 +25,11 @@ import Data.Binary.Get (runGetOrFail)
 import EVM
 import EVM.ABI
 import EVM.Exec
+import EVM.Patricia as Patricia
+import EVM.Precompiled
+import EVM.RLP
 import EVM.Solidity
 import EVM.Types
-import EVM.Precompiled
-import EVM.Transaction
-import EVM.RLP
 
 main :: IO ()
 main = defaultMain $ testGroup "hevm"
@@ -86,7 +86,7 @@ main = defaultMain $ testGroup "hevm"
                 Nothing
                 (execute 1 (h <> v <> r <> s) 32)
           ]
-
+      ]
   , testGroup "Byte/word manipulations"
     [ testProperty "padLeft length" $ \n (Bytes bs) ->
         BS.length (padLeft n bs) == max n (BS.length bs)
@@ -101,7 +101,7 @@ main = defaultMain $ testGroup "hevm"
             y = BS.replicate n 0
         in x == y
     ]
-  ]
+
   , testGroup "RLP encodings"
     [ testProperty "rlp decode is a retraction (bytes)" $ \(Bytes bs) ->
 --      withMaxSuccess 100000 $
@@ -114,6 +114,17 @@ main = defaultMain $ testGroup "hevm"
     ,  testProperty "rlp decode is a retraction (RLP)" $ \(RLPData r) ->
 --       withMaxSuccess 100000 $
        rlpdecode (rlpencode r) == Just r
+    ]
+  , testGroup "Merkle Patricia Trie"
+    [  testProperty "update followed by delete is id" $ \(Bytes r, Bytes s, Bytes t) ->
+        whenFail
+        (putStrLn ("r:" <> (show (ByteStringS r))) >>
+         putStrLn ("s:" <> (show (ByteStringS s))) >>
+         putStrLn ("t:" <> (show (ByteStringS t)))) $
+--       withMaxSuccess 100000 $
+       Patricia.insertValues [(r, BS.pack[1]), (s, BS.pack[2]), (t, BS.pack[3]),
+                              (r, mempty), (s, mempty), (t, mempty)]
+       === (Just $ Literal Patricia.Empty)
     ]
   ]
 

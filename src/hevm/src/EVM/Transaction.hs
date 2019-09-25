@@ -1,7 +1,7 @@
 {-# LANGUAGE TemplateHaskell #-}
 module EVM.Transaction where
 
-import Prelude hiding (Word, drop, length, take, head, tail)
+import Prelude hiding (Word)
 
 import EVM.Concrete
 import EVM.FeeSchedule
@@ -9,6 +9,7 @@ import EVM.Keccak (keccak)
 import EVM.Precompiled (execute)
 import EVM.RLP
 import EVM.Types
+import Test.QuickCheck
 
 import Data.Aeson (FromJSON (..))
 import Data.ByteString (ByteString)
@@ -41,17 +42,6 @@ sender chainId tx = ecrec hash v' (txR tx) (txS tx)
         v'   = if v == 27 || v == 28 then v
                else 28 - mod v 2
 
-txGasCost :: FeeSchedule Word -> Transaction -> Word
-txGasCost fs tx =
-  let calldata     = txData tx
-      zeroBytes    = BS.count 0 calldata
-      nonZeroBytes = BS.length calldata - zeroBytes
-      baseCost     = g_transaction fs
-        + if isNothing (txToAddr tx) then g_txcreate fs else 0
-      zeroCost     = g_txdatazero fs
-      nonZeroCost  = g_txdatanonzero fs
-  in baseCost + zeroCost * (fromIntegral zeroBytes) + nonZeroCost * (fromIntegral nonZeroBytes)
-
 signingData :: Int -> Transaction -> ByteString
 signingData chainId tx =
   if v == (chainId * 2 + 35) || v == (chainId * 2 + 36)
@@ -76,6 +66,17 @@ signingData chainId tx =
                               rlpWord256 (fromIntegral chainId),
                               rlpWord256 0x0,
                               rlpWord256 0x0]
+
+txGasCost :: FeeSchedule Word -> Transaction -> Word
+txGasCost fs tx =
+  let calldata     = txData tx
+      zeroBytes    = BS.count 0 calldata
+      nonZeroBytes = BS.length calldata - zeroBytes
+      baseCost     = g_transaction fs
+        + if isNothing (txToAddr tx) then g_txcreate fs else 0
+      zeroCost     = g_txdatazero fs
+      nonZeroCost  = g_txdatanonzero fs
+  in baseCost + zeroCost * (fromIntegral zeroBytes) + nonZeroCost * (fromIntegral nonZeroBytes)
 
 instance FromJSON Transaction where
   parseJSON (JSON.Object val) = do
