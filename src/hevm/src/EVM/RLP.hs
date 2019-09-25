@@ -1,13 +1,10 @@
 module EVM.RLP where
 
 import Prelude hiding (drop, head, length)
-
--- import EVM.Concrete
 import EVM.Types
 
 import Data.ByteString (ByteString, drop, head, length)
 import qualified Data.ByteString   as BS
-
 
 data RLP = BS ByteString | List [RLP] deriving Eq
 
