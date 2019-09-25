@@ -1222,7 +1222,7 @@ executePrecompile fees preCompileAddr gasCap inOffset inSize outOffset outSize x
                   e = asInteger $ lazySlice (96 + lenb) lene $ input
                   m = asInteger $ lazySlice (96 + lenb + lene) lenm $ input
                 in
-                  frontpad (num lenm) (asBE (expFast b e m))
+                  padLeft (num lenm) (asBE (expFast b e m))
           in do
             assign (state . stack) (1 : xs)
             assign (state . returndata) output
@@ -1276,10 +1276,6 @@ executePrecompile fees preCompileAddr gasCap inOffset inSize outOffset outSize x
 truncpad :: Int -> ByteString -> ByteString
 truncpad n xs = if m > n then BS.take n xs
                      else BS.append xs (BS.replicate (n - m) 0)
-  where m = BS.length xs
-
-frontpad :: Int -> ByteString -> ByteString
-frontpad n xs = BS.append (BS.replicate (n - m) 0) xs
   where m = BS.length xs
 
 lazySlice :: Word -> Word -> ByteString -> LS.ByteString
