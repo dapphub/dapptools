@@ -5,7 +5,7 @@ import Prelude hiding (Word, drop, length, take, head, tail)
 
 import EVM.Concrete
 import EVM.FeeSchedule
-import EVM.Keccak (keccak)--, word160Bytes, word256Bytes, rlpWord256, rlpBytes, rlpList)
+import EVM.Keccak (keccak)
 import EVM.Precompiled (execute)
 import EVM.Types
 
@@ -95,6 +95,9 @@ encodeLen offset bs | length bs <= 55 = prefix (length bs) <> bs
             prefix n = BS.singleton $ num $ offset + n
             lenLen = length lenBytes + 55
 
+rlpList :: [ByteString] -> ByteString
+rlpList n = rlpencode $ List $ fmap BS n
+
 signingData :: Int -> Transaction -> ByteString
 signingData chainId tx =
   if v == (chainId * 2 + 35) || v == (chainId * 2 + 36)
@@ -103,35 +106,35 @@ signingData chainId tx =
   where v          = fromIntegral (txV tx)
         to'        = case txToAddr tx of
           Just a  -> rlpWord160 a
-          Nothing -> BS (rlpencode (BS mempty))
-        normalData = rlpencode (List [rlpWord256 (txNonce tx),
+          Nothing -> rlpencode $ BS mempty
+        normalData = rlpList [rlpWord256 (txNonce tx),
                               rlpWord256 (txGasPrice tx),
                               rlpWord256 (txGasLimit tx),
                               to',
                               rlpWord256 (txValue tx),
-                              BS (rlpencode (BS (txData tx)))])
-        eip155Data = rlpencode (List [rlpWord256 (txNonce tx),
+                              rlpencode (BS (txData tx))]
+        eip155Data = rlpList [rlpWord256 (txNonce tx),
                               rlpWord256 (txGasPrice tx),
                               rlpWord256 (txGasLimit tx),
                               to',
                               rlpWord256 (txValue tx),
-                              BS (rlpencode (BS (txData tx))),
+                              rlpencode (BS (txData tx)),
                               rlpWord256 (fromIntegral chainId),
                               rlpWord256 0x0,
-                              rlpWord256 0x0])
+                              rlpWord256 0x0]
 
-rlpWord256 :: W256 -> RLP 
-rlpWord256 n = BS (rlpencode (BS $ word256Bytes n))
+rlpWord256 :: W256 -> ByteString
+rlpWord256 n = rlpencode $ BS $ word256Bytes n
 
-rlpWord160 :: Addr -> RLP 
-rlpWord160 n = BS (rlpencode (BS $ word160Bytes n))
+rlpWord160 :: Addr -> ByteString
+rlpWord160 n = rlpencode $ BS $ word160Bytes n
 
 newContractAddress :: Addr -> W256 -> Addr
-newContractAddress a n = num $ keccak $ rlpencode (List [rlpWord160 a, rlpWord256 n])
+newContractAddress a n = num $ keccak $ rlpList [rlpencode $ BS $ word160Bytes a, rlpWord256 n]
 
 newContractAddressCREATE2 :: Addr -> W256 -> ByteString -> Addr
-newContractAddressCREATE2 a s b =
-  fromIntegral (keccak $ BS.cons (fromIntegral (0xff :: Integer)) (BS.concat $ [word160Bytes a, word256Bytes $ num s, word256Bytes $ keccak b]))
+newContractAddressCREATE2 a s b = num $ keccak $ mconcat $
+  [BS.singleton 0xff, word160Bytes a, word256Bytes $ num s, word256Bytes $ keccak b]
 
 instance FromJSON Transaction where
   parseJSON (JSON.Object val) = do

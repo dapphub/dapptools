@@ -30,14 +30,13 @@ import qualified EVM.VMTest as VMTest
 import EVM (ExecMode(..))
 import EVM.Debug
 import EVM.Exec
-import EVM.Keccak (newContractAddress)
 import EVM.Solidity
 import EVM.Types hiding (word)
 import EVM.UnitTest (UnitTestOptions, coverageReport, coverageForUnitTestContract)
 import EVM.UnitTest (runUnitTestContract)
 import EVM.UnitTest (getParametersFromEnvironmentVariables, testNumber)
 import EVM.Dapp (findUnitTests, dappInfo)
-import EVM.Transaction (rlpdecode)
+import EVM.Transaction (rlpdecode, RLP, rlpencode, newContractAddress)
 
 import qualified EVM.Facts     as Facts
 import qualified EVM.Facts.Git as Git
@@ -138,8 +137,9 @@ data Command w
     }
   | Emacs
   | Version
-  | Rlpdecode -- RLP decode a string and print the result
-  { rlphexstring :: w ::: ByteString <?> "RLP encoded hexstring" }
+  | Rlp  -- RLP decode a string and print the result
+  { decode :: w ::: ByteString <?> "RLP encoded hexstring"
+  }
   deriving (Options.Generic)
 
 type URL = Text
@@ -226,8 +226,8 @@ main = do
               error ("Failed to read Solidity JSON for `" ++ theJson ++ "'")
     Emacs ->
       EVM.Emacs.main
-    Rlpdecode {} ->
-      case EVM.Transaction.rlpdecode $ hexByteString "--rlphexstring" $ strip0x $ rlphexstring cmd of
+    Rlp {} ->
+      case EVM.Transaction.rlpdecode $ hexByteString "--decode" $ strip0x $ decode cmd of
         Nothing -> error("Malformed RLP string")
         Just c -> putStrLn $ show c
 
