@@ -38,7 +38,26 @@ file=$(jshon <<<"$meta" -e settings -e compilationTarget -k)
 optimized=$(jshon <<<"$meta" -e settings -e optimizer -e enabled -u)
 runs=$(jshon <<<"$meta" -e settings -e optimizer -e runs -u)
 
-version=v"$version"
+# Etherscan requires leading 'v' which isn't in the artifacts
+version="v${version}"
+
+# Get the list of supported solc versions and compare
+# Etherscan uses the js solc, which is not guaranteed to match the C distribution signature
+version_list=$(curl -fsS "https://raw.githubusercontent.com/ethereum/solc-bin/gh-pages/bin/list.txt")
+
+# There have been a couple of instances where the solc js release used by
+#   Etherscan does not match the tag of the C distributions. 
+if [[ $version_list != *"$version"* ]]; then
+  regex="(.+commit+.)"
+  # Version incompatible with js release
+  echo "Compiler version $version is not compatible with etherscan"
+  if [[ $version =~ $regex ]]; then
+    version_proto=${BASH_REMATCH[1]}
+    version=$(echo "$version_list" | grep -o "${version_proto}\{8\}")
+    echo "Attempting ${version}"
+  fi
+fi
+
 if [[ "$optimized" = "true" ]]; then
   optimized=1
 else
@@ -47,7 +66,7 @@ fi
 
 params=(
   "module=contract" "action=verifysourcecode"
-  "contractname=$name" "contractaddress=$address}"
+  "contractname=$name" "contractaddress=$address"
   "optimizationUsed=$optimized" "runs=$runs"
   "apikey=$ETHERSCAN_API_KEY"
 )
@@ -65,44 +84,35 @@ query=$(printf "&%s" "${params[@]}")
 
 count=0
 while [ $count -lt 5 ]; do
+  sleep 10
+
   response=$(curl -fsS "$ETHERSCAN_API_URL" -d "$query" \
   --data-urlencode "compilerversion=$version" \
   --data-urlencode "sourceCode@"<(echo "$source") -X POST)
 
   status=$(jshon <<<"$response" -e status -u)
-  #message=$(jshon <<<"$response" -e message -u)
   guid=$(jshon <<<"$response" -e result -u)
+  message=$(jshon <<<"$response" -e message -u)
   count=$((count + 1))
 
-  [[ $guid = "Contract source code already verified" ]] && {
-    echo >&2 "$guid"
-    echo >&2 "Go to $ETHERSCAN_URL/$2#code"
-    exit 1
-  }
   [[ $status = 1 ]] && break;
-  sleep 5
 done
 
 [[ $status = 0 ]] && {
   echo >&2 "There was an error verifying this contract."
-  echo >&2 "Response: $guid"
+  echo >&2 "Response: $message"
   exit 1
 }
 
-count=0
-while [ $count -lt 5 ]; do
-  sleep 10
-  response=$(curl -fsS "$ETHERSCAN_API_URL" \
-  -d "module=contract&action=checkverifystatus&guid=$guid")
+sleep 20
+response=$(curl -fsS "$ETHERSCAN_API_URL" \
+-d "module=contract&action=checkverifystatus&guid=$guid")
 
-  status=$(jshon <<<"$response" -e status -u)
-  # message=$(jshon <<<"$response" -e message -u)
-  result=$(jshon <<<"$response" -e result -u)
+status=$(jshon <<<"$response" -e status -u)
+result=$(jshon <<<"$response" -e result -u)
 
-  [[ $status = 1 ]] && {
-    echo >&2 "$result"
-    echo >&2 "Go to $ETHERSCAN_URL/$2#code"
-    exit 0
-  }
-  count=$((count + 1))
-done
+[[ $status = 1 ]] && {
+  echo >&2 "$result"
+  echo >&2 "Go to $ETHERSCAN_URL/$2#code"
+  exit 0
+}
