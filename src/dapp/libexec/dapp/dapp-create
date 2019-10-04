@@ -19,13 +19,12 @@ done
 bin=$DAPP_OUT/${1?missing contract name}.bin
 type=$(seth --abi-constructor <"$DAPP_OUT/$1.abi")
 address=$(set -x; seth send --create "$bin" "${type/constructor/${1##*/}}" "${@:2}")
-# TODO(cmooney): parse this out of $DAPP_JSON file
-path="src/value.sol"
 
 [[ $DAPP_VERIFY_CONTRACT ]] && {
   echo >&2 "Verifying contract at $address"
+  path=$(sed 's|\/|/|g' $DAPP_JSON | sed "s/.*\"\(.*:${1}\)\".*/\1/g")
   sleep 5
-  dapp verify-contract "${path}:${1}" "$address" || true
+  dapp verify-contract "$path" "$address" || true
 }
 
 echo "$address"
