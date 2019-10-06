@@ -1,4 +1,5 @@
-#!/usr/bin/env bash
+#@IgnoreInspection BashAddShebang
+l#!/usr/bin/env bash
 set -ex
 
 [[ $ETHERSCAN_API_KEY ]] || {
@@ -38,10 +39,24 @@ file=$(jshon <<<"$meta" -e settings -e compilationTarget -k)
 optimized=$(jshon <<<"$meta" -e settings -e optimizer -e enabled -u)
 runs=$(jshon <<<"$meta" -e settings -e optimizer -e runs -u)
 
-# TODO(cmooney): allow this to be changed in case solc version isn't supported
-# by etherscan.
-# version=v"$version"
-version="v0.5.11+commit.c082d0b4"
+# Etherscan requires leading 'v'
+version="v${version}"
+# version="0.5.11+commit.22be8592"
+# Get the list of supported solc versions and compare
+# Etherscan uses the js solc, which is not guaranteed to match the C distribution signature
+version_list=$(curl -fsS "https://raw.githubusercontent.com/ethereum/solc-bin/gh-pages/bin/list.txt")
+
+if [[ $version_list != *"$version"* ]]; then
+  regex="(.+commit+.)"
+  # Version incompatible with js release
+  echo "Compiler version $version is not compatible with etherscan"
+  if [[ $version =~ $regex ]]; then
+    version_proto=${BASH_REMATCH[1]}
+    version=$(echo $version_list | grep -o "${version_proto}\{8\}")
+    echo "Attempting ${version}"
+  fi
+fi
+
 if [[ "$optimized" = "true" ]]; then
   optimized=1
 else
