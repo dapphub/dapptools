@@ -1,5 +1,4 @@
-#@IgnoreInspection BashAddShebang
-l#!/usr/bin/env bash
+!/usr/bin/env bash
 set -ex
 
 [[ $ETHERSCAN_API_KEY ]] || {
