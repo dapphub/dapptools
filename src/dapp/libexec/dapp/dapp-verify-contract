@@ -38,13 +38,15 @@ file=$(jshon <<<"$meta" -e settings -e compilationTarget -k)
 optimized=$(jshon <<<"$meta" -e settings -e optimizer -e enabled -u)
 runs=$(jshon <<<"$meta" -e settings -e optimizer -e runs -u)
 
-# Etherscan requires leading 'v'
+# Etherscan requires leading 'v' which isn't in the artifacts
 version="v${version}"
-# version="0.5.11+commit.22be8592"
+
 # Get the list of supported solc versions and compare
 # Etherscan uses the js solc, which is not guaranteed to match the C distribution signature
 version_list=$(curl -fsS "https://raw.githubusercontent.com/ethereum/solc-bin/gh-pages/bin/list.txt")
 
+# There have been a couple of instances where the solc js release used by
+#   Etherscan does not match the tag of the C distributions. 
 if [[ $version_list != *"$version"* ]]; then
   regex="(.+commit+.)"
   # Version incompatible with js release
