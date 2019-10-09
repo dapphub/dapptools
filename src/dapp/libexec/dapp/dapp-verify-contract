@@ -53,7 +53,7 @@ if [[ $version_list != *"$version"* ]]; then
   echo "Compiler version $version is not compatible with etherscan"
   if [[ $version =~ $regex ]]; then
     version_proto=${BASH_REMATCH[1]}
-    version=$(echo $version_list | grep -o "${version_proto}\{8\}")
+    version=$(echo "$version_list" | grep -o "${version_proto}\{8\}")
     echo "Attempting ${version}"
   fi
 fi
