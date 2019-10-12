@@ -261,8 +261,11 @@ abiTailSize x =
         AbiBytesDynamic s -> 32 + roundTo256Bits (BS.length s)
         AbiArrayDynamic _ xs -> 32 + Vector.sum (Vector.map abiValueSize xs)
         AbiArray _ _ xs -> Vector.sum (Vector.map abiValueSize xs)
-        AbiTuple v -> sum (abiValueSize <$> v)
+        AbiTuple v -> sum (headSize <$> v) + sum (abiTailSize <$> v)
         _ -> error "impossible"
+  where headSize y = if abiKind (abiValueType y) == Static
+                     then abiValueSize y
+                     else 32
 
 abiHeadSize :: AbiValue -> Int
 abiHeadSize x =
