@@ -10,10 +10,15 @@ find "$DAPP_SRC" -name '*.sol' | while read -r x; do
   dir=${x%\/*}
   dir=${dir#$DAPP_SRC}
   dir=${dir#/}
-  mkdir -p "$DAPP_OUT/$dir"
-  (set -x; solc --overwrite $REMAPPINGS --allow-paths $DAPP_SRC $solcFlags --abi --bin --bin-runtime -o "$DAPP_OUT/$dir" "$x")
   json_file=$DAPP_OUT/$dir/${x##*/}.json
+  mkdir -p "$DAPP_OUT/$dir"
   (set -x; solc $REMAPPINGS --allow-paths $DAPP_SRC $solcFlags $jsonopts "$x" >"$json_file")
+  if [ "$flatten" == 1 ]; then
+    flat_file="$DAPP_OUT/$dir/${x##*/}.flat"
+    (set -x; hevm flatten --source-file "$x" --json-file "$json_file" >"$flat_file")
+    x="$flat_file"
+  fi
+  (set -x; solc --overwrite $REMAPPINGS --allow-paths $DAPP_SRC $solcFlags --abi --bin --bin-runtime -o "$DAPP_OUT/$dir" "$x")
 done
 
 mkdir lib

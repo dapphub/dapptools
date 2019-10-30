@@ -19,12 +19,14 @@ in
     , deps ? []
     , solc ? pkgs.solc
     , test-hevm ? pkgs.dapp2.test-hevm
+    , hevm ? pkgs.hevm
     , solcFlags ? ""
+    , flatten ? false
     , ...
     } @ attrs:
       pkgs.stdenv.mkDerivation (rec {
         inherit doCheck;
-        buildInputs = [ test-hevm solc ];
+        buildInputs = [ test-hevm solc ] ++ (if flatten then [hevm] else []);
         passthru = {
           remappings = remappings deps;
           libPaths = libPaths deps;
