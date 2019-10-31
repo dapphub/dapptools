@@ -37,9 +37,9 @@ import Data.ByteString (ByteString)
 import Data.Foldable (foldl', toList)
 import Data.List (sort, nub)
 import Data.Map (Map, (!))
-import Data.Maybe (mapMaybe, isJust)
+import Data.Maybe (mapMaybe, isJust, catMaybes)
 import Data.Monoid ((<>))
-import Data.Text (Text, unpack, pack)
+import Data.Text (Text, unpack, pack, intercalate)
 import Data.Text.Encoding (encodeUtf8)
 import Text.Read (readMaybe)
 
@@ -140,15 +140,43 @@ flatten dapp target = do
 -- Construct a new Solidity version pragma for the highest mentioned version
 -- given a list of source file ASTs.
 maximalPragma :: [Value] -> Text
-maximalPragma asts =
-  case mapMaybe versions asts of
-    [] -> error "no Solidity version pragmas in any source files"
-    xs ->
-      "pragma solidity "
-        <> pack (show (rangeIntersection xs))
-        <> ";\n"
+maximalPragma asts = (
+    case mapMaybe versions asts of
+      [] -> error "no Solidity version pragmas in any source files"
+      xs ->
+        "pragma solidity "
+          <> pack (show (rangeIntersection xs))
+          <> ";\n"
+  )
+  <> (
+    mconcat . nub . sort . fmap (\ast ->
+      mconcat $ fmap
+        (\xs -> "pragma "
+          <> intercalate " " [x | String x <- xs]
+          <> ";\n")
+        (otherPragmas ast)
+    )
+  ) asts
+
 
   where
+    isVersionPragma :: [Value] -> Bool
+    isVersionPragma =
+      \case
+        String "solidity" : _ -> True
+        _ -> False
+
+    pragmaComponents :: Value -> [[Value]]
+    pragmaComponents ast = components
+      where
+        ps :: [Value]
+        ps = filter (nodeIs "PragmaDirective") (universe ast)
+
+        components :: [[Value]]
+        components = catMaybes $ fmap
+          ((fmap toList) . preview (key "attributes" . key "literals" . _Array))
+          ps
+
     -- Simple way to combine many SemVer ranges.  We don't actually
     -- optimize these boolean expressions, so the resulting pragma
     -- might be redundant, like ">=0.4.23 >=0.5.0 <0.6.0".
@@ -160,29 +188,25 @@ maximalPragma asts =
     versions :: Value -> Maybe SemVerRange
     versions ast = fmap grok components
       where
-        pragma :: Maybe Value
-        pragma =
-          case filter (nodeIs "PragmaDirective") (universe ast) of
-            [x] -> Just x
+        components :: Maybe [Value]
+        components =
+          case filter isVersionPragma (pragmaComponents ast) of
+            [_:xs] -> Just xs
             []  -> Nothing
             _   -> error "multiple version pragmas"
 
-        components :: Maybe [Value]
-        components = fmap toList
-          (pragma >>= preview (key "attributes" . key "literals" . _Array))
-
         grok :: [Value] -> SemVerRange
-        grok = \case
-          String "solidity" : xs ->
-            let
-              rangeText = mconcat [x | String x <- xs]
-            in
-              case parseSemVerRange rangeText of
-                Right r -> r
-                Left _ ->
-                  error ("failed to parse SemVer range " ++ show rangeText)
-          x ->
-            error ("unrecognized pragma: " ++ show x)
+        grok xs =
+          let
+            rangeText = mconcat [x | String x <- xs]
+          in
+            case parseSemVerRange rangeText of
+              Right r -> r
+              Left _ ->
+                error ("failed to parse SemVer range " ++ show rangeText)
+
+    otherPragmas :: Value -> [[Value]]
+    otherPragmas = (filter (not . isVersionPragma)) . pragmaComponents
 
 nodeIs :: Text -> Value -> Bool
 nodeIs t x = isSourceNode && hasRightName
