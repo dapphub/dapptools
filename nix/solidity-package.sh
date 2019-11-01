@@ -13,7 +13,7 @@ find "$DAPP_SRC" -name '*.sol' | while read -r x; do
   json_file=$DAPP_OUT/$dir/${x##*/}.json
   mkdir -p "$DAPP_OUT/$dir"
   (set -x; solc $REMAPPINGS --allow-paths $DAPP_SRC $solcFlags $jsonopts "$x" >"$json_file")
-  if [ "$flatten" == 1 ]; then
+  if [[ $flatten == 1 && ! $x =~ \.t(\.[a-z0-9]+)*\.sol$ ]]; then
     flat_file="$DAPP_OUT/$dir/${x##*/}.flat"
     (set -x; hevm flatten --source-file "$x" --json-file "$json_file" >"$flat_file")
     x="$flat_file"
