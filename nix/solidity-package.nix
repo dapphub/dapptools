@@ -26,7 +26,7 @@ in
     } @ attrs:
       pkgs.stdenv.mkDerivation (rec {
         inherit doCheck;
-        buildInputs = [ test-hevm solc ] ++ (if flatten then [hevm] else []);
+        buildInputs = [ test-hevm solc ] ++ pkgs.lib.optional flatten hevm;
         passthru = {
           remappings = remappings deps;
           libPaths = libPaths deps;
