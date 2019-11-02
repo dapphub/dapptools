@@ -1,4 +1,9 @@
 # hevm changelog
+## 0.35 - 2019-11-02
+ - Merkle Patricia trie support [280](https://github.com/dapphub/dapptools/pull/280)
+ - RLP encoding and decoding functions [280](https://github.com/dapphub/dapptools/pull/280)
+ - Extended support for Solidity ABI encoding [259](https://github.com/dapphub/dapptools/pull/259)
+ - Bug fixes surrounding unit tests and gas accounting (https://github.com/dapphub/dapptools/commit/574ef401d3e744f2dcf994da056810cf69ef84fe, https://github.com/dapphub/dapptools/commit/5257574dd9df14edc29410786b75e9fb9c59069f)
 
 ## 0.34 - 2019-08-28
  - handle new solc bzzr metadata in codehash for source map
