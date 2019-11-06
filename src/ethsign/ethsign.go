@@ -44,12 +44,8 @@ func rawSignHash(data []byte) []byte {
 func getWallets(c *cli.Context, defaultKeyStores cli.StringSlice) []accounts.Wallet {
   backends := []accounts.Backend{}
 
-  var paths []string
-  if len(c.StringSlice("key-store")) == 0 {
-    paths = defaultKeyStores
-  } else {
-    paths = c.StringSlice("key-store")
-  }
+  paths := c.StringSlice("key-store")
+
   for _, x := range(paths) {
     ks := keystore.NewKeyStore(
       x, keystore.StandardScryptN, keystore.StandardScryptP)
@@ -207,6 +203,7 @@ func main() {
           Name: "key-store",
           Usage: "path to key store",
           EnvVar: "ETH_KEYSTORE",
+          Value: &defaultKeyStores,
         },
       },
       Action: func(c *cli.Context) error {
@@ -244,6 +241,7 @@ func main() {
           Name: "key-store",
           Usage: "path to key store",
           EnvVar: "ETH_KEYSTORE",
+          Value: &defaultKeyStores,
         },
         cli.BoolFlag{
           Name: "create",
@@ -363,6 +361,7 @@ func main() {
           Name:   "key-store",
           Usage:  "path to key store",
           EnvVar: "ETH_KEYSTORE",
+          Value: &defaultKeyStores,
         },
         cli.StringFlag{
           Name:   "from",
