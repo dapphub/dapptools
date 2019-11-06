@@ -90,7 +90,7 @@ Scan:
     } else if x.URL().Scheme == "ledger" {
       x.Open("")
       for j := 0; j <= 3; j++ {
-        pathstr := fmt.Sprintf("m/44'/60'/0'/%d", j)
+        pathstr := fmt.Sprintf(c.String("hd-path") + "/%d", j)
         path, _ := accounts.ParseDerivationPath(pathstr)
         y, err := x.Derive(path, true)
         if err != nil {
@@ -170,6 +170,7 @@ func recover(data []byte, sig hexutil.Bytes, noPrefix bool) (common.Address, err
 }
 
 func main() {
+  var defaultHDPath = "m/44'/60'/0'" // aka "ledger legacy"
   var defaultKeyStores cli.StringSlice
   if runtime.GOOS == "darwin" {
     defaultKeyStores = []string{
@@ -205,6 +206,12 @@ func main() {
           EnvVar: "ETH_KEYSTORE",
           Value: &defaultKeyStores,
         },
+        cli.StringFlag{
+          Name: "hd-path",
+          Usage: "hd derivation path",
+          EnvVar: "ETH_HDPATH",
+          Value: defaultHDPath,
+        },
       },
       Action: func(c *cli.Context) error {
         wallets := getWallets(c, defaultKeyStores)
@@ -216,7 +223,7 @@ func main() {
           } else if x.URL().Scheme == "ledger" {
             x.Open("")
             for j := 0; j <= 3; j++ {
-              pathstr := fmt.Sprintf("m/44'/60'/0'/%d", j)
+              pathstr := fmt.Sprintf(c.String("hd-path") + "/%d", j)
               path, _ := accounts.ParseDerivationPath(pathstr)
               z, err := x.Derive(path, false)
               if err != nil {
@@ -242,6 +249,12 @@ func main() {
           Usage: "path to key store",
           EnvVar: "ETH_KEYSTORE",
           Value: &defaultKeyStores,
+        },
+        cli.StringFlag{
+          Name: "hd-path",
+          Usage: "hd derivation path",
+          EnvVar: "ETH_HDPATH",
+          Value: defaultHDPath,
         },
         cli.BoolFlag{
           Name: "create",
@@ -363,6 +376,12 @@ func main() {
           EnvVar: "ETH_KEYSTORE",
           Value: &defaultKeyStores,
         },
+        cli.StringFlag{
+					Name: "hd-path",
+					Usage: "hd derivation path",
+					EnvVar: "ETH_HDPATH",
+					Value: defaultHDPath,
+				},
         cli.StringFlag{
           Name:   "from",
           Usage:  "address of signing account",
