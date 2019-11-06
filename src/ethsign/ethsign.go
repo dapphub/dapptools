@@ -157,16 +157,11 @@ func recover(data []byte, sig hexutil.Bytes, noPrefix bool) (common.Address, err
     hash = signHash(data)
   }
 
-  rpk, err := crypto.Ecrecover(hash, sig)
+  rpk, err := crypto.SigToPub(hash, sig)
   if err != nil {
     return common.Address{}, err
   }
-  pubKey, err := crypto.UnmarshalPubkey(rpk)
-  if err != nil {
-    return common.Address{}, fmt.Errorf("invalid public key")
-  }
-  recoveredAddr := crypto.PubkeyToAddress(*pubKey)
-  return recoveredAddr, nil
+  return crypto.PubkeyToAddress(*rpk), nil
 }
 
 func main() {
@@ -611,7 +606,7 @@ func main() {
           return cli.NewExitError("ethsign: failed to read private key", 1)
         }
 
-	acct, err := ks.ImportECDSA(privatekey, string(passphraseBytes))
+  acct, err := ks.ImportECDSA(privatekey, string(passphraseBytes))
         if err != nil {
           fmt.Fprintf(os.Stderr, "keystore error: %v\n", err)
           return cli.NewExitError("ethsign: failed to import key", 1)
