@@ -89,7 +89,7 @@ Scan:
       }
     } else if x.URL().Scheme == "ledger" {
       x.Open("")
-      for j := 0; j <= 3; j++ {
+      for j := 0; j <= c.Int("n"); j++ {
         pathstr := fmt.Sprintf(c.String("hd-path") + "/%d", j)
         path, _ := accounts.ParseDerivationPath(pathstr)
         y, err := x.Derive(path, true)
@@ -212,6 +212,11 @@ func main() {
           EnvVar: "ETH_HDPATH",
           Value: defaultHDPath,
         },
+        cli.IntFlag{
+          Name: "n",
+          Usage: "maximum ledger index",
+          Value: 5,
+        },
       },
       Action: func(c *cli.Context) error {
         wallets := getWallets(c, defaultKeyStores)
@@ -222,7 +227,7 @@ func main() {
             }
           } else if x.URL().Scheme == "ledger" {
             x.Open("")
-            for j := 0; j <= 3; j++ {
+            for j := 0; j <= c.Int("n"); j++ {
               pathstr := fmt.Sprintf(c.String("hd-path") + "/%d", j)
               path, _ := accounts.ParseDerivationPath(pathstr)
               z, err := x.Derive(path, false)
@@ -255,6 +260,11 @@ func main() {
           Usage: "hd derivation path",
           EnvVar: "ETH_HDPATH",
           Value: defaultHDPath,
+        },
+        cli.IntFlag{
+          Name: "n",
+          Usage: "maximum ledger index",
+          Value: 5,
         },
         cli.BoolFlag{
           Name: "create",
@@ -377,11 +387,16 @@ func main() {
           Value: &defaultKeyStores,
         },
         cli.StringFlag{
-					Name: "hd-path",
-					Usage: "hd derivation path",
-					EnvVar: "ETH_HDPATH",
-					Value: defaultHDPath,
-				},
+          Name: "hd-path",
+          Usage: "hd derivation path",
+          EnvVar: "ETH_HDPATH",
+          Value: defaultHDPath,
+        },
+        cli.IntFlag{
+          Name: "n",
+          Usage: "maximum ledger index",
+          Value: 5,
+        },
         cli.StringFlag{
           Name:   "from",
           Usage:  "address of signing account",
