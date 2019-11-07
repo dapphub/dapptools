@@ -18,7 +18,7 @@ import EVM.Demand (demand)
 -- The AST is a deep JSON structure, so we use Aeson and Lens.
 import Control.Lens (preview, view, universe)
 import Data.Aeson (Value (String))
-import Data.Aeson.Lens (key, _String, _Array)
+import Data.Aeson.Lens (key, _String, _Array, _Integer)
 
 -- We use the FGL graph library for the topological sort.
 -- (We use four FGL functions and they're all in different modules!)
@@ -37,7 +37,7 @@ import Data.ByteString (ByteString)
 import Data.Foldable (foldl', toList)
 import Data.List (sort, nub)
 import Data.Map (Map, (!))
-import Data.Maybe (mapMaybe, isJust, catMaybes)
+import Data.Maybe (mapMaybe, isJust, catMaybes, fromJust)
 import Data.Monoid ((<>))
 import Data.Text (Text, unpack, pack, intercalate)
 import Data.Text.Encoding (encodeUtf8)
@@ -46,6 +46,10 @@ import Text.Read (readMaybe)
 import qualified Data.Map as Map
 import qualified Data.Text as Text
 import qualified Data.ByteString as BS
+
+--- XXX: debugging
+import Debug.Trace (trace)
+
 
 -- Define an alias for FGL graphs with text nodes and unlabeled edges.
 type FileGraph = Fgl.Gr Text ()
@@ -97,6 +101,50 @@ flatten dapp target = do
     asts :: Map Text Value
     asts = view (dappSources . sourceAsts) dapp
 
+    topScopeIds :: [Integer]
+    topScopeIds = mconcat $ fmap f $ Map.elems asts
+      where
+        id' = preview (key "id" . _Integer)
+        f ast =
+          [ fromJust' "no id for SourceUnit" $ id' node
+          | node <- universe ast
+          , nodeIs "SourceUnit" node
+          ]
+
+    contractsAndStructsToRename :: [Integer]
+    contractsAndStructsToRename = mconcat $ fmap f $ Map.elems asts
+      where
+        scope = preview (key "attributes" . key "scope" . _Integer)
+        id' = preview (key "id" . _Integer)
+        p x = (nodeIs "ContractDefinition" x || nodeIs "StructDefinition" x)
+          && (fromJust' "line:122 contract/struct scope" $ scope x) `elem` topScopeIds
+        f ast =
+          [ fromJust' "no id for top scoped contract or struct" $ id' node
+          | node <- universe ast
+          , p node
+          ]
+
+    contractStructs :: [(Integer, (Integer, Text))]
+    contractStructs = mconcat $ fmap f $ Map.elems asts
+      where
+        scope = preview (key "attributes" . key "scope" . _Integer)
+        cname = preview (key "attributes" . key "canonicalName" . _String)
+        id' = preview (key "id" . _Integer)
+        p x = (nodeIs "StructDefinition" x)
+          && (fromJust' "line:137 nested struct" $ scope x) `elem` contractsAndStructsToRename
+        f ast =
+          [ let
+              id'' = fromJust' "no id for nested struct" $ id' node
+              cname' = fromJust'
+                ("no canonical name of nested struct with id:" ++ show id'') $ cname node
+              ref = fromJust'
+                ("no scope of nested struct with id:" ++ show id'') $ scope node
+            in
+              (id'', (ref, cname'))
+          | node <- universe ast
+          , p node
+          ]
+
   -- We use the target source file to make a relevant subgraph
   -- with only files transitively depended on from the target.
   case Map.lookup target indices of
@@ -125,7 +173,13 @@ flatten dapp target = do
           src <- BS.readFile (unpack path)
           pure $ mconcat
             [ "////// ", encodeUtf8 path, "\n"
-            , stripImportsAndPragmas src (asts ! path), "\n"
+            -- Fold over a list of source transforms
+            , fst
+                (prefixContractAst
+                  contractsAndStructsToRename
+                  contractStructs
+                  (stripImportsAndPragmas (src, 0) (asts ! path))
+                  (asts ! path)), "\n"
             ]
 
       -- Force all evaluation before any printing happens, to avoid
@@ -216,29 +270,20 @@ nodeIs t x = isSourceNode && hasRightName
     hasRightName =
       Just t == preview (key "name" . _String) x
 
-stripImportsAndPragmas :: ByteString -> Value -> ByteString
-stripImportsAndPragmas bs ast = stripAstNodes bs ast p
+stripImportsAndPragmas :: (ByteString, Int) -> Value -> (ByteString, Int)
+stripImportsAndPragmas bso ast = stripAstNodes bso ast p
   where
     p x = nodeIs "ImportDirective" x || nodeIs "PragmaDirective" x
 
-stripAstNodes :: ByteString -> Value -> (Value -> Bool) -> ByteString
-stripAstNodes bs ast p =
+stripAstNodes :: (ByteString, Int)-> Value -> (Value -> Bool) -> (ByteString, Int)
+stripAstNodes bso ast p =
   cutRanges [sourceRange node | node <- universe ast, p node]
 
   where
-    -- Parses the `src` field of an AST node into a pair of byte indices.
-    sourceRange :: Value -> (Int, Int)
-    sourceRange v =
-      case preview (key "src" . _String) v of
-        Just (Text.splitOn ":" -> [readAs -> Just i, readAs -> Just n, _]) ->
-          (i, i + n)
-        _ ->
-          error "internal error: no source position for AST node"
-
     -- Removes a set of non-overlapping ranges from a bytestring
     -- by commenting them out.
-    cutRanges :: [(Int, Int)] -> ByteString
-    cutRanges (sort -> rs) = fst (foldl' f (bs, 0) rs)
+    cutRanges :: [(Int, Int)] -> (ByteString, Int)
+    cutRanges (sort -> rs) = foldl' f bso rs
       where
         f (bs', n) (i, j) =
           ( cut bs' (i + n) (j + n)
@@ -252,3 +297,96 @@ stripAstNodes bs ast p =
 
 readAs :: Read a => Text -> Maybe a
 readAs = readMaybe . Text.unpack
+
+prefixContractAst :: [Integer] -> [(Integer, (Integer, Text))] -> (ByteString, Int) -> Value -> (ByteString, Int)
+prefixContractAst castr cs bso ast = prefixAstNodes
+  where
+    refDec = preview (key "attributes" . key "referencedDeclaration" . _Integer)
+    name = preview (key "attributes" . key "name" . _String)
+    id' = preview (key "id" . _Integer)
+
+    p x = (nodeIs "ContractDefinition" x || nodeIs "StructDefinition" x)
+      && (fromJust' "id of any" $ id' x) `elem` castr
+
+    p' x =
+      (nodeIs "Identifier" x || nodeIs "UserDefinedTypeName" x)
+        && (fromJust' "refDec of ident/userdef" $ refDec x) `elem` castr
+
+    p'' x =
+      (nodeIs "Identifier" x || nodeIs "UserDefinedTypeName" x)
+      && (let
+          refs = fmap fst cs
+          ref = fromJust' "refDec of ident/userdef" $ refDec x
+          n = fromJust' "name of ident/userdef" $ name x
+          cn = fromJust' "no match for lookup in nested structs" $ lookup ref cs
+        in
+          -- XXX: comparing canonical name with name of nested structs not super great
+          ref `elem` refs && n == snd cn
+      )
+
+    p''' x = p x || p' x || p'' x
+
+    prefixAstNodes :: (ByteString, Int)
+    prefixAstNodes  =
+      cutRanges [(sourceRange node, sourceId node) | node <- universe ast, p''' node]
+
+    -- Parses the `id` and `attributes.referencedDeclaration` field of an AST node
+    -- into a pair of byte indices.
+    -- XXX: these manual offsets have to be replaced by looking at the bytes
+    sourceId :: Value -> (Int, Integer)
+    sourceId v =
+      if (not $ p v || p' v) &&  p'' v then (
+        let
+          ref = fromJust' "refDec of nested struct ref" $ refDec v
+          cn = fromJust' "no match for lookup in nested structs" $ lookup ref cs
+        in
+          (0, fst cn)
+      ) else
+        fromJust' "internal error: no id found for contract reference" x
+
+      where
+        x :: Maybe (Int, Integer)
+        x = case preview (key "name") v of
+          Just (String "ContractDefinition") ->
+            fmap ((,) 9) $ id' v
+          Just (String "StructDefinition") ->
+            fmap ((,) 7) $ id' v
+          Just (String t)
+            | t `elem` ["UserDefinedTypeName", "Identifier"] ->
+              fmap ((,) 0) $ refDec v
+            | otherwise ->
+              error "internal error: not a contract reference"
+          _ ->
+            error "internal error: not a contract reference"
+
+    -- Prefix a set of non-overlapping ranges from a bytestring
+    -- by commenting them out.
+    cutRanges :: [((Int, Int), (Int, Integer))] -> (ByteString, Int)
+    cutRanges (sort -> rs) = foldl' f bso rs
+      where
+        f (bs', n) ((i, _), (o, t)) =
+          let
+            t' = "_" <> (pack $ show t) <> "_"
+          in
+            ( prefix t' bs' (i + n + o)
+            , n + Text.length t' )
+
+    -- Comments out the bytes between two indices from a bytestring.
+    prefix :: Text -> ByteString -> Int -> ByteString
+    prefix t x i =
+      let (a, b) = BS.splitAt i x
+      in a <> encodeUtf8 t <> b
+
+-- Parses the `src` field of an AST node into a pair of byte indices.
+sourceRange :: Value -> (Int, Int)
+sourceRange v =
+  case preview (key "src" . _String) v of
+    Just (Text.splitOn ":" -> [readAs -> Just i, readAs -> Just n, _]) ->
+      (i, i + n)
+    _ ->
+      error "internal error: no source position for AST node"
+
+fromJust' :: String -> Maybe a -> a
+fromJust' msg = \case
+  Just x -> x
+  Nothing -> error $ "no match in fromJust' " ++ msg
