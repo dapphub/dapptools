@@ -36,8 +36,8 @@ import Control.Monad (forM)
 import Data.ByteString (ByteString)
 import Data.Foldable (foldl', toList)
 import Data.List (sort, nub)
-import Data.Map (Map, (!))
-import Data.Maybe (mapMaybe, isJust, catMaybes, fromJust)
+import Data.Map (Map, (!), (!?))
+import Data.Maybe (mapMaybe, isJust, catMaybes, fromMaybe)
 import Data.Monoid ((<>))
 import Data.Text (Text, unpack, pack, intercalate)
 import Data.Text.Encoding (encodeUtf8)
@@ -111,15 +111,22 @@ flatten dapp target = do
           , nodeIs "SourceUnit" node
           ]
 
-    contractsAndStructsToRename :: [Integer]
-    contractsAndStructsToRename = mconcat $ fmap f $ Map.elems asts
+    contractsAndStructsToRename :: Map Integer Text
+    contractsAndStructsToRename =
+      Map.fromList
+        $ indexed [ x | x <- xs, (snd x) `elem` xs' ]
       where
+        xs = mconcat $ fmap f $ Map.elems asts
+        xs' = repeated $ fmap snd xs
         scope = preview (key "attributes" . key "scope" . _Integer)
+        name = preview (key "attributes" . key "name" . _String)
         id' = preview (key "id" . _Integer)
         p x = (nodeIs "ContractDefinition" x || nodeIs "StructDefinition" x)
-          && (fromJust' "line:122 contract/struct scope" $ scope x) `elem` topScopeIds
+          && (fromJust' "no contract/struct scope" $ scope x) `elem` topScopeIds
         f ast =
-          [ fromJust' "no id for top scoped contract or struct" $ id' node
+          [ ( fromJust' "no id for top scoped contract or struct" $ id' node
+            , fromJust' "no id for top scoped contract or struct" $ name node
+            )
           | node <- universe ast
           , p node
           ]
@@ -131,7 +138,7 @@ flatten dapp target = do
         cname = preview (key "attributes" . key "canonicalName" . _String)
         id' = preview (key "id" . _Integer)
         p x = (nodeIs "StructDefinition" x)
-          && (fromJust' "line:137 nested struct" $ scope x) `elem` contractsAndStructsToRename
+          && (fromJust' "line:137 nested struct" $ scope x) `Map.member` contractsAndStructsToRename
         f ast =
           [ let
               id'' = fromJust' "no id for nested struct" $ id' node
@@ -298,29 +305,43 @@ stripAstNodes bso ast p =
 readAs :: Read a => Text -> Maybe a
 readAs = readMaybe . Text.unpack
 
-prefixContractAst :: [Integer] -> [(Integer, (Integer, Text))] -> (ByteString, Int) -> Value -> (ByteString, Int)
+prefixContractAst :: Map Integer Text -> [(Integer, (Integer, Text))] -> (ByteString, Int) -> Value -> (ByteString, Int)
 prefixContractAst castr cs bso ast = prefixAstNodes
   where
+    bs = fst bso
     refDec = preview (key "attributes" . key "referencedDeclaration" . _Integer)
     name = preview (key "attributes" . key "name" . _String)
     id' = preview (key "id" . _Integer)
 
+    -- Is node top level defined type (contract/interface/struct)
     p x = (nodeIs "ContractDefinition" x || nodeIs "StructDefinition" x)
-      && (fromJust' "id of any" $ id' x) `elem` castr
+      && (fromJust' "id of any" $ id' x) `Map.member` castr
 
+    -- Is node identifier that is referencing top level defined type
     p' x =
       (nodeIs "Identifier" x || nodeIs "UserDefinedTypeName" x)
-        && (fromJust' "refDec of ident/userdef" $ refDec x) `elem` castr
+        && (fromJust' "refDec of ident/userdef" $ refDec x) `Map.member` castr
 
+    -- Is node identifier that is referencing a struct nested in a top level
+    -- defined contract/interface
     p'' x =
       (nodeIs "Identifier" x || nodeIs "UserDefinedTypeName" x)
-      && (let
+      && (isJust $ name x)
+      && (
+        let
           refs = fmap fst cs
-          ref = fromJust' "refDec of ident/userdef" $ refDec x
-          n = fromJust' "name of ident/userdef" $ name x
-          cn = fromJust' "no match for lookup in nested structs" $ lookup ref cs
+          i = fromJust' "no id for ident/userdef" $ id' x
+          ref = fromJust' ("no refDec for ident/userdef: " ++ show i) $ refDec x
+          n = fromJust' ("no name for ident/userdef: " ++ show i) $ name x
+          cn = fromJust'
+            ("no match for lookup in nested structs: "
+              ++ show i
+              ++ " -> "
+              ++ show ref
+            ) $ lookup ref cs
         in
-          -- XXX: comparing canonical name with name of nested structs not super great
+          -- XXX: comparing canonical name with name of nested structs
+          -- might not be super great
           ref `elem` refs && n == snd cn
       )
 
@@ -328,11 +349,10 @@ prefixContractAst castr cs bso ast = prefixAstNodes
 
     prefixAstNodes :: (ByteString, Int)
     prefixAstNodes  =
-      cutRanges [(sourceRange node, sourceId node) | node <- universe ast, p''' node]
+      cutRanges [sourceId node | node <- universe ast, p''' node]
 
     -- Parses the `id` and `attributes.referencedDeclaration` field of an AST node
     -- into a pair of byte indices.
-    -- XXX: these manual offsets have to be replaced by looking at the bytes
     sourceId :: Value -> (Int, Integer)
     sourceId v =
       if (not $ p v || p' v) &&  p'' v then (
@@ -340,35 +360,41 @@ prefixContractAst castr cs bso ast = prefixAstNodes
           ref = fromJust' "refDec of nested struct ref" $ refDec v
           cn = fromJust' "no match for lookup in nested structs" $ lookup ref cs
         in
-          (0, fst cn)
+          (end, fst cn)
       ) else
         fromJust' "internal error: no id found for contract reference" x
 
       where
+        (start, end) = sourceRange v
         x :: Maybe (Int, Integer)
-        x = case preview (key "name") v of
-          Just (String "ContractDefinition") ->
-            fmap ((,) 9) $ id' v
-          Just (String "StructDefinition") ->
-            fmap ((,) 7) $ id' v
-          Just (String t)
+        x = case preview (key "name" . _String) v of
+          Just t
+            | t `elem` ["ContractDefinition", "StructDefinition"] ->
+              let
+                name' = encodeUtf8 $ fromJust' "no name for contract/struct" $ name v
+                bs' = snd $ BS.splitAt (start + snd bso) bs
+                pos = start
+                  + (BS.length $ fst $ BS.breakSubstring name' bs')
+                  + (BS.length name')
+              in
+                fmap ((,) pos) $ id' v
             | t `elem` ["UserDefinedTypeName", "Identifier"] ->
-              fmap ((,) 0) $ refDec v
+              fmap ((,) end) $ refDec v
             | otherwise ->
               error "internal error: not a contract reference"
-          _ ->
+          Nothing ->
             error "internal error: not a contract reference"
 
     -- Prefix a set of non-overlapping ranges from a bytestring
     -- by commenting them out.
-    cutRanges :: [((Int, Int), (Int, Integer))] -> (ByteString, Int)
+    cutRanges :: [(Int, Integer)] -> (ByteString, Int)
     cutRanges (sort -> rs) = foldl' f bso rs
       where
-        f (bs', n) ((i, _), (o, t)) =
+        f (bs', n) (i, t) =
           let
-            t' = "_" <> (pack $ show t) <> "_"
+            t' = "_" <> (castr ! t)
           in
-            ( prefix t' bs' (i + n + o)
+            ( prefix t' bs' (i + n)
             , n + Text.length t' )
 
     -- Comments out the bytes between two indices from a bytestring.
@@ -389,4 +415,23 @@ sourceRange v =
 fromJust' :: String -> Maybe a -> a
 fromJust' msg = \case
   Just x -> x
-  Nothing -> error $ "no match in fromJust' " ++ msg
+  Nothing -> error msg
+
+repeated :: Eq a => [a] -> [a]
+repeated = fmap fst $ foldl' f ([], [])
+  where
+    f (acc, seen) x =
+      ( if (x `elem` seen) && (not $ x `elem` acc)
+        then x : acc
+        else acc
+      , x : seen
+      )
+
+indexed :: [(Integer, Text)] -> [(Integer, Text)]
+indexed = fst . foldl' f ([], Map.empty) -- (zip (fmap snd xs) $ replicate (length xs) 0) xs
+  where
+    f (acc, seen) (id', n) =
+      let
+        count = (fromMaybe 0 $ seen !? n) + 1
+      in
+        ((id', pack $ show count) : acc, Map.insert n count seen)
