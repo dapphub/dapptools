@@ -136,7 +136,12 @@ initializeUnitTest UnitTestOptions { .. } = do
 -- | Assuming a test contract is loaded and initialized, this stepper
 -- will run the specified test method and return whether it succeeded.
 runUnitTest :: UnitTestOptions -> ABIMethod -> Stepper Bool
-runUnitTest UnitTestOptions { .. } method = do
+runUnitTest a method = do
+  x <- execTest a method
+  checkFailures a method x
+
+execTest :: UnitTestOptions -> ABIMethod -> Stepper Bool
+execTest UnitTestOptions { .. } method = do
   -- Fail immediately if there was a failure in the setUp() phase
   Stepper.evm (use result) >>=
     \case
@@ -145,9 +150,6 @@ runUnitTest UnitTestOptions { .. } method = do
         pure False
 
       _ -> do
-        -- Decide whether the test is supposed to fail or succeed
-        let shouldFail = "testFail" `isPrefixOf` method
-
         -- The test subject should be loaded and initialized already
         addr <- Stepper.evm $ use (state . contract)
 
@@ -170,15 +172,26 @@ runUnitTest UnitTestOptions { .. } method = do
           _ ->
             pure ()
 
-        -- Ask whether any assertions failed
-        Stepper.evm $ popTrace
-        Stepper.evm $ setupCall testParams addr "failed()"
-        Stepper.note "Checking whether assertions failed"
-        res <- Stepper.execFullyOrFail >>= Stepper.decode AbiBoolType
-        let AbiBool failed = res
+        pure bailed
 
-        -- Return true if the test was successful
-        pure (shouldFail == (bailed || failed))
+checkFailures :: UnitTestOptions -> ABIMethod -> Bool -> Stepper Bool
+checkFailures UnitTestOptions { .. } method bailed = do
+     -- Decide whether the test is supposed to fail or succeed
+     let shouldFail = "testFail" `isPrefixOf` method
+
+     -- The test subject should be loaded and initialized already
+     addr <- Stepper.evm $ use (state . contract)
+
+     -- Ask whether any assertions failed
+     Stepper.evm $ popTrace
+     Stepper.evm $ setupCall testParams addr "failed()"
+     Stepper.note "Checking whether assertions failed"
+     res <- Stepper.execFullyOrFail >>= Stepper.decode AbiBoolType
+     let AbiBool failed = res
+     -- Return true if the test was successful
+     pure (shouldFail == (bailed || failed))
+
+
 
 tick :: Text -> IO ()
 tick x = Text.putStr x >> hFlush stdout
@@ -416,28 +429,39 @@ runUnitTestContract
         runOne testName = do
           x <-
             runStateT
-              (interpret opts (runUnitTest opts testName))
+              (interpret opts (execTest opts testName))
               vm1
           case x of
-             (Right True,  vm) ->
-               let
-                 gasSpent =
-                   view burned vm - view burned vm1
-                 gasText =
-                   pack . show $
-                     (fromIntegral gasSpent :: Integer)
-               in
-                 pure
-                   ("\x1b[32m[PASS]\x1b[0m "
-                   <> testName <> " (gas: " <> gasText <> ")"
-                   , Right (passOutput vm dapp opts testName)
-                   )
-             (Right False, vm) ->
-               pure ("\x1b[31m[FAIL]\x1b[0m "
-               <> testName, Left (failOutput vm dapp opts testName))
+             (Right b, vm2) -> do
+               y <- runStateT
+                      (interpret opts (checkFailures opts testName b))
+                      vm2
+               case y of
+                 (Right True,  vm) ->
+                   let
+                     gasSpent =
+                       num (testGasCall testParams) - view (state . gas) vm2
+                     gasText =
+                       pack . show $
+                       (fromIntegral gasSpent :: Integer)
+                   in
+                     pure
+                     ("\x1b[32m[PASS]\x1b[0m "
+                      <> testName <> " (gas: " <> gasText <> ")"
+                     , Right (passOutput vm dapp opts testName)
+                     )
+                 (Right False, vm) ->
+                   pure ("\x1b[31m[FAIL]\x1b[0m "
+                   <> testName, Left (failOutput vm dapp opts testName))
+                 (Left _, _)       ->
+                   pure ("\x1b[33m[OOPS]\x1b[0m "
+                   <> testName, Left ("VM error for " <> testName))
+
              (Left _, _)       ->
                pure ("\x1b[33m[OOPS]\x1b[0m "
                <> testName, Left ("VM error for " <> testName))
+
+
 
       let inform = \(x, y) -> Text.putStrLn x >> pure y
 
