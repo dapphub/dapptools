@@ -9,7 +9,6 @@ import EVM.Keccak (keccak)
 import EVM.Precompiled (execute)
 import EVM.RLP
 import EVM.Types
-import Test.QuickCheck
 
 import Data.Aeson (FromJSON (..))
 import Data.ByteString (ByteString)
