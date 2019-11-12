@@ -461,8 +461,6 @@ runUnitTestContract
                pure ("\x1b[33m[OOPS]\x1b[0m "
                <> testName, Left ("VM error for " <> testName))
 
-
-
       let inform = \(x, y) -> Text.putStrLn x >> pure y
 
       -- Run all the test cases and print their status updates
