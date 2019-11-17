@@ -2037,28 +2037,16 @@ stackOp3 cost f =
 checkJump :: (Integral n) => n -> [Word] -> EVM ()
 checkJump x xs = do
   theCode <- use (state . code)
+  self <- use (state . codeContract)
+  theCodeOps <- use (env . contracts . ix self . codeOps)
   if x < num (BS.length theCode) && BS.index theCode (num x) == 0x5b
     then
-      insidePushData (num x) >>=
-        \case
-          True ->
-            vmError BadJumpDestination
-          _ -> do
-            state . stack .= xs
-            state . pc .= num x
+      case RegularVector.find (\(i, op) -> i == num x && op == OpJumpdest) theCodeOps of
+        Nothing ->  vmError BadJumpDestination
+        _ -> do
+             state . stack .= xs
+             state . pc .= num x
     else vmError BadJumpDestination
-
-insidePushData :: Int -> EVM Bool
-insidePushData i =
-  -- If the operation index for the code pointer is the same
-  -- as for the previous code pointer, then it's inside push data.
-  if i == 0
-    then pure False
-    else do
-      self <- use (state . codeContract)
-      preuse (env . contracts . ix self . opIxMap) >>= \case
-        Just m -> pure ((m Vector.! i) == (m Vector.! (i - 1)))
-        Nothing  -> error "internal error: can't find operation index map"
 
 opSize :: Word8 -> Int
 opSize x | x >= 0x60 && x <= 0x7f = num x - 0x60 + 2
