@@ -734,11 +734,11 @@ stepOneOpcode ui =
 isNextSourcePosition
   :: UiVmState -> Pred VM
 isNextSourcePosition ui vm =
-  let
-    Just dapp       = view uiVmDapp ui
-    initialPosition = currentSrcMap dapp (view uiVm ui)
-  in
-    currentSrcMap dapp vm /= initialPosition
+  case view uiVmDapp ui of
+     Just dapp ->
+       let initialPosition = currentSrcMap dapp (view uiVm ui)
+       in currentSrcMap dapp vm /= initialPosition
+     Nothing -> True
 
 isNextSourcePositionWithoutEntering
   :: UiVmState -> Pred VM
