@@ -1,4 +1,4 @@
-resolver: lts-12.10
+resolver: lts-14.14
 packages:
 - .
 extra-deps:
@@ -11,6 +11,7 @@ extra-deps:
 - ipprint-0.6
 - megaparsec-7.0.5
 - multiset-0.3.4.1
+- QuickCheck-2.12.6.1
 - restless-git-0.7
 - rosezipper-0.2
 - s-cargot-0.1.4.0
