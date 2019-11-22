@@ -3,7 +3,7 @@
 {-# Language DataKinds #-}
 module EVM.TTY where
 
-import Prelude hiding (Word)
+import Prelude hiding (head, Word)
 
 import Brick
 import Brick.Widgets.Border
@@ -43,6 +43,7 @@ import Data.Monoid ((<>))
 import Data.Text (Text, unpack, pack)
 import Data.Text.Encoding (decodeUtf8)
 import Data.List (sort)
+import Data.Vector (Vector, head, singleton, (!))
 import Data.Version (showVersion)
 import Data.SBV hiding (solver)
 
@@ -81,7 +82,7 @@ data UiVmState = UiVmState
   , _uiVmSolc         :: Maybe SolcContract
   , _uiVmDapp         :: Maybe DappInfo
   , _uiVmStepCount    :: Int
-  , _uiVmFirstState   :: UiVmState
+  , _uiVmSnapshots    :: Vector UiVmState
   , _uiVmMessage      :: Maybe String
   , _uiVmNotes        :: [String]
   , _uiVmShowMemory   :: Bool
@@ -109,6 +110,10 @@ makeLenses ''UiVmState
 makeLenses ''UiTestPickerState
 makeLenses ''UiBrowserState
 makePrisms ''UiState
+
+-- caching VM states lets us backstep efficiently
+snapshotInterval :: Int
+snapshotInterval = 50
 
 type Pred a = a -> Bool
 
@@ -313,13 +318,13 @@ runFromVM maxIter' maybesrcinfo oracle' vm = do
            , _uiVmSolc = snd <$> uiDappSolc
            , _uiVmDapp = fst <$> uiDappSolc
            , _uiVmStepCount = 0
-           , _uiVmFirstState = undefined
+           , _uiVmSnapshots = undefined
            , _uiVmMessage = Just $ "Executing EVM code in " <> show (view (state . contract) vm)
            , _uiVmNotes = []
            , _uiVmShowMemory = False
            , _uiVmTestOpts = opts
            }
-    ui1 = updateUiVmState ui0 vm & set uiVmFirstState ui1
+    ui1 = updateUiVmState ui0 vm & set uiVmSnapshots (singleton ui1)
 
   v <- mkVty
   ui2 <- customMain v mkVty Nothing (app opts) (ViewVm ui1)
@@ -515,7 +520,7 @@ appEvent (ViewVm s) (VtyEvent (V.EvKey (V.KChar 'a') [])) =
         s2 = set uiVmShowMemory (view uiVmShowMemory s) s1
         s3 = set uiVmTestOpts   (view uiVmTestOpts s) s2
 
-      in takeStep s3 StepTimidly StepNone
+      in takeStep (head (view uiVmSnapshots s)) StepTimidly StepNone
 
 -- Vm Overview: p - step
 appEvent st@(ViewVm s) (VtyEvent (V.EvKey (V.KChar 'p') [])) =
@@ -524,20 +529,21 @@ appEvent st@(ViewVm s) (VtyEvent (V.EvKey (V.KChar 'p') [])) =
       -- We're already at the first step; ignore command.
       continue st
     n -> do
-      -- To step backwards, we revert to the first state
-      -- and execute n - 1 instructions from there.
+      -- To step backwards, we revert to the previous snapshot
+      -- and execute n - 1 `mod` snapshotInterval steps from there.
       --
       -- We keep the current cache so we don't have to redo
       -- any blocking queries, and also the memory view.
       let
-        s0 = view uiVmFirstState s
+        s0 = (view uiVmSnapshots s) ! (div (n - 1) snapshotInterval)
         s1 = set (uiVm . cache)   (view (uiVm . cache) s) s0
         s2 = set (uiVmShowMemory) (view uiVmShowMemory s) s1
         s3 = set (uiVmTestOpts)   (view uiVmTestOpts s) s2
+        stepsToTake = (n - 1) `mod` snapshotInterval
 
-      -- Take n steps; "timidly," because all queries
+      -- Take the steps; "timidly," because all queries
       -- ought to be cached.
-      takeStep s3 StepTimidly (StepMany (n - 1))
+      takeStep s3 StepTimidly (StepMany stepsToTake)
 
 -- Vm Overview: 0 - choose no jump
 appEvent (ViewVm s) (VtyEvent (V.EvKey (V.KChar '0') [])) =
@@ -646,7 +652,7 @@ initialUiVmStateForTest opts@UnitTestOptions{..} dapp (theContractName, theTestN
         , _uiVmSolc         = Just testContract
         , _uiVmDapp         = Just dapp
         , _uiVmStepCount    = 0
-        , _uiVmFirstState   = undefined
+        , _uiVmSnapshots    = undefined
         , _uiVmMessage      = Just "Creating unit test contract"
         , _uiVmNotes        = []
         , _uiVmShowMemory   = False
@@ -657,7 +663,7 @@ initialUiVmStateForTest opts@UnitTestOptions{..} dapp (theContractName, theTestN
     vm0 =
       initialUnitTestVm opts testContract (Map.elems (view dappSolcByName dapp))
     ui1 =
-      updateUiVmState ui0 vm0 & set uiVmFirstState ui1
+      updateUiVmState ui0 vm0 & set uiVmSnapshots (singleton ui1)
 
 myTheme :: [(AttrName, V.Attr)]
 myTheme =
@@ -815,10 +821,15 @@ drawHelpBar = hBorder <=> hCenter help
 stepOneOpcode :: UiVmState -> UiVmState
 stepOneOpcode ui =
   let
-    nextVm = execState exec1 (view uiVm ui)
+    nextVm      = execState exec1 (view uiVm ui)
+    stepCount   = view uiVmStepCount ui
+    addSnapshot = if (stepCount `mod` snapshotInterval == 0) && (stepCount > 0)
+                  then (flip snoc) ui
+                  else id
   in
     ui & over uiVmStepCount (+ 1)
        & set uiVm nextVm
+       & over uiVmSnapshots addSnapshot
 
 isNextSourcePosition
   :: UiVmState -> Pred VM
