@@ -175,17 +175,21 @@ interpret mode =
 
 
             StepOne -> do
-              -- Run an instruction
               modify stepOneOpcode
 
-              use (uiVm . result) >>= \case
-                Nothing ->
-                  -- If instructions remain, then pause & await user.
-                  pure (Stepped restart)
-                Just r ->
-                  -- If returning, proceed directly the continuation,
-                  -- but stopping before the next instruction.
-                  interpret StepNone (k r)
+              let
+                finishUp =
+                  use (uiVm . result) >>= \case
+                    Nothing ->
+                      -- If instructions remain, then pause & await user.
+                      pure (Stepped restart)
+                    Just r ->
+                      -- If returning, proceed directly the continuation,
+                      -- but stopping before the next instruction.
+                      interpret StepNone (k r)
+
+              -- After finishing up, we're ready to save a snapshot.
+              finishUp <* maybeSaveSnapshot
 
             StepMany 0 ->
               -- Finish the continuation until the next instruction;
@@ -274,6 +278,14 @@ interpret mode =
         -- Stepper wants to exit because of a failure.
         Stepper.Fail e ->
           error ("VM error: " ++ show e)
+
+maybeSaveSnapshot :: State UiVmState ()
+maybeSaveSnapshot = do
+  ui <- get
+  let n = view uiVmStepCount ui
+  if n > 0 && n `mod` snapshotInterval == 0
+    then modifying uiVmSnapshots (`snoc` ui)
+    else pure ()
 
 isUnitTestContract :: Text -> DappInfo -> Bool
 isUnitTestContract name dapp =
@@ -821,15 +833,10 @@ drawHelpBar = hBorder <=> hCenter help
 stepOneOpcode :: UiVmState -> UiVmState
 stepOneOpcode ui =
   let
-    nextVm      = execState exec1 (view uiVm ui)
-    stepCount   = view uiVmStepCount ui
-    addSnapshot = if (stepCount `mod` snapshotInterval == 0) && (stepCount > 0)
-                  then (flip snoc) ui
-                  else id
+    nextVm = execState exec1 (view uiVm ui)
   in
     ui & over uiVmStepCount (+ 1)
        & set uiVm nextVm
-       & over uiVmSnapshots addSnapshot
 
 isNextSourcePosition
   :: UiVmState -> Pred VM
