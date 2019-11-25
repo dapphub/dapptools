@@ -81,6 +81,7 @@ if [ "$DAPP_BUILD_EXTRACT" ]; then
     echo "$contract" | jq '.["abi"]' -r > "$DAPP_OUT/$name.abi"
     echo "$contract" | jq '.["bin"]' -r > "$DAPP_OUT/$name.bin"
     echo "$contract" | jq '.["bin-runtime"]' -r > "$DAPP_OUT/$name.bin-runtime"
+    echo "$contract" | jq '.["metadata"]' -r > "$DAPP_OUT/$name.metadata"
   done
   echo
   info "warning: --extract is slow and may have filename collisions. All build data can be found in $DAPP_JSON.\\n"
