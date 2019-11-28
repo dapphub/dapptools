@@ -623,7 +623,7 @@ initialUnitTestVm (UnitTestOptions {..}) theContract _ =
            , vmoptGasprice = testGasprice
            , vmoptMaxCodeSize = testMaxCodeSize
            , vmoptDifficulty = testDifficulty
-           , vmoptSchedule = FeeSchedule.metropolis
+           , vmoptSchedule = FeeSchedule.istanbul
            , vmoptCreate = False
            }
     creator =
