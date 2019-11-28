@@ -402,7 +402,7 @@ fromCreateBlockchainCase block tx preState postState =
     (Nothing, _) -> Left SignatureUnverified
     (_, Nothing) -> Left FailedCreate
     (Just origin, Just (checkState, createdAddr)) -> let
-      feeSchedule = EVM.FeeSchedule.metropolis
+      feeSchedule = EVM.FeeSchedule.istanbul
       in Right $ Case
          (EVM.VMOpts
           { vmoptCode          = txData tx
@@ -432,7 +432,7 @@ fromNormalBlockchainCase :: Block -> Transaction
                        -> Either BlockchainError Case
 fromNormalBlockchainCase block tx preState postState =
   let Just toAddr = txToAddr tx
-      feeSchedule = EVM.FeeSchedule.metropolis
+      feeSchedule = EVM.FeeSchedule.istanbul
       toCode = Map.lookup toAddr preState
       theCode = case toCode of
           Nothing -> ""
