@@ -109,3 +109,15 @@ homestead = FeeSchedule
 
 metropolis :: Num n => FeeSchedule n
 metropolis = eip160 . eip150 $ homestead
+
+-- EIP1884: Repricing for trie-size-dependent opcodes
+-- <https://github.com/ethereum/EIPs/blob/master/EIPS/eip-1884.md>
+eip1884 :: EIP n
+eip1884 fees = fees
+  { g_sload = 800
+  , g_balance = 700
+  , g_extcodehash = 700
+  }
+
+istanbul :: Num n => FeeSchedule n
+istanbul = eip1884 $ metropolis

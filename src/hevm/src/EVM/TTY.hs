@@ -1045,6 +1045,7 @@ opWidget (i, o) = str (showPc i <> " ") <+> case o of
   OpNumber -> txt "NUMBER"
   OpDifficulty -> txt "DIFFICULTY"
   OpGaslimit -> txt "GASLIMIT"
+  OpSelfbalance -> txt "SELFBALANCE"
   OpPop -> txt "POP"
   OpMload -> txt "MLOAD"
   OpMstore -> txt "MSTORE"

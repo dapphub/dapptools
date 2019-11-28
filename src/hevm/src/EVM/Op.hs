@@ -53,6 +53,7 @@ data Op
   | OpNumber
   | OpDifficulty
   | OpGaslimit
+  | OpSelfbalance
   | OpPop
   | OpMload
   | OpMstore
