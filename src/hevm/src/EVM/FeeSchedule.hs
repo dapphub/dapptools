@@ -119,5 +119,12 @@ eip1884 fees = fees
   , g_extcodehash = 700
   }
 
+-- EIP2028: Transaction data gas cost reduction
+-- <https://github.com/ethereum/EIPs/blob/master/EIPS/eip-2028.md>
+eip2028 :: EIP n
+eip2028 fees = fees
+  { g_txdatanonzero = 16
+  }
+
 istanbul :: Num n => FeeSchedule n
-istanbul = eip1884 $ metropolis
+istanbul = eip2028 . eip1884 $ metropolis
