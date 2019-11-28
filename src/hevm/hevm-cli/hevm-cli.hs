@@ -456,7 +456,7 @@ vmFromCommand cmd =
       , EVM.vmoptGasprice      = word gasprice 0
       , EVM.vmoptMaxCodeSize   = word maxcodesize 0xffffffff
       , EVM.vmoptDifficulty    = word difficulty 0
-      , EVM.vmoptSchedule      = FeeSchedule.metropolis
+      , EVM.vmoptSchedule      = FeeSchedule.istanbul
       , EVM.vmoptCreate        = create cmd
       }
     word f def = maybe def id (f cmd)
