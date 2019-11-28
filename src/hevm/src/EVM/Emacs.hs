@@ -596,6 +596,8 @@ opString (i, o) = (showPc i <> " ") ++ case o of
   OpNumber -> "NUMBER"
   OpDifficulty -> "DIFFICULTY"
   OpGaslimit -> "GASLIMIT"
+  OpChainid -> "CHAINID"
+  OpSelfbalance -> "SELFBALANCE"
   OpPop -> "POP"
   OpMload -> "MLOAD"
   OpMstore -> "MSTORE"

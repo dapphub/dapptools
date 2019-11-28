@@ -2284,11 +2284,11 @@ costOfPrecompile (FeeSchedule {..}) precompileAddr input =
                   then (x * x) `div` 4 + 96 * x - 3072
                   else (x * x) `div` 16 + 480 * x - 199680
     -- ECADD
-    0x6 -> 150
+    0x6 -> g_ecadd
     -- ECMUL
-    0x7 -> 6000
+    0x7 -> g_ecmul
     -- ECPAIRING
-    0x8 -> num $ ((BS.length input) `div` 192) * 34000 + 45000
+    0x8 -> num $ ((BS.length input) `div` 192) * (num g_pairing_point) + (num g_pairing_base)
     _ -> error ("unimplemented precompiled contract " ++ show precompileAddr)
 
 -- Gas cost of memory expansion
