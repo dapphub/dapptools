@@ -753,6 +753,11 @@ exec1 = do
           limitStack 1 . burn g_base $
             next >> push (the block gaslimit)
 
+        -- op: CHAINID
+        0x46 -> error "CHAINID not implemented"
+          -- limitStack 1 . burn g_base $
+          --  next >> push (the state chainid)
+
         -- op: SELFBALANCE
         0x47 ->
           limitStack 1 . burn g_low $
@@ -2177,6 +2182,7 @@ readOp x _ = case x of
   0x43 -> OpNumber
   0x44 -> OpDifficulty
   0x45 -> OpGaslimit
+  0x46 -> OpChainid
   0x47 -> OpSelfbalance
   0x50 -> OpPop
   0x51 -> OpMload
