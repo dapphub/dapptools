@@ -757,8 +757,8 @@ exec1 = do
 
         -- op: CHAINID
         0x46 ->
-          limitStack 1 . burn g_base $ do
-           next >> push (the env chainId)
+          limitStack 1 . burn g_base $
+            next >> push (the env chainId)
 
         -- op: SELFBALANCE
         0x47 ->
