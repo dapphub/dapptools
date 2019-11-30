@@ -254,6 +254,7 @@ deriving instance Eq Contract
 -- | Various environmental data
 data Env = Env
   { _contracts :: Map Addr Contract
+  , _chainId   :: Word
   , _sha3Crack :: Map Word ByteString
   }
 
@@ -362,6 +363,7 @@ makeVm o = VM
     }
   , _env = Env
     { _sha3Crack = mempty
+    , _chainId = 42
     , _contracts = Map.fromList
       [(vmoptAddress o, initialContract (InitCode (vmoptCode o)))]
     }
@@ -754,9 +756,9 @@ exec1 = do
             next >> push (the block gaslimit)
 
         -- op: CHAINID
-        0x46 -> error "CHAINID not implemented"
-          -- limitStack 1 . burn g_base $
-          --  next >> push (the state chainid)
+        0x46 ->
+          limitStack 1 . burn g_base $ do
+           next >> push (the env chainId)
 
         -- op: SELFBALANCE
         0x47 ->
