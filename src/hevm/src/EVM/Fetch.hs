@@ -28,6 +28,7 @@ data RpcQuery a where
   QueryBalance :: Addr         -> RpcQuery W256
   QueryNonce   :: Addr         -> RpcQuery W256
   QuerySlot    :: Addr -> W256 -> RpcQuery W256
+  QueryChainId ::                 RpcQuery W256
 
 data BlockNumber = Latest | BlockNumber W256
 
@@ -80,6 +81,9 @@ fetchQuery n f q = do
     QuerySlot addr slot ->
       fmap readText <$>
         f (rpc "eth_getStorageAt" [toRPC addr, toRPC slot, toRPC n])
+    QueryChainId ->
+      fmap readText <$>
+        f (rpc "eth_chainId" [toRPC n])
   return x
 
 fetchWithSession :: Text -> Session -> Value -> IO (Maybe Text)

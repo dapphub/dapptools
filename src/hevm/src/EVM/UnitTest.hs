@@ -83,6 +83,7 @@ data TestVMParams = TestVMParams
   , testGasprice      :: W256
   , testMaxCodeSize   :: W256
   , testDifficulty    :: W256
+  , testChainId       :: W256
   }
 
 defaultGasForCreating :: W256
@@ -632,6 +633,7 @@ initialUnitTestVm (UnitTestOptions {..}) theContract _ =
         & set balance (w256 testBalanceCreate)
   in vm
     & set (env . contracts . at ethrunAddress) (Just creator)
+    & set (env . chainId) (w256 testChainId)
 
 getParametersFromEnvironmentVariables :: IO TestVMParams
 getParametersFromEnvironmentVariables = do
@@ -654,3 +656,4 @@ getParametersFromEnvironmentVariables = do
     <*> getWord "DAPP_TEST_GAS_PRICE" 0
     <*> getWord "DAPP_TEST_MAXCODESIZE" defaultMaxCodeSize
     <*> getWord "DAPP_TEST_DIFFICULTY" 1
+    <*> getWord "DAPP_TEST_CHAINID" 99
