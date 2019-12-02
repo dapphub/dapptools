@@ -131,7 +131,10 @@ initializeUnitTest UnitTestOptions { .. } = do
 
   -- Let `setUp()' run to completion
   void Stepper.execFullyOrFail
-  Stepper.evm popTrace
+  (Stepper.evm $ use result) >>= \case
+    Just (VMFailure e) -> Stepper.evm (pushTrace (ErrorTrace e))
+    _ -> Stepper.evm popTrace
+
 
 -- | Assuming a test contract is loaded and initialized, this stepper
 -- will run the specified test method and return whether it succeeded.
@@ -142,37 +145,24 @@ runUnitTest a method = do
 
 execTest :: UnitTestOptions -> ABIMethod -> Stepper Bool
 execTest UnitTestOptions { .. } method = do
-  -- Fail immediately if there was a failure in the setUp() phase
-  Stepper.evm (use result) >>=
-    \case
-      Just (VMFailure e) -> do
+  -- The test subject should be loaded and initialized already
+  addr <- Stepper.evm $ use (state . contract)
+  -- Set up the call to the test method
+  Stepper.evm $
+    setupCall testParams addr method
+  Stepper.evm (pushTrace (EntryTrace method))
+  Stepper.note "Running unit test"
+  -- Try running the test method
+  bailed <-
+    Stepper.execFully >>=
+      either (const (pure True)) (const (pure False))
+  -- If we failed, put the error in the trace.
+  -- It's not clear to me right now why this doesn't happen somewhere else.
+  (Stepper.evm $ use result) >>= \case
+    Just (VMFailure e) ->
         Stepper.evm (pushTrace (ErrorTrace e))
-        pure False
-
-      _ -> do
-        -- The test subject should be loaded and initialized already
-        addr <- Stepper.evm $ use (state . contract)
-
-        -- Set up the call to the test method
-        Stepper.evm $
-          setupCall testParams addr method
-        Stepper.evm (pushTrace (EntryTrace method))
-        Stepper.note "Running unit test"
-
-        -- Try running the test method
-        bailed <-
-          Stepper.execFully >>=
-            either (const (pure True)) (const (pure False))
-
-        -- If we failed, put the error in the trace.
-        -- It's not clear to me right now why this doesn't happen somewhere else.
-        (Stepper.evm $ use result) >>= \case
-          Just (VMFailure e) ->
-            Stepper.evm (pushTrace (ErrorTrace e))
-          _ ->
-            pure ()
-
-        pure bailed
+    _ -> pure ()
+  pure bailed
 
 checkFailures :: UnitTestOptions -> ABIMethod -> Bool -> Stepper Bool
 checkFailures UnitTestOptions { .. } method bailed = do
@@ -424,57 +414,61 @@ runUnitTestContract
       -- Gather the dapp-related metadata
       let dapp = dappInfo "." contractMap sources
 
-      -- Define the thread spawner for test cases
-      let
-        runOne testName = do
-          x <-
-            runStateT
-              (interpret opts (execTest opts testName))
-              vm1
-          case x of
-             (Right b, vm2) -> do
-               y <- runStateT
-                      (interpret opts (checkFailures opts testName b))
-                      vm2
-               case y of
-                 (Right True,  vm) ->
-                   let
-                     gasSpent =
-                       num (testGasCall testParams) - view (state . gas) vm2
-                     gasText =
-                       pack . show $
-                       (fromIntegral gasSpent :: Integer)
-                   in
-                     pure
-                     ("\x1b[32m[PASS]\x1b[0m "
-                      <> testName <> " (gas: " <> gasText <> ")"
-                     , Right (passOutput vm dapp opts testName)
-                     )
-                 (Right False, vm) ->
-                   pure ("\x1b[31m[FAIL]\x1b[0m "
-                   <> testName, Left (failOutput vm dapp opts testName))
-                 (Left _, _)       ->
-                   pure ("\x1b[33m[OOPS]\x1b[0m "
-                   <> testName, Left ("VM error for " <> testName))
+      case view result vm1 of
+        Nothing -> error "internal error: setUp() did not end with a result"
+        Just (VMFailure _) -> do
+          Text.putStrLn ("\x1b[31m[FAIL]\x1b[0m setUp()")
+          tick "\n"
+          tick $ failOutput vm1 dapp opts "setUp()"
+          pure False
+        Just (VMSuccess _) -> do
 
-             (Left _, _)       ->
-               pure ("\x1b[33m[OOPS]\x1b[0m "
-               <> testName, Left ("VM error for " <> testName))
+          -- Define the thread spawner for test cases
+          let
+            runOne testName = do
+              x <-
+                runStateT
+                  (interpret opts (execTest opts testName))
+                  vm1
+              case x of
+                (Right b, vm2) -> do
+                  y <- runStateT
+                    (interpret opts (checkFailures opts testName b))
+                    vm2
+                  case y of
+                    (Right True,  vm) ->
+                      let gasSpent = num (testGasCall testParams) - view (state . gas) vm2
+                          gasText = pack . show $ (fromIntegral gasSpent :: Integer)
+                      in
+                        pure
+                        ("\x1b[32m[PASS]\x1b[0m "
+                         <> testName <> " (gas: " <> gasText <> ")"
+                        , Right (passOutput vm dapp opts testName))
+                    (Right False, vm) ->
+                             pure ("\x1b[31m[FAIL]\x1b[0m "
+                             <> testName, Left (failOutput vm dapp opts testName))
+                    (Left _, _)       ->
+                             pure ("\x1b[33m[OOPS]\x1b[0m "
+                             <> testName, Left ("VM error for " <> testName))
 
-      let inform = \(x, y) -> Text.putStrLn x >> pure y
+                (Left _, _)       ->
+                  pure ("\x1b[33m[OOPS]\x1b[0m "
+                        <> testName, Left ("VM error for " <> testName))
 
-      -- Run all the test cases and print their status updates
-      details <-
-        mapM (\x -> runOne x >>= inform) testNames
+          let inform = \(x, y) -> Text.putStrLn x >> pure y
 
-      let running = [x | Right x <- details]
-      let bailing = [x | Left x <- details]
+                -- Run all the test cases and print their status updates
+          details <-
+            mapM (\x -> runOne x >>= inform) testNames
 
-      tick "\n"
-      tick (Text.unlines (filter (not . Text.null) running))
-      tick (Text.unlines (filter (not . Text.null) bailing))
+          let running = [x | Right x <- details]
+          let bailing = [x | Left x <- details]
 
-      pure (null bailing)
+          tick "\n"
+          tick (Text.unlines (filter (not . Text.null) running))
+          tick (Text.unlines (filter (not . Text.null) bailing))
+
+          pure (null bailing)
 
 indentLines :: Int -> Text -> Text
 indentLines n s =
