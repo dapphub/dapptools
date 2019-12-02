@@ -363,7 +363,7 @@ makeVm o = VM
     }
   , _env = Env
     { _sha3Crack = mempty
-    , _chainId = 42
+    , _chainId = 99
     , _contracts = Map.fromList
       [(vmoptAddress o, initialContract (InitCode (vmoptCode o)))]
     }
