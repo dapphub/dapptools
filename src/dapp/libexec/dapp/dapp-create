@@ -27,4 +27,4 @@ address=$(set -x; seth send --create "$bin" "${type/constructor/${1##*/}}" "${@:
   dapp verify-contract "$path" "$address" || true
 }
 
-echo "$address"
+echo $(seth --to-checksum-address $address)
