@@ -29,4 +29,5 @@ else
   exit 1
 fi
 
-seth keccak "$rlp" | cut -b 27-66
+raw_address=$(seth keccak "$rlp" | cut -b 27-66)
+seth --to-checksum-address "$raw_address" | cut -b 3-
