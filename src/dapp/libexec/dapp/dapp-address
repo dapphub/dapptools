@@ -30,4 +30,4 @@ else
 fi
 
 raw_address=$(seth keccak "$rlp" | cut -b 27-66)
-seth --to-checksum-address "$raw_address" | cut -b 3-
+seth --to-checksum-address "$raw_address"
