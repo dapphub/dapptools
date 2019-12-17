@@ -57,11 +57,15 @@ import qualified Data.Set as Set
 import Data.Vector (Vector)
 import qualified Data.Vector as Vector
 
+import Test.QuickCheck.Monadic
+
+
 data UnitTestOptions = UnitTestOptions
   {
     oracle     :: Query -> IO (EVM ())
   , verbose    :: Maybe Int
   , match      :: Text
+  , fuzzmatch  :: (Text, [AbiType])
   , vmModifier :: VM -> VM
   , testParams :: TestVMParams
   }
@@ -98,6 +102,9 @@ defaultBalanceForCreated = 0xffffffffffffffffffffffff
 defaultMaxCodeSize :: W256
 defaultMaxCodeSize = 0xffffffff
 
+noArgs :: AbiValue
+noArgs = AbiTuple mempty
+
 type ABIMethod = Text
 
 -- | Assuming a constructor is loaded, this stepper will run the constructor
@@ -125,7 +132,7 @@ initializeUnitTest UnitTestOptions { .. } = do
   -- Initialize the test contract
   Stepper.evm (popTrace >> pushTrace (EntryTrace "initialize test"))
   Stepper.evm $
-    setupCall testParams addr "setUp()"
+    setupCall testParams addr "setUp()" noArgs
 
   Stepper.note "Running `setUp()'"
 
@@ -138,18 +145,18 @@ initializeUnitTest UnitTestOptions { .. } = do
 
 -- | Assuming a test contract is loaded and initialized, this stepper
 -- will run the specified test method and return whether it succeeded.
-runUnitTest :: UnitTestOptions -> ABIMethod -> Stepper Bool
-runUnitTest a method = do
-  x <- execTest a method
-  checkFailures a method x
+runUnitTest :: UnitTestOptions -> ABIMethod -> AbiValue -> Stepper Bool
+runUnitTest a method args = do
+  x <- execTest a method args
+  checkFailures a method args x
 
-execTest :: UnitTestOptions -> ABIMethod -> Stepper Bool
-execTest UnitTestOptions { .. } method = do
+execTest :: UnitTestOptions -> ABIMethod -> AbiValue -> Stepper Bool
+execTest UnitTestOptions { .. } method args = do
   -- The test subject should be loaded and initialized already
   addr <- Stepper.evm $ use (state . contract)
   -- Set up the call to the test method
   Stepper.evm $
-    setupCall testParams addr method
+    setupCall testParams addr method args
   Stepper.evm (pushTrace (EntryTrace method))
   Stepper.note "Running unit test"
   -- Try running the test method
@@ -164,8 +171,8 @@ execTest UnitTestOptions { .. } method = do
     _ -> pure ()
   pure bailed
 
-checkFailures :: UnitTestOptions -> ABIMethod -> Bool -> Stepper Bool
-checkFailures UnitTestOptions { .. } method bailed = do
+checkFailures :: UnitTestOptions -> ABIMethod -> AbiValue -> Bool -> Stepper Bool
+checkFailures UnitTestOptions { .. } method args bailed = do
      -- Decide whether the test is supposed to fail or succeed
      let shouldFail = "testFail" `isPrefixOf` method
 
@@ -174,14 +181,19 @@ checkFailures UnitTestOptions { .. } method bailed = do
 
      -- Ask whether any assertions failed
      Stepper.evm $ popTrace
-     Stepper.evm $ setupCall testParams addr "failed()"
+     Stepper.evm $ setupCall testParams addr "failed()" args
      Stepper.note "Checking whether assertions failed"
      res <- Stepper.execFullyOrFail >>= Stepper.decode AbiBoolType
      let AbiBool failed = res
      -- Return true if the test was successful
      pure (shouldFail == (bailed || failed))
 
-
+-- | Randomly generates the calldata arguments and runs the test
+fuzzTest :: UnitTestOptions -> Text -> [AbiType] -> VM -> PropertyM IO Bool
+fuzzTest opts sig types vm = forAllM (genAbiValue (AbiTupleType $ Vector.fromList types)) $ \args -> do
+                                        run (runStateT (interpret opts (runUnitTest opts sig args)) vm) >>= \case
+                                          (Left _, _) -> return False
+                                          (Right b, _) -> return b
 
 tick :: Text -> IO ()
 tick x = Text.putStr x >> hFlush stdout
@@ -365,7 +377,7 @@ coverageForUnitTestContract
         runOne testName = spawn_ . liftIO $ do
           (x, (_, cov)) <-
             runStateT
-              (interpretWithCoverage opts (runUnitTest opts testName))
+              (interpretWithCoverage opts (runUnitTest opts testName noArgs))
               (vm1, mempty)
           case x of
             Right True -> pure cov
@@ -428,12 +440,12 @@ runUnitTestContract
             runOne testName = do
               x <-
                 runStateT
-                  (interpret opts (execTest opts testName))
+                  (interpret opts (execTest opts testName noArgs))
                   vm1
               case x of
                 (Right b, vm2) -> do
                   y <- runStateT
-                    (interpret opts (checkFailures opts testName b))
+                    (interpret opts (checkFailures opts testName noArgs b))
                     vm2
                   case y of
                     (Right True,  vm) ->
@@ -545,12 +557,12 @@ formatTestLog events (Log _ args (topic:_)) =
 word32Bytes :: Word32 -> ByteString
 word32Bytes x = BS.pack [byteAt x (3 - i) | i <- [0..3]]
 
-setupCall :: TestVMParams -> Addr -> Text -> EVM ()
-setupCall params target abi = do
+setupCall :: TestVMParams -> Addr -> Text -> AbiValue -> EVM ()
+setupCall params target sig args  = do
   let TestVMParams {..} = params
   resetState
   loadContract target
-  assign (state . calldata) (word32Bytes (abiKeccak (encodeUtf8 abi)))
+  assign (state . calldata) $ abiMethod sig args
   assign (state . caller) testCaller
   assign (state . gas) (w256 testGasCall)
 

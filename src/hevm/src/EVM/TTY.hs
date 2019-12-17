@@ -11,7 +11,7 @@ import Brick.Widgets.Center
 import Brick.Widgets.List
 
 import EVM
-import EVM.ABI (abiTypeSolidity)
+import EVM.ABI (abiTypeSolidity, AbiValue(..))
 import EVM.Concrete (Word (C))
 import EVM.Dapp (DappInfo, dappInfo)
 import EVM.Dapp (dappUnitTests, dappSolcByName, dappSolcByHash, dappSources)
@@ -549,7 +549,7 @@ initialUiVmStateForTest opts dapp (theContractName, theTestName) =
       Stepper.evm . pushTrace . EntryTrace $
         "test " <> theTestName <> " (" <> theContractName <> ")"
       initializeUnitTest opts
-      void (runUnitTest opts theTestName)
+      void (runUnitTest opts theTestName (AbiTuple mempty))
     ui0 =
       UiVmState
         { _uiVm             = vm0
