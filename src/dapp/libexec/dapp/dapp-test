@@ -5,6 +5,7 @@
 ### Options:
 ###   -v, --verbose         trace ouput for failing tests
 ###   -vv                   trace output for all tests including passes
+###   --fuzz-runs=<number>   number of times to run fuzzing tests
 ###   -m, --match=<string>  only run test methods matching regex
 ###
 ### RPC options:
