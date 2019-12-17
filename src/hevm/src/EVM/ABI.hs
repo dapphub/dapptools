@@ -38,9 +38,11 @@ module EVM.ABI
   , putAbi
   , getAbi
   , getAbiSeq
+  , genAbiValue
   , abiValueType
   , abiTypeSolidity
   , abiCalldata
+  , abiMethod
   , encodeAbiValue
   , parseTypeName
   ) where
@@ -300,6 +302,11 @@ putAbiSeq xs =
 
 encodeAbiValue :: AbiValue -> BS.ByteString
 encodeAbiValue = BSLazy.toStrict . runPut . putAbi
+
+abiMethod :: Text -> AbiValue -> BS.ByteString
+abiMethod s args = BSLazy.toStrict . runPut $ do
+  putWord32be (abiKeccak (encodeUtf8 s))
+  putAbi args
 
 abiCalldata :: Text -> Vector AbiValue -> BS.ByteString
 abiCalldata s xs = BSLazy.toStrict . runPut $ do
