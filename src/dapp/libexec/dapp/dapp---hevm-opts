@@ -24,6 +24,10 @@ while [[ $1 ]]; do
     -v|--verbose)
       opts+=(--verbose 1); shift
       ;;
+    --fuzz-runs)
+      shift; [ -n "$1" ] || fail "--fuzz-runs requires an argument."
+      opts+=(--fuzz-runs "$1"); shift
+      ;;
     --rpc-url)
       shift; [ -n "$1" ] || fail "--rpc-url requires an argument."
       HEVM_RPC=yes
