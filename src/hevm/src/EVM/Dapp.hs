@@ -3,11 +3,11 @@
 module EVM.Dapp where
 
 import EVM (Trace, traceCodehash, traceOpIx)
-import EVM.ABI (Event)
+import EVM.ABI (Event, AbiType)
 import EVM.Debug (srcMapCodePos)
 import EVM.Keccak (abiKeccak)
 import EVM.Solidity (SolcContract, CodeType (..), SourceCache, SrcMap)
-import EVM.Solidity (contractName)
+import EVM.Solidity (contractName, methodInputs)
 import EVM.Solidity (runtimeCodehash, creationCodehash, abiMap)
 import EVM.Solidity (runtimeSrcmap, creationSrcmap, eventMap)
 import EVM.Solidity (methodSignature, contractAst, astIdMap, astSrcMap)
@@ -19,7 +19,6 @@ import Data.Text.Encoding (encodeUtf8)
 import Data.Map (Map)
 import Data.Monoid ((<>))
 import Data.Word (Word32)
-import Data.List (sort)
 
 import Control.Arrow ((>>>))
 import Control.Lens
@@ -31,7 +30,7 @@ data DappInfo = DappInfo
   , _dappSolcByName :: Map Text SolcContract
   , _dappSolcByHash :: Map W256 (CodeType, SolcContract)
   , _dappSources    :: SourceCache
-  , _dappUnitTests  :: [(Text, [Text])]
+  , _dappUnitTests  :: [(Text, [(Text, [AbiType])])]
   , _dappEventMap   :: Map W256 Event
   , _dappAstIdMap   :: Map Int Value
   , _dappAstSrcMap  :: (SrcMap -> Maybe Value)
@@ -70,7 +69,7 @@ dappInfo root solcByName sources =
 unitTestMarkerAbi :: Word32
 unitTestMarkerAbi = abiKeccak (encodeUtf8 "IS_TEST()")
 
-findUnitTests :: (Text -> Bool) -> ([SolcContract] -> [(Text, [Text])])
+findUnitTests :: (Text -> Bool) -> ([SolcContract] -> [(Text, [(Text, [AbiType])])])
 findUnitTests matcher =
   concatMap $ \c ->
     case preview (abiMap . ix unitTestMarkerAbi) c of
@@ -81,13 +80,12 @@ findUnitTests matcher =
            then []
            else [(view contractName c, testNames)]
 
-unitTestMethods :: (Text -> Bool) -> (SolcContract -> [Text])
+unitTestMethods :: (Text -> Bool) -> (SolcContract -> [(Text, [AbiType])])
 unitTestMethods matcher =
   view abiMap
     >>> Map.elems
-    >>> map (view methodSignature)
-    >>> filter matcher
-    >>> sort
+    >>> map (\f -> (view methodSignature f, fmap snd $ view methodInputs f))
+    >>> filter (matcher . fst)
 
 traceSrcMap :: DappInfo -> Trace -> Maybe SrcMap
 traceSrcMap dapp trace =

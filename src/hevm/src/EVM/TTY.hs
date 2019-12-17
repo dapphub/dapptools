@@ -260,6 +260,7 @@ runFromVM vm = do
       { oracle            = Fetch.zero
       , verbose           = Nothing
       , match             = ""
+      , fuzzRuns          = 1
       , vmModifier        = id
       , testParams        = error "irrelevant"
       }
@@ -302,7 +303,7 @@ main opts root jsonFilePath = do
                   TestPickerPane
                   (Vec.fromList
                    (concatMap
-                    (\(a, xs) -> [(a, x) | x <- xs])
+                    (\(a, xs) -> [(a, fst x) | x <- xs])
                     (view dappUnitTests dapp)))
                   1
             , _testPickerDapp = dapp
@@ -389,7 +390,7 @@ appEvent st@(ViewVm s) (VtyEvent (V.EvKey V.KEsc [])) =
               TestPickerPane
               (Vec.fromList
                (concatMap
-                (\(a, xs) -> [(a, x) | x <- xs])
+                (\(a, xs) -> [(a, fst x) | x <- xs])
                 (view dappUnitTests dapp)))
               1
         , _testPickerDapp = dapp
