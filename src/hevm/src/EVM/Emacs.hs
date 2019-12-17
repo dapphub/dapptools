@@ -507,6 +507,7 @@ defaultUnitTestOptions = do
     { oracle            = Fetch.zero
     , verbose           = Nothing
     , match             = ""
+    , fuzzRuns          = 100
     , vmModifier        = id
     , testParams        = params
     }

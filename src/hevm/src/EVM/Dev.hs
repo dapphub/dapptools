@@ -48,6 +48,7 @@ ghciTest root path state =
         { oracle = EVM.Fetch.zero
         , verbose = Nothing
         , match = ""
+        , fuzzRuns = 100
         , vmModifier = loadFacts
         , testParams = params
         }
@@ -96,6 +97,7 @@ ghciTty root path state =
         { oracle = EVM.Fetch.zero
         , verbose = Nothing
         , match = ""
+        , fuzzRuns = 100
         , vmModifier = loadFacts
         , testParams = params
         }

@@ -106,6 +106,7 @@ data Command w
       { jsonFile    :: w ::: Maybe String <?> "Filename or path to dapp build output (default: out/*.solc.json)"
       , dappRoot    :: w ::: Maybe String <?> "Path to dapp project root directory (default: . )"
       , debug       :: w ::: Bool         <?> "Run interactively"
+      , fuzzRuns    :: w ::: Maybe Int    <?> "Number of times to run fuzz tests"
       , rpc         :: w ::: Maybe URL    <?> "Fetch state from a remote node"
       , verbose     :: w ::: Maybe Int    <?> "Append call trace: {1} failures {2} all"
       , coverage    :: w ::: Bool         <?> "Coverage analysis"
@@ -190,6 +191,7 @@ unitTestOptions cmd = do
          Nothing  -> EVM.Fetch.zero
     , EVM.UnitTest.verbose = verbose cmd
     , EVM.UnitTest.match   = pack $ fromMaybe "^test" (match cmd)
+    , EVM.UnitTest.fuzzRuns = fromMaybe 100 (fuzzRuns cmd)
     , EVM.UnitTest.vmModifier = vmModifier
     , EVM.UnitTest.testParams = params
     }

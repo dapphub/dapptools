@@ -11,7 +11,6 @@ import EVM.Dapp
 import EVM.Debug (srcMapCodePos)
 import EVM.Exec
 import EVM.Format
-import EVM.Keccak
 import EVM.Solidity
 import EVM.Types
 import EVM.Concrete (w256, wordAt, wordValue)
@@ -36,7 +35,6 @@ import Data.Maybe         (fromMaybe, catMaybes, fromJust, fromMaybe, mapMaybe)
 import Data.Monoid        ((<>))
 import Data.Text          (Text, pack, unpack)
 import Data.Text          (isPrefixOf, stripSuffix, intercalate)
-import Data.Text.Encoding (encodeUtf8)
 import Data.Word          (Word32)
 import System.Environment (lookupEnv)
 import System.IO          (hFlush, stdout)
@@ -57,6 +55,7 @@ import qualified Data.Set as Set
 import Data.Vector (Vector)
 import qualified Data.Vector as Vector
 
+import Test.QuickCheck hiding (verbose)
 import Test.QuickCheck.Monadic
 
 
@@ -65,7 +64,7 @@ data UnitTestOptions = UnitTestOptions
     oracle     :: Query -> IO (EVM ())
   , verbose    :: Maybe Int
   , match      :: Text
-  , fuzzmatch  :: (Text, [AbiType])
+  , fuzzRuns   :: Int
   , vmModifier :: VM -> VM
   , testParams :: TestVMParams
   }
@@ -190,10 +189,12 @@ checkFailures UnitTestOptions { .. } method args bailed = do
 
 -- | Randomly generates the calldata arguments and runs the test
 fuzzTest :: UnitTestOptions -> Text -> [AbiType] -> VM -> PropertyM IO Bool
-fuzzTest opts sig types vm = forAllM (genAbiValue (AbiTupleType $ Vector.fromList types)) $ \args -> do
-                                        run (runStateT (interpret opts (runUnitTest opts sig args)) vm) >>= \case
-                                          (Left _, _) -> return False
-                                          (Right b, _) -> return b
+fuzzTest opts sig types vm = forAllM (genAbiValue (AbiTupleType $ Vector.fromList types))
+  $ \args ->
+      do
+        run (runStateT (interpret opts (runUnitTest opts sig args)) vm) >>= \case
+          (Left _, _) -> return False
+          (Right b, _) -> return b
 
 tick :: Text -> IO ()
 tick x = Text.putStr x >> hFlush stdout
@@ -352,7 +353,7 @@ coverageForUnitTestContract
   :: UnitTestOptions
   -> Map Text SolcContract
   -> SourceCache
-  -> (Text, [Text])
+  -> (Text, [(Text, [AbiType])])
   -> IO (MultiSet SrcMap)
 coverageForUnitTestContract
   opts@(UnitTestOptions {..}) contractMap sources (name, testNames) = do
@@ -374,7 +375,7 @@ coverageForUnitTestContract
 
       -- Define the thread spawner for test cases
       let
-        runOne testName = spawn_ . liftIO $ do
+        runOne (testName, _) = spawn_ . liftIO $ do
           (x, (_, cov)) <-
             runStateT
               (interpretWithCoverage opts (runUnitTest opts testName noArgs))
@@ -399,13 +400,13 @@ runUnitTestContract
   :: UnitTestOptions
   -> Map Text SolcContract
   -> SourceCache
-  -> (Text, [Text])
+  -> (Text, [(Text, [AbiType])])
   -> IO Bool
 runUnitTestContract
-  opts@(UnitTestOptions {..}) contractMap sources (name, testNames) = do
+  opts@(UnitTestOptions {..}) contractMap sources (name, testSigs) = do
 
   -- Print a header
-  putStrLn $ "Running " ++ show (length testNames) ++ " tests for "
+  putStrLn $ "Running " ++ show (length testSigs) ++ " tests for "
     ++ unpack name
 
   -- Look for the wanted contract by name from the Solidity info
@@ -435,7 +436,7 @@ runUnitTestContract
           pure False
         Just (VMSuccess _) -> do
 
-          -- Define the thread spawner for test cases
+          -- Define the thread spawner for normal test cases
           let
             runOne testName = do
               x <-
@@ -467,11 +468,30 @@ runUnitTestContract
                   pure ("\x1b[33m[OOPS]\x1b[0m "
                         <> testName, Left ("VM error for " <> testName))
 
+          -- Define the thread spawner for property based tests
+          let fuzzRun (testName, types) = do
+                res <- quickCheckResult (withMaxSuccess fuzzRuns $ monadicIO $ do fuzzTest opts testName types vm1)
+                case res of
+                  (Success numTests _ _ _ _ _) ->
+                    pure ("\x1b[32m[PASS]\x1b[0m "
+                           <> testName <> " (runs: " <> (pack $ show numTests) <> ")",
+                           --vm1 isn't quite the post vm we want... but anyway...
+                           Right (passOutput vm1 dapp opts testName))
+                  (Failure _ _ _ _ _ _ _ _ _ _ failingTestCase _ _)
+                    -> pure ("\x1b[31m[FAIL]\x1b[0m "
+                              <> testName <> " counterexample: " <> pack (show failingTestCase),
+                              Left (failOutput vm1 dapp opts testName))
+                  _ -> pure ("\x1b[31m[OOPS]\x1b[0m "
+                              <> testName, Left (failOutput vm1 dapp opts testName))
+
+          let runTest (testName, []) = runOne testName
+              runTest (testName, types) = fuzzRun (testName, types)
+
           let inform = \(x, y) -> Text.putStrLn x >> pure y
 
-                -- Run all the test cases and print their status updates
+          -- Run all the test cases and print their status updates
           details <-
-            mapM (\x -> runOne x >>= inform) testNames
+            mapM (\x -> runTest x >>= inform) testSigs
 
           let running = [x | Right x <- details]
           let bailing = [x | Left x <- details]
