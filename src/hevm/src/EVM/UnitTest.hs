@@ -1,5 +1,4 @@
 {-# LANGUAGE ViewPatterns #-}
-
 module EVM.UnitTest where
 
 import Prelude hiding (Word)
@@ -28,13 +27,16 @@ import qualified Control.Monad.State.Strict as State
 import Control.Monad.Par.Class (spawn_)
 import Control.Monad.Par.IO (runParIO)
 
+import qualified Data.ByteString.Lazy as BSLazy
 import Data.ByteString    (ByteString)
+import Data.ByteString.Base16 as BS16
 import Data.Foldable      (toList)
 import Data.Map           (Map)
 import Data.Maybe         (fromMaybe, catMaybes, fromJust, fromMaybe, mapMaybe)
 import Data.Monoid        ((<>))
 import Data.Text          (Text, pack, unpack)
 import Data.Text          (isPrefixOf, stripSuffix, intercalate)
+import qualified Data.ByteString.Char8  as Char8
 import Data.Word          (Word32)
 import System.Environment (lookupEnv)
 import System.IO          (hFlush, stdout)
@@ -56,8 +58,6 @@ import Data.Vector (Vector)
 import qualified Data.Vector as Vector
 
 import Test.QuickCheck hiding (verbose)
-import Test.QuickCheck.Monadic
-
 
 data UnitTestOptions = UnitTestOptions
   {
@@ -65,6 +65,7 @@ data UnitTestOptions = UnitTestOptions
   , verbose    :: Maybe Int
   , match      :: Text
   , fuzzRuns   :: Int
+  , replay     :: Maybe (Text, BSLazy.ByteString)
   , vmModifier :: VM -> VM
   , testParams :: TestVMParams
   }
@@ -101,9 +102,6 @@ defaultBalanceForCreated = 0xffffffffffffffffffffffff
 defaultMaxCodeSize :: W256
 defaultMaxCodeSize = 0xffffffff
 
-noArgs :: AbiValue
-noArgs = AbiTuple mempty
-
 type ABIMethod = Text
 
 -- | Assuming a constructor is loaded, this stepper will run the constructor
@@ -131,7 +129,7 @@ initializeUnitTest UnitTestOptions { .. } = do
   -- Initialize the test contract
   Stepper.evm (popTrace >> pushTrace (EntryTrace "initialize test"))
   Stepper.evm $
-    setupCall testParams addr "setUp()" noArgs
+    setupCall testParams addr "setUp()" emptyAbi
 
   Stepper.note "Running `setUp()'"
 
@@ -188,13 +186,12 @@ checkFailures UnitTestOptions { .. } method args bailed = do
      pure (shouldFail == (bailed || failed))
 
 -- | Randomly generates the calldata arguments and runs the test
-fuzzTest :: UnitTestOptions -> Text -> [AbiType] -> VM -> PropertyM IO Bool
-fuzzTest opts sig types vm = forAllM (genAbiValue (AbiTupleType $ Vector.fromList types))
-  $ \args ->
-      do
-        run (runStateT (interpret opts (runUnitTest opts sig args)) vm) >>= \case
-          (Left _, _) -> return False
-          (Right b, _) -> return b
+fuzzTest :: UnitTestOptions -> Text -> [AbiType] -> VM -> Property
+fuzzTest opts sig types vm = forAllShow (genAbiValue (AbiTupleType $ Vector.fromList types)) (show . ByteStringS . encodeAbiValue)
+  $ \args -> ioProperty $ do
+    (runStateT (interpret opts (runUnitTest opts sig args)) vm) >>= \case
+      (Left _, _) -> return False
+      (Right b, _) -> return b
 
 tick :: Text -> IO ()
 tick x = Text.putStr x >> hFlush stdout
@@ -378,7 +375,7 @@ coverageForUnitTestContract
         runOne (testName, _) = spawn_ . liftIO $ do
           (x, (_, cov)) <-
             runStateT
-              (interpretWithCoverage opts (runUnitTest opts testName noArgs))
+              (interpretWithCoverage opts (runUnitTest opts testName emptyAbi))
               (vm1, mempty)
           case x of
             Right True -> pure cov
@@ -438,15 +435,16 @@ runUnitTestContract
 
           -- Define the thread spawner for normal test cases
           let
-            runOne testName = do
+            runOne testName args = do
+              let argInfo = pack (if args == emptyAbi then "" else " with arguments: " <> show args)
               x <-
                 runStateT
-                  (interpret opts (execTest opts testName noArgs))
+                  (interpret opts (execTest opts testName args))
                   vm1
               case x of
                 (Right b, vm2) -> do
                   y <- runStateT
-                    (interpret opts (checkFailures opts testName noArgs b))
+                    (interpret opts (checkFailures opts testName args b))
                     vm2
                   case y of
                     (Right True,  vm) ->
@@ -455,37 +453,51 @@ runUnitTestContract
                       in
                         pure
                         ("\x1b[32m[PASS]\x1b[0m "
-                         <> testName <> " (gas: " <> gasText <> ")"
+                         <> testName <> argInfo <> " (gas: " <> gasText <> ")"
                         , Right (passOutput vm dapp opts testName))
                     (Right False, vm) ->
                              pure ("\x1b[31m[FAIL]\x1b[0m "
-                             <> testName, Left (failOutput vm dapp opts testName))
+                             <> testName <> argInfo, Left (failOutput vm dapp opts testName))
                     (Left _, _)       ->
                              pure ("\x1b[33m[OOPS]\x1b[0m "
-                             <> testName, Left ("VM error for " <> testName))
+                             <> testName <> argInfo, Left ("VM error for " <> testName))
 
                 (Left _, _)       ->
                   pure ("\x1b[33m[OOPS]\x1b[0m "
-                        <> testName, Left ("VM error for " <> testName))
+                        <> testName <> argInfo, Left ("VM error for " <> testName))
 
           -- Define the thread spawner for property based tests
           let fuzzRun (testName, types) = do
-                res <- quickCheckResult (withMaxSuccess fuzzRuns $ monadicIO $ do fuzzTest opts testName types vm1)
+                res <- quickCheckResult (withMaxSuccess fuzzRuns (fuzzTest opts testName types vm1))
                 case res of
-                  (Success numTests _ _ _ _ _) ->
+                  Success numTests _ _ _ _ _ ->
                     pure ("\x1b[32m[PASS]\x1b[0m "
                            <> testName <> " (runs: " <> (pack $ show numTests) <> ")",
-                           --vm1 isn't quite the post vm we want... but anyway...
+                           -- vm1 isn't quite the post vm we want...
+                           -- but the vm we want is not accessible here anyway...
                            Right (passOutput vm1 dapp opts testName))
-                  (Failure _ _ _ _ _ _ _ _ _ _ failingTestCase _ _)
-                    -> pure ("\x1b[31m[FAIL]\x1b[0m "
-                              <> testName <> " counterexample: " <> pack (show failingTestCase),
-                              Left (failOutput vm1 dapp opts testName))
+                  Failure _ _ _ _ _ _ _ _ _ _ failCase _ _ ->
+                    let abiValue = decodeAbiValue (AbiTupleType (Vector.fromList types)) $ BSLazy.fromStrict . snd . BS16.decode . Char8.pack $ concat failCase
+                        ppOutput = pack $ show abiValue
+                    in do
+                    -- Run the failing test again to get a proper trace
+                    vm2 <- execStateT (interpret opts (runUnitTest opts testName abiValue)) vm1
+                    pure ("\x1b[31m[FAIL]\x1b[0m "
+                             <> testName <> ". Counterexample: " <> ppOutput
+                             <> "\nRun:\n dapp test --replay '(\"" <> testName <> "\",\""
+                             <> (pack (concat failCase)) <> "\")'\nto test this case again, or \n dapp debug --replay '(\""
+                             <> testName <> "\",\"" <> (pack (concat failCase)) <> "\")'\nto debug it.",
+                             Left (failOutput vm2 dapp opts testName))
                   _ -> pure ("\x1b[31m[OOPS]\x1b[0m "
                               <> testName, Left (failOutput vm1 dapp opts testName))
 
-          let runTest (testName, []) = runOne testName
-              runTest (testName, types) = fuzzRun (testName, types)
+          let runTest (testName, []) = runOne testName emptyAbi
+              runTest (testName, types) = case replay of
+                Nothing -> fuzzRun (testName, types)
+                Just (sig, callData) -> if sig == testName
+                                         then runOne testName $
+                                              decodeAbiValue (AbiTupleType (Vector.fromList types)) callData
+                                         else fuzzRun (testName, types)
 
           let inform = \(x, y) -> Text.putStrLn x >> pure y
 

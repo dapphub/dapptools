@@ -54,7 +54,7 @@ import Control.Monad.State.Strict (execState)
 import Data.ByteString            (ByteString)
 import Data.List                  (intercalate, isSuffixOf)
 import Data.Text                  (Text, unpack, pack)
-import Data.Text.Encoding   (encodeUtf8)
+import Data.Text.Encoding         (encodeUtf8)
 import Data.Maybe                 (fromMaybe)
 import Data.Version               (showVersion)
 import System.Directory           (withCurrentDirectory, listDirectory)
@@ -103,15 +103,16 @@ data Command w
       , state       :: w ::: Maybe String     <?> "Path to state repository"
       }
   | DappTest -- Run DSTest unit tests
-      { jsonFile    :: w ::: Maybe String <?> "Filename or path to dapp build output (default: out/*.solc.json)"
-      , dappRoot    :: w ::: Maybe String <?> "Path to dapp project root directory (default: . )"
-      , debug       :: w ::: Bool         <?> "Run interactively"
-      , fuzzRuns    :: w ::: Maybe Int    <?> "Number of times to run fuzz tests"
-      , rpc         :: w ::: Maybe URL    <?> "Fetch state from a remote node"
-      , verbose     :: w ::: Maybe Int    <?> "Append call trace: {1} failures {2} all"
-      , coverage    :: w ::: Bool         <?> "Coverage analysis"
-      , state       :: w ::: Maybe String <?> "Path to state repository"
-      , match       :: w ::: Maybe String <?> "Test case filter - only run methods matching regex"
+      { jsonFile    :: w ::: Maybe String             <?> "Filename or path to dapp build output (default: out/*.solc.json)"
+      , dappRoot    :: w ::: Maybe String             <?> "Path to dapp project root directory (default: . )"
+      , debug       :: w ::: Bool                     <?> "Run interactively"
+      , fuzzRuns    :: w ::: Maybe Int                <?> "Number of times to run fuzz tests"
+      , replay      :: w ::: Maybe (Text, ByteString) <?> "Custom fuzz case to run/debug"
+      , rpc         :: w ::: Maybe URL                <?> "Fetch state from a remote node"
+      , verbose     :: w ::: Maybe Int                <?> "Append call trace: {1} failures {2} all"
+      , coverage    :: w ::: Bool                     <?> "Coverage analysis"
+      , state       :: w ::: Maybe String             <?> "Path to state repository"
+      , match       :: w ::: Maybe String             <?> "Test case filter - only run methods matching regex"
       }
   | Interactive -- Browse & run unit tests interactively
       { jsonFile :: w ::: Maybe String <?> "Filename or path to dapp build output (default: out/*.solc.json)"
@@ -159,6 +160,11 @@ data Command w
 
 type URL = Text
 
+
+-- For some reason haskell can't derive a
+-- parseField instance for (Text, ByteString)
+instance Options.ParseField (Text, ByteString)
+
 instance Options.ParseRecord (Command Options.Wrapped) where
   parseRecord =
     Options.parseRecordWithModifiers Options.lispCaseModifiers
@@ -192,6 +198,9 @@ unitTestOptions cmd = do
     , EVM.UnitTest.verbose = verbose cmd
     , EVM.UnitTest.match   = pack $ fromMaybe "^test" (match cmd)
     , EVM.UnitTest.fuzzRuns = fromMaybe 100 (fuzzRuns cmd)
+    , EVM.UnitTest.replay   = do
+        arg <- replay cmd
+        return $ (fst arg, LazyByteString.fromStrict (hexByteString "--replay" $ strip0x $ snd arg))
     , EVM.UnitTest.vmModifier = vmModifier
     , EVM.UnitTest.testParams = params
     }
@@ -363,9 +372,6 @@ launchExec cmd = do
               Git.saveFacts (Git.RepoAt path) (Facts.vmFacts vm')
     Debug ->
       void (EVM.TTY.runFromVM vm1)
-
-strip0x :: ByteString -> ByteString
-strip0x bs = if "0x" `Char8.isPrefixOf` bs then Char8.drop 2 bs else bs
 
 data Testcase = Testcase {
   _entries :: [(Text, Maybe Text)],

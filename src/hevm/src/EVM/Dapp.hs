@@ -75,17 +75,19 @@ findUnitTests matcher =
     case preview (abiMap . ix unitTestMarkerAbi) c of
       Nothing -> []
       Just _  ->
-        let testNames = (unitTestMethods matcher) c
+        let testNames = (unitTestMethodsFiltered matcher) c
         in if null testNames
            then []
            else [(view contractName c, testNames)]
 
-unitTestMethods :: (Text -> Bool) -> (SolcContract -> [(Text, [AbiType])])
-unitTestMethods matcher =
-  view abiMap
-    >>> Map.elems
-    >>> map (\f -> (view methodSignature f, fmap snd $ view methodInputs f))
-    >>> filter (matcher . fst)
+unitTestMethodsFiltered :: (Text -> Bool) -> (SolcContract -> [(Text, [AbiType])])
+unitTestMethodsFiltered matcher c = filter (matcher . fst) $ unitTestMethods c
+
+unitTestMethods :: SolcContract -> [(Text, [AbiType])]
+unitTestMethods = view abiMap
+                  >>> Map.elems
+                  >>> map (\f -> (view methodSignature f,
+                                  fmap snd $ view methodInputs f))
 
 traceSrcMap :: DappInfo -> Trace -> Maybe SrcMap
 traceSrcMap dapp trace =
