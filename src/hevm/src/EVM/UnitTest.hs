@@ -32,7 +32,7 @@ import Data.ByteString    (ByteString)
 import Data.ByteString.Base16 as BS16
 import Data.Foldable      (toList)
 import Data.Map           (Map)
-import Data.Maybe         (fromMaybe, catMaybes, fromJust, fromMaybe, mapMaybe)
+import Data.Maybe         (fromMaybe, catMaybes, fromJust, isJust, fromMaybe, mapMaybe)
 import Data.Monoid        ((<>))
 import Data.Text          (Text, pack, unpack)
 import Data.Text          (isPrefixOf, stripSuffix, intercalate)
@@ -468,7 +468,14 @@ runUnitTestContract
 
           -- Define the thread spawner for property based tests
           let fuzzRun (testName, types) = do
-                res <- quickCheckResult (withMaxSuccess fuzzRuns (fuzzTest opts testName types vm1))
+                let args = Args{ replay          = Nothing
+                               , maxSuccess      = fuzzRuns
+                               , maxDiscardRatio = 10
+                               , maxSize         = 100
+                               , chatty          = isJust verbose
+                               , maxShrinks      = maxBound
+                               }
+                res <- quickCheckWithResult args (fuzzTest opts testName types vm1)
                 case res of
                   Success numTests _ _ _ _ _ ->
                     pure ("\x1b[32m[PASS]\x1b[0m "
