@@ -49,6 +49,7 @@ ghciTest root path state =
         , verbose = Nothing
         , match = ""
         , fuzzRuns = 100
+        , replay = Nothing
         , vmModifier = loadFacts
         , testParams = params
         }
@@ -98,6 +99,7 @@ ghciTty root path state =
         , verbose = Nothing
         , match = ""
         , fuzzRuns = 100
+        , replay = Nothing
         , vmModifier = loadFacts
         , testParams = params
         }

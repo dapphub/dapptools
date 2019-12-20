@@ -508,6 +508,7 @@ defaultUnitTestOptions = do
     , verbose           = Nothing
     , match             = ""
     , fuzzRuns          = 100
+    , replay            = Nothing
     , vmModifier        = id
     , testParams        = params
     }

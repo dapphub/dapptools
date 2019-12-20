@@ -43,7 +43,9 @@ module EVM.ABI
   , abiTypeSolidity
   , abiCalldata
   , abiMethod
+  , emptyAbi
   , encodeAbiValue
+  , decodeAbiValue
   , parseTypeName
   ) where
 
@@ -51,7 +53,7 @@ import EVM.Keccak (abiKeccak)
 import EVM.Types
 
 import Control.Monad      (replicateM, replicateM_, forM_, void)
-import Data.Binary.Get    (Get, label, getWord8, getWord32be, skip)
+import Data.Binary.Get    (Get, runGet, label, getWord8, getWord32be, skip)
 import Data.Binary.Put    (Put, runPut, putWord8, putWord32be)
 import Data.Bits          (shiftL, shiftR, (.&.))
 import Data.ByteString    (ByteString)
@@ -102,7 +104,6 @@ instance Show AbiValue where
     "[" ++ intercalate ", " (show <$> Vector.toList v) ++ "]"
   show (AbiTuple v) =
     "(" ++ intercalate ", " (show <$> Vector.toList v) ++ ")"
-
 
 data AbiType
   = AbiUIntType         Int
@@ -321,6 +322,9 @@ putAbiSeq xs =
 encodeAbiValue :: AbiValue -> BS.ByteString
 encodeAbiValue = BSLazy.toStrict . runPut . putAbi
 
+decodeAbiValue :: AbiType -> BSLazy.ByteString -> AbiValue
+decodeAbiValue = runGet . getAbi
+
 abiMethod :: Text -> AbiValue -> BS.ByteString
 abiMethod s args = BSLazy.toStrict . runPut $ do
   putWord32be (abiKeccak (encodeUtf8 s))
@@ -389,6 +393,9 @@ getWord256 = pack32 8 <$> replicateM 8 getWord32be
 
 roundTo256Bits :: Integral a => a -> a
 roundTo256Bits n = 32 * div (n + 255) 256
+
+emptyAbi :: AbiValue
+emptyAbi = AbiTuple mempty
 
 getBytesWith256BitPadding :: Integral a => a -> Get ByteString
 getBytesWith256BitPadding i =

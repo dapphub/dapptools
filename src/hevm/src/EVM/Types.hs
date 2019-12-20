@@ -17,6 +17,7 @@ import Data.ByteString (ByteString)
 import Data.ByteString.Base16 as BS16
 import Data.ByteString.Builder (byteStringHex, toLazyByteString)
 import Data.ByteString.Lazy (toStrict)
+import qualified Data.ByteString.Char8  as Char8
 import Data.DoubleWord
 import Data.DoubleWord.TH
 import Data.Word (Word8)
@@ -68,6 +69,9 @@ showAddrWith0x addr = "0x" ++ show addr
 
 showWordWith0x :: W256 -> String
 showWordWith0x addr = show addr
+
+strip0x :: ByteString -> ByteString
+strip0x bs = if "0x" `Char8.isPrefixOf` bs then Char8.drop 2 bs else bs
 
 newtype ByteStringS = ByteStringS ByteString
 
