@@ -28,6 +28,10 @@ while [[ $1 ]]; do
       shift; [ -n "$1" ] || fail "--fuzz-runs requires an argument."
       opts+=(--fuzz-runs "$1"); shift
       ;;
+    --replay)
+      shift; [ -n "$1" ] || fail "--fuzz-runs requires an argument."
+      opts+=(--replay "$1"); shift
+      ;;
     --rpc-url)
       shift; [ -n "$1" ] || fail "--rpc-url requires an argument."
       HEVM_RPC=yes
