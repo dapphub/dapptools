@@ -1,4 +1,9 @@
 # hevm changelog
+
+## [unreleased]
+ - Correct gas readouts for unit tests
+ - Prevent crash when trying to jump to next source code point if source code is missing
+
 ## 0.35 - 2019-11-02
  - Merkle Patricia trie support [280](https://github.com/dapphub/dapptools/pull/280)
  - RLP encoding and decoding functions [280](https://github.com/dapphub/dapptools/pull/280)
