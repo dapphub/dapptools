@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [unreleased]
+### Fixed
+- `dapp address` and `dapp create` now returns checksummed addresses
+### Changed
+- `dapp address` returns address with `0x` prefix. 
+
 ## [0.25.0] - 2019-08-02
 ### Fixed
 - Correctly load testnet snapshots which were saved with multiple accounts
