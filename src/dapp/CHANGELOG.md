@@ -5,10 +5,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [unreleased]
+### Added
+- Support for solc 0.5.15
+
 ### Fixed
 - `dapp address` and `dapp create` now returns checksummed addresses
+
 ### Changed
 - `dapp address` returns address with `0x` prefix. 
+- Default to solc 0.5.15
 
 ## [0.25.0] - 2019-08-02
 ### Fixed
