@@ -8,9 +8,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - Integration with `hevm`s new property based testing functionality. Any test with nonzero arguments will be interpreted as a property test whose arguments are randomly generated and run `--fuzz-runs` number of times.
 - Support for solc 0.5.16
+- Support for solc 0.6.0
 
 ## [0.26.0]
 ### Added
+=======
 - Support for solc 0.5.15
 
 ### Fixed
