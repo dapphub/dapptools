@@ -43,6 +43,7 @@ data FeeSchedule n = FeeSchedule
   , g_ecmul :: n
   , g_pairing_point :: n
   , g_pairing_base :: n
+  , g_fround :: n
   , r_block :: n
   } deriving Show
 
@@ -112,6 +113,7 @@ homestead = FeeSchedule
   , g_ecmul = 40000
   , g_pairing_point = 80000
   , g_pairing_base = 100000
+  , g_fround = 1
   , r_block = 2000000000000000000
   }
 
