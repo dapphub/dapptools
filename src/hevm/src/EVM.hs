@@ -413,7 +413,7 @@ exec1 = do
 
     doStop = finishFrame (FrameReturned "")
 
-  if self > 0x0 && self < 0x9 then do
+  if self > 0x0 && self <= 0x9 then do
     -- call to precompile
     let ?op = 0x00 -- dummy value
     let
@@ -914,7 +914,7 @@ exec1 = do
               : xs
              ) ->
               case xTo of
-                n | n > 0 && n <= 8 ->
+                n | n > 0 && n <= 9 ->
                   precompiledContract vm fees xGas xTo xTo xValue xInOffset xInSize xOutOffset xOutSize xs
                 n | num n == cheatCode ->
                   do
@@ -955,7 +955,7 @@ exec1 = do
               : xs
               ) ->
               case xTo of
-                n | n > 0 && n <= 8 ->
+                n | n > 0 && n <= 9 ->
                   precompiledContract vm fees xGas xTo self xValue xInOffset xInSize xOutOffset xOutSize xs
                 _ ->
                   accessMemoryRange fees xInOffset xInSize $
@@ -1013,7 +1013,7 @@ exec1 = do
           case stk of
             (xGas:(num -> xTo):xInOffset:xInSize:xOutOffset:xOutSize:xs) ->
               case xTo of
-                n | n > 0 && n <= 8 ->
+                n | n > 0 && n <= 9 ->
                   precompiledContract vm fees xGas xTo self 0 xInOffset xInSize xOutOffset xOutSize xs
                 n | num n == cheatCode -> do
                       assign (state . stack) xs
@@ -1050,7 +1050,7 @@ exec1 = do
           case stk of
             (xGas : (num -> xTo) : xInOffset : xInSize : xOutOffset : xOutSize : xs) ->
               case xTo of
-                n | n > 0 && n <= 8 ->
+                n | n > 0 && n <= 9 ->
                   precompiledContract vm fees xGas xTo xTo 0 xInOffset xInSize xOutOffset xOutSize xs
                 _ ->
                   accessMemoryRange fees xInOffset xInSize $
@@ -1169,6 +1169,10 @@ executePrecompile fees preCompileAddr gasCap inOffset inSize outOffset outSize x
   let input = readMemory (num inOffset) (num inSize) vm
       cost = costOfPrecompile fees preCompileAddr input
       notImplemented = error $ "precompile at address " <> show preCompileAddr <> " not yet implemented"
+      precompileFail = do burn (gasCap - cost) $ do
+                            assign (state . stack) (0 : xs)
+                            pushTrace $ ErrorTrace $ PrecompileFailure
+                            next
   if cost > gasCap then
     burn gasCap $ do
       assign (state . stack) (0 : xs)
@@ -1242,11 +1246,7 @@ executePrecompile fees preCompileAddr gasCap inOffset inSize outOffset outSize x
 
         -- ECADD
         0x6 -> case EVM.Precompiled.execute 0x6 (truncpad 128 input) 64 of
-          Nothing -> do
-            burn (gasCap - cost) $ do
-              assign (state . stack) (0 : xs)
-              pushTrace $ ErrorTrace $ PrecompileFailure
-              next
+          Nothing -> precompileFail
           Just output -> do
             let truncpaddedOutput = truncpad 64 output
             assign (state . stack) (1 : xs)
@@ -1256,11 +1256,7 @@ executePrecompile fees preCompileAddr gasCap inOffset inSize outOffset outSize x
 
         -- ECMUL
         0x7 -> case EVM.Precompiled.execute 0x7 (truncpad 96 input) 64 of
-          Nothing -> do
-            burn (gasCap - cost) $ do
-              assign (state . stack) (0 : xs)
-              pushTrace $ ErrorTrace $ PrecompileFailure
-              next
+          Nothing -> precompileFail
           Just output -> do
             let truncpaddedOutput = truncpad 64 output
             assign (state . stack) (1 : xs)
@@ -1270,17 +1266,26 @@ executePrecompile fees preCompileAddr gasCap inOffset inSize outOffset outSize x
 
         -- ECPAIRING
         0x8 -> case EVM.Precompiled.execute 0x8 input 32 of
-          Nothing -> do
-            burn (gasCap - cost) $ do
-              assign (state . stack) (0 : xs)
-              pushTrace $ ErrorTrace $ PrecompileFailure
-              next
+          Nothing -> precompileFail
           Just output -> do
             let truncpaddedOutput = truncpad 32 output
             assign (state . stack) (1 : xs)
             assign (state . returndata) truncpaddedOutput
             copyBytesToMemory truncpaddedOutput outSize 0 outOffset
             next
+
+        -- BLAKE2
+        0x9 -> case (BS.length input, 1 >= BS.last input) of
+          (213, True) -> case EVM.Precompiled.execute 0x9 input 64 of
+            Just output -> do
+              let truncpaddedOutput = truncpad 64 output
+              assign (state . stack) (1 : xs)
+              assign (state . returndata) truncpaddedOutput
+              copyBytesToMemory truncpaddedOutput outSize 0 outOffset
+              next
+            Nothing -> precompileFail
+          _ -> precompileFail
+
 
         _   -> notImplemented
 
@@ -2291,6 +2296,8 @@ costOfPrecompile (FeeSchedule {..}) precompileAddr input =
     0x7 -> g_ecmul
     -- ECPAIRING
     0x8 -> num $ ((BS.length input) `div` 192) * (num g_pairing_point) + (num g_pairing_base)
+    -- BLAKE2 (todo)
+    0x9 -> g_fround * (num $ asInteger $ lazySlice 0 4 input)
     _ -> error ("unimplemented precompiled contract " ++ show precompileAddr)
 
 -- Gas cost of memory expansion

@@ -16,6 +16,7 @@ enum ethjet_operation
     ETHJET_ECADD = 6,
     ETHJET_ECMUL = 7,
     ETHJET_ECPAIRING = 8,
+    ETHJET_BLAKE2 = 9,
     ETHJET_EXAMPLE = 0xdeadbeef,
   };
 

@@ -1,6 +1,7 @@
 #include "ethjet.h"
 #include "ethjet-ff.h"
 #include "tinykeccak.h"
+#include "blake2.h"
 
 #include <secp256k1_recovery.h>
 
@@ -96,6 +97,21 @@ ethjet_ecrecover (secp256k1_context *ctx,
   return 1;
 }
 
+int ethjet_blake2(uint8_t *in, size_t in_size,
+                  uint8_t *out, size_t out_size) {
+  uint32_t rounds = in[0] << 24 | in[1] << 16 | in[2] << 8 | in[3];
+  unsigned char f = in[212];
+  uint64_t *h = (uint64_t *)&in[4];
+  uint64_t *m = (uint64_t *)&in[68];
+  uint64_t *t = (uint64_t *)&in[196];
+
+  blake2b_compress(h, m, t, f, rounds);
+
+  memcpy(out, h, out_size);
+
+  return 1;
+}
+
 int
 ethjet (struct ethjet_context *ctx,
         enum ethjet_operation op,
@@ -118,6 +134,9 @@ ethjet (struct ethjet_context *ctx,
 
   case ETHJET_ECPAIRING:
     return ethjet_ecpairing (in, in_size, out, out_size);
+
+  case ETHJET_BLAKE2:
+    return ethjet_blake2 (in, in_size, out, out_size);
 
   default:
     return 0;
