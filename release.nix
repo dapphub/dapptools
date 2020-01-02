@@ -12,14 +12,15 @@ let
     sha256 = "06h3hcsm09kp4hzq5sm9vqkmvx2nvgbh5i788qnqh5iiz9fpaa9k";
   };
 
-  # run all General State Tests, skipping modexp as it is
-  # problematic for darwin. todo: don't skip for linux
+  # run all General State Tests, skipping tests that deal with "anomalies on the main network"
+  # (see section K.1 of https://ethereum.github.io/yellowpaper/paper.pdf), and some performance
+  # heavy ones.
   hevmCompliance = x: x.runCommand "hevm-compliance" {} ''
     mkdir "$out"
     export PATH=${x.pkgs.hevm}/bin:${x.pkgs.jq}/bin:$PATH
     ${x.pkgs.hevm}/bin/hevm compliance \
       --tests ${ethereum-test-suite x} \
-      --skip "(modexp|RevertPrecompiledTouch_storage_d0g0v0|RevertPrecompiledTouch_storage_d3g0v0|Create1000Byzantium_d0g1v0)" \
+      --skip "(RevertPrecompiledTouch_storage_d0g0v0|RevertPrecompiledTouch_storage_d3g0v0|Create1000Byzantium_d0g1v0)" \
       --timeout 20 \
       --html > $out/index.html
     ${x.pkgs.hevm}/bin/hevm compliance \
