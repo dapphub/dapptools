@@ -379,6 +379,7 @@ errorFatal TooManyBlocks = True
 errorFatal TooManyTxs = True
 errorFatal TargetMissing = True
 errorFatal SignatureUnverified = True
+errorFatal InvalidTx = True
 errorFatal _ = False
 
 fromBlockchainCase :: BlockchainCase -> Either BlockchainError Case
