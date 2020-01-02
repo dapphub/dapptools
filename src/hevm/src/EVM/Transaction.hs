@@ -48,20 +48,20 @@ signingData chainId tx =
   else normalData
   where v          = fromIntegral (txV tx)
         to'        = case txToAddr tx of
-          Just a  -> rlpWord160 a
-          Nothing -> rlpencode $ BS mempty
+          Just a  -> BS $ word160Bytes a
+          Nothing -> BS mempty
         normalData = rlpList [rlpWord256 (txNonce tx),
                               rlpWord256 (txGasPrice tx),
                               rlpWord256 (txGasLimit tx),
                               to',
                               rlpWord256 (txValue tx),
-                              rlpencode (BS (txData tx))]
+                              BS (txData tx)]
         eip155Data = rlpList [rlpWord256 (txNonce tx),
                               rlpWord256 (txGasPrice tx),
                               rlpWord256 (txGasLimit tx),
                               to',
                               rlpWord256 (txValue tx),
-                              rlpencode (BS (txData tx)),
+                              BS (txData tx),
                               rlpWord256 (fromIntegral chainId),
                               rlpWord256 0x0,
                               rlpWord256 0x0]
