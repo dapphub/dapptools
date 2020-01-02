@@ -385,7 +385,7 @@ errorFatal _ = False
 fromBlockchainCase :: BlockchainCase -> Either BlockchainError Case
 fromBlockchainCase (BlockchainCase blocks preState postState network) =
   case (blocks, network) of
-    ((block : []), "ConstantinopleFix") -> case blockTxs block of
+    ((block : []), "Istanbul") -> case blockTxs block of
       (tx : []) -> case txToAddr tx of
         Nothing -> fromCreateBlockchainCase block tx preState postState
         Just _  -> fromNormalBlockchainCase block tx preState postState
