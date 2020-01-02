@@ -1,6 +1,8 @@
 # hevm changelog
 
 ## [unreleased]
+ - Fix a bug introduced in [280](https://github.com/dapphub/dapptools/pull/280) of rlp encoding of transactions and sender address [320](https://github.com/dapphub/dapptools/pull/320/).
+ - Make InvalidTx a fatal error for vm tests and ci.
  - Correct gas readouts for unit tests
  - Prevent crash when trying to jump to next source code point if source code is missing
 
