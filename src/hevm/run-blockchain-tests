@@ -46,7 +46,7 @@ h1, h2 { text-align: center; margin-top: 2rem  }
 <h1>hevm consensus test report</h1>
 <p>$(date +%Y-%m-%d)</p>
 <p>$(echo "$npass passed, $nbal bad-balance, $nnon bad-nonce, $nstr bad-storage, $nfail failed, $nskip skipped, $ntime timeout")</p>
-(Test suite: <span class=GeneralStateTests</span>GeneralStateTests</span> for ConstantinopleFix)
+(Test suite: <span class=GeneralStateTests</span>GeneralStateTests</span> for Istanbul)
 </header>
 <h2>Failed tests</h2>
 <table id=failed>
@@ -84,20 +84,18 @@ shopt -s nocasematch
   for x in BlockchainTests/GeneralStateTests/*/*; do
     if [[ $x =~ .*$match.* ]] && [[ -n $skip && $x =~ .*$skip.* ]]; then
       for job in $(<$x jq '.|keys[]' -r); do
-        echo -n "$x " ; echo -n "$job " ; echo "skip"
+        echo -n "$job " ; echo "skip"
       done
     elif [[ $x =~ .*$match.* ]]; then
       set +e
-      echo -n "$x " ; "$HEVM" bc-test --file $x --timeout $timeout 2>&1
+      "$HEVM" bc-test --file $x --timeout $timeout 2>&1
       set -e
     fi
   done
 } | {
-  while read path test outcome; do
-    echo >&2 "$path $test $outcome"
-    category=$(dirname "$path")
-    testcase=$(basename "${path%.json}")
-    row="<tr><td class=testcase>$testcase<td>$outcome<td class=category>$category"
+  while read test outcome; do
+    echo >&2 "$test $outcome"
+    row="<tr><td class=testcase>$test<td>$outcome"
     row+=$'\n'
     case $outcome in
       ok)          passed+=$row ;;

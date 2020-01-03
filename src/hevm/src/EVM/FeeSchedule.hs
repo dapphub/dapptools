@@ -146,5 +146,15 @@ eip2028 fees = fees
   { g_txdatanonzero = 16
   }
 
+-- EIP2200: Structured definitions for gas metering
+-- <https://github.com/ethereum/EIPs/blob/master/EIPS/eip-2200.md>
+eip2200 :: EIP n
+eip2200 fees = fees
+  { g_sload = 800
+  , g_sset = 20000   -- not changed
+  , g_sreset = 5000  -- not changed
+  , r_sclear = 15000 -- not changed
+  }
+
 istanbul :: Num n => FeeSchedule n
-istanbul = eip1108 . eip1884 . eip2028 $ metropolis
+istanbul = eip1108 . eip1884 . eip2028 . eip2200 $ metropolis
