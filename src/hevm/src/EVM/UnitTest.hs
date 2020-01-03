@@ -29,14 +29,12 @@ import Control.Monad.Par.IO (runParIO)
 
 import qualified Data.ByteString.Lazy as BSLazy
 import Data.ByteString    (ByteString)
-import Data.ByteString.Base16 as BS16
 import Data.Foldable      (toList)
 import Data.Map           (Map)
 import Data.Maybe         (fromMaybe, catMaybes, fromJust, isJust, fromMaybe, mapMaybe)
 import Data.Monoid        ((<>))
 import Data.Text          (Text, pack, unpack)
 import Data.Text          (isPrefixOf, stripSuffix, intercalate)
-import qualified Data.ByteString.Char8  as Char8
 import Data.Word          (Word32)
 import System.Environment (lookupEnv)
 import System.IO          (hFlush, stdout)
@@ -484,7 +482,7 @@ runUnitTestContract
                            -- but the vm we want is not accessible here anyway...
                            Right (passOutput vm1 dapp opts testName))
                   Failure _ _ _ _ _ _ _ _ _ _ failCase _ _ ->
-                    let abiValue = decodeAbiValue (AbiTupleType (Vector.fromList types)) $ BSLazy.fromStrict . snd . BS16.decode . Char8.pack $ concat failCase
+                    let abiValue = decodeAbiValue (AbiTupleType (Vector.fromList types)) $ BSLazy.fromStrict $ hexText (pack $ concat failCase)
                         ppOutput = pack $ show abiValue
                     in do
                     -- Run the failing test again to get a proper trace
