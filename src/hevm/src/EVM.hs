@@ -818,18 +818,49 @@ exec1 = do
           notStatic $
           case stk of
             (x:new:xs) -> do
-              accessStorage self x $ \old -> do
-                -- Gas cost is higher when changing from zero to nonzero.
-                let cost = if old == 0 && new /= 0 then g_sset else g_sreset
+              accessStorage self x $ \current -> do
+                availableGas <- use (state . gas)
 
-                burn cost $ do
-                  next
-                  assign (state . stack) xs
-                  assign (env . contracts . ix (the state contract) . storage . at x)
-                    (Just new)
+                if availableGas <= g_callstipend
+                  then finishFrame (FrameErrored (OutOfGas availableGas g_callstipend))
+                  else do
+                    original <- use (tx . txReversion . at self . non
+                             (initialContract (EVM.RuntimeCode mempty))
+                             . storage . at x . non 0)
 
-                  -- Give gas refund if clearing the storage slot.
-                  if old /= 0 && new == 0 then refund r_sclear else noop
+                    let cost =
+                          if (current == new) then g_sload
+                          else if (current == original) && (original == 0) then g_sset
+                          else if (current == original) then g_sreset
+                          else g_sload
+
+                    burn cost $ do
+                      next
+                      assign (state . stack) xs
+                      assign (env . contracts . ix (the state contract) . storage . at x)
+                        (Just new)
+
+                      case (current == new) of
+                        True  -> noop
+                        False -> case (current == original) of
+
+                            True -> do if (original /= 0) && (new == 0)
+                                           then refund r_sclear
+                                           else noop
+
+                            False -> do if (original /= 0)
+                                            then
+                                              if (new == 0)
+                                                 then refund r_sclear
+                                                 else unRefund r_sclear
+                                            else noop
+
+                                        if (original == new)
+                                           then
+                                             if (original == 0)
+                                                then refund (g_sset - g_sload)
+                                                else refund (g_sreset - g_sload)
+                                           else noop
 
             _ -> underrun
 
@@ -1511,6 +1542,13 @@ refund :: Word -> EVM ()
 refund n = do
   self <- use (state . contract)
   pushTo (tx . substate . refunds) (self, n)
+
+unRefund :: Word -> EVM ()
+unRefund n = do
+  self <- use (state . contract)
+  refs <- use (tx . substate . refunds)
+  assign (tx . substate . refunds)
+    (filter (\(a,b) -> not (a == self && b == n)) refs)
 
 touchAccount :: Addr -> EVM()
 touchAccount a =
