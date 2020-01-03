@@ -360,7 +360,9 @@ knownBzzrPrefixes = [
   -- a1 65 "bzzr0" 0x58 0x20 (solc <= 0.5.8)
   BS.pack [0xa1, 0x65, 98, 122, 122, 114, 48, 0x58, 0x20],
   -- a2 65 "bzzr0" 0x58 0x20 (solc >= 0.5.9)
-  BS.pack [0xa2, 0x65, 98, 122, 122, 114, 48, 0x58, 0x20]
+  BS.pack [0xa2, 0x65, 98, 122, 122, 114, 48, 0x58, 0x20],
+  -- a2 65 "bzzr1" 0x58 0x20 (solc >= 0.5.11)
+  BS.pack [0xa2, 0x65, 98, 122, 122, 114, 49, 0x58, 0x20]
   ]
 
 -- | Every node in the AST has an ID, and other nodes reference those
