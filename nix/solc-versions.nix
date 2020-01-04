@@ -38,5 +38,7 @@ rec {
   x86_64-darwin = removeAttrs x86_64-linux [ "solc_0_4_6" "solc_0_4_8" "solc_0_4_11" "solc_0_4_12" "solc_0_4_24" ];
 
   # these versions have not been upstreamed on NixOS/nixpkgs yet, and come from our fork at dapptools/nixpkgs
-  unreleased = {};
+  unreleased = {
+    solc_0_5_15 = { rev = "4b456387e27ec440396646099cb8973fc3052e20"; sha256 = "16c4yn8fm1smm399bp4x3q4h1v96bvxy53407cgyl2hmy16k7qv9"; };
+  };
 }

@@ -15,7 +15,7 @@
         1. add a new `solc_X.Y.Z` in the `unreleased` section
         1. update `rev` and `sha256` based on the output from `nix-prefetch-git
            git@github.com:dapphub/nixpkgs refs/heads/solc-X.Y.Z`
-    1. bump the version number in `dapp---version`, `default.nix` and the changelog
+    1. bump the version number in `dapp---version`, `src/dapp/default.nix` and the changelog
     1. commit the changes
 1. open a pr from `dapphub/dapptools:solc-X.Y.Z` to `dapphub/dapptools:master`
 1. once merged tag the commit with the new version number
