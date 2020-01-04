@@ -5,14 +5,14 @@
 ### Options:
 ###   -v, --verbose         trace ouput for failing tests
 ###   -vv                   trace output for all tests including passes
-###   --fuzz-runs=<number>  number of times to run fuzzing tests
-###   --replay=<string>     rerun a particular test case
-###   -m, --match=<string>  only run test methods matching regex
+###   --fuzz-runs <number>  number of times to run fuzzing tests
+###   --replay <string>     rerun a particular test case
+###   -m, --match <string>  only run test methods matching regex
 ###
 ### RPC options:
 ###   --rpc                 fetch remote state via ETH_RPC_URL
-###   --rpc-url=<url>       fetch remote state via <url>
-###   --rpc-block=<number>  block number (latest if not specified)
+###   --rpc-url <url>       fetch remote state via <url>
+###   --rpc-block <number>  block number (latest if not specified)
 set -e
 have() { command -v "$1" >/dev/null; }
 
