@@ -32,6 +32,7 @@ rec {
     solc_0_5_10 = { rev = "8cced8017924086752a8fe47841c4a413a64e3b7"; sha256 = "09ck386lc1qrzq68f638a7l1plgzgmb72q7bny6z88pay2jp01rl"; };
     solc_0_5_11 = { rev = "917ce8e48f79bf15364968f66177b48ad2a82580"; sha256 = "15hhzh5v6jgmiqpd7rg6svl8ixy81v2q4f3rw36vh9xg2yqgbi9l"; };
     solc_0_5_12 = { rev = "a795e561f7623dada24e03a6e4d77c0a5b87dfca"; sha256 = "071gqqnila977zg3xlx3zbl0xpkm6v0916dz5z58681yw15lf4xj"; };
+    solc_0_5_15 = { rev = "1101ef4daeff8a3df3c479bb170cef97f839371a"; sha256 = "18ycihiy1jk81np8h2z50xbsqgja7s21w74pnmgfk8bav6p2fflb"; };
   };
 
   # some versions do not compile on macOS
@@ -39,6 +40,5 @@ rec {
 
   # these versions have not been upstreamed on NixOS/nixpkgs yet, and come from our fork at dapptools/nixpkgs
   unreleased = {
-    solc_0_5_15 = { rev = "4b456387e27ec440396646099cb8973fc3052e20"; sha256 = "16c4yn8fm1smm399bp4x3q4h1v96bvxy53407cgyl2hmy16k7qv9"; };
   };
 }
