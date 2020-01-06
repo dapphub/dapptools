@@ -217,6 +217,7 @@ data TxState = TxState
   , _substate        :: SubState
   , _isCreate        :: Bool
   , _txReversion     :: Map Addr Contract
+  , _origStorage     :: Map Addr Contract
   }
 
 -- | The "accrued substate" across a transaction
@@ -333,6 +334,8 @@ makeVm o = VM
     , _substate = SubState mempty mempty mempty
     , _isCreate = vmoptCreate o
     , _txReversion = Map.fromList
+      [(vmoptAddress o, initialContract (InitCode (vmoptCode o)))]
+    , _origStorage = Map.fromList
       [(vmoptAddress o, initialContract (InitCode (vmoptCode o)))]
     }
   , _logs = mempty
@@ -824,7 +827,7 @@ exec1 = do
                 if availableGas <= g_callstipend
                   then finishFrame (FrameErrored (OutOfGas availableGas g_callstipend))
                   else do
-                    original <- use (tx . txReversion . at self . non
+                    original <- use (tx . origStorage . at self . non
                              (initialContract (EVM.RuntimeCode mempty))
                              . storage . at x . non 0)
 
@@ -1731,6 +1734,8 @@ create self this xGas xValue xs newAddr initCode = do
                             , creationContextSubstate = view (tx . substate) vm0
                             }
 
+        --reset origStorage if account already existed
+        assign (tx . origStorage . at newAddr . lifted) newContract
         zoom (env . contracts) $ do
           oldAcc <- use (at newAddr)
           let oldBal = case oldAcc of

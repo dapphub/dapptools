@@ -553,6 +553,7 @@ vmForCase mode x =
     EVM.makeVm (testVmOpts x)
     & EVM.env . EVM.contracts .~ realizeContracts initState
     & EVM.tx . EVM.txReversion .~ realizeContracts checkState
+    & EVM.tx . EVM.origStorage .~ realizeContracts initState
     & EVM.tx . EVM.substate . EVM.touchedAccounts .~ touchedAccounts
     & EVM.execMode .~ mode
 
