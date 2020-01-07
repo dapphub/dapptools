@@ -41,7 +41,6 @@ The program will expect you to have these dependencies installed:
 * `git <https://git-scm.com/>`_
 * `node <https://nodejs.org/en/>`_
 * `solc <https://solidity.readthedocs.io/en/develop/installing-solidity.html>`_
-* `ethabi <https://github.com/ethcore/ethabi>`_
 * `ethrun <https://github.com/dapphub/ethrun/releases>`_
 * `seth <https://github.com/dapphub/seth>`_
 * `jshon <http://kmkeen.com/jshon/>`_

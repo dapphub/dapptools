@@ -163,10 +163,6 @@ in rec {
     '';
   });
 
-  ethabi = self.callPackage ./nix/ethabi.nix {
-    inherit (self.darwin.apple_sdk.frameworks) Security;
-  };
-
   qrtx = self.bashScript {
     name = "qrtx";
     version = "0";

@@ -22,7 +22,6 @@ ENV USER node
 WORKDIR /home/node
 
 RUN curl https://nixos.org/nix/install | bash
-RUN /nix/var/nix/profiles/default/bin/nix-env -i ethabi jshon
 
 VOLUME /src
 WORKDIR /src
