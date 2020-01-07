@@ -1,35 +1,29 @@
-#!/usr/bin/env bash
-### seth-calldata -- pack a signature and a list of arguments into calldata
-### Usage: seth calldata <sig> [<args>]
-###    or: seth calldata <file>
-###    or: seth calldata <data>
-###
-### Pack <sig> and <args> into data suitable for passing to `seth call'.
-### If <sig> has the form `<name>(<types>)', pack <sig>/<args> into calldata.
-###
-### If <file> contains a slash character, treat it as a file name to read.
-### Otherwise, ensure <data> begins with `0x' and treat it as hexdata.
-set -e
-if [[ $1 =~ ^([^\(]+)\( ]]; then
-  name=${BASH_REMATCH[1]}
-  abi=$(seth --abi-function-json "$1")
-  shift
-  for arg; do
-    [[ $arg = @* ]] && arg=$(seth lookup "$arg")
-    args+=(-p "${arg#0x}")
-  done
-  calldata=$(
-    [[ $SETH_DEBUG_ETHABI ]] && set -x
-    ethabi encode function <(echo "$abi") "$name" "${args[@]}" -l
-  )
-  if [[ $calldata = error* ]]; then
-    echo >&2 "ethabi: $calldata"
-    exit 1
-  else
-    echo "0x${calldata#0x}"
-  fi
-elif [[ $2 ]]; then
-  seth --fail-usage "$0"
-else
-  seth --to-hexdata "$1"
-fi
+#!/usr/bin/env node
+const usage = "Usage: seth calldata <sig> [<args>]>\n   or: seth calldata <file>\n   or: seth calldata <data>"
+if (process.argv.length >= 3 &&
+    process.argv[2].indexOf('(') >= 0) {
+  // silence warnings we don't care about
+  const log = console.log
+  console.log = () => {};
+  const ethers = require("./ethers.min.js");
+  console.log = log;
+  const sig = process.argv[2];
+  try {
+    const funcs = new ethers.utils.Interface(["function " + sig.replace(')(', ') returns (')]).functions;
+      console.log(funcs[Object.keys(funcs)[0]].encode(process.argv.slice(3)))
+    } catch (e) {
+      console.log(e.toString())
+      process.exit(1)
+    }
+} else if (process.argv.length == 3) {
+  const {execSync}   = require('child_process');
+  try {
+    const yes = execSync('seth --to-hexdata \"' + process.argv[2] + "\"").toString().replace('\n','')
+    console.log(yes)
+  } catch(e) {
+    process.exit(1)
+  }
+} else {
+  console.log(usage)
+  process.exit(1)
+}
