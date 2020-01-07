@@ -1,9 +1,10 @@
 # hevm changelog
 
-## [unreleased]
+## 0.36 - 2020-01-07
+ - Implement Istanbul support [318](https://github.com/dapphub/dapptools/pull/318)
  - Fix a bug introduced in [280](https://github.com/dapphub/dapptools/pull/280) of rlp encoding of transactions and sender address [320](https://github.com/dapphub/dapptools/pull/320/).
  - Make InvalidTx a fatal error for vm tests and ci.
- - Suport property based testing in unit tests. Arguments to test functions are randomly generated based on the function abi. Fuzz tests are not present in the graphical debugger.
+ - Suport property based testing in unit tests. [313](https://github.com/dapphub/dapptools/pull/313) Arguments to test functions are randomly generated based on the function abi. Fuzz tests are not present in the graphical debugger.
  - Added flags `--replay` and `--fuzz-run` to `hevm dapp-test`, allowing for particular fuzz run cases to be rerun, or for configuration of how many fuzz tests are run.
  - Correct gas readouts for unit tests
  - Prevent crash when trying to jump to next source code point if source code is missing
