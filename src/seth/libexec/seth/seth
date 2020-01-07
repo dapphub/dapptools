@@ -147,7 +147,7 @@ if [[ $SETH_CHAIN ]]; then
         ~/{.ethereum,Library/Ethereum}/testnet/keystore/
       )
       ;;
-    kovan|rinkeby)
+    kovan|rinkeby|goerli)
       eth_rpc_url=https://$SETH_CHAIN.infura.io/$INFURA_KEY
       export ETHERSCAN_API_URL=https://api-$SETH_CHAIN.etherscan.io/api
       keystores=(
