@@ -2339,7 +2339,7 @@ costOfPrecompile (FeeSchedule {..}) precompileAddr input =
     0x7 -> g_ecmul
     -- ECPAIRING
     0x8 -> num $ ((BS.length input) `div` 192) * (num g_pairing_point) + (num g_pairing_base)
-    -- BLAKE2 (todo)
+    -- BLAKE2
     0x9 -> g_fround * (num $ asInteger $ lazySlice 0 4 input)
     _ -> error ("unimplemented precompiled contract " ++ show precompileAddr)
 
