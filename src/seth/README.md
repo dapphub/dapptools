@@ -127,8 +127,7 @@ or the flag `--rpc-url`.
 
 Alternatively, you can use a default remote node (operated by
 [Infura]) using the variable `SETH_CHAIN` or the flag `--chain` (or
-`-C`).  Allowed values: `ethlive` (aka `mainnet`), `ropsten`, `kovan`,
-and `rinkeby`.
+`-C`).  Allowed values: `ethlive` (aka `mainnet`), `ropsten`, `kovan`, `rinkeby`, and `goerli`.
 
 Note: If you frequently use Seth with the Infura nodes, you should
 [sign up for an Infura API key](https://infura.io/register) and use your
@@ -397,7 +396,7 @@ and normalize it to lowercase.
 Print the symbolic name of the current blockchain by checking the
 genesis block hash.
 
-Outputs one of `ethlive`, `etclive`, `kovan`, `ropsten`, `morden`,
+Outputs one of `ethlive`, `etclive`, `kovan`, `ropsten`, `goerli`, `morden`,
 `rinkeby`, or `unknown`.
 
 ### `seth code`

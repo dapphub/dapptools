@@ -19,12 +19,12 @@ case "$chain" in
     export ETHERSCAN_API_URL=https://api.etherscan.io/api
     export ETHERSCAN_URL=https://etherscan.io/address
     ;;
-  ropsten|kovan|rinkeby)
+  ropsten|kovan|rinkeby|goerli)
     export ETHERSCAN_API_URL=https://api-$chain.etherscan.io/api
     export ETHERSCAN_URL=https://$chain.etherscan.io/address
     ;;
   *)
-    echo >&2 "Verification only works on mainnet, ropsten, kovan and rinkeby."
+    echo >&2 "Verification only works on mainnet, ropsten, kovan, rinkeby, and goerli."
     exit 1
 esac
 
@@ -46,7 +46,7 @@ version="v${version}"
 version_list=$(curl -fsS "https://raw.githubusercontent.com/ethereum/solc-bin/gh-pages/bin/list.txt")
 
 # There have been a couple of instances where the solc js release used by
-#   Etherscan does not match the tag of the C distributions. 
+#   Etherscan does not match the tag of the C distributions.
 if [[ $version_list != *"$version"* ]]; then
   regex="(.+commit+.)"
   # Version incompatible with js release
