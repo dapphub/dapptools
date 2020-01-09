@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 //seth---abi-decode -- extract return values from hexdata
-const usage = "Usage: seth --abi-decode <name>(<in-types>)(<out-types) <hexdata>\nDecode <hexdata> according to <out-types> (<in-types> are ignored).";
+const usage = `Usage: seth --abi-decode <name>(<in-types>)(<out-types) <hexdata>
+Decode <hexdata> according to <out-types> (<in-types> are ignored).`;
 if (process.argv.length == 4) {
   // silence warnings we don't care about
   const log = console.log

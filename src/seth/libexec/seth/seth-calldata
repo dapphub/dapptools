@@ -1,5 +1,7 @@
 #!/usr/bin/env node
-const usage = "Usage: seth calldata <sig> [<args>]>\n   or: seth calldata <file>\n   or: seth calldata <data>"
+const usage = `Usage: seth calldata <sig> [<args>]>
+   or: seth calldata <file>
+   or: seth calldata <data>`;
 if (process.argv.length >= 3 &&
     process.argv[2].indexOf('(') >= 0) {
   // silence warnings we don't care about
