@@ -13,10 +13,10 @@ if (process.argv.length == 4) {
     const funcs = new ethers.utils.Interface(['function ' + sig]).functions;
     console.log(funcs[Object.keys(funcs)[0]].decode(hexdata).join('\n'))
   } catch (e) {
-    console.log(e.toString())
+    console.error(e.toString())
     process.exit(1)
   }
 } else {
-  console.log(usage)
+  console.error(usage)
   process.exit(1)
 }

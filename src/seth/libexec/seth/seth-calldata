@@ -12,7 +12,7 @@ if (process.argv.length >= 3 &&
     const funcs = new ethers.utils.Interface(["function " + sig.replace(')(', ') returns (')]).functions;
       console.log(funcs[Object.keys(funcs)[0]].encode(process.argv.slice(3)))
     } catch (e) {
-      console.log(e.toString())
+      console.error(e.toString())
       process.exit(1)
     }
 } else if (process.argv.length == 3) {
@@ -24,9 +24,10 @@ if (process.argv.length >= 3 &&
                             ).toString().replace('\n','')
     console.log(yes)
   } catch(e) {
+    console.error(e)
     process.exit(1)
   }
 } else {
-  console.log(usage)
+  console.error(usage)
   process.exit(1)
 }
