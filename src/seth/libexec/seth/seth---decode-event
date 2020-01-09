@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-//seth---decode-event -- extract return values from hexdata
+//seth---decode-event -- decode hexdata into event form
 const usage = "Usage: seth --decode-event <abi-json> <event-name> <hexdata>";
 if (process.argv.length == 5) {
   // silence warnings we don't care about
@@ -11,7 +11,7 @@ if (process.argv.length == 5) {
     const events = new ethers.utils.Interface(process.argv[2]).events;
     console.log(events[process.argv[3]].decode(process.argv[4]).join('\n'))
   } catch (e) {
-    console.log(e.toString())
+    console.error(e.toString())
     process.exit(1)
   }
 } else {
