@@ -3,19 +3,33 @@
 const usage = `Usage: seth --abi-decode <name>(<in-types>)(<out-types) <hexdata>
 Decode <hexdata> according to <out-types> (<in-types> are ignored).`;
 if (process.argv.length == 4) {
-  // silence warnings we don't care about
-  const log = console.log
-  console.log = () => {};
-  const ethers = require("./ethers.min.js");
-  console.log = log;
-  const sig = process.argv[2].replace(')(', ') returns (');
-  const hexdata = process.argv[3].indexOf('0x') == 0 ? process.argv[3] : "0x" + process.argv[3];
-  try {
-    const funcs = new ethers.utils.Interface(['function ' + sig]).functions;
-    console.log(funcs[Object.keys(funcs)[0]].decode(hexdata).join('\n'))
-  } catch (e) {
-    console.error(e.toString())
-    process.exit(1)
+  if (process.argv[3].indexOf(')(') >= 0) {
+    // silence warnings we don't care about
+    const log = console.log
+    console.log = () => {};
+    const ethers = require("./ethers.min.js");
+    console.log = log;
+    const sig = process.argv[2].replace(')(', ') returns (');
+    const hexdata = process.argv[3].indexOf('0x') == 0 ? process.argv[3] : "0x" + process.argv[3];
+    try {
+      const funcs = new ethers.utils.Interface(['function ' + sig]).functions;
+      console.log(funcs[Object.keys(funcs)[0]].decode(hexdata).join('\n'))
+    } catch (e) {
+      console.error(e.toString())
+      process.exit(1)
+    }
+  } else {
+    const {execFileSync}   = require('child_process');
+    try {
+      const yes = execFileSync("seth",
+                               ["--to-hex",
+                                process.argv[3]]
+                              ).toString().replace('\n','')
+      console.log(yes)
+    } catch(e) {
+      console.error(e)
+      process.exit(1)
+    }
   }
 } else {
   console.error(usage)
