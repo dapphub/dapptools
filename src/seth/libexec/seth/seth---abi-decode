@@ -3,7 +3,7 @@
 const usage = `Usage: seth --abi-decode <name>(<in-types>)(<out-types) <hexdata>
 Decode <hexdata> according to <out-types> (<in-types> are ignored).`;
 if (process.argv.length == 4) {
-  if (process.argv[3].indexOf(')(') >= 0) {
+  if (process.argv[2].indexOf(')(') >= 0) {
     // silence warnings we don't care about
     const log = console.log
     console.log = () => {};
