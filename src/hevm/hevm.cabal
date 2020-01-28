@@ -87,6 +87,7 @@ library
     binary                            >= 0.8,
     brick                             >= 0.18,
     bytestring                        >= 0.10,
+    cborg                             >= 0.2,
     cereal                            >= 0.5,
     containers                        >= 0.5,
     cryptonite                        >= 0.21,
