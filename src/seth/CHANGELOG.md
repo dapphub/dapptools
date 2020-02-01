@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 - `seth {--to-uint256,--to-int256,--to-bytes32}` now returns hex string with `0x` prefix.
+- Removed ethabi dependency in favor of (already present) `ethers.js`.
 
 ## [0.8.3] - 2019-08-08
 ### Fixed
