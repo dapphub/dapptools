@@ -106,7 +106,7 @@ done
 
 sleep 20
 response=$(curl -fsS "$ETHERSCAN_API_URL" \
--d "module=contract&action=checkverifystatus&guid=$guid")
+-d "module=contract&action=checkverifystatus&guid=$guid&apikey=$ETHERSCAN_API_KEY")
 
 status=$(jshon <<<"$response" -e status -u)
 result=$(jshon <<<"$response" -e result -u)
