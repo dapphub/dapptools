@@ -1,0 +1,27 @@
+#!/usr/bin/env node
+const usage = `Usage: seth --calldata-decode <name>(<in-types>)(<out-types) <hexdata>
+Decode <hexdata> according to <in-types> (<out-types> are ignored).`;
+if (process.argv.length == 4 &&
+    process.argv[2].indexOf('(') >= 0) {
+  // silence warnings we don't care about
+  const log = console.log
+  console.log = () => {};
+  const ethers = require("./ethers.min.js");
+  console.log = log;
+  const sig = process.argv[2];
+  const calldata = process.argv[3];
+  try {
+    const sighash = ethers.utils.hexDataSlice(calldata, 0, 4);
+    const data = ethers.utils.hexDataSlice(calldata, 4);
+    const funcs = new ethers.utils.Interface(["function " + sig.replace(')(', ') returns (')]).functions;
+    const func = Object.values(funcs).find(f => f.sighash == sighash);
+    const decoded = ethers.utils.defaultAbiCoder.decode(func.inputs, data);
+    console.log(decoded.map(e => e.toString()).join('\n'));
+  } catch (e) {
+    console.error(e.toString())
+    process.exit(1)
+  }
+} else {
+  console.error(usage)
+  process.exit(1)
+}
