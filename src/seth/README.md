@@ -59,6 +59,9 @@ Contents
       * [`seth --from-bin`]
       * [`seth --from-wei`]
       * [`seth --to-wei`]
+      * [`seth --to-uint256`]
+      * [`seth --to-bytes32`]
+      * [`seth --to-checksum-address`]
       * [`seth age`]
       * [`seth balance`]
       * [`seth block`]
@@ -329,6 +332,24 @@ Convert an ETH amount into wei.
 
 The unit may be `wei`, `gwei`, `eth`, or `ether`.
 
+### `seth --to-uint256`
+
+Convert a number into uint256 hex.
+
+    seth --to-uint256 <value>
+
+### `seth --to-bytes32`
+
+Convert data (what types, just numbers?) number into bytes32.
+
+    seth --to-bytes32 <value>
+
+### `seth --to-checksum-address
+
+Convert address into checksum address
+
+    seth --to-checksum-address <address>
+
 ### `seth age`
 
 Show the timestamp of a block (the latest block by default).
@@ -571,6 +592,9 @@ Show all fields unless `<field>` is given.
 [`seth --from-bin`]: #seth---from-bin
 [`seth --from-wei`]: #seth---from-wei
 [`seth --to-wei`]: #seth---to-wei
+[`seth --to-uint256`]: #seth---to-uint256
+[`seth --to-bytes32`]: #seth---to-bytes32
+[`seth --to-checksum-address`]: #seth---to-checksum-address
 [`seth abi`]: #seth-abi
 [`seth age`]: #seth-age
 [`seth balance`]: #seth-balance
