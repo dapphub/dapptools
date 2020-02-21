@@ -347,7 +347,7 @@ Convert a number into uint256 hex string with 0x prefix.
 
 ### `seth --to-bytes32`
 
-Convert data (what types, just numbers?) into bytes32 hex string with 0x prefix.
+Pad a hex string to the right with zeroes to 32 bytes.
 
     seth --to-bytes32 <value>
 
