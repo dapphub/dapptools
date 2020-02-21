@@ -4,11 +4,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [unreleased]
+## [0.8.4] - 2020-02-21
 
 ### Changed
 - `seth {--to-uint256,--to-int256,--to-bytes32}` now returns hex string with `0x` prefix.
 - Removed ethabi dependency in favor of (already present) `ethers.js`.
+- `0x` prefix is strictly required for bytestrings while using `seth calldata`.
+- When giving array arguments to `seth calldata`, each bytestring must be enclosed in double quotes.
+
+### Added
+- `seth --calldata-decode` command [#338](https://github.com/dapphub/dapptools/pull/338)
 
 ## [0.8.3] - 2019-08-08
 ### Fixed
