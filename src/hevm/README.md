@@ -47,6 +47,24 @@ or you can enter the interactive debugger using
   - `m`: toggle memory view
   - `h`: show key-binding help
 
+### Environment Variables 
+
+These environment variables can be used to control block parameters
+
+  - `DAPP_TEST_ADDRESS`
+  - `DAPP_TEST_CALLER`
+  - `DAPP_TEST_ORIGIN`
+  - `DAPP_TEST_GAS_CREATE`
+  - `DAPP_TEST_GAS_CALL`
+  - `DAPP_TEST_BALANCE_CREATE`
+  - `DAPP_TEST_BALANCE_CALL`
+  - `DAPP_TEST_COINBASE`
+  - `DAPP_TEST_NUMBER`
+  - `DAPP_TEST_TIMESTAMP`
+  - `DAPP_TEST_GAS_LIMIT`
+  - `DAPP_TEST_GAS_PRICE`
+  - `DAPP_TEST_DIFFICULTY`
+
 ## Installing
 
 ### Nix
