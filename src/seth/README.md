@@ -63,6 +63,7 @@ Contents
       * [`seth --to-uint256`]
       * [`seth --to-bytes32`]
       * [`seth --to-address`]
+      * [`seth --calldata-decode`]
       * [`seth age`]
       * [`seth balance`]
       * [`seth block`]
@@ -351,12 +352,19 @@ Pad a hex string to the right with zeroes to 32 bytes.
 
     seth --to-bytes32 <value>
 
-### `seth --to-address
+### `seth --to-address`
 
 Convert an address into a checksummed address.
 
     seth --to-address <address>
 
+### `seth --calldata-decode`
+
+Decodes a calldata bytestring into a list of input arguments.
+
+    seth --calldata-decode <signature> <hexstring>
+
+    
 ### `seth age`
 
 Show the timestamp of a block (the latest block by default).
