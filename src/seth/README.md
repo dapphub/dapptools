@@ -353,7 +353,7 @@ Pad a hex string to the right with zeroes to 32 bytes.
 
 ### `seth --to-address
 
-Convert address into checksum address.
+Convert an address into a checksummed address.
 
     seth --to-address <address>
 
