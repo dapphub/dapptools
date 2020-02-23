@@ -12,11 +12,12 @@ if (process.argv.length >= 3 &&
   const sig = process.argv[2];
   try {
     const funcs = new ethers.utils.Interface(["function " + sig.replace(')(', ') returns (')]).functions;
-      console.log(funcs[Object.keys(funcs)[0]].encode(process.argv.slice(3)))
-    } catch (e) {
-      console.error(e.toString())
-      process.exit(1)
-    }
+    const args = process.argv.slice(3).map(s => s.match(/\[.*\]/) ? JSON.parse(s) : s)
+    console.log(funcs[Object.keys(funcs)[0]].encode(args))
+  } catch (e) {
+    console.error(e.toString())
+    process.exit(1)
+  }
 } else if (process.argv.length == 3) {
   const {execFileSync}   = require('child_process');
   try {

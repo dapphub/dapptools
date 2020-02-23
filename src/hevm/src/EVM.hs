@@ -2351,9 +2351,7 @@ memoryCost FeeSchedule{..} byteCount =
     linearCost = g_memory * wordCount
     quadraticCost = div (wordCount * wordCount) 512
   in
-    if byteCount > exponentiate 2 32
-    then maxBound
-    else linearCost + quadraticCost
+    linearCost + quadraticCost
 
 -- * Arithmetic
 

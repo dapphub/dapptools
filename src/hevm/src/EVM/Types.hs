@@ -42,7 +42,7 @@ mkUnpackedDoubleWord "Word512" ''Word256 "Int512" ''Int256 ''Word256
 newtype W256 = W256 Word256
   deriving
     ( Num, Integral, Real, Ord, Enum, Eq
-    , Bits, FiniteBits, Bounded, Generic
+    , Bits, FiniteBits, Generic
     )
 
 newtype Addr = Addr { addressWord160 :: Word160 }

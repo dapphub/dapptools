@@ -198,10 +198,6 @@ instance FiniteBits Word where
   countLeadingZeros (C _ x) = countLeadingZeros x
   countTrailingZeros (C _ x) = countTrailingZeros x
 
-instance Bounded Word where
-  minBound = w256 minBound
-  maxBound = w256 maxBound
-
 instance Eq Word where
   (C _ x) == (C _ y) = x == y
 
