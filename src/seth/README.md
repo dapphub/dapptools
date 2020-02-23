@@ -59,6 +59,7 @@ Contents
       * [`seth --from-bin`]
       * [`seth --from-wei`]
       * [`seth --to-wei`]
+      * [`seth gas-price`]
       * [`seth age`]
       * [`seth balance`]
       * [`seth block`]
@@ -329,6 +330,10 @@ Convert an ETH amount into wei.
 
 The unit may be `wei`, `gwei`, `eth`, or `ether`.
 
+### `seth gas-price`
+
+Reads the current gas price at target chain.
+
 ### `seth age`
 
 Show the timestamp of a block (the latest block by default).
@@ -571,6 +576,7 @@ Show all fields unless `<field>` is given.
 [`seth --from-bin`]: #seth---from-bin
 [`seth --from-wei`]: #seth---from-wei
 [`seth --to-wei`]: #seth---to-wei
+[`seth gas-price`]: #seth-gas-price
 [`seth abi`]: #seth-abi
 [`seth age`]: #seth-age
 [`seth balance`]: #seth-balance
