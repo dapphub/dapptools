@@ -358,10 +358,6 @@ Convert an address into a checksummed address.
 
     seth --to-address <address>
 
-### `seth gas-price`
-
-Reads the current gas price at target chain.
-
 ### `seth age`
 
 Show the timestamp of a block (the latest block by default).
@@ -470,6 +466,10 @@ With `--follow`, the command blocks waiting for new events (like `tail
 -f`).
 
 See also [`seth logs`] which does not decode events.
+
+### `seth gas-price`
+
+Reads the current gas price at target chain.
 
 ### `seth keccak`
 
