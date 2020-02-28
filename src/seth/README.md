@@ -73,6 +73,7 @@ Contents
       * [`seth code`]
       * [`seth estimate`]
       * [`seth events`]
+      * [`seth gas-price`]
       * [`seth help`]
       * [`seth keccak`]
       * [`seth logs`]
@@ -474,6 +475,10 @@ With `--follow`, the command blocks waiting for new events (like `tail
 
 See also [`seth logs`] which does not decode events.
 
+### `seth gas-price`
+
+Reads the current gas price at target chain.
+
 ### `seth keccak`
 
 Print the Keccak-256 hash of an arbitrary piece of data.
@@ -611,6 +616,7 @@ Show all fields unless `<field>` is given.
 [`seth --to-uint256`]: #seth---to-uint256
 [`seth --to-bytes32`]: #seth---to-bytes32
 [`seth --to-address`]: #seth---to-address
+[`seth gas-price`]: #seth-gas-price
 [`seth abi`]: #seth-abi
 [`seth age`]: #seth-age
 [`seth balance`]: #seth-balance
