@@ -16,6 +16,11 @@ for i in "$@"; do
   esac
 done
 
+[[ -e "${DAPP_JSON}" ]] || {
+  echo >&2 "${0##*/}: error: ${DAPP_JSON} file not found. Did you run ``dapp build``?"
+  exit 1
+}
+
 name=${1?missing contract name}
 
 mapfile -t contracts < <(<"$DAPP_JSON" jq '.contracts|keys[]' -r)
