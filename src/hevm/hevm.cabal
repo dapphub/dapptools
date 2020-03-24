@@ -2,7 +2,7 @@ cabal-version: 2.2
 name:
   hevm
 version:
-  0.36
+  0.37
 synopsis:
   Ethereum virtual machine evaluator
 description:
