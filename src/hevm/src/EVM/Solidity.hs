@@ -50,7 +50,7 @@ import Data.Aeson.Lens
 import Data.Binary.Get      (runGet, getWord16be)
 import Data.ByteString      (ByteString)
 import Data.ByteString.Lazy (fromStrict)
-import Data.Char            (isDigit, digitToInt)
+import Data.Char            (isDigit)
 import Data.Either          (isRight)
 import Data.Foldable
 import Data.Map.Strict      (Map)
@@ -117,15 +117,16 @@ data SrcMap = SM {
   srcMapOffset :: {-# UNPACK #-} Int,
   srcMapLength :: {-# UNPACK #-} Int,
   srcMapFile   :: {-# UNPACK #-} Int,
-  srcMapJump   :: JumpType
+  srcMapJump   :: JumpType,
+  srcMapModifierDepth :: {-# UNPACK #-} Int
 } deriving (Show, Eq, Ord, Generic)
 
 data SrcMapParseState
-  = F1 [Int] Int
-  | F2 Int [Int] Int
-  | F3 Int Int [Int] Int
-  | F4 Int Int Int
-  | F5 SrcMap
+  = F1 [Char] Int
+  | F2 Int [Char] Int
+  | F3 Int Int [Char] Int
+  | F4 Int Int Int (Maybe JumpType)
+  | F5 Int Int Int JumpType [Char]
   | Fe
   deriving Show
 
@@ -139,44 +140,49 @@ makeLenses ''Method
 -- Obscure but efficient parser for the Solidity sourcemap format.
 makeSrcMaps :: Text -> Maybe (Seq SrcMap)
 makeSrcMaps = (\case (_, Fe, _) -> Nothing; x -> Just (done x))
-             . Text.foldl' (\x y -> go y x) (mempty, F1 [] 1, SM 0 0 0 JumpRegular)
+             . Text.foldl' (\x y -> go y x) (mempty, F1 [] 1, SM 0 0 0 JumpRegular 0)
   where
-    digits ds = digits' (0 :: Int) (0 :: Int) ds
-    digits' !x _ []      = x
-    digits' !x !n (d:ds) = digits' (x + d * 10 ^ n) (n + 1) ds
-
     done (xs, s, p) = let (xs', _, _) = go ';' (xs, s, p) in xs'
 
-    go ':' (xs, F1 [] _, p@(SM a _ _ _))       = (xs, F2 a [] 1, p)
-    go ':' (xs, F1 ds k, p)                    = (xs, F2 (k * digits ds) [] 1, p)
+    go :: Char -> (Seq SrcMap, SrcMapParseState, SrcMap) -> (Seq SrcMap, SrcMapParseState, SrcMap)
+    go ':' (xs, F1 [] _, p@(SM a _ _ _ _))     = (xs, F2 a [] 1, p)
+    go ':' (xs, F1 ds k, p)                    = (xs, F2 (k * (read ds)) [] 1, p)
     go '-' (xs, F1 [] _, p)                    = (xs, F1 [] (-1), p)
-    go d   (xs, F1 ds k, p) | isDigit d        = (xs, F1 (digitToInt d : ds) k, p)
+    go d   (xs, F1 ds k, p) | isDigit d        = (xs, F1 (d : ds) k, p)
     go ';' (xs, F1 [] k, p)                    = (xs |> p, F1 [] k, p)
-    go ';' (xs, F1 ds k, SM _ b c d)           = let p' = SM (k * digits ds) b c d in
-                                                 (xs |> p', F1 [] 1, p')
+    go ';' (xs, F1 ds k, SM _ b c d e)         = let p' = SM (k * (read ds)) b c d e in (xs |> p', F1 [] 1, p')
 
     go '-' (xs, F2 a [] _, p)                  = (xs, F2 a [] (-1), p)
-    go d   (xs, F2 a ds k, p) | isDigit d      = (xs, F2 a (digitToInt d : ds) k, p)
-    go ':' (xs, F2 a [] _, p@(SM _ b _ _))     = (xs, F3 a b [] 1, p)
-    go ':' (xs, F2 a ds k, p)                  = (xs, F3 a (k * digits ds) [] 1, p)
-    go ';' (xs, F2 a [] _, SM _ b c d)         = let p' = SM a b c d in (xs |> p', F1 [] 1, p')
-    go ';' (xs, F2 a ds k, SM _ _ c d)         = let p' = SM a (k * digits ds) c d in
+    go d   (xs, F2 a ds k, p) | isDigit d      = (xs, F2 a (d : ds) k, p)
+    go ':' (xs, F2 a [] _, p@(SM _ b _ _ _))   = (xs, F3 a b [] 1, p)
+    go ':' (xs, F2 a ds k, p)                  = (xs, F3 a (k * (read ds)) [] 1, p)
+    go ';' (xs, F2 a [] _, SM _ b c d e)       = let p' = SM a b c d e in (xs |> p', F1 [] 1, p')
+    go ';' (xs, F2 a ds k, SM _ _ c d e)       = let p' = SM a (k * (read ds)) c d e in
                                                  (xs |> p', F1 [] 1, p')
 
-    go d   (xs, F3 a b ds k, p) | isDigit d  = (xs, F3 a b (digitToInt d : ds) k, p)
-    go '-' (xs, F3 a b [] _, p)              = (xs, F3 a b [] (-1), p)
-    go ':' (xs, F3 a b [] _, p@(SM _ _ c _)) = (xs, F4 a b c, p)
-    go ':' (xs, F3 a b ds k, p)              = (xs, F4 a b (k * digits ds), p)
-    go ';' (xs, F3 a b [] _, SM _ _ c d)     = let p' = SM a b c d in (xs |> p', F1 [] 1, p')
-    go ';' (xs, F3 a b ds k, SM _ _ _ d)     = let p' = SM a b (k * digits ds) d in
-                                               (xs |> p', F1 [] 1, p')
+    go d   (xs, F3 a b ds k, p) | isDigit d    = (xs, F3 a b (d : ds) k, p)
+    go '-' (xs, F3 a b [] _, p)                = (xs, F3 a b [] (-1), p)
+    go ':' (xs, F3 a b [] _, p@(SM _ _ c _ _)) = (xs, F4 a b c Nothing, p)
+    go ':' (xs, F3 a b ds k, p)                = (xs, F4 a b (k * (read ds)) Nothing, p)
+    go ';' (xs, F3 a b [] _, SM _ _ c d e)     = let p' = SM a b c d e in (xs |> p', F1 [] 1, p')
+    go ';' (xs, F3 a b ds k, SM _ _ _ d e)     = let p' = SM a b (k * (read ds)) d e in
+                                                 (xs |> p', F1 [] 1, p')
 
-    go 'i' (xs, F4 a b c, p)                 = (xs, F5 (SM a b c JumpInto), p)
-    go 'o' (xs, F4 a b c, p)                 = (xs, F5 (SM a b c JumpFrom), p)
-    go '-' (xs, F4 a b c, p)                 = (xs, F5 (SM a b c JumpRegular), p)
-    go ';' (xs, F5 s, _)                     = (xs |> s, F1 [] 1, s)
+    go 'i' (xs, F4 a b c Nothing, p)           = (xs, F4 a b c (Just JumpInto), p)
+    go 'o' (xs, F4 a b c Nothing, p)           = (xs, F4 a b c (Just JumpFrom), p)
+    go '-' (xs, F4 a b c Nothing, p)           = (xs, F4 a b c (Just JumpRegular), p)
+    go ':' (xs, F4 a b c (Just d),  p)         = (xs, F5 a b c d [], p)
+    go ':' (xs, F4 a b c _, p@(SM _ _ _ d _))  = (xs, F5 a b c d [], p)
+    go ';' (xs, F4 a b c _, SM _ _ _ d e)      = let p' = SM a b c d e in
+                                                 (xs |> p', F1 [] 1, p')
 
-    go c (xs, _, p)                          = (xs, error ("srcmap: y u " ++ show c ++ "?!?"), p)
+    go d   (xs, F5 a b c j ds, p) | isDigit d  = (xs, F5 a b c j (d : ds), p)
+    go ';' (xs, F5 a b c j [], _)              = let p' = SM a b c j (-1) in -- solc <0.6
+                                                 (xs |> p', F1 [] 1, p')
+    go ';' (xs, F5 a b c j ds, _)              = let p' = SM a b c j (read ds) in -- solc >=0.6
+                                                 (xs |> p', F1 [] 1, p')
+
+    go c (xs, state, p)                      = (xs, error ("srcmap: y u " ++ show c ++ " in state" ++ show state ++ "?!?"), p)
 
 makeSourceCache :: [Text] -> Map Text Value -> IO SourceCache
 makeSourceCache paths asts = do
@@ -380,7 +386,7 @@ astIdMap = foldMap f
 
 astSrcMap :: Map Int Value -> (SrcMap -> Maybe Value)
 astSrcMap astIds =
-  \(SM i n f _)  -> Map.lookup (i, n, f) tmp
+  \(SM i n f _ _)  -> Map.lookup (i, n, f) tmp
   where
     tmp :: Map (Int, Int, Int) Value
     tmp =

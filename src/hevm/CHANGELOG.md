@@ -1,5 +1,8 @@
 # hevm changelog
 
+## 0.37 - 2020-03-24
+ - Sourcemap parser now admits `solc-0.6.0` compiled `.sol.json` files.
+
 ## 0.36 - 2020-01-07
  - Implement Istanbul support [318](https://github.com/dapphub/dapptools/pull/318)
  - Fix a bug introduced in [280](https://github.com/dapphub/dapptools/pull/280) of rlp encoding of transactions and sender address [320](https://github.com/dapphub/dapptools/pull/320/).
