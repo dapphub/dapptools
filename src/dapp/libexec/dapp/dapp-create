@@ -42,7 +42,7 @@ done
 }
 
 data=$(<"$DAPP_JSON" jq '.contracts' -r)
-contract=$(echo "$data" | jq '.[''"'"$path"'"'']')
+contract=$(echo "$data" | jq '.[''"'"${name[0]}"'"'']')
 abi=$(jq '.["abi"]' -r <<< "$contract")
 bin=$(jq '.["bin"]' -r <<< "$contract")
 type=$(seth --abi-constructor <<< "$abi")
