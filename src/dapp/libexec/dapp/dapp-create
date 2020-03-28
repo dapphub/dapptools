@@ -26,8 +26,13 @@ name=${1?missing contract name}
 mapfile -t contracts < <(<"$DAPP_JSON" jq '.contracts|keys[]' -r)
 
 name=()
+
 for path in "${contracts[@]}"; do
-  [[ "${path#*:}" = "$1" ]] && name+=("$path")
+  if [ -z "${1##*:*}" ]; then
+    [[ "$path" = "$1" ]] && name+=("$path")
+  else
+    [[ "${path#*:}" = "$1" ]] && name+=("$path")
+  fi
 done
 
 [[ "${#name[@]}" -eq 0 ]] && {
@@ -36,8 +41,8 @@ done
 }
 
 [[ "${#name[@]}" -ge 2 ]] && {
-  echo >&2 "${0##*/}: error: $1 found in multiple files"
-  printf '%s\n' "${name[@]}"
+  echo >&2 "${0##*/}: error: $1 found in multiple files. Use full path:"
+  printf 'dapp create %s\n' "${name[@]}"
   exit 1
 }
 
@@ -46,7 +51,7 @@ contract=$(echo "$data" | jq '.[''"'"${name[0]}"'"'']')
 abi=$(jq '.["abi"]' -r <<< "$contract")
 bin=$(jq '.["bin"]' -r <<< "$contract")
 type=$(seth --abi-constructor <<< "$abi")
-address=$(set -x; seth send --create "$bin" "${type/constructor/${1##*/}}" "${@:2}")
+address=$(set -x; seth send --create "$bin" "${type/constructor/${1#*:}}" "${@:2}")
 
 [[ $DAPP_VERIFY_CONTRACT ]] && {
   echo >&2 "Verifying contract at $address"
