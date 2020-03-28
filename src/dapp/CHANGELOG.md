@@ -10,6 +10,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Support for solc 0.5.16
 - Support for solc 0.6.0
 
+### Changed
+- `--extract` flag for `dapp build` no longer needed for using `dapp create`.
+- `dapp create` will fail if it finds multiple contracts with same name, requiring full path instead.
+
 ## [0.26.0]
 ### Added
 - Support for solc 0.5.15
