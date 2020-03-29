@@ -55,6 +55,7 @@ import Data.Text                  (Text, unpack, pack, splitOn)
 import Data.Text.Encoding         (encodeUtf8)
 import Data.Maybe                 (fromMaybe, fromJust)
 import Data.Version               (showVersion)
+import Data.SBV hiding (Word, verbose)
 import System.Directory           (withCurrentDirectory, listDirectory)
 import System.Exit                (die, exitFailure, exitWith, ExitCode(..))
 import System.IO                  (hFlush, stdout)
@@ -74,15 +75,17 @@ import qualified Data.Sequence          as Seq
 import qualified System.Timeout         as Timeout
 
 import qualified Paths_hevm      as Paths
-import qualified Text.Regex.TDFA as Regex
+--import qualified Text.Regex.TDFA as Regex
 
 import Options.Generic as Options
 
 -- This record defines the program's command-line options
 -- automatically via the `optparse-generic` package.
 data Command w
-  = Exec -- Execute a given program with specified env & calldata
-      { code        :: w ::: Maybe ByteString <?> "Program bytecode"
+  = Symbolic -- Execute a given program with specified env & calldata
+        { code        :: w ::: ByteString       <?> "Program bytecode"}
+  | Exec -- Execute a given program with specified env & calldata
+      { code        :: w ::: Maybe ByteString       <?> "Program bytecode"
       , calldata    :: w ::: Maybe ByteString <?> "Tx: calldata"
       , address     :: w ::: Maybe Addr       <?> "Tx: address"
       , caller      :: w ::: Maybe Addr       <?> "Tx: caller"
@@ -216,6 +219,7 @@ main = do
     root = fromMaybe "." (dappRoot cmd)
   case cmd of
     Version {} -> putStrLn (showVersion Paths.version)
+    Symbolic {} -> launchSymbolic cmd
     Exec {} ->
       launchExec cmd
     Abiencode {} ->
@@ -349,6 +353,36 @@ dappCoverage opts _ solcFile =
       Nothing ->
         error ("Failed to read Solidity JSON for `" ++ solcFile ++ "'")
 
+symbolEVM :: Symbolic (SWord 256, SWord 256)
+symbolEVM = do x <- symbolic "x"
+               y <- symbolic "y"
+               pure (x,y)
+
+
+launchSymbolic :: Command Options.Unwrapped -> IO ()
+launchSymbolic cmd = do (x,y) <- runSMT symbolEVM
+                        let vm1 = EVM.makeVm $ EVM.VMOpts
+                              {   EVM.vmoptCode         = hexByteString "--code" (strip0x (code cmd))
+                              , EVM.vmoptCalldata      = toBytes y <> toBytes x
+                              , EVM.vmoptValue         = 0
+                              , EVM.vmoptAddress       = 0
+                              , EVM.vmoptCaller        = 0
+                              , EVM.vmoptOrigin        = 0
+                              , EVM.vmoptGas           = 230012300123
+                              , EVM.vmoptGaslimit      = 230012300123
+                              , EVM.vmoptCoinbase      = 0
+                              , EVM.vmoptNumber        = 0
+                              , EVM.vmoptTimestamp     = 0
+                              , EVM.vmoptBlockGaslimit = 0
+                              , EVM.vmoptGasprice      = 0
+                              , EVM.vmoptMaxCodeSize   = 0xffffffff
+                              , EVM.vmoptDifficulty    = 0
+                              , EVM.vmoptSchedule      = FeeSchedule.istanbul
+                              , EVM.vmoptCreate        = False --create cmd
+                              }
+                        void (EVM.TTY.runFromVM vm1)
+
+
 launchExec :: Command Options.Unwrapped -> IO ()
 launchExec cmd = do
   let root = fromMaybe "." (dappRoot cmd)
@@ -471,7 +505,7 @@ vmFromCommand cmd = do
     
         vm1 c = EVM.makeVm $ EVM.VMOpts
           { EVM.vmoptContract      = c
-          , EVM.vmoptCalldata      = maybe "" ((hexByteString "--calldata") . strip0x)
+          , EVM.vmoptCalldata      = maybe [] (litBytes . (hexByteString "--calldata") . strip0x)
                                        (calldata cmd)
           , EVM.vmoptValue         = value'
           , EVM.vmoptAddress       = address'
