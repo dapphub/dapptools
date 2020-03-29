@@ -1,3 +1,4 @@
+{-# Language DataKinds #-}
 {-# Language FlexibleInstances #-}
 {-# Language StrictData #-}
 
@@ -8,7 +9,7 @@ import Prelude hiding (Word, (^))
 import EVM.Keccak (keccak)
 import EVM.RLP
 import EVM.Types (Addr, W256 (..), num, toWord512, fromWord512)
-import EVM.Types (word, padRight, word160Bytes, word256Bytes)
+import EVM.Types (word, padRight, spadRight, word160Bytes, word256Bytes)
 
 import Control.Lens    ((^?), ix)
 import Data.Bits       (Bits (..), FiniteBits (..), shiftL, shiftR)
@@ -17,12 +18,26 @@ import Data.DoubleWord (signedWord, unsignedWord)
 import Data.Maybe      (fromMaybe)
 import Data.Semigroup  ((<>))
 import Data.Word       (Word8)
-
+import Data.SBV hiding (Word)
 import qualified Data.ByteString as BS
 
 wordAt :: Int -> ByteString -> W256
 wordAt i bs =
   word (padRight 32 (BS.drop i bs))
+
+swordAt :: Int -> [SWord 8] -> (SWord 256)
+swordAt i bs = fromBytes $ take 32 $ spadRight 32 (drop i bs)
+
+-- mkSword :: [SWord 8] -> (SWord 256)
+-- mkSword (b1:b2:b3:b4:b5:b6:b7:b8:
+--          b9:b10:b11:b12:b13:b14:b15:b16:
+--          b17:b18:b19:b20:b21:b22:b23:b24:
+--          b25:b26:b27:b28:b29:b30:b31:b32)
+--   = b1 # b2 # b3 # b4 # b5 # b6 # b7 # b8 # 
+--     b9 # b10 # b11 # b12 # b13 # b14 # b15 # b16 # 
+--     b17 # b18 # b19 # b20 # b21 # b22 # b23 # b24 # 
+--     b25 # b26 # b27 # b28 # b29 # b30 # b31 # b32
+
 
 readByteOrZero :: Int -> ByteString -> Word8
 readByteOrZero i bs = fromMaybe 0 (bs ^? ix i)
@@ -161,6 +176,13 @@ readBlobWord (C _ i) x =
   if i > num (BS.length x)
   then 0
   else w256 (wordAt (num i) x)
+
+readSWord :: Word -> [SWord 8] -> (SWord 256)
+readSWord (C _ i) x =
+  if i > num (length x)
+  then 0
+  else swordAt (num i) x
+
 
 blobSize :: ByteString -> Word
 blobSize x = w256 (num (BS.length x))

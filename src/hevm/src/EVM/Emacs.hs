@@ -1,5 +1,6 @@
 {-# Language ImplicitParams #-}
 {-# Language TemplateHaskell #-}
+{-# Language DataKinds #-}
 {-# Language FlexibleInstances #-}
 
 module EVM.Emacs where
@@ -17,6 +18,7 @@ import Data.SCargot.Repr
 import Data.SCargot.Repr.Basic
 import Data.Set (Set)
 import Data.Text (Text, pack, unpack)
+import Data.SBV hiding (Word, output)
 import EVM
 import EVM.ABI
 import EVM.Concrete
@@ -449,6 +451,10 @@ instance SDisplay Contract where
       ]
 
 instance SDisplay W256 where
+  sexp x = A (txt (txt x))
+
+-- no idea what's going on here
+instance SDisplay (SWord 256) where
   sexp x = A (txt (txt x))
 
 instance (SDisplay k, SDisplay v) => SDisplay (Map k v) where

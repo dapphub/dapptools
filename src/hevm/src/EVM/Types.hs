@@ -1,5 +1,9 @@
 {-# Language CPP #-}
 {-# Language TemplateHaskell #-}
+{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE DefaultSignatures #-}
+{-# LANGUAGE FlexibleInstances #-}
 
 module EVM.Types where
 
@@ -10,6 +14,8 @@ import Data.Aeson (FromJSONKey (..), FromJSONKeyFunction (..))
 #endif
 
 import Text.ParserCombinators.ReadP
+import Data.SBV
+import Data.Kind
 import Data.Monoid ((<>))
 import Data.Bifunctor (first)
 import Data.Bits
@@ -47,6 +53,37 @@ newtype W256 = W256 Word256
     ( Num, Integral, Real, Ord, Enum, Eq
     , Bits, FiniteBits, Generic
     )
+
+-- | convert between (WordN 256) and Word256
+type family ToSizzle (t :: Type) :: Type where
+    ToSizzle W256 = (WordN 256)
+
+-- | Conversion from a fixed-sized BV to a sized bit-vector.
+class ToSizzleBV a where
+   -- | Convert a fixed-sized bit-vector to the corresponding sized bit-vector,
+   -- for instance 'SWord16' to 'SWord 16'. See also 'fromSized'.
+   toSizzle :: a -> ToSizzle a
+
+   default toSizzle :: (Num (ToSizzle a), Integral a) => (a -> ToSizzle a)
+   toSizzle = fromIntegral
+
+-- | Capture the correspondence between sized and fixed-sized BVs
+type family FromSizzle (t :: Type) :: Type where
+   FromSizzle (WordN 256) = W256
+
+
+-- | Conversion from a sized BV to a fixed-sized bit-vector.
+class FromSizzleBV a where
+   -- | Convert a sized bit-vector to the corresponding fixed-sized bit-vector,
+   -- for instance 'SWord 16' to 'SWord16'. See also 'toSized'.
+   fromSizzle :: a -> FromSizzle a
+
+   default fromSizzle :: (Num (FromSizzle a), Integral a) => a -> FromSizzle a
+   fromSizzle = fromIntegral
+ 
+instance (ToSizzleBV W256)
+instance (FromSizzleBV (WordN 256))
+--instance {-# OVERLAPPING  #-} ToSizedBV (SWord 256) where toSized = Trans.sFromIntegral
 
 newtype Addr = Addr { addressWord160 :: Word160 }
   deriving (Num, Integral, Real, Ord, Enum, Eq, Bits, Generic)
@@ -172,6 +209,10 @@ padLeft n xs = BS.replicate (n - BS.length xs) 0 <> xs
 
 padRight :: Int -> ByteString -> ByteString
 padRight n xs = xs <> BS.replicate (n - BS.length xs) 0
+
+spadRight :: Int -> [SWord 8] -> [SWord 8]
+spadRight n xs = xs <> replicate (n - length xs) 0
+
 
 word :: ByteString -> W256
 word xs = case Cereal.runGet m (padLeft 32 xs) of
