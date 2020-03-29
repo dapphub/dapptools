@@ -16,6 +16,7 @@ module EVM where
 import Prelude hiding (log, Word, exponent)
 
 import Data.SBV hiding (Word, output)
+import Data.Proxy (Proxy(..))
 import EVM.ABI
 import EVM.Types
 import EVM.Solidity
@@ -87,7 +88,7 @@ deriving instance Show Error
 -- | The possible result states of a VM
 data VMResult
   = VMFailure Error -- ^ An operation failed
-  | VMSuccess ByteString -- ^ Reached STOP, RETURN, or end-of-code
+  | VMSuccess [SWord 8] -- ^ Reached STOP, RETURN, or end-of-code
 
 deriving instance Show VMResult
 
@@ -117,7 +118,7 @@ data TraceData
   | QueryTrace Query
   | ErrorTrace Error
   | EntryTrace Text
-  | ReturnTrace ByteString FrameContext
+  | ReturnTrace [SWord 8] FrameContext
 
 data Query where
   PleaseFetchContract :: Addr         -> (Contract -> EVM ()) -> Query
@@ -196,13 +197,13 @@ data FrameState = FrameState
   , _code         :: ByteString
   , _pc           :: Int
   , _stack        :: [(SWord 256)]
-  , _memory       :: ByteString
+  , _memory       :: [SWord 8]--ByteStringb
   , _memorySize   :: Int
   , _calldata     :: [SWord 8]
   , _callvalue    :: Word
   , _caller       :: Addr
   , _gas          :: Word
-  , _returndata   :: ByteString
+  , _returndata   :: [SWord 8]
   , _static       :: Bool
   }
 
@@ -400,8 +401,17 @@ next = modifying (state . pc) (+ (opSize ?op))
 w256lit :: W256 -> (SWord 256)
 w256lit = literal . toSizzle
 
-forceLit :: (SWord 256) -> W256
-forceLit = fromSizzle .fromJust . unliteral
+forceLit :: (SWord 256) -> Word
+forceLit = w256 . fromSizzle . fromJust . unliteral
+
+forceLitBytes :: [SWord 8] -> ByteString
+forceLitBytes = BS.pack . fmap (fromSized . fromJust . unliteral)
+
+maybeLitBytes :: [SWord 8] -> Maybe ByteString
+maybeLitBytes xs = fmap (\x -> BS.pack (fmap fromSized x)) (mapM unliteral xs)
+
+-- litBytes :: ByteString -> [SWord 8]
+-- litBytes = BS.unpack . fmap (fromSized . fromJust . unliteral)
 
 
 exec1 :: EVM ()
@@ -422,7 +432,7 @@ exec1 = do
 
     fees@FeeSchedule {..} = the block schedule
 
-    doStop = finishFrame (FrameReturned "")
+    doStop = finishFrame (FrameReturned [])
 
   if self > 0x0 && self <= 0x9 then doStop
     -- -- call to precompile
@@ -622,7 +632,7 @@ exec1 = do
 
         -- op: CALLDATALOAD
         0x35 -> stackOp1 (const g_verylow) $
-          \x -> readBlobWord x (the state calldata)
+          \x -> readSWord (forceLit x) (the state calldata)
 
         -- -- op: CALLDATASIZE
         -- 0x36 ->
@@ -782,37 +792,38 @@ exec1 = do
             (_:xs) -> burn g_base (next >> assign (state . stack) xs)
             _      -> underrun
 
-        -- -- op: MLOAD
-        -- 0x51 ->
-        --   case stk of
-        --     (x:xs) ->
-        --       burn g_verylow $
-        --         accessMemoryWord fees x $ do
-        --           next
-        --           assign (state . stack) (view (word256At (num x)) mem : xs)
-        --     _ -> underrun
+        -- op: MLOAD
+        0x51 ->
+          case stk of
+            (x:xs) ->
+              burn g_verylow $
+                accessMemoryWord fees (forceLit x) $ do
+                  next
+                  assign (state . stack) (view (word256At (num (forceLit x))) mem : xs)
+            _ -> underrun
 
-        -- -- op: MSTORE
-        -- 0x52 ->
-        --   case stk of
-        --     (x:y:xs) ->
-        --       burn g_verylow $
-        --         accessMemoryWord fees x $ do
-        --           next
-        --           assign (state . memory . word256At (num x)) y
-        --           assign (state . stack) xs
-        --     _ -> underrun
+        -- op: MSTORE
+        0x52 ->
+          case stk of
+            (x:y:xs) ->
+              burn g_verylow $
+                accessMemoryWord fees (forceLit x) $ do
+                  next
+                  assign (state . memory . word256At (num (forceLit x))) y
+                  assign (state . stack) xs
+            _ -> underrun
 
-        -- -- op: MSTORE8
-        -- 0x53 ->
-        --   case stk of
-        --     (x:y:xs) ->
-        --       burn g_verylow $
-        --         accessMemoryRange fees x 1 $ do
-        --           next
-        --           modifying (state . memory) (setMemoryByte x (wordToByte y))
-        --           assign (state . stack) xs
-        --     _ -> underrun
+        -- op: MSTORE8
+        0x53 ->
+          case stk of
+            (x:y:xs) ->
+              let yByte = bvExtract (Proxy :: Proxy 7) (Proxy :: Proxy 0) y
+              in burn g_verylow $
+                accessMemoryRange fees (forceLit x) 1 $ do
+                  next
+                  modifying (state . memory) (setMemoryByte (forceLit x) yByte)
+                  assign (state . stack) xs
+            _ -> underrun
 
         -- -- op: SLOAD
         -- 0x54 ->
@@ -998,41 +1009,43 @@ exec1 = do
         --     _ ->
         --       underrun
 
-        -- -- op: RETURN
-        -- 0xf3 ->
-        --   case stk of
-        --     (xOffset:xSize:_) ->
-        --       accessMemoryRange fees xOffset xSize $ do
-        --         let
-        --           output = readMemory (num xOffset) (num xSize) vm
-        --           codesize = num (BS.length output)
-        --           maxsize = the block maxCodeSize
-        --         case view frames vm of
-        --           [] ->
-        --             case the tx isCreate of
-        --               True ->
-        --                 if codesize > maxsize
-        --                 then
-        --                   finishFrame (FrameErrored (MaxCodeSizeExceeded maxsize codesize))
-        --                 else
-        --                   burn (g_codedeposit * num (BS.length output)) $
-        --                     finishFrame (FrameReturned output)
-        --               False ->
-        --                 finishFrame (FrameReturned output)
-        --           (frame: _) -> do
-        --             let
-        --               context = view frameContext frame
-        --             case context of
-        --               CreationContext {} ->
-        --                 if codesize > maxsize
-        --                 then
-        --                   finishFrame (FrameErrored (MaxCodeSizeExceeded maxsize codesize))
-        --                 else
-        --                   burn (g_codedeposit * num (BS.length output)) $
-        --                     finishFrame (FrameReturned output)
-        --               CallContext {} ->
-        --                   finishFrame (FrameReturned output)
-        --     _ -> underrun
+        -- op: RETURN
+        0xf3 ->
+          case stk of
+            (xOffset:xSize:_) ->
+              accessMemoryRange fees (forceLit xOffset) (forceLit xSize) $ do
+                let
+                  litOffset = forceLit xOffset
+                  litSize = forceLit xSize
+                  output = readMemory (num litOffset) (num litSize) vm
+                  codesize = num (length output)
+                  maxsize = the block maxCodeSize
+                case view frames vm of
+                  [] ->
+                    case (the tx isCreate) of
+                      True ->
+                        if codesize > maxsize
+                        then
+                          finishFrame (FrameErrored (MaxCodeSizeExceeded maxsize codesize))
+                        else
+                          burn (g_codedeposit * num (length output)) $
+                            finishFrame (FrameReturned output)
+                      False ->
+                        finishFrame (FrameReturned output)
+                  (frame: _) -> do
+                    let
+                      context = view frameContext frame
+                    case context of
+                      CreationContext {} ->
+                        if codesize > maxsize
+                        then
+                          finishFrame (FrameErrored (MaxCodeSizeExceeded maxsize codesize))
+                        else
+                          burn (g_codedeposit * num (length output)) $
+                            finishFrame (FrameReturned output)
+                      CallContext {} ->
+                          finishFrame (FrameReturned output)
+            _ -> underrun
 
         -- -- op: DELEGATECALL
         -- 0xf4 ->
@@ -1452,7 +1465,7 @@ finalize = do
       createeExists <- (Map.member createe) <$> use (env . contracts)
 
       if creation && createeExists
-      then replaceCode createe (RuntimeCode output)
+      then replaceCode createe (RuntimeCode $ forceLitBytes output)
       else noop
 
   -- compute and pay the refund to the caller and the
@@ -1574,34 +1587,35 @@ cheat
   :: (?op :: Word8)
   => (Word, Word) -> (Word, Word)
   -> EVM ()
-cheat (inOffset, inSize) (outOffset, outSize) = do
-  mem <- use (state . memory)
-  let
-    abi =
-      num (wordValue (readMemoryWord32 inOffset mem))
-    input =
-      sliceMemory (inOffset + 4) (inSize - 4) mem
-  case Map.lookup abi cheatActions of
-    Nothing ->
-      vmError (BadCheatCode abi)
-    Just (argTypes, action) ->
-      case runGetOrFail
-             (getAbiSeq (length argTypes) argTypes)
-             (fromStrict input) of
-        Right ("", _, args) ->
-          action (toList args) >>= \case
-            Nothing -> do
-              next
-              push 1
-            Just (encodeAbiValue -> bs) -> do
-              next
-              modifying (state . memory)
-                (writeMemory bs outSize 0 outOffset)
-              push 1
-        Left _ ->
-          vmError (BadCheatCode abi)
-        Right _ ->
-          vmError (BadCheatCode abi)
+cheat = error "todo"
+-- cheat (inOffset, inSize) (outOffset, outSize) = do
+--   mem <- use (state . memory)
+--   let
+--     abi =
+--       num (wordValue (readMemoryWord32 inOffset mem))
+--     input =
+--       sliceMemory (inOffset + 4) (inSize - 4) mem
+--   case Map.lookup abi cheatActions of
+--     Nothing ->
+--       vmError (BadCheatCode abi)
+--     Just (argTypes, action) ->
+--       case runGetOrFail
+--              (getAbiSeq (length argTypes) argTypes)
+--              (fromStrict input) of
+--         Right ("", _, args) ->
+--           action (toList args) >>= \case
+--             Nothing -> do
+--               next
+--               push 1
+--             Just (encodeAbiValue -> bs) -> do
+--               next
+--               modifying (state . memory)
+--                 (writeMemory bs outSize 0 outOffset)
+--               push 1
+--         Left _ ->
+--           vmError (BadCheatCode abi)
+--         Right _ ->
+--           vmError (BadCheatCode abi)
 
 type CheatAction = ([AbiType], [AbiValue] -> EVM (Maybe AbiValue))
 
@@ -1793,8 +1807,8 @@ underrun = vmError StackUnderrun
 
 -- | A stack frame can be popped in three ways.
 data FrameResult
-  = FrameReturned ByteString -- ^ STOP, RETURN, or no more code
-  | FrameReverted ByteString -- ^ REVERT
+  = FrameReturned [SWord 8] -- ^ STOP, RETURN, or no more code
+  | FrameReverted [SWord 8] -- ^ REVERT
   | FrameErrored Error -- ^ Any other error
   deriving Show
 
@@ -1813,7 +1827,7 @@ finishFrame how = do
       assign result . Just $
         case how of
           FrameReturned output -> VMSuccess output
-          FrameReverted output -> VMFailure (Revert output)
+          FrameReverted output -> VMFailure (Revert (forceLitBytes output))
           FrameErrored e       -> VMFailure e
       finalize
 
@@ -1830,7 +1844,7 @@ finishFrame how = do
           FrameErrored e ->
             ErrorTrace e
           FrameReverted output ->
-            ErrorTrace (Revert output)
+            ErrorTrace (Revert (forceLitBytes output))
           FrameReturned output ->
             ReturnTrace output (view frameContext nextFrame)
       -- Pop to the previous level of the debug trace stack.
@@ -1895,7 +1909,7 @@ finishFrame how = do
           case how of
             -- Case 4: Returning during a creation?
             FrameReturned output -> do
-              replaceCode createe (RuntimeCode output)
+              replaceCode createe (RuntimeCode (forceLitBytes output))
               assign (state . returndata) mempty
               reclaimRemainingGasAllowance
               push (num createe)
@@ -1950,7 +1964,7 @@ accessMemoryWord
 accessMemoryWord fees x = accessMemoryRange fees x 32
 
 copyBytesToMemory
-  :: ByteString -> Word -> Word -> Word -> EVM ()
+  :: [SWord 8] -> Word -> Word -> Word -> EVM ()
 copyBytesToMemory bs size xOffset yOffset =
   if size == 0 then noop
   else do
@@ -1959,21 +1973,21 @@ copyBytesToMemory bs size xOffset yOffset =
       writeMemory bs size xOffset yOffset mem
 
 copyCallBytesToMemory
-  :: ByteString -> Word -> Word -> Word -> EVM ()
+  :: [SWord 8] -> Word -> Word -> Word -> EVM ()
 copyCallBytesToMemory bs size xOffset yOffset =
   if size == 0 then noop
   else do
     mem <- use (state . memory)
     assign (state . memory) $
-      writeMemory bs (min size (num (BS.length bs))) xOffset yOffset mem
+      writeMemory bs (min size (num (length bs))) xOffset yOffset mem
 
-readMemory :: Word -> Word -> VM -> ByteString
-readMemory offset size vm = sliceMemory offset size (view (state . memory) vm)
+readMemory :: Word -> Word -> VM -> [SWord 8]
+readMemory offset size vm = sliceWithZero (num offset) (num size) (view (state . memory) vm)
 
 word256At
   :: Functor f
-  => Word -> (Word -> f Word)
-  -> ByteString -> f ByteString
+  => Word -> (SWord 256 -> f (SWord 256))
+  -> [SWord 8] -> f [SWord 8]
 word256At i = lens getter setter where
   getter = readMemoryWord i
   setter m x = setMemoryWord i x m
