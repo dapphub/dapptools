@@ -287,7 +287,7 @@ parseVmOpts v =
        (JSON.Object env, JSON.Object exec) ->
          EVM.VMOpts
            <$> (dataField exec "code" >>= pure . EVM.initialContract . EVM.RuntimeCode)
-           <*> dataField exec "data"
+           <*> (dataField exec "data" >>= pure . litBytes)
            <*> wordField exec "value"
            <*> addrField exec "address"
            <*> addrField exec "caller"
@@ -442,7 +442,8 @@ fromNormalBlockchainCase block tx preState postState =
       (_, _, Just origin, Just checkState) -> Right $ Case
         (EVM.VMOpts
          { vmoptContract      = EVM.initialContract theCode
-         , vmoptCalldata      = txData tx
+         { vmoptCode          = theCode
+         , vmoptCalldata      = litBytes $ txData tx
          , vmoptValue         = txValue tx
          , vmoptAddress       = toAddr
          , vmoptCaller        = origin

@@ -21,7 +21,7 @@ vmForEthrunCreation :: ByteString -> VM
 vmForEthrunCreation creationCode =
   (makeVm $ VMOpts
     { vmoptContract = initialContract (InitCode creationCode)
-    , vmoptCalldata = ""
+    , vmoptCalldata = []
     , vmoptValue = 0
     , vmoptAddress = createAddress ethrunAddress 1
     , vmoptCaller = ethrunAddress
