@@ -30,6 +30,7 @@ import Prelude hiding (fail)
 import Control.Monad.Operational (Program, singleton)
 import Data.Binary.Get (runGetOrFail)
 import Data.Text (Text)
+import Data.SBV
 
 import EVM (EVM, VMResult (VMFailure, VMSuccess), Error (Query), Query)
 import qualified EVM
@@ -85,7 +86,7 @@ note :: Text -> Stepper ()
 note = singleton . Note
 
 -- | Run the VM until final result, resolving all queries
-execFully :: Stepper (Either Error ByteString)
+execFully :: Stepper (Either Error [SWord 8])
 execFully =
   exec >>= \case
     VMFailure (Query q) ->
@@ -95,7 +96,7 @@ execFully =
     VMSuccess x ->
       pure (Right x)
 
-execFullyOrFail :: Stepper ByteString
+execFullyOrFail :: Stepper [SWord 8]
 execFullyOrFail = execFully >>= either (fail . VMFailed) pure
 
 -- | Decode a blob as an ABI value, failing if ABI encoding wrong

@@ -828,7 +828,7 @@ updateUiVmState ui vm =
     message =
       case view result vm of
         Just (VMSuccess msg) ->
-          Just ("VMSuccess: " <> (show . ByteStringS $ msg))
+          Just ("VMSuccess: " <> (show msg))
         Just (VMFailure (Revert msg)) ->
           Just ("VMFailure: " <> (show . ByteStringS $ msg))
         Just (VMFailure err) ->
@@ -923,18 +923,23 @@ withHighlight :: Bool -> Widget n -> Widget n
 withHighlight False = withDefAttr dimAttr
 withHighlight True  = withDefAttr boldAttr
 
+prettyIfConcrete :: [SWord 8] -> String
+prettyIfConcrete x = case maybeLitBytes x of
+  Just lits -> prettyHex 40 lits
+  Nothing -> show x
+
 drawTracePane :: UiVmState -> UiWidget
 drawTracePane s =
   case view uiVmShowMemory s of
     True ->
       hBorderWithLabel (txt "Calldata")
 --      <=> str (prettyHex 40 (view (uiVm . state . calldata) s))
-      <=> str (show (view (uiVm . state . calldata) s))
+      <=> str (prettyIfConcrete (view (uiVm . state . calldata) s))
       <=> hBorderWithLabel (txt "Returndata")
-      <=> str (prettyHex 40 (view (uiVm . state . returndata) s))
+      <=> str (prettyIfConcrete (view (uiVm . state . returndata) s))
       <=> hBorderWithLabel (txt "Memory")
       <=> viewport TracePane Vertical
-            (str (prettyHex 40 (view (uiVm . state . memory) s)))
+            (str (prettyIfConcrete (view (uiVm . state . memory) s)))
     False ->
       hBorderWithLabel (txt "Trace")
       <=> renderList

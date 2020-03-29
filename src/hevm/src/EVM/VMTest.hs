@@ -23,7 +23,7 @@ import Control.Monad.State.Strict (runState, join)
 import qualified Control.Monad.Operational as Operational
 import qualified Control.Monad.State.Class as State
 
-import EVM (EVM)
+import EVM (EVM, forceLitBytes)
 import EVM.Stepper (Stepper)
 import EVM.Transaction
 import EVM.Types
@@ -163,7 +163,7 @@ checkExpectation diff execmode x vm =
       let
         (okState, ok2, ok3, ok4, ok5) =
           checkExpectedContracts vm (expectedContracts expectation)
-        (s2, b2) = ("bad-output", checkExpectedOut output (expectedOut expectation))
+        (s2, b2) = ("bad-output", checkExpectedOut (forceLitBytes output) (expectedOut expectation))
         (s3, b3) = ("bad-gas", checkExpectedGas vm (expectedGas expectation))
         ss = map fst (filter (not . snd) [(s2, b2), (s3, b3)])
       _ <- if not okState then

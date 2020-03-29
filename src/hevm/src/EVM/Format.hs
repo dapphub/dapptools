@@ -2,7 +2,7 @@ module EVM.Format where
 
 import Prelude hiding (Word)
 
-import EVM (VM, cheatCode, traceForest, traceData, Error (..))
+import EVM (VM, cheatCode, traceForest, traceData, Error (..), forceLitBytes)
 import EVM (Trace, TraceData (..), Log (..), Query (..), FrameContext (..))
 import EVM.Dapp (DappInfo, dappSolcByHash, showTraceLocation, dappEventMap)
 import EVM.Concrete (Word (..), wordValue)
@@ -180,13 +180,13 @@ showTrace dapp trace =
     ReturnTrace output (CallContext _ _ hash (Just abi) _ _ _) ->
       case getAbiMethodOutput dapp hash abi of
         Nothing ->
-          "← " <> formatBinary output
+          "← " <> formatBinary (forceLitBytes output)
         Just (_, t) ->
-          "← " <> abiTypeSolidity t <> " " <> showValue t output
+          "← " <> abiTypeSolidity t <> " " <> showValue t (forceLitBytes output)
     ReturnTrace output (CallContext {}) ->
-      "← " <> formatBinary output
+      "← " <> formatBinary (forceLitBytes output)
     ReturnTrace output (CreationContext {}) ->
-      "← " <> pack (show (BS.length output)) <> " bytes of code"
+      "← " <> pack (show (length output)) <> " bytes of code"
 
     EntryTrace t ->
       t
