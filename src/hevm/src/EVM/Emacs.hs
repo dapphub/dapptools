@@ -457,6 +457,10 @@ instance SDisplay W256 where
 instance SDisplay (SWord 256) where
   sexp x = A (txt (txt x))
 
+-- no idea what's going on here
+instance SDisplay (SWord 8) where
+  sexp x = A (txt (txt x))
+
 instance (SDisplay k, SDisplay v) => SDisplay (Map k v) where
   sexp x = L [L [sexp k, sexp v] | (k, v) <- Map.toList x]
 
@@ -500,10 +504,10 @@ instance SDisplay Word where
 instance SDisplay ByteString where
   sexp = A . txt . pack . show . ByteStringS
 
-sexpMemory :: ByteString -> SExpr Text
+sexpMemory :: [SWord 8] -> SExpr Text
 sexpMemory bs =
-  if BS.length bs > 1024
-  then L [A "large-memory", A (txt (BS.length bs))]
+  if length bs > 1024
+  then L [A "large-memory", A (txt (length bs))]
   else sexp bs
 
 defaultUnitTestOptions :: MonadIO m => m UnitTestOptions
