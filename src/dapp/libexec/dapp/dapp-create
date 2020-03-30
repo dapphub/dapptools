@@ -16,9 +16,42 @@ for i in "$@"; do
   esac
 done
 
-bin=$DAPP_OUT/${1?missing contract name}.bin
-type=$(seth --abi-constructor <"$DAPP_OUT/$1.abi")
-address=$(set -x; seth send --create "$bin" "${type/constructor/${1##*/}}" "${@:2}")
+[[ -e "${DAPP_JSON}" ]] || {
+  echo >&2 "${0##*/}: error: ${DAPP_JSON} file not found. Did you run ``dapp build``?"
+  exit 1
+}
+
+name=${1?missing contract name}
+
+mapfile -t contracts < <(<"$DAPP_JSON" jq '.contracts|keys[]' -r)
+
+name=()
+
+for path in "${contracts[@]}"; do
+  if [ -z "${1##*:*}" ]; then
+    [[ "$path" = "$1" ]] && name+=("$path")
+  else
+    [[ "${path#*:}" = "$1" ]] && name+=("$path")
+  fi
+done
+
+[[ "${#name[@]}" -eq 0 ]] && {
+  echo >&2 "${0##*/}: error: $1 not found"
+  exit 1
+}
+
+[[ "${#name[@]}" -ge 2 ]] && {
+  echo >&2 "${0##*/}: error: $1 found in multiple files. Use full path:"
+  printf 'dapp create %s\n' "${name[@]}"
+  exit 1
+}
+
+data=$(<"$DAPP_JSON" jq '.contracts' -r)
+contract=$(echo "$data" | jq '.[''"'"${name[0]}"'"'']')
+abi=$(jq '.["abi"]' -r <<< "$contract")
+bin=$(jq '.["bin"]' -r <<< "$contract")
+type=$(seth --abi-constructor <<< "$abi")
+address=$(set -x; seth send --create "$bin" "${type/constructor/${1#*:}}" "${@:2}")
 
 [[ $DAPP_VERIFY_CONTRACT ]] && {
   echo >&2 "Verifying contract at $address"
