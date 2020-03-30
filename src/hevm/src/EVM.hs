@@ -32,6 +32,7 @@ import Data.Text (Text)
 import Data.Word (Word8, Word32)
 import Data.Bits (bit, testBit, complement, xor, shiftR, (.&.), (.|.), FiniteBits(..))
 
+import GHC.TypeNats
 import Control.Lens hiding (op, (:<), (|>), (.>))
 import Control.Monad.State.Strict hiding (state)
 
@@ -401,6 +402,9 @@ next = modifying (state . pc) (+ (opSize ?op))
 w256lit :: W256 -> (SWord 256)
 w256lit = literal . toSizzle
 
+litWord :: Word -> (SWord 256)
+litWord (C _ a) = literal $ toSizzle a
+
 forceLit :: (SWord 256) -> Word
 forceLit = w256 . fromSizzle . fromJust . unliteral
 
@@ -409,10 +413,6 @@ forceLitBytes = BS.pack . fmap (fromSized . fromJust . unliteral)
 
 maybeLitBytes :: [SWord 8] -> Maybe ByteString
 maybeLitBytes xs = fmap (\x -> BS.pack (fmap fromSized x)) (mapM unliteral xs)
-
--- litBytes :: ByteString -> [SWord 8]
--- litBytes = BS.unpack . fmap (fromSized . fromJust . unliteral)
-
 
 exec1 :: EVM ()
 exec1 = do
@@ -470,7 +470,7 @@ exec1 = do
           limitStack 1 $
             burn g_verylow $ do
               next
-              push (w256lit (word xs))
+              push (w256 (word xs))
 
         -- op: DUP
         x | x >= 0x80 && x <= 0x8f -> do
@@ -481,7 +481,7 @@ exec1 = do
               limitStack 1 $
                 burn g_verylow $ do
                   next
-                  push y
+                  pushSym y
 
         -- op: SWAP
         x | x >= 0x90 && x <= 0x9f -> do
@@ -552,10 +552,10 @@ exec1 = do
         0x10 -> stackOp2 (const g_verylow) $ \(x, y) -> ite (x .< y) 1 0
         -- op: GT
         0x11 -> stackOp2 (const g_verylow) $ \(x, y) -> ite (x .> y) 1 0
-        -- -- op: SLT
-        -- 0x12 -> stackOp2 (const g_verylow) $ uncurry slt
-        -- -- op: SGT
-        -- 0x13 -> stackOp2 (const g_verylow) $ uncurry sgt
+        -- op: SLT
+        0x12 -> stackOp2 (const g_verylow) $ uncurry slt
+        -- op: SGT
+        0x13 -> stackOp2 (const g_verylow) $ uncurry sgt
 
         -- op: EQ
         0x14 -> stackOp2 (const g_verylow) $ \(x, y) -> ite (x .== y) 1 0
@@ -571,73 +571,75 @@ exec1 = do
         -- op: NOT
         0x19 -> stackOp1 (const g_verylow) complement
 
-        -- -- op: BYTE
-        -- 0x1a -> stackOp2 (const g_verylow) $ \case
-        --   (n, _) | n >= 32 ->
-        --     0
-        --   (n, x) ->
-        --     0xff .&. shiftR x (8 * (31 - num n))
+        -- op: BYTE
+        0x1a -> stackOp2 (const g_verylow) $ \case
+          (n, _) | (forceLit n) >= 32 ->
+            0
+          (n, x) ->
+            0xff .&. shiftR x (8 * (31 - num (forceLit n)))
 
-        -- -- op: SHL
-        -- 0x1b -> stackOp2 (const g_verylow) $ \(n, x) -> shl x n
-        -- -- op: SHR
-        -- 0x1c -> stackOp2 (const g_verylow) $ \(n, x) -> shr x n
-        -- -- op: SAR
-        -- 0x1d -> stackOp2 (const g_verylow) $ \(n, x) -> sar x n
+        -- op: SHL
+        0x1b -> stackOp2 (const g_verylow) $ \(n, x) -> sShiftLeft x n
+        -- op: SHR
+        0x1c -> stackOp2 (const g_verylow) $ \(n, x) -> sShiftRight x n
+        -- op: SAR
+        0x1d -> stackOp2 (const g_verylow) $ \(n, x) -> sSignedShiftArithRight x n
 
-        -- -- op: SHA3
-        -- 0x20 ->
-        --   case stk of
-        --     ((num -> xOffset) : (num -> xSize) : xs) -> do
-        --       let bytes = readMemory xOffset xSize vm
-        --           hash  = keccakBlob bytes
-        --       burn (g_sha3 + g_sha3word * ceilDiv (num xSize) 32) $
-        --         accessMemoryRange fees xOffset xSize $ do
-        --           next
-        --           assign (state . stack) (hash : xs)
-        --           assign (env . sha3Crack . at hash) (Just bytes)
-        --     _ -> underrun
+        -- op: SHA3
+        0x20 ->
+          case stk of
+            (((num . forceLit) -> xOffset) : ((num . forceLit) -> xSize) : xs) -> do
+              let bytes = readMemory xOffset xSize vm
+                  (hash, invMap)  = case maybeLitBytes bytes of
+                                 Just bs -> (litWord $ keccakBlob bs, Map.singleton (keccakBlob bs) bs)
+                                 Nothing -> error "not supported yet" --symKeccak bytes
+              burn (g_sha3 + g_sha3word * ceilDiv (num xSize) 32) $
+                accessMemoryRange fees xOffset xSize $ do
+                  next
+                  assign (state . stack) (hash : xs)
+                  (env . sha3Crack) <>= invMap
+            _ -> underrun
 
-        -- -- op: ADDRESS
-        -- 0x30 ->
-        --   limitStack 1 $
-        --     burn g_base (next >> push (num self))
+        -- op: ADDRESS
+        0x30 ->
+          limitStack 1 $
+            burn g_base (next >> push (num self))
 
-        -- -- op: BALANCE
-        -- 0x31 ->
-        --   case stk of
-        --     (x:xs) ->
-        --       burn g_balance $
-        --         fetchAccount (num x) $ \c -> do
-        --           next
-        --           assign (state . stack) xs
-        --           push (view balance c)
-        --     [] ->
-        --       underrun
+        -- op: BALANCE
+        0x31 ->
+          case stk of
+            (x:xs) -> do
+              burn g_balance $
+                fetchAccount (num (forceLit x)) $ \c -> do
+                  next
+                  assign (state . stack) xs
+                  push (view balance c)
+            [] ->
+              underrun
 
-        -- -- op: ORIGIN
-        -- 0x32 ->
-        --   limitStack 1 . burn g_base $
-        --     next >> push (num (the tx origin))
+        -- op: ORIGIN
+        0x32 ->
+          limitStack 1 . burn g_base $
+            next >> push (num (the tx origin))
 
-        -- -- op: CALLER
-        -- 0x33 ->
-        --   limitStack 1 . burn g_base $
-        --     next >> push (num (the state caller))
+        -- op: CALLER
+        0x33 ->
+          limitStack 1 . burn g_base $
+            next >> push (num (the state caller))
 
-        -- -- op: CALLVALUE
-        -- 0x34 ->
-        --   limitStack 1 . burn g_base $
-        --     next >> push (the state callvalue)
+        -- op: CALLVALUE
+        0x34 ->
+          limitStack 1 . burn g_base $
+            next >> push (the state callvalue)
 
         -- op: CALLDATALOAD
         0x35 -> stackOp1 (const g_verylow) $
           \x -> readSWord (forceLit x) (the state calldata)
 
-        -- -- op: CALLDATASIZE
-        -- 0x36 ->
-        --   limitStack 1 . burn g_base $
-        --     next >> push (blobSize (the state calldata))
+        -- op: CALLDATASIZE
+        0x36 ->
+          limitStack 1 . burn g_base $
+            next >> push (num (length (the state calldata)))
 
         -- -- op: CALLDATACOPY
         -- 0x37 ->
@@ -650,27 +652,27 @@ exec1 = do
         --           copyBytesToMemory (the state calldata) xSize xFrom xTo
         --     _ -> underrun
 
-        -- -- op: CODESIZE
-        -- 0x38 ->
-        --   limitStack 1 . burn g_base $
-        --     next >> push (num (BS.length (the state code)))
+        -- op: CODESIZE
+        0x38 ->
+          limitStack 1 . burn g_base $
+            next >> push (num (BS.length (the state code)))
 
-        -- -- op: CODECOPY
-        -- 0x39 ->
-        --   case stk of
-        --     ((num -> memOffset) : (num -> codeOffset) : (num -> n) : xs) ->
-        --       burn (g_verylow + g_copy * ceilDiv (num n) 32) $
-        --         accessUnboundedMemoryRange fees memOffset n $ do
-        --           next
-        --           assign (state . stack) xs
-        --           copyBytesToMemory (the state code)
-        --             n codeOffset memOffset
-        --     _ -> underrun
+        -- op: CODECOPY
+        0x39 ->
+          case stk of
+            (((num . forceLit) -> memOffset) : ((num . forceLit) -> codeOffset) : ((num . forceLit) -> n) : xs) -> do
+              burn (g_verylow + g_copy * ceilDiv (num n) 32) $
+                accessUnboundedMemoryRange fees memOffset n $ do
+                  next
+                  assign (state . stack) xs
+                  copyBytesToMemory (litBytes (the state code))
+                    n codeOffset memOffset
+            _ -> underrun
 
-        -- -- op: GASPRICE
-        -- 0x3a ->
-        --   limitStack 1 . burn g_base $
-        --     next >> push (the tx gasprice)
+        -- op: GASPRICE
+        0x3a ->
+          limitStack 1 . burn g_base $
+            next >> push (the tx gasprice)
 
         -- -- op: EXTCODESIZE
         -- 0x3b ->
@@ -751,40 +753,40 @@ exec1 = do
         --         (num i :: Integer)
         --           & show & Char8.pack & keccak & num
 
-        -- -- op: COINBASE
-        -- 0x41 ->
-        --   limitStack 1 . burn g_base $
-        --     next >> push (num (the block coinbase))
+        -- op: COINBASE
+        0x41 ->
+          limitStack 1 . burn g_base $
+            next >> push (num (the block coinbase))
 
-        -- -- op: TIMESTAMP
-        -- 0x42 ->
-        --   limitStack 1 . burn g_base $
-        --     next >> push (the block timestamp)
+        -- op: TIMESTAMP
+        0x42 ->
+          limitStack 1 . burn g_base $
+            next >> push (the block timestamp)
 
-        -- -- op: NUMBER
-        -- 0x43 ->
-        --   limitStack 1 . burn g_base $
-        --     next >> push (the block number)
+        -- op: NUMBER
+        0x43 ->
+          limitStack 1 . burn g_base $
+            next >> push (the block number)
 
-        -- -- op: DIFFICULTY
-        -- 0x44 ->
-        --   limitStack 1 . burn g_base $
-        --     next >> push (the block difficulty)
+        -- op: DIFFICULTY
+        0x44 ->
+          limitStack 1 . burn g_base $
+            next >> push (the block difficulty)
 
-        -- -- op: GASLIMIT
-        -- 0x45 ->
-        --   limitStack 1 . burn g_base $
-        --     next >> push (the block gaslimit)
+        -- op: GASLIMIT
+        0x45 ->
+          limitStack 1 . burn g_base $
+            next >> push (the block gaslimit)
 
-        -- -- op: CHAINID
-        -- 0x46 ->
-        --   limitStack 1 . burn g_base $
-        --     next >> push (the env chainId)
+        -- op: CHAINID
+        0x46 ->
+          limitStack 1 . burn g_base $
+            next >> push (the env chainId)
 
-        -- -- op: SELFBALANCE
-        -- 0x47 ->
-        --   limitStack 1 . burn g_low $
-        --     next >> push (view balance this)
+        -- op: SELFBALANCE
+        0x47 ->
+          limitStack 1 . burn g_low $
+            next >> push (view balance this)
 
         -- op: POP
         0x50 ->
@@ -805,23 +807,23 @@ exec1 = do
         -- op: MSTORE
         0x52 ->
           case stk of
-            (x:y:xs) ->
+            ((forceLit -> x):y:xs) ->
               burn g_verylow $
-                accessMemoryWord fees (forceLit x) $ do
+                accessMemoryWord fees x $ do
                   next
-                  assign (state . memory . word256At (num (forceLit x))) y
+                  assign (state . memory . word256At (num x)) y
                   assign (state . stack) xs
             _ -> underrun
 
         -- op: MSTORE8
         0x53 ->
           case stk of
-            (x:y:xs) ->
-              let yByte = bvExtract (Proxy :: Proxy 7) (Proxy :: Proxy 0) y
-              in burn g_verylow $
-                accessMemoryRange fees (forceLit x) 1 $ do
+            ((forceLit -> x):y:xs) ->
+              burn g_verylow $
+                accessMemoryRange fees x 1 $ do
+                  let yByte = bvExtract (Proxy :: Proxy 7) (Proxy :: Proxy 0) y
                   next
-                  modifying (state . memory) (setMemoryByte (forceLit x) yByte)
+                  modifying (state . memory) (setMemoryByte x yByte)
                   assign (state . stack) xs
             _ -> underrun
 
@@ -885,41 +887,42 @@ exec1 = do
 
         --     _ -> underrun
 
-        -- -- op: JUMP
-        -- 0x56 ->
-        --   case stk of
-        --     (x:xs) ->
-        --       burn g_mid $
-        --         checkJump x xs
-        --     _ -> underrun
+        -- op: JUMP
+        0x56 ->
+          case stk of
+            (x:xs) ->
+              burn g_mid $ checkJump (forceLit x) xs
+            _ -> underrun
 
-        -- -- op: JUMPI
-        -- 0x57 ->
-        --   case stk of
-        --     (x:y:xs) ->
-        --       burn g_high $
-        --         if y == 0
-        --           then assign (state . stack) xs >> next
-        --           else checkJump x xs
-        --     _ -> underrun
+        -- op: JUMPI
+        0x57 -> do
+          case stk of
+            (x:y:xs) ->
+              burn g_high $
+                case unliteral y of
+                    Nothing -> error "symbolic JUMPI args not supported"
+                    Just y' -> if y' == 0
+                               then assign (state . stack) xs >> next
+                               else checkJump (forceLit x) xs
+            _ -> underrun
 
-        -- -- op: PC
-        -- 0x58 ->
-        --   limitStack 1 . burn g_base $
-        --     next >> push (num (the state pc))
+        -- op: PC
+        0x58 ->
+          limitStack 1 . burn g_base $
+            next >> push (num (the state pc))
 
-        -- -- op: MSIZE
-        -- 0x59 ->
-        --   limitStack 1 . burn g_base $
-        --     next >> push (num (the state memorySize))
+        -- op: MSIZE
+        0x59 ->
+          limitStack 1 . burn g_base $
+            next >> push (num (the state memorySize))
 
-        -- -- op: GAS
-        -- 0x5a ->
-        --   limitStack 1 . burn g_base $
-        --     next >> push (the state gas - g_base)
+        -- op: GAS
+        0x5a ->
+          limitStack 1 . burn g_base $
+            next >> push (the state gas - g_base)
 
-        -- -- op: JUMPDEST
-        -- 0x5b -> burn g_jumpdest next
+        -- op: JUMPDEST
+        0x5b -> burn g_jumpdest next
 
         -- -- op: EXP
         -- 0x0a ->
@@ -1129,13 +1132,13 @@ exec1 = do
         --             doStop
 
         -- op: REVERT
-        -- 0xfd ->
-        --   case stk of
-        --     (xOffset:xSize:_) ->
-        --       accessMemoryRange fees xOffset xSize $ do
-        --         let output = readMemory (num xOffset) (num xSize) vm
-        --         finishFrame (FrameReverted output)
-        --     _ -> underrun
+        0xfd ->
+          case stk of
+            ((forceLit -> xOffset):(forceLit -> xSize):_) ->
+              accessMemoryRange fees xOffset xSize $ do
+                let output = readMemory (num xOffset) (num xSize) vm
+                finishFrame (FrameReverted output)
+            _ -> underrun
 
         xxx ->
           vmError (UnrecognizedOpcode xxx)
@@ -1331,10 +1334,10 @@ callChecks this xGas xContext xValue xInOffset xInSize xOutOffset xOutSize xs co
 
 --         _   -> notImplemented
 
-truncpad :: Int -> ByteString -> ByteString
-truncpad n xs = if m > n then BS.take n xs
-                     else BS.append xs (BS.replicate (n - m) 0)
-  where m = BS.length xs
+-- truncpad :: Int -> ByteString -> ByteString
+-- truncpad n xs = if m > n then BS.take n xs
+--                 else BS.append xs (BS.replicate (n - m) 0)
+--   where m = BS.length xs
 
 lazySlice :: Word -> Word -> ByteString -> LS.ByteString
 lazySlice offset size bs =
@@ -2043,8 +2046,12 @@ traceLog log = do
 
 -- * Stack manipulation
 
-push :: (SWord 256) -> EVM ()
-push x = state . stack %= (x :)
+push :: Word -> EVM ()
+push = pushSym . w256lit . num
+
+pushSym :: SWord 256 -> EVM ()
+pushSym x = state . stack %= (x :)
+
 
 stackOp1
   :: (?op :: Word8)
@@ -2091,19 +2098,19 @@ stackOp3 cost f =
 
 -- * Bytecode data functions
 
--- checkJump :: (Integral n) => n -> [Word] -> EVM ()
--- checkJump x xs = do
---   theCode <- use (state . code)
---   self <- use (state . codeContract)
---   theCodeOps <- use (env . contracts . ix self . codeOps)
---   if x < num (BS.length theCode) && BS.index theCode (num x) == 0x5b
---     then
---       case RegularVector.find (\(i, op) -> i == num x && op == OpJumpdest) theCodeOps of
---         Nothing ->  vmError BadJumpDestination
---         _ -> do
---              state . stack .= xs
---              state . pc .= num x
---     else vmError BadJumpDestination
+checkJump :: (Integral n) => n -> [SWord 256] -> EVM ()
+checkJump x xs = do
+  theCode <- use (state . code)
+  self <- use (state . codeContract)
+  theCodeOps <- use (env . contracts . ix self . codeOps)
+  if x < num (BS.length theCode) && BS.index theCode (num x) == 0x5b
+    then
+      case RegularVector.find (\(i, op) -> i == num x && op == OpJumpdest) theCodeOps of
+        Nothing ->  vmError BadJumpDestination
+        _ -> do
+             state . stack .= xs
+             state . pc .= num x
+    else vmError BadJumpDestination
 
 opSize :: Word8 -> Int
 opSize x | x >= 0x60 && x <= 0x7f = num x - 0x60 + 2
@@ -2348,6 +2355,14 @@ memoryCost FeeSchedule{..} byteCount =
     quadraticCost = div (wordCount * wordCount) 512
   in
     linearCost + quadraticCost
+
+-- * Symbolic versions
+
+
+
+-- symKeccak :: (KnownNat n, IsNonZero n) => Proxy n -> SWord n -> SWord 256
+-- symKeccak _ = uninterpret "keccak" 
+
 
 -- * Arithmetic
 
