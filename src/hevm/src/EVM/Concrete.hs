@@ -9,7 +9,7 @@ import Prelude hiding (Word, (^))
 import EVM.Keccak (keccak)
 import EVM.RLP
 import EVM.Types (Addr, W256 (..), num, toWord512, fromWord512)
-import EVM.Types (word, padRight, spadRight, word160Bytes, word256Bytes)
+import EVM.Types (word, padRight, word160Bytes, word256Bytes, truncpad)
 
 import Control.Lens    ((^?), ix)
 import Data.Bits       (Bits (..), FiniteBits (..), shiftL, shiftR)
@@ -26,7 +26,7 @@ wordAt i bs =
   word (padRight 32 (BS.drop i bs))
 
 swordAt :: Int -> [SWord 8] -> (SWord 256)
-swordAt i bs = fromBytes $ take 32 $ spadRight 32 (drop i bs)
+swordAt i bs = fromBytes $ truncpad 32 $ drop i bs
 
 -- mkSword :: [SWord 8] -> (SWord 256)
 -- mkSword (b1:b2:b3:b4:b5:b6:b7:b8:
@@ -60,6 +60,7 @@ w256 :: W256 -> Word
 w256 = C Dull
 
 data Word = C Whiff W256
+--data SWord = S Whiff (SWord 256)
 
 wordToByte :: Word -> Word8
 wordToByte (C _ x) = num (x .&. 0xff)
@@ -95,32 +96,32 @@ mulmod (C _ x) (C _ y) (C _ z) =
     fromWord512
       ((toWord512 x * toWord512 y) `mod` (toWord512 z))
 
-slt :: Word -> Word -> Word
-slt (C _ (W256 x)) (C _ (W256 y)) =
-  if signedWord x < signedWord y then w256 1 else w256 0
+slt :: SWord 256 -> SWord 256 -> SWord 256
+slt x y =
+  ite (sFromIntegral x .< (sFromIntegral y :: (SInt 256))) 1 0
 
-sgt :: Word -> Word -> Word
-sgt (C _ (W256 x)) (C _ (W256 y)) =
-  if signedWord x > signedWord y then w256 1 else w256 0
+sgt :: SWord 256 -> SWord 256 -> SWord 256
+sgt x y =
+  ite (sFromIntegral x .> (sFromIntegral y :: (SInt 256))) 1 0
 
-shr :: Word -> Word -> Word
-shr x n =
-  if n > 255 then 0
-  else shiftR x (num n)
+-- shr :: SWord 256 -> Word -> SWord 256
+-- shr x n =
+--   if n > 255 then 0
+--   else shiftR x (num n)
 
-shl :: Word -> Word -> Word
-shl x n =
-  if n > 255 then 0
-  else shiftL x (num n)
+-- shl :: SWord 256 -> Word -> SWord 256
+-- shl x n =
+--   if n > 255 then 0
+--   else shiftL x (num n)
 
-sar :: Word -> Word -> Word
-sar (C _ (W256 x)) (C _ (W256 n)) =
-  let
-    sx = signedWord x
-  in
-    if n > 255 && sx > 0 then 0
-    else if n > 255 && sx < 0 then -1
-    else w256 (num (unsignedWord (shiftR sx (num n))))
+-- sar :: SWord 256 -> Word -> SWord 256
+-- sar x (C _ (W256 n)) =
+--   let
+--     sx = signedWord x
+--   in
+--     if n > 255 && sx > 0 then 0
+--     else if n > 255 && sx < 0 then -1
+--     else unsignedWord (shiftR sx (num n))
 
 wordValue :: Word -> W256
 wordValue (C _ x) = x
@@ -130,8 +131,7 @@ sliceMemory o s =
   byteStringSliceWithDefaultZeroes (num o) (num s)
 
 sliceWithZero :: Int -> Int -> [SWord 8] -> [SWord 8]
-sliceWithZero o s m =
-  take s (spadRight s (drop o m))
+sliceWithZero o s m = truncpad s $ drop o m
 
 writeMemory :: [SWord 8] -> Word -> Word -> Word -> [SWord 8] -> [SWord 8]
 writeMemory bs1 (C _ n) (C _ src) (C _ dst) bs0 =
@@ -161,8 +161,6 @@ readMemoryWord (C _ i) m = fromBytes $ spadRight 32 (drop (num i) m)
 --   in {-# SCC "readMemoryWord" #-}
 --     w256 $ go (0 :: W256) (31 :: Int)
 
--- readMemoryWord32 :: Word -> ByteString -> Word
--- readMemoryWord32 (C _ i) m =
 --   let
 --     go !a (-1) = a
 --     go !a !n = go (a + shiftL (num $ readByteOrZero (num i + n) m)
