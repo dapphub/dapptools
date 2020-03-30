@@ -66,6 +66,7 @@ import Data.Text.Encoding (encodeUtf8)
 import Data.Vector        (Vector)
 import Data.Word          (Word32, Word8)
 import Data.List          (intercalate)
+import Data.SBV hiding (label)
 import GHC.Generics
 
 import Test.QuickCheck hiding ((.&.), label)
@@ -523,6 +524,5 @@ listP parser = between (char '[') (char ']') ((do skipSpaces
                                                   a <- parser
                                                   skipSpaces
                                                   return a) `sepBy` (char ','))
-
 
 
