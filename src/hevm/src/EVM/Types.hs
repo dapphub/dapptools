@@ -210,8 +210,10 @@ padLeft n xs = BS.replicate (n - BS.length xs) 0 <> xs
 padRight :: Int -> ByteString -> ByteString
 padRight n xs = xs <> BS.replicate (n - BS.length xs) 0
 
-spadRight :: Int -> [SWord 8] -> [SWord 8]
-spadRight n xs = xs <> replicate (n - length xs) 0
+truncpad :: Int -> [SWord 8] -> [SWord 8]
+truncpad n xs = if m > n then take n xs
+                else mappend xs (replicate (n - m) 0)
+  where m = length xs
 
 
 word :: ByteString -> W256
