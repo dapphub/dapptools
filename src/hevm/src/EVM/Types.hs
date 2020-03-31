@@ -107,6 +107,9 @@ instance Show Addr where
 showAddrWith0x :: Addr -> String
 showAddrWith0x addr = "0x" ++ show addr
 
+litBytes :: ByteString -> [SWord 8]
+litBytes bs = fmap (toSized . literal) (BS.unpack bs)
+
 strip0x :: ByteString -> ByteString
 strip0x bs = if "0x" `Char8.isPrefixOf` bs then Char8.drop 2 bs else bs
 
