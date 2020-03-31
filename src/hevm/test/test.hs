@@ -1,29 +1,38 @@
 {-# Language OverloadedStrings #-}
 {-# Language QuasiQuotes #-}
 {-# Language GeneralizedNewtypeDeriving #-}
-
+{-# Language DataKinds #-}
+{-# Language StandaloneDeriving #-}
 import Data.Text (Text)
 import Data.ByteString (ByteString)
 
 import qualified Data.Text as Text
+import Data.Maybe (fromMaybe, fromJust)
+import Data.Text.Encoding (encodeUtf8)
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Base16 as Hex
 
 import Test.Tasty
-import Test.Tasty.QuickCheck
+import Test.Tasty.QuickCheck-- hiding (forAll)
 import Test.Tasty.HUnit
 
-import Control.Monad.State.Strict (execState, runState)
+import Control.Monad.State.Strict (execState, runState, MonadIO)
 import Control.Lens hiding (List)
 
 import qualified Data.Vector as Vector
 import Data.String.Here
+import qualified EVM.FeeSchedule as FeeSchedule
 
 import Data.Binary.Put (runPut)
+import Data.SBV hiding ((===), forAll_)
+import Data.SBV.Control hiding ((===), isTheorem)
+--import Data-SBV-Trans
 import Data.Binary.Get (runGetOrFail)
 
 import EVM
+import EVM.Symbolic
 import EVM.ABI
+import EVM.Keccak
 import EVM.Exec
 import EVM.Patricia as Patricia
 import EVM.Precompiled
@@ -126,10 +135,60 @@ main = defaultMain $ testGroup "hevm"
                               (r, mempty), (s, mempty), (t, mempty)]
        === (Just $ Literal Patricia.Empty)
     ]
-  ]
 
+  , testGroup "Symbolic execution"
+    [ testCase "add is commutative" $ do
+        Just plus <- singleContract "Add"
+          "function add(uint x, uint y) public pure returns (uint z) {z = x + y;}"
+        validity <- runSMT $ query $ do
+          x <- freshVar_
+          y <- freshVar_
+          let Just vm = loadVM plus (litBytes (sig "add(uint256,uint256)")
+                                      <> toBytes x <> toBytes y)
+          endStates <- io $ execSymbolic vm
+          canFail <- case endStates of
+                       [VMSuccess out] -> do constrain $ fromBytes out ./= (x + y :: SWord 256)
+                                             checkSat
+                       _ -> do checkSat
+          case canFail of
+            Unk -> error "A proof could not be found"
+            Sat -> error "Failure: there are variables x, y for which the claim is false"
+            Unsat -> pure ()
+        print validity
+    ]
+  ]
   where
     (===>) = assertSolidityComputation
+
+
+-- -- | @since 4.9.0.0
+-- instance MonadIO Identity where
+--     liftIO = _
+inUIntRange :: SInteger -> SBool
+inUIntRange x = 0 .<= x .&& x .< 2 ^ 256 - 1 
+
+
+runSymbolic :: VM -> IO ([VMResult])
+runSymbolic = error "in symbolic.hs"
+
+loadVM :: ByteString -> [SWord 8] -> Maybe VM
+loadVM x ins =
+    case runState exec (vmForEthrunCreation x) of
+       (VMSuccess targetCode, vm1) -> do
+         let target = view (state . contract) vm1
+             vm2 = execState (replaceCodeOfSelf (RuntimeCode (forceLitBytes targetCode))) vm1
+         return $ snd $ flip runState vm2
+                (do resetState
+                    assign (state . gas) 0xffffffffffffffff -- kludge
+                    loadContract target
+                    assign (state . calldata) ins)
+       _ -> Nothing
+
+runSimpleVM :: ByteString -> [SWord 8] -> Maybe [SWord 8]
+runSimpleVM x ins = do vm <- (loadVM x ins)
+                       case runState exec vm of
+                         (VMSuccess out, _) -> Just out
+                         _ -> Nothing
 
 hex :: ByteString -> ByteString
 hex s =
@@ -154,6 +213,11 @@ defaultDataLocation t =
   then "memory"
   else ""
 
+runFunction :: Text -> [SWord 8] -> IO (Maybe [SWord 8])
+runFunction c input = do
+  Just x <- singleContract "X" c
+  return $ runSimpleVM x input
+
 runStatements
   :: Text -> [AbiValue] -> AbiType
   -> IO (Maybe ByteString)
@@ -164,34 +228,16 @@ runStatements stmts args t = do
                              <> " " <> defaultDataLocation (abiValueType x)
                              <> " " <> Text.pack [c])
             (zip args "abcdefg"))
-      sig =
+      s =
         "foo(" <> Text.intercalate ","
                     (map (abiTypeSolidity . abiValueType) args) <> ")"
 
-  Just x <- singleContract "X" [i|
+  output <- runFunction [i|
     function foo(${params}) public pure returns (${abiTypeSolidity t} x) {
       ${stmts}
     }
-  |]
-
-  case runState exec (vmForEthrunCreation x) of
-    (VMSuccess targetCode, vm1) -> do
-      let target = view (state . contract) vm1
-          vm2 = execState (replaceCodeOfSelf (RuntimeCode (forceLitBytes targetCode))) vm1
-      case flip runState vm2
-             (do resetState
-                 assign (state . gas) 0xffffffffffffffff -- kludge
-                 loadContract target
-                 assign (state . calldata)
-                   (litBytes (abiCalldata sig (Vector.fromList args)))
-                 exec) of
-        (VMSuccess out, _) ->
-          return (Just (forceLitBytes out))
-        (VMFailure problem, _) -> do
-          print problem
-          return Nothing
-    _ ->
-      return Nothing
+  |] (litBytes (abiCalldata s (Vector.fromList args)))
+  return $ maybe Nothing maybeLitBytes output
 
 newtype Bytes = Bytes ByteString
   deriving Eq
