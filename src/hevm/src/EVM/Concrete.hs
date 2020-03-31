@@ -152,6 +152,9 @@ writeMemory bs1 (C _ n) (C _ src) (C _ dst) bs0 =
 readMemoryWord :: Word -> [SWord 8] -> SWord 256
 readMemoryWord (C _ i) m = fromBytes $ spadRight 32 (drop (num i) m)
 
+spadRight :: Num a => Int -> [a] -> [a]
+spadRight n xs = xs <> replicate (n - length xs) 0
+
 -- readMemoryWord :: Word -> ByteString -> Word
 -- readMemoryWord (C _ i) m =
 --   let
