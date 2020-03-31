@@ -442,7 +442,6 @@ fromNormalBlockchainCase block tx preState postState =
       (_, _, Just origin, Just checkState) -> Right $ Case
         (EVM.VMOpts
          { vmoptContract      = EVM.initialContract theCode
-         { vmoptCode          = theCode
          , vmoptCalldata      = litBytes $ txData tx
          , vmoptValue         = txValue tx
          , vmoptAddress       = toAddr

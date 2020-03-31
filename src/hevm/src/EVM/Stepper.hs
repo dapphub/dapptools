@@ -1,4 +1,5 @@
 {-# Language GADTs #-}
+{-# Language DataKinds #-}
 
 module EVM.Stepper
   ( Action (..)

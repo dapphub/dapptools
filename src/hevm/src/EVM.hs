@@ -46,6 +46,7 @@ import Data.Vector.Storable         (Vector)
 import Data.Foldable                (toList)
 
 import Data.Tree
+import Numeric (readHex, showHex)
 
 import qualified Data.ByteString      as BS
 import qualified Data.ByteString.Lazy as LS
@@ -531,18 +532,14 @@ exec1 = do
         0x03 -> stackOp2 (const g_verylow) (uncurry (-))
 
         -- op: DIV
-        0x04 -> stackOp2 (const g_low) $
-          \case (_, 0) -> 0
-                (x, y) -> sDiv x y
+        0x04 -> stackOp2 (const g_low) (uncurry (sDiv))
 
         -- -- op: SDIV
         -- 0x05 ->
         --   stackOp2 (const g_low) (uncurry sdiv)
 
         -- op: MOD
-        0x06 -> stackOp2 (const g_low) $ \case
-          (_, 0) -> 0
-          (x, y) -> sMod x y
+        0x06 -> stackOp2 (const g_low) (uncurry (sMod))
 
         -- -- op: SMOD
         -- 0x07 -> stackOp2 (const g_low) $ uncurry smod
@@ -644,16 +641,16 @@ exec1 = do
           limitStack 1 . burn g_base $
             next >> push (num (length (the state calldata)))
 
-        -- -- op: CALLDATACOPY
-        -- 0x37 ->
-        --   case stk of
-        --     ((num -> xTo) : (num -> xFrom) : (num -> xSize) :xs) ->
-        --       burn (g_verylow + g_copy * ceilDiv xSize 32) $
-        --         accessUnboundedMemoryRange fees xTo xSize $ do
-        --           next
-        --           assign (state . stack) xs
-        --           copyBytesToMemory (the state calldata) xSize xFrom xTo
-        --     _ -> underrun
+        -- op: CALLDATACOPY
+        0x37 ->
+          case stk of
+            (((num . forceLit) -> xTo) : ((num . forceLit) -> xFrom) : ((num . forceLit) -> xSize) :xs) ->
+              burn (g_verylow + g_copy * ceilDiv xSize 32) $
+                accessUnboundedMemoryRange fees xTo xSize $ do
+                  next
+                  assign (state . stack) xs
+                  copyBytesToMemory (the state calldata) xSize xFrom xTo
+            _ -> underrun
 
         -- op: CODESIZE
         0x38 ->
@@ -677,23 +674,23 @@ exec1 = do
           limitStack 1 . burn g_base $
             next >> push (the tx gasprice)
 
-        -- -- op: EXTCODESIZE
-        -- 0x3b ->
-        --   case stk of
-        --     (x:xs) ->
-        --       if x == num cheatCode
-        --         then do
-        --           next
-        --           assign (state . stack) xs
-        --           push (w256 1)
-        --         else
-        --           burn g_extcode $
-        --             fetchAccount (num x) $ \c -> do
-        --               next
-        --               assign (state . stack) xs
-        --               push (num (BS.length (view bytecode c)))
-        --     [] ->
-        --       underrun
+        -- op: EXTCODESIZE
+        0x3b ->
+          case stk of
+            ((forceLit -> x):xs) ->
+              if x == num cheatCode
+                then do
+                  next
+                  assign (state . stack) xs
+                  push (w256 1)
+                else
+                  burn g_extcode $
+                    fetchAccount (num x) $ \c -> do
+                      next
+                      assign (state . stack) xs
+                      push (num (BS.length (view bytecode c)))
+            [] ->
+              underrun
 
         -- -- op: EXTCODECOPY
         -- 0x3c ->
@@ -903,7 +900,7 @@ exec1 = do
             (x:y:xs) ->
               burn g_high $
                 case unliteral y of
-                    Nothing -> error "symbolic JUMPI args not supported"
+                    Nothing -> error $ "symbolic JUMPI args not supported: " <> show y <> " at pc: " <> show (the state pc) <> "of code: " <> show (ByteStringS (the state code))
                     Just y' -> if y' == 0
                                then assign (state . stack) xs >> next
                                else checkJump (forceLit x) xs
@@ -927,13 +924,13 @@ exec1 = do
         -- op: JUMPDEST
         0x5b -> burn g_jumpdest next
 
-        -- -- op: EXP
-        -- 0x0a ->
-        --   let cost (_, exponent) =
-        --         if exponent == 0
-        --         then g_exp
-        --         else g_exp + g_expbyte * num (ceilDiv (1 + log2 exponent) 8)
-        --   in stackOp2 cost (uncurry exponentiate)
+        -- op: EXP
+        0x0a ->
+          let cost (_ ,(forceLit -> exponent)) =
+                if exponent == 0
+                then g_exp
+                else g_exp + g_expbyte * num (ceilDiv (1 + log2 exponent) 8)
+          in stackOp2 (const g_exp) (uncurry (.^))
 
         -- -- op: SIGNEXTEND
         -- 0x0b ->
@@ -1033,12 +1030,10 @@ exec1 = do
         -- op: RETURN
         0xf3 ->
           case stk of
-            (xOffset:xSize:_) ->
-              accessMemoryRange fees (forceLit xOffset) (forceLit xSize) $ do
+            ((forceLit -> xOffset):(forceLit -> xSize):_) ->
+              accessMemoryRange fees xOffset xSize $ do
                 let
-                  litOffset = forceLit xOffset
-                  litSize = forceLit xSize
-                  output = readMemory (num litOffset) (num litSize) vm
+                  output = readMemory xOffset xSize vm
                   codesize = num (length output)
                   maxsize = the block maxCodeSize
                 case view frames vm of
@@ -1168,7 +1163,7 @@ exec1 = do
           case stk of
             ((forceLit -> xOffset):(forceLit -> xSize):_) ->
               accessMemoryRange fees xOffset xSize $ do
-                let output = readMemory (num xOffset) (num xSize) vm
+                let output = readMemory xOffset xSize vm
                 finishFrame (FrameReverted output)
             _ -> underrun
 
