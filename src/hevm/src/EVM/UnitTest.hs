@@ -558,37 +558,43 @@ formatTestLogs events xs =
 formatTestLog :: Map W256 Event -> Log -> Maybe Text
 formatTestLog _ (Log _ _ []) = Nothing
 formatTestLog events (Log _ args (topic:_)) =
-  case (Map.lookup (wordValue topic) events) of
-    Nothing -> Nothing
-    Just (Event name _ _) -> case name of
-      "log_bytes32" ->
-        Just $ formatBytes args
-
-      "log_named_bytes32" ->
-        let key = BS.take 32 args
-            val = BS.drop 32 args
-        in Just $ formatString key <> ": " <> formatBytes val
-
-      "log_named_address" ->
-        let key = BS.take 32 args
-            val = BS.drop 44 args
-        in Just $ formatString key <> ": " <> formatBinary val
-
-      "log_named_int" ->
-        let key = BS.take 32 args
-            val = wordAt 32 args
-        in Just $ formatString key <> ": " <> showDec Signed val
-
-      "log_named_uint" ->
-        let key = BS.take 32 args
-            val = wordAt 32 args
-        in Just $ formatString key <> ": " <> showDec Unsigned val
+  case maybeLitWord topic of
+    Nothing -> Nothing 
+    Just t -> case (Map.lookup (wordValue t) events) of
+                   Nothing -> Nothing
+                   Just (Event name _ _) -> case name of
+                     "log_bytes32" ->
+                       Just $ formatSBytes args
+               
+                     "log_named_bytes32" ->
+                       let key = take 32 args
+                           val = drop 32 args
+                       in Just $ formatSString key <> ": " <> formatSBytes val
+               
+                     "log_named_address" ->
+                       let key = take 32 args
+                           val = drop 44 args
+                       in Just $ formatSString key <> ": " <> formatSBinary val
+               
+                     "log_named_int" ->
+                       let key = take 32 args
+                           val = case maybeLitWord (swordAt 32 args) of
+                             Just c -> showDec Signed (wordValue c)
+                             Nothing -> "<symbolic int>"
+                      in Just $ formatSString key <> ": " <> val
+               
+                     "log_named_uint" ->
+                       let key = take 32 args
+                           val = case maybeLitWord (swordAt 32 args) of
+                             Just c -> showDec Unsigned (wordValue c)
+                             Nothing -> "<symbolic uint>"
+                       in Just $ formatSString key <> ": " <> val
 
 -- TODO: event logs (bytes);
 -- TODO: event log_named_decimal_int  (bytes32 key, int val, uint decimals);
 -- TODO: event log_named_decimal_uint (bytes32 key, uint val, uint decimals);
 
-      _ -> Nothing
+                     _ -> Nothing
 
 word32Bytes :: Word32 -> ByteString
 word32Bytes x = BS.pack [byteAt x (3 - i) | i <- [0..3]]

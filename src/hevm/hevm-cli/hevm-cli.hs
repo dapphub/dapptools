@@ -26,6 +26,7 @@ import qualified EVM.VMTest as VMTest
 
 import EVM (ExecMode(..))
 import EVM.Concrete (createAddress, w256)
+import EVM.Symbolic
 import EVM.Debug
 import EVM.Exec
 import EVM.ABI
@@ -44,7 +45,7 @@ import qualified EVM.Facts     as Facts
 import qualified EVM.Facts.Git as Git
 import qualified EVM.UnitTest
 
---import Control.Concurrent.Async   (async, waitCatch)
+import Control.Concurrent.Async   (async, waitCatch)
 import Control.Exception          (evaluate)
 import qualified Control.Monad.Operational as Operational
 import qualified Control.Monad.State.Class as State
@@ -58,6 +59,7 @@ import Data.Text.Encoding         (encodeUtf8)
 import Data.Maybe                 (fromMaybe, fromJust)
 import Data.Version               (showVersion)
 import Data.SBV hiding (Word, verbose)
+import Data.SBV.Control hiding (Word, verbose, Version, timeout, create)
 import System.Directory           (withCurrentDirectory, listDirectory)
 import System.Exit                (die, exitFailure)
 import System.IO                  (hFlush, stdout)
@@ -77,7 +79,7 @@ import qualified Data.Sequence          as Seq
 import qualified System.Timeout         as Timeout
 
 import qualified Paths_hevm      as Paths
---import qualified Text.Regex.TDFA as Regex
+import qualified Text.Regex.TDFA as Regex
 
 import Options.Generic as Options
 
@@ -85,7 +87,9 @@ import Options.Generic as Options
 -- automatically via the `optparse-generic` package.
 data Command w
   = Symbolic -- Execute a given program with specified env & calldata
-        { code        :: w ::: ByteString       <?> "Program bytecode"}
+      { code          :: w ::: ByteString                <?> "Program bytecode"
+      , funcSig       :: w ::: Text                      <?> "Function signature"
+      }
   | Exec -- Execute a given program with specified env & calldata
       { code        :: w ::: Maybe ByteString       <?> "Program bytecode"
       , calldata    :: w ::: Maybe ByteString <?> "Tx: calldata"
@@ -226,7 +230,7 @@ main = do
     root = fromMaybe "." (dappRoot cmd)
   case cmd of
     Version {} -> putStrLn (showVersion Paths.version)
-    Symbolic {} -> launchSymbolic cmd >>= print
+    Symbolic {} -> assert cmd
     Exec {} ->
       launchExec cmd
     Abiencode {} ->
@@ -332,6 +336,39 @@ regexMatches regexSource =
   in
     Regex.matchTest regex . Seq.fromList . unpack
 
+assert :: Command Options.Unwrapped -> IO ()
+assert cmd = case parseSignature (funcSig cmd) of
+                       Nothing -> error "could not parse function signature"
+                       Just s ->
+                         let
+                            vm1 = EVM.makeVm $ EVM.VMOpts
+                                 { EVM.vmoptCode          = hexByteString "--code" (strip0x (code cmd))
+                                 , EVM.vmoptCalldata      = []
+                                 , EVM.vmoptValue         = 0
+                                 , EVM.vmoptAddress       = 0
+                                 , EVM.vmoptCaller        = 0
+                                 , EVM.vmoptOrigin        = 0
+                                 , EVM.vmoptGas           = 0xffffffffff
+                                 , EVM.vmoptGaslimit      = 0xffffffffff
+                                 , EVM.vmoptCoinbase      = 0
+                                 , EVM.vmoptNumber        = 0
+                                 , EVM.vmoptTimestamp     = 0
+                                 , EVM.vmoptBlockGaslimit = 0
+                                 , EVM.vmoptGasprice      = 0
+                                 , EVM.vmoptMaxCodeSize   = 0xffffffff
+                                 , EVM.vmoptDifficulty    = 0
+                                 , EVM.vmoptSchedule      = FeeSchedule.istanbul
+                                 , EVM.vmoptCreate        = False
+                                 }
+                            post = Just $ \(input, output) -> case output of
+                              (EVM.VMFailure (EVM.UnrecognizedOpcode 254)) -> sFalse
+                              _ -> sTrue
+                         in do results <- runSMT $ query $ verify vm1 s (const sTrue) post
+                               case results of
+                                 Left () -> print "All good"
+                                 Right a -> do print "Assertion violation:"
+                                               print a
+
 dappCoverage :: UnitTestOptions -> Mode -> String -> IO ()
 dappCoverage opts _ solcFile =
   readSolc solcFile >>=
@@ -366,41 +403,6 @@ symbolEVM :: Symbolic (SWord 256, SWord 256)
 symbolEVM = do x <- symbolic "x"
                y <- symbolic "y"
                pure (x,y)
-
-
-launchSymbolic :: Command Options.Unwrapped -> IO ThmResult
-launchSymbolic cmd = prove $ \x y ->
-                        let vm1 = EVM.makeVm $ EVM.VMOpts
-                              {   EVM.vmoptCode         = hexByteString "--code" (strip0x (code cmd))
-                              , EVM.vmoptCalldata      = toBytes y <> toBytes x
-                              , EVM.vmoptValue         = 0
-                              , EVM.vmoptAddress       = 0
-                              , EVM.vmoptCaller        = 0
-                              , EVM.vmoptOrigin        = 0
-                              , EVM.vmoptGas           = 230012300123
-                              , EVM.vmoptGaslimit      = 230012300123
-                              , EVM.vmoptCoinbase      = 0
-                              , EVM.vmoptNumber        = 0
-                              , EVM.vmoptTimestamp     = 0
-                              , EVM.vmoptBlockGaslimit = 0
-                              , EVM.vmoptGasprice      = 0
-                              , EVM.vmoptMaxCodeSize   = 0xffffffff
-                              , EVM.vmoptDifficulty    = 0
-                              , EVM.vmoptSchedule      = FeeSchedule.istanbul
-                              , EVM.vmoptCreate        = False --create cmd
-                              }
-                            postvm = execState exec vm1
-                        in case view EVM.result postvm of
-                              Nothing ->
-                                sFalse --error "internal error; no EVM result"
-                              Just (EVM.VMFailure (EVM.Revert msg)) -> do
-                                sFalse --die . show . ByteStringS $ msg
-                              Just (EVM.VMFailure err) -> do
-                                sFalse --die . show $ err
-                              Just (EVM.VMSuccess msg) -> do
-                                x + (y :: SWord 256) .== (fromBytes msg)
---                                print res
-
 
 launchExec :: Command Options.Unwrapped -> IO ()
 launchExec cmd = do
@@ -560,33 +562,32 @@ launchTest execmode cmd = do
 
 #if MIN_VERSION_aeson(1, 0, 0)
 runVMTest :: Bool -> ExecMode -> Mode -> Maybe Int -> (String, VMTest.Case) -> IO Bool
-runVMTest = error "hmm"
--- runVMTest diffmode execmode mode timelimit (name, x) = do
---   let vm0 = VMTest.vmForCase execmode x
---   putStr (name ++ " ")
---   hFlush stdout
---   result <- do
---     action <- async $
---       case mode of
---         Run ->
---           Timeout.timeout (1e6 * (fromMaybe 10 timelimit)) . evaluate $ do
---             execState (VMTest.interpret . void $ EVM.Stepper.execFully) vm0
---         Debug ->
---           Just <$> EVM.TTY.runFromVM vm0
---     waitCatch action
---   case result of
---     Right (Just vm1) -> do
---       ok <- VMTest.checkExpectation diffmode execmode x vm1
---       putStrLn (if ok then "ok" else "")
---       return ok
---     Right Nothing -> do
---       putStrLn "timeout"
---       return False
---     Left e -> do
---       putStrLn $ "error: " ++ if diffmode
---         then show e
---         else (head . lines . show) e
---       return False
+runVMTest diffmode execmode mode timelimit (name, x) = do
+  let vm0 = VMTest.vmForCase execmode x
+  putStr (name ++ " ")
+  hFlush stdout
+  result <- do
+    action <- async $
+      case mode of
+        Run ->
+          Timeout.timeout (1e6 * (fromMaybe 10 timelimit)) . evaluate $ do
+            execState (VMTest.interpret . void $ EVM.Stepper.execFully) vm0
+        Debug ->
+          Just <$> EVM.TTY.runFromVM vm0
+    waitCatch action
+  case result of
+    Right (Just vm1) -> do
+      ok <- VMTest.checkExpectation diffmode execmode x vm1
+      putStrLn (if ok then "ok" else "")
+      return ok
+    Right Nothing -> do
+      putStrLn "timeout"
+      return False
+    Left e -> do
+      putStrLn $ "error: " ++ if diffmode
+        then show e
+        else (head . lines . show) e
+      return False
 
 #endif
 

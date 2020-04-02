@@ -37,8 +37,8 @@ mkDerivation {
   ];
   testHaskellDepends = [
     base base16-bytestring binary bytestring free ghci-pretty here
-    HUnit lens mtl QuickCheck tasty tasty-hunit tasty-quickcheck text
-    vector
+    HUnit lens mtl QuickCheck sbv_8_4 tasty tasty-hunit tasty-quickcheck
+    text vector
   ];
   testSystemDepends = [ secp256k1 ];
   homepage = "https://github.com/dapphub/dapptools";
