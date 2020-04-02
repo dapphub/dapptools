@@ -1,12 +1,15 @@
+{-# Language DataKinds #-}
+{-# LANGUAGE OverloadedStrings #-}
 module EVM.Format where
 
 import Prelude hiding (Word)
 
-import EVM (VM, cheatCode, traceForest, traceData, Error (..), forceLitBytes)
+import EVM (VM, cheatCode, traceForest, traceData, Error (..), forceLitBytes,
+            maybeLitBytes, maybeLitWord)
 import EVM (Trace, TraceData (..), Log (..), Query (..), FrameContext (..))
 import EVM.Dapp (DappInfo, dappSolcByHash, showTraceLocation, dappEventMap)
 import EVM.Concrete (Word (..), wordValue)
-import EVM.Types (W256 (..), num)
+import EVM.Types (W256 (..), num, litBytes)
 import EVM.ABI (AbiValue (..), Event (..), AbiType (..))
 import EVM.ABI (Indexed (NotIndexed), getAbiSeq, getAbi)
 import EVM.ABI (abiTypeSolidity, parseTypeName)
@@ -16,10 +19,11 @@ import EVM.Solidity (methodOutput, methodSignature)
 import Control.Arrow ((>>>))
 import Control.Lens (view, preview, ix, _2, to, _Just)
 import Data.Binary.Get (runGetOrFail)
+import Data.SBV hiding (Word)
 import Data.ByteString (ByteString)
 import Data.ByteString.Builder (byteStringHex, toLazyByteString)
 import Data.ByteString.Lazy (toStrict, fromStrict)
-import Data.DoubleWord (signedWord)
+import Data.DoubleWord (signedWord, Word256)
 import Data.Foldable (toList)
 import Data.Maybe (catMaybes, fromMaybe)
 import Data.Monoid ((<>))
@@ -27,7 +31,7 @@ import Data.Text (Text, pack, unpack, intercalate)
 import Data.Text (dropEnd, splitOn)
 import Data.Text.Encoding (decodeUtf8, decodeUtf8')
 import Data.Tree.View (showTree)
-import Data.Vector (Vector)
+import Data.Vector (Vector, fromList)
 
 import Numeric (showHex)
 
@@ -37,6 +41,7 @@ import qualified Data.Map as Map
 import qualified Data.Text as Text
 
 data Signedness = Signed | Unsigned
+  deriving (Show)
 
 showDec :: Signedness -> W256 -> Text
 showDec signed (W256 w) =
@@ -109,15 +114,30 @@ formatBytes b =
     then formatQString s
     else formatBinary b
 
+formatSBytes :: [SWord 8] -> Text
+formatSBytes b = case maybeLitBytes b of
+  Nothing -> "<" <> pack (show (length b)) <> " symbolic bytes>"
+  Just bs -> formatBytes bs
+
 formatQString :: ByteString -> Text
 formatQString = pack . show
 
 formatString :: ByteString -> Text
 formatString bs = decodeUtf8 (fst (BS.spanEnd (== 0) bs))
 
+formatSString :: [SWord 8] -> Text
+formatSString bs = case maybeLitBytes bs of
+ Nothing -> "<" <> pack (show (length bs)) <> " symbolic bytes (string)>"
+ Just x  -> formatString x
+
 formatBinary :: ByteString -> Text
 formatBinary =
   (<>) "0x" . decodeUtf8 . toStrict . toLazyByteString . byteStringHex
+
+formatSBinary :: [SWord 8] -> Text
+formatSBinary bs = case maybeLitBytes bs of
+  Just b -> formatBinary b
+  Nothing -> "<" <> pack (show (length bs)) <> " symbolic bytes>"
 
 showTraceTree :: DappInfo -> VM -> Text
 showTraceTree dapp =
@@ -140,29 +160,30 @@ showTrace dapp trace =
           mconcat
             [ "\x1b[36m"
             , "log0("
-            , formatBinary bytes
+            , formatSBinary bytes
             , ")"
             , "\x1b[0m"
             ] <> pos
         (topic:_) ->
-          case Map.lookup (wordValue topic) (view dappEventMap dapp) of
-            Just (Event name _ types) ->
-              mconcat
-                [ "\x1b[36m"
-                , name
-                , showValues [t | (t, NotIndexed) <- types] bytes
-                -- todo: show indexed
-                , "\x1b[0m"
-                ] <> pos
-            Nothing ->
-              -- todo: catch ds-note
-              mconcat
-                [ "\x1b[36m"
-                , "log" <> (pack (show (length topics))) <> "("
-                , formatBinary bytes <> ", "
-                , intercalate ", " (map (pack . show) topics) <> ")"
-                , "\x1b[0m"
-                ] <> pos
+          case maybeLitWord topic of
+            Just top -> case Map.lookup (wordValue top) (view dappEventMap dapp) of
+                 Just (Event name _ types) ->
+                   mconcat
+                     [ "\x1b[36m"
+                     , name
+                     , showValues [t | (t, NotIndexed) <- types] bytes
+                     -- todo: show indexed
+                     , "\x1b[0m"
+                     ] <> pos
+                 Nothing ->
+                   -- todo: catch ds-note
+                   mconcat
+                     [ "\x1b[36m"
+                     , "log" <> (pack (show (length topics))) <> "("
+                     , formatSBinary bytes <> ", "
+                     , intercalate ", " (map (pack . show) topics) <> ")"
+                     , "\x1b[0m"
+                     ] <> pos
 
     QueryTrace q ->
       case q of
@@ -204,7 +225,7 @@ showTrace dapp trace =
             <> maybe "[fallback function]"
                  (fromMaybe "[unknown method]" . maybeAbiName solc)
                  abi
-            <> maybe ("(" <> formatBinary calldata <> ")")
+            <> maybe ("(" <> formatSBinary calldata <> ")")
                  -- todo: if unknown method, then just show raw calldata
                  (\x -> showCall (catMaybes x) calldata)
                  (abi >>= fmap getAbiTypes . maybeAbiName solc)
@@ -228,24 +249,26 @@ getAbiTypes abi = map (parseTypeName mempty) types
       filter (/= "") $
         splitOn "," (dropEnd 1 (last (splitOn "(" abi)))
 
-showCall :: [AbiType] -> ByteString -> Text
-showCall ts bs =
-  case runGetOrFail (getAbiSeq (length ts) ts)
-         (fromStrict (BS.drop 4 bs)) of
-    Right (_, _, xs) -> showAbiValues xs
-    Left (_, _, _)   -> formatBinary bs
+showCall :: [AbiType] -> [SWord 8] -> Text
+showCall = showValues
+  -- case runGetOrFail (getAbiSeq (length ts) ts)
+  --        (fromStrict (BS.drop 4 bs)) of
+  --   Right (_, _, xs) -> showAbiValues xs
+  --   Left (_, _, _)   -> formatBinary bs
 
 showError :: ByteString -> Text
 showError bs = case BS.take 4 bs of
   -- Method ID for Error(string)
-  "\b\195y\160" -> showCall [AbiStringType] bs
+  "\b\195y\160" -> showCall [AbiStringType] (litBytes bs)
   _             -> formatBinary bs
 
-showValues :: [AbiType] -> ByteString -> Text
-showValues ts bs =
-  case runGetOrFail (getAbiSeq (length ts) ts) (fromStrict bs) of
-    Right (_, _, xs) -> showAbiValues xs
-    Left (_, _, _)   -> formatBinary bs
+showValues :: [AbiType] -> [SWord 8] -> Text
+showValues ts sbs = case maybeLitBytes sbs of
+  Nothing -> "<symbolic " <> (abiTypeSolidity $ AbiTupleType (fromList ts))
+  Just bs -> 
+     case runGetOrFail (getAbiSeq (length ts) ts) (fromStrict bs) of
+       Right (_, _, xs) -> showAbiValues xs
+       Left (_, _, _)   -> formatBinary bs
 
 showValue :: AbiType -> ByteString -> Text
 showValue t bs =

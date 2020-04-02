@@ -16,7 +16,7 @@ import Test.Tasty
 import Test.Tasty.QuickCheck-- hiding (forAll)
 import Test.Tasty.HUnit
 
-import Control.Monad.State.Strict (execState, runState, MonadIO)
+import Control.Monad.State.Strict (execState, runState, MonadIO, void)
 import Control.Lens hiding (List)
 
 import qualified Data.Vector as Vector
@@ -137,56 +137,66 @@ main = defaultMain $ testGroup "hevm"
     ]
 
   , testGroup "Symbolic execution"
-    [ testCase "add is commutative" $ do
-        Just plus <- singleContract "Add"
-          "function add(uint x, uint y) public pure returns (uint z) {z = x + y;}"
-        validity <- runSMT $ query $ do
-          x <- freshVar_
-          y <- freshVar_
-          let Just vm = loadVM plus (litBytes (sig "add(uint256,uint256)")
-                                      <> toBytes x <> toBytes y)
-          endStates <- io $ execSymbolic vm
-          canFail <- case endStates of
-                       [VMSuccess out] -> do constrain $ fromBytes out ./= (x + y :: SWord 256)
-                                             checkSat
-                       _ -> do checkSat
-          case canFail of
-            Unk -> error "A proof could not be found"
-            Sat -> error "Failure: there are variables x, y for which the claim is false"
-            Unsat -> pure ()
-        print validity
+      [
+      -- Somewhat tautological since we are asserting the precondition
+      -- on the same form as the actual "requires" clause.
+      testCase "SafeAdd success case" $ do
+        Just safeAdd <- singleContract "SafeAdd"
+          [i|
+            function add(uint x, uint y) public pure returns (uint z) {
+                 require((z = x + y) >= x);
+            }   
+          |]
+        let Just vm = loadVM safeAdd
+            asWord :: [SWord 8] -> SWord 256
+            asWord = fromBytes
+            pre calldata = let (x, y) = splitAt 32 calldata
+                           in asWord x .<= asWord x + asWord y
+            post = Just $ \input output -> let (x, y) = splitAt 32 input
+                                           in asWord output .== asWord x + asWord y
+        void $ runSMT $ query $
+          startWithArgs vm ("add(uint256,uint256)"
+                           , AbiTupleType $ Vector.fromList
+                             [AbiUIntType 256, AbiUIntType 256]) pre post
+        
+      ,
+
+      testCase "x == y => x + y == 2 * y" $ do
+        Just safeAdd <- singleContract "SafeAdd"
+          [i|
+            function add(uint x, uint y) public pure returns (uint z) {
+                 require((z = x + y) >= x);
+            }   
+          |]
+        let Just vm = loadVM safeAdd
+            asWord :: [SWord 8] -> SWord 256
+            asWord = fromBytes
+            pre calldata = let (x, y) = splitAt 32 calldata
+                           in (asWord x .<= asWord x + asWord y)
+                              .&& (x .== y)
+            post = Just $ \input output -> let (x, y) = splitAt 32 input
+                                           in asWord output .== 2 * asWord y
+        void $ runSMT $ query $
+          startWithArgs vm ("add(uint256,uint256)"
+                           , AbiTupleType $ Vector.fromList
+                             [AbiUIntType 256, AbiUIntType 256]) pre post
+          
     ]
   ]
   where
     (===>) = assertSolidityComputation
 
-
--- -- | @since 4.9.0.0
--- instance MonadIO Identity where
---     liftIO = _
 inUIntRange :: SInteger -> SBool
 inUIntRange x = 0 .<= x .&& x .< 2 ^ 256 - 1 
-
 
 runSymbolic :: VM -> IO ([VMResult])
 runSymbolic = error "in symbolic.hs"
 
-loadVM :: ByteString -> [SWord 8] -> Maybe VM
-loadVM x ins =
-    case runState exec (vmForEthrunCreation x) of
-       (VMSuccess targetCode, vm1) -> do
-         let target = view (state . contract) vm1
-             vm2 = execState (replaceCodeOfSelf (RuntimeCode (forceLitBytes targetCode))) vm1
-         return $ snd $ flip runState vm2
-                (do resetState
-                    assign (state . gas) 0xffffffffffffffff -- kludge
-                    loadContract target
-                    assign (state . calldata) ins)
-       _ -> Nothing
-
 runSimpleVM :: ByteString -> [SWord 8] -> Maybe [SWord 8]
-runSimpleVM x ins = do vm <- (loadVM x ins)
-                       case runState exec vm of
+runSimpleVM x ins = case loadVM x of
+                      Nothing -> Nothing
+                      Just vm -> 
+                       case runState (assign (state.calldata) ins >> exec) vm of
                          (VMSuccess out, _) -> Just out
                          _ -> Nothing
 

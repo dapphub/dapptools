@@ -51,7 +51,7 @@ mkUnpackedDoubleWord "Word512" ''Word256 "Int512" ''Int256 ''Word256
 newtype W256 = W256 Word256
   deriving
     ( Num, Integral, Real, Ord, Enum, Eq
-    , Bits, FiniteBits, Generic
+    , Bits, FiniteBits, Bounded, Generic
     )
 
 -- | convert between (WordN 256) and Word256
