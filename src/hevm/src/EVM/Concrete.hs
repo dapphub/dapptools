@@ -68,33 +68,35 @@ wordToByte (C _ x) = num (x .&. 0xff)
 exponentiate :: Word -> Word -> Word
 exponentiate (C _ x) (C _ y) = w256 (x ^ y)
 
-sdiv :: Word -> Word -> Word
-sdiv _ (C _ (W256 0)) = 0
-sdiv (C _ (W256 x)) (C _ (W256 y)) =
-  let sx = signedWord x
-      sy = signedWord y
-  in w256 . W256 . unsignedWord $ quot sx sy
+sdiv :: SWord 256 -> SWord 256 -> SWord 256
+sdiv x y = let sx, sy :: SInt 256
+               sx = sFromIntegral x
+               sy = sFromIntegral y
+           in sFromIntegral (sx `sDiv` sy)
 
-smod :: Word -> Word -> Word
-smod _ (C _ (W256 0)) = 0
-smod (C _ (W256 x)) (C _ (W256 y)) =
-  let sx = signedWord x
-      sy = signedWord y
-  in w256 . W256 . unsignedWord $ rem sx sy
+smod :: SWord 256 -> SWord 256 -> SWord 256
+smod x y = let sx, sy :: SInt 256
+               sx = sFromIntegral x
+               sy = sFromIntegral y
+           in sFromIntegral (sx `sMod` sy)
 
-addmod :: Word -> Word -> Word -> Word
-addmod _ _ (C _ (W256 0)) = 0
-addmod (C _ x) (C _ y) (C _ z) =
-  w256 $
-    fromWord512
-      ((toWord512 x + toWord512 y) `mod` (toWord512 z))
+addmod :: SWord 256 -> SWord 256 -> SWord 256 -> SWord 256
+addmod x y z = let to512 :: SWord 256 -> SWord 512
+                   to512 = sFromIntegral
+               in sFromIntegral $ x + y `sMod` z
 
-mulmod :: Word -> Word -> Word -> Word
-mulmod _ _ (C _ (W256 0)) = 0
-mulmod (C _ x) (C _ y) (C _ z) =
-  w256 $
-    fromWord512
-      ((toWord512 x * toWord512 y) `mod` (toWord512 z))
+mulmod :: SWord 256 -> SWord 256 -> SWord 256 -> SWord 256
+mulmod x y z = let to512 :: SWord 256 -> SWord 512
+                   to512 = sFromIntegral
+               in sFromIntegral $ x * y `sMod` z
+
+
+-- mulmod :: Word -> Word -> Word -> Word
+-- mulmod _ _ (C _ (W256 0)) = 0
+-- mulmod (C _ x) (C _ y) (C _ z) =
+--   w256 $
+--     fromWord512
+--       ((toWord512 x * toWord512 y) `mod` (toWord512 z))
 
 slt :: SWord 256 -> SWord 256 -> SWord 256
 slt x y =
@@ -164,12 +166,8 @@ spadRight n xs = xs <> replicate (n - length xs) 0
 --   in {-# SCC "readMemoryWord" #-}
 --     w256 $ go (0 :: W256) (31 :: Int)
 
---   let
---     go !a (-1) = a
---     go !a !n = go (a + shiftL (num $ readByteOrZero (num i + n) m)
---                               (8 * (3 - n))) (n - 1)
---   in {-# SCC "readMemoryWord32" #-}
---     w256 $ go (0 :: W256) (3 :: Int)
+readMemoryWord32 :: Word -> [SWord 8] -> SWord 256
+readMemoryWord32 (C _ i) m = fromBytes $ truncpad 4 (drop (num i) m)
 
 setMemoryWord :: Word -> (SWord 256) -> [SWord 8] -> [SWord 8]
 setMemoryWord (C _ i) x =
@@ -226,6 +224,10 @@ instance FiniteBits Word where
   finiteBitSize (C _ x) = finiteBitSize x
   countLeadingZeros (C _ x) = countLeadingZeros x
   countTrailingZeros (C _ x) = countTrailingZeros x
+
+instance Bounded Word where
+  minBound = w256 minBound
+  maxBound = w256 maxBound
 
 instance Eq Word where
   (C _ x) == (C _ y) = x == y
