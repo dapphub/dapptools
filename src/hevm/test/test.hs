@@ -138,28 +138,34 @@ main = defaultMain $ testGroup "hevm"
 
   , testGroup "Symbolic execution"
       [
-      -- Somewhat tautological since we are asserting the precondition
-      -- on the same form as the actual "requires" clause.
-      testCase "SafeAdd success case" $ do
-        Just safeAdd <- singleContract "SafeAdd"
-          [i|
-            function add(uint x, uint y) public pure returns (uint z) {
-                 require((z = x + y) >= x);
-            }   
-          |]
-        let Just vm = loadVM safeAdd
-            asWord :: [SWord 8] -> SWord 256
-            asWord = fromBytes
-            pre calldata = let (x, y) = splitAt 32 calldata
-                           in asWord x .<= asWord x + asWord y
-            post = Just $ \input output -> let (x, y) = splitAt 32 input
-                                           in asWord output .== asWord x + asWord y
-        void $ runSMT $ query $
-          startWithArgs vm ("add(uint256,uint256)"
-                           , AbiTupleType $ Vector.fromList
-                             [AbiUIntType 256, AbiUIntType 256]) pre post
-        
-      ,
+     --  -- Currently hangs when checking postcondition...
+     --  -- probably because z3 cannot handle the large bitvectors.
+     --  -- might work better
+     --  -- Somewhat tautological since we are asserting the precondition
+     --  -- on the same form as the actual "requires" clause.
+     --  testCase "SafeAdd success case" $ do
+     --    Just safeAdd <- singleContract "SafeAdd"
+     --      [i|
+     --       function add(uint x, uint y) public pure returns (uint z) {
+     --             require((z = x + y) >= x);
+     --        }   
+     --      |]
+     --    let Just vm = loadVM safeAdd
+     --        asWord :: [SWord 8] -> SWord 256
+     --        asWord = fromBytes
+     --        pre calldata = let (x, y) = splitAt 32 calldata
+     --                       in asWord x .<= asWord x + asWord y
+     --        post = Just $ \(input, output) -> case output of
+     --          (VMSuccess out) -> 
+     --            let (x, y) = splitAt 32 input
+     --            in (asWord out) .== (asWord y) + (asWord y)
+     --          _ -> sFalse
+     --    nothing <- runSMT $ query $
+     --      verify vm ("add(uint256,uint256)"
+     --                       , AbiTupleType $ Vector.fromList
+     --                         [AbiUIntType 256, AbiUIntType 256]) pre post
+     --    assert $ nothing == Left ()
+     -- ,
 
       testCase "x == y => x + y == 2 * y" $ do
         Just safeAdd <- singleContract "SafeAdd"
@@ -174,13 +180,16 @@ main = defaultMain $ testGroup "hevm"
             pre calldata = let (x, y) = splitAt 32 calldata
                            in (asWord x .<= asWord x + asWord y)
                               .&& (x .== y)
-            post = Just $ \input output -> let (x, y) = splitAt 32 input
-                                           in asWord output .== 2 * asWord y
-        void $ runSMT $ query $
-          startWithArgs vm ("add(uint256,uint256)"
+            post = Just $ \(input, output) -> case output of
+                                                (VMSuccess out) ->
+                                                  let (x, y) = splitAt 32 input
+                                                  in asWord out .== 2 * asWord y
+                                                _ -> sFalse
+        nothing <- runSMT $ query $
+          verify vm ("add(uint256,uint256)"
                            , AbiTupleType $ Vector.fromList
                              [AbiUIntType 256, AbiUIntType 256]) pre post
-          
+        assert $ nothing == Left ()
     ]
   ]
   where
@@ -188,9 +197,6 @@ main = defaultMain $ testGroup "hevm"
 
 inUIntRange :: SInteger -> SBool
 inUIntRange x = 0 .<= x .&& x .< 2 ^ 256 - 1 
-
-runSymbolic :: VM -> IO ([VMResult])
-runSymbolic = error "in symbolic.hs"
 
 runSimpleVM :: ByteString -> [SWord 8] -> Maybe [SWord 8]
 runSimpleVM x ins = case loadVM x of

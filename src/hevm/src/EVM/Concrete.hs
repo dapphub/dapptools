@@ -83,12 +83,12 @@ smod x y = let sx, sy :: SInt 256
 addmod :: SWord 256 -> SWord 256 -> SWord 256 -> SWord 256
 addmod x y z = let to512 :: SWord 256 -> SWord 512
                    to512 = sFromIntegral
-               in sFromIntegral $ x + y `sMod` z
+               in sFromIntegral $ (to512 x) + (to512 y) `sMod` (to512 z)
 
 mulmod :: SWord 256 -> SWord 256 -> SWord 256 -> SWord 256
 mulmod x y z = let to512 :: SWord 256 -> SWord 512
                    to512 = sFromIntegral
-               in sFromIntegral $ x * y `sMod` z
+               in sFromIntegral $ (to512 x) * (to512 y) `sMod` (to512 z)
 
 
 -- mulmod :: Word -> Word -> Word -> Word
