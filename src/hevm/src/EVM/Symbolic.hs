@@ -5,28 +5,28 @@
 module EVM.Symbolic where
 
 import Control.Lens
---import EVM.Stepper
 import EVM hiding (Query)
 import EVM.Exec
 import EVM.Op
 import EVM.ABI
-import EVM.TTY --todo: factor out stepping mechanisms properly
 import EVM.Types
+import EVM.Format
 import Data.SBV.Trans.Control hiding (sat)
 import Data.SBV.Trans
 import Data.SBV hiding (runSMT)
---import Data.SBV.Core.Sized
+
 import Control.Monad.IO.Class
 import GHC.TypeNats
 import Data.Vector        (Vector, toList)
 import Control.Monad.State.Class (MonadState)
 import qualified Control.Monad.State.Class as State
-import Data.ByteString.Lazy (toStrict)
-import Data.ByteString (ByteString)
-import Data.Text hiding (replicate, concat)
+import Data.ByteString.Lazy (toStrict, fromStrict)
+import Data.ByteString (ByteString, pack)
+import Data.Text (Text)--hiding (replicate, concat)
 import Data.Binary.Put    (runPut)
+import Data.Binary.Get    (runGet)
 import Control.Monad.State.Strict (runState, execState, unless)
-import Data.Maybe (isJust)
+import Data.Maybe (isJust, fromJust)
 
 loadVM :: ByteString -> Maybe VM
 loadVM x =
@@ -82,17 +82,17 @@ symAbiArg (AbiBytesType n) = error "todo"
 symAbiArg (AbiArrayType len typ) = do args <- mapM symAbiArg (replicate len typ)
                                       return $ litBytes (encodeAbiValue (AbiUInt 256 (fromIntegral len))) <> (concat args)
 symAbiArg (AbiTupleType tuple) = mapM symAbiArg (toList tuple) >>= return . concat
+symAbiArg _ = error "todo"
 
-
-symExec :: VM -> Query [VMResult]
-symExec vm = do
+symExec :: VM -> [SBool] -> Query [(VMResult, [SBool])]
+symExec vm pathconds = do
   let branch = execState (execWhile isNotJump) vm
   case view result branch of
-    Just x -> return [x]
+    Just x -> return [(x, pathconds)]
     Nothing -> do
       io $ print $ "possible branching point at pc: " <> show (view (state.pc) branch)
       let Just cond = branch^.state.stack ^? ix 1
-      noJump <- checkSatAssuming [cond ./= 0]
+      noJump <- checkSatAssuming ((cond ./= 0):pathconds)
       case noJump of
         Unk   -> error "Solver said unknown!"
         Unsat -> -- the jump condition must be 0.
@@ -100,39 +100,52 @@ symExec vm = do
                  -- step once and then recurse.
                  let vm1 = branch & state.stack.(ix 1) .~ 0
                  in do io $ print $ "but smt says jump condition is false"
-                       symExec vm1
+                       symExec vm1 pathconds
 
         Sat   -> -- it's possible for the jump condition
                  -- to be nonzero. Can it also be zero?
-                 do jump <- checkSatAssuming [cond .== 0]
+                 do jump <- checkSatAssuming ((cond .== 0):pathconds)
                     case jump of
                        Unk   -> error "Solver said unknown!"
                        Unsat -> -- no. The we must jump.
                                 let vm1 = branch & state.stack.(ix 1) .~ 1
                                 in do io $ print $ "but smt says jump condition is true"
-                                      symExec vm1
+                                      symExec vm1 pathconds
 
                        Sat -> -- We can either jump or not jump.
                               -- Explore both paths
                          let aVm = branch & state.stack.(ix 1) .~ 0
                              bVm = branch & state.stack.(ix 1) .~ 1
                          in do io $ print $ "and smt says both cases are possible"
-                               aResult <- symExec aVm
-                               bResult <- symExec bVm
+                               aResult <- symExec aVm ((cond .== 0):pathconds)
+                               bResult <- symExec bVm ((cond .== 1):pathconds)
                                return $ aResult <> bResult
 
 type Precondition = [SWord 8] -> SBool
-type Postcondition = [SWord 8] -> [SWord 8] -> SBool
+type Postcondition = ([SWord 8], VMResult) -> SBool
 
-startWithArgs :: VM -> (Text, AbiType) -> Precondition -> Maybe Postcondition -> Query [VMResult]
-startWithArgs vm (methodName, types) pre maybepost = do
+verify :: VM -> (Text, AbiType) -> Precondition -> Maybe Postcondition -> Query (Either () AbiValue)
+verify vm (methodName, types) pre maybepost = do
   input <- symAbiArg types
+  let calldata' = litBytes (sig methodName) <> input
   constrain $ pre input
-  results <- symExec $ vm & (state.calldata) .~ (litBytes (sig methodName) <> input)
+  results <- symExec (vm & (state.calldata) .~ calldata') []
   case maybepost of
-    Just post -> do mapM (\(VMSuccess output) -> constrain (post input output)) results
-                    return results
-    Nothing -> return results
+    Just post -> do let postC = sOr $ fmap (\(x,pathc) -> (sAnd pathc) .&& sNot (post (input, x))) results
+                    -- is it possible for any of these pathcondition => postcondition
+                    -- implications to be false?
+                    io $ print "checking postcondition..."
+                    sat <- checkSatAssuming [postC]
+                    case sat of
+                      Unsat -> do io $ print "Q.E.D"
+                                  return $ Left ()
+                      Sat -> do io $ print "post condition violated:"
+                                model <- mapM (getValue.fromSized) calldata'
+--                                io $ print model
+                                let inputArgs = decodeAbiValue types $ fromStrict (pack model)
+                                return $ Right inputArgs
+    Nothing -> do io $ print "Q.E.D"
+                  return $ Left ()
 
 isNotJump :: VM -> Bool
 isNotJump vm = vmOp vm /= Just OpJumpi ||
