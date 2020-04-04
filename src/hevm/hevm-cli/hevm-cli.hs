@@ -86,7 +86,7 @@ import Options.Generic as Options
 -- This record defines the program's command-line options
 -- automatically via the `optparse-generic` package.
 data Command w
-  = Symbolic -- Execute a given program with specified env & calldata
+  = Assert -- Execute a given program with specified env & calldata
       { code          :: w ::: ByteString                <?> "Program bytecode"
       , funcSig       :: w ::: Text                      <?> "Function signature"
       }
@@ -230,7 +230,7 @@ main = do
     root = fromMaybe "." (dappRoot cmd)
   case cmd of
     Version {} -> putStrLn (showVersion Paths.version)
-    Symbolic {} -> assert cmd
+    Assert {} -> assert cmd
     Exec {} ->
       launchExec cmd
     Abiencode {} ->
