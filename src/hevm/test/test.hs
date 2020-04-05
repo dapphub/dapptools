@@ -190,6 +190,29 @@ main = defaultMain $ testGroup "hevm"
                            , AbiTupleType $ Vector.fromList
                              [AbiUIntType 256, AbiUIntType 256]) pre post
         assert $ nothing == Left ()
+      ,
+
+        testCase "factorize 973013" $ do
+        Just factor <- singleContract "factorize"
+          [i|
+            function factor(uint x, uint y) public pure returns (uint z) {
+                   require(1 < x && x < 973013 && 1 < y && y < 973013);
+                   assert(x*y != 973013);
+            }   
+          |]
+        let Just vm = loadVM factor
+            asWord :: [SWord 8] -> SWord 256
+            asWord = fromBytes
+            pre = const sTrue
+            post = Just $ \(input, output) -> case output of
+              (EVM.VMFailure (EVM.UnrecognizedOpcode 254)) -> sFalse
+              _ -> sTrue
+        nothing <- runSMT $ query $
+          verify vm ("factor(uint256,uint256)"
+                           , AbiTupleType $ Vector.fromList
+                             [AbiUIntType 256, AbiUIntType 256]) pre post
+        assertEqual "counterexample:" (Right $ AbiTuple $ Vector.fromList [AbiUInt 256 1021, AbiUInt 256 953]) nothing 
+
     ]
   ]
   where

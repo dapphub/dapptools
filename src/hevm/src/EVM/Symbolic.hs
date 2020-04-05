@@ -132,16 +132,16 @@ verify vm (methodName, types) pre maybepost = do
   results <- symExec (vm & (state.calldata) .~ calldata') []
   case maybepost of
     Just post -> do let postC = sOr $ fmap (\(x,pathc) -> (sAnd pathc) .&& sNot (post (input, x))) results
+                    constrain postC
                     -- is it possible for any of these pathcondition => postcondition
                     -- implications to be false?
                     io $ print "checking postcondition..."
-                    sat <- checkSatAssuming [postC]
+                    sat <- checkSat
                     case sat of
                       Unsat -> do io $ print "Q.E.D"
                                   return $ Left ()
                       Sat -> do io $ print "post condition violated:"
-                                model <- mapM (getValue.fromSized) calldata'
---                                io $ print model
+                                model <- mapM (getValue.fromSized) input
                                 let inputArgs = decodeAbiValue types $ fromStrict (pack model)
                                 return $ Right inputArgs
     Nothing -> do io $ print "Q.E.D"
