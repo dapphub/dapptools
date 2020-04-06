@@ -180,8 +180,8 @@ main = defaultMain $ testGroup "hevm"
             pre calldata = let (x, y) = splitAt 32 calldata
                            in (asWord x .<= asWord x + asWord y)
                               .&& (x .== y)
-            post = Just $ \(input, output) -> case output of
-                                                (VMSuccess out) ->
+            post = Just $ \(input, output) -> case view result output of
+                                                Just (VMSuccess out) ->
                                                   let (x, y) = splitAt 32 input
                                                   in asWord out .== 2 * asWord y
                                                 _ -> sFalse
@@ -195,7 +195,7 @@ main = defaultMain $ testGroup "hevm"
         testCase "factorize 973013" $ do
         Just factor <- singleContract "factorize"
           [i|
-            function factor(uint x, uint y) public pure returns (uint z) {
+            function factor(uint x, uint y) public pure  {
                    require(1 < x && x < 973013 && 1 < y && y < 973013);
                    assert(x*y != 973013);
             }   
@@ -204,15 +204,15 @@ main = defaultMain $ testGroup "hevm"
             asWord :: [SWord 8] -> SWord 256
             asWord = fromBytes
             pre = const sTrue
-            post = Just $ \(input, output) -> case output of
-              (EVM.VMFailure (EVM.UnrecognizedOpcode 254)) -> sFalse
+            post = Just $ \(input, output) -> case view result output of
+              Just (EVM.VMFailure (EVM.UnrecognizedOpcode 254)) -> sFalse
               _ -> sTrue
-        nothing <- runSMT $ query $
+        (Right (AbiTuple xy)) <- runSMT $ query $
           verify vm ("factor(uint256,uint256)"
                            , AbiTupleType $ Vector.fromList
                              [AbiUIntType 256, AbiUIntType 256]) pre post
-        assertEqual "counterexample:" (Right $ AbiTuple $ Vector.fromList [AbiUInt 256 1021, AbiUInt 256 953]) nothing 
-
+        let (AbiUInt 256 x, AbiUInt 256 y) = (head (Vector.toList xy), head $ tail (Vector.toList xy))
+        assert $ x == 953 && y == 1021 || x == 1021 && y == 953
     ]
   ]
   where

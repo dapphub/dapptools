@@ -360,8 +360,8 @@ assert cmd = case parseSignature (funcSig cmd) of
                                  , EVM.vmoptSchedule      = FeeSchedule.istanbul
                                  , EVM.vmoptCreate        = False
                                  }
-                            post = Just $ \(input, output) -> case output of
-                              (EVM.VMFailure (EVM.UnrecognizedOpcode 254)) -> sFalse
+                            post = Just $ \(input, output) -> case view EVM.result output of
+                              Just (EVM.VMFailure (EVM.UnrecognizedOpcode 254)) -> sFalse
                               _ -> sTrue
                          in do results <- runSMT $ query $ verify vm1 s (const sTrue) post
                                case results of
