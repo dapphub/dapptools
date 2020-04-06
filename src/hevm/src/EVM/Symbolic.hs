@@ -84,11 +84,11 @@ symAbiArg (AbiArrayType len typ) = do args <- mapM symAbiArg (replicate len typ)
 symAbiArg (AbiTupleType tuple) = mapM symAbiArg (toList tuple) >>= return . concat
 symAbiArg _ = error "todo"
 
-symExec :: VM -> [SBool] -> Query [(VMResult, [SBool])]
+symExec :: VM -> [SBool] -> Query [(VM, [SBool])]
 symExec vm pathconds = do
   let branch = execState (execWhile isNotJump) vm
   case view result branch of
-    Just x -> return [(x, pathconds)]
+    Just x -> return [(branch, pathconds)]
     Nothing -> do
       io $ print $ "possible branching point at pc: " <> show (view (state.pc) branch)
       let Just cond = branch^.state.stack ^? ix 1
@@ -122,7 +122,7 @@ symExec vm pathconds = do
                                return $ aResult <> bResult
 
 type Precondition = [SWord 8] -> SBool
-type Postcondition = ([SWord 8], VMResult) -> SBool
+type Postcondition = ([SWord 8], VM) -> SBool
 
 verify :: VM -> (Text, AbiType) -> Precondition -> Maybe Postcondition -> Query (Either () AbiValue)
 verify vm (methodName, types) pre maybepost = do
