@@ -84,7 +84,8 @@ data Error
   | CallDepthLimitReached
   | MaxCodeSizeExceeded Word Word
   | PrecompileFailure
-
+  | UnexpectedSymbolicArg
+  
 deriving instance Show Error
 
 -- | The possible result states of a VM
@@ -201,7 +202,7 @@ data FrameState = FrameState
   , _code         :: ByteString
   , _pc           :: Int
   , _stack        :: [(SWord 256)]
-  , _memory       :: [SWord 8]--ByteStringb
+  , _memory       :: [SWord 8]
   , _memorySize   :: Int
   , _calldata     :: [SWord 8]
   , _callvalue    :: Word
@@ -448,16 +449,18 @@ exec1 = do
       calldatasize = num $ length (the state calldata)
     copyBytesToMemory (the state calldata) calldatasize 0 0
     executePrecompile fees self (the state gas) 0 calldatasize 0 0 []
-    use (state . stack) >>= \case
-      (0:_) ->
-        fetchAccount self $ \_ -> do
-          touchAccount self
-          vmError PrecompileFailure
-      (1:_) ->
-        fetchAccount self $ \_ -> do
-          touchAccount self
-          out <- use (state . returndata)
-          finishFrame (FrameReturned out)
+    case stk of
+      (x:_) -> case maybeLitWord x of
+        Just 0 -> do
+          fetchAccount self $ \_ -> do
+            touchAccount self
+            vmError PrecompileFailure
+        Just _ ->
+          fetchAccount self $ \_ -> do
+            touchAccount self
+            out <- use (state . returndata)
+            finishFrame (FrameReturned out)
+        Nothing -> vmError UnexpectedSymbolicArg
       _ ->
         underrun
 
@@ -542,7 +545,7 @@ exec1 = do
           stackOp2 (const g_low) (uncurry sdiv)
 
         -- op: MOD
-        0x06 -> stackOp2 (const g_low) (uncurry (sMod))
+        0x06 -> stackOp2 (const g_low) $ \(x, y) -> ite (y .== 0) 0 (x `sMod` y)
 
         -- op: SMOD
         0x07 -> stackOp2 (const g_low) $ uncurry smod
@@ -931,7 +934,7 @@ exec1 = do
                 if exponent == 0
                 then g_exp
                 else g_exp + g_expbyte * num (ceilDiv (1 + log2 exponent) 8)
-          in stackOp2 (const g_exp) (uncurry (.^))
+          in stackOp2 cost (uncurry (.^))
 
         -- op: SIGNEXTEND
         0x0b ->
@@ -1204,17 +1207,19 @@ precompiledContract vm fees gasCap precompileAddr recipient xValue inOffset inSi
             executePrecompile fees precompileAddr gas' inOffset inSize outOffset outSize xs
             stk <- use (state . stack)
             case stk of
-              (0:_) ->
-                return ()
-              (1:_) ->
-                fetchAccount recipient $ \_ -> do
+              (x:_) -> case maybeLitWord x of
+                Nothing -> vmError UnexpectedSymbolicArg
+                Just 0 -> 
+                  return ()
+                Just 1 ->
+                  fetchAccount recipient $ \_ -> do
 
-                zoom (env . contracts) $ do
-                  ix self . balance -= xValue
-                  ix recipient  . balance += xValue
-                touchAccount self
-                touchAccount recipient
-                touchAccount precompileAddr
+                     zoom (env . contracts) $ do
+                       ix self . balance -= xValue
+                       ix recipient  . balance += xValue
+                     touchAccount self
+                     touchAccount recipient
+                     touchAccount precompileAddr
               _ ->
                 underrun
 
