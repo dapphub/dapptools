@@ -28,17 +28,6 @@ wordAt i bs =
 swordAt :: Int -> [SWord 8] -> (SWord 256)
 swordAt i bs = fromBytes $ truncpad 32 $ drop i bs
 
--- mkSword :: [SWord 8] -> (SWord 256)
--- mkSword (b1:b2:b3:b4:b5:b6:b7:b8:
---          b9:b10:b11:b12:b13:b14:b15:b16:
---          b17:b18:b19:b20:b21:b22:b23:b24:
---          b25:b26:b27:b28:b29:b30:b31:b32)
---   = b1 # b2 # b3 # b4 # b5 # b6 # b7 # b8 # 
---     b9 # b10 # b11 # b12 # b13 # b14 # b15 # b16 # 
---     b17 # b18 # b19 # b20 # b21 # b22 # b23 # b24 # 
---     b25 # b26 # b27 # b28 # b29 # b30 # b31 # b32
-
-
 readByteOrZero :: Int -> [SWord 8] -> SWord 8
 readByteOrZero i bs = fromMaybe 0 (bs ^? ix i)
 
@@ -72,23 +61,23 @@ sdiv :: SWord 256 -> SWord 256 -> SWord 256
 sdiv x y = let sx, sy :: SInt 256
                sx = sFromIntegral x
                sy = sFromIntegral y
-           in sFromIntegral (sx `sDiv` sy)
+           in sFromIntegral (sx `sQuot` sy)
 
 smod :: SWord 256 -> SWord 256 -> SWord 256
 smod x y = let sx, sy :: SInt 256
                sx = sFromIntegral x
                sy = sFromIntegral y
-           in sFromIntegral (sx `sMod` sy)
+           in ite (y .== 0) 0 (sFromIntegral (sx `sMod` sy))
 
 addmod :: SWord 256 -> SWord 256 -> SWord 256 -> SWord 256
 addmod x y z = let to512 :: SWord 256 -> SWord 512
                    to512 = sFromIntegral
-               in sFromIntegral $ (to512 x) + (to512 y) `sMod` (to512 z)
+               in sFromIntegral $ ((to512 x) + (to512 y)) `sMod` (to512 z)
 
 mulmod :: SWord 256 -> SWord 256 -> SWord 256 -> SWord 256
 mulmod x y z = let to512 :: SWord 256 -> SWord 512
                    to512 = sFromIntegral
-               in sFromIntegral $ (to512 x) * (to512 y) `sMod` (to512 z)
+               in sFromIntegral $ ((to512 x) * (to512 y)) `sMod` (to512 z)
 
 
 -- mulmod :: Word -> Word -> Word -> Word
