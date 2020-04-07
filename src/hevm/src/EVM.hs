@@ -449,7 +449,8 @@ exec1 = do
       calldatasize = num $ length (the state calldata)
     copyBytesToMemory (the state calldata) calldatasize 0 0
     executePrecompile fees self (the state gas) 0 calldatasize 0 0 []
-    case stk of
+    vmx <- get
+    case view (state.stack) vmx of
       (x:_) -> case maybeLitWord x of
         Just 0 -> do
           fetchAccount self $ \_ -> do
