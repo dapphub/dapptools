@@ -67,7 +67,7 @@ smod :: SWord 256 -> SWord 256 -> SWord 256
 smod x y = let sx, sy :: SInt 256
                sx = sFromIntegral x
                sy = sFromIntegral y
-           in ite (y .== 0) 0 (sFromIntegral (sx `sMod` sy))
+           in ite (y .== 0) 0 (sFromIntegral (sx `sRem` sy))
 
 addmod :: SWord 256 -> SWord 256 -> SWord 256 -> SWord 256
 addmod x y z = let to512 :: SWord 256 -> SWord 512
