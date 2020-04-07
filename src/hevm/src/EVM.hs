@@ -84,7 +84,8 @@ data Error
   | CallDepthLimitReached
   | MaxCodeSizeExceeded Word Word
   | PrecompileFailure
-
+  | UnexpectedSymbolicArg
+  
 deriving instance Show Error
 
 -- | The possible result states of a VM
@@ -199,7 +200,7 @@ data FrameState = FrameState
   , _code         :: ByteString
   , _pc           :: Int
   , _stack        :: [(SWord 256)]
-  , _memory       :: [SWord 8]--ByteStringb
+  , _memory       :: [SWord 8]
   , _memorySize   :: Int
   , _calldata     :: [SWord 8]
   , _callvalue    :: Word
@@ -438,47 +439,27 @@ exec1 = do
 
     doStop = finishFrame (FrameReturned [])
 
-<<<<<<< HEAD
-  if self > 0x0 && self <= 0x9 then doStop
-    -- -- call to precompile
-    -- let ?op = 0x00 -- dummy value
-    -- let
-    --   calldatasize = num $ BS.length (the state calldata)
-    -- copyBytesToMemory (the state calldata) calldatasize 0 0
-    -- executePrecompile self (the state gas) 0 calldatasize 0 0 []
-    -- use (state . stack) >>= \case
-    --   (0:_) ->
-    --     fetchAccount self $ \_ -> do
-    --       touchAccount self
-    --       vmError PrecompileFailure
-    --   (1:_) ->
-    --     fetchAccount self $ \_ -> do
-    --       touchAccount self
-    --       out <- use (state . returndata)
-    --       finishFrame (FrameReturned out)
-    --   _ ->
-    --     underrun
-=======
   if self > 0x0 && self <= 0x9 then do
     -- call to precompile
     let ?op = 0x00 -- dummy value
     let
       calldatasize = num $ length (the state calldata)
     copyBytesToMemory (the state calldata) calldatasize 0 0
-    executePrecompile fees self (the state gas) 0 calldatasize 0 0 []
-    use (state . stack) >>= \case
-      (0:_) ->
-        fetchAccount self $ \_ -> do
-          touchAccount self
-          vmError PrecompileFailure
-      (1:_) ->
-        fetchAccount self $ \_ -> do
-          touchAccount self
-          out <- use (state . returndata)
-          finishFrame (FrameReturned out)
+    executePrecompile self (the state gas) 0 calldatasize 0 0 []
+    case stk of
+      (x:_) -> case maybeLitWord x of
+        Just 0 -> do
+          fetchAccount self $ \_ -> do
+            touchAccount self
+            vmError PrecompileFailure
+        Just _ ->
+          fetchAccount self $ \_ -> do
+            touchAccount self
+            out <- use (state . returndata)
+            finishFrame (FrameReturned out)
+        Nothing -> vmError UnexpectedSymbolicArg
       _ ->
         underrun
->>>>>>> 47453933... Remaining opcodes adapted to symbolic stack, calldata and memory.
 
   else if the state pc >= num (BS.length (the state code))
     then doStop
@@ -561,7 +542,7 @@ exec1 = do
           stackOp2 (const g_low) (uncurry sdiv)
 
         -- op: MOD
-        0x06 -> stackOp2 (const g_low) (uncurry (sMod))
+        0x06 -> stackOp2 (const g_low) $ \(x, y) -> ite (y .== 0) 0 (x `sMod` y)
 
         -- op: SMOD
         0x07 -> stackOp2 (const g_low) $ uncurry smod
@@ -950,7 +931,7 @@ exec1 = do
                 if exponent == 0
                 then g_exp
                 else g_exp + g_expbyte * num (ceilDiv (1 + log2 exponent) 8)
-          in stackOp2 (const g_exp) (uncurry (.^))
+          in stackOp2 cost (uncurry (.^))
 
         -- op: SIGNEXTEND
         0x0b ->
