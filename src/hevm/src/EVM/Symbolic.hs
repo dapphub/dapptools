@@ -86,13 +86,15 @@ symAbiArg _ = error "todo"
 
 symExec :: VM -> [SBool] -> Query [(VM, [SBool])]
 symExec vm pathconds = do
+  resetAssertions
   let branch = execState (execWhile isNotJump) vm
   case view result branch of
     Just x -> return [(branch, pathconds)]
     Nothing -> do
       io $ print $ "possible branching point at pc: " <> show (view (state.pc) branch)
       let Just cond = branch^.state.stack ^? ix 1
-      noJump <- checkSatAssuming ((cond ./= 0):pathconds)
+      constrain ((cond ./= 0) .&& sAnd pathconds)
+      noJump <- checkSat --Assuming ((cond ./= 0):pathconds)
       case noJump of
         Unk   -> error "Solver said unknown!"
         Unsat -> -- the jump condition must be 0.
@@ -102,24 +104,26 @@ symExec vm pathconds = do
                  in do io $ print $ "but smt says jump condition is false"
                        symExec vm1 pathconds
 
-        Sat   -> -- it's possible for the jump condition
+        Sat   -> do
+                 -- it's possible for the jump condition
                  -- to be nonzero. Can it also be zero?
-                 do jump <- checkSatAssuming ((cond .== 0):pathconds)
-                    case jump of
-                       Unk   -> error "Solver said unknown!"
-                       Unsat -> -- no. The we must jump.
-                                let vm1 = branch & state.stack.(ix 1) .~ 1
-                                in do io $ print $ "but smt says jump condition is true"
-                                      symExec vm1 pathconds
-
-                       Sat -> -- We can either jump or not jump.
-                              -- Explore both paths
-                         let aVm = branch & state.stack.(ix 1) .~ 0
-                             bVm = branch & state.stack.(ix 1) .~ 1
-                         in do io $ print $ "and smt says both cases are possible"
-                               aResult <- symExec aVm ((cond .== 0):pathconds)
-                               bResult <- symExec bVm ((cond .== 1):pathconds)
-                               return $ aResult <> bResult
+                     resetAssertions
+                     constrain ((cond .== 0) .&& sAnd pathconds)
+                     jump <- checkSat
+                     case jump of
+                        Unk   -> error "Solver said unknown!"
+                        Unsat -> -- no. The we must jump.
+                                 let vm1 = branch & state.stack.(ix 1) .~ 1
+                                 in do io $ print $ "but smt says jump condition is true"
+                                       symExec vm1 pathconds
+                        Sat -> -- We can either jump or not jump.
+                               -- Explore both paths
+                          let aVm = branch & state.stack.(ix 1) .~ 0
+                              bVm = branch & state.stack.(ix 1) .~ 1
+                          in do io $ print $ "and smt says both cases are possible"
+                                aResult <- symExec aVm ((cond .== 0):pathconds)
+                                bResult <- symExec bVm ((cond .== 1):pathconds)
+                                return $ aResult <> bResult
 
 type Precondition = [SWord 8] -> SBool
 type Postcondition = ([SWord 8], VM) -> SBool
@@ -128,8 +132,7 @@ verify :: VM -> (Text, AbiType) -> Precondition -> Maybe Postcondition -> Query 
 verify vm (methodName, types) pre maybepost = do
   input <- symAbiArg types
   let calldata' = litBytes (sig methodName) <> input
-  constrain $ pre input
-  results <- symExec (vm & (state.calldata) .~ calldata') []
+  results <- symExec (vm & (state.calldata) .~ calldata') [pre input]
   case maybepost of
     Just post -> do let postC = sOr $ fmap (\(x,pathc) -> (sAnd pathc) .&& sNot (post (input, x))) results
                     constrain postC
@@ -152,4 +155,3 @@ isNotJump vm = vmOp vm /= Just OpJumpi ||
   case vm^.state.stack ^? ix 1 of
     Just c -> isConcrete c
     Nothing -> error "malformed stack"
-
