@@ -678,9 +678,11 @@ drawVmBrowser ui =
                   [ txt ("Codehash: " <>    pack (show (view codehash c)))
                   , txt ("Nonce: "    <> showWordExact (view nonce    c))
                   , txt ("Balance: "  <> showWordExact (view balance  c))
-                  , txt ("Storage: "  <> pack ( show ( Map.toList (view storage c))))
+                  , txt ("Storage: "  <> storageDisplay (view storage c))
                   ]
                 ]
+             where storageDisplay (Concrete s) = pack ( show ( Map.toList s))
+                   storageDisplay (Symbolic s) = pack "<symbolic>"
           Just solc ->
             hBox
               [ borderWithLabel (txt "Contract information") . padBottom Max . padRight (Pad 2) $ vBox

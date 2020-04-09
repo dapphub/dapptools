@@ -4,6 +4,7 @@
 
 module EVM.Solidity
   ( solidity
+  , solcRuntime
   , JumpType (..)
   , SolcContract (..)
   , SourceCache (..)
@@ -14,7 +15,7 @@ module EVM.Solidity
   , methodSignature
   , methodInputs
   , methodOutput
-  , parseSignature
+  , parseFunArgs
   , abiMap
   , eventMap
   , contractName
@@ -228,6 +229,12 @@ solidity contract src = do
   let Just (solc, _, _) = readJSON json
   return (solc ^? ix (path <> ":" <> contract) . creationCode)
 
+solcRuntime :: Text -> Text -> IO (Maybe ByteString)
+solcRuntime contract src = do
+  (json, path) <- solidity' src
+  let Just (solc, _, _) = readJSON json
+  return (solc ^? ix (path <> ":" <> contract) . runtimeCode)
+
 force :: String -> Maybe a -> a
 force s = fromMaybe (error s)
 
@@ -337,14 +344,14 @@ parseMethodInput x =
 
 -- crude: assumes signature of form `foo(uint256,address)`
 -- (no return data, no argnames)
-parseSignature :: Text -> Maybe (Text, AbiType)
-parseSignature x =
+parseFunArgs :: Text -> Maybe AbiType
+parseFunArgs x =
  let (_:args) = splitOn "(" x
      (argdata:_) = splitOn ")" $ concat args
   in do args' <- if argdata == ""
                  then return mempty
                  else mapM (parseTypeName mempty) $ splitOn "," argdata
-        return (x, AbiTupleType (Vector.fromList args'))
+        return $ AbiTupleType (Vector.fromList args')
 
 toCode :: Text -> ByteString
 toCode = fst . BS16.decode . encodeUtf8

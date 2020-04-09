@@ -125,7 +125,9 @@ checkStateFail diff x expectation vm (okState, okMoney, okNonce, okData, okCode)
     check = checkContracts x
     initial = initTx x
     expected = expectedContracts expectation
-    actual = view (EVM.env . EVM.contracts . to (fmap clearZeroStorage)) vm
+    actual = view (EVM.env . EVM.contracts . to (fmap (clearZeroStorage.clearOrigStorage))) vm
+    printStorage (EVM.Symbolic c) = show c
+    printStorage (EVM.Concrete c) = show $ Map.toList c
 
   putStr (unwords reason)
   when (diff && (not okState)) $ do
@@ -144,7 +146,7 @@ checkStateFail diff x expectation vm (okState, okMoney, okNonce, okData, okCode)
     putStrLn "\nActual balance/state: "
     printField (\v -> (show . toInteger  $ EVM._nonce v) ++ " "
                    ++ (show . toInteger  $ EVM._balance v) ++ " "
-                   ++ (show . Map.toList $ EVM._storage v)) actual
+                   ++ (printStorage      $ EVM._storage v)) actual
   return okState
 
 checkExpectation :: Bool -> EVM.ExecMode -> Case -> EVM.VM -> IO Bool
@@ -205,8 +207,8 @@ checkExpectedOut output ex = case ex of
 
 checkExpectedContracts :: EVM.VM -> Map Addr Contract -> (Bool, Bool, Bool, Bool, Bool)
 checkExpectedContracts vm expected =
-  let cs = vm ^. EVM.env . EVM.contracts . to (fmap clearZeroStorage)
-      expectedCs = realizeContracts expected
+  let cs = vm ^. EVM.env . EVM.contracts . to (fmap (clearZeroStorage.clearOrigStorage))
+      expectedCs = fmap clearOrigStorage $ realizeContracts expected
   in ( (expectedCs ~= cs)
      , (clearBalance <$> expectedCs) ~= (clearBalance <$> cs)
      , (clearNonce   <$> expectedCs) ~= (clearNonce   <$> cs)
@@ -214,12 +216,17 @@ checkExpectedContracts vm expected =
      , (clearCode    <$> expectedCs) ~= (clearCode    <$> cs)
      )
 
+clearOrigStorage :: EVM.Contract -> EVM.Contract
+clearOrigStorage = set EVM.origStorage mempty
+
 clearZeroStorage :: EVM.Contract -> EVM.Contract
-clearZeroStorage =
-  over EVM.storage (Map.filterWithKey (\_ x -> x /= 0))
+clearZeroStorage c = case EVM._storage c of
+  EVM.Symbolic _ -> c
+  EVM.Concrete m -> let store = Map.filterWithKey (\_ x -> x /= 0) m
+                    in set EVM.storage (EVM.Concrete store) c
 
 clearStorage :: EVM.Contract -> EVM.Contract
-clearStorage = set EVM.storage mempty
+clearStorage = set EVM.storage (EVM.Concrete mempty)
 
 clearBalance :: EVM.Contract -> EVM.Contract
 clearBalance = set EVM.balance 0
@@ -355,7 +362,12 @@ realizeContract x =
   EVM.initialContract (x ^. code)
     & EVM.balance .~ EVM.w256 (x ^. balance)
     & EVM.nonce   .~ EVM.w256 (x ^. nonce)
-    & EVM.storage .~ (
+    & EVM.storage .~ EVM.Concrete (
+        Map.fromList .
+        map (\(k, v) -> (EVM.w256 k, EVM.w256 v)) .
+        Map.toList $ x ^. storage
+        )
+    & EVM.origStorage .~ (
         Map.fromList .
         map (bimap EVM.w256 EVM.w256) .
         Map.toList $ x ^. storage
@@ -548,7 +560,6 @@ vmForCase mode x =
     EVM.makeVm (testVmOpts x)
     & EVM.env . EVM.contracts .~ realizeContracts initState
     & EVM.tx . EVM.txReversion .~ realizeContracts checkState
-    & EVM.tx . EVM.origStorage .~ realizeContracts initState
     & EVM.tx . EVM.substate . EVM.touchedAccounts .~ touchedAccounts
     & EVM.execMode .~ mode
 

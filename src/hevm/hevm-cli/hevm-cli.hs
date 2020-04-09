@@ -337,37 +337,16 @@ regexMatches regexSource =
     Regex.matchTest regex . Seq.fromList . unpack
 
 assert :: Command Options.Unwrapped -> IO ()
-assert cmd = case parseSignature (funcSig cmd) of
-                       Nothing -> error "could not parse function signature"
-                       Just s ->
-                         let
-                            vm1 = EVM.makeVm $ EVM.VMOpts
-                                 { EVM.vmoptCode          = hexByteString "--code" (strip0x (code cmd))
-                                 , EVM.vmoptCalldata      = []
-                                 , EVM.vmoptValue         = 0
-                                 , EVM.vmoptAddress       = 0
-                                 , EVM.vmoptCaller        = 0
-                                 , EVM.vmoptOrigin        = 0
-                                 , EVM.vmoptGas           = 0xffffffffff
-                                 , EVM.vmoptGaslimit      = 0xffffffffff
-                                 , EVM.vmoptCoinbase      = 0
-                                 , EVM.vmoptNumber        = 0
-                                 , EVM.vmoptTimestamp     = 0
-                                 , EVM.vmoptBlockGaslimit = 0
-                                 , EVM.vmoptGasprice      = 0
-                                 , EVM.vmoptMaxCodeSize   = 0xffffffff
-                                 , EVM.vmoptDifficulty    = 0
-                                 , EVM.vmoptSchedule      = FeeSchedule.istanbul
-                                 , EVM.vmoptCreate        = False
-                                 }
-                            post = Just $ \(input, output) -> case view EVM.result output of
-                              Just (EVM.VMFailure (EVM.UnrecognizedOpcode 254)) -> sFalse
-                              _ -> sTrue
-                         in do results <- runSMT $ query $ verify vm1 s (const sTrue) post
-                               case results of
-                                 Left () -> print "All good"
-                                 Right a -> do print "Assertion violation:"
-                                               print a
+assert cmd =
+  let post = Just $ \(input, output) ->
+        case view EVM.result output of
+          Just (EVM.VMFailure (EVM.UnrecognizedOpcode 254)) -> sFalse
+          _ -> sTrue
+  in do results <- runSMT $ query $ verify (EVM.RuntimeCode (code cmd)) (funcSig cmd) (const sTrue) post
+        case results of
+          Left () -> print "All good"
+          Right a -> do print "Assertion violation:"
+                        print a
 
 dappCoverage :: UnitTestOptions -> Mode -> String -> IO ()
 dappCoverage opts _ solcFile =
