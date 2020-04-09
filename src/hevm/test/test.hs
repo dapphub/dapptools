@@ -142,76 +142,107 @@ main = defaultMain $ testGroup "hevm"
       -- Somewhat tautological since we are asserting the precondition
       -- on the same form as the actual "requires" clause.
       testCase "SafeAdd success case" $ do
-        Just safeAdd <- singleContract "SafeAdd"
+        Just safeAdd <- solcRuntime "SafeAdd"
           [i|
-           function add(uint x, uint y) public pure returns (uint z) {
+          contract SafeAdd {
+            function add(uint x, uint y) public pure returns (uint z) {
                  require((z = x + y) >= x);
             }
+          }
           |]
-        let Just vm = loadVM safeAdd
-            asWord :: [SWord 8] -> SWord 256
+        let asWord :: [SWord 8] -> SWord 256
             asWord = fromBytes
             pre calldata = let (x, y) = splitAt 32 calldata
                            in asWord x .<= asWord x + asWord y
-            post = Just $ \(input, output) -> case view result output of
-              Just (VMSuccess out) ->
-                let (x, y) = splitAt 32 input
-                in (asWord out) .== (asWord x) + (asWord y)
-              _ -> sFalse
+            post = Just $ \(prestate, output) ->
+              let input = view (state.calldata) prestate
+                  (x, y) = splitAt 32 (drop 4 input)
+              in case view result output of
+                Just (VMSuccess out) -> (asWord out) .== (asWord x) + (asWord y)
+                _ -> sFalse
         nothing <- runSMT $ query $
-          verify vm ("add(uint256,uint256)"
-                           , AbiTupleType $ Vector.fromList
-                             [AbiUIntType 256, AbiUIntType 256]) pre post
+          verify (RuntimeCode safeAdd) "add(uint256,uint256)" pre post
         print nothing
         assert $ nothing == Left ()
      ,
 
       testCase "x == y => x + y == 2 * y" $ do
-        Just safeAdd <- singleContract "SafeAdd"
+        Just safeAdd <- solcRuntime "SafeAdd"
           [i|
+          contract SafeAdd {
             function add(uint x, uint y) public pure returns (uint z) {
                  require((z = x + y) >= x);
             }
+          }
           |]
-        let Just vm = loadVM safeAdd
-            asWord :: [SWord 8] -> SWord 256
+        let asWord :: [SWord 8] -> SWord 256
             asWord = fromBytes
             pre calldata = let (x, y) = splitAt 32 calldata
                            in (asWord x .<= asWord x + asWord y)
                               .&& (x .== y)
-            post = Just $ \(input, output) -> case view result output of
-                                                Just (VMSuccess out) ->
-                                                  let (x, y) = splitAt 32 input
-                                                  in asWord out .== 2 * asWord y
-                                                _ -> sFalse
+            post = Just $ \(prestate, output)
+              -> let input = view (state.calldata) prestate
+                     (x, y) = splitAt 32 (drop 4 input)
+                 in case view result output of
+                      Just (VMSuccess out) -> asWord out .== 2 * asWord y
+                      _ -> sFalse
         nothing <- runSMT $ query $
-          verify vm ("add(uint256,uint256)"
-                           , AbiTupleType $ Vector.fromList
-                             [AbiUIntType 256, AbiUIntType 256]) pre post
+          verify (RuntimeCode safeAdd) "add(uint256,uint256)" pre post
         assert $ nothing == Left ()
       ,
-
         testCase "factorize 973013" $ do
-        Just factor <- singleContract "factorize"
+        Just factor <- solcRuntime "PrimalityCheck"
           [i|
+          contract PrimalityCheck {
             function factor(uint x, uint y) public pure  {
                    require(1 < x && x < 973013 && 1 < y && y < 973013);
                    assert(x*y != 973013);
             }
+          }
           |]
-        let Just vm = loadVM factor
-            asWord :: [SWord 8] -> SWord 256
+        let asWord :: [SWord 8] -> SWord 256
             asWord = fromBytes
             pre = const sTrue
-            post = Just $ \(input, output) -> case view result output of
+            post = Just $ \(_, output) -> case view result output of
               Just (EVM.VMFailure (EVM.UnrecognizedOpcode 254)) -> sFalse
               _ -> sTrue
         (Right (AbiTuple xy)) <- runSMT $ query $
-          verify vm ("factor(uint256,uint256)"
-                           , AbiTupleType $ Vector.fromList
-                             [AbiUIntType 256, AbiUIntType 256]) pre post
+          verify (RuntimeCode factor) "factor(uint256,uint256)" pre post
         let (AbiUInt 256 x, AbiUInt 256 y) = (head (Vector.toList xy), head $ tail (Vector.toList xy))
         assert $ x == 953 && y == 1021 || x == 1021 && y == 953
+        --,
+        -- currently fails, but due to z3 stuff!
+        -- I swear it should actually work!
+        -- testCase "summary storage writes" $ do
+        -- Just factor <- solcRuntime "A"
+        --   [i|
+        --   contract A {
+        --     uint x;
+        --     function f(uint256 y) public {
+        --        x += y;
+        --        x += y;
+        --     }
+        --   }
+        --   |]
+        -- print $ ByteStringS factor
+        -- let asWord :: [SWord 8] -> SWord 256
+        --     asWord = fromBytes
+        --     pre = const sTrue
+        --     post = Just $ \(prestate, poststate) ->
+        --       let y = snd $ splitAt 4 (view (state.calldata) prestate)
+        --           this = view (state . codeContract) prestate
+        --           Just preC = view (env.contracts . at this) prestate
+        --           Just postC = view (env.contracts . at this) poststate
+        --           Symbolic prestore = _storage preC
+        --           Symbolic poststore = _storage postC
+        --           prex = readArray prestore 0
+        --           postx = readArray poststore 0
+        --       in case view result poststate of
+        --         Just (VMSuccess mempty) -> prex + 2 * (fromBytes y) .== postx
+        --         _ -> sFalse
+        -- nothing <- runSMT $ query $
+        --   verify (RuntimeCode factor) "f(uint256)" pre post
+        -- assertEqual "success?" nothing (Left ())
     ]
   ]
   where

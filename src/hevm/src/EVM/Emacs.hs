@@ -428,6 +428,10 @@ instance SDisplay DappInfo where
 instance SDisplay (SExpr Text) where
   sexp = id
 
+instance SDisplay Storage where
+  sexp (Symbolic _) = error "idk"
+  sexp (Concrete d) = sexp d
+
 instance SDisplay VM where
   sexp x =
     L [ L [A "result", sexp (view result x)]
