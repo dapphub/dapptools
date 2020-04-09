@@ -11,9 +11,13 @@ import EVM.Op
 import EVM.ABI
 import EVM.Types
 import EVM.Format
+import EVM.Keccak
+import EVM.Solidity
+import EVM.Concrete (createAddress)
+import qualified EVM.FeeSchedule as FeeSchedule
 import Data.SBV.Trans.Control hiding (sat)
 import Data.SBV.Trans
-import Data.SBV hiding (runSMT)
+import Data.SBV hiding (runSMT, newArray_)
 
 import Control.Monad.IO.Class
 import GHC.TypeNats
@@ -21,12 +25,54 @@ import Data.Vector        (Vector, toList)
 import Control.Monad.State.Class (MonadState)
 import qualified Control.Monad.State.Class as State
 import Data.ByteString.Lazy (toStrict, fromStrict)
-import Data.ByteString (ByteString, pack)
-import Data.Text (Text)--hiding (replicate, concat)
+import Data.ByteString (ByteString, pack, null)
+import qualified Data.ByteString as BS
+import Data.Text (Text)
 import Data.Binary.Put    (runPut)
 import Data.Binary.Get    (runGet)
 import Control.Monad.State.Strict (runState, execState, unless)
 import Data.Maybe (isJust, fromJust)
+
+mkSymbolicContract :: ContractCode -> SArray (WordN 256) (WordN 256) -> Contract
+mkSymbolicContract theContractCode store = Contract
+  { _contractcode = theContractCode
+  , _codehash =
+    if BS.null theCode then 0 else
+      keccak (stripBytecodeMetadata theCode)
+  , _storage  = Symbolic store
+  , _balance  = 0
+  , _nonce    = 0
+  , _opIxMap  = mkOpIxMap theCode
+  , _codeOps  = mkCodeOps theCode
+  , _external = False
+  , _origStorage = mempty
+  } where theCode = case theContractCode of
+            InitCode b    -> b
+            RuntimeCode b -> b
+
+loadSymVM :: ByteString -> SArray (WordN 256) (WordN 256) -> [SWord 8] -> VM
+loadSymVM x initStore calldata =
+    (makeVm $ VMOpts
+    { vmoptContract = mkSymbolicContract (RuntimeCode x) initStore
+    , vmoptCalldata = calldata
+    , vmoptValue = 0
+    , vmoptAddress = createAddress ethrunAddress 1
+    , vmoptCaller = ethrunAddress
+    , vmoptOrigin = ethrunAddress
+    , vmoptCoinbase = 0
+    , vmoptNumber = 0
+    , vmoptTimestamp = 0
+    , vmoptBlockGaslimit = 0
+    , vmoptGasprice = 0
+    , vmoptDifficulty = 0
+    , vmoptGas = 0xffffffffffffffff
+    , vmoptGaslimit = 0xffffffffffffffff
+    , vmoptMaxCodeSize = 0xffffffff
+    , vmoptSchedule = FeeSchedule.istanbul
+    , vmoptCreate = False
+    }) & set (env . contracts . at (createAddress ethrunAddress 1))
+             (Just (mkSymbolicContract (RuntimeCode x) initStore))
+
 
 loadVM :: ByteString -> Maybe VM
 loadVM x =
@@ -126,15 +172,18 @@ symExec vm pathconds = do
                                 return $ aResult <> bResult
 
 type Precondition = [SWord 8] -> SBool
-type Postcondition = ([SWord 8], VM) -> SBool
+type Postcondition = (VM, VM) -> SBool
 
-verify :: VM -> (Text, AbiType) -> Precondition -> Maybe Postcondition -> Query (Either () AbiValue)
-verify vm (methodName, types) pre maybepost = do
+verify :: ContractCode -> Text -> Precondition -> Maybe Postcondition -> Query (Either () AbiValue)
+verify (RuntimeCode runtimecode) signature' pre maybepost = do
+  let Just types = (parseFunArgs signature')
   input <- symAbiArg types
-  let calldata' = litBytes (sig methodName) <> input
-  results <- symExec (vm & (state.calldata) .~ calldata') [pre input]
+  let calldata' = litBytes (sig signature') <> input
+  symstore <- newArray_ Nothing
+  let preState = loadSymVM runtimecode symstore calldata'
+  results <- symExec preState [pre input]
   case maybepost of
-    Just post -> do let postC = sOr $ fmap (\(x,pathc) -> (sAnd pathc) .&& sNot (post (input, x))) results
+    Just post -> do let postC = sOr $ fmap (\(postState,pathc) -> (sAnd pathc) .&& sNot (post (preState, postState))) results
                     constrain postC
                     -- is it possible for any of these pathcondition => postcondition
                     -- implications to be false?
