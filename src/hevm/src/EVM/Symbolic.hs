@@ -179,7 +179,7 @@ verify (RuntimeCode runtimecode) signature' pre maybepost = do
   let Just types = (parseFunArgs signature')
   input <- symAbiArg types
   let calldata' = litBytes (sig signature') <> input
-  symstore <- newArray_ Nothing
+  symstore <- freshArray_ Nothing
   let preState = loadSymVM runtimecode symstore calldata'
   results <- symExec preState [pre input]
   case maybepost of
