@@ -137,7 +137,6 @@ in rec {
 
   token = self.callPackage (import ./src/token) {};
   dai = self.callPackage (import ./submodules/dai-cli) {};
-  mcd = self.callPackage (import ./submodules/mcd-cli) {};
 
   setzer = self.callPackage (import ./submodules/setzer) {};
   terra = self.callPackage (import ./submodules/terra) {};
