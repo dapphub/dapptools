@@ -11,7 +11,7 @@ import Data.Maybe (fromMaybe, fromJust)
 import Data.Text.Encoding (encodeUtf8)
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Base16 as Hex
-
+import Debug.Trace
 import Test.Tasty
 import Test.Tasty.QuickCheck-- hiding (forAll)
 import Test.Tasty.HUnit
@@ -210,39 +210,72 @@ main = defaultMain $ testGroup "hevm"
           verify (RuntimeCode factor) "factor(uint256,uint256)" pre post
         let (AbiUInt 256 x, AbiUInt 256 y) = (head (Vector.toList xy), head $ tail (Vector.toList xy))
         assert $ x == 953 && y == 1021 || x == 1021 && y == 953
-        --,
-        -- currently fails, but due to z3 stuff!
-        -- I swear it should actually work!
-        -- testCase "summary storage writes" $ do
-        -- Just factor <- solcRuntime "A"
-        --   [i|
-        --   contract A {
-        --     uint x;
-        --     function f(uint256 y) public {
-        --        x += y;
-        --        x += y;
-        --     }
-        --   }
-        --   |]
-        -- print $ ByteStringS factor
-        -- let asWord :: [SWord 8] -> SWord 256
-        --     asWord = fromBytes
-        --     pre = const sTrue
-        --     post = Just $ \(prestate, poststate) ->
-        --       let y = snd $ splitAt 4 (view (state.calldata) prestate)
-        --           this = view (state . codeContract) prestate
-        --           Just preC = view (env.contracts . at this) prestate
-        --           Just postC = view (env.contracts . at this) poststate
-        --           Symbolic prestore = _storage preC
-        --           Symbolic poststore = _storage postC
-        --           prex = readArray prestore 0
-        --           postx = readArray poststore 0
-        --       in case view result poststate of
-        --         Just (VMSuccess mempty) -> prex + 2 * (fromBytes y) .== postx
-        --         _ -> sFalse
-        -- nothing <- runSMT $ query $
-        --   verify (RuntimeCode factor) "f(uint256)" pre post
-        -- assertEqual "success?" nothing (Left ())
+        ,
+        testCase "summary storage writes" $ do
+        Just c <- solcRuntime "A"
+          [i|
+          contract A {
+            uint x;
+            function f(uint256 y) public {
+               x += y;
+               x += y;
+            }
+          }
+          |]
+        let asWord :: [SWord 8] -> SWord 256
+            asWord = fromBytes
+            pre = const sTrue
+            post = Just $ \(prestate, poststate) ->
+              let y = drop 4 (view (state.calldata) prestate)
+                  this = view (state . codeContract) prestate
+                  Just preC = view (env.contracts . at this) prestate
+                  Just postC = view (env.contracts . at this) poststate
+                  Symbolic prestore = _storage preC
+                  Symbolic poststore = _storage postC
+                  prex = readArray prestore 0
+                  postx = readArray poststore 0
+              in case view result poststate of
+                Just (VMSuccess mempty) -> prex + 2 * (fromBytes y) .== postx
+                _ -> sFalse
+        nothing <- runSMTWith z3{transcript=Just "z3log.log"} $ query $
+          verify (RuntimeCode c) "f(uint256)" pre post
+        assertEqual "success?" nothing (Left ())
+        ,
+        testCase "catch storage collisions" $ do
+        Just c <- solcRuntime "A"
+          [i|
+          contract A {
+            function f(uint x, uint y) public {
+               assembly {
+                 let newx := sub(sload(x), 1)
+                 let newy := add(sload(y), 1)
+                 sstore(x,newx)
+                 sstore(y,newy)
+               }
+            }
+          }
+          |]
+        let asWord :: [SWord 8] -> SWord 256
+            asWord = fromBytes
+            pre = const sTrue
+            post = Just $ \(prestate, poststate) ->
+              let (x,y) = over both (fromBytes) (splitAt 32 $ drop 4 (view (state.calldata) prestate))
+                  this = view (state . codeContract) prestate
+                  Just preC = view (env.contracts . at this) prestate
+                  Just postC = view (env.contracts . at this) poststate
+                  Symbolic prestore = _storage preC
+                  Symbolic poststore = _storage postC
+                  prex  = readArray prestore x
+                  postx = readArray poststore x
+                  prey  = readArray prestore y
+                  posty = readArray poststore y
+              in case view result poststate of
+                Just (VMSuccess mempty) -> prex + prey .== postx + (posty :: SWord 256)
+                _ -> sFalse
+        (Right (AbiTuple xyz)) <- runSMT $ query $
+          verify (RuntimeCode c) "f(uint256,uint256)" pre post
+        let (AbiUInt 256 x, AbiUInt 256 y) = (head (Vector.toList xyz), head $ tail (Vector.toList xyz))
+        assert $ x == y
     ]
   ]
   where
