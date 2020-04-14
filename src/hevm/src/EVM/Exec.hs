@@ -20,7 +20,7 @@ ethrunAddress = Addr 0x00a329c0648769a73afac7f9381e08fb43dbea72
 vmForEthrunCreation :: ByteString -> VM
 vmForEthrunCreation creationCode =
   (makeVm $ VMOpts
-    { vmoptCode = creationCode
+    { vmoptContract = initialContract (InitCode creationCode)
     , vmoptCalldata = ""
     , vmoptValue = 0
     , vmoptAddress = createAddress ethrunAddress 1

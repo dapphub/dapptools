@@ -181,6 +181,7 @@ executable hevm
     memory                            >= 0.14,
     mtl                               >= 2.2,
     optparse-generic                  >= 1.1,
+    operational                       >= 0.2,
     process                           >= 1.4,
     quickcheck-text                   >= 0.1,
     regex-tdfa                        >= 1.2,

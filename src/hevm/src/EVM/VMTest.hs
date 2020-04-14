@@ -288,7 +288,7 @@ parseVmOpts v =
      case (envV, execV) of
        (JSON.Object env, JSON.Object exec) ->
          EVM.VMOpts
-           <$> dataField exec "code"
+           <$> (dataField exec "code" >>= pure . EVM.initialContract . EVM.RuntimeCode)
            <*> dataField exec "data"
            <*> wordField exec "value"
            <*> addrField exec "address"
@@ -406,7 +406,7 @@ fromCreateBlockchainCase block tx preState postState =
       feeSchedule = EVM.FeeSchedule.istanbul
       in Right $ Case
          (EVM.VMOpts
-          { vmoptCode          = txData tx
+          { vmoptContract      = EVM.initialContract (EVM.InitCode (txData tx))
           , vmoptCalldata      = mempty
           , vmoptValue         = txValue tx
           , vmoptAddress       = createdAddr
@@ -436,16 +436,14 @@ fromNormalBlockchainCase block tx preState postState =
       feeSchedule = EVM.FeeSchedule.istanbul
       toCode = Map.lookup toAddr preState
       theCode = case toCode of
-          Nothing -> ""
-          Just c -> case (view code c) of
-              EVM.RuntimeCode x  -> x
-              EVM.InitCode x     -> x
+          Nothing -> EVM.RuntimeCode mempty
+          Just c -> view code c
   in case (toAddr , toCode , sender 1 tx , checkNormalTx tx block preState) of
       (_, _, Nothing, _) -> Left SignatureUnverified
       (_, _, _, Nothing) -> Left InvalidTx
       (_, _, Just origin, Just checkState) -> Right $ Case
         (EVM.VMOpts
-         { vmoptCode          = theCode
+         { vmoptContract      = EVM.initialContract theCode
          , vmoptCalldata      = txData tx
          , vmoptValue         = txValue tx
          , vmoptAddress       = toAddr
@@ -516,17 +514,17 @@ initTx x =
   let
     checkState = checkContracts x
     opts     = testVmOpts x
-    toAddr   = EVM.vmoptAddress opts
-    origin   = EVM.vmoptOrigin  opts
-    value    = EVM.vmoptValue   opts
-    initcode = EVM.vmoptCode    opts
-    creation = EVM.vmoptCreate  opts
+    toAddr   = EVM.vmoptAddress  opts
+    origin   = EVM.vmoptOrigin   opts
+    value    = EVM.vmoptValue    opts
+    initcode = EVM._contractcode (EVM.vmoptContract opts)
+    creation = EVM.vmoptCreate   opts
   in
     id
     . (Map.adjust (over balance (subtract value)) origin)
     . (Map.adjust (over balance (+ value)) toAddr)
     . (if creation
-       then (Map.adjust (set code (EVM.InitCode initcode)) toAddr)
+       then (Map.adjust (set code initcode) toAddr)
           . (Map.adjust (set nonce 1) toAddr)
           . (Map.adjust (set storage mempty) toAddr)
           . (Map.adjust (set create True) toAddr)
