@@ -241,6 +241,8 @@ main = defaultMain $ testGroup "hevm"
           verify (RuntimeCode c) "f(uint256)" pre post
         assertEqual "success?" nothing (Left ())
         ,
+        -- Inspired by these `msg.sender == to` token bugs
+        -- which break linearity of totalSupply.
         testCase "catch storage collisions" $ do
         Just c <- solcRuntime "A"
           [i|

@@ -66,7 +66,6 @@ import Data.Text.Encoding (encodeUtf8)
 import Data.Vector        (Vector)
 import Data.Word          (Word32, Word8)
 import Data.List          (intercalate)
-import Data.SBV hiding (label)
 import GHC.Generics
 
 import Test.QuickCheck hiding ((.&.), label)
@@ -122,7 +121,10 @@ data AbiType
   | AbiArrayDynamicType AbiType
   | AbiArrayType        Int AbiType
   | AbiTupleType        (Vector AbiType)
-  deriving (Show, Read, Eq, Ord, Generic)
+  deriving (Read, Eq, Ord, Generic)
+
+instance Show AbiType where
+  show = Text.unpack . abiTypeSolidity
 
 data AbiKind = Dynamic | Static
   deriving (Show, Read, Eq, Ord, Generic)
