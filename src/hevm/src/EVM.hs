@@ -254,7 +254,7 @@ instance Eq Storage where
   (==) (Concrete a) (Concrete b) = a == b
   (==) (Symbolic _) (Concrete _) = False
   (==) (Concrete _) (Symbolic _) = False
-  (==) a b = error "do not compare two symbolic arrays like this!"
+  (==) _ _ = error "do not compare two symbolic arrays like this!"
 
 -- | The state of a contract
 data Contract = Contract
@@ -874,7 +874,6 @@ exec1 = do
                 if availableGas <= g_callstipend
                   then finishFrame (FrameErrored (OutOfGas availableGas g_callstipend))
                   else do
-                    let Just this = view (env.contracts.at self) vm
                     let original = case view storage this of
                                       Concrete _ -> fromMaybe 0 (Map.lookup (forceLit x) (view origStorage this))
                                       Symbolic _ -> 0 -- we don't use this value anywhere anyway

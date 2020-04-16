@@ -23,6 +23,7 @@ module EVM.Solidity
   , creationCode
   , makeSrcMaps
   , readSolc
+  , readJSON
   , runtimeCode
   , snippetCache
   , runtimeCodehash
