@@ -103,7 +103,10 @@ data SlotType
   -- that excludes arrays, contracts, and mappings.
   = StorageMapping (NonEmpty AbiType) AbiType
   | StorageValue AbiType
-  deriving Show
+  deriving Eq
+
+instance Show SlotType where
+  show = unpack . slotTypeSolidity
 
 slotTypeSolidity :: SlotType -> Text
 slotTypeSolidity =
