@@ -143,29 +143,30 @@ makeSrcMaps = (\case (_, Fe, _) -> Nothing; x -> Just (done x))
              . Text.foldl' (\x y -> go y x) (mempty, F1 [] 1, SM 0 0 0 JumpRegular 0)
   where
     done (xs, s, p) = let (xs', _, _) = go ';' (xs, s, p) in xs'
+    readR = read . reverse
 
     go :: Char -> (Seq SrcMap, SrcMapParseState, SrcMap) -> (Seq SrcMap, SrcMapParseState, SrcMap)
     go ':' (xs, F1 [] _, p@(SM a _ _ _ _))     = (xs, F2 a [] 1, p)
-    go ':' (xs, F1 ds k, p)                    = (xs, F2 (k * (read ds)) [] 1, p)
+    go ':' (xs, F1 ds k, p)                    = (xs, F2 (k * (readR ds)) [] 1, p)
     go '-' (xs, F1 [] _, p)                    = (xs, F1 [] (-1), p)
     go d   (xs, F1 ds k, p) | isDigit d        = (xs, F1 (d : ds) k, p)
     go ';' (xs, F1 [] k, p)                    = (xs |> p, F1 [] k, p)
-    go ';' (xs, F1 ds k, SM _ b c d e)         = let p' = SM (k * (read ds)) b c d e in (xs |> p', F1 [] 1, p')
+    go ';' (xs, F1 ds k, SM _ b c d e)         = let p' = SM (k * (readR ds)) b c d e in (xs |> p', F1 [] 1, p')
 
     go '-' (xs, F2 a [] _, p)                  = (xs, F2 a [] (-1), p)
     go d   (xs, F2 a ds k, p) | isDigit d      = (xs, F2 a (d : ds) k, p)
     go ':' (xs, F2 a [] _, p@(SM _ b _ _ _))   = (xs, F3 a b [] 1, p)
-    go ':' (xs, F2 a ds k, p)                  = (xs, F3 a (k * (read ds)) [] 1, p)
+    go ':' (xs, F2 a ds k, p)                  = (xs, F3 a (k * (readR ds)) [] 1, p)
     go ';' (xs, F2 a [] _, SM _ b c d e)       = let p' = SM a b c d e in (xs |> p', F1 [] 1, p')
-    go ';' (xs, F2 a ds k, SM _ _ c d e)       = let p' = SM a (k * (read ds)) c d e in
+    go ';' (xs, F2 a ds k, SM _ _ c d e)       = let p' = SM a (k * (readR ds)) c d e in
                                                  (xs |> p', F1 [] 1, p')
 
     go d   (xs, F3 a b ds k, p) | isDigit d    = (xs, F3 a b (d : ds) k, p)
     go '-' (xs, F3 a b [] _, p)                = (xs, F3 a b [] (-1), p)
     go ':' (xs, F3 a b [] _, p@(SM _ _ c _ _)) = (xs, F4 a b c Nothing, p)
-    go ':' (xs, F3 a b ds k, p)                = (xs, F4 a b (k * (read ds)) Nothing, p)
+    go ':' (xs, F3 a b ds k, p)                = (xs, F4 a b (k * (readR ds)) Nothing, p)
     go ';' (xs, F3 a b [] _, SM _ _ c d e)     = let p' = SM a b c d e in (xs |> p', F1 [] 1, p')
-    go ';' (xs, F3 a b ds k, SM _ _ _ d e)     = let p' = SM a b (k * (read ds)) d e in
+    go ';' (xs, F3 a b ds k, SM _ _ _ d e)     = let p' = SM a b (k * (readR ds)) d e in
                                                  (xs |> p', F1 [] 1, p')
 
     go 'i' (xs, F4 a b c Nothing, p)           = (xs, F4 a b c (Just JumpInto), p)
@@ -179,7 +180,7 @@ makeSrcMaps = (\case (_, Fe, _) -> Nothing; x -> Just (done x))
     go d   (xs, F5 a b c j ds, p) | isDigit d  = (xs, F5 a b c j (d : ds), p)
     go ';' (xs, F5 a b c j [], _)              = let p' = SM a b c j (-1) in -- solc <0.6
                                                  (xs |> p', F1 [] 1, p')
-    go ';' (xs, F5 a b c j ds, _)              = let p' = SM a b c j (read ds) in -- solc >=0.6
+    go ';' (xs, F5 a b c j ds, _)              = let p' = SM a b c j (readR ds) in -- solc >=0.6
                                                  (xs |> p', F1 [] 1, p')
 
     go c (xs, state, p)                      = (xs, error ("srcmap: y u " ++ show c ++ " in state" ++ show state ++ "?!?"), p)
