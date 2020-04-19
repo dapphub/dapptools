@@ -155,6 +155,9 @@ data Command w
   | MerkleTest -- Insert a set of key values and check against the given root
   { file :: w ::: String <?> "Path to .json test file"
   }
+  | StripMetadata -- Remove metadata from contract bytecode
+  { code        :: w ::: ByteString       <?> "Program bytecode"
+  }
 
   deriving (Options.Generic)
 
@@ -256,6 +259,8 @@ main = do
         Nothing -> error("Malformed RLP string")
         Just c -> putStrLn $ show c
     MerkleTest {} -> merkleTest cmd
+    StripMetadata {} -> print .
+      ByteStringS . stripBytecodeMetadata . hexByteString "bytecode" . strip0x $ code cmd
 
 launchScript :: String -> Command Options.Unwrapped -> IO ()
 launchScript script cmd = do
