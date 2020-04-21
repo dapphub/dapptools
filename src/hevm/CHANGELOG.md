@@ -1,5 +1,10 @@
 # hevm changelog
 
+## Unreleased
+ - Exposes metadata stripping of bytecode to the cli: `hevm strip-metadata --code X`. [357](https://github.com/dapphub/dapptools/pull/357).
+ - Fixes a bug in the srcmap parsing introduced in 0.37 [356](https://github.com/dapphub/dapptools/pull/356).
+ - Fixes a bug in the abi-encoding of `bytes` with size > 32[358](https://github.com/dapphub/dapptools/pull/358).
+
 ## 0.37 - 2020-03-24
  - Sourcemap parser now admits `solc-0.6.0` compiled `.sol.json` files.
 
