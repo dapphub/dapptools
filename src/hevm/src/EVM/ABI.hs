@@ -200,9 +200,8 @@ getAbi t = label (Text.unpack (abiTypeSolidity t)) $
 
 putAbi :: AbiValue -> Put
 putAbi = \case
-  AbiUInt n x -> do
-    let word32Count = div (roundTo256Bits n) 4
-    forM_ (reverse [0 .. word32Count - 1]) $ \i ->
+  AbiUInt _ x -> do
+    forM_ (reverse [0 .. 7]) $ \i ->
       putWord32be (fromIntegral (shiftR x (i * 32) .&. 0xffffffff))
 
   AbiInt n x   -> putAbi (AbiUInt n (fromIntegral x))
@@ -211,7 +210,7 @@ putAbi = \case
 
   AbiBytes n xs -> do
     forM_ [0 .. n-1] (putWord8 . BS.index xs)
-    replicateM_ (roundTo256Bits n - n) (putWord8 0)
+    replicateM_ (roundTo32Bytes n - n) (putWord8 0)
 
   AbiBytesDynamic xs -> do
     let n = BS.length xs
@@ -259,17 +258,17 @@ putAbiTail x =
 abiValueSize :: AbiValue -> Int
 abiValueSize x =
   case x of
-    AbiUInt n _  -> roundTo256Bits n
-    AbiInt  n _  -> roundTo256Bits n
-    AbiBytes n _ -> roundTo256Bits n
+    AbiUInt _ _  -> 32
+    AbiInt  _ _  -> 32
+    AbiBytes n _ -> roundTo32Bytes n
     AbiAddress _ -> 32
     AbiBool _    -> 32
     AbiArray _ _ xs -> Vector.sum (Vector.map abiHeadSize xs) +
                        Vector.sum (Vector.map abiTailSize xs)
-    AbiBytesDynamic xs -> 32 + roundTo256Bits (BS.length xs)
+    AbiBytesDynamic xs -> 32 + roundTo32Bytes (BS.length xs)
     AbiArrayDynamic _ xs -> 32 + Vector.sum (Vector.map abiHeadSize xs) +
                                 Vector.sum (Vector.map abiTailSize xs)
-    AbiString s -> 32 + roundTo256Bits (BS.length s)
+    AbiString s -> 32 + roundTo32Bytes (BS.length s)
     AbiTuple v  -> sum (abiValueSize <$> v)
 
 abiTailSize :: AbiValue -> Int
@@ -278,8 +277,8 @@ abiTailSize x =
     Static -> 0
     Dynamic ->
       case x of
-        AbiString s -> 32 + roundTo256Bits (BS.length s)
-        AbiBytesDynamic s -> 32 + roundTo256Bits (BS.length s)
+        AbiString s -> 32 + roundTo32Bytes (BS.length s)
+        AbiBytesDynamic s -> 32 + roundTo32Bytes (BS.length s)
         AbiArrayDynamic _ xs -> 32 + Vector.sum (Vector.map abiValueSize xs)
         AbiArray _ _ xs -> Vector.sum (Vector.map abiValueSize xs)
         AbiTuple v -> sum (headSize <$> v) + sum (abiTailSize <$> v)
@@ -294,9 +293,9 @@ abiHeadSize x =
     Dynamic -> 32
     Static ->
       case x of
-        AbiUInt n _  -> roundTo256Bits n
-        AbiInt  n _  -> roundTo256Bits n
-        AbiBytes n _ -> roundTo256Bits n
+        AbiUInt _ _  -> 32
+        AbiInt  _ _  -> 32
+        AbiBytes n _ -> roundTo32Bytes n
         AbiAddress _ -> 32
         AbiBool _    -> 32
         AbiArray _ _ xs -> Vector.sum (Vector.map abiHeadSize xs) +
@@ -391,8 +390,8 @@ asUInt n f = (\(AbiUInt _ x) -> f (fromIntegral x)) <$> getAbi (AbiUIntType n)
 getWord256 :: Get Word256
 getWord256 = pack32 8 <$> replicateM 8 getWord32be
 
-roundTo256Bits :: Integral a => a -> a
-roundTo256Bits n = 32 * div (n + 255) 256
+roundTo32Bytes :: Integral a => a -> a
+roundTo32Bytes n = 32 * div (n + 31) 32
 
 emptyAbi :: AbiValue
 emptyAbi = AbiTuple mempty
@@ -400,7 +399,7 @@ emptyAbi = AbiTuple mempty
 getBytesWith256BitPadding :: Integral a => a -> Get ByteString
 getBytesWith256BitPadding i =
   (BS.pack <$> replicateM n getWord8)
-    <* skip ((roundTo256Bits n) - n)
+    <* skip ((roundTo32Bytes n) - n)
   where n = fromIntegral i
 
 -- QuickCheck instances
