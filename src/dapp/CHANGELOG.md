@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Integration with `hevm`s new property based testing functionality. Any test with nonzero arguments will be interpreted as a property test whose arguments are randomly generated and run `--fuzz-runs` number of times.
 - Support for solc 0.5.16
 - Support for solc 0.6.0
+- Support for solc 0.6.6
 
 ### Changed
 - `--extract` flag for `dapp build` no longer needed for using `dapp create`.
