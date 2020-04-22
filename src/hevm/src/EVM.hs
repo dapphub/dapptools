@@ -950,6 +950,7 @@ exec1 = do
               : xOutSize
               : xs
              ) ->
+              (if xValue > 0 then notStatic else id) $
               case xTo of
                 n | n > 0 && n <= 9 ->
                   precompiledContract vm fees xGas xTo xTo xValue xInOffset xInSize xOutOffset xOutSize xs
@@ -958,7 +959,6 @@ exec1 = do
                     assign (state . stack) xs
                     cheat (xInOffset, xInSize) (xOutOffset, xOutSize)
                 _ ->
-                  (if xValue > 0 then notStatic else id) $
                     accessMemoryRange fees xInOffset xInSize $
                       accessMemoryRange fees xOutOffset xOutSize $ do
                         availableGas <- use (state . gas)
@@ -1164,7 +1164,6 @@ precompiledContract
   -> [Word]
   -> EVM ()
 precompiledContract vm fees gasCap precompileAddr recipient xValue inOffset inSize outOffset outSize xs =
-  (if xValue == 0 then notStatic else id) $
     accessMemoryRange fees inOffset inSize $
       accessMemoryRange fees outOffset outSize $ do
         availableGas <- use (state . gas)
