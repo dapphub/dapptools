@@ -1,6 +1,6 @@
 # hevm changelog
 
-## Unreleased
+## 0.38 - 2020-04-23
  - Exposes metadata stripping of bytecode to the cli: `hevm strip-metadata --code X`. [357](https://github.com/dapphub/dapptools/pull/357).
  - Fixes a bug in the srcmap parsing introduced in 0.37 [356](https://github.com/dapphub/dapptools/pull/356).
  - Fixes a bug in the abi-encoding of `bytes` with size > 32[358](https://github.com/dapphub/dapptools/pull/358).
