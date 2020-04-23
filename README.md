@@ -3,7 +3,7 @@
 Hello!
 
 This repository contains the source code for several Ethereum tools
-hand-crafted and maintained by DappHub, along with dependency management, courtesy of Nix.
+hand-crafted and maintained by DappHub, along with dependency management, courtesy of [Nix](https://nixos.org/nix/).
 
 Contents:
 
