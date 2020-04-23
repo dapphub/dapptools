@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [unreleased]
+## [0.27.0] - 2020-04-23
 ### Added
 - Integration with `hevm`s new property based testing functionality. Any test with nonzero arguments will be interpreted as a property test whose arguments are randomly generated and run `--fuzz-runs` number of times.
 - Support for solc 0.5.16
@@ -163,3 +163,6 @@ changelog.
 [0.22.0]: https://github.com/dapphub/dapptools/tree/dapp/0.22.0
 [0.23.0]: https://github.com/dapphub/dapptools/tree/dapp/0.23.0
 [0.24.0]: https://github.com/dapphub/dapptools/tree/dapp/0.24.0
+[0.25.0]: https://github.com/dapphub/dapptools/tree/dapp/0.25.0
+[0.26.0]: https://github.com/dapphub/dapptools/tree/dapp/0.26.0
+[0.27.0]: https://github.com/dapphub/dapptools/tree/dapp/0.27.0
