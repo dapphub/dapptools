@@ -1505,11 +1505,15 @@ finalize = do
 
 loadContract :: Addr -> EVM ()
 loadContract target =
-  preuse (env . contracts . ix target . bytecode) >>=
+  preuse (env . contracts . ix target . contractcode) >>=
     \case
       Nothing ->
         error "Call target doesn't exist"
-      Just targetCode -> do
+      Just (InitCode targetCode) -> do
+        assign (state . contract) target
+        assign (state . code)     targetCode
+        assign (state . codeContract) target
+      Just (RuntimeCode targetCode) -> do
         assign (state . contract) target
         assign (state . code)     targetCode
         assign (state . codeContract) target
