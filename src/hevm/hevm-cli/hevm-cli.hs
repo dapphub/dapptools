@@ -119,6 +119,7 @@ data Command w
       , dappRoot :: w ::: Maybe String <?> "Path to dapp project root directory (default: . )"
       , rpc      :: w ::: Maybe URL    <?> "Fetch state from a remote node"
       , state    :: w ::: Maybe String <?> "Path to state repository"
+      , replay   :: w ::: Maybe (Text, ByteString) <?> "Custom fuzz case to run/debug"
       }
   | BcTest -- Run an Ethereum Blockhain/GeneralState test
       { file    :: w ::: String    <?> "Path to .json test file"
