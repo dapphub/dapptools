@@ -12,7 +12,14 @@ if (process.argv.length >= 3 &&
   const sig = process.argv[2];
   try {
     const funcs = new ethers.utils.Interface(["function " + sig.replace(')(', ') returns (')]).functions;
-    const args = process.argv.slice(3).map(s => s.match(/\[.*\]/) ? JSON.parse(s) : s)
+    const args = process.argv.slice(3).map(s => {
+      try {
+        return JSON.parse(s)
+      }
+      catch (e) {
+        return s
+      }
+    })
     console.log(funcs[Object.keys(funcs)[0]].encode(args))
   } catch (e) {
     console.error(e.toString())
