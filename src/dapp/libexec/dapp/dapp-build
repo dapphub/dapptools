@@ -38,6 +38,7 @@ info() {
 
 IFS=" " read -r -a opts <<<"$SOLC_FLAGS"
 json_opts=--combined-json=abi,bin,bin-runtime,srcmap,srcmap-runtime,ast,metadata
+solc --help | grep -q -- --storage-layout && json_opts+=,storage-layout
 solc --help | grep -q -- --overwrite && opts+=(--overwrite)
 
 remappings=$(dapp remappings)
