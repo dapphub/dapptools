@@ -3,21 +3,18 @@ module EVM.StorageLayout where
 -- Figures out the layout of storage slots for Solidity contracts.
 
 import EVM.Dapp (DappInfo, dappAstSrcMap, dappAstIdMap)
-import EVM.Solidity (SolcContract, creationSrcmap)
-import EVM.ABI (AbiType (..), parseTypeName, abiTypeSolidity)
+import EVM.Solidity (SolcContract, creationSrcmap, SlotType(..))
+import EVM.ABI (AbiType (..), parseTypeName)
 
 import Data.Aeson (Value (Number))
 import Data.Aeson.Lens
 
 import Control.Lens
 
-import Data.Text (Text, unpack, words)
+import Data.Text (Text, unpack, pack, words)
 
 import Data.Foldable (toList)
 import Data.Maybe (fromMaybe, isJust)
-import Data.Monoid ((<>))
-
-import Data.List.NonEmpty (NonEmpty)
 import qualified Data.List.NonEmpty as NonEmpty
 
 import qualified Data.Sequence as Seq
@@ -80,7 +77,7 @@ storageVariablesForContract node = do
             [ variableName
             , " (", name, ")"
             , "\n", "  Type: "
-            , slotTypeSolidity (slotTypeForDeclaration x)
+            , pack $ show (slotTypeForDeclaration x)
             ]
         Nothing ->
           error "malformed variable declaration"
@@ -97,35 +94,6 @@ isStorageVariableDeclaration :: Value -> Bool
 isStorageVariableDeclaration x =
   nodeIs "VariableDeclaration" x
     && preview (key "attributes" . key "constant" . _Bool) x /= Just True
-
-data SlotType
-  -- Note that mapping keys can only be elementary;
-  -- that excludes arrays, contracts, and mappings.
-  = StorageMapping (NonEmpty AbiType) AbiType
-  | StorageValue AbiType
-  deriving Eq
-
-instance Show SlotType where
-  show = unpack . slotTypeSolidity
-
-slotTypeSolidity :: SlotType -> Text
-slotTypeSolidity =
-  \case
-    StorageValue t ->
-      abiTypeSolidity t
-    StorageMapping (s NonEmpty.:| ss) t ->
-      "mapping("
-        <> abiTypeSolidity s
-        <> " => "
-        <> foldr
-             (\x y ->
-               "mapping("
-                 <> abiTypeSolidity x
-                 <> " => "
-                 <> y
-                 <> ")")
-             (abiTypeSolidity t) ss
-        <> ")"
 
 slotTypeForDeclaration :: Value -> SlotType
 slotTypeForDeclaration node =
