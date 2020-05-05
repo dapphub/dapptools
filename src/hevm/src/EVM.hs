@@ -29,9 +29,6 @@ import qualified EVM.Precompiled
 import Data.Binary.Get (runGetOrFail)
 import Data.Text (Text)
 import Data.Word (Word8, Word32)
-import Data.Bits (bit, testBit, complement, xor, shiftR, (.&.), (.|.), FiniteBits(..))
-
-import GHC.TypeNats
 import Control.Lens hiding (op, (:<), (|>), (.>))
 import Control.Monad.State.Strict hiding (state)
 
@@ -1479,11 +1476,11 @@ accessStorage addr slot continue =
   where
       mkQuery = assign result . Just . VMFailure . Query $
                   PleaseFetchSlot addr (forceLit slot)
-                    (\x -> do
-                        modifying (cache . fetched . ix addr . storage) (writeStorage slot (litWord x))
-                        modifying (env . contracts . ix addr . storage) (writeStorage slot (litWord x))
+                    (\(litWord -> x) -> do
+                        modifying (cache . fetched . ix addr . storage) (writeStorage slot x)
+                        modifying (env . contracts . ix addr . storage) (writeStorage slot x)
                         assign result Nothing
-                        continue $ litWord x)
+                        continue x)
 
 accountExists :: Addr -> VM -> Bool
 accountExists addr vm =

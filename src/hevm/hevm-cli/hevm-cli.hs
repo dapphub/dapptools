@@ -87,7 +87,7 @@ import Options.Generic as Options
 -- automatically via the `optparse-generic` package.
 data Command w
   = Assert -- Execute a given program with specified env & calldata
-      { code          :: w ::: ByteString                <?> "Program bytecode"
+      { code          :: w ::: Maybe ByteString          <?> "Program bytecode"
       , funcSig       :: w ::: Text                      <?> "Function signature"
       }
   | Exec -- Execute a given program with specified env & calldata
@@ -342,7 +342,8 @@ assert cmd =
         case view EVM.result output of
           Just (EVM.VMFailure (EVM.UnrecognizedOpcode 254)) -> sFalse
           _ -> sTrue
-  in do results <- runSMT $ query $ verify (EVM.RuntimeCode (code cmd)) (funcSig cmd) (const sTrue) post
+      bytecode = maybe (error "bytecode not given") EVM.RuntimeCode (code cmd)
+  in do results <- runSMT $ query $ verify bytecode (funcSig cmd) (const sTrue) post
         case results of
           Left () -> print "All good"
           Right a -> do print "Assertion violation:"
@@ -552,7 +553,7 @@ runVMTest diffmode execmode mode timelimit (name, x) = do
           Timeout.timeout (1e6 * (fromMaybe 10 timelimit)) . evaluate $ do
             execState (VMTest.interpret . void $ EVM.Stepper.execFully) vm0
         Debug ->
-          Just <$> EVM.TTY.runFromVM vm0
+          Just <$> EVM.TTY.runFromVM EVM.Fetch.zero vm0
     waitCatch action
   case result of
     Right (Just vm1) -> do

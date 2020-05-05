@@ -1,16 +1,19 @@
 {-# Language DeriveAnyClass #-}
 {-# Language StrictData #-}
 {-# Language TemplateHaskell #-}
+{-# Language OverloadedStrings #-}
 
 module EVM.Solidity
   ( solidity
   , solcRuntime
   , JumpType (..)
   , SolcContract (..)
+  , StorageItem (..)
   , SourceCache (..)
   , SrcMap (..)
   , CodeType (..)
   , Method (..)
+  , SlotType (..)
   , methodName
   , methodSignature
   , methodInputs
@@ -51,6 +54,7 @@ import Control.Applicative
 import Control.Lens         hiding (Indexed)
 import Data.Aeson           (Value (..))
 import Data.Aeson.Lens
+import Data.Scientific
 import Data.Binary.Get      (runGet, getWord16be)
 import Data.ByteString      (ByteString)
 import Data.ByteString.Lazy (fromStrict)
@@ -59,6 +63,8 @@ import Data.Either          (isRight)
 import Data.Foldable hiding (concat)
 import Data.Map.Strict      (Map)
 import Data.Maybe
+import Data.List.NonEmpty   (NonEmpty)
+import qualified Data.List.NonEmpty as NonEmpty
 import Data.Semigroup
 import Data.Sequence        (Seq)
 import Data.Text            (Text, pack, intercalate, splitOn, concat)
@@ -80,6 +86,45 @@ import qualified Data.Map.Strict        as Map
 import qualified Data.Text              as Text
 import qualified Data.Vector            as Vector
 
+data StorageItem = StorageItem {
+  _type  :: SlotType,
+  _offset :: Int,
+  _slot   :: Int
+  } deriving (Show, Eq)
+  
+data SlotType
+  -- Note that mapping keys can only be elementary;
+  -- that excludes arrays, contracts, and mappings.
+  = StorageMapping (NonEmpty AbiType) AbiType
+  | StorageValue AbiType
+--  | StorageArray AbiType
+  deriving Eq
+
+instance Show SlotType where
+ show (StorageValue t) = show t
+ show (StorageMapping (s NonEmpty.:| ss) t) =
+      "mapping("
+        <> show s
+        <> " => "
+        <> foldr
+             (\x y ->
+               "mapping("
+                 <> show x
+                 <> " => "
+                 <> y
+                 <> ")")
+             (show t) ss
+        <> ")"
+
+instance Read SlotType where
+  readsPrec _ ('m':'a':'p':'p':'i':'n':'g':'(':s) =
+    let (lhs:rhs) = Text.splitOn " => " (pack s)
+        first = fromJust $ parseTypeName mempty lhs
+        target = fromJust $ parseTypeName mempty (Text.replace ")" "" (last rhs))
+        rest = fmap (fromJust . (parseTypeName mempty . (Text.replace "mapping(" ""))) (take (length rhs - 1) rhs)
+    in [(StorageMapping (first NonEmpty.:| rest) target, "")]
+  readsPrec _ s = [(StorageValue $ fromMaybe (error "could not parse storage item") (parseTypeName mempty (pack s)),"")]
+
 data SolcContract = SolcContract
   { _runtimeCodehash  :: W256
   , _creationCodehash :: W256
@@ -89,6 +134,7 @@ data SolcContract = SolcContract
   , _constructorInputs :: [(Text, AbiType)]
   , _abiMap           :: Map Word32 Method
   , _eventMap         :: Map W256 Event
+  , _storageLayout    :: Maybe (Map Text StorageItem)
   , _runtimeSrcmap    :: Seq SrcMap
   , _creationSrcmap   :: Seq SrcMap
   , _contractAst      :: Value
@@ -311,8 +357,24 @@ readJSON json = do
                                 then Indexed
                                 else NotIndexed ))
                     (toList $ abi ^?! key "inputs" . _Array))
-              )
+              ),
+         _storageLayout = mkStorageLayout $ x ^? key "storage-layout" . _String
       })
+
+mkStorageLayout :: Maybe Text -> Maybe (Map Text StorageItem)
+mkStorageLayout Nothing = Nothing
+mkStorageLayout (Just json) = do items <- json ^? key "storage" . _Array
+                                 types <- json ^? key "types"
+                                 Map.fromList <$> mapM
+                                    (\item -> do name <- item ^? key "label" . _String
+                                                 offset <- item ^? key "offset" . _Number >>= toBoundedInteger
+                                                 slot <- item ^? key "slot" . _String
+                                                 typ <- item ^? key "type" . _String
+                                                 slotType <- types ^?! key typ ^? key "label" . _String
+                                                 return (name, StorageItem (read $ Text.unpack slotType) offset (read $ Text.unpack slot))
+
+                                    )
+                                    (Vector.toList items)
 
 signature :: AsValue s => s -> Text
 signature abi =
