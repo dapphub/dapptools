@@ -235,7 +235,7 @@ main = defaultMain $ testGroup "hevm"
                   prex = readArray prestore 0
                   postx = readArray poststore 0
               in case view result poststate of
-                Just (VMSuccess mempty) -> prex + 2 * (fromBytes y) .== postx
+                Just (VMSuccess _) -> prex + 2 * (fromBytes y) .== postx
                 _ -> sFalse
         nothing <- runSMTWith z3{transcript=Just "z3log.log"} $ query $
           verify (RuntimeCode c) "f(uint256)" pre post
