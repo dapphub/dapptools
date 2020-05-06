@@ -14,7 +14,12 @@ if (process.argv.length >= 3 &&
     const funcs = new ethers.utils.Interface(["function " + sig.replace(')(', ') returns (')]).functions;
     const args = process.argv.slice(3).map(s => {
       try {
-        return JSON.parse(s)
+        const parsed = JSON.parse(s)
+        if (typeof(parsed) == "number") {
+          return s
+        } else {
+          return parsed
+        }
       }
       catch (e) {
         return s
