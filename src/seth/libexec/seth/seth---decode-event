@@ -1,20 +1,19 @@
-#!/usr/bin/env node
-//seth---decode-event -- decode hexdata into event form
-const usage = "Usage: seth --decode-event <abi-json> <event-name> <hexdata>";
-if (process.argv.length == 5) {
-  // silence warnings we don't care about
-  const log = console.log
-  console.log = () => {};
-  const ethers = require("./ethers.min.js");
-  console.log = log;
-  try {
-    const events = new ethers.utils.Interface(process.argv[2]).events;
-    console.log(events[process.argv[3]].decode(process.argv[4]).join('\n'))
-  } catch (e) {
-    console.error(e.toString())
-    process.exit(1)
+#!/usr/bin/env bash
+set -e
+mapfile -t topics < <(jshon -e topics -a -u <<<"$1")
+tx=$(jshon -e transactionHash -u <<<"$1")
+data=$(jshon -e data -u <<<"$1")
+data=${data#0x}
+[ "$data" == 00 ] && data="" # TODO: fix this? needed for ganache-cli
+event=$(seth --event-name "${topics[0]}")
+if [[ $event ]]; then
+  for x in "${topics[@]}"; do ethabi+=(-l "${x#0x}"); done
+  ethabi decode log <(echo "${SETH_ABI?}") \
+  "$event" "${ethabi[@]}" "$data" | {
+    while read -r param value; do
+      jshon+=(-s "$value" -i "$param")
+    done
+    jshon <<<{} -s "$event" -i type -s "$tx" -i tx \
+    -n {} "${jshon[@]}" -i data -j
   }
-} else {
-  console.log(usage)
-  process.exit(1)
-}
+fi
