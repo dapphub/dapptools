@@ -4,7 +4,7 @@ with rustPlatform;
 
 buildRustPackage rec {
   name = "ethabi-${version}";
-  version = "7.0.0";
+  version = "10.0.0";
 
   src = fetchFromGitHub {
     owner = "paritytech";
