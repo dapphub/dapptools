@@ -5,6 +5,7 @@
 {-# Language DataKinds #-}
 {-# Language FlexibleInstances #-}
 {-# Language DeriveGeneric #-}
+{-# Language GADTs #-}
 {-# Language GeneralizedNewtypeDeriving #-}
 {-# Language LambdaCase #-}
 {-# Language NumDecimals #-}
@@ -47,15 +48,17 @@ import qualified EVM.UnitTest  as EVM.UnitTest
 
 import Control.Concurrent.Async   (async, waitCatch)
 import Control.Exception          (evaluate)
+import qualified Control.Monad.Operational as Operational
+import qualified Control.Monad.State.Class as State
 import Control.Lens
 import Control.Applicative
 import Control.Monad              (void, when, forM_)
-import Control.Monad.State.Strict (execState)
+import Control.Monad.State.Strict (execState, runState, StateT, liftIO, execStateT)
 import Data.ByteString            (ByteString)
 import Data.List                  (intercalate, isSuffixOf)
 import Data.Text                  (Text, unpack, pack)
 import Data.Text.Encoding         (encodeUtf8)
-import Data.Maybe                 (fromMaybe)
+import Data.Maybe                 (fromMaybe, fromJust)
 import Data.Version               (showVersion)
 import System.Directory           (withCurrentDirectory, listDirectory)
 import System.Exit                (die, exitFailure)
@@ -83,7 +86,7 @@ import Options.Generic as Options
 -- automatically via the `optparse-generic` package.
 data Command w
   = Exec -- Execute a given program with specified env & calldata
-      { code        :: w ::: ByteString       <?> "Program bytecode"
+      { code        :: w ::: Maybe ByteString <?> "Program bytecode"
       , calldata    :: w ::: Maybe ByteString <?> "Tx: calldata"
       , address     :: w ::: Maybe Addr       <?> "Tx: address"
       , caller      :: w ::: Maybe Addr       <?> "Tx: caller"
@@ -101,6 +104,8 @@ data Command w
       , difficulty  :: w ::: Maybe W256       <?> "Block: difficulty"
       , debug       :: w ::: Bool             <?> "Run interactively"
       , state       :: w ::: Maybe String     <?> "Path to state repository"
+      , rpc         :: w ::: Maybe URL        <?> "Fetch state from a remote node"
+      , block       :: w ::: Maybe W256       <?> "Block state is be fetched from"
       }
   | DappTest -- Run DSTest unit tests
       { jsonFile    :: w ::: Maybe String             <?> "Filename or path to dapp build output (default: out/*.solc.json)"
@@ -157,7 +162,7 @@ data Command w
   { file :: w ::: String <?> "Path to .json test file"
   }
   | StripMetadata -- Remove metadata from contract bytecode
-  { code        :: w ::: ByteString       <?> "Program bytecode"
+  { code        :: w ::: Maybe ByteString       <?> "Program bytecode"
   }
 
   deriving (Options.Generic)
@@ -261,7 +266,7 @@ main = do
         Just c -> putStrLn $ show c
     MerkleTest {} -> merkleTest cmd
     StripMetadata {} -> print .
-      ByteStringS . stripBytecodeMetadata . hexByteString "bytecode" . strip0x $ code cmd
+      ByteStringS . stripBytecodeMetadata . hexByteString "bytecode" . strip0x $ fromJust $ code cmd
 
 launchScript :: String -> Command Options.Unwrapped -> IO ()
 launchScript script cmd = do
@@ -351,7 +356,7 @@ dappCoverage opts _ solcFile = do
 
 launchExec :: Command Options.Unwrapped -> IO ()
 launchExec cmd = do
-  let vm = vmFromCommand cmd
+  vm <- vmFromCommand cmd
   vm1 <- case state cmd of
     Nothing -> pure vm
     Just path ->
@@ -361,9 +366,9 @@ launchExec cmd = do
       Facts.apply vm <$> Git.loadFacts (Git.RepoAt path)
 
   case optsMode cmd of
-    Run ->
-      let vm' = execState exec vm1
-      in case view EVM.result vm' of
+    Run -> do
+      vm' <- execStateT (interpret fetcher . void $ EVM.Stepper.execFully) vm1
+      case view EVM.result vm' of
         Nothing ->
           error "internal error; no EVM result"
         Just (EVM.VMFailure (EVM.Revert msg)) -> do
@@ -376,8 +381,9 @@ launchExec cmd = do
             Nothing -> pure ()
             Just path ->
               Git.saveFacts (Git.RepoAt path) (Facts.vmFacts vm')
-    Debug ->
-      void (EVM.TTY.runFromVM vm1)
+    Debug -> void (EVM.TTY.runFromVM fetcher vm1)
+   where fetcher = maybe EVM.Fetch.zero (EVM.Fetch.http block') (rpc cmd)
+         block'  = maybe EVM.Fetch.Latest EVM.Fetch.BlockNumber (block cmd)
 
 data Testcase = Testcase {
   _entries :: [(Text, Maybe Text)],
@@ -434,39 +440,52 @@ tohexOrText s = case "0x" `Char8.isPrefixOf` encodeUtf8 s of
                   False -> encodeUtf8 s
 
 
-vmFromCommand :: Command Options.Unwrapped -> EVM.VM
-vmFromCommand cmd =
-  vm1 & EVM.env . EVM.contracts . ix address' . EVM.balance +~ (w256 value')
-  where
-    value'   = word value 0
-    caller'  = addr caller 0
-    origin'  = addr origin caller'
-    address' = if create cmd
-          then createAddress origin' (word nonce 0)
-          else addr address 0xacab
-
-    vm1 = EVM.makeVm $ EVM.VMOpts
-      { EVM.vmoptCode          = hexByteString "--code" (strip0x (code cmd))
-      , EVM.vmoptCalldata      = maybe "" (hexByteString "--calldata" . strip0x)
-                                   (calldata cmd)
-      , EVM.vmoptValue         = value'
-      , EVM.vmoptAddress       = address'
-      , EVM.vmoptCaller        = caller'
-      , EVM.vmoptOrigin        = origin'
-      , EVM.vmoptGas           = word gas 0
-      , EVM.vmoptGaslimit      = word gas 0
-      , EVM.vmoptCoinbase      = addr coinbase 0
-      , EVM.vmoptNumber        = word number 0
-      , EVM.vmoptTimestamp     = word timestamp 0
-      , EVM.vmoptBlockGaslimit = word gaslimit 0
-      , EVM.vmoptGasprice      = word gasprice 0
-      , EVM.vmoptMaxCodeSize   = word maxcodesize 0xffffffff
-      , EVM.vmoptDifficulty    = word difficulty 0
-      , EVM.vmoptSchedule      = FeeSchedule.istanbul
-      , EVM.vmoptCreate        = create cmd
-      }
-    word f def = maybe def id (f cmd)
-    addr f def = maybe def id (f cmd)
+vmFromCommand :: Command Options.Unwrapped -> IO EVM.VM
+vmFromCommand cmd = do
+  vm <- case (code cmd, rpc cmd) of
+     (Nothing, Nothing) -> error "Missing: --code TEXT or --rpc TEXT"
+     (Just c,  Nothing) -> return $ vm1 (EVM.initialContract (codeType (hexByteString "--code" (strip0x c))))
+     (a     , Just url) -> do maybeContract <- EVM.Fetch.fetchContractFrom block' url address'
+                              case maybeContract of
+                                  Nothing -> error $ "contract not found: " <> show address'
+                                  Just contract' -> case a of
+                                    Nothing -> return (vm1 contract')
+                                    -- if both code and url is given,
+                                    -- fetch the contract then overwrite the code
+                                    Just c -> return $ (vm1 contract') & set (EVM.state . EVM.code) c
+  return $ vm & EVM.env . EVM.contracts . ix address' . EVM.balance +~ (w256 value')
+      where
+        block'   = maybe EVM.Fetch.Latest EVM.Fetch.BlockNumber (block cmd)
+        value'   = word value 0
+        caller'  = addr caller 0
+        origin'  = addr origin caller'
+        codeType = if create cmd then EVM.InitCode else EVM.RuntimeCode
+        address' = if create cmd
+              then createAddress origin' (word nonce 0)
+              else addr address 0xacab
+    
+        vm1 c = EVM.makeVm $ EVM.VMOpts
+          { EVM.vmoptContract      = c
+          , EVM.vmoptCalldata      = maybe "" ((hexByteString "--calldata") . strip0x)
+                                       (calldata cmd)
+          , EVM.vmoptValue         = value'
+          , EVM.vmoptAddress       = address'
+          , EVM.vmoptCaller        = caller'
+          , EVM.vmoptOrigin        = origin'
+          , EVM.vmoptGas           = word gas 0
+          , EVM.vmoptGaslimit      = word gas 0
+          , EVM.vmoptCoinbase      = addr coinbase 0
+          , EVM.vmoptNumber        = word number 0
+          , EVM.vmoptTimestamp     = word timestamp 0
+          , EVM.vmoptBlockGaslimit = word gaslimit 0
+          , EVM.vmoptGasprice      = word gasprice 0
+          , EVM.vmoptMaxCodeSize   = word maxcodesize 0xffffffff
+          , EVM.vmoptDifficulty    = word difficulty 0
+          , EVM.vmoptSchedule      = FeeSchedule.istanbul
+          , EVM.vmoptCreate        = create cmd
+          }
+        word f def = maybe def id (f cmd)
+        addr f def = maybe def id (f cmd)
 
 launchTest :: ExecMode -> Command Options.Unwrapped ->  IO ()
 launchTest execmode cmd = do
@@ -504,7 +523,7 @@ runVMTest diffmode execmode mode timelimit (name, x) = do
           Timeout.timeout (1e6 * (fromMaybe 10 timelimit)) . evaluate $ do
             execState (VMTest.interpret . void $ EVM.Stepper.execFully) vm0
         Debug ->
-          Just <$> EVM.TTY.runFromVM vm0
+          Just <$> EVM.TTY.runFromVM EVM.Fetch.zero vm0
     waitCatch action
   case result of
     Right (Just vm1) -> do
@@ -521,3 +540,32 @@ runVMTest diffmode execmode mode timelimit (name, x) = do
       return False
 
 #endif
+
+interpret
+  :: (EVM.Query -> IO (EVM.EVM ()))
+  -> EVM.Stepper.Stepper a
+  -> StateT EVM.VM IO (Either EVM.Stepper.Failure a)
+interpret fetcher =
+  eval . Operational.view
+
+  where
+    eval
+      :: Operational.ProgramView EVM.Stepper.Action a
+      -> StateT EVM.VM IO (Either EVM.Stepper.Failure a)
+
+    eval (Operational.Return x) =
+      pure (Right x)
+
+    eval (action Operational.:>>= k) =
+      case action of
+        EVM.Stepper.Exec ->
+          exec >>= interpret fetcher . k
+        EVM.Stepper.Wait q ->
+          do m <- liftIO (fetcher q)
+             State.state (runState m) >> interpret fetcher (k ())
+        EVM.Stepper.Note _ ->
+          interpret fetcher (k ())
+        EVM.Stepper.Fail e ->
+          pure (Left e)
+        EVM.Stepper.EVM m ->
+          State.state (runState m) >>= interpret fetcher . k

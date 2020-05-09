@@ -253,11 +253,11 @@ mkVty = do
   V.setMode (V.outputIface vty) V.BracketedPaste True
   return vty
 
-runFromVM :: VM -> IO VM
-runFromVM vm = do
+runFromVM :: (Query -> IO (EVM ())) -> VM -> IO VM
+runFromVM oracle' vm = do
   let
     opts = UnitTestOptions
-      { oracle            = Fetch.zero
+      { oracle            = oracle'
       , verbose           = Nothing
       , match             = ""
       , fuzzRuns          = 1
@@ -470,7 +470,15 @@ appEvent (ViewVm s) (VtyEvent (V.EvKey (V.KChar 'e') [])) =
 
 -- Vm Overview: a - step
 appEvent (ViewVm s) (VtyEvent (V.EvKey (V.KChar 'a') [])) =
-  takeStep (view uiVmFirstState s) StepTimidly StepNone
+      -- We keep the current cache so we don't have to redo
+      -- any blocking queries, and also the memory view.
+      let
+        s0 = view uiVmFirstState s
+        s1 = set (uiVm . cache)   (view (uiVm . cache) s) s0
+        s2 = set (uiVmShowMemory) (view uiVmShowMemory s) s1
+        s3 = set (uiVmTestOpts)   (view uiVmTestOpts s) s2
+
+      in takeStep s3 StepTimidly StepNone
 
 -- Vm Overview: p - step
 appEvent st@(ViewVm s) (VtyEvent (V.EvKey (V.KChar 'p') [])) =
