@@ -25,6 +25,7 @@ import qualified EVM.VMTest as VMTest
 #endif
 
 import EVM.Concrete (createAddress, w256)
+import EVM.ABI (sig)
 import EVM.Symbolic
 import EVM.Debug
 import EVM.Exec
@@ -77,7 +78,7 @@ import qualified Data.Sequence          as Seq
 import qualified System.Timeout         as Timeout
 
 import qualified Paths_hevm      as Paths
-import qualified Text.Regex.TDFA as Regex
+--import qualified Text.Regex.TDFA as Regex
 
 import Options.Generic as Options
 
@@ -85,11 +86,12 @@ import Options.Generic as Options
 -- automatically via the `optparse-generic` package.
 data Command w
   = Assert -- Execute a given program with specified env & calldata
-      { code          :: w ::: Maybe ByteString          <?> "Program bytecode"
-      , funcSig       :: w ::: Text                      <?> "Function signature"
+      { code        :: w ::: Maybe ByteString   <?> "Program bytecode"
+      , funcSig     :: w ::: Text               <?> "Function signature"
+      , debug       :: w ::: Bool               <?> "Run interactively"
       }
   | Exec -- Execute a given program with specified env & calldata
-      { code        :: w ::: Maybe ByteString       <?> "Program bytecode"
+      { code        :: w ::: Maybe ByteString <?> "Program bytecode"
       , calldata    :: w ::: Maybe ByteString <?> "Tx: calldata"
       , address     :: w ::: Maybe Addr       <?> "Tx: address"
       , caller      :: w ::: Maybe Addr       <?> "Tx: caller"
@@ -317,28 +319,41 @@ dappTest opts _ solcFile =
         error ("Failed to read Solidity JSON for `" ++ solcFile ++ "'")
 
 regexMatches :: Text -> Text -> Bool
-regexMatches regexSource =
-  let
-    compOpts =
-      Regex.defaultCompOpt { Regex.lastStarGreedy = True }
-    execOpts =
-      Regex.defaultExecOpt { Regex.captureGroups = False }
-    regex = Regex.makeRegexOpts compOpts execOpts (unpack regexSource)
-  in
-    Regex.matchTest regex . Seq.fromList . unpack
+regexMatches = error "wait"
+-- regexMatches regexSource =
+--   let
+--     compOpts =
+--       Regex.defaultCompOpt { Regex.lastStarGreedy = True }
+--     execOpts =
+--       Regex.defaultExecOpt { Regex.captureGroups = False }
+--     regex = Regex.makeRegexOpts compOpts execOpts (unpack regexSource)
+--   in
+--     Regex.matchTest regex . Seq.fromList . unpack
 
 assert :: Command Options.Unwrapped -> IO ()
 assert cmd =
-  let post = Just $ \(input, output) ->
-        case view EVM.result output of
-          Just (EVM.VMFailure (EVM.UnrecognizedOpcode 254)) -> sFalse
-          _ -> sTrue
-      bytecode = maybe (error "bytecode not given") EVM.RuntimeCode (code cmd)
-  in do results <- runSMT $ query $ verify bytecode (funcSig cmd) (const sTrue) post
-        case results of
-          Left () -> print "All good"
-          Right a -> do print "Assertion violation:"
-                        print a
+  if debug cmd
+  then do
+    -- todo; merge with vmFromCommand or not?
+      let Just types = parseFunArgs $ funcSig cmd
+          bytecode = maybe (error "bytecode not given") (hexByteString "--code" . strip0x) (code cmd)
+      void . runSMT $ query $ do input <- symAbiArg types
+                                 let calldata' = litBytes (sig (funcSig cmd)) <> input
+                                 symstore <- freshArray_ Nothing
+                                 let preState = loadSymVM bytecode symstore calldata'
+                                 io (EVM.TTY.runFromVM EVM.Fetch.zero preState)
+
+  else
+    let post = Just $ \(input, output) ->
+          case view EVM.result output of
+            Just (EVM.VMFailure (EVM.UnrecognizedOpcode 254)) -> sFalse
+            _ -> sTrue
+        bytecode = maybe (error "bytecode not given") EVM.RuntimeCode (code cmd)
+    in do results <- runSMT $ query $ verify bytecode (funcSig cmd) (const sTrue) post
+          case results of
+            Left () -> print "All good"
+            Right a -> do print "Assertion violation:"
+                          print a
 
 dappCoverage :: UnitTestOptions -> Mode -> String -> IO ()
 dappCoverage opts _ solcFile =
