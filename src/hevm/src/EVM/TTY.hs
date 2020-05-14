@@ -215,6 +215,12 @@ interpret mode =
                       -- let's do it later.
                       r -> pure r
 
+        -- Stepper is waiting for user input from a query
+        Stepper.Wait (PleaseChoosePath _) -> do
+                  -- pause & await user.
+                  pure (Stepped (Operational.singleton action >>= k))
+                  -- pure (Stepped (Stepper.exec >>= k))
+
         -- Stepper wants to make a query and wait for the results?
         Stepper.Wait q ->
           -- Tell the TTY to run an I/O action to produce the next stepper.
@@ -499,6 +505,25 @@ appEvent st@(ViewVm s) (VtyEvent (V.EvKey (V.KChar 'p') [])) =
       -- Take n steps; "timidly," because all queries
       -- ought to be cached.
       takeStep s3 StepTimidly (StepMany (n - 1))
+
+-- Vm Overview: 0 - choose no jump
+appEvent st@(ViewVm s) (VtyEvent (V.EvKey (V.KChar '0') [])) =
+  case view (uiVm . result) s of
+    Just (VMFailure (Query (PleaseChoosePath contin))) ->
+      takeStep (s & set uiVm (execState (contin 0) (view uiVm s)))
+        StepNormally
+        StepNone
+    _ -> continue (ViewVm s)
+
+-- Vm Overview: 1 - choose jump
+appEvent st@(ViewVm s) (VtyEvent (V.EvKey (V.KChar '1') [])) =
+  case view (uiVm . result) s of
+    Just (VMFailure (Query (PleaseChoosePath contin))) ->
+      takeStep (s & set uiVm (execState (contin 1) (view uiVm s)))
+        StepNormally
+        StepNone
+    _ -> continue (ViewVm s)
+
 
 -- Any: Esc - return to Vm Overview or Exit
 appEvent s (VtyEvent (V.EvKey V.KEsc [])) =

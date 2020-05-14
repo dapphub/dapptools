@@ -15,7 +15,7 @@ module EVM where
 
 import Prelude hiding (log, Word, exponent)
 
-import Data.SBV hiding (Word, output)
+import Data.SBV hiding (Word, output, Unknown)
 import Data.Proxy (Proxy(..))
 import EVM.ABI
 import EVM.Types
@@ -93,17 +93,18 @@ deriving instance Show VMResult
 
 -- | The state of a stepwise EVM execution
 data VM = VM
-  { _result        :: Maybe VMResult
-  , _state         :: FrameState
-  , _frames        :: [Frame]
-  , _env           :: Env
-  , _block         :: Block
-  , _tx            :: TxState
-  , _logs          :: Seq Log
-  , _traces        :: Zipper.TreePos Zipper.Empty Trace
-  , _cache         :: Cache
-  , _execMode      :: ExecMode
-  , _burned        :: Word
+  { _result         :: Maybe VMResult
+  , _state          :: FrameState
+  , _frames         :: [Frame]
+  , _env            :: Env
+  , _block          :: Block
+  , _tx             :: TxState
+  , _logs           :: Seq Log
+  , _traces         :: Zipper.TreePos Zipper.Empty Trace
+  , _cache          :: Cache
+  , _execMode       :: ExecMode
+  , _burned         :: Word
+  , _pathConditions :: [SBool]
   }
 
 data Trace = Trace
@@ -123,8 +124,10 @@ data TraceData
 data ExecMode = ExecuteNormally | ExecuteAsBlockchainTest | ExecuteAsVMTest
 
 data Query where
-  PleaseFetchContract :: Addr         -> (Contract -> EVM ()) -> Query
-  PleaseFetchSlot     :: Addr -> Word -> (Word     -> EVM ()) -> Query
+  PleaseFetchContract :: Addr         -> (Contract   -> EVM ()) -> Query
+  PleaseFetchSlot     :: Addr -> Word -> (Word       -> EVM ()) -> Query
+  PleaseAskSMT        :: SWord 256 -> [SBool] -> (JumpCondition -> EVM ()) -> Query
+  PleaseChoosePath    :: (Word -> EVM ()) -> Query
 
 instance Show Query where
   showsPrec _ = \case
@@ -134,14 +137,25 @@ instance Show Query where
       (("<EVM.Query: fetch slot "
         ++ show slot ++ " for "
         ++ show addr ++ ">") ++)
+    PleaseAskSMT condition pathConditions _ ->
+      (("<EVM.Query: ask SMT about "
+        ++ show condition ++ " in context "
+        ++ show pathConditions ++ ">") ++)
+    PleaseChoosePath _ ->
+      (("<EVM.Query: waiting for user to select path (0,1)") ++)
 
 -- | Alias for the type of e.g. @exec1@.
 type EVM a = State VM a
 
+type CodeLocation = (Addr, Word)
+data JumpCondition = Known Word | Unknown
+  deriving (Show)
+
 -- | The cache is data that can be persisted for efficiency:
 -- any expensive query that is constant at least within a block.
 data Cache = Cache
-  { _fetched :: Map Addr Contract
+  { _fetched :: Map Addr Contract,
+    _smtquery :: Map CodeLocation JumpCondition
   } deriving Show
 
 -- | A way to specify an initial VM state
@@ -325,10 +339,14 @@ bytecode = contractcode . to f
 
 instance Semigroup Cache where
   a <> b = Cache
-    { _fetched = mappend (view fetched a) (view fetched b) }
+    { _fetched = mappend (view fetched a) (view fetched b),
+      _smtquery = mappend (view smtquery a) (view smtquery b)
+    }
 
 instance Monoid Cache where
-  mempty = Cache { _fetched = mempty }
+  mempty = Cache { _fetched = mempty,
+                   _smtquery = mempty
+                 }
 
 -- * Data accessors
 
@@ -385,10 +403,12 @@ makeVm o = VM
     , _contracts = Map.fromList
       [(vmoptAddress o, vmoptContract o)]
     }
-  , _cache = Cache $ Map.fromList
-    [(vmoptAddress o, vmoptContract o)]
+  , _cache = Cache (Map.fromList
+    [(vmoptAddress o, vmoptContract o)])
+    mempty
   , _execMode = ExecuteNormally
   , _burned = 0
+  , _pathConditions = []
   } where theCode = case _contractcode (vmoptContract o) of
             InitCode b    -> b
             RuntimeCode b -> b
@@ -923,12 +943,13 @@ exec1 = do
         0x57 -> do
           case stk of
             (x:y:xs) ->
-              burn g_high $
-                case unliteral y of
-                    Nothing -> error $ "symbolic JUMPI args not supported: " <> show y <> " at pc: " <> show (the state pc) <> "of code: " <> show (ByteStringS (the state code))
-                    Just y' -> if y' == 0
-                               then assign (state . stack) xs >> next
-                               else checkJump (forceLit x) xs
+                burn g_high $
+                  let jump 0 = assign (state . stack) xs >> next
+                      jump _ = checkJump (forceLit x) xs
+                  in case maybeLitWord y of
+                      Just y' -> jump y'
+                      -- if the jump condition is symbolic, an smt query has to be made.
+                      Nothing -> askSMT self (num $ the state pc) y jump
             _ -> underrun
 
         -- op: PC
@@ -1002,7 +1023,6 @@ exec1 = do
                     assign (state . stack) xs
                     cheat (xInOffset, xInSize) (xOutOffset, xOutSize)
                 _ ->
-                  (if xValue > 0 then notStatic else id) $
                     accessMemoryRange fees xInOffset xInSize $
                       accessMemoryRange fees xOutOffset xOutSize $ do
                         availableGas <- use (state . gas)
@@ -1416,6 +1436,30 @@ pushTo f x = f %= (x :)
 
 pushToSequence :: MonadState s m => ASetter s s (Seq a) (Seq a) -> a -> m ()
 pushToSequence f x = f %= (Seq.|> x)
+
+askSMT :: Addr -> Word -> SWord 256 -> (Word -> EVM ()) -> EVM ()
+askSMT addr pcval jumpcondition continue = do
+-- First, check the cache if a query has been done already for this
+-- particular (contract, pc) combination:
+  use (cache . smtquery . at (addr, pcval)) >>= \case
+     -- If the query has been done already, select path or select the only available
+     Just w -> choosePath w
+     -- If this is a new query, do it, cache it, and select path
+     Nothing -> do pathconds <- use pathConditions
+                   assign result . Just . VMFailure . Query $ PleaseAskSMT
+                     jumpcondition pathconds
+                     (\x -> do assign (cache . smtquery . ix (addr, pcval)) x
+                               choosePath x)
+   where -- Only one path is possible
+         choosePath (Known w) = do assign result Nothing
+                                   continue w
+         -- Both paths are possible; we ask for more input
+         choosePath Unknown = assign result . Just . VMFailure . Query $ PleaseChoosePath
+           (\selected -> do
+               pathConditions <>= [litWord selected .== jumpcondition]
+               assign result Nothing
+               continue selected)
+
 
 fetchAccount :: Addr -> (Contract -> EVM ()) -> EVM ()
 fetchAccount addr continue =
