@@ -124,6 +124,8 @@ fetchSlotFrom n url addr slot =
   Session.withAPISession
     (\s -> fetchSlotWithSession n url s addr slot)
 
+
+-- more like http + z3 now
 http :: BlockNumber -> Text -> EVM.Query -> IO (EVM ())
 http n url q =
   case q of
@@ -136,6 +138,7 @@ http n url q =
       fetchSlotFrom n url addr (fromIntegral slot) >>= \case
         Just x  -> return (continue x)
         Nothing -> error ("oracle error: " ++ show q)
+      
 
 zero :: Monad m => EVM.Query -> m (EVM ())
 zero q =
@@ -144,5 +147,9 @@ zero q =
       return (continue (initialContract (EVM.RuntimeCode mempty)))
     EVM.PleaseFetchSlot _ _ continue ->
       return (continue 0)
+    EVM.PleaseAskSMT jumpcondition pathconds continue ->
+      return $ continue EVM.Unknown
+
+
 
 type Fetcher = EVM.Query -> IO (EVM ())
