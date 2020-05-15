@@ -12,7 +12,7 @@ import Brick.Widgets.List
 
 import EVM
 import EVM.ABI (abiTypeSolidity, decodeAbiValue, AbiType(..), emptyAbi)
-import EVM.Concrete (Word (C))
+import EVM.Concrete (SymWord(..))
 import EVM.Dapp (DappInfo, dappInfo)
 import EVM.Dapp (dappUnitTests, unitTestMethods, dappSolcByName, dappSolcByHash, dappSources)
 import EVM.Dapp (dappAstSrcMap)
@@ -75,7 +75,7 @@ type UiWidget = Widget Name
 data UiVmState = UiVmState
   { _uiVm             :: VM
   , _uiVmNextStep     :: Stepper ()
-  , _uiVmStackList    :: List Name (Int, (SWord 256))
+  , _uiVmStackList    :: List Name (Int, (SymWord))
   , _uiVmBytecodeList :: List Name (Int, Op)
   , _uiVmTraceList    :: List Name Text
   , _uiVmSolidityList :: List Name (Int, ByteString)
@@ -652,6 +652,7 @@ drawHelpView =
         "N      Step fwds to the next source position\n" <>
         "C-n    Step fwds to the next source position skipping CALL & CREATE\n" <>
         "p      Step back by one instruction\n\n" <>
+        "P      Step back to the previous source position\n" <>
         "m      Toggle memory pane\n" <>
         "Down   Scroll memory pane fwds\n" <>
         "Up     Scroll memory pane back\n" <>
@@ -836,6 +837,9 @@ currentSrcMap dapp vm =
       Just (Runtime, solc) ->
         preview (runtimeSrcmap . ix i) solc
 
+nextSrcMap :: DappInfo -> VM -> Maybe SrcMap
+nextSrcMap dapp vm = currentSrcMap dapp (vm & over (state . pc) (+1))
+
 currentSolc :: DappInfo -> VM -> Maybe SolcContract
 currentSolc dapp vm =
   let
@@ -905,21 +909,16 @@ drawStackPane ui =
     labelText = txt ("Gas available: " <> gasText <> "; stack:")
   in hBorderWithLabel labelText <=>
     renderList
-      (\_ (i, x) ->
+      (\_ (i, x@(S _ w)) ->
          vBox
            [ withHighlight True (str ("#" ++ show i ++ " "))
                <+> str (show x)
-           , dim (txt ("   " <> case unliteral x of
+           , dim (txt ("   " <> case unliteral w of
                        Nothing -> ""
                        Just u -> showWordExplanation (fromSizzle u) (view uiVmDapp ui)))
            ])
       False
       (view uiVmStackList ui)
-
-showSWordExplanation :: (SWord 256) -> Maybe DappInfo -> Text
-showSWordExplanation w d = case unliteral w of
-  Nothing -> pack $ show w
-  Just c  -> showWordExplanation (fromSizzle c) d
 
 showWordExplanation :: W256 -> Maybe DappInfo -> Text
 showWordExplanation w Nothing = showDec Unsigned w
