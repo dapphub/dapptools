@@ -13,7 +13,7 @@ import EVM.Types
 import EVM.Format
 import EVM.Keccak
 import EVM.Solidity
-import EVM.Concrete (createAddress)
+import EVM.Concrete (createAddress, SymWord(..))
 import qualified EVM.FeeSchedule as FeeSchedule
 import Data.SBV.Trans.Control hiding (sat)
 import Data.SBV.Trans
@@ -202,5 +202,5 @@ verify (RuntimeCode runtimecode) signature' pre maybepost = do
 isNotJump :: VM -> Bool
 isNotJump vm = vmOp vm /= Just OpJumpi ||
   case vm^.state.stack ^? ix 1 of
-    Just c -> isConcrete c
+    Just (S _ c) -> isConcrete c
     Nothing -> error "malformed stack"
