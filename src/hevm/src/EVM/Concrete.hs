@@ -2,13 +2,14 @@
 {-# Language FlexibleInstances #-}
 {-# Language StrictData #-}
 
+
 module EVM.Concrete where
 
 import Prelude hiding (Word, (^))
 
 import EVM.Keccak (keccak)
 import EVM.RLP
-import EVM.Types (Addr, W256 (..), num, toWord512, fromWord512)
+import EVM.Types (Addr, W256 (..), num, toWord512, fromWord512, fromSizzle)
 import EVM.Types (word, padRight, word160Bytes, word256Bytes, truncpad)
 
 import Control.Lens    ((^?), ix)
@@ -25,8 +26,8 @@ wordAt :: Int -> ByteString -> W256
 wordAt i bs =
   word (padRight 32 (BS.drop i bs))
 
-swordAt :: Int -> [SWord 8] -> (SWord 256)
-swordAt i bs = fromBytes $ truncpad 32 $ drop i bs
+swordAt :: Int -> [SWord 8] -> SymWord
+swordAt i bs = sw256 . fromBytes $ truncpad 32 $ drop i bs
 
 readByteOrZero :: Int -> [SWord 8] -> SWord 8
 readByteOrZero i bs = fromMaybe 0 (bs ^? ix i)
@@ -62,41 +63,45 @@ data SymWord = S Whiff (SWord 256)
 sw256 :: SWord 256 -> SymWord
 sw256 = S Dull
 
+maybeLitWord :: SymWord -> Maybe Word
+maybeLitWord (S whiff a) = fmap (C whiff . fromSizzle) (unliteral a)
+
+
 wordToByte :: Word -> Word8
 wordToByte (C _ x) = num (x .&. 0xff)
 
 exponentiate :: Word -> Word -> Word
 exponentiate (C _ x) (C _ y) = w256 (x ^ y)
 
-sdiv :: SWord 256 -> SWord 256 -> SWord 256
-sdiv x y = let sx, sy :: SInt 256
-               sx = sFromIntegral x
-               sy = sFromIntegral y
-           in sFromIntegral (sx `sQuot` sy)
+sdiv :: SymWord -> SymWord -> SymWord
+sdiv (S _ x) (S _ y) = let sx, sy :: SInt 256
+                           sx = sFromIntegral x
+                           sy = sFromIntegral y
+                       in sw256 $ sFromIntegral (sx `sQuot` sy)
 
-smod :: SWord 256 -> SWord 256 -> SWord 256
-smod x y = let sx, sy :: SInt 256
-               sx = sFromIntegral x
-               sy = sFromIntegral y
-           in ite (y .== 0) 0 (sFromIntegral (sx `sRem` sy))
+smod :: SymWord -> SymWord -> SymWord
+smod (S _ x) (S _ y) = let sx, sy :: SInt 256
+                           sx = sFromIntegral x
+                           sy = sFromIntegral y
+                       in sw256 $ ite (y .== 0) 0 (sFromIntegral (sx `sRem` sy))
 
-addmod :: SWord 256 -> SWord 256 -> SWord 256 -> SWord 256
-addmod x y z = let to512 :: SWord 256 -> SWord 512
-                   to512 = sFromIntegral
-               in sFromIntegral $ ((to512 x) + (to512 y)) `sMod` (to512 z)
+addmod :: SymWord -> SymWord -> SymWord -> SymWord
+addmod (S _ x) (S _ y) (S _ z) = let to512 :: SWord 256 -> SWord 512
+                                     to512 = sFromIntegral
+                                 in sw256 $ sFromIntegral $ ((to512 x) + (to512 y)) `sMod` (to512 z)
 
-mulmod :: SWord 256 -> SWord 256 -> SWord 256 -> SWord 256
-mulmod x y z = let to512 :: SWord 256 -> SWord 512
-                   to512 = sFromIntegral
-               in sFromIntegral $ ((to512 x) * (to512 y)) `sMod` (to512 z)
+mulmod :: SymWord -> SymWord -> SymWord -> SymWord
+mulmod (S _ x) (S _ y) (S _ z) = let to512 :: SWord 256 -> SWord 512
+                                     to512 = sFromIntegral
+                                 in sw256 $ sFromIntegral $ ((to512 x) * (to512 y)) `sMod` (to512 z)
 
-slt :: SWord 256 -> SWord 256 -> SWord 256
-slt x y =
-  ite (sFromIntegral x .< (sFromIntegral y :: (SInt 256))) 1 0
+slt :: SymWord -> SymWord -> SymWord
+slt (S _ x) (S _ y) =
+  sw256 $ ite (sFromIntegral x .< (sFromIntegral y :: (SInt 256))) 1 0
 
-sgt :: SWord 256 -> SWord 256 -> SWord 256
-sgt x y =
-  ite (sFromIntegral x .> (sFromIntegral y :: (SInt 256))) 1 0
+sgt :: SymWord -> SymWord -> SymWord
+sgt (S _ x) (S _ y) =
+  sw256 $ ite (sFromIntegral x .> (sFromIntegral y :: (SInt 256))) 1 0
 
 wordValue :: Word -> W256
 wordValue (C _ x) = x
@@ -124,14 +129,14 @@ writeMemory bs1 (C _ n) (C _ src) (C _ dst) bs0 =
   in
     a <> a' <> c <> b'
 
-readMemoryWord :: Word -> [SWord 8] -> SWord 256
-readMemoryWord (C _ i) m = fromBytes $ truncpad 32 (drop (num i) m)
+readMemoryWord :: Word -> [SWord 8] -> SymWord
+readMemoryWord (C _ i) m = sw256 $ fromBytes $ truncpad 32 (drop (num i) m)
 
-readMemoryWord32 :: Word -> [SWord 8] -> SWord 256
-readMemoryWord32 (C _ i) m = fromBytes $ truncpad 4 (drop (num i) m)
+readMemoryWord32 :: Word -> [SWord 8] -> SymWord
+readMemoryWord32 (C _ i) m = sw256 $ fromBytes $ truncpad 4 (drop (num i) m)
 
-setMemoryWord :: Word -> (SWord 256) -> [SWord 8] -> [SWord 8]
-setMemoryWord (C _ i) x =
+setMemoryWord :: Word -> SymWord -> [SWord 8] -> [SWord 8]
+setMemoryWord (C _ i) (S _ x) =
   writeMemory (toBytes x) 32 0 (num i)
 
 setMemoryByte :: Word -> SWord 8 -> [SWord 8] -> [SWord 8]
@@ -144,7 +149,7 @@ readBlobWord (C _ i) x =
   then 0
   else w256 (wordAt (num i) x)
 
-readSWord :: Word -> [SWord 8] -> (SWord 256)
+readSWord :: Word -> [SWord 8] -> SymWord
 readSWord (C _ i) x =
   if i > num (length x)
   then 0
@@ -166,13 +171,78 @@ instance Show Word where
   show (C whiff x) = show whiff ++ ": " ++ show x
 
 instance Show SymWord where
-  show (S Dull (SBV (SVal _ (Left c))))  = show c
-  show (S Dull (SBV (SVal _ (Right _)))) = "<symbolic>"
+  show s@(S Dull _) = case maybeLitWord s of
+    Nothing -> "<symbolic>"
+    Just w  -> show w
   show (S (Var var) x) = var ++ ": " ++ show x
   show (S (InfixBinOp symbol x y) z) = show x ++ symbol ++ show y  ++ ": " ++ show z
   show (S (BinOp symbol x y) z) = symbol ++ show x ++ show y  ++ ": " ++ show z
   show (S (UnOp symbol x) z) = symbol ++ show x ++ ": " ++ show z
   show (S whiff x) = show whiff ++ ": " ++ show x
+
+instance EqSymbolic SymWord where
+  (.==) (S _ x) (S _ y) = x .== y
+
+instance Num SymWord where
+  (S _ x) + (S _ y) = sw256 (x + y)
+  (S _ x) * (S _ y) = sw256 (x * y)
+  abs (S _ x) = sw256 (abs x)
+  signum (S _ x) = sw256 (signum x)
+  fromInteger x = sw256 (fromInteger x)
+  negate (S _ x) = sw256 (negate x)
+
+instance Bits SymWord where
+  (S _ x) .&. (S _ y) = sw256 (x .&. y)
+  (S _ x) .|. (S _ y) = sw256 (x .|. y)
+  (S _ x) `xor` (S _ y) = sw256 (x `xor` y)
+  complement (S _ x) = sw256 (complement x)
+  shift (S _ x) i = sw256 (shift x i)
+  rotate (S _ x) i = sw256 (rotate x i)
+  bitSize (S _ x) = bitSize x
+  bitSizeMaybe (S _ x) = bitSizeMaybe x
+  isSigned (S _ x) = isSigned x
+  testBit (S _ x) i = testBit x i
+  bit i = sw256 (bit i)
+  popCount (S _ x) = popCount x
+
+
+instance SDivisible SymWord where
+  sQuotRem (S _ x) (S _ y) = let (a, b) = x `sQuotRem` y
+                             in (sw256 a, sw256 b)
+  sDivMod (S _ x) (S _ y) = let (a, b) = x `sDivMod` y
+                             in (sw256 a, sw256 b)
+
+instance Mergeable SymWord where
+  symbolicMerge a b (S _ x) (S _ y) = sw256 $ symbolicMerge a b x y
+  select xs (S _ x) b = let ys = fmap (\(S _ y) -> y) xs
+                        in sw256 $ select ys x b
+-- instance SFiniteBits SymWord where
+--   sFiniteBitSize (S _ x) = sFiniteBitSize x
+--   sCountLeadingZeros (S _ x) = sCountLeadingZeros x
+--   sCountTrailingZeros (S _ x) = sCountTrailingZeros x
+
+instance Bounded SymWord where
+  minBound = sw256 minBound
+  maxBound = sw256 maxBound
+
+instance Eq SymWord where
+  (S _ x) == (S _ y) = x == y
+
+instance Enum SymWord where
+  toEnum i = sw256 (toEnum i)
+  fromEnum (S _ x) = fromEnum x
+
+--deriving instance SIntegral SymWord
+  -- quotRem (S _ x) (S _ y) =
+  --   let (a, b) = quotRem x y
+  --   in (sw256 a, sw256 b)
+--  toInteger (S _ x) = toInteger x
+
+-- instance Real SymWord where
+--   toRational (S _ x) = toRational x
+
+instance OrdSymbolic SymWord where
+  (.<) (S _ x) (S _ y) = (.<) x y
 
 instance Read Word where
   readsPrec n s =
