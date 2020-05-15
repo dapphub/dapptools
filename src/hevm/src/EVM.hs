@@ -103,7 +103,7 @@ data VM = VM
   , _traces         :: Zipper.TreePos Zipper.Empty Trace
   , _cache          :: Cache
   , _burned         :: Word
-  , _pathConditions :: [SBool]
+  , _pathConditions :: [(SBool, Bool)]
   }
 
 data Trace = Trace
@@ -123,7 +123,7 @@ data TraceData
 data Query where
   PleaseFetchContract :: Addr         -> (Contract   -> EVM ()) -> Query
   PleaseFetchSlot     :: Addr -> Word -> (Word       -> EVM ()) -> Query
-  PleaseAskSMT        :: SWord 256 -> [SBool] -> (JumpCondition -> EVM ()) -> Query
+  PleaseAskSMT        :: SymWord -> [SBool] -> (JumpCondition -> EVM ()) -> Query
   PleaseChoosePath    :: (Word -> EVM ()) -> Query
 
 instance Show Query where
@@ -178,7 +178,7 @@ data VMOpts = VMOpts
   } deriving Show
 
 -- | A log entry
-data Log = Log Addr [SWord 8] [SWord 256]
+data Log = Log Addr [SWord 8] [SymWord]
 
 -- | An entry in the VM's "call/create stack"
 data Frame = Frame
@@ -209,7 +209,7 @@ data FrameState = FrameState
   , _codeContract :: Addr
   , _code         :: ByteString
   , _pc           :: Int
-  , _stack        :: [(SWord 256)]
+  , _stack        :: [SymWord]
   , _memory       :: [SWord 8]
   , _memorySize   :: Int
   , _calldata     :: [SWord 8]
@@ -432,20 +432,17 @@ initialContract theContractCode = Contract
 next :: (?op :: Word8) => EVM ()
 next = modifying (state . pc) (+ (opSize ?op))
 
-w256lit :: W256 -> (SWord 256)
-w256lit = literal . toSizzle
+w256lit :: W256 -> SymWord
+w256lit = S Dull . literal . toSizzle
 
-litWord :: Word -> (SWord 256)
-litWord (C _ a) = literal $ toSizzle a
-
-maybeLitWord :: SWord 256 -> Maybe Word
-maybeLitWord a = fmap (w256 . fromSizzle) (unliteral a)
+litWord :: Word -> (SymWord)
+litWord (C whiff a) = S whiff (literal $ toSizzle a)
 
 -- TODO: wrap these up with the state as well
 -- for more insightful failure mode
-forceLit :: (SWord 256) -> Word
-forceLit a = case unliteral a of
-  Just c -> w256 $ fromSizzle c
+forceLit :: SymWord -> Word
+forceLit (S whiff a) = case unliteral a of
+  Just c -> C whiff (fromSizzle c)
   Nothing -> error "unexpected symbolic argument"
 
 forceLitBytes :: [SWord 8] -> ByteString
@@ -617,11 +614,11 @@ exec1 = do
             0xff .&. shiftR x (8 * (31 - num (forceLit n)))
 
         -- op: SHL
-        0x1b -> stackOp2 (const g_verylow) $ \(n, x) -> sShiftLeft x n
+        0x1b -> stackOp2 (const g_verylow) $ \((S _ n), (S _ x)) -> sw256 $ sShiftLeft x n
         -- op: SHR
-        0x1c -> stackOp2 (const g_verylow) $ \(n, x) -> sShiftRight x n
+        0x1c -> stackOp2 (const g_verylow) $ \((S _ n), (S _ x)) -> sw256 $ sShiftRight x n
         -- op: SAR
-        0x1d -> stackOp2 (const g_verylow) $ \(n, x) -> sSignedShiftArithRight x n
+        0x1d -> stackOp2 (const g_verylow) $ \((S _ n), (S _ x)) -> sw256 $ sSignedShiftArithRight x n
 
         -- op: SHA3
         -- more accurately refered to as KECCAK
@@ -857,7 +854,7 @@ exec1 = do
         -- op: MSTORE8
         0x53 ->
           case stk of
-            ((forceLit -> x):y:xs) ->
+            ((forceLit -> x):(S _ y):xs) ->
               burn g_verylow $
                 accessMemoryRange fees x 1 $ do
                   let yByte = bvExtract (Proxy :: Proxy 7) (Proxy :: Proxy 0) y
@@ -972,16 +969,16 @@ exec1 = do
                 if exponent == 0
                 then g_exp
                 else g_exp + g_expbyte * num (ceilDiv (1 + log2 exponent) 8)
-          in stackOp2 cost (uncurry (.^))
+          in stackOp2 cost $ \((S _ x),(S _ y)) -> sw256 $ x .^ y
 
         -- op: SIGNEXTEND
         0x0b ->
-          stackOp2 (const g_low) $ \((forceLit -> bytes), x) ->
-            if bytes >= 32 then x
+          stackOp2 (const g_low) $ \((forceLit -> bytes), w@(S _ x)) ->
+            if bytes >= 32 then w
             else let n = num bytes * 8 + 7 in
-              ite (sTestBit x n)
-              (x .|. complement (bit n - 1))
-              (x .&. (bit n - 1))
+              sw256 $ ite (sTestBit x n)
+                      (x .|. complement (bit n - 1))
+                      (x .&. (bit n - 1))
 
         -- op: CREATE
         0xf0 ->
@@ -1225,7 +1222,7 @@ precompiledContract
   -> Addr
   -> Word
   -> Word -> Word -> Word -> Word
-  -> [Word]
+  -> [SymWord]
   -> EVM ()
 precompiledContract this xGas precompileAddr recipient xValue inOffset inSize outOffset outSize xs =
   callChecks this xGas recipient xValue inOffset inSize outOffset outSize xs $ \gas' ->
@@ -1252,7 +1249,7 @@ executePrecompile
   :: (?op :: Word8)
   => FeeSchedule Word
   -> Addr
-  -> Word -> Word -> Word -> Word -> Word -> [SWord 256]
+  -> Word -> Word -> Word -> Word -> Word -> [SymWord]
   -> EVM ()
 executePrecompile fees preCompileAddr gasCap inOffset inSize outOffset outSize xs  = do
   vm <- get
@@ -1421,7 +1418,7 @@ pushTo f x = f %= (x :)
 pushToSequence :: MonadState s m => ASetter s s (Seq a) (Seq a) -> a -> m ()
 pushToSequence f x = f %= (Seq.|> x)
 
-askSMT :: Addr -> Word -> SWord 256 -> (Word -> EVM ()) -> EVM ()
+askSMT :: Addr -> Word -> SymWord -> (Word -> EVM ()) -> EVM ()
 askSMT addr pcval jumpcondition continue = do
 -- First, check the cache if a query has been done already for this
 -- particular (contract, pc) combination:
@@ -1431,7 +1428,7 @@ askSMT addr pcval jumpcondition continue = do
      -- If this is a new query, do it, cache it, and select path
      Nothing -> do pathconds <- use pathConditions
                    assign result . Just . VMFailure . Query $ PleaseAskSMT
-                     jumpcondition pathconds
+                     jumpcondition (fst <$> pathconds)
                      (\x -> do assign (cache . smtquery . ix (addr, pcval)) x
                                choosePath x)
    where -- Only one path is possible
@@ -1440,7 +1437,7 @@ askSMT addr pcval jumpcondition continue = do
          -- Both paths are possible; we ask for more input
          choosePath Unknown = assign result . Just . VMFailure . Query $ PleaseChoosePath
            (\selected -> do
-               pathConditions <>= [litWord selected .== jumpcondition]
+               pathConditions <>= [(litWord selected .== jumpcondition, selected == 1)]
                assign result Nothing
                continue selected)
 
@@ -1467,19 +1464,19 @@ fetchAccount addr continue =
         then vmError . NoSuchContract $ addr
         else continue c
 
-readStorage :: Storage -> SWord 256 -> Maybe (SWord 256)
-readStorage (Symbolic s) loc = Just $ readArray s loc
+readStorage :: Storage -> SymWord -> Maybe (SymWord)
+readStorage (Symbolic s) (S _ loc) = Just . sw256 $ readArray s loc
 readStorage (Concrete s) loc = do v <- Map.lookup (forceLit loc) s
                                   return $ litWord v
 
-writeStorage :: SWord 256 -> SWord 256 -> Storage -> Storage
-writeStorage loc val (Symbolic s) = Symbolic (writeArray s loc val)
+writeStorage :: SymWord -> SymWord -> Storage -> Storage
+writeStorage (S _ loc) (S _ val) (Symbolic s) = Symbolic (writeArray s loc val)
 writeStorage loc val (Concrete s) = Concrete (Map.insert (forceLit loc) (forceLit val) s)
 
 accessStorage
   :: Addr                  -- ^ Contract address
-  -> SWord 256             -- ^ Storage slot key
-  -> (SWord 256 -> EVM ()) -- ^ Continuation
+  -> SymWord             -- ^ Storage slot key
+  -> (SymWord -> EVM ()) -- ^ Continuation
   -> EVM ()
 accessStorage addr slot continue =
   use (env . contracts . at addr) >>= \case
@@ -1721,7 +1718,7 @@ cheatActions =
 -- * General call implementation ("delegateCall")
 delegateCall
   :: (?op :: Word8)
-  => Contract -> Word -> Addr -> Addr -> Word -> Word -> Word -> Word -> Word -> [SWord 256]
+  => Contract -> Word -> Addr -> Addr -> Word -> Word -> Word -> Word -> Word -> [SymWord]
   -> EVM ()
   -> EVM ()
 delegateCall this gasGiven xTo xContext xValue xInOffset xInSize xOutOffset xOutSize xs continue =
@@ -1779,7 +1776,7 @@ collision c' = case c' of
 
 create :: (?op :: Word8)
   => Addr -> Contract
-  -> Word -> Word -> [SWord 256] -> Addr -> ByteString -> EVM ()
+  -> Word -> Word -> [SymWord] -> Addr -> ByteString -> EVM ()
 create self this xGas xValue xs newAddr initCode = do
   vm0 <- get
   if xValue > view balance this
@@ -2058,7 +2055,7 @@ readMemory offset size vm = sliceWithZero (num offset) (num size) (view (state .
 
 word256At
   :: Functor f
-  => Word -> (SWord 256 -> f (SWord 256))
+  => Word -> (SymWord -> f (SymWord))
   -> [SWord 8] -> f [SWord 8]
 word256At i = lens getter setter where
   getter = readMemoryWord i
@@ -2118,14 +2115,14 @@ traceLog log = do
 push :: Word -> EVM ()
 push = pushSym . w256lit . num
 
-pushSym :: SWord 256 -> EVM ()
+pushSym :: SymWord -> EVM ()
 pushSym x = state . stack %= (x :)
 
 
 stackOp1
   :: (?op :: Word8)
-  => ((SWord 256) -> Word)
-  -> ((SWord 256) -> (SWord 256))
+  => ((SymWord) -> Word)
+  -> ((SymWord) -> (SymWord))
   -> EVM ()
 stackOp1 cost f =
   use (state . stack) >>= \case
@@ -2139,8 +2136,8 @@ stackOp1 cost f =
 
 stackOp2
   :: (?op :: Word8)
-  => (((SWord 256), (SWord 256)) -> Word)
-  -> (((SWord 256), (SWord 256)) -> (SWord 256))
+  => (((SymWord), (SymWord)) -> Word)
+  -> (((SymWord), (SymWord)) -> (SymWord))
   -> EVM ()
 stackOp2 cost f =
   use (state . stack) >>= \case
@@ -2153,8 +2150,8 @@ stackOp2 cost f =
 
 stackOp3
   :: (?op :: Word8)
-  => (((SWord 256), (SWord 256), (SWord 256)) -> Word)
-  -> (((SWord 256), (SWord 256), (SWord 256)) -> (SWord 256))
+  => (((SymWord), (SymWord), (SymWord)) -> Word)
+  -> (((SymWord), (SymWord), (SymWord)) -> (SymWord))
   -> EVM ()
 stackOp3 cost f =
   use (state . stack) >>= \case
@@ -2167,7 +2164,7 @@ stackOp3 cost f =
 
 -- * Bytecode data functions
 
-checkJump :: (Integral n) => n -> [SWord 256] -> EVM ()
+checkJump :: (Integral n) => n -> [SymWord] -> EVM ()
 checkJump x xs = do
   theCode <- use (state . code)
   self <- use (state . codeContract)
@@ -2219,7 +2216,7 @@ vmOpIx vm =
   do self <- currentContract vm
      (view opIxMap self) Vector.!? (view (state . pc) vm)
 
-opParams :: VM -> Map String (SWord 256)
+opParams :: VM -> Map String (SymWord)
 opParams vm =
   case vmOp vm of
     Just OpCreate ->
@@ -2429,7 +2426,7 @@ memoryCost FeeSchedule{..} byteCount =
 
 
 
--- symKeccak :: (KnownNat n, IsNonZero n) => Proxy n -> SWord n -> SWord 256
+-- symKeccak :: (KnownNat n, IsNonZero n) => Proxy n -> SWord n -> SymWord
 -- symKeccak _ = uninterpret "keccak" 
 
 
@@ -2453,3 +2450,4 @@ log2 x = finiteBitSize x - 1 - countLeadingZeros x
 --   (("-- *" . 1) ("data " . 2) ("newtype " . 2) ("type " . 2))
 -- compile-command: "make"
 -- End:
+

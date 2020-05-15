@@ -5,10 +5,10 @@ module EVM.Format where
 import Prelude hiding (Word)
 
 import EVM (VM, cheatCode, traceForest, traceData, Error (..), forceLitBytes,
-            maybeLitBytes, maybeLitWord)
+            maybeLitBytes)
 import EVM (Trace, TraceData (..), Log (..), Query (..), FrameContext (..))
 import EVM.Dapp (DappInfo, dappSolcByHash, showTraceLocation, dappEventMap)
-import EVM.Concrete (Word (..), wordValue)
+import EVM.Concrete (Word (..), wordValue, maybeLitWord)
 import EVM.Types (W256 (..), num, litBytes)
 import EVM.ABI (AbiValue (..), Event (..), AbiType (..))
 import EVM.ABI (Indexed (NotIndexed), getAbiSeq, getAbi)

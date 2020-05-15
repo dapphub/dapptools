@@ -462,6 +462,10 @@ instance SDisplay (SWord 256) where
   sexp x = A (txt (txt x))
 
 -- no idea what's going on here
+instance SDisplay (SymWord) where
+  sexp x = A (txt (txt x))
+
+-- no idea what's going on here
 instance SDisplay (SWord 8) where
   sexp x = A (txt (txt x))
 
