@@ -52,7 +52,7 @@ import qualified Control.Monad.Operational as Operational
 import qualified Control.Monad.State.Class as State
 import Control.Lens
 import Control.Monad              (void, when, forM_)
-import Control.Monad.State.Strict (execState, runState, StateT, liftIO, execStateT)
+import Control.Monad.State.Strict (execState, runState, StateT, liftIO, execStateT, lift)
 import Data.ByteString            (ByteString)
 import Data.List                  (intercalate, isSuffixOf)
 import Data.Text                  (Text, unpack, pack, splitOn)
@@ -328,7 +328,7 @@ dappTest opts _ solcFile =
         error ("Failed to read Solidity JSON for `" ++ solcFile ++ "'")
 
 regexMatches :: Text -> Text -> Bool
-regexMatches = error "wait"
+regexMatches = error "no"
 -- regexMatches regexSource =
 --   let
 --     compOpts =
@@ -346,11 +346,13 @@ assert cmd =
     -- todo; merge with vmFromCommand or not?
       let Just types = parseFunArgs $ funcSig cmd
           bytecode = maybe (error "bytecode not given") (hexByteString "--code" . strip0x) (code cmd)
-      void . runSMT $ query $ do input <- symAbiArg types
+      res <- runSMT $ query $ do input <- symAbiArg types
                                  let calldata' = litBytes (sig (funcSig cmd)) <> input
                                  symstore <- freshArray_ Nothing
                                  let preState = loadSymVM bytecode symstore calldata'
-                                 io (EVM.TTY.runFromVM EVM.Fetch.zero preState)
+                                 execStateT (explore EVM.Fetch.oracle $ EVM.Stepper.execFully) preState
+      print (view EVM.result res)
+                                 --io (EVM.TTY.runFromVM EVM.Fetch.zero preState)
 
   else
     let post = Just $ \(input, output) ->
@@ -557,7 +559,7 @@ launchTest execmode cmd = do
 
 #if MIN_VERSION_aeson(1, 0, 0)
 runVMTest :: Bool -> ExecMode -> Mode -> Maybe Int -> (String, VMTest.Case) -> IO Bool
-runVMTest diffmode execmode mode timelimit (name, x) = error "not now"
+runVMTest = error "no"
 -- runVMTest diffmode execmode mode timelimit (name, x) = do
 --   let vm0 = VMTest.vmForCase execmode x
 --   putStr (name ++ " ")
@@ -623,3 +625,33 @@ abiencode abi args =
   in if length declarations == length args
      then abiMethod sig $ AbiTuple . V.fromList $ zipWith makeAbiValue (snd <$> declarations) args
      else error $ "wrong number of arguments:" <> show (length args) <> ": " <> show args
+
+explore
+  :: (EVM.Query -> Query (EVM.EVM ()))
+  -> EVM.Stepper.Stepper a
+  -> StateT EVM.VM Query (Either EVM.Stepper.Failure a)
+explore fetcher =
+  eval . Operational.view
+
+  where
+    eval
+      :: Operational.ProgramView EVM.Stepper.Action a
+      -> StateT EVM.VM Query (Either EVM.Stepper.Failure a)
+
+    eval (Operational.Return x) =
+      pure (Right x)
+
+    eval (action Operational.:>>= k) =
+      case action of
+        EVM.Stepper.Exec ->
+          exec >>= explore fetcher . k
+        EVM.Stepper.Wait q ->
+          do m <- lift (fetcher q)
+             State.state (runState m) >>= explore fetcher . k
+             
+        EVM.Stepper.Note _ ->
+          explore fetcher (k ())
+        EVM.Stepper.Fail e ->
+          pure (Left e)
+        EVM.Stepper.EVM m ->
+          State.state (runState m) >>= explore fetcher . k

@@ -357,14 +357,15 @@ takeStep ui policy mode =
             StepNormally StepNone
 
         StepTimidly ->
-          error "step blocked unexpectedly"
+          error $ "step blocked unexpectedly" ++ show (view (uiVm . result) ui')
+--                  ++ "blocker:" ++ show blocker
 
     (Returned (), ui') ->
       case policy of
         StepNormally ->
           continue (ViewVm ui')
         StepTimidly ->
-          error "step halted unexpectedly"
+          error $ "step halted unexpectedly" ++ show (view (uiVm . result) ui)
   where
     vmResult Nothing = False
     vmResult (Just (VMFailure (Query _))) = False
@@ -963,6 +964,10 @@ drawTracePane s =
       <=> str (prettyIfConcrete (view (uiVm . state . calldata) s))
       <=> hBorderWithLabel (txt "Returndata")
       <=> str (prettyIfConcrete (view (uiVm . state . returndata) s))
+      <=> hBorderWithLabel (txt "Output")
+      <=> str (maybe "" show (view (uiVm . result) s))
+      <=> hBorderWithLabel (txt "Cache")
+      <=> str (show (view (uiVm . cache . path) s))
       <=> hBorderWithLabel (txt "Memory")
       <=> viewport TracePane Vertical
             (str (prettyIfConcrete (view (uiVm . state . memory) s)))

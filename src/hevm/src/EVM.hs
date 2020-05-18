@@ -104,7 +104,7 @@ data VM = VM
   , _cache          :: Cache
   , _execMode       :: ExecMode
   , _burned         :: Word
-  , _pathConditions :: [(SBool, Bool)]
+  , _pathConditions :: [SBool]
   }
 
 data Trace = Trace
@@ -128,6 +128,7 @@ data Query where
   PleaseFetchSlot     :: Addr -> Word -> (Word       -> EVM ()) -> Query
   PleaseAskSMT        :: SymWord -> [SBool] -> (JumpCondition -> EVM ()) -> Query
   PleaseChoosePath    :: (Word -> EVM ()) -> Query
+--  InitializeVM        :: (() -> EVM ()) -> Query
 
 instance Show Query where
   showsPrec _ = \case
@@ -155,7 +156,7 @@ data JumpCondition = Known Word | Unknown
 -- any expensive query that is constant at least within a block.
 data Cache = Cache
   { _fetched :: Map Addr Contract,
-    _smtquery :: Map CodeLocation JumpCondition
+    _path :: Map CodeLocation JumpCondition
   } deriving Show
 
 -- | A way to specify an initial VM state
@@ -340,12 +341,12 @@ bytecode = contractcode . to f
 instance Semigroup Cache where
   a <> b = Cache
     { _fetched = mappend (view fetched a) (view fetched b),
-      _smtquery = mappend (view smtquery a) (view smtquery b)
+      _path = mappend (view path a) (view path b)
     }
 
 instance Monoid Cache where
   mempty = Cache { _fetched = mempty,
-                   _smtquery = mempty
+                   _path = mempty
                  }
 
 -- * Data accessors
@@ -1438,22 +1439,24 @@ askSMT :: Addr -> Word -> SymWord -> (Word -> EVM ()) -> EVM ()
 askSMT addr pcval jumpcondition continue = do
 -- First, check the cache if a query has been done already for this
 -- particular (contract, pc) combination:
-  use (cache . smtquery . at (addr, pcval)) >>= \case
+  use (cache . path . at (addr, pcval)) >>= \case
      -- If the query has been done already, select path or select the only available
      Just w -> choosePath w
      -- If this is a new query, do it, cache it, and select path
      Nothing -> do pathconds <- use pathConditions
                    assign result . Just . VMFailure . Query $ PleaseAskSMT
-                     jumpcondition (fst <$> pathconds)
-                     (\x -> do assign (cache . smtquery . ix (addr, pcval)) x
+                     jumpcondition pathconds
+                     (\x -> do assign (cache . path . at (addr, pcval)) (Just x)
                                choosePath x)
    where -- Only one path is possible
          choosePath (Known w) = do assign result Nothing
+                                   assign (cache . path . at (addr, pcval)) (Just (Known w))
                                    continue w
          -- Both paths are possible; we ask for more input
          choosePath Unknown = assign result . Just . VMFailure . Query $ PleaseChoosePath
            (\selected -> do
-               pathConditions <>= [(litWord selected .== jumpcondition, selected == 1)]
+               pathConditions <>= [litWord selected .== jumpcondition]
+               assign (cache . path . at (addr, pcval)) (Just (Known selected))
                assign result Nothing
                continue selected)
 

@@ -13,6 +13,9 @@ import qualified EVM
 
 import Control.Lens hiding ((.=))
 import Control.Monad.Trans.Maybe
+import Data.SBV.Trans.Control
+import Data.SBV.Trans hiding (Word)
+import Data.SBV hiding (runSMT, newArray_, Word)
 import Data.Aeson
 import Data.Aeson.Lens
 import Data.ByteString (ByteString)
@@ -138,7 +141,30 @@ http n url q =
       fetchSlotFrom n url addr (fromIntegral slot) >>= \case
         Just x  -> return (continue x)
         Nothing -> error ("oracle error: " ++ show q)
-      
+    EVM.PleaseAskSMT jumpcondition pathconditions continue ->
+      runSMT . query $ do
+         let pathconds = sAnd pathconditions
+         constrain pathconds
+         constrain (jumpcondition ./= 0)
+         noJump <- checkSat
+         case noJump of
+           -- Unsat means condition
+           -- must be zero
+           Unsat -> return $ continue (EVM.Known 0)
+           -- Sat means its possible for condition
+           -- to be nonzero.
+           Sat -> do resetAssertions
+                     constrain pathconds
+                     constrain (jumpcondition .== 0)
+                     jump <- checkSat
+                     -- can it also be zero?
+                     case jump of
+                       -- No. It must be nonzero
+                       Unsat -> return $ continue (EVM.Known 1)
+                       -- Yes. Both branches possible
+                       Sat -> return $ continue EVM.Unknown      
+
+
 
 zero :: Monad m => EVM.Query -> m (EVM ())
 zero q =
@@ -153,3 +179,40 @@ zero q =
 
 
 type Fetcher = EVM.Query -> IO (EVM ())
+
+-- more like http + z3 now
+--oracle :: BlockNumber -> Text -> EVM.Query -> Query (EVM ())
+oracle :: EVM.Query -> Query (EVM ())
+oracle q = do
+  case q of
+    -- EVM.PleaseFetchContract addr continue -> io $
+    --   fetchContractFrom n url addr >>= \case
+    --     Just x -> do
+    --       return (continue x)
+    --     Nothing -> error ("oracle error: " ++ show q)
+    -- EVM.PleaseFetchSlot addr slot continue -> io $
+    --   fetchSlotFrom n url addr (fromIntegral slot) >>= \case
+    --     Just x  -> return (continue x)
+    --     Nothing -> error ("oracle error: " ++ show q)
+    EVM.PleaseAskSMT jumpcondition pathconditions continue ->
+      do
+         let pathconds = sAnd pathconditions
+         constrain pathconds
+         constrain (jumpcondition ./= 0)
+         noJump <- checkSat
+         case noJump of
+           -- Unsat means condition
+           -- must be zero
+           Unsat -> return $ continue (EVM.Known 0)
+           -- Sat means its possible for condition
+           -- to be nonzero.
+           Sat -> do resetAssertions
+                     constrain pathconds
+                     constrain (jumpcondition .== 0)
+                     jump <- checkSat
+                     -- can it also be zero?
+                     case jump of
+                       -- No. It must be nonzero
+                       Unsat -> return $ continue (EVM.Known 1)
+                       -- Yes. Both branches possible
+                       Sat -> return $ continue EVM.Unknown      
