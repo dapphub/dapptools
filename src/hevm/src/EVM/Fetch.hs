@@ -12,8 +12,12 @@ import EVM          (EVM, Contract, initialContract, nonce, balance, external)
 import qualified EVM
 
 import Control.Lens hiding ((.=))
+import Control.Monad.Reader
 import Control.Monad.Trans.Maybe
+
 import Data.SBV.Trans.Control
+--import qualified Data.SBV.Control.Query as Trans
+import qualified Data.SBV.Internals as SBV
 import Data.SBV.Trans hiding (Word)
 import Data.SBV hiding (runSMT, newArray_, Word)
 import Data.Aeson
@@ -182,8 +186,8 @@ type Fetcher = EVM.Query -> IO (EVM ())
 
 -- more like http + z3 now
 --oracle :: BlockNumber -> Text -> EVM.Query -> Query (EVM ())
-oracle :: EVM.Query -> Query (EVM ())
-oracle q = do
+oracle :: SBV.State -> Fetcher
+oracle state q = do
   case q of
     -- EVM.PleaseFetchContract addr continue -> io $
     --   fetchContractFrom n url addr >>= \case
@@ -195,24 +199,25 @@ oracle q = do
     --     Just x  -> return (continue x)
     --     Nothing -> error ("oracle error: " ++ show q)
     EVM.PleaseAskSMT jumpcondition pathconditions continue ->
-      do
+      flip runReaderT state $ SBV.runQueryT $ do
+         resetAssertions
          let pathconds = sAnd pathconditions
          constrain pathconds
          constrain (jumpcondition ./= 0)
          noJump <- checkSat
          case noJump of
-           -- Unsat means condition
-           -- must be zero
-           Unsat -> return $ continue (EVM.Known 0)
-           -- Sat means its possible for condition
-           -- to be nonzero.
-           Sat -> do resetAssertions
-                     constrain pathconds
-                     constrain (jumpcondition .== 0)
-                     jump <- checkSat
-                     -- can it also be zero?
-                     case jump of
-                       -- No. It must be nonzero
-                       Unsat -> return $ continue (EVM.Known 1)
-                       -- Yes. Both branches possible
-                       Sat -> return $ continue EVM.Unknown      
+            -- Unsat means condition
+            -- must be zero
+            Unsat -> return $ continue (EVM.Known 0)
+            -- Sat means its possible for condition
+            -- to be nonzero.
+            Sat -> do resetAssertions
+                      constrain pathconds
+                      constrain (jumpcondition .== 0)
+                      jump <- checkSat
+                      -- can it also be zero?
+                      case jump of
+                        -- No. It must be nonzero
+                        Unsat -> return $ continue (EVM.Known 1)
+                        -- Yes. Both branches possible
+                        Sat -> return $ continue EVM.Unknown      
