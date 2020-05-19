@@ -250,8 +250,18 @@ mkVty = do
   V.setMode (V.outputIface vty) V.BracketedPaste True
   return vty
 
-runFromVM :: (Query -> IO (EVM ())) -> VM -> IO VM
-runFromVM oracle' vm = do
+runFromVM :: Maybe (FilePath, FilePath) -> (Query -> IO (EVM ())) -> VM -> IO VM
+runFromVM maybesrcinfo oracle' vm = do
+  uiDappSolc <- case maybesrcinfo of
+                   Nothing -> return Nothing
+                   Just (root,json) -> readSolc json >>= \case
+                     Nothing -> return Nothing
+                     Just (contractMap, sourceCache) ->
+                       let dapp = dappInfo root contractMap sourceCache
+                       in return $ ((,) dapp) <$> (currentSolc dapp vm)
+                           
+                         
+
   let
     opts = UnitTestOptions
       { oracle            = oracle'
@@ -262,7 +272,6 @@ runFromVM oracle' vm = do
       , vmModifier        = id
       , testParams        = error "irrelevant"
       }
-
     ui0 = UiVmState
            { _uiVm = vm
            , _uiVmNextStep = void Stepper.execFully
@@ -270,8 +279,8 @@ runFromVM oracle' vm = do
            , _uiVmBytecodeList = undefined
            , _uiVmTraceList = undefined
            , _uiVmSolidityList = undefined
-           , _uiVmSolc = Nothing
-           , _uiVmDapp = Nothing
+           , _uiVmSolc = snd <$> uiDappSolc
+           , _uiVmDapp = fst <$> uiDappSolc
            , _uiVmStepCount = 0
            , _uiVmFirstState = undefined
            , _uiVmMessage = Just $ "Executing EVM code in " <> show (view (state . contract) vm)

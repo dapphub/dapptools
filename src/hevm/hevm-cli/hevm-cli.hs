@@ -104,6 +104,7 @@ data Command w
       , state       :: w ::: Maybe String     <?> "Path to state repository"
       , rpc         :: w ::: Maybe URL        <?> "Fetch state from a remote node"
       , block       :: w ::: Maybe W256       <?> "Block state is be fetched from"
+      , jsonFile    :: w ::: Maybe String     <?> "Filename or path to dapp build output (default: out/*.solc.json)"
       }
   | DappTest -- Run DSTest unit tests
       { jsonFile    :: w ::: Maybe String             <?> "Filename or path to dapp build output (default: out/*.solc.json)"
@@ -360,6 +361,9 @@ dappCoverage opts _ solcFile =
 
 launchExec :: Command Options.Unwrapped -> IO ()
 launchExec cmd = do
+  let root = fromMaybe "." (dappRoot cmd)
+      srcinfo = ((,) root) <$> (jsonFile cmd)
+
   vm <- vmFromCommand cmd
   vm1 <- case state cmd of
     Nothing -> pure vm
@@ -385,7 +389,7 @@ launchExec cmd = do
             Nothing -> pure ()
             Just path ->
               Git.saveFacts (Git.RepoAt path) (Facts.vmFacts vm')
-    Debug -> void (EVM.TTY.runFromVM fetcher vm1)
+    Debug -> void $ EVM.TTY.runFromVM srcinfo fetcher vm1
    where fetcher = maybe EVM.Fetch.zero (EVM.Fetch.http block') (rpc cmd)
          block'  = maybe EVM.Fetch.Latest EVM.Fetch.BlockNumber (block cmd)
 
@@ -535,7 +539,7 @@ runVMTest diffmode execmode mode timelimit (name, x) = do
           Timeout.timeout (1e6 * (fromMaybe 10 timelimit)) . evaluate $ do
             execState (VMTest.interpret . void $ EVM.Stepper.execFully) vm0
         Debug ->
-          Just <$> EVM.TTY.runFromVM EVM.Fetch.zero vm0
+          Just <$> EVM.TTY.runFromVM Nothing EVM.Fetch.zero vm0
     waitCatch action
   case result of
     Right (Just vm1) -> do
