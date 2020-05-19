@@ -46,7 +46,7 @@ import qualified EVM.Facts     as Facts
 import qualified EVM.Facts.Git as Git
 import qualified EVM.UnitTest
 
---import Control.Concurrent.Async   (async, waitCatch)
+import Control.Concurrent.Async   (async, waitCatch)
 import Control.Exception          (evaluate)
 import qualified Control.Monad.Operational as Operational
 import qualified Control.Monad.State.Class as State
@@ -80,7 +80,7 @@ import qualified Data.Sequence          as Seq
 import qualified System.Timeout         as Timeout
 
 import qualified Paths_hevm      as Paths
---import qualified Text.Regex.TDFA as Regex
+import qualified Text.Regex.TDFA as Regex
 
 import Options.Generic as Options
 
@@ -328,16 +328,15 @@ dappTest opts _ solcFile =
         error ("Failed to read Solidity JSON for `" ++ solcFile ++ "'")
 
 regexMatches :: Text -> Text -> Bool
-regexMatches = error "no"
--- regexMatches regexSource =
---   let
---     compOpts =
---       Regex.defaultCompOpt { Regex.lastStarGreedy = True }
---     execOpts =
---       Regex.defaultExecOpt { Regex.captureGroups = False }
---     regex = Regex.makeRegexOpts compOpts execOpts (unpack regexSource)
---   in
---     Regex.matchTest regex . Seq.fromList . unpack
+regexMatches regexSource =
+  let
+    compOpts =
+      Regex.defaultCompOpt { Regex.lastStarGreedy = True }
+    execOpts =
+      Regex.defaultExecOpt { Regex.captureGroups = False }
+    regex = Regex.makeRegexOpts compOpts execOpts (unpack regexSource)
+  in
+    Regex.matchTest regex . Seq.fromList . unpack
 
 assert :: Command Options.Unwrapped -> IO ()
 assert cmd =
@@ -346,13 +345,12 @@ assert cmd =
     -- todo; merge with vmFromCommand or not?
       let Just types = parseFunArgs $ funcSig cmd
           bytecode = maybe (error "bytecode not given") (hexByteString "--code" . strip0x) (code cmd)
-      res <- runSMT $ query $ do input <- symAbiArg types
+      void . runSMT . query $ do input <- symAbiArg types
                                  let calldata' = litBytes (sig (funcSig cmd)) <> input
                                  symstore <- freshArray_ Nothing
                                  let preState = loadSymVM bytecode symstore calldata'
-                                 execStateT (explore EVM.Fetch.oracle $ EVM.Stepper.execFully) preState
-      print (view EVM.result res)
-                                 --io (EVM.TTY.runFromVM EVM.Fetch.zero preState)
+                                 smtState <- queryState
+                                 io $ EVM.TTY.runFromVM (EVM.Fetch.oracle smtState) preState
 
   else
     let post = Just $ \(input, output) ->
@@ -428,7 +426,7 @@ launchExec cmd = do
             Nothing -> pure ()
             Just path ->
               Git.saveFacts (Git.RepoAt path) (Facts.vmFacts vm')
-    Debug -> void (EVM.TTY.runFromVM fetcher vm1)
+    Debug -> void $ EVM.TTY.runFromVM fetcher vm1
    where fetcher = maybe EVM.Fetch.zero (EVM.Fetch.http block') (rpc cmd)
          block'  = maybe EVM.Fetch.Latest EVM.Fetch.BlockNumber (block cmd)
 
@@ -559,33 +557,32 @@ launchTest execmode cmd = do
 
 #if MIN_VERSION_aeson(1, 0, 0)
 runVMTest :: Bool -> ExecMode -> Mode -> Maybe Int -> (String, VMTest.Case) -> IO Bool
-runVMTest = error "no"
--- runVMTest diffmode execmode mode timelimit (name, x) = do
---   let vm0 = VMTest.vmForCase execmode x
---   putStr (name ++ " ")
---   hFlush stdout
---   result <- do
---     action <- async $
---       case mode of
---         Run ->
---           Timeout.timeout (1e6 * (fromMaybe 10 timelimit)) . evaluate $ do
---             execState (VMTest.interpret . void $ EVM.Stepper.execFully) vm0
---         Debug ->
---           Just <$> EVM.TTY.runFromVM EVM.Fetch.zero vm0
---     waitCatch action
---   case result of
---     Right (Just vm1) -> do
---       ok <- VMTest.checkExpectation diffmode execmode x vm1
---       putStrLn (if ok then "ok" else "")
---       return ok
---     Right Nothing -> do
---       putStrLn "timeout"
---       return False
---     Left e -> do
---       putStrLn $ "error: " ++ if diffmode
---         then show e
---         else (head . lines . show) e
---       return False
+runVMTest diffmode execmode mode timelimit (name, x) = do
+  let vm0 = VMTest.vmForCase execmode x
+  putStr (name ++ " ")
+  hFlush stdout
+  result <- do
+    action <- async $
+      case mode of
+        Run ->
+          Timeout.timeout (1e6 * (fromMaybe 10 timelimit)) . evaluate $ do
+            execState (VMTest.interpret . void $ EVM.Stepper.execFully) vm0
+        Debug ->
+          Just <$> EVM.TTY.runFromVM EVM.Fetch.zero vm0
+    waitCatch action
+  case result of
+    Right (Just vm1) -> do
+      ok <- VMTest.checkExpectation diffmode execmode x vm1
+      putStrLn (if ok then "ok" else "")
+      return ok
+    Right Nothing -> do
+      putStrLn "timeout"
+      return False
+    Left e -> do
+      putStrLn $ "error: " ++ if diffmode
+        then show e
+        else (head . lines . show) e
+      return False
 
 #endif
 

@@ -35,6 +35,7 @@ import EVM.Fetch (Fetcher)
 
 import Control.Lens
 import Control.Monad.State.Strict hiding (state)
+import Control.Monad.Reader (runReaderT)
 
 import Data.Aeson.Lens
 import Data.ByteString (ByteString)
@@ -45,7 +46,8 @@ import Data.Text.Encoding (decodeUtf8)
 import Data.List (sort)
 import Data.Version (showVersion)
 import Numeric (showHex)
-import Data.SBV
+import Data.SBV hiding (solver)
+import qualified Data.SBV.Internals as SBV
 
 import qualified Data.ByteString as BS
 import qualified Data.Map as Map
@@ -54,6 +56,8 @@ import qualified Data.Vector as Vec
 import qualified Data.Vector.Storable as SVec
 import qualified Graphics.Vty as V
 import qualified System.Console.Haskeline as Readline
+
+import qualified Data.SBV.Trans.Control as SBV
 
 import qualified EVM.TTYCenteredList as Centered
 
@@ -219,11 +223,10 @@ interpret mode =
         Stepper.Wait (PleaseChoosePath _) -> do
                   -- pause & await user.
                   pure (Stepped (Operational.singleton action >>= k))
-                  -- pure (Stepped (Stepper.exec >>= k))
 
         -- Stepper wants to make a query and wait for the results?
         Stepper.Wait q ->
-          -- Tell the TTY to run an I/O action to produce the next stepper.
+          -- Tell the TTY to run a SBV.query action to produce the next stepper.
           pure . Blocked $ do
             -- First run the fetcher, getting a VM state transition back.
             m <- ?fetcher q
@@ -513,7 +516,7 @@ appEvent st@(ViewVm s) (VtyEvent (V.EvKey (V.KChar '0') [])) =
     Just (VMFailure (Query (PleaseChoosePath contin))) ->
       takeStep (s & set uiVm (execState (contin 0) (view uiVm s)))
         StepNormally
-        StepNone
+        StepOne
     _ -> continue (ViewVm s)
 
 -- Vm Overview: 1 - choose jump
@@ -522,7 +525,7 @@ appEvent st@(ViewVm s) (VtyEvent (V.EvKey (V.KChar '1') [])) =
     Just (VMFailure (Query (PleaseChoosePath contin))) ->
       takeStep (s & set uiVm (execState (contin 1) (view uiVm s)))
         StepNormally
-        StepNone
+        StepOne
     _ -> continue (ViewVm s)
 
 
