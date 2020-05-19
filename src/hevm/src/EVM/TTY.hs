@@ -35,7 +35,7 @@ import EVM.Fetch (Fetcher)
 
 import Control.Lens
 import Control.Monad.State.Strict hiding (state)
-import Control.Monad.Reader (runReaderT)
+import Control.Monad.Trans.Maybe (runMaybeT)
 
 import Data.Aeson.Lens
 import Data.ByteString (ByteString)
@@ -520,7 +520,7 @@ appEvent st@(ViewVm s) (VtyEvent (V.EvKey (V.KChar 'p') [])) =
       takeStep s3 StepTimidly (StepMany (n - 1))
 
 -- Vm Overview: 0 - choose no jump
-appEvent st@(ViewVm s) (VtyEvent (V.EvKey (V.KChar '0') [])) =
+appEvent (ViewVm s) (VtyEvent (V.EvKey (V.KChar '0') [])) =
   case view (uiVm . result) s of
     Just (VMFailure (Query (PleaseChoosePath contin))) ->
       takeStep (s & set uiVm (execState (contin 0) (view uiVm s)))
@@ -529,7 +529,7 @@ appEvent st@(ViewVm s) (VtyEvent (V.EvKey (V.KChar '0') [])) =
     _ -> continue (ViewVm s)
 
 -- Vm Overview: 1 - choose jump
-appEvent st@(ViewVm s) (VtyEvent (V.EvKey (V.KChar '1') [])) =
+appEvent (ViewVm s) (VtyEvent (V.EvKey (V.KChar '1') [])) =
   case view (uiVm . result) s of
     Just (VMFailure (Query (PleaseChoosePath contin))) ->
       takeStep (s & set uiVm (execState (contin 1) (view uiVm s)))
