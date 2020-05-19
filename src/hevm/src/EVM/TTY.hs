@@ -35,7 +35,7 @@ import EVM.Fetch (Fetcher)
 
 import Control.Lens
 import Control.Monad.State.Strict hiding (state)
-import Control.Monad.Reader (runReaderT)
+import Control.Monad.Trans.Maybe (runMaybeT)
 
 import Data.Aeson.Lens
 import Data.ByteString (ByteString)
@@ -260,8 +260,18 @@ mkVty = do
   V.setMode (V.outputIface vty) V.BracketedPaste True
   return vty
 
-runFromVM :: (Query -> IO (EVM ())) -> VM -> IO VM
-runFromVM oracle' vm = do
+runFromVM :: Maybe (FilePath, FilePath) -> (Query -> IO (EVM ())) -> VM -> IO VM
+runFromVM maybesrcinfo oracle' vm = do
+  uiDappSolc <- case maybesrcinfo of
+                   Nothing -> return Nothing
+                   Just (root,json) -> readSolc json >>= \case
+                     Nothing -> return Nothing
+                     Just (contractMap, sourceCache) ->
+                       let dapp = dappInfo root contractMap sourceCache
+                       in return $ ((,) dapp) <$> (currentSolc dapp vm)
+                           
+                         
+
   let
     opts = UnitTestOptions
       { oracle            = oracle'
@@ -272,7 +282,6 @@ runFromVM oracle' vm = do
       , vmModifier        = id
       , testParams        = error "irrelevant"
       }
-
     ui0 = UiVmState
            { _uiVm = vm
            , _uiVmNextStep = void Stepper.execFully
@@ -280,8 +289,8 @@ runFromVM oracle' vm = do
            , _uiVmBytecodeList = undefined
            , _uiVmTraceList = undefined
            , _uiVmSolidityList = undefined
-           , _uiVmSolc = Nothing
-           , _uiVmDapp = Nothing
+           , _uiVmSolc = snd <$> uiDappSolc
+           , _uiVmDapp = fst <$> uiDappSolc
            , _uiVmStepCount = 0
            , _uiVmFirstState = undefined
            , _uiVmMessage = Just $ "Executing EVM code in " <> show (view (state . contract) vm)
@@ -511,7 +520,7 @@ appEvent st@(ViewVm s) (VtyEvent (V.EvKey (V.KChar 'p') [])) =
       takeStep s3 StepTimidly (StepMany (n - 1))
 
 -- Vm Overview: 0 - choose no jump
-appEvent st@(ViewVm s) (VtyEvent (V.EvKey (V.KChar '0') [])) =
+appEvent (ViewVm s) (VtyEvent (V.EvKey (V.KChar '0') [])) =
   case view (uiVm . result) s of
     Just (VMFailure (Query (PleaseChoosePath contin))) ->
       takeStep (s & set uiVm (execState (contin 0) (view uiVm s)))
@@ -520,7 +529,7 @@ appEvent st@(ViewVm s) (VtyEvent (V.EvKey (V.KChar '0') [])) =
     _ -> continue (ViewVm s)
 
 -- Vm Overview: 1 - choose jump
-appEvent st@(ViewVm s) (VtyEvent (V.EvKey (V.KChar '1') [])) =
+appEvent (ViewVm s) (VtyEvent (V.EvKey (V.KChar '1') [])) =
   case view (uiVm . result) s of
     Just (VMFailure (Query (PleaseChoosePath contin))) ->
       takeStep (s & set uiVm (execState (contin 1) (view uiVm s)))

@@ -87,8 +87,9 @@ import Options.Generic as Options
 -- This record defines the program's command-line options
 -- automatically via the `optparse-generic` package.
 data Command w
-  = Assert -- Execute a given program with specified env & calldata
+  = Symbolic -- Execute a given program with specified env & calldata
       { code        :: w ::: Maybe ByteString   <?> "Program bytecode"
+      , jsonFile    :: w ::: Maybe String       <?> "Filename or path to dapp build output (default: out/*.solc.json)"
       , funcSig     :: w ::: Text               <?> "Function signature"
       , debug       :: w ::: Bool               <?> "Run interactively"
       }
@@ -113,6 +114,7 @@ data Command w
       , state       :: w ::: Maybe String     <?> "Path to state repository"
       , rpc         :: w ::: Maybe URL        <?> "Fetch state from a remote node"
       , block       :: w ::: Maybe W256       <?> "Block state is be fetched from"
+      , jsonFile    :: w ::: Maybe String     <?> "Filename or path to dapp build output (default: out/*.solc.json)"
       }
   | DappTest -- Run DSTest unit tests
       { jsonFile    :: w ::: Maybe String             <?> "Filename or path to dapp build output (default: out/*.solc.json)"
@@ -232,7 +234,7 @@ main = do
     root = fromMaybe "." (dappRoot cmd)
   case cmd of
     Version {} -> putStrLn (showVersion Paths.version)
-    Assert {} -> assert cmd
+    Symbolic {} -> assert cmd
     Exec {} ->
       launchExec cmd
     Abiencode {} ->
@@ -342,15 +344,16 @@ assert :: Command Options.Unwrapped -> IO ()
 assert cmd =
   if debug cmd
   then do
-    -- todo; merge with vmFromCommand or not?
-      let Just types = parseFunArgs $ funcSig cmd
+      let root = fromMaybe "." (dappRoot cmd)
+          srcinfo = ((,) root) <$> (jsonFile cmd)
+          Just types = parseFunArgs $ funcSig cmd
           bytecode = maybe (error "bytecode not given") (hexByteString "--code" . strip0x) (code cmd)
       void . runSMT . query $ do input <- symAbiArg types
                                  let calldata' = litBytes (sig (funcSig cmd)) <> input
                                  symstore <- freshArray_ Nothing
                                  let preState = loadSymVM bytecode symstore calldata'
                                  smtState <- queryState
-                                 io $ EVM.TTY.runFromVM (EVM.Fetch.oracle smtState) preState
+                                 io $ EVM.TTY.runFromVM srcinfo (EVM.Fetch.oracle smtState) preState
 
   else
     let post = Just $ \(input, output) ->
@@ -401,6 +404,9 @@ symbolEVM = do x <- symbolic "x"
 
 launchExec :: Command Options.Unwrapped -> IO ()
 launchExec cmd = do
+  let root = fromMaybe "." (dappRoot cmd)
+      srcinfo = ((,) root) <$> (jsonFile cmd)
+
   vm <- vmFromCommand cmd
   vm1 <- case state cmd of
     Nothing -> pure vm
@@ -426,7 +432,7 @@ launchExec cmd = do
             Nothing -> pure ()
             Just path ->
               Git.saveFacts (Git.RepoAt path) (Facts.vmFacts vm')
-    Debug -> void $ EVM.TTY.runFromVM fetcher vm1
+    Debug -> void $ EVM.TTY.runFromVM srcinfo fetcher vm1
    where fetcher = maybe EVM.Fetch.zero (EVM.Fetch.http block') (rpc cmd)
          block'  = maybe EVM.Fetch.Latest EVM.Fetch.BlockNumber (block cmd)
 
@@ -568,7 +574,7 @@ runVMTest diffmode execmode mode timelimit (name, x) = do
           Timeout.timeout (1e6 * (fromMaybe 10 timelimit)) . evaluate $ do
             execState (VMTest.interpret . void $ EVM.Stepper.execFully) vm0
         Debug ->
-          Just <$> EVM.TTY.runFromVM EVM.Fetch.zero vm0
+          Just <$> EVM.TTY.runFromVM Nothing EVM.Fetch.zero vm0
     waitCatch action
   case result of
     Right (Just vm1) -> do
@@ -622,33 +628,3 @@ abiencode abi args =
   in if length declarations == length args
      then abiMethod sig $ AbiTuple . V.fromList $ zipWith makeAbiValue (snd <$> declarations) args
      else error $ "wrong number of arguments:" <> show (length args) <> ": " <> show args
-
-explore
-  :: (EVM.Query -> Query (EVM.EVM ()))
-  -> EVM.Stepper.Stepper a
-  -> StateT EVM.VM Query (Either EVM.Stepper.Failure a)
-explore fetcher =
-  eval . Operational.view
-
-  where
-    eval
-      :: Operational.ProgramView EVM.Stepper.Action a
-      -> StateT EVM.VM Query (Either EVM.Stepper.Failure a)
-
-    eval (Operational.Return x) =
-      pure (Right x)
-
-    eval (action Operational.:>>= k) =
-      case action of
-        EVM.Stepper.Exec ->
-          exec >>= explore fetcher . k
-        EVM.Stepper.Wait q ->
-          do m <- lift (fetcher q)
-             State.state (runState m) >>= explore fetcher . k
-             
-        EVM.Stepper.Note _ ->
-          explore fetcher (k ())
-        EVM.Stepper.Fail e ->
-          pure (Left e)
-        EVM.Stepper.EVM m ->
-          State.state (runState m) >>= explore fetcher . k
