@@ -78,7 +78,7 @@ import qualified Data.Sequence          as Seq
 import qualified System.Timeout         as Timeout
 
 import qualified Paths_hevm      as Paths
---import qualified Text.Regex.TDFA as Regex
+import qualified Text.Regex.TDFA as Regex
 
 import Options.Generic as Options
 
@@ -319,16 +319,15 @@ dappTest opts _ solcFile =
         error ("Failed to read Solidity JSON for `" ++ solcFile ++ "'")
 
 regexMatches :: Text -> Text -> Bool
-regexMatches = error "no"
--- regexMatches regexSource =
---   let
---     compOpts =
---       Regex.defaultCompOpt { Regex.lastStarGreedy = True }
---     execOpts =
---       Regex.defaultExecOpt { Regex.captureGroups = False }
---     regex = Regex.makeRegexOpts compOpts execOpts (unpack regexSource)
---   in
---     Regex.matchTest regex . Seq.fromList . unpack
+regexMatches regexSource =
+  let
+    compOpts =
+      Regex.defaultCompOpt { Regex.lastStarGreedy = True }
+    execOpts =
+      Regex.defaultExecOpt { Regex.captureGroups = False }
+    regex = Regex.makeRegexOpts compOpts execOpts (unpack regexSource)
+  in
+    Regex.matchTest regex . Seq.fromList . unpack
 
 assert :: Command Options.Unwrapped -> IO ()
 assert cmd =
@@ -337,13 +336,12 @@ assert cmd =
     -- todo; merge with vmFromCommand or not?
       let Just types = parseFunArgs $ funcSig cmd
           bytecode = maybe (error "bytecode not given") (hexByteString "--code" . strip0x) (code cmd)
-      res <- runSMT $ query $ do input <- symAbiArg types
+      void . runSMT . query $ do input <- symAbiArg types
                                  let calldata' = litBytes (sig (funcSig cmd)) <> input
                                  symstore <- freshArray_ Nothing
                                  let preState = loadSymVM bytecode symstore calldata'
-                                 execStateT (explore EVM.Fetch.oracle $ EVM.Stepper.execFully) preState
-      print (view EVM.result res)
-                                 --io (EVM.TTY.runFromVM EVM.Fetch.zero preState)
+                                 smtState <- queryState
+                                 io $ EVM.TTY.runFromVM (EVM.Fetch.oracle smtState) preState
 
   else
     let post = Just $ \(input, output) ->
