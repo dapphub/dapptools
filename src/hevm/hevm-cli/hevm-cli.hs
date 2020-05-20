@@ -32,6 +32,7 @@ import EVM (ExecMode(..))
 import EVM.Concrete (createAddress)
 import EVM.Debug
 import EVM.Exec
+import EVM.ABI
 import EVM.Solidity
 import EVM.Types hiding (word)
 import EVM.UnitTest (UnitTestOptions, coverageReport, coverageForUnitTestContract)
@@ -78,7 +79,7 @@ import qualified Data.Sequence          as Seq
 import qualified System.Timeout         as Timeout
 
 import qualified Paths_hevm      as Paths
-import qualified Text.Regex.TDFA as Regex
+--import qualified Text.Regex.TDFA as Regex
 
 import Options.Generic as Options
 
@@ -158,6 +159,11 @@ data Command w
   | Rlp  -- RLP decode a string and print the result
   { decode :: w ::: ByteString <?> "RLP encoded hexstring"
   }
+  | Abi  -- Abi encode or decode
+  { types    :: w ::: String            <?> "Signature of types to decode / encode"
+  , values   :: w ::: Maybe [String]    <?> "Values to encode"
+  , encoded  :: w ::: Maybe ByteString  <?> "Bytestring to decode"
+  }
   | MerkleTest -- Insert a set of key values and check against the given root
   { file :: w ::: String <?> "Path to .json test file"
   }
@@ -223,6 +229,8 @@ main = do
     Version {} -> putStrLn (showVersion Paths.version)
     Exec {} ->
       launchExec cmd
+    Abi {} ->
+      abi cmd
     VmTest {} ->
       launchTest ExecuteAsVMTest cmd
     BcTest {} ->
@@ -314,15 +322,16 @@ dappTest opts _ solcFile = do
         error ("Failed to read Solidity JSON for `" ++ solcFile ++ "'")
 
 regexMatches :: Text -> Text -> Bool
-regexMatches regexSource =
-  let
-    compOpts =
-      Regex.defaultCompOpt { Regex.lastStarGreedy = True }
-    execOpts =
-      Regex.defaultExecOpt { Regex.captureGroups = False }
-    regex = Regex.makeRegexOpts compOpts execOpts (unpack regexSource)
-  in
-    Regex.matchTest regex . Seq.fromList . unpack
+regexMatches = error "no"
+-- regexMatches regexSource =
+--   let
+--     compOpts =
+--       Regex.defaultCompOpt { Regex.lastStarGreedy = True }
+--     execOpts =
+--       Regex.defaultExecOpt { Regex.captureGroups = False }
+--     regex = Regex.makeRegexOpts compOpts execOpts (unpack regexSource)
+--   in
+--     Regex.matchTest regex . Seq.fromList . unpack
 
 dappCoverage :: UnitTestOptions -> Mode -> String -> IO ()
 dappCoverage opts _ solcFile = do
@@ -512,32 +521,33 @@ launchTest execmode cmd = do
 
 #if MIN_VERSION_aeson(1, 0, 0)
 runVMTest :: Bool -> ExecMode -> Mode -> Maybe Int -> (String, VMTest.Case) -> IO Bool
-runVMTest diffmode execmode mode timelimit (name, x) = do
-  let vm0 = VMTest.vmForCase execmode x
-  putStr (name ++ " ")
-  hFlush stdout
-  result <- do
-    action <- async $
-      case mode of
-        Run ->
-          Timeout.timeout (1e6 * (fromMaybe 10 timelimit)) . evaluate $ do
-            execState (VMTest.interpret . void $ EVM.Stepper.execFully) vm0
-        Debug ->
-          Just <$> EVM.TTY.runFromVM EVM.Fetch.zero vm0
-    waitCatch action
-  case result of
-    Right (Just vm1) -> do
-      ok <- VMTest.checkExpectation diffmode execmode x vm1
-      putStrLn (if ok then "ok" else "")
-      return ok
-    Right Nothing -> do
-      putStrLn "timeout"
-      return False
-    Left e -> do
-      putStrLn $ "error: " ++ if diffmode
-        then show e
-        else (head . lines . show) e
-      return False
+runVMTest = error "no" -- :: Bool -> ExecMode -> Mode -> Maybe Int -> (String, VMTest.Case) -> IO Bool
+-- runVMTest diffmode execmode mode timelimit (name, x) = do
+--   let vm0 = VMTest.vmForCase execmode x
+--   putStr (name ++ " ")
+--   hFlush stdout
+--   result <- do
+--     action <- async $
+--       case mode of
+--         Run ->
+--           Timeout.timeout (1e6 * (fromMaybe 10 timelimit)) . evaluate $ do
+--             execState (VMTest.interpret . void $ EVM.Stepper.execFully) vm0
+--         Debug ->
+--           Just <$> EVM.TTY.runFromVM EVM.Fetch.zero vm0
+--     waitCatch action
+--   case result of
+--     Right (Just vm1) -> do
+--       ok <- VMTest.checkExpectation diffmode execmode x vm1
+--       putStrLn (if ok then "ok" else "")
+--       return ok
+--     Right Nothing -> do
+--       putStrLn "timeout"
+--       return False
+--     Left e -> do
+--       putStrLn $ "error: " ++ if diffmode
+--         then show e
+--         else (head . lines . show) e
+--       return False
 
 #endif
 
@@ -569,3 +579,15 @@ interpret fetcher =
           pure (Left e)
         EVM.Stepper.EVM m ->
           State.state (runState m) >>= interpret fetcher . k
+
+
+abidecode :: V.Vector AbiType -> ByteString -> V.Vector AbiValue
+abidecode = error "no"
+
+abiencode :: V.Vector AbiType -> [String] -> ByteString
+abiencode = error "no"
+
+abi :: Command Options.Unwrapped ->  IO ()
+abi cmd = case (types cmd, values cmd, encoded cmd) of
+  (Just types, Just values, Nothing) -> print . ByteStringS $ abiencode types values
+  (Just types, Nothing, Just bytes) -> print $ abidecode types (hexByteString "--bytes" $ strip0x bytes)
