@@ -47,6 +47,8 @@ module EVM.ABI
   , encodeAbiValue
   , decodeAbiValue
   , parseTypeName
+  , makeAbiValue
+  , sig
   ) where
 
 import EVM.Keccak (abiKeccak)
@@ -67,6 +69,8 @@ import Data.List          (intercalate)
 import GHC.Generics
 
 import Test.QuickCheck hiding ((.&.), label)
+import Text.ParserCombinators.ReadP
+import Control.Applicative
 
 import qualified Data.ByteString      as BS
 import qualified Data.ByteString.Lazy as BSLazy
@@ -324,6 +328,9 @@ encodeAbiValue = BSLazy.toStrict . runPut . putAbi
 decodeAbiValue :: AbiType -> BSLazy.ByteString -> AbiValue
 decodeAbiValue = runGet . getAbi
 
+sig :: Text -> BS.ByteString
+sig s = BSLazy.toStrict . runPut $ putWord32be (abiKeccak (encodeUtf8 s))
+
 abiMethod :: Text -> AbiValue -> BS.ByteString
 abiMethod s args = BSLazy.toStrict . runPut $ do
   putWord32be (abiKeccak (encodeUtf8 s))
@@ -468,3 +475,49 @@ instance Arbitrary AbiValue where
             (shrinkList shrink (Vector.toList v))
     AbiTuple v -> Vector.toList $ AbiTuple . Vector.fromList . shrink <$> v
     _ -> []
+
+
+
+data Boolz = Boolz Bool
+
+instance Read Boolz where
+  readsPrec _ ('T':'r':'u':'e':x) = [(Boolz True, x)]
+  readsPrec _ ('t':'r':'u':'e':x) = [(Boolz True, x)]
+  readsPrec _ ('f':'a':'l':'s':'e':x) = [(Boolz False, x)]
+  readsPrec _ ('F':'a':'l':'s':'e':x) = [(Boolz False, x)]
+  readsPrec _ [] = []
+  readsPrec n (x:t) = readsPrec n t
+
+-- cannot parse tuples right now
+readBool arg = if arg == "true" then True
+                      else if arg == "false" then False
+                           else (read arg :: W256) /= 0
+
+makeAbiValue :: AbiType -> String -> AbiValue
+makeAbiValue typ = fst . head . readP_to_S (parseAbiValue typ)
+
+parseAbiValue :: AbiType -> ReadP AbiValue
+parseAbiValue (AbiUIntType n) = do W256 w256 <- readS_to_P reads
+                                   return $ AbiUInt n w256
+parseAbiValue (AbiIntType n) = do W256 w256 <- readS_to_P reads
+                                  return $ AbiInt n (num w256)
+parseAbiValue (AbiIntType n) = AbiAddress <$> readS_to_P reads
+parseAbiValue AbiBoolType = (do W256 w256 <- readS_to_P reads
+                                return $ AbiBool (w256 /= 0))
+                            <|> (do Boolz b <- readS_to_P reads
+                                    return $ AbiBool b)
+parseAbiValue (AbiBytesType n) = AbiBytes n <$> do ByteStringS bytes <- readS_to_P reads
+                                                   return bytes
+parseAbiValue AbiBytesDynamicType = AbiBytesDynamic <$> do ByteStringS bytes <- readS_to_P reads
+                                                           return bytes
+parseAbiValue AbiStringType = AbiString <$> do ByteStringS bytes <- readS_to_P reads
+                                               return bytes
+parseAbiValue (AbiArrayDynamicType typ) =
+  AbiArrayDynamic typ <$> do a <- between (char '[') (char ']') (parseAbiValue typ `sepBy` (char ','))
+                             return $ Vector.fromList a
+parseAbiValue (AbiArrayType n typ) =
+  AbiArray n typ <$> do a <- between (char '[') (char ']') (parseAbiValue typ `sepBy` (char ','))
+                        return $ Vector.fromList a
+
+
+

@@ -81,6 +81,11 @@ instance Show ByteStringS where
       fromBinary =
         Text.decodeUtf8 . toStrict . toLazyByteString . byteStringHex
 
+instance Read ByteStringS where
+  readsPrec _ t@('0':'x':_) = [(ByteStringS (hexText (Text.pack t)), "")]
+  readsPrec _ t = [(ByteStringS (hexText (Text.pack ('0':'x':t))), "")]
+       
+
 instance FromJSON W256 where
   parseJSON v = do
     s <- Text.unpack <$> parseJSON v
