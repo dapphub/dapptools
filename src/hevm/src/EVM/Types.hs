@@ -10,9 +10,11 @@ import Data.Aeson (FromJSON (..))
 import Data.Aeson (FromJSONKey (..), FromJSONKeyFunction (..))
 #endif
 
+import Text.ParserCombinators.ReadP
 import Data.Monoid ((<>))
 import Data.Bits
 import Data.Char
+import Data.ByteString.Internal
 import Data.ByteString (ByteString)
 import Data.ByteString.Base16 as BS16
 import Data.ByteString.Builder (byteStringHex, toLazyByteString)
@@ -73,7 +75,7 @@ showWordWith0x addr = show addr
 strip0x :: ByteString -> ByteString
 strip0x bs = if "0x" `Char8.isPrefixOf` bs then Char8.drop 2 bs else bs
 
-newtype ByteStringS = ByteStringS ByteString
+newtype ByteStringS = ByteStringS ByteString deriving (Eq)
 
 instance Show ByteStringS where
   show (ByteStringS x) = ("0x" ++) . Text.unpack . fromBinary $ x
@@ -82,9 +84,11 @@ instance Show ByteStringS where
         Text.decodeUtf8 . toStrict . toLazyByteString . byteStringHex
 
 instance Read ByteStringS where
-  readsPrec _ t@('0':'x':_) = [(ByteStringS (hexText (Text.pack t)), "")]
-  readsPrec _ t = [(ByteStringS (hexText (Text.pack ('0':'x':t))), "")]
-       
+    readsPrec n ('0':'x':x) = [(ByteStringS $ fst bytes, Text.unpack . Text.decodeUtf8 $ snd bytes)]
+       where bytes = BS16.decode (Text.encodeUtf8 (Text.pack x))
+    readsPrec _ _ = []
+
+
 
 instance FromJSON W256 where
   parseJSON v = do

@@ -48,6 +48,7 @@ module EVM.ABI
   , decodeAbiValue
   , parseTypeName
   , makeAbiValue
+  , parseAbiValue
   , sig
   ) where
 
@@ -65,17 +66,18 @@ import Data.Text          (Text, pack)
 import Data.Text.Encoding (encodeUtf8)
 import Data.Vector        (Vector)
 import Data.Word          (Word32, Word8)
-import Data.List          (intercalate)
+import Data.List          (intercalate, concat, words)
 import GHC.Generics
 
 import Test.QuickCheck hiding ((.&.), label)
 import Text.ParserCombinators.ReadP
 import Control.Applicative
 
-import qualified Data.ByteString      as BS
-import qualified Data.ByteString.Lazy as BSLazy
-import qualified Data.Text            as Text
-import qualified Data.Vector          as Vector
+import qualified Data.ByteString       as BS
+import qualified Data.ByteString.Char8 as Char8
+import qualified Data.ByteString.Lazy  as BSLazy
+import qualified Data.Text             as Text
+import qualified Data.Vector           as Vector
 
 import qualified Text.Megaparsec      as P
 import qualified Text.Megaparsec.Char as P
@@ -494,7 +496,7 @@ readBool arg = if arg == "true" then True
                            else (read arg :: W256) /= 0
 
 makeAbiValue :: AbiType -> String -> AbiValue
-makeAbiValue typ = fst . head . readP_to_S (parseAbiValue typ)
+makeAbiValue typ str = fst . head $ readP_to_S (parseAbiValue typ) str
 
 parseAbiValue :: AbiType -> ReadP AbiValue
 parseAbiValue (AbiUIntType n) = do W256 w256 <- readS_to_P reads
@@ -510,14 +512,20 @@ parseAbiValue (AbiBytesType n) = AbiBytes n <$> do ByteStringS bytes <- readS_to
                                                    return bytes
 parseAbiValue AbiBytesDynamicType = AbiBytesDynamic <$> do ByteStringS bytes <- readS_to_P reads
                                                            return bytes
-parseAbiValue AbiStringType = AbiString <$> do ByteStringS bytes <- readS_to_P reads
-                                               return bytes
+parseAbiValue AbiStringType = AbiString <$> do Char8.pack <$> readS_to_P reads
 parseAbiValue (AbiArrayDynamicType typ) =
-  AbiArrayDynamic typ <$> do a <- between (char '[') (char ']') (parseAbiValue typ `sepBy` (char ','))
+  AbiArrayDynamic typ <$> do a <- listP (parseAbiValue typ)
                              return $ Vector.fromList a
 parseAbiValue (AbiArrayType n typ) =
-  AbiArray n typ <$> do a <- between (char '[') (char ']') (parseAbiValue typ `sepBy` (char ','))
+  AbiArray n typ <$> do a <- listP (parseAbiValue typ)
                         return $ Vector.fromList a
+
+
+listP :: ReadP a -> ReadP [a]
+listP parser = between (char '[') (char ']') ((do skipSpaces
+                                                  a <- parser
+                                                  skipSpaces
+                                                  return a) `sepBy` (char ','))
 
 
 
