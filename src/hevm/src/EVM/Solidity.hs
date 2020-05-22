@@ -14,6 +14,7 @@ module EVM.Solidity
   , methodSignature
   , methodInputs
   , methodOutput
+  , parseMethodInput
   , abiMap
   , eventMap
   , contractName
