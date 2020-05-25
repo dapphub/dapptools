@@ -220,8 +220,9 @@ interpret mode =
                       r -> pure r
 
         -- Stepper is waiting for user input from a query
-        Stepper.Wait (PleaseChoosePath _) -> do
+        Stepper.Option _ -> do
                   -- pause & await user.
+                  -- TODO: fixme
                   pure (Stepped (Operational.singleton action >>= k))
 
         -- Stepper wants to make a query and wait for the results?
@@ -522,7 +523,7 @@ appEvent st@(ViewVm s) (VtyEvent (V.EvKey (V.KChar 'p') [])) =
 -- Vm Overview: 0 - choose no jump
 appEvent (ViewVm s) (VtyEvent (V.EvKey (V.KChar '0') [])) =
   case view (uiVm . result) s of
-    Just (VMFailure (Query (PleaseChoosePath contin))) ->
+    Just (VMFailure (Choose (PleaseChoosePath contin))) ->
       takeStep (s & set uiVm (execState (contin 0) (view uiVm s)))
         StepNormally
         StepOne
@@ -531,7 +532,7 @@ appEvent (ViewVm s) (VtyEvent (V.EvKey (V.KChar '0') [])) =
 -- Vm Overview: 1 - choose jump
 appEvent (ViewVm s) (VtyEvent (V.EvKey (V.KChar '1') [])) =
   case view (uiVm . result) s of
-    Just (VMFailure (Query (PleaseChoosePath contin))) ->
+    Just (VMFailure (Choose (PleaseChoosePath contin))) ->
       takeStep (s & set uiVm (execState (contin 1) (view uiVm s)))
         StepNormally
         StepOne

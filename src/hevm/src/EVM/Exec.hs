@@ -46,6 +46,12 @@ exec =
     Nothing -> State.state (runState exec1) >> exec
     Just x  -> return x
 
+run :: MonadState VM m => m VM
+run =
+  use EVM.result >>= \case
+    Nothing -> State.state (runState exec1) >> run
+    Just x  -> State.get
+
 execWhile :: MonadState VM m => (VM -> Bool) -> m Int
 execWhile p = go 0
   where

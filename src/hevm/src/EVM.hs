@@ -75,13 +75,13 @@ data Error
   | StackLimitExceeded
   | IllegalOverflow
   | Query Query
+  | Choose Choose
   | StateChangeWhileStatic
   | InvalidMemoryAccess
   | CallDepthLimitReached
   | MaxCodeSizeExceeded Word Word
   | PrecompileFailure
   | UnexpectedSymbolicArg
-  
 deriving instance Show Error
 
 -- | The possible result states of a VM
@@ -127,8 +127,9 @@ data Query where
   PleaseFetchContract :: Addr         -> (Contract   -> EVM ()) -> Query
   PleaseFetchSlot     :: Addr -> Word -> (Word       -> EVM ()) -> Query
   PleaseAskSMT        :: SymWord -> [SBool] -> (JumpCondition -> EVM ()) -> Query
-  PleaseChoosePath    :: (Word -> EVM ()) -> Query
---  InitializeVM        :: (() -> EVM ()) -> Query
+
+data Choose where
+  PleaseChoosePath    :: (Word -> EVM ()) -> Choose
 
 instance Show Query where
   showsPrec _ = \case
@@ -142,8 +143,11 @@ instance Show Query where
       (("<EVM.Query: ask SMT about "
         ++ show condition ++ " in context "
         ++ show pathConditions ++ ">") ++)
+
+instance Show Choose where
+  showsPrec _ = \case
     PleaseChoosePath _ ->
-      (("<EVM.Query: waiting for user to select path (0,1)") ++)
+      (("<EVM.Choice: waiting for user to select path (0,1)") ++)
 
 -- | Alias for the type of e.g. @exec1@.
 type EVM a = State VM a
@@ -1453,7 +1457,7 @@ askSMT addr pcval jumpcondition continue = do
                                    assign (cache . path . at (addr, pcval)) (Just (Known w))
                                    continue w
          -- Both paths are possible; we ask for more input
-         choosePath Unknown = assign result . Just . VMFailure . Query $ PleaseChoosePath
+         choosePath Unknown = assign result . Just . VMFailure . Choose $ PleaseChoosePath
            (\selected -> do
                pathConditions <>= [litWord selected .== jumpcondition]
                assign (cache . path . at (addr, pcval)) (Just (Known selected))

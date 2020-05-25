@@ -51,8 +51,9 @@ import Control.Exception          (evaluate)
 import qualified Control.Monad.Operational as Operational
 import qualified Control.Monad.State.Class as State
 import Control.Lens
-import Control.Monad              (void, when, forM_)
-import Control.Monad.State.Strict (execState, runState, StateT, liftIO, execStateT, lift)
+import Control.Applicative
+import Control.Monad              (void, when, forM_, (>=>))
+import Control.Monad.State.Strict (execState, runState, runStateT, StateT, liftIO, execStateT, lift)
 import Data.ByteString            (ByteString)
 import Data.List                  (intercalate, isSuffixOf)
 import Data.Text                  (Text, unpack, pack, splitOn)
@@ -90,9 +91,14 @@ data Command w
   = Symbolic -- Execute a given program with specified env & calldata
       { code        :: w ::: Maybe ByteString   <?> "Program bytecode"
       , jsonFile    :: w ::: Maybe String       <?> "Filename or path to dapp build output (default: out/*.solc.json)"
-      , funcSig     :: w ::: Text               <?> "Function signature"
+      , funcSig     :: w ::: Maybe Text         <?> "Function signature"
       , debug       :: w ::: Bool               <?> "Run interactively"
       }
+  | Equiv -- prove equivalence between two programs
+    { codeA   :: w ::: ByteString <?> "Bytecode of the first program"
+    , codeB   :: w ::: ByteString <?> "Bytecode of the second program"
+    , funcSig :: w ::: Maybe Text <?> "Function signature"
+  }
   | Exec -- Execute a given program with specified env & calldata
       { code        :: w ::: Maybe ByteString <?> "Program bytecode"
       , calldata    :: w ::: Maybe ByteString <?> "Tx: calldata"
@@ -235,6 +241,7 @@ main = do
   case cmd of
     Version {} -> putStrLn (showVersion Paths.version)
     Symbolic {} -> assert cmd
+    Equiv {} -> equivalenceCheck cmd
     Exec {} ->
       launchExec cmd
     Abiencode {} ->
@@ -340,16 +347,59 @@ regexMatches regexSource =
   in
     Regex.matchTest regex . Seq.fromList . unpack
 
+equivalenceCheck :: Command Options.Unwrapped -> IO ()
+equivalenceCheck cmd =
+  do let bytecodeA = hexByteString "--code" . strip0x $ codeA cmd
+         bytecodeB = hexByteString "--code" . strip0x $ codeB cmd
+         Just types = parseFunArgs =<< funcSig cmd
+     void . runSMT . query $ do
+           input <- symAbiArg types
+           let calldata' = litBytes (sig $ fromMaybe (error "no funcsig given") (funcSig cmd)) <> input
+           symstore <- freshArray_ Nothing
+           let (preStateA, preStateB) = both' (\a -> loadSymVM a symstore calldata') (bytecodeA, bytecodeB)
+           smtState <- queryState
+           (aRes, bRes) <- both (\a -> io $ fst <$> runStateT (interpret (EVM.Fetch.oracle smtState) EVM.Stepper.runFully) a) (preStateA, preStateB)
+           resetAssertions
+           case (aRes, bRes) of
+             (Left errA, Right _) -> error $ "A Failed: " <> show errA
+             (Right _, Left errB) -> error $ "B Failed: " <> show errB
+             (Left errA, Left errB) -> error $ "A Failed: " <> show errA <> "\nand B Failed:" <> show errB
+             (Right aVMs, Right bVMs) -> do
+               forM_ [(a,b) | a <- aVMs, b <- bVMs] $ 
+                 (\ab -> let (aPath, bPath) = both' (view EVM.pathConditions) ab
+                             (aResult, bResult) = both' (view EVM.result) ab
+                                -- for each A endstate alpha, we need to check that every B endstate
+                                -- whose pathcondition is implied by the pathcondition of alpha
+                                -- have a matching result.
+    
+                                -- To be able to get counterexamples in case of failure, we negate and
+                                -- check for differing endstates
+                             resultDiffers = case (aResult, bResult) of
+                                   (Just (EVM.VMSuccess a), Just (EVM.VMSuccess b)) -> a ./= b
+                                   (Just (EVM.VMFailure _), Just (EVM.VMFailure _)) -> sFalse
+                                   (Just _, Just _) -> sTrue
+                                   _ -> error "Internal error: a logical christmas miracle!"
+                         in constrain $ (sAnd aPath .=> sAnd bPath) .&& resultDiffers)
+               checkSat >>= \case
+                  Unk -> error "solver said unknown!"
+                  Sat -> error "not equal"
+                  Unsat -> return ()
+
+
+-- prelude plz
+both' :: (a -> b) -> (a, a) -> (b, b)
+both' f (x, y) = (f x, f y)
+
 assert :: Command Options.Unwrapped -> IO ()
 assert cmd =
   if debug cmd
   then do
       let root = fromMaybe "." (dappRoot cmd)
           srcinfo = ((,) root) <$> (jsonFile cmd)
-          Just types = parseFunArgs $ funcSig cmd
+          Just types = parseFunArgs =<< funcSig cmd
           bytecode = maybe (error "bytecode not given") (hexByteString "--code" . strip0x) (code cmd)
       void . runSMT . query $ do input <- symAbiArg types
-                                 let calldata' = litBytes (sig (funcSig cmd)) <> input
+                                 let calldata' = litBytes (sig $ fromMaybe (error "no funcsig given") (funcSig cmd)) <> input
                                  symstore <- freshArray_ Nothing
                                  let preState = loadSymVM bytecode symstore calldata'
                                  smtState <- queryState
@@ -361,7 +411,7 @@ assert cmd =
             Just (EVM.VMFailure (EVM.UnrecognizedOpcode 254)) -> sFalse
             _ -> sTrue
         bytecode = maybe (error "bytecode not given") EVM.RuntimeCode (code cmd)
-    in do results <- runSMT $ query $ verify bytecode (funcSig cmd) (const sTrue) post
+    in do results <- runSMT $ query $ verify bytecode (fromMaybe (error "function signature missing") (funcSig cmd)) (const sTrue) post
           case results of
             Left () -> print "All good"
             Right a -> do print "Assertion violation:"
@@ -592,29 +642,39 @@ runVMTest diffmode execmode mode timelimit (name, x) = do
 
 #endif
 
+-- Interpreter which explores all paths at
+-- branching points.
+-- returns a list of possible final evm states
 interpret
   :: (EVM.Query -> IO (EVM.EVM ()))
   -> EVM.Stepper.Stepper a
-  -> StateT EVM.VM IO (Either EVM.Stepper.Failure a)
+  -> StateT EVM.VM IO (Either EVM.Stepper.Failure [a])
 interpret fetcher =
   eval . Operational.view
 
   where
     eval
       :: Operational.ProgramView EVM.Stepper.Action a
-      -> StateT EVM.VM IO (Either EVM.Stepper.Failure a)
+      -> StateT EVM.VM IO (Either EVM.Stepper.Failure [a])
 
     eval (Operational.Return x) =
-      pure (Right x)
+      pure (Right [x])
 
     eval (action Operational.:>>= k) =
       case action of
         EVM.Stepper.Exec ->
           exec >>= interpret fetcher . k
+        EVM.Stepper.Run ->
+          run >>= interpret fetcher . k
+        EVM.Stepper.Option (EVM.PleaseChoosePath continue) ->
+          do a <- State.state (runState (continue 0)) >> interpret fetcher (k ())
+             b <- State.state (runState (continue 1)) >> interpret fetcher (k ())
+             return $ liftA2 (<>) a b
         EVM.Stepper.Wait q ->
           do m <- liftIO (fetcher q)
              State.state (runState m) >> interpret fetcher (k ())
         EVM.Stepper.Note _ ->
+          -- simply ignore the note here
           interpret fetcher (k ())
         EVM.Stepper.Fail e ->
           pure (Left e)
