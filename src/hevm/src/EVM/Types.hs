@@ -88,8 +88,6 @@ instance Read ByteStringS where
        where bytes = BS16.decode (Text.encodeUtf8 (Text.pack x))
     readsPrec _ _ = []
 
-
-
 instance FromJSON W256 where
   parseJSON v = do
     s <- Text.unpack <$> parseJSON v

@@ -66,7 +66,7 @@ import Data.Text          (Text, pack)
 import Data.Text.Encoding (encodeUtf8)
 import Data.Vector        (Vector)
 import Data.Word          (Word32, Word8)
-import Data.List          (intercalate, concat, words)
+import Data.List          (intercalate)
 import GHC.Generics
 
 import Test.QuickCheck hiding ((.&.), label)
@@ -479,7 +479,8 @@ instance Arbitrary AbiValue where
     _ -> []
 
 
-
+-- Bool synonym with custom read instance
+-- to be able to parse lower case 'false' and 'true'
 data Boolz = Boolz Bool
 
 instance Read Boolz where
@@ -488,22 +489,19 @@ instance Read Boolz where
   readsPrec _ ('f':'a':'l':'s':'e':x) = [(Boolz False, x)]
   readsPrec _ ('F':'a':'l':'s':'e':x) = [(Boolz False, x)]
   readsPrec _ [] = []
-  readsPrec n (x:t) = readsPrec n t
-
--- cannot parse tuples right now
-readBool arg = if arg == "true" then True
-                      else if arg == "false" then False
-                           else (read arg :: W256) /= 0
+  readsPrec n (_:t) = readsPrec n t
 
 makeAbiValue :: AbiType -> String -> AbiValue
-makeAbiValue typ str = fst . head $ readP_to_S (parseAbiValue typ) str
+makeAbiValue typ str = case readP_to_S (parseAbiValue typ) str of
+  [] -> error "could not parse abi arguments"
+  ((val,_):_) -> val
 
 parseAbiValue :: AbiType -> ReadP AbiValue
 parseAbiValue (AbiUIntType n) = do W256 w256 <- readS_to_P reads
                                    return $ AbiUInt n w256
 parseAbiValue (AbiIntType n) = do W256 w256 <- readS_to_P reads
                                   return $ AbiInt n (num w256)
-parseAbiValue (AbiIntType n) = AbiAddress <$> readS_to_P reads
+parseAbiValue AbiAddressType = AbiAddress <$> readS_to_P reads
 parseAbiValue AbiBoolType = (do W256 w256 <- readS_to_P reads
                                 return $ AbiBool (w256 /= 0))
                             <|> (do Boolz b <- readS_to_P reads
@@ -519,7 +517,7 @@ parseAbiValue (AbiArrayDynamicType typ) =
 parseAbiValue (AbiArrayType n typ) =
   AbiArray n typ <$> do a <- listP (parseAbiValue typ)
                         return $ Vector.fromList a
-
+parseAbiValue (AbiTupleType _) = error "tuple types not supported"
 
 listP :: ReadP a -> ReadP [a]
 listP parser = between (char '[') (char ']') ((do skipSpaces

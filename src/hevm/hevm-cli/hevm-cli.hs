@@ -24,10 +24,6 @@ import qualified EVM.Stepper
 import qualified EVM.TTY as EVM.TTY
 import qualified EVM.Emacs as EVM.Emacs
 
-
---import qualified Text.Read.Lex as L
-
---import Text.ParserCombinators.ReadPrec
 import Text.ParserCombinators.ReadP
 
 #if MIN_VERSION_aeson(1, 0, 0)
