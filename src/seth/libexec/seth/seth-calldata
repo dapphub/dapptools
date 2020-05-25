@@ -16,12 +16,12 @@ if [[ $1 =~ ^([^\(]+)\( ]]; then
   shift
   for arg; do
     [[ $arg = @* ]] && arg=$(seth lookup "$arg")
-    args+=" --arg \""${arg//\"/\\\"}"\" "
+    args+=" --arg \"${arg//\"/\\\"}\" "
   done
   abi=$(echo "${abi//\"/\\\"}" | tr -d '[:space:]')
   set -x
   calldata=$(
-    eval "hevm abiencode --abi \""${abi}"\" --name "$name" "$args""
+    eval "hevm abiencode --abi \"${abi}\" --name $name $args"
   )
   if [[ $calldata = error* ]]; then
     echo >&2 "ethabi: $calldata"
