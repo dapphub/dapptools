@@ -8,6 +8,7 @@ module EVM.Stepper
   , exec
   , execFully
   , execFullyOrFail
+  , runFully
   , decode
   , fail
   , wait
@@ -35,9 +36,9 @@ import qualified Control.Monad.State.Class as State
 import qualified EVM.Exec
 import Data.Binary.Get (runGetOrFail)
 import Data.Text (Text)
-import Data.SBV
+import Data.SBV hiding (options)
 
-import EVM (EVM, VM, VMResult (VMFailure, VMSuccess), Error (Query), Query)
+import EVM (EVM, VM, VMResult (VMFailure, VMSuccess), Error (Query, Choose), Query, Choose)
 import qualified EVM
 
 import EVM.ABI (AbiType, AbiValue, getAbi)
@@ -50,7 +51,7 @@ import qualified Data.ByteString.Lazy as LazyByteString
 data Action a where
 
   -- | Keep executing until an intermediate result is reached
-  Exec ::            Action VMResult
+  Exec ::           Action VMResult
 
   -- | Keep executing until the final state is reached
   Run ::             Action VM
@@ -60,6 +61,9 @@ data Action a where
 
   -- | Wait for a query to be resolved
   Wait :: Query   -> Action ()
+
+  -- | Multiple things can happen
+  Option :: Choose -> Action ()
 
   -- | Embed a VM state transformation
   EVM  :: EVM a   -> Action a
@@ -91,6 +95,9 @@ fail = singleton . Fail
 wait :: Query -> Stepper ()
 wait = singleton . Wait
 
+option :: Choose -> Stepper ()
+option = singleton . Option
+
 evm :: EVM a -> Stepper a
 evm = singleton . EVM
 
@@ -103,6 +110,8 @@ execFully =
   exec >>= \case
     VMFailure (Query q) ->
       wait q >> execFully
+    VMFailure (Choose q) ->
+      option q >> execFully
     VMFailure x ->
       pure (Left x)
     VMSuccess x ->
@@ -116,6 +125,8 @@ runFully = do
     Nothing -> error "should not occur"
     Just (VMFailure (Query q)) ->
       wait q >> runFully
+    Just (VMFailure (Choose q)) ->
+      option q >> runFully
     Just _ -> 
       pure vm
 
