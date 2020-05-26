@@ -25,7 +25,7 @@ import qualified EVM.VMTest as VMTest
 #endif
 
 import EVM (ExecMode(..))
-import EVM.ABI (sig)
+import EVM.ABI (sig, decodeAbiValue)
 import EVM.Concrete (createAddress)
 import EVM.Symbolic
 import EVM.Debug
@@ -356,33 +356,38 @@ equivalenceCheck cmd =
            input <- symAbiArg types
            let calldata' = litBytes (sig $ fromMaybe (error "no funcsig given") (funcSig cmd)) <> input
            symstore <- freshArray_ Nothing
-           let (preStateA, preStateB) = both' (\a -> loadSymVM a symstore calldata') (bytecodeA, bytecodeB)
+           let (preStateA, preStateB) = both' (\x -> loadSymVM x symstore calldata') (bytecodeA, bytecodeB)
            smtState <- queryState
-           (aRes, bRes) <- both (\a -> io $ fst <$> runStateT (interpret (EVM.Fetch.oracle smtState) EVM.Stepper.runFully) a) (preStateA, preStateB)
+           (aRes, bRes) <- both (\x -> io $ fst <$> runStateT (interpret (EVM.Fetch.oracle smtState) EVM.Stepper.runFully) x) (preStateA, preStateB)
            resetAssertions
            case (aRes, bRes) of
              (Left errA, Right _) -> error $ "A Failed: " <> show errA
              (Right _, Left errB) -> error $ "B Failed: " <> show errB
              (Left errA, Left errB) -> error $ "A Failed: " <> show errA <> "\nand B Failed:" <> show errB
              (Right aVMs, Right bVMs) -> do
-               forM_ [(a,b) | a <- aVMs, b <- bVMs] $ 
-                 (\ab -> let (aPath, bPath) = both' (view EVM.pathConditions) ab
-                             (aResult, bResult) = both' (view EVM.result) ab
-                                -- for each A endstate alpha, we need to check that every B endstate
-                                -- whose pathcondition is implied by the pathcondition of alpha
-                                -- have a matching result.
-    
-                                -- To be able to get counterexamples in case of failure, we negate and
-                                -- check for differing endstates
-                             resultDiffers = case (aResult, bResult) of
-                                   (Just (EVM.VMSuccess a), Just (EVM.VMSuccess b)) -> a ./= b
-                                   (Just (EVM.VMFailure _), Just (EVM.VMFailure _)) -> sFalse
-                                   (Just _, Just _) -> sTrue
-                                   _ -> error "Internal error: a logical christmas miracle!"
-                         in constrain $ (sAnd aPath .=> sAnd bPath) .&& resultDiffers)
+               let differingEndStates = flip fmap [(a,b) | a <- aVMs, b <- bVMs] $
+               -- for each pair of endstates, if there exists an input such both
+               -- path conditions are satisfiably, then the results must be equal
+                     (\ab -> let (aPath, bPath) = both' (view EVM.pathConditions) ab
+                                 (aResult, bResult) = both' (view EVM.result) ab
+                                 differingResults = case (aResult, bResult) of
+                                      (Just (EVM.VMSuccess a), Just (EVM.VMSuccess b)) -> a ./= b
+                                      (Just (EVM.VMFailure _), Just (EVM.VMFailure _)) -> sFalse
+                                      (Just _, Just _) -> sTrue
+                                      _ -> error "Internal error: a logical christmas miracle!"
+                             in (sAnd aPath .&& sAnd bPath .&& differingResults))
+               -- If there exists a pair of endstates where this is not the case,
+               -- the following constraint is satisfiable
+               constrain $ sOr differingEndStates
+
                checkSat >>= \case
                   Unk -> error "solver said unknown!"
-                  Sat -> error "not equal"
+                  Sat -> do model <- mapM (getValue.fromSized) input
+                            let inputArgs = decodeAbiValue types $ Lazy.fromStrict (ByteString.pack model)
+                            io $ do putStrLn $ "Not equal!"
+                                    putStrLn $ "Counterexample:"
+                                    print inputArgs
+                                    exitFailure
                   Unsat -> return ()
 
 
