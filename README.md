@@ -26,7 +26,7 @@ curl https://nixos.org/nix/install | sh
 Then install dapptools:
 
 ```
-nix-env -A seth -A dapp -A hevm \
+nix-env -iA seth dapp hevm \
   -if https://github.com/dapphub/dapptools/tarball/rm-submodules \
   --substituters https://dapp.cachix.org \
   --trusted-public-keys dapp.cachix.org-1:9GJt9Ja8IQwR7YW/aF0QvCa6OmjGmsKoZIist0dG+Rs=
