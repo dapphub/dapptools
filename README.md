@@ -12,55 +12,25 @@ Contents:
 - [Hevm](./src/hevm) - Ethereum evaluator. Fully complient Haskell EVM implementation.
 - [Ethsign](./src/ethsign) - sign Ethereum transactions from a local keystore.
 
-## Easy install
-All tools and dependencies can be automaticaly installed by running:
-```sh
-curl https://dapp.tools/install | sh
-```
+## Instalation
 
-You _may_ also need to add the nix binaries to your path:
+Install `nix` if you haven't already:
 
 ```sh
-export PATH="$PATH:$HOME/.nix-profile/bin"
+curl https://nixos.org/nix/install | sh
+
+# Run this or login again to use Nix
+. "$HOME/.nix-profile/etc/profile.d/nix.sh"
 ```
 
-## Manual install
-For a manual install, please follow the instructions below.
+Then install dapptools:
 
-### Install Nix
-
-Make sure you are using Nix v2
-
-    curl https://nixos.org/nix/install | sh
-
-    # Run this or login again to use Nix
-    . "$HOME/.nix-profile/etc/profile.d/nix.sh"
-
-### Setup Cachix (optional)
-
-If you want to cache the binary builds across several computers, Nix
-provides several ways of doing this, the most convenient being
-the [Cachix](https://cachix.org) service.
-
-We maintain a public cache which you can use by installing Cachix
-
-    nix-env -if https://github.com/cachix/cachix/tarball/master --substituters https://cachix.cachix.org --trusted-public-keys cachix.cachix.org-1:eWNHQldwUO7G2VkjpnjDbWwy4KQ/HNxht7H4SSoMckM=
-
-then running
-
-    cachix use dapp
-
-followed by restarting your Nix daemon (if on a multi-user Nix installation)
-
-### Install tools
-
-To install tools from this repository, you need to run
-
-    git clone --recursive https://github.com/dapphub/dapptools $HOME/.dapp/dapptools
-    nix-env -f $HOME/.dapp/dapptools -iA dapp seth solc hevm ethsign
-
-which will build and install these tools into your Nix profile, optionally
-fetching the binaries from the cache if you have configured it.
+```
+nix-env -A seth -A dapp -A hevm \
+  -if https://github.com/dapphub/dapptools/tarball/rm-submodules \
+  --substituters https://dapp.cachix.org \
+  --trusted-public-keys dapp.cachix.org-1:9GJt9Ja8IQwR7YW/aF0QvCa6OmjGmsKoZIist0dG+Rs=
+```
 
 ### Installing custom solc versions
 
