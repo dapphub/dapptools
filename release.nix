@@ -43,7 +43,6 @@ let
     inherit qrtx-term;
     inherit qrtx;
     inherit seth;
-    inherit setzer;
     inherit token;
 
     hevm-compliance = hevmCompliance dist;

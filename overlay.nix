@@ -127,11 +127,6 @@ in rec {
   evmdis = self.callPackage ./nix/evmdis.nix {};
 
   token = self.callPackage (import ./src/token) {};
-  dai = self.callPackage (import ./submodules/dai-cli) {};
-
-  setzer = self.callPackage (import ./submodules/setzer) {};
-  terra = self.callPackage (import ./submodules/terra) {};
-  chief = self.callPackage (import ./submodules/chief) {};
 
   # We use this to run private testnets without
   # the pesky transaction size limit.
