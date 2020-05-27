@@ -200,9 +200,7 @@ main = defaultMain $ testGroup "hevm"
             }
           }
           |]
-        let asWord :: [SWord 8] -> SWord 256
-            asWord = fromBytes
-            pre = const sTrue
+        let pre = const sTrue
             post = Just $ \(_, output) -> case view result output of
               Just (EVM.VMFailure (EVM.UnrecognizedOpcode 254)) -> sFalse
               _ -> sTrue
