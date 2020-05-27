@@ -647,45 +647,6 @@ runVMTest diffmode execmode mode timelimit (name, x) = do
 
 #endif
 
--- Interpreter which explores all paths at
--- branching points.
--- returns a list of possible final evm states
-interpret
-  :: (EVM.Query -> IO (EVM.EVM ()))
-  -> EVM.Stepper.Stepper a
-  -> StateT EVM.VM IO (Either EVM.Stepper.Failure [a])
-interpret fetcher =
-  eval . Operational.view
-
-  where
-    eval
-      :: Operational.ProgramView EVM.Stepper.Action a
-      -> StateT EVM.VM IO (Either EVM.Stepper.Failure [a])
-
-    eval (Operational.Return x) =
-      pure (Right [x])
-
-    eval (action Operational.:>>= k) =
-      case action of
-        EVM.Stepper.Exec ->
-          exec >>= interpret fetcher . k
-        EVM.Stepper.Run ->
-          run >>= interpret fetcher . k
-        EVM.Stepper.Option (EVM.PleaseChoosePath continue) ->
-          do a <- State.state (runState (continue 0)) >> interpret fetcher (k ())
-             b <- State.state (runState (continue 1)) >> interpret fetcher (k ())
-             return $ liftA2 (<>) a b
-        EVM.Stepper.Wait q ->
-          do m <- liftIO (fetcher q)
-             State.state (runState m) >> interpret fetcher (k ())
-        EVM.Stepper.Note _ ->
-          -- simply ignore the note here
-          interpret fetcher (k ())
-        EVM.Stepper.Fail e ->
-          pure (Left e)
-        EVM.Stepper.EVM m ->
-          State.state (runState m) >>= interpret fetcher . k
-
 abiencode :: (AsValue s) => s -> [String] -> ByteString
 abiencode abi args =
   let declarations = parseMethodInput <$> V.toList (abi ^?! key "inputs" . _Array)

@@ -33,9 +33,9 @@ module EVM.Facts
   , fileToFact
   ) where
 
-import EVM          (VM, Contract, litWord)
-import EVM.Concrete (Word)
-import EVM          (VM, Contract, balance, nonce, storage, bytecode, env, contracts)
+import EVM          (VM, Contract)
+import EVM.Concrete (Word, litWord)
+import EVM          (balance, nonce, storage, bytecode, env, contracts)
 import EVM.Types    (Addr)
 
 import qualified EVM
