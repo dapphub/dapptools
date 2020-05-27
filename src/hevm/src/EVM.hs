@@ -437,12 +437,6 @@ initialContract theContractCode = Contract
 next :: (?op :: Word8) => EVM ()
 next = modifying (state . pc) (+ (opSize ?op))
 
-w256lit :: W256 -> SymWord
-w256lit = S Dull . literal . toSizzle
-
-litWord :: Word -> (SymWord)
-litWord (C whiff a) = S whiff (literal $ toSizzle a)
-
 -- TODO: wrap these up with the state as well
 -- for more insightful failure mode
 forceLit :: SymWord -> Word
@@ -633,7 +627,7 @@ exec1 = do
               let bytes = readMemory xOffset xSize vm
                   (hash, invMap)  = case maybeLitBytes bytes of
                                  Just bs -> (litWord $ keccakBlob bs, Map.singleton (keccakBlob bs) bs)
-                                 Nothing -> error "not supported yet" --symKeccak bytes
+                                 Nothing -> (symKeccak bytes, mempty)
               burn (g_sha3 + g_sha3word * ceilDiv (num xSize) 32) $
                 accessMemoryRange fees xOffset xSize $ do
                   next
@@ -1261,10 +1255,10 @@ executePrecompile fees preCompileAddr gasCap inOffset inSize outOffset outSize x
   let input = forceLitBytes $ readMemory (num inOffset) (num inSize) vm
       cost = costOfPrecompile fees preCompileAddr input
       notImplemented = error $ "precompile at address " <> show preCompileAddr <> " not yet implemented"
-      precompileFail = do burn (gasCap - cost) $ do
-                            assign (state . stack) (0 : xs)
-                            pushTrace $ ErrorTrace $ PrecompileFailure
-                            next
+      precompileFail = burn (gasCap - cost) $ do
+                         assign (state . stack) (0 : xs)
+                         pushTrace $ ErrorTrace $ PrecompileFailure
+                         next
   if cost > gasCap then
     burn gasCap $ do
       assign (state . stack) (0 : xs)
@@ -1433,9 +1427,8 @@ askSMT addr pcval jumpcondition continue = do
      -- If this is a new query, do it, cache it, and select path
      Nothing -> do pathconds <- use pathConditions
                    assign result . Just . VMFailure . Query $ PleaseAskSMT
-                     jumpcondition pathconds
-                     (\x -> do assign (cache . path . at (addr, pcval)) (Just x)
-                               choosePath x)
+                     jumpcondition pathconds choosePath
+
    where -- Only one path is possible
          choosePath (Known w) = do assign result Nothing
                                    assign (cache . path . at (addr, pcval)) (Just (Known w))
@@ -2432,10 +2425,20 @@ memoryCost FeeSchedule{..} byteCount =
 -- * Symbolic versions
 
 
+-- This is an ugly definition that can probably be done better
+-- with some fancy reflection / haskell dependent type /
+-- type family magic
+-- but for now, let's go the ugly & easy route and just catch
+-- the most common uses of keccak
 
--- symKeccak :: (KnownNat n, IsNonZero n) => Proxy n -> SWord n -> SymWord
--- symKeccak _ = uninterpret "keccak" 
-
+symKeccak :: [SWord 8] -> SymWord
+symKeccak bytes = case length bytes of
+  0 -> litWord $ keccakBlob mempty
+  1 -> sw256 $ uninterpret "keccak" $ (fromBytes bytes :: SWord 8)
+  4 -> sw256 $ uninterpret "keccak" $ (fromBytes bytes :: SWord 32)
+  32 -> sw256 $ uninterpret "keccak" $ (fromBytes bytes :: SWord 256)
+  64 -> sw256 $ uninterpret "keccak" $ (fromBytes bytes :: SWord 512)
+--  96 -> sw256 $ uninterpret "keccak" $ (fromBytes bytes :: SWord 768)
 
 -- * Arithmetic
 
