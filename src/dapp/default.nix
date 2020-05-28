@@ -1,6 +1,6 @@
 { lib, stdenv, fetchFromGitHub, makeWrapper, glibcLocales
 , coreutils, git, gnused, gnumake, hevm, jshon, jq, nix
-, nodejs, perl, seth , shellcheck , solc }:
+, nodejs, perl, seth, shellcheck, solc }:
 
 stdenv.mkDerivation rec {
   name = "dapp-${version}";
