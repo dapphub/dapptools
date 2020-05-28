@@ -6,7 +6,7 @@
 module EVM.Symbolic where
 
 import Control.Lens
-import EVM hiding (Query)
+import EVM hiding (Query, push)
 import qualified EVM as EVM
 import EVM.Exec
 import EVM.Op
@@ -23,6 +23,7 @@ import EVM.Concrete (createAddress, SymWord(..))
 import qualified EVM.FeeSchedule as FeeSchedule
 import Data.SBV.Trans.Control hiding (sat)
 import Data.SBV.Trans
+import Data.SBV.Control (registerUISMTFunction)
 import Data.SBV hiding (runSMT, newArray_, addAxiom)
 
 import Control.Monad.IO.Class
@@ -57,7 +58,7 @@ mkSymbolicContract theContractCode store = Contract
             InitCode b    -> b
             RuntimeCode b -> b
 
-loadSymVM :: ByteString -> SArray (WordN 256) (WordN 256) -> [SWord 8] -> VM
+loadSymVM :: ByteString -> SArray (WordN 256) (WordN 256) -> ([SWord 8], SymWord) -> VM
 loadSymVM x initStore calldata =
     (makeVm $ VMOpts
     { vmoptContract = mkSymbolicContract (RuntimeCode x) initStore
@@ -93,26 +94,31 @@ loadVM x =
                     loadContract target)
        _ -> Nothing
 
-symAbiArg :: AbiType -> Query [SWord 8]
+symAbiArg :: AbiType -> Query ([SWord 8], SymWord)
 -- We don't assume input types are restricted to their proper range here;
 -- such assumptions should instead be given as preconditions.
 -- This could catch some interesting calldata mismanagement errors.
-symAbiArg (AbiUIntType n) | n `mod` 8 == 0 && n <= 256 = toBytes <$> (freshVar_ :: Query (SWord 256))
+symAbiArg (AbiUIntType n) | n `mod` 8 == 0 && n <= 256 = do x <- freshVar_
+                                                            return (toBytes (x :: SWord 256), 32)
                           | otherwise = error "bad type"
 
-symAbiArg (AbiIntType n)  | n `mod` 8 == 0 && n <= 256 = toBytes <$> (freshVar_ :: Query (SWord 256))
+symAbiArg (AbiIntType n)  | n `mod` 8 == 0 && n <= 256 = do x <- freshVar_
+                                                            return (toBytes (x :: SWord 256), 32)
                           | otherwise = error "bad type"
 
-symAbiArg AbiAddressType = toBytes <$> (freshVar_ :: Query (SWord 256))
+symAbiArg AbiAddressType = do x <- freshVar_
+                              return (toBytes (x :: SWord 256), 32)
 
-symAbiArg (AbiBytesType n) | n <= 32 = toBytes <$> (freshVar_ :: Query (SWord 256))
+symAbiArg (AbiBytesType n) | n <= 32 = do x <- freshVar_
+                                          return (toBytes (x :: SWord 256), 32)
                            | otherwise = error "bad type"
 
 -- TODO: is this encoding correct?
 symAbiArg (AbiArrayType len typ) = do args <- mapM symAbiArg (replicate len typ)
-                                      return $ litBytes (encodeAbiValue (AbiUInt 256 (fromIntegral len))) <> (concat args)
+                                      return (litBytes (encodeAbiValue (AbiUInt 256 (fromIntegral len))) <> (concat $ fst <$> args), 32 + (sum $ snd <$> args))
 
-symAbiArg (AbiTupleType tuple) = mapM symAbiArg (toList tuple) >>= return . concat
+symAbiArg (AbiTupleType tuple) = do args <- mapM symAbiArg (toList tuple)
+                                    return (concat $ fst <$> args, sum $ snd <$> args)
 symAbiArg n = error $ "TODO: symbolic abiencoding for" <> show n
 
 -- Interpreter which explores all paths at
@@ -160,20 +166,37 @@ type Precondition = [SWord 8] -> SBool
 type Postcondition = (VM, VM) -> SBool
 
 verify :: ContractCode -> Text -> Precondition -> Maybe Postcondition -> Symbolic (Either () AbiValue)
-verify (RuntimeCode runtimecode) signature' pre maybepost = query $ do
+verify (RuntimeCode runtimecode) signature' pre maybepost = do
+  -- Adding this axiom here might be a good approach,
+  -- but unfortunately later `(reset-assertion)` calls
+  -- removes it from the current constraints.
+
+  -- Need to rearchitect the sharing of contexts of queries,
+  -- and perhaps make the JUMPI checks complelely concurrent.
+
+  -- It is possible that one could do all the path explorations concurrently
+  -- with a new architecture.
+  -- This would certainly seem like the most interesting option
+  
+  -- registerUISMTFunction symKeccak32
+  -- addAxiom "injectivity of keccak32" ["(assert (forall ((a (_ BitVec 256)) (b (_ BitVec 256)))"
+  --                                    , " (=>  (= (keccak32 a) (keccak32 b))"
+  --                                    , "      (= a b))))"
+  --                                    ]
+  query $ do
     let Just types = (parseFunArgs signature')
-    input <- symAbiArg types
-    let calldata' = litBytes (sig signature') <> input
+    (input,len) <- symAbiArg types
+    let (calldata',cdlen) = (litBytes (sig signature') <> input, len + 4)
     symstore <- freshArray_ Nothing
-    let preState = (loadSymVM runtimecode symstore calldata') & set pathConditions [pre input]
+    let preState = (loadSymVM runtimecode symstore (calldata',cdlen)) & set pathConditions [pre input]
     smtState <- queryState
     results <- io $ fst <$> runStateT (interpret (Fetch.oracle smtState) Stepper.runFully) preState
     case (maybepost, results) of
       (Just post, Right res) -> do let postC = sOr $ fmap (\postState -> (sAnd (view pathConditions postState)) .&& sNot (post (preState, postState))) res
-                                   resetAssertions
-                                   constrain postC
                                    -- is it possible for any of these pathcondition => postcondition
                                    -- implications to be false?
+                                   resetAssertions
+                                   constrain postC
                                    io $ print "checking postcondition..."
                                    sat <- checkSat
                                    case sat of
