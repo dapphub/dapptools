@@ -5,6 +5,8 @@ let
   stdenv = self.pkgs.stdenv;
 
 in rec {
+  dapptoolsSrc = self.callPackage (import ./nix/dapptools-src.nix) {};
+
   haskellPackages = super.haskellPackages.override (old: {
     overrides = lib.composeExtensions (old.overrides or (_: _: {})) (
       import ./haskell.nix { inherit lib; pkgs = self; }
