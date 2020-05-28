@@ -160,8 +160,7 @@ main = defaultMain $ testGroup "hevm"
               in case view result output of
                 Just (VMSuccess out) -> (asWord out) .== (asWord x) + (asWord y)
                 _ -> sFalse
-        nothing <- runSMT $ query $
-          verify (RuntimeCode safeAdd) "add(uint256,uint256)" pre post
+        nothing <- runSMT $ verify (RuntimeCode safeAdd) "add(uint256,uint256)" pre post
         print nothing
         assert $ nothing == Left ()
      ,
@@ -186,7 +185,7 @@ main = defaultMain $ testGroup "hevm"
                  in case view result output of
                       Just (VMSuccess out) -> asWord out .== 2 * asWord y
                       _ -> sFalse
-        nothing <- runSMT $ query $
+        nothing <- runSMT $
           verify (RuntimeCode safeAdd) "add(uint256,uint256)" pre post
         assert $ nothing == Left ()
       ,
@@ -204,8 +203,7 @@ main = defaultMain $ testGroup "hevm"
             post = Just $ \(_, output) -> case view result output of
               Just (EVM.VMFailure (EVM.UnrecognizedOpcode 254)) -> sFalse
               _ -> sTrue
-        (Right (AbiTuple xy)) <- runSMT $ query $
-          verify (RuntimeCode factor) "factor(uint256,uint256)" pre post
+        (Right (AbiTuple xy)) <- runSMT $ verify (RuntimeCode factor) "factor(uint256,uint256)" pre post
         let (AbiUInt 256 x, AbiUInt 256 y) = (head (Vector.toList xy), head $ tail (Vector.toList xy))
         assert $ x == 953 && y == 1021 || x == 1021 && y == 953
         ,
@@ -235,8 +233,7 @@ main = defaultMain $ testGroup "hevm"
               in case view result poststate of
                 Just (VMSuccess _) -> prex + 2 * (fromBytes y) .== postx
                 _ -> sFalse
-        nothing <- runSMTWith z3{transcript=Just "z3log.log"} $ query $
-          verify (RuntimeCode c) "f(uint256)" pre post
+        nothing <- runSMT $ verify (RuntimeCode c) "f(uint256)" pre post
         assertEqual "success?" nothing (Left ())
         ,
         -- Inspired by these `msg.sender == to` token bugs
@@ -272,10 +269,26 @@ main = defaultMain $ testGroup "hevm"
               in case view result poststate of
                 Just (VMSuccess mempty) -> prex + prey .== postx + (posty :: SWord 256)
                 _ -> sFalse
-        (Right (AbiTuple xyz)) <- runSMT $ query $
-          verify (RuntimeCode c) "f(uint256,uint256)" pre post
+        (Right (AbiTuple xyz)) <- runSMT $ verify (RuntimeCode c) "f(uint256,uint256)" pre post
         let (AbiUInt 256 x, AbiUInt 256 y) = (head (Vector.toList xyz), head $ tail (Vector.toList xyz))
         assert $ x == y
+        ,
+        testCase "injectivity of keccak" $ do
+        Just c <- solcRuntime "A"
+          [i|
+          contract A {
+            function f(uint x, uint y) public {
+               if (keccak256(abi.encodePacked(x)) == keccak256(abi.encodePacked(y))) assert(x == y);
+            }
+          }
+          |]
+        let pre = const sTrue
+            post = Just $ \(_, output) -> case view result output of
+              Just (EVM.VMFailure (EVM.UnrecognizedOpcode 254)) -> sFalse
+              _ -> sTrue
+        nothing <- runSMT $
+          verify (RuntimeCode c) "f(uint256,uint256)" pre post
+        assert $ nothing == Left ()
     ]
   ]
   where

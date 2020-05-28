@@ -145,30 +145,7 @@ http n url q =
       fetchSlotFrom n url addr (fromIntegral slot) >>= \case
         Just x  -> return (continue x)
         Nothing -> error ("oracle error: " ++ show q)
-    EVM.PleaseAskSMT jumpcondition pathconditions continue ->
-      runSMT . query $ do
-         let pathconds = sAnd pathconditions
-         constrain pathconds
-         constrain (jumpcondition ./= 0)
-         noJump <- checkSat
-         case noJump of
-           -- Unsat means condition
-           -- must be zero
-           Unsat -> return $ continue (EVM.Known 0)
-           -- Sat means its possible for condition
-           -- to be nonzero.
-           Sat -> do resetAssertions
-                     constrain pathconds
-                     constrain (jumpcondition .== 0)
-                     jump <- checkSat
-                     -- can it also be zero?
-                     case jump of
-                       -- No. It must be nonzero
-                       Unsat -> return $ continue (EVM.Known 1)
-                       -- Yes. Both branches possible
-                       Sat -> return $ continue EVM.Unknown      
-
-
+    EVM.PleaseAskSMT jumpcondition pathconditions continue -> error "smt calls not available for this oracle"
 
 zero :: Monad m => EVM.Query -> m (EVM ())
 zero q =
@@ -184,20 +161,10 @@ zero q =
 
 type Fetcher = EVM.Query -> IO (EVM ())
 
--- more like http + z3 now
---oracle :: BlockNumber -> Text -> EVM.Query -> Query (EVM ())
+-- like http + z3
 oracle :: SBV.State -> Fetcher
 oracle state q = do
   case q of
-    -- EVM.PleaseFetchContract addr continue -> io $
-    --   fetchContractFrom n url addr >>= \case
-    --     Just x -> do
-    --       return (continue x)
-    --     Nothing -> error ("oracle error: " ++ show q)
-    -- EVM.PleaseFetchSlot addr slot continue -> io $
-    --   fetchSlotFrom n url addr (fromIntegral slot) >>= \case
-    --     Just x  -> return (continue x)
-    --     Nothing -> error ("oracle error: " ++ show q)
     EVM.PleaseAskSMT jumpcondition pathconditions continue ->
       flip runReaderT state $ SBV.runQueryT $ do
          resetAssertions
@@ -221,3 +188,5 @@ oracle state q = do
                         Unsat -> return $ continue (EVM.Known 1)
                         -- Yes. Both branches possible
                         Sat -> return $ continue EVM.Unknown      
+
+    _ -> zero q
