@@ -16,6 +16,7 @@ module EVM where
 import Prelude hiding (log, Word, exponent)
 
 import Data.SBV hiding (Word, output, Unknown)
+import qualified Data.SBV.Control as SBV
 import Data.Proxy (Proxy(..))
 import EVM.ABI
 import EVM.Types
@@ -2434,11 +2435,17 @@ memoryCost FeeSchedule{..} byteCount =
 symKeccak :: [SWord 8] -> SymWord
 symKeccak bytes = case length bytes of
   0 -> litWord $ keccakBlob mempty
-  1 -> sw256 $ uninterpret "keccak" $ (fromBytes bytes :: SWord 8)
-  4 -> sw256 $ uninterpret "keccak" $ (fromBytes bytes :: SWord 32)
-  32 -> sw256 $ uninterpret "keccak" $ (fromBytes bytes :: SWord 256)
-  64 -> sw256 $ uninterpret "keccak" $ (fromBytes bytes :: SWord 512)
+  1 -> sw256 $ uninterpret "keccak1" $ (fromBytes bytes :: SWord 8)
+  4 -> sw256 $ uninterpret "keccak4" $ (fromBytes bytes :: SWord 32)
+  32 -> sw256 $ uninterpret "keccak32" $ (fromBytes bytes :: SWord 256)
+  64 -> sw256 $ uninterpret "keccak64" $ (fromBytes bytes :: SWord 512)
 --  96 -> sw256 $ uninterpret "keccak" $ (fromBytes bytes :: SWord 768)
+
+keccakProp :: Symbolic SBool
+keccakProp = forAll_ $ \a (b :: SWord 256) ->
+  symKeccak (toBytes a) .== symKeccak (toBytes b) .=> a .== b
+  
+
 
 -- * Arithmetic
 
