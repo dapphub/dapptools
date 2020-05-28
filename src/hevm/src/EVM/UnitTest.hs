@@ -604,7 +604,7 @@ setupCall params target sig args  = do
   let TestVMParams {..} = params
   resetState
   loadContract target
-  assign (state . calldata) $ litBytes $ abiMethod sig args
+  assign (state . calldata) $ (litBytes $ abiMethod sig args, litWord . num . BS.length $ abiMethod sig args)
   assign (state . caller) testCaller
   assign (state . gas) (w256 testGasCall)
 
@@ -614,7 +614,7 @@ initialUnitTestVm (UnitTestOptions {..}) theContract _ =
     TestVMParams {..} = testParams
     vm = makeVm $ VMOpts
            { vmoptContract = initialContract (InitCode (view creationCode theContract))
-           , vmoptCalldata = []
+           , vmoptCalldata = ([], 0)
            , vmoptValue = 0
            , vmoptAddress = testAddress
            , vmoptCaller = testCaller

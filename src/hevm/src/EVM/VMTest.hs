@@ -46,6 +46,7 @@ import qualified Data.Map          as Map
 import qualified Data.Aeson        as JSON
 import qualified Data.Aeson.Types  as JSON
 import qualified Data.ByteString.Lazy  as Lazy
+import qualified Data.ByteString as BS
 
 data Which = Pre | Post
 
@@ -294,7 +295,7 @@ parseVmOpts v =
        (JSON.Object env, JSON.Object exec) ->
          EVM.VMOpts
            <$> (dataField exec "code" >>= pure . EVM.initialContract . EVM.RuntimeCode)
-           <*> (dataField exec "data" >>= pure . litBytes)
+           <*> (dataField exec "data" >>= \a -> pure ( (litBytes a), EVM.litWord . num $ BS.length a))
            <*> wordField exec "value"
            <*> addrField exec "address"
            <*> addrField exec "caller"
@@ -417,7 +418,7 @@ fromCreateBlockchainCase block tx preState postState =
       in Right $ Case
          (EVM.VMOpts
           { vmoptContract      = EVM.initialContract (EVM.InitCode (txData tx))
-          , vmoptCalldata      = mempty
+          , vmoptCalldata      = (mempty, 0)
           , vmoptValue         = txValue tx
           , vmoptAddress       = createdAddr
           , vmoptCaller        = origin
@@ -454,7 +455,7 @@ fromNormalBlockchainCase block tx preState postState =
       (_, _, Just origin, Just checkState) -> Right $ Case
         (EVM.VMOpts
          { vmoptContract      = EVM.initialContract theCode
-         , vmoptCalldata      = litBytes $ txData tx
+         , vmoptCalldata      = (litBytes $ txData tx, EVM.litWord . num . BS.length $ txData tx)
          , vmoptValue         = txValue tx
          , vmoptAddress       = toAddr
          , vmoptCaller        = origin
