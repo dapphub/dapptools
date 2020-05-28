@@ -397,30 +397,28 @@ both' f (x, y) = (f x, f y)
 
 assert :: Command Options.Unwrapped -> IO ()
 assert cmd =
-  if debug cmd
-  then do
-      let root = fromMaybe "." (dappRoot cmd)
-          srcinfo = ((,) root) <$> (jsonFile cmd)
-          Just types = parseFunArgs =<< funcSig cmd
-          bytecode = maybe (error "bytecode not given") (hexByteString "--code" . strip0x) (code cmd)
-      void . runSMT . query $ do input <- symAbiArg types
-                                 let calldata' = litBytes (sig $ fromMaybe (error "no funcsig given") (funcSig cmd)) <> input
-                                 symstore <- freshArray_ Nothing
-                                 let preState = loadSymVM bytecode symstore calldata'
-                                 smtState <- queryState
-                                 io $ EVM.TTY.runFromVM srcinfo (EVM.Fetch.oracle smtState) preState
+  let bytecode = maybe (error "bytecode not given") (hexByteString "--code" . strip0x) (code cmd)
+  in if debug cmd
+     then do let root = fromMaybe "." (dappRoot cmd)
+                 srcinfo = ((,) root) <$> (jsonFile cmd)
+                 Just types = parseFunArgs =<< funcSig cmd
+             void . runSMT . query $ do input <- symAbiArg types
+                                        let calldata' = litBytes (sig $ fromMaybe (error "no funcsig given") (funcSig cmd)) <> input
+                                        symstore <- freshArray_ Nothing
+                                        let preState = loadSymVM bytecode symstore calldata'
+                                        smtState <- queryState
+                                        io $ EVM.TTY.runFromVM srcinfo (EVM.Fetch.oracle smtState) preState
 
-  else
-    let post = Just $ \(input, output) ->
-          case view EVM.result output of
-            Just (EVM.VMFailure (EVM.UnrecognizedOpcode 254)) -> sFalse
-            _ -> sTrue
-        bytecode = maybe (error "bytecode not given") EVM.RuntimeCode (code cmd)
-    in do results <- runSMT $ query $ verify bytecode (fromMaybe (error "function signature missing") (funcSig cmd)) (const sTrue) post
-          case results of
-            Left () -> print "All good"
-            Right a -> do print "Assertion violation:"
-                          print a
+     else
+       let post = Just $ \(_, output) ->
+             case view EVM.result output of
+               Just (EVM.VMFailure (EVM.UnrecognizedOpcode 254)) -> sFalse
+               _ -> sTrue
+       in do results <- runSMT $ verify (EVM.RuntimeCode bytecode) (fromMaybe (error "function signature missing") (funcSig cmd)) (const sTrue) post
+             case results of
+               Left () -> print "All good"
+               Right a -> do print "Assertion violation:"
+                             print a
 
 dappCoverage :: UnitTestOptions -> Mode -> String -> IO ()
 dappCoverage opts _ solcFile =
