@@ -106,6 +106,7 @@ data VM = VM
   , _execMode       :: ExecMode
   , _burned         :: Word
   , _pathConditions :: [SBool]
+  , _iterations     :: Map CodeLocation Int
   }
 
 data Trace = Trace
@@ -161,7 +162,7 @@ data JumpCondition = Known Word | Unknown
 -- any expensive query that is constant at least within a block.
 data Cache = Cache
   { _fetched :: Map Addr Contract,
-    _path :: Map CodeLocation JumpCondition
+    _path :: Map (CodeLocation, Int) JumpCondition
   } deriving Show
 
 -- | A way to specify an initial VM state
@@ -415,6 +416,7 @@ makeVm o = VM
   , _execMode = ExecuteNormally
   , _burned = 0
   , _pathConditions = []
+  , _iterations = mempty
   } where theCode = case _contractcode (vmoptContract o) of
             InitCode b    -> b
             RuntimeCode b -> b
@@ -1439,26 +1441,35 @@ pushToSequence f x = f %= (Seq.|> x)
 
 askSMT :: Addr -> Word -> SymWord -> (Word -> EVM ()) -> EVM ()
 askSMT addr pcval jumpcondition continue = do
--- First, check the cache if a query has been done already for this
--- particular (contract, pc) combination:
-  use (cache . path . at (addr, pcval)) >>= \case
+  -- We keep track of how many times we have come across this particular
+  -- (contract, pc) combination in the `iteration` mapping.
+  iteration <- use (iterations . at (addr, pcval) . non 0)
+
+  -- If we are backstepping, the result of this query should be cached
+  -- already. So we first check the cache to see if the result is known
+  use (cache . path . at ((addr, pcval), iteration)) >>= \case
      -- If the query has been done already, select path or select the only available
      Just w -> choosePath w
-     -- If this is a new query, do it, cache it, and select path
+     -- If this is a new query, run the query, cache the result
+     -- increment the iterations and select appropriate path
      Nothing -> do pathconds <- use pathConditions
                    assign result . Just . VMFailure . Query $ PleaseAskSMT
                      jumpcondition pathconds choosePath
 
    where -- Only one path is possible
          choosePath (Known w) = do assign result Nothing
-                                   assign (cache . path . at (addr, pcval)) (Just (Known w))
+                                   iteration <- use (iterations . at (addr, pcval) . non 0)
+                                   assign (cache . path . at ((addr, pcval), iteration)) (Just (Known w))
+                                   assign (iterations . at (addr, pcval)) (Just (iteration + 1))
                                    continue w
          -- Both paths are possible; we ask for more input
          choosePath Unknown = assign result . Just . VMFailure . Choose $ PleaseChoosePath
            (\selected -> do
                pathConditions <>= [litWord selected .== jumpcondition]
-               assign (cache . path . at (addr, pcval)) (Just (Known selected))
+               iteration <- use (iterations . at (addr, pcval) . non 0)
+               assign (cache . path . at ((addr, pcval), iteration)) (Just (Known selected))
                assign result Nothing
+               assign (iterations . at (addr, pcval)) (Just (iteration + 1))
                continue selected)
 
 
