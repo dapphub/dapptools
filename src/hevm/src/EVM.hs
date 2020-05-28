@@ -164,7 +164,7 @@ data Cache = Cache
 -- | A way to specify an initial VM state
 data VMOpts = VMOpts
   { vmoptContract :: Contract
-  , vmoptCalldata :: [SWord 8]
+  , vmoptCalldata :: ([SWord 8], SymWord)
   , vmoptValue :: W256
   , vmoptAddress :: Addr
   , vmoptCaller :: Addr
@@ -218,7 +218,7 @@ data FrameState = FrameState
   , _stack        :: [SymWord]
   , _memory       :: [SWord 8]
   , _memorySize   :: Int
-  , _calldata     :: [SWord 8]
+  , _calldata     :: ([SWord 8], SymWord)
   , _callvalue    :: Word
   , _caller       :: Addr
   , _gas          :: Word
@@ -315,7 +315,7 @@ blankState = FrameState
   , _stack        = mempty
   , _memory       = mempty
   , _memorySize   = 0
-  , _calldata     = mempty
+  , _calldata     = (mempty, 0)
   , _callvalue    = 0
   , _caller       = 0
   , _gas          = 0
@@ -475,23 +475,27 @@ exec1 = do
     -- call to precompile
     let ?op = 0x00 -- dummy value
     let
-      calldatasize = num $ length (the state calldata)
-    copyBytesToMemory (the state calldata) calldatasize 0 0
-    executePrecompile self (the state gas) 0 calldatasize 0 0 []
-    use (state.stack) >>= \case
-      (x:_) -> case maybeLitWord x of
-        Just 0 -> do
-          fetchAccount self $ \_ -> do
-            touchAccount self
-            vmError PrecompileFailure
-        Just _ ->
-          fetchAccount self $ \_ -> do
-            touchAccount self
-            out <- use (state . returndata)
-            finishFrame (FrameReturned out)
+      calldatasize = snd (the state calldata)
+    case maybeLitWord calldatasize of
         Nothing -> vmError UnexpectedSymbolicArg
-      _ ->
-        underrun
+        Just calldatasize' -> do
+          copyBytesToMemory (fst $ the state calldata) calldatasize' 0 0
+          executePrecompile self (the state gas) 0 calldatasize' 0 0 []
+          vmx <- get
+          case view (state.stack) vmx of
+            (x:_) -> case maybeLitWord x of
+              Just 0 -> do
+                fetchAccount self $ \_ -> do
+                  touchAccount self
+                  vmError PrecompileFailure
+              Just _ ->
+                fetchAccount self $ \_ -> do
+                  touchAccount self
+                  out <- use (state . returndata)
+                  finishFrame (FrameReturned out)
+              Nothing -> vmError UnexpectedSymbolicArg
+            _ ->
+              underrun
 
   else if the state pc >= num (BS.length (the state code))
     then doStop
@@ -670,12 +674,12 @@ exec1 = do
 
         -- op: CALLDATALOAD
         0x35 -> stackOp1 (const g_verylow) $
-          \x -> readSWord (forceLit x) (the state calldata)
+          \x -> readSWord (forceLit x) (fst $ the state calldata)
 
         -- op: CALLDATASIZE
         0x36 ->
           limitStack 1 . burn g_base $
-            next >> push (num (length (the state calldata)))
+            next >> pushSym (snd $ (the state calldata))
 
         -- op: CALLDATACOPY
         0x37 ->
@@ -685,7 +689,7 @@ exec1 = do
                 accessUnboundedMemoryRange fees xTo xSize $ do
                   next
                   assign (state . stack) xs
-                  copyBytesToMemory (the state calldata) xSize xFrom xTo
+                  copyBytesToMemory (fst $ the state calldata) xSize xFrom xTo
             _ -> underrun
 
         -- op: CODESIZE
@@ -1727,45 +1731,48 @@ delegateCall this gasGiven xTo xContext xValue xInOffset xInSize xOutOffset xOut
   \xGas -> do
     vm0 <- get
     fetchAccount xTo . const $
-      preuse (env . contracts . ix xTo) >>= \case
-        Nothing ->
-          vmError (NoSuchContract xTo)
-        Just target ->
-          burn xGas $ do
-           let newContext = CallContext
-                  { callContextOffset = xOutOffset
-                  , callContextSize = xOutSize
-                  , callContextCodehash = view codehash target
-                  , callContextReversion = view (env . contracts) vm0
-                  , callContextSubState = view (tx . substate) vm0
-                  , callContextAbi =
-                      if xInSize >= 4
-                      then case maybeLitBytes $
-                                    take 4 $ drop (num xInOffset) $ (view (state . memory) vm0)
-                           of Nothing -> Nothing
-                              Just sigBytes -> Just . w256 $ word sigBytes
-                      else Nothing
-                  , callContextData = (readMemory (num xInOffset) (num xInSize) vm0)
-                  }
-           pushTrace (FrameTrace newContext)
-            next
-            vm1 <- get
-           pushTo frames $ Frame
-              { _frameState = (set stack xs) (view state vm1)
-              , _frameContext = newContext
-              }
-           zoom state $ do
-              assign gas xGas
-              assign pc 0
-              assign code (view bytecode target)
-              assign codeContract xTo
-              assign stack mempty
-              assign memory mempty
-              assign memorySize 0
-              assign returndata mempty
-              assign calldata (readMemory (num xInOffset) (num xInSize) vm0)
+        preuse (env . contracts . ix xTo) >>= \case
+          Nothing ->
+            vmError (NoSuchContract xTo)
+          Just target ->
+            burn xGas $ do
+              let newContext = CallContext
+                    { callContextOffset = xOutOffset
+                    , callContextSize = xOutSize
+                    , callContextCodehash = view codehash target
+                    , callContextReversion = view (env . contracts) vm0
+                    , callContextSubState = view (tx . substate) vm0
+                    , callContextAbi =
+                        if xInSize >= 4
+                        then case maybeLitBytes $
+                                      take 4 $ drop (num xInOffset) $ (view (state . memory) vm0)
+                             of Nothing -> Nothing
+                                Just sigBytes -> Just . w256 $ word sigBytes
+                        else Nothing
+                    , callContextData = (readMemory (num xInOffset) (num xInSize) vm0)
+                    }
 
-           continue
+              pushTrace (FrameTrace newContext)
+              next
+              vm1 <- get
+
+              pushTo frames $ Frame
+                { _frameState = (set stack xs) (view state vm1)
+                , _frameContext = newContext
+                }
+
+              zoom state $ do
+                assign gas xGas
+                assign pc 0
+                assign code (view bytecode target)
+                assign codeContract xTo
+                assign stack mempty
+                assign memory mempty
+                assign memorySize 0
+                assign returndata mempty
+                assign calldata (readMemory (num xInOffset) (num xInSize) vm0, litWord xInSize)
+
+              continue
 
 -- -- * Contract creation
 
@@ -2432,14 +2439,14 @@ memoryCost FeeSchedule{..} byteCount =
 -- but for now, let's go the ugly & easy route and just catch
 -- the most common uses of keccak
 
+symKeccak32 :: SWord 256 -> SWord 256
+symKeccak32 = uninterpret "keccak32"
+
 symKeccak :: [SWord 8] -> SymWord
 symKeccak bytes = case length bytes of
   0 -> litWord $ keccakBlob mempty
-  1 -> sw256 $ uninterpret "keccak1" $ (fromBytes bytes :: SWord 8)
-  4 -> sw256 $ uninterpret "keccak4" $ (fromBytes bytes :: SWord 32)
-  32 -> sw256 $ uninterpret "keccak32" $ (fromBytes bytes :: SWord 256)
-  64 -> sw256 $ uninterpret "keccak64" $ (fromBytes bytes :: SWord 512)
---  96 -> sw256 $ uninterpret "keccak" $ (fromBytes bytes :: SWord 768)
+  32 -> sw256 . symKeccak32 $ fromBytes bytes
+  n -> error $ "TODO: symkeccak for: " <> show n
 
 keccakProp :: Symbolic SBool
 keccakProp = forAll_ $ \a (b :: SWord 256) ->

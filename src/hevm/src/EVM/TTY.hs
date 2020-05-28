@@ -974,7 +974,7 @@ drawTracePane s =
     True ->
       hBorderWithLabel (txt "Calldata")
 --      <=> str (prettyHex 40 (view (uiVm . state . calldata) s))
-      <=> str (prettyIfConcrete (view (uiVm . state . calldata) s))
+      <=> str (prettyIfConcrete $ fst (view (uiVm . state . calldata) s))
       <=> hBorderWithLabel (txt "Returndata")
       <=> str (prettyIfConcrete (view (uiVm . state . returndata) s))
       <=> hBorderWithLabel (txt "Output")
