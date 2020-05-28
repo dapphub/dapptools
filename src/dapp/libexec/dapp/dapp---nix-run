@@ -16,7 +16,4 @@ have() { command -v "$1" >/dev/null; }
 
 expr="$1"; shift
 
-DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
-DAPPTOOLS="$DIR/../../../../default.nix"
-
 nix run "(with import $DAPPTOOLS {}; $expr)" -c "$@"
