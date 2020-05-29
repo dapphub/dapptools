@@ -11,7 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - add environment flag `ETH_HD_PATH` which can be used to set derivation
   path for BIP32 hardware wallets
 
-[0.13.0]: https://github.com/dapphub/dapptools/tree/ethsign/0.14.0
+[0.14.0]: https://github.com/dapphub/dapptools/tree/ethsign/0.14.0
 
 ## [0.13.0] - 2019-08-08
 
