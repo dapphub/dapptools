@@ -12,7 +12,7 @@ Contents:
 - [Hevm](./src/hevm) - Ethereum evaluator. Fully complient Haskell EVM implementation.
 - [Ethsign](./src/ethsign) - sign Ethereum transactions from a local keystore.
 
-## Instalation
+## Installation
 
 Install `nix` if you haven't already:
 
