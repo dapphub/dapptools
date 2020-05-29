@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+set -e
 export SOLC_FLAGS="--evm-version constantinople"
 for x in *.sol; do
   dapp test-standalone "$x"
