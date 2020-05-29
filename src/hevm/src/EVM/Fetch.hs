@@ -15,7 +15,9 @@ import Control.Lens hiding ((.=))
 import Control.Monad.Reader
 import Control.Monad.Trans.Maybe
 
+import Data.SBV.Control (registerUISMTFunction)
 import Data.SBV.Trans.Control
+import Data.SBV.Internals (sendStringToSolver, retrieveResponseFromSolver)
 --import qualified Data.SBV.Control.Query as Trans
 import qualified Data.SBV.Internals as SBV
 import Data.SBV.Trans hiding (Word)
@@ -167,21 +169,21 @@ oracle state q = do
   case q of
     EVM.PleaseAskSMT jumpcondition pathconditions continue ->
       flip runReaderT state $ SBV.runQueryT $ do
-         resetAssertions
          let pathconds = sAnd pathconditions
          constrain pathconds
          constrain (jumpcondition ./= 0)
          noJump <- checkSat
+         resetAssertions
          case noJump of
             -- Unsat means condition
             -- must be zero
             Unsat -> return $ continue (EVM.Known 0)
             -- Sat means its possible for condition
             -- to be nonzero.
-            Sat -> do resetAssertions
-                      constrain pathconds
+            Sat -> do constrain pathconds
                       constrain (jumpcondition .== 0)
                       jump <- checkSat
+                      resetAssertions
                       -- can it also be zero?
                       case jump of
                         -- No. It must be nonzero
@@ -190,3 +192,15 @@ oracle state q = do
                         Sat -> return $ continue EVM.Unknown      
 
     _ -> zero q
+
+-- TODO: move me
+ufProperties :: Query ()
+ufProperties = do
+  -- Altohugh this constraints are the right approach
+  -- z3 chokes when presented with this new information
+  sendStringToSolver $ concat ["(assert (forall ((a Int) (b Int))"
+                              , " (=>  (= (keccak32 a) (keccak32 b))"
+                              , "      (= a b))))"
+                              ]
+  k <- retrieveResponseFromSolver "synching with call above" Nothing
+  unless (concat k == "success") (error "smt synchronization failed")

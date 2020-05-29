@@ -139,7 +139,6 @@ main = defaultMain $ testGroup "hevm"
 
   , testGroup "Symbolic execution"
       [
-      -- Previous hang up was from using `satAssuming`.
       -- Somewhat tautological since we are asserting the precondition
       -- on the same form as the actual "requires" clause.
       testCase "SafeAdd success case" $ do
@@ -161,7 +160,7 @@ main = defaultMain $ testGroup "hevm"
               in case view result output of
                 Just (VMSuccess out) -> (asWord out) .== (asWord x) + (asWord y)
                 _ -> sFalse
-        nothing <- runSMTWith z3{verbose=True} $ verify (RuntimeCode safeAdd) "add(uint256,uint256)" pre post
+        nothing <- runSMT $ verify (RuntimeCode safeAdd) "add(uint256,uint256)" pre post
         print nothing
         assert $ nothing == Left ()
      ,
@@ -273,8 +272,61 @@ main = defaultMain $ testGroup "hevm"
         (Right (AbiTuple xyz)) <- runSMT $ verify (RuntimeCode c) "f(uint256,uint256)" pre post
         let (AbiUInt 256 x, AbiUInt 256 y) = (head (Vector.toList xyz), head $ tail (Vector.toList xyz))
         assert $ x == y
-        -- -- This currently fails, so commented out to run other tests for now
+        ,
+        testCase "Deposit contract loop" $ do
+          Just c <- solcRuntime "Deposit"
+            [i|
+            contract Deposit {
+	      function deposit(uint256 deposit_count) external pure {
+	        require(deposit_count < 2**32 - 1);
+	        ++deposit_count;
+	        bool found = false;
+	        for (uint height = 0; height < 32; height++) {
+	          if ((deposit_count & 1) == 1) {
+	            found = true;
+	            break;
+	          }
+	         deposit_count = deposit_count >> 1;
+	         }
+	        assert(found);
+	      }
+             }
+            |]
+          let pre = const sTrue
+              post = Just $ \(_, output) -> case view result output of
+                Just (EVM.VMFailure (EVM.UnrecognizedOpcode 254)) -> sFalse
+                _ -> sTrue
+          res <- runSMT $ verify (RuntimeCode c) "deposit(uint256)" pre post
+          assert $ res == Left ()
+        ,
+        testCase "Deposit contract loop (error version)" $ do
+          Just c <- solcRuntime "Deposit"
+            [i|
+            contract Deposit {
+	      function deposit(uint8 deposit_count) external pure {
+	        require(deposit_count < 2**32 - 1);
+	        ++deposit_count;
+	        bool found = false;
+	        for (uint height = 0; height < 32; height++) {
+	          if ((deposit_count & 1) == 1) {
+	            found = true;
+	            break;
+	          }
+	         deposit_count = deposit_count >> 1;
+	         }
+	        assert(found);
+	      }
+             }
+            |]
+          let pre = const sTrue
+              post = Just $ \(_, output) -> case view result output of
+                Just (EVM.VMFailure (EVM.UnrecognizedOpcode 254)) -> sFalse
+                _ -> sTrue
+          (Right (AbiTuple deposit)) <- runSMT $ verify (RuntimeCode c) "deposit(uint8)" pre post
+          print deposit
+          assert $ deposit == Vector.fromList [AbiUInt 8 255]
         -- ,
+
         -- testCase "injectivity of keccak" $ do
         -- Just c <- solcRuntime "A"
         --   [i|

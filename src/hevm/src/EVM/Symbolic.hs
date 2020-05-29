@@ -24,6 +24,7 @@ import qualified EVM.FeeSchedule as FeeSchedule
 import Data.SBV.Trans.Control hiding (sat)
 import Data.SBV.Trans
 import Data.SBV.Control (registerUISMTFunction)
+import Data.SBV.Internals (sendStringToSolver)
 import Data.SBV hiding (runSMT, newArray_, addAxiom)
 
 import Control.Monad.IO.Class
@@ -167,28 +168,16 @@ type Postcondition = (VM, VM) -> SBool
 
 verify :: ContractCode -> Text -> Precondition -> Maybe Postcondition -> Symbolic (Either () AbiValue)
 verify (RuntimeCode runtimecode) signature' pre maybepost = do
-  -- Adding this axiom here might be a good approach,
-  -- but unfortunately later `(reset-assertion)` calls
-  -- removes it from the current constraints.
-
-  -- Need to rearchitect the sharing of contexts of queries,
-  -- and perhaps make the JUMPI checks complelely concurrent.
-
-  -- It is possible that one could do all the path explorations concurrently
-  -- with a new architecture.
-  -- This would certainly seem like the most interesting option
-  
-  -- registerUISMTFunction symKeccak32
-  -- addAxiom "injectivity of keccak32" ["(assert (forall ((a (_ BitVec 256)) (b (_ BitVec 256)))"
-  --                                    , " (=>  (= (keccak32 a) (keccak32 b))"
-  --                                    , "      (= a b))))"
-  --                                    ]
+-- If we want to assert the constraints of Fetch.ufProperties
+-- we need this here:
+--  registerUISMTFunction EVM.symKeccak32
   query $ do
     let Just types = (parseFunArgs signature')
     (input,len) <- symAbiArg types
     let (calldata',cdlen) = (litBytes (sig signature') <> input, len + 4)
     symstore <- freshArray_ Nothing
     let preState = (loadSymVM runtimecode symstore (calldata',cdlen)) & set pathConditions [pre input]
+    --registerUISMTFunction EVM.symKeccak32
     smtState <- queryState
     results <- io $ fst <$> runStateT (interpret (Fetch.oracle smtState) Stepper.runFully) preState
     case (maybepost, results) of
