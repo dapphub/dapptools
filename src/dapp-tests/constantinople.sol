@@ -3,12 +3,15 @@ pragma solidity ^0.5.2;
 import "ds-test/test.sol";
 
 contract DeadCode{
-    function dummy() external returns (uint256);
+    function dummy() external returns (uint256) {}
 }
 
 contract ConstantinopleTests is DSTest {
+    DeadCode notmuch;
+    function setUp() public {
+      notmuch = new DeadCode();
+    }
 
-    ConstantinopleTests notmuch;
     // this 5 byte-long initcode simply returns nothing
     // PUSH1  00     PUSH1  00     RETURN
     // 60     00     60     00     f3
