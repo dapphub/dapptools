@@ -18,7 +18,6 @@ if [[ $1 =~ ^([^\(]+)\( ]]; then
     args+=" --arg \"${arg//\"/\\\"}\" "
   done
   abi=$(echo "${abi//\"/\\\"}" | tr -d '[:space:]')
-  set -x
   calldata=$(
     eval "hevm abiencode --abi \"${abi}\" $args"
   )
