@@ -4,6 +4,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.14.0] - 2020-05-29
+
+### Changed
+
+- add environment flag `ETH_HD_PATH` which can be used to set derivation
+  path for BIP32 hardware wallets
+
+[0.13.0]: https://github.com/dapphub/dapptools/tree/ethsign/0.14.0
+
 ## [0.13.0] - 2019-08-08
 
 ### Changed
