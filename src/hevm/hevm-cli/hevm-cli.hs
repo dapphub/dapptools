@@ -165,7 +165,6 @@ data Command w
   }
   | Abiencode
   { abi  :: w ::: String      <?> "Signature of types to decode / encode"
-  , name :: w ::: String      <?> "Function name"
   , arg  :: w ::: [String]    <?> "Values to encode"
   }
   | MerkleTest -- Insert a set of key values and check against the given root
@@ -234,7 +233,7 @@ main = do
     Exec {} ->
       launchExec cmd
     Abiencode {} ->
-      print . ByteStringS $ abiencode (abi cmd) (name cmd) (arg cmd)
+      print . ByteStringS $ abiencode (abi cmd) (arg cmd)
     VmTest {} ->
       launchTest ExecuteAsVMTest cmd
     BcTest {} ->
@@ -582,9 +581,10 @@ interpret fetcher =
         EVM.Stepper.EVM m ->
           State.state (runState m) >>= interpret fetcher . k
 
-abiencode :: (AsValue s) => s -> String -> [String] -> ByteString
-abiencode abi funName args =
+abiencode :: (AsValue s) => s -> [String] -> ByteString
+abiencode abi args =
   let declarations = parseMethodInput <$> V.toList (abi ^?! key "inputs" . _Array)
+      sig = signature abi
   in if length declarations == length args
-     then abiMethod (pack funName) $ AbiTuple . V.fromList $ zipWith makeAbiValue (snd <$> declarations) args
+     then abiMethod sig $ AbiTuple . V.fromList $ zipWith makeAbiValue (snd <$> declarations) args
      else error $ "wrong number of arguments:" <> show (length args) <> ": " <> show args
