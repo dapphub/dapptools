@@ -2450,13 +2450,13 @@ memoryCost FeeSchedule{..} byteCount =
 -- but for now, let's go the ugly & easy route and just catch
 -- the most common uses of keccak
 
-symKeccak32 :: SWord 256 -> SWord 256
+symKeccak32 :: SInteger -> SInteger
 symKeccak32 = uninterpret "keccak32"
 
 symKeccak :: [SWord 8] -> SymWord
 symKeccak bytes = case length bytes of
   0 -> litWord $ keccakBlob mempty
-  32 -> sw256 . symKeccak32 $ fromBytes bytes
+  32 -> sw256 . sFromIntegral . symKeccak32 $ sFromIntegral $ (fromBytes bytes :: SWord 256)
   n -> error $ "TODO: symkeccak for: " <> show n
 
 keccakProp :: Symbolic SBool
