@@ -42,7 +42,10 @@ solc:x.y.z test`, but you can also install `solc` "standalone" (i.e. add it to
 your `$PATH`) with:
 
 ```
-   $ nix-env -f $HOME/.dapp/dapptools -iA solc-versions.solc_0_5_0
+nix-env -iA solc-versions.solc_x_y_z \
+  -if https://github.com/dapphub/dapptools/tarball/master \
+  --substituters https://dapp.cachix.org \
+  --trusted-public-keys dapp.cachix.org-1:9GJt9Ja8IQwR7YW/aF0QvCa6OmjGmsKoZIist0dG+Rs=
 ```
 
 Versions of `solc` that haven't yet landed in nixpkgs can be found under the
