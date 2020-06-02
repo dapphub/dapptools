@@ -165,7 +165,7 @@ data Cache = Cache
 -- | A way to specify an initial VM state
 data VMOpts = VMOpts
   { vmoptContract :: Contract
-  , vmoptCalldata :: ([SWord 8], SymWord)
+  , vmoptCalldata :: ([SWord 8], (SWord 32)) -- maximum size of uint32 as per eip 1985
   , vmoptValue :: W256
   , vmoptAddress :: Addr
   , vmoptCaller :: Addr
@@ -219,7 +219,7 @@ data FrameState = FrameState
   , _stack        :: [SymWord]
   , _memory       :: [SWord 8]
   , _memorySize   :: Int
-  , _calldata     :: ([SWord 8], SymWord)
+  , _calldata     :: ([SWord 8], (SWord 32))
   , _callvalue    :: Word
   , _caller       :: Addr
   , _gas          :: Word
@@ -478,11 +478,11 @@ exec1 = do
     let ?op = 0x00 -- dummy value
     let
       calldatasize = snd (the state calldata)
-    case maybeLitWord calldatasize of
+    case unliteral calldatasize of
         Nothing -> vmError UnexpectedSymbolicArg
         Just calldatasize' -> do
-          copyBytesToMemory (fst $ the state calldata) calldatasize' 0 0
-          executePrecompile self (the state gas) 0 calldatasize' 0 0 []
+          copyBytesToMemory (fst $ the state calldata) (num calldatasize') 0 0
+          executePrecompile self (the state gas) 0 (num calldatasize') 0 0 []
           vmx <- get
           case view (state.stack) vmx of
             (x:_) -> case maybeLitWord x of
@@ -681,7 +681,7 @@ exec1 = do
         -- op: CALLDATASIZE
         0x36 ->
           limitStack 1 . burn g_base $
-            next >> pushSym (snd $ (the state calldata))
+            next >> pushSym (sw256 . zeroExtend . snd $ (the state calldata))
 
         -- op: CALLDATACOPY
         0x37 ->
@@ -1781,7 +1781,7 @@ delegateCall this gasGiven xTo xContext xValue xInOffset xInSize xOutOffset xOut
                 assign memory mempty
                 assign memorySize 0
                 assign returndata mempty
-                assign calldata (readMemory (num xInOffset) (num xInSize) vm0, litWord xInSize)
+                assign calldata (readMemory (num xInOffset) (num xInSize) vm0, literal (num xInSize))
 
               continue
 
