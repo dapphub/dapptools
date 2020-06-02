@@ -28,6 +28,8 @@ import EVM.Stepper (Stepper)
 import EVM.Transaction
 import EVM.Types
 
+import Data.SBV
+
 import Control.Arrow ((***), (&&&))
 import Control.Lens
 import Control.Monad
@@ -295,7 +297,7 @@ parseVmOpts v =
        (JSON.Object env, JSON.Object exec) ->
          EVM.VMOpts
            <$> (dataField exec "code" >>= pure . EVM.initialContract . EVM.RuntimeCode)
-           <*> (dataField exec "data" >>= \a -> pure ( (litBytes a), EVM.litWord . num $ BS.length a))
+           <*> (dataField exec "data" >>= \a -> pure ( (litBytes a), literal . num $ BS.length a))
            <*> wordField exec "value"
            <*> addrField exec "address"
            <*> addrField exec "caller"
@@ -455,7 +457,7 @@ fromNormalBlockchainCase block tx preState postState =
       (_, _, Just origin, Just checkState) -> Right $ Case
         (EVM.VMOpts
          { vmoptContract      = EVM.initialContract theCode
-         , vmoptCalldata      = (litBytes $ txData tx, EVM.litWord . num . BS.length $ txData tx)
+         , vmoptCalldata      = (litBytes $ txData tx, literal . num . BS.length $ txData tx)
          , vmoptValue         = txValue tx
          , vmoptAddress       = toAddr
          , vmoptCaller        = origin

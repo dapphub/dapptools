@@ -11,7 +11,7 @@
 {-# Language TypeOperators #-}
 
 import qualified EVM
-import EVM.Concrete (w256, litWord)
+import EVM.Concrete (w256, litWord, sw256)
 import qualified EVM.FeeSchedule as FeeSchedule
 import qualified EVM.Fetch
 import qualified EVM.Flatten
@@ -103,6 +103,7 @@ data Command w
   | Exec -- Execute a given program with specified env & calldata
       { code        :: w ::: Maybe ByteString <?> "Program bytecode"
       , calldata    :: w ::: Maybe ByteString <?> "Tx: calldata"
+      , funcSig     :: w ::: Maybe Text       <?> "Function signature"
       , address     :: w ::: Maybe Addr       <?> "Tx: address"
       , caller      :: w ::: Maybe Addr       <?> "Tx: caller"
       , origin      :: w ::: Maybe Addr       <?> "Tx: origin"
@@ -352,14 +353,22 @@ equivalenceCheck :: Command Options.Unwrapped -> IO ()
 equivalenceCheck cmd =
   do let bytecodeA = hexByteString "--code" . strip0x $ codeA cmd
          bytecodeB = hexByteString "--code" . strip0x $ codeB cmd
-         Just types = parseFunArgs =<< funcSig cmd
+         types = parseFunArgs =<< funcSig cmd
+         getCalldata = case types of
+                      Nothing -> do cd <- sbytes1024
+                                    len <- freshVar_
+                                    return (cd, len, len .<= 1024)
+                      Just typ -> do (input, len) <- symAbiArg typ
+                                     return (litBytes (sig $ fromMaybe (error "not possibru") (funcSig cmd)) <> input, len + 4, sTrue)
+
      void . runSMT . query $ do
-           (input, len) <- symAbiArg types
-           let calldata' = litBytes (sig $ fromMaybe (error "no funcsig given") (funcSig cmd)) <> input
+           (calldata', cdlen, cdconstraint) <- getCalldata
            symstore <- freshArray_ Nothing
-           let (preStateA, preStateB) = both' (\x -> loadSymVM x symstore (calldata', 4 + len)) (bytecodeA, bytecodeB)
+           let (preStateA, preStateB) = both' (\x -> loadSymVM x symstore (calldata', cdlen) & over EVM.pathConditions ((<>) [cdconstraint]))
+                                          (bytecodeA, bytecodeB)
            smtState <- queryState
-           (aRes, bRes) <- both (\x -> io $ fst <$> runStateT (interpret (EVM.Fetch.oracle smtState) EVM.Stepper.runFully) x) (preStateA, preStateB)
+           (aRes, bRes) <- both (\x -> io $ fst <$> runStateT (interpret (EVM.Fetch.oracle smtState Nothing) EVM.Stepper.runFully) x)
+                             (preStateA, preStateB)
            resetAssertions
            case (aRes, bRes) of
              (Left errA, Right _) -> error $ "A Failed: " <> show errA
@@ -383,11 +392,12 @@ equivalenceCheck cmd =
 
                checkSat >>= \case
                   Unk -> error "solver said unknown!"
-                  Sat -> do model <- mapM (getValue.fromSized) input
-                            let inputArgs = decodeAbiValue types $ Lazy.fromStrict (ByteString.pack model)
+                  Sat -> do model <- mapM (getValue.fromSized) calldata'
                             io $ do putStrLn $ "Not equal!"
                                     putStrLn $ "Counterexample:"
-                                    print inputArgs
+                                    case types of
+                                      Just typ -> print $ decodeAbiValue typ $ Lazy.fromStrict (ByteString.pack (drop 4 model))
+                                      Nothing -> print $ ByteStringS (ByteString.pack model)
                                     exitFailure
                   Unsat -> return ()
 
@@ -396,26 +406,31 @@ equivalenceCheck cmd =
 both' :: (a -> b) -> (a, a) -> (b, b)
 both' f (x, y) = (f x, f y)
 
+
+-- Although it is tempting to fully abstract calldata and give any hints about the nature of the signature
+-- doing so results in significant time spent in consulting z3 about rather trivial matters.
+
+-- If function signatures are known, they should always be given for best results.
 assert :: Command Options.Unwrapped -> IO ()
 assert cmd =
   let bytecode = maybe (error "bytecode not given") (hexByteString "--code" . strip0x) (code cmd)
+      root = fromMaybe "." (dappRoot cmd)
+      srcinfo = ((,) root) <$> (jsonFile cmd)
+      types = parseFunArgs =<< funcSig cmd
+      getCalldata = case types of
+                      Nothing -> do cd <- sbytes1024
+                                    len <- freshVar_
+                                    return (cd, len, len .<= 1024)
+                      Just typ -> do (input, len) <- symAbiArg typ
+                                     return (litBytes (sig $ fromMaybe (error "not possibru") (funcSig cmd)) <> input, len + 4, sTrue)
   in if debug cmd
-     then do let root = fromMaybe "." (dappRoot cmd)
-                 srcinfo = ((,) root) <$> (jsonFile cmd)
-                 Just types = parseFunArgs =<< funcSig cmd
-             void . runSMT . query $ do (input, len) <- symAbiArg types
-                                        let calldata' = litBytes (sig $ fromMaybe (error "no funcsig given") (funcSig cmd)) <> input
-                                        symstore <- freshArray_ Nothing
-                                        let preState = loadSymVM bytecode symstore (calldata', len + 4)
-                                        smtState <- queryState
-                                        io $ EVM.TTY.runFromVM srcinfo (EVM.Fetch.oracle smtState) preState
+     then void . runSMT . query $ do (calldata', len, lenConstraint) <- getCalldata
+                                     symstore <- freshArray_ Nothing
+                                     let preState = loadSymVM bytecode symstore (calldata', len) & over EVM.pathConditions ((<>) [lenConstraint])
+                                     smtState <- queryState
+                                     io $ EVM.TTY.runFromVM srcinfo (EVM.Fetch.oracle smtState Nothing) preState
 
-     else
-       let post = Just $ \(_, output) ->
-             case view EVM.result output of
-               Just (EVM.VMFailure (EVM.UnrecognizedOpcode 254)) -> sFalse
-               _ -> sTrue
-       in do results <- runSMT $ verify (EVM.RuntimeCode bytecode) (fromMaybe (error "function signature missing") (funcSig cmd)) (const sTrue) post
+     else do results <- runSMT $ checkAssert (EVM.RuntimeCode bytecode) (funcSig cmd)
              case results of
                Left () -> print "All good"
                Right a -> do print "Assertion violation:"
@@ -460,35 +475,33 @@ launchExec :: Command Options.Unwrapped -> IO ()
 launchExec cmd = do
   let root = fromMaybe "." (dappRoot cmd)
       srcinfo = ((,) root) <$> (jsonFile cmd)
+  void . runSMT . query $
+    do smtState <- queryState
+       vm <- vmFromCommand cmd
+       vm1 <- case state cmd of
+         Nothing -> pure vm
+           -- Note: this will load the code, so if you've specified a state
+           -- repository, then you effectively can't change `--code' after
+           -- the first run.
+         Just path -> io $ Facts.apply vm <$> Git.loadFacts (Git.RepoAt path)
 
-  vm <- vmFromCommand cmd
-  vm1 <- case state cmd of
-    Nothing -> pure vm
-    Just path ->
-      -- Note: this will load the code, so if you've specified a state
-      -- repository, then you effectively can't change `--code' after
-      -- the first run.
-      Facts.apply vm <$> Git.loadFacts (Git.RepoAt path)
-
-  case optsMode cmd of
-    Run -> do
-      vm' <- execStateT (interpret fetcher . void $ EVM.Stepper.execFully) vm1
-      case view EVM.result vm' of
-        Nothing ->
-          error "internal error; no EVM result"
-        Just (EVM.VMFailure (EVM.Revert msg)) ->
-          die . show . ByteStringS $ msg
-        Just (EVM.VMFailure err) ->
-          die . show $ err
-        Just (EVM.VMSuccess msg) -> do
-          print . ByteStringS $ EVM.forceLitBytes msg
-          case state cmd of
-            Nothing -> pure ()
-            Just path ->
-              Git.saveFacts (Git.RepoAt path) (Facts.vmFacts vm')
-    Debug -> void $ EVM.TTY.runFromVM srcinfo fetcher vm1
-   where fetcher = maybe EVM.Fetch.zero (EVM.Fetch.http block') (rpc cmd)
-         block'  = maybe EVM.Fetch.Latest EVM.Fetch.BlockNumber (block cmd)
+       case optsMode cmd of
+         Run -> io $ do
+           vm' <- execStateT (interpret (fetcher smtState) . void $ EVM.Stepper.execFully) vm1
+           case view EVM.result vm' of
+             Nothing -> error "internal error; no EVM result"
+             Just (EVM.VMFailure (EVM.Revert msg)) -> die . show . ByteStringS $ msg
+             Just (EVM.VMFailure err) -> die . show $ err
+             Just (EVM.VMSuccess msg) -> putStrLn . show . ByteStringS $ EVM.forceLitBytes msg
+           case state cmd of
+             Nothing -> pure ()
+             Just path ->
+               Git.saveFacts (Git.RepoAt path) (Facts.vmFacts vm')
+         Debug -> io . void $ EVM.TTY.runFromVM srcinfo (fetcher smtState) vm1
+       return ()
+   where fetcher smt = case rpc cmd of
+           Nothing -> EVM.Fetch.oracle smt Nothing
+           Just url -> EVM.Fetch.oracle smt $ Just (block', url)
 
 data Testcase = Testcase {
   _entries :: [(Text, Maybe Text)],
@@ -545,20 +558,40 @@ tohexOrText s = case "0x" `Char8.isPrefixOf` encodeUtf8 s of
                   False -> encodeUtf8 s
 
 
-vmFromCommand :: Command Options.Unwrapped -> IO EVM.VM
+vmFromCommand :: Command Options.Unwrapped -> Query EVM.VM
 vmFromCommand cmd = do
+  (cdata, cdlen, cdconstraint) <- case (calldata cmd, funcSig cmd) of
+    -- fully abstract calldata:
+    (Nothing, Nothing) -> do cd <- sbytes1024
+                             len <- freshVar_
+                             return (cd, len, len .<= 1024)
+    -- concrete calldata:
+    (Just cd, Nothing) -> let cddata = litBytes . (hexByteString "--calldata") $ strip0x cd
+                          in return (cddata, literal . num $ length cddata, sTrue)
+    -- abstract calldata based on signature
+    (Nothing, Just s) -> let Just typ = parseFunArgs s
+                         in do (input, len) <- symAbiArg typ
+                               return (litBytes (sig s) <> input, len + 4, sTrue)
+    -- Fail if both are given
+
+    -- NOTE: it should be possible to combine concrete and abstract calldata
+    -- in the future: we can allow calldata to be passed similarly to how hevm does abiencoding
+    (Just _, Just _) -> error "Incompatible options: calldata and funcSig (coming soon)"
+
   vm <- case (code cmd, rpc cmd) of
      (Nothing, Nothing) -> error "Missing: --code TEXT or --rpc TEXT"
-     (Just c,  Nothing) -> return $ vm1 (EVM.initialContract (codeType (hexByteString "--code" (strip0x c))))
-     (a     , Just url) -> do maybeContract <- EVM.Fetch.fetchContractFrom block' url address'
-                              case maybeContract of
-                                  Nothing -> error $ "contract not found: " <> show address'
-                                  Just contract' -> case a of
-                                    Nothing -> return (vm1 contract')
-                                    -- if both code and url is given,
-                                    -- fetch the contract then overwrite the code
-                                    Just c -> return $ (vm1 contract') & set (EVM.state . EVM.code) c
-  return $ vm & EVM.env . EVM.contracts . ix address' . EVM.balance +~ (w256 value')
+     (Just c,  Nothing) -> return $ vm1 (EVM.initialContract (codeType (hexByteString "--code" (strip0x c)))) (cdata, cdlen)
+     (a     , Just url) -> io $ do maybeContract <- EVM.Fetch.fetchContractFrom block' url address'
+                                   case maybeContract of
+                                     Nothing -> error $ "contract not found: " <> show address'
+                                     Just contract' -> case a of
+                                       Nothing -> return $ vm1 contract' (cdata, cdlen)
+                                       -- if both code and url is given,
+                                       -- fetch the contract then overwrite the code
+                                       Just c -> return $ (vm1 contract' (cdata, cdlen)) & set (EVM.state . EVM.code) c
+  return $ vm
+    & EVM.env . EVM.contracts . ix address' . EVM.balance +~ (w256 value')
+    & over EVM.pathConditions ((<>) [cdconstraint])
       where
         block'   = maybe EVM.Fetch.Latest EVM.Fetch.BlockNumber (block cmd)
         value'   = word value 0
@@ -568,10 +601,7 @@ vmFromCommand cmd = do
         address' = if create cmd
               then createAddress origin' (word nonce 0)
               else addr address 0xacab
-        cddata = maybe [] (litBytes . (hexByteString "--calldata") . strip0x)
-                      (calldata cmd)
-        calldata' = (cddata, litWord . num $ length cddata)
-        vm1 c = EVM.makeVm $ EVM.VMOpts
+        vm1 c calldata' = EVM.makeVm $ EVM.VMOpts
           { EVM.vmoptContract      = c
           , EVM.vmoptCalldata      = calldata'
           , EVM.vmoptValue         = value'
