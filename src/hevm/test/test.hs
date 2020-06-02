@@ -10,6 +10,7 @@ import qualified Data.Text as Text
 import Data.Maybe (fromMaybe, fromJust)
 import Data.Text.Encoding (encodeUtf8)
 import qualified Data.ByteString as BS
+import qualified Data.ByteString.Lazy as BS (fromStrict)
 import qualified Data.ByteString.Base16 as Hex
 import Debug.Trace
 import Test.Tasty
@@ -160,8 +161,7 @@ main = defaultMain $ testGroup "hevm"
               in case view result output of
                 Just (VMSuccess out) -> (asWord out) .== (asWord x) + (asWord y)
                 _ -> sFalse
-        nothing <- runSMT $ verify (RuntimeCode safeAdd) "add(uint256,uint256)" pre post
-        print nothing
+        nothing <- runSMT $ verify (RuntimeCode safeAdd) (Just "add(uint256,uint256)") pre post
         assert $ nothing == Left ()
      ,
 
@@ -186,7 +186,7 @@ main = defaultMain $ testGroup "hevm"
                       Just (VMSuccess out) -> asWord out .== 2 * asWord y
                       _ -> sFalse
         nothing <- runSMT $
-          verify (RuntimeCode safeAdd) "add(uint256,uint256)" pre post
+          verify (RuntimeCode safeAdd) (Just "add(uint256,uint256)") pre post
         assert $ nothing == Left ()
       ,
         testCase "factorize 973013" $ do
@@ -199,12 +199,9 @@ main = defaultMain $ testGroup "hevm"
             }
           }
           |]
-        let pre = const sTrue
-            post = Just $ \(_, output) -> case view result output of
-              Just (EVM.VMFailure (EVM.UnrecognizedOpcode 254)) -> sFalse
-              _ -> sTrue
-        (Right (AbiTuple xy)) <- runSMT $ verify (RuntimeCode factor) "factor(uint256,uint256)" pre post
-        let (AbiUInt 256 x, AbiUInt 256 y) = (head (Vector.toList xy), head $ tail (Vector.toList xy))
+        (Right bs) <- runSMTWith z3{verbose=True} $ checkAssert (RuntimeCode factor) (Just "factor(uint256,uint256)")
+        let AbiTuple xy = decodeAbiValue (AbiTupleType $ Vector.fromList [AbiUIntType 256, AbiUIntType 256]) (BS.fromStrict bs)
+            [AbiUInt 256 x, AbiUInt 256 y] = Vector.toList xy
         assert $ x == 953 && y == 1021 || x == 1021 && y == 953
         ,
         testCase "summary storage writes" $ do
@@ -233,8 +230,8 @@ main = defaultMain $ testGroup "hevm"
               in case view result poststate of
                 Just (VMSuccess _) -> prex + 2 * (fromBytes y) .== postx
                 _ -> sFalse
-        nothing <- runSMT $ verify (RuntimeCode c) "f(uint256)" pre post
-        assertEqual "success?" nothing (Left ())
+        nothing <- runSMT $ verify (RuntimeCode c) (Just "f(uint256)") pre post
+        assert $ nothing == Left ()
         ,
         -- Inspired by these `msg.sender == to` token bugs
         -- which break linearity of totalSupply.
@@ -269,8 +266,9 @@ main = defaultMain $ testGroup "hevm"
               in case view result poststate of
                 Just (VMSuccess mempty) -> prex + prey .== postx + (posty :: SWord 256)
                 _ -> sFalse
-        (Right (AbiTuple xyz)) <- runSMT $ verify (RuntimeCode c) "f(uint256,uint256)" pre post
-        let (AbiUInt 256 x, AbiUInt 256 y) = (head (Vector.toList xyz), head $ tail (Vector.toList xyz))
+        (Right bs) <- runSMT $ verify (RuntimeCode c) (Just "f(uint256,uint256)") pre post
+        let AbiTuple xyz = decodeAbiValue (AbiTupleType $ Vector.fromList [AbiUIntType 256, AbiUIntType 256]) (BS.fromStrict bs)
+            [AbiUInt 256 x, AbiUInt 256 y] = Vector.toList xyz
         assert $ x == y
         ,
         testCase "Deposit contract loop" $ do
@@ -292,11 +290,7 @@ main = defaultMain $ testGroup "hevm"
 	      }
              }
             |]
-          let pre = const sTrue
-              post = Just $ \(_, output) -> case view result output of
-                Just (EVM.VMFailure (EVM.UnrecognizedOpcode 254)) -> sFalse
-                _ -> sTrue
-          res <- runSMT $ verify (RuntimeCode c) "deposit(uint256)" pre post
+          res <- runSMT $ checkAssert (RuntimeCode c) (Just "deposit(uint256)")
           assert $ res == Left ()
         ,
         testCase "Deposit contract loop (error version)" $ do
@@ -318,13 +312,13 @@ main = defaultMain $ testGroup "hevm"
 	      }
              }
             |]
-          let pre = const sTrue
-              post = Just $ \(_, output) -> case view result output of
-                Just (EVM.VMFailure (EVM.UnrecognizedOpcode 254)) -> sFalse
-                _ -> sTrue
-          (Right (AbiTuple deposit)) <- runSMT $ verify (RuntimeCode c) "deposit(uint8)" pre post
-          print deposit
-          assert $ deposit == Vector.fromList [AbiUInt 8 255]
+          (Right bs) <- runSMT $ checkAssert (RuntimeCode c) (Just "deposit(uint8)")
+          let deposit = decodeAbiValue (AbiUIntType 8) (BS.fromStrict bs)
+          assert $ deposit == AbiUInt 8 255
+
+        -- TODO: testcase for symbolic storage... A variation of the deposit contract example
+        -- above where `deposit_count` is a storage var seems to yield false negatives
+        
         -- ,
 
         -- testCase "injectivity of keccak" $ do
@@ -354,7 +348,7 @@ inUIntRange x = 0 .<= x .&& x .< 2 ^ 256 - 1
 runSimpleVM :: ByteString -> ByteString -> Maybe [SWord 8]
 runSimpleVM x ins = case loadVM x of
                       Nothing -> Nothing
-                      Just vm -> let calldata' = (litBytes ins, litWord . num $ BS.length ins)
+                      Just vm -> let calldata' = (litBytes ins, literal . num $ BS.length ins)
                        in case runState (assign (state.calldata) calldata' >> exec) vm of
                             (VMSuccess out, _) -> Just out
                             _ -> Nothing
