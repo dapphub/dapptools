@@ -164,8 +164,8 @@ zero q =
 type Fetcher = EVM.Query -> IO (EVM ())
 
 -- like http + z3
-oracle :: SBV.State -> Fetcher
-oracle state q = do
+oracle :: SBV.State -> Maybe (BlockNumber, Text) -> Fetcher
+oracle state info q = do
   case q of
     EVM.PleaseAskSMT jumpcondition pathconditions continue ->
       flip runReaderT state $ SBV.runQueryT $ do
@@ -191,7 +191,9 @@ oracle state q = do
                         -- Yes. Both branches possible
                         Sat -> return $ continue EVM.Unknown      
 
-    _ -> zero q
+    _ -> case info of
+      Nothing -> zero q
+      Just (n, url) -> http n url q
 
 -- TODO: move me
 ufProperties :: Query ()
