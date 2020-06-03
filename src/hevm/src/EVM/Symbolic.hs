@@ -61,15 +61,15 @@ mkSymbolicContract theContractCode store = Contract
             InitCode b    -> b
             RuntimeCode b -> b
 
-loadSymVM :: ByteString -> SArray (WordN 256) (WordN 256) -> ([SWord 8], SWord 32) -> VM
-loadSymVM x initStore calldata =
+loadSymVM :: ByteString -> SArray (WordN 256) (WordN 256) -> SAddr -> ([SWord 8], SWord 32) -> VM
+loadSymVM x initStore addr calldata =
     (makeVm $ VMOpts
     { vmoptContract = mkSymbolicContract (RuntimeCode x) initStore
     , vmoptCalldata = calldata
     , vmoptValue = 0
     , vmoptAddress = createAddress ethrunAddress 1
-    , vmoptCaller = ethrunAddress
-    , vmoptOrigin = ethrunAddress
+    , vmoptCaller = addr
+    , vmoptOrigin = ethrunAddress --todo: generalize
     , vmoptCoinbase = 0
     , vmoptNumber = 0
     , vmoptTimestamp = 0
@@ -197,7 +197,8 @@ verify (RuntimeCode runtimecode) signature' pre maybepost = do
       Just sign -> do (input,len) <- symAbiArg $ fromJust (parseFunArgs sign)
                       return (litBytes (sig sign) <> input, len + 4, sTrue)
     symstore <- freshArray_ Nothing
-    let preState = (loadSymVM runtimecode symstore (calldata', cdlen)) & over pathConditions ((<>) [pre (drop 4 calldata'), cdconstraint])
+    caller <- SAddr <$> freshVar_
+    let preState = (loadSymVM runtimecode symstore caller (calldata', cdlen)) & over pathConditions ((<>) [pre (drop 4 calldata'), cdconstraint])
     --registerUISMTFunction EVM.symKeccak32
     smtState <- queryState
     results <- io $ fst <$> runStateT (interpret (Fetch.oracle smtState Nothing) Stepper.runFully) preState

@@ -168,7 +168,7 @@ data VMOpts = VMOpts
   , vmoptCalldata :: ([SWord 8], (SWord 32)) -- maximum size of uint32 as per eip 1985
   , vmoptValue :: W256
   , vmoptAddress :: Addr
-  , vmoptCaller :: Addr
+  , vmoptCaller :: SAddr
   , vmoptOrigin :: Addr
   , vmoptGas :: W256
   , vmoptGaslimit :: W256
@@ -221,7 +221,7 @@ data FrameState = FrameState
   , _memorySize   :: Int
   , _calldata     :: ([SWord 8], (SWord 32))
   , _callvalue    :: Word
-  , _caller       :: Addr
+  , _caller       :: SAddr
   , _gas          :: Word
   , _returndata   :: [SWord 8]
   , _static       :: Bool
@@ -671,7 +671,8 @@ exec1 = do
         -- op: CALLER
         0x33 ->
           limitStack 1 . burn g_base $
-            next >> push (num (the state caller))
+            let toSymWord = sw256 . sFromIntegral . saddressWord160
+            in next >> pushSym (toSymWord (the state caller))
 
         -- op: CALLVALUE
         0x34 ->
@@ -1033,7 +1034,7 @@ exec1 = do
                   _ -> delegateCall this xGas xTo xTo xValue xInOffset xInSize xOutOffset xOutSize xs $ do
                             zoom state $ do
                               assign callvalue xValue
-                              assign caller self
+                              assign caller (litAddr self)
                               assign contract xTo
                             zoom (env . contracts) $ do
                               ix self . balance -= xValue
@@ -1062,7 +1063,7 @@ exec1 = do
                   _ -> delegateCall this xGas xTo self xValue xInOffset xInSize xOutOffset xOutSize xs $ do
                          zoom state $ do
                            assign callvalue xValue
-                           assign caller self
+                           assign caller (litAddr self)
                          touchAccount self
             _ ->
               underrun
@@ -1123,7 +1124,6 @@ exec1 = do
                   _ -> do
                         theCaller <- use (state . caller)
                         delegateCall this xGas xTo self 0 xInOffset xInSize xOutOffset xOutSize xs $ do
-                          touchAccount theCaller
                           touchAccount self
             _ -> underrun
 
@@ -1163,7 +1163,7 @@ exec1 = do
                   _ -> delegateCall this xGas xTo xTo 0 xInOffset xInSize xOutOffset xOutSize xs $ do
                             zoom state $ do
                               assign callvalue 0
-                              assign caller self
+                              assign caller (litAddr self)
                               assign contract xTo
                               assign static True
                             touchAccount self
@@ -1672,6 +1672,12 @@ burn n continue = do
     else
       vmError (OutOfGas available n)
 
+forceConcreteAddr :: SAddr -> (Addr -> EVM ()) -> EVM ()
+forceConcreteAddr n continue = case maybeLitAddr n of
+  Nothing -> vmError UnexpectedSymbolicArg
+  Just c -> continue c
+
+
 forceConcrete :: SymWord -> (Word -> EVM ()) -> EVM ()
 forceConcrete n continue = case maybeLitWord n of
   Nothing -> vmError UnexpectedSymbolicArg
@@ -1908,7 +1914,7 @@ create self this xGas xValue xs newAddr initCode = do
             & set codeContract newAddr
             & set code       initCode
             & set callvalue  xValue
-            & set caller     self
+            & set caller     (litAddr self)
             & set gas        xGas
 
 -- | Replace a contract's code, like when CREATE returns
