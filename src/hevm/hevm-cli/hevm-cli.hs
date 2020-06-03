@@ -364,7 +364,8 @@ equivalenceCheck cmd =
      void . runSMT . query $ do
            (calldata', cdlen, cdconstraint) <- getCalldata
            symstore <- freshArray_ Nothing
-           let (preStateA, preStateB) = both' (\x -> loadSymVM x symstore (calldata', cdlen) & over EVM.pathConditions ((<>) [cdconstraint]))
+           caller' <- SAddr <$> freshVar_
+           let (preStateA, preStateB) = both' (\x -> loadSymVM x symstore caller' (calldata', cdlen) & over EVM.pathConditions ((<>) [cdconstraint]))
                                           (bytecodeA, bytecodeB)
            smtState <- queryState
            (aRes, bRes) <- both (\x -> io $ fst <$> runStateT (interpret (EVM.Fetch.oracle smtState Nothing) EVM.Stepper.runFully) x)
@@ -426,7 +427,8 @@ assert cmd =
   in if debug cmd
      then void . runSMT . query $ do (calldata', len, lenConstraint) <- getCalldata
                                      symstore <- freshArray_ Nothing
-                                     let preState = loadSymVM bytecode symstore (calldata', len) & over EVM.pathConditions ((<>) [lenConstraint])
+                                     caller' <- SAddr <$> freshVar_
+                                     let preState = loadSymVM bytecode symstore caller' (calldata', len) & over EVM.pathConditions ((<>) [lenConstraint])
                                      smtState <- queryState
                                      io $ EVM.TTY.runFromVM srcinfo (EVM.Fetch.oracle smtState Nothing) preState
 
@@ -577,31 +579,32 @@ vmFromCommand cmd = do
     -- NOTE: it should be possible to combine concrete and abstract calldata
     -- in the future: we can allow calldata to be passed similarly to how hevm does abiencoding
     (Just _, Just _) -> error "Incompatible options: calldata and funcSig (coming soon)"
-
+  caller' <- case caller cmd of
+    Nothing -> SAddr <$> freshVar_
+    Just c -> return $ litAddr c
   vm <- case (code cmd, rpc cmd) of
      (Nothing, Nothing) -> error "Missing: --code TEXT or --rpc TEXT"
-     (Just c,  Nothing) -> return $ vm1 (EVM.initialContract (codeType (hexByteString "--code" (strip0x c)))) (cdata, cdlen)
+     (Just c,  Nothing) -> return $ vm1 (EVM.initialContract (codeType (hexByteString "--code" (strip0x c)))) (cdata, cdlen) caller'
      (a     , Just url) -> io $ do maybeContract <- EVM.Fetch.fetchContractFrom block' url address'
                                    case maybeContract of
                                      Nothing -> error $ "contract not found: " <> show address'
                                      Just contract' -> case a of
-                                       Nothing -> return $ vm1 contract' (cdata, cdlen)
+                                       Nothing -> return $ vm1 contract' (cdata, cdlen) caller'
                                        -- if both code and url is given,
                                        -- fetch the contract then overwrite the code
-                                       Just c -> return $ (vm1 contract' (cdata, cdlen)) & set (EVM.state . EVM.code) c
+                                       Just c -> return $ (vm1 contract' (cdata, cdlen) caller') & set (EVM.state . EVM.code) c
   return $ vm
     & EVM.env . EVM.contracts . ix address' . EVM.balance +~ (w256 value')
     & over EVM.pathConditions ((<>) [cdconstraint])
       where
         block'   = maybe EVM.Fetch.Latest EVM.Fetch.BlockNumber (block cmd)
         value'   = word value 0
-        caller'  = addr caller 0
-        origin'  = addr origin caller'
+        origin'  = addr origin 0
         codeType = if create cmd then EVM.InitCode else EVM.RuntimeCode
         address' = if create cmd
               then createAddress origin' (word nonce 0)
               else addr address 0xacab
-        vm1 c calldata' = EVM.makeVm $ EVM.VMOpts
+        vm1 c calldata' caller' = EVM.makeVm $ EVM.VMOpts
           { EVM.vmoptContract      = c
           , EVM.vmoptCalldata      = calldata'
           , EVM.vmoptValue         = value'

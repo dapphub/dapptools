@@ -300,7 +300,7 @@ parseVmOpts v =
            <*> (dataField exec "data" >>= \a -> pure ( (litBytes a), literal . num $ BS.length a))
            <*> wordField exec "value"
            <*> addrField exec "address"
-           <*> addrField exec "caller"
+           <*> (litAddr <$> addrField exec "caller")
            <*> addrField exec "origin"
            <*> wordField exec "gas" -- XXX: correct?
            <*> wordField exec "gas" -- XXX: correct?
@@ -423,7 +423,7 @@ fromCreateBlockchainCase block tx preState postState =
           , vmoptCalldata      = (mempty, 0)
           , vmoptValue         = txValue tx
           , vmoptAddress       = createdAddr
-          , vmoptCaller        = origin
+          , vmoptCaller        = (litAddr origin)
           , vmoptOrigin        = origin
           , vmoptGas           = txGasLimit tx - fromIntegral (txGasCost feeSchedule tx)
           , vmoptGaslimit      = txGasLimit tx
@@ -460,7 +460,7 @@ fromNormalBlockchainCase block tx preState postState =
          , vmoptCalldata      = (litBytes $ txData tx, literal . num . BS.length $ txData tx)
          , vmoptValue         = txValue tx
          , vmoptAddress       = toAddr
-         , vmoptCaller        = origin
+         , vmoptCaller        = (litAddr origin)
          , vmoptOrigin        = origin
          , vmoptGas           = txGasLimit tx - fromIntegral (txGasCost feeSchedule tx)
          , vmoptGaslimit      = txGasLimit tx

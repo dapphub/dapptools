@@ -606,7 +606,7 @@ setupCall params target sig args  = do
   resetState
   loadContract target
   assign (state . calldata) $ (litBytes $ abiMethod sig args, literal . num . BS.length $ abiMethod sig args)
-  assign (state . caller) testCaller
+  assign (state . caller) (litAddr testCaller)
   assign (state . gas) (w256 testGasCall)
 
 initialUnitTestVm :: UnitTestOptions -> SolcContract -> [SolcContract] -> VM
@@ -618,7 +618,7 @@ initialUnitTestVm (UnitTestOptions {..}) theContract _ =
            , vmoptCalldata = ([], 0)
            , vmoptValue = 0
            , vmoptAddress = testAddress
-           , vmoptCaller = testCaller
+           , vmoptCaller = (litAddr testCaller)
            , vmoptOrigin = testOrigin
            , vmoptGas = testGasCreate
            , vmoptGaslimit = testGasCreate
