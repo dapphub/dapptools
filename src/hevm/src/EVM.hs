@@ -472,7 +472,7 @@ exec1 = do
     mem  = the state memory
     stk  = the state stack
     self = the state contract
-    this = fromMaybe (error "internal error: state contract") (preview (ix (the state contract)) (the env contracts))
+    this = fromMaybe (error "internal error: state contract") (preview (ix self) (the env contracts))
 
     fees@FeeSchedule {..} = the block schedule
 
@@ -487,7 +487,7 @@ exec1 = do
         Nothing -> vmError UnexpectedSymbolicArg
         Just calldatasize' -> do
           copyBytesToMemory (fst $ the state calldata) (num calldatasize') 0 0
-          executePrecompile fees self (the state gas) 0 (num calldatasize') 0 0 []
+          executePrecompile self (the state gas) 0 (num calldatasize') 0 0 []
           vmx <- get
           case view (state.stack) vmx of
             (x:_) -> case maybeLitWord x of
@@ -652,7 +652,7 @@ exec1 = do
         -- op: ADDRESS
         0x30 ->
           limitStack 1 $
-            burn g_base (next >> push (num (the state contract)))
+            burn g_base (next >> push (num self))
 
         -- op: BALANCE
         0x31 ->
@@ -916,7 +916,7 @@ exec1 = do
                     burn cost $ do
                       next
                       assign (state . stack) xs
-                      modifying (env . contracts . ix (the state contract) . storage)
+                      modifying (env . contracts . ix self . storage)
                         (writeStorage x new)
 
                       case mapM maybeLitWord [current,new] of
@@ -1028,29 +1028,21 @@ exec1 = do
               (if xValue > 0 then notStatic else id) $
                 case xTo of
                   n | n > 0 && n <= 9 ->
-                    precompiledContract vm fees xGas xTo xTo xValue xInOffset xInSize xOutOffset xOutSize xs
+                    precompiledContract this xGas xTo xTo xValue xInOffset xInSize xOutOffset xOutSize xs
                   n | num n == cheatCode ->
                     do
                       assign (state . stack) xs
                       cheat (xInOffset, xInSize) (xOutOffset, xOutSize)
-                  _ ->
-                      accessMemoryRange fees xInOffset xInSize $
-                        accessMemoryRange fees xOutOffset xOutSize $ do
-                          availableGas <- use (state . gas)
-                          let
-                            recipientExists = accountExists xTo vm
-                            (cost, gas') = costOfCall fees recipientExists xValue availableGas xGas
-                          burn (cost - gas') $
-                            delegateCall this gas' xTo xValue xInOffset xInSize xOutOffset xOutSize xs $ do
-                              zoom state $ do
-                                assign callvalue xValue
-                                assign caller (the state contract)
-                                assign contract xTo
-                              zoom (env . contracts) $ do
-                                ix self . balance -= xValue
-                                ix xTo  . balance += xValue
-                              touchAccount self
-                              touchAccount xTo
+                  _ -> delegateCall this xGas xTo xTo xValue xInOffset xInSize xOutOffset xOutSize xs $ do
+                            zoom state $ do
+                              assign callvalue xValue
+                              assign caller self
+                              assign contract xTo
+                            zoom (env . contracts) $ do
+                              ix self . balance -= xValue
+                              ix xTo  . balance += xValue
+                            touchAccount self
+                            touchAccount xTo
             _ ->
               underrun
 
@@ -1069,19 +1061,12 @@ exec1 = do
               \(xGas, (num -> xTo), xInOffset, xInSize, xOutOffset, xOutSize) ->
                 case xTo of
                   n | n > 0 && n <= 9 ->
-                    precompiledContract vm fees xGas xTo self xValue xInOffset xInSize xOutOffset xOutSize xs
-                  _ ->
-                    accessMemoryRange fees xInOffset xInSize $
-                      accessMemoryRange fees xOutOffset xOutSize $ do
-                        availableGas <- use (state . gas)
-                        let
-                          (cost, gas') = costOfCall fees True xValue availableGas xGas
-                        burn (cost - gas') $
-                          delegateCall this gas' xTo xValue xInOffset xInSize xOutOffset xOutSize xs $ do
-                            zoom state $ do
-                              assign callvalue xValue
-                              assign caller (the state contract)
-                            touchAccount self
+                    precompiledContract this xGas xTo self xValue xInOffset xInSize xOutOffset xOutSize xs
+                  _ -> delegateCall this xGas xTo self xValue xInOffset xInSize xOutOffset xOutSize xs $ do
+                         zoom state $ do
+                           assign callvalue xValue
+                           assign caller self
+                         touchAccount self
             _ ->
               underrun
 
@@ -1134,19 +1119,13 @@ exec1 = do
               \(xGas, (num -> xTo), xInOffset, xInSize, xOutOffset, xOutSize) ->
                 case xTo of
                   n | n > 0 && n <= 9 ->
-                    precompiledContract vm fees xGas xTo self 0 xInOffset xInSize xOutOffset xOutSize xs
+                    precompiledContract this xGas xTo self 0 xInOffset xInSize xOutOffset xOutSize xs
                   n | num n == cheatCode -> do
                         assign (state . stack) xs
                         cheat (xInOffset, xInSize) (xOutOffset, xOutSize)
-                  _ ->
-                    accessMemoryRange fees xInOffset xInSize $
-                      accessMemoryRange fees xOutOffset xOutSize $ do
-                      availableGas <- use (state . gas)
-                      let
-                        (cost, gas') = costOfCall fees True 0 availableGas xGas
-                      burn (cost - gas') $ do
+                  _ -> do
                         theCaller <- use (state . caller)
-                        delegateCall this gas' xTo 0 xInOffset xInSize xOutOffset xOutSize xs $ do
+                        delegateCall this xGas xTo self 0 xInOffset xInSize xOutOffset xOutSize xs $ do
                           touchAccount theCaller
                           touchAccount self
             _ -> underrun
@@ -1183,19 +1162,11 @@ exec1 = do
               \(xGas, (num -> xTo), xInOffset, xInSize, xOutOffset, xOutSize) ->
                 case xTo of
                   n | n > 0 && n <= 9 ->
-                    precompiledContract vm fees xGas xTo xTo 0 xInOffset xInSize xOutOffset xOutSize xs
-                  _ ->
-                    accessMemoryRange fees xInOffset xInSize $
-                      accessMemoryRange fees xOutOffset xOutSize $ do
-                        availableGas <- use (state . gas)
-                        let
-                          recipientExists = accountExists xTo vm
-                          (cost, gas') = costOfCall fees recipientExists 0 availableGas xGas
-                        burn (cost - gas') $
-                          delegateCall this gas' xTo 0 xInOffset xInSize xOutOffset xOutSize xs $ do
+                    precompiledContract this xGas xTo xTo 0 xInOffset xInSize xOutOffset xOutSize xs
+                  _ -> delegateCall this xGas xTo xTo 0 xInOffset xInSize xOutOffset xOutSize xs $ do
                             zoom state $ do
                               assign callvalue 0
-                              assign caller (the state contract)
+                              assign caller self
                               assign contract xTo
                               assign static True
                             touchAccount self
@@ -1241,10 +1212,39 @@ exec1 = do
         xxx ->
           vmError (UnrecognizedOpcode xxx)
 
+
+callChecks
+  :: (?op :: Word8)
+  => Contract -> Word -> Addr -> Word -> Word -> Word -> Word -> Word -> [SymWord]
+   -- continuation with gas avail for call
+  -> (Word -> EVM ())
+  -> EVM ()
+callChecks this xGas xContext xValue xInOffset xInSize xOutOffset xOutSize xs continue = do
+  vm <- get
+  let fees = view (block . schedule) vm
+  accessMemoryRange fees xInOffset xInSize $
+    accessMemoryRange fees xOutOffset xOutSize $ do
+      availableGas <- use (state . gas)
+      let recipientExists = accountExists xContext vm
+          (cost, gas') = costOfCall fees recipientExists xValue availableGas xGas
+      burn (cost - gas') $ do
+        if xValue > view balance this
+        then do
+          assign (state . stack) (0 : xs)
+          assign (state . returndata) mempty
+          pushTrace $ ErrorTrace $ BalanceTooLow xValue (view balance this)
+          next
+        else if length (view frames vm) >= 1024
+             then do
+               assign (state . stack) (0 : xs)
+               assign (state . returndata) mempty
+               pushTrace $ ErrorTrace $ CallDepthLimitReached
+               next
+             else continue gas'
+
 precompiledContract
   :: (?op :: Word8)
-  => VM
-  -> FeeSchedule Word
+  => Contract
   -> Word
   -> Addr
   -> Addr
@@ -1252,48 +1252,36 @@ precompiledContract
   -> Word -> Word -> Word -> Word
   -> [SymWord]
   -> EVM ()
-precompiledContract vm fees gasCap precompileAddr recipient xValue inOffset inSize outOffset outSize xs =
-    accessMemoryRange fees inOffset inSize $
-      accessMemoryRange fees outOffset outSize $ do
-        availableGas <- use (state . gas)
-        let
-          self = view (state . contract) vm
-          Just this = view (env . contracts . at self) vm
-          recipientExists = accountExists recipient vm
-          (cost, gas') = costOfCall fees recipientExists xValue availableGas gasCap
-        burn (cost - gas') $
-          if xValue > view balance this then do
-            assign (state . stack) (0 : xs)
-            next
-          else do
-            executePrecompile fees precompileAddr gas' inOffset inSize outOffset outSize xs
-            stk <- use (state . stack)
-            case stk of
-              (x:_) -> case maybeLitWord x of
-                Nothing -> vmError UnexpectedSymbolicArg
-                Just 0 ->
-                  return ()
-                Just 1 ->
-                  fetchAccount recipient $ \_ -> do
-
-                     zoom (env . contracts) $ do
-                       ix self . balance -= xValue
-                       ix recipient  . balance += xValue
-                     touchAccount self
-                     touchAccount recipient
-                     touchAccount precompileAddr
-              _ ->
-                underrun
+precompiledContract this xGas precompileAddr recipient xValue inOffset inSize outOffset outSize xs =
+  callChecks this xGas recipient xValue inOffset inSize outOffset outSize xs $ \gas' ->
+  do
+    executePrecompile precompileAddr gas' inOffset inSize outOffset outSize xs
+    self <- use (state . contract)
+    stk <- use (state . stack)
+    case stk of
+      (x:_) -> case maybeLitWord x of
+        Nothing -> vmError UnexpectedSymbolicArg
+        Just 0 ->
+          return ()
+        Just 1 ->
+          fetchAccount recipient $ \_ -> do
+            zoom (env . contracts) $ do
+              ix self . balance -= xValue
+              ix recipient  . balance += xValue
+            touchAccount self
+            touchAccount recipient
+            touchAccount precompileAddr
+      _ -> underrun
 
 executePrecompile
   :: (?op :: Word8)
-  => FeeSchedule Word
-  -> Addr
+  => Addr
   -> Word -> Word -> Word -> Word -> Word -> [SymWord]
   -> EVM ()
-executePrecompile fees preCompileAddr gasCap inOffset inSize outOffset outSize xs  = do
+executePrecompile preCompileAddr gasCap inOffset inSize outOffset outSize xs  = do
   vm <- get
   let input = forceLitBytes $ readMemory (num inOffset) (num inSize) vm
+      fees = view (block . schedule) vm
       cost = costOfPrecompile fees preCompileAddr input
       notImplemented = error $ "precompile at address " <> show preCompileAddr <> " not yet implemented"
       precompileFail = burn (gasCap - cost) $ do
@@ -1799,71 +1787,61 @@ cheatActions =
 -- * General call implementation ("delegateCall")
 delegateCall
   :: (?op :: Word8)
-  => Contract -> Word -> Addr -> Word -> Word -> Word -> Word -> Word -> [SymWord]
+  => Contract -> Word -> Addr -> Addr -> Word -> Word -> Word -> Word -> Word -> [SymWord]
   -> EVM ()
   -> EVM ()
-delegateCall this xGas xTo xValue xInOffset xInSize xOutOffset xOutSize xs continue = do
-  vm0 <- get
-  if xValue > view balance this
-  then do
-    assign (state . stack) (0 : xs)
-    assign (state . returndata) mempty
-    pushTrace $ ErrorTrace $ BalanceTooLow xValue (view balance this)
-    next
-  else if length (view frames vm0) >= 1024
-  then do
-    assign (state . stack) (0 : xs)
-    assign (state . returndata) mempty
-    pushTrace $ ErrorTrace $ CallDepthLimitReached
-    next
-  else case view execMode vm0 of
-    ExecuteAsVMTest -> do
-      assign (state . stack) (1 : xs)
-      next
-    _ ->
-      fetchAccount xTo . const $
-        preuse (env . contracts . ix xTo) >>= \case
-          Nothing ->
-            vmError (NoSuchContract xTo)
-          Just target ->
-            burn xGas $ do
-              let newContext = CallContext
-                    { callContextOffset = xOutOffset
-                    , callContextSize = xOutSize
-                    , callContextCodehash = view codehash target
-                    , callContextReversion = view (env . contracts) vm0
-                    , callContextSubState = view (tx . substate) vm0
-                    , callContextAbi =
-                        if xInSize >= 4
-                        then case maybeLitBytes $
-                                      take 4 $ drop (num xInOffset) $ (view (state . memory) vm0)
-                             of Nothing -> Nothing
-                                Just sigBytes -> Just . w256 $ word sigBytes
-                        else Nothing
-                    , callContextData = (readMemory (num xInOffset) (num xInSize) vm0)
-                    }
-
-              pushTrace (FrameTrace newContext)
-              next
-              vm1 <- get
-
-              pushTo frames $ Frame
-                { _frameState = (set stack xs) (view state vm1)
-                , _frameContext = newContext
-                }
-
-              zoom state $ do
-                assign gas xGas
-                assign pc 0
-                assign code (view bytecode target)
-                assign codeContract xTo
-                assign stack mempty
-                assign memory mempty
-                assign memorySize 0
-                assign returndata mempty
-                assign calldata (readMemory (num xInOffset) (num xInSize) vm0, literal (num xInSize))
-
-              continue
+delegateCall this gasGiven xTo xContext xValue xInOffset xInSize xOutOffset xOutSize xs continue =
+  callChecks this gasGiven xContext xValue xInOffset xInSize xOutOffset xOutSize xs $
+  \xGas -> do
+    vm0 <- get
+    case view execMode vm0 of
+      ExecuteAsVMTest -> do
+        assign (state . stack) (1 : xs)
+        next
+      _ ->
+        fetchAccount xTo . const $
+          preuse (env . contracts . ix xTo) >>= \case
+            Nothing ->
+              vmError (NoSuchContract xTo)
+            Just target ->
+              burn xGas $ do
+                let newContext = CallContext
+                      { callContextOffset = xOutOffset
+                      , callContextSize = xOutSize
+                      , callContextCodehash = view codehash target
+                      , callContextReversion = view (env . contracts) vm0
+                      , callContextSubState = view (tx . substate) vm0
+                      , callContextAbi =
+                          if xInSize >= 4
+                          then case maybeLitBytes $
+                                        take 4 $ drop (num xInOffset) $ (view (state . memory) vm0)
+                               of Nothing -> Nothing
+                                  Just sigBytes -> Just . w256 $ word sigBytes
+                          else Nothing
+                      , callContextData = (readMemory (num xInOffset) (num xInSize) vm0)
+                      }
+  
+                pushTrace (FrameTrace newContext)
+                next
+                vm1 <- get
+  
+                pushTo frames $ Frame
+                  { _frameState = (set stack xs) (view state vm1)
+                  , _frameContext = newContext
+                  }
+  
+                zoom state $ do
+                  assign gas xGas
+                  assign pc 0
+                  assign code (view bytecode target)
+                  assign codeContract xTo
+                  assign stack mempty
+                  assign memory mempty
+                  assign memorySize 0
+                  assign returndata mempty
+                  assign calldata (readMemory (num xInOffset) (num xInSize) vm0, literal (num xInSize))
+  
+                continue
 
 -- -- * Contract creation
 
@@ -2459,9 +2437,9 @@ costOfCall (FeeSchedule {..}) recipientExists xValue availableGas xGas =
     c_extra =
       num g_call + c_xfer + c_new
     c_xfer =
-      if xValue /= 0          then num g_callvalue              else 0
+      if xValue /= 0  then num g_callvalue              else 0
     c_callgas =
-      if xValue /= 0          then c_gascap + num g_callstipend else c_gascap
+      if xValue /= 0  then c_gascap + num g_callstipend else c_gascap
     c_new =
       if not recipientExists && xValue /= 0
       then num g_newaccount
