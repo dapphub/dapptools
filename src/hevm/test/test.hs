@@ -315,6 +315,22 @@ main = defaultMain $ testGroup "hevm"
           (Right bs) <- runSMT $ checkAssert (RuntimeCode c) (Just "deposit(uint8)")
           let deposit = decodeAbiValue (AbiUIntType 8) (BS.fromStrict bs)
           assert $ deposit == AbiUInt 8 255
+--      ,
+        -- -- this takes a really long time.
+        -- -- I wish cvc4 would get their shit together
+        -- -- because it seems to be able to do it faster
+        -- testCase "explore function dispatch" $ do
+        -- Just c <- solcRuntime "A"
+        --   [i|
+        --   contract A {
+        --     function f(uint x) public pure returns (uint) {
+        --       return x;
+        --     }
+        --   }
+        --   |]
+        -- nothing <- runSMTWith z3 $ checkAssert (RuntimeCode c) Nothing
+        -- assert $ nothing == Left ()
+--        ,
 
         -- TODO: testcase for symbolic storage... A variation of the deposit contract example
         -- above where `deposit_count` is a storage var seems to yield false negatives
