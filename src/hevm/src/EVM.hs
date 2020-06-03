@@ -550,9 +550,8 @@ exec1 = do
             (xOffset':xSize':xs) ->
               if length xs < n
               then underrun
-              else do
-                forceConcrete xOffset' $ \xOffset ->
-                  forceConcrete xSize' $ \xSize -> do
+              else
+                forceConcrete2 (xOffset', xSize') $ \(xOffset, xSize) -> do
                     let (topics, xs') = splitAt n xs
                         bytes         = readMemory (num xOffset) (num xSize) vm
                         log           = Log self bytes topics
@@ -1279,7 +1278,7 @@ executePrecompile
   -> EVM ()
 executePrecompile preCompileAddr gasCap inOffset inSize outOffset outSize xs  = do
   vm <- get
-  let input = forceLitBytes $ readMemory (num inOffset) (num inSize) vm
+  let input = readMemory (num inOffset) (num inSize) vm
       fees = view (block . schedule) vm
       cost = costOfPrecompile fees preCompileAddr input
       notImplemented = error $ "precompile at address " <> show preCompileAddr <> " not yet implemented"
@@ -1296,7 +1295,7 @@ executePrecompile preCompileAddr gasCap inOffset inSize outOffset outSize xs  = 
       case preCompileAddr of
         -- ECRECOVER
         0x1 ->
-          case EVM.Precompiled.execute 0x1 (truncpadlit 128 input) 32 of
+          case EVM.Precompiled.execute 0x1 (truncpadlit 128 (forceLitBytes input)) 32 of
             Nothing -> do
               -- return no output for invalid signature
               assign (state . stack) (1 : xs)
@@ -1311,7 +1310,9 @@ p              assign (state . returndata) mempty
         -- SHA2-256
         0x2 ->
           let
-            hash  = litBytes $ BS.pack $ BA.unpack $ (Crypto.hash input :: Digest SHA256)
+            hash = case maybeLitBytes input of
+                     Just input' -> litBytes $ BS.pack $ BA.unpack $ (Crypto.hash input' :: Digest SHA256)
+                     Nothing -> symSHA256 input --litBytes $ BS.pack $ BA.unpack $ (Crypto.hash input' :: Digest SHA256)
           in do
             assign (state . stack) (1 : xs)
             assign (state . returndata) hash
@@ -1322,7 +1323,7 @@ p              assign (state . returndata) mempty
         0x3 ->
           let
             padding = BS.pack $ replicate 12 0
-            hash' = BS.pack $ BA.unpack $ (Crypto.hash input :: Digest RIPEMD160)
+            hash' = BS.pack $ BA.unpack $ (Crypto.hash (forceLitBytes input) :: Digest RIPEMD160)
             hash  = litBytes $ padding <> hash'
           in do
             assign (state . stack) (1 : xs)
@@ -1332,26 +1333,26 @@ p              assign (state . returndata) mempty
 
         -- IDENTITY
         0x4 -> do
-            let out = litBytes input
             assign (state . stack) (1 : xs)
-            assign (state . returndata) out -- could be symbolic
-            copyCallBytesToMemory out outSize 0 outOffset
+            assign (state . returndata) input
+            copyCallBytesToMemory input outSize 0 outOffset
             next
 
         -- MODEXP
         0x5 ->
           let
-            (lenb, lene, lenm) = parseModexpLength input
+            input' = forceLitBytes input
+            (lenb, lene, lenm) = parseModexpLength input'
 
             output = litBytes $
-              case (isZero (96 + lenb + lene) lenm input) of
+              case (isZero (96 + lenb + lene) lenm input') of
                  True ->
                    truncpadlit (num lenm) (asBE (0 :: Int))
                  False ->
                    let
-                     b = asInteger $ lazySlice 96 lenb $ input
-                     e = asInteger $ lazySlice (96 + lenb) lene $ input
-                     m = asInteger $ lazySlice (96 + lenb + lene) lenm $ input
+                     b = asInteger $ lazySlice 96 lenb $ input'
+                     e = asInteger $ lazySlice (96 + lenb) lene $ input'
+                     m = asInteger $ lazySlice (96 + lenb + lene) lenm $ input'
                    in
                      padLeft (num lenm) (asBE (expFast b e m))
           in do
@@ -1361,7 +1362,8 @@ p              assign (state . returndata) mempty
             next
 
         -- ECADD
-        0x6 -> case EVM.Precompiled.execute 0x6 (truncpadlit 128 input) 64 of
+        0x6 -> let input' = forceLitBytes input
+          in case EVM.Precompiled.execute 0x6 (truncpadlit 128 input') 64 of
           Nothing -> precompileFail
           Just output -> do
             let truncpaddedOutput = litBytes $ truncpadlit 64 output
@@ -1371,7 +1373,8 @@ p              assign (state . returndata) mempty
             next
 
         -- ECMUL
-        0x7 -> case EVM.Precompiled.execute 0x7 (truncpadlit 96 input) 64 of
+        0x7 -> let input' = forceLitBytes input
+          in case EVM.Precompiled.execute 0x7 (truncpadlit 96 input') 64 of
           Nothing -> precompileFail
           Just output -> do
             let truncpaddedOutput = litBytes $ truncpadlit 64 output
@@ -1381,7 +1384,8 @@ p              assign (state . returndata) mempty
             next
 
         -- ECPAIRING
-        0x8 -> case EVM.Precompiled.execute 0x8 input 32 of
+        0x8 -> let input' = forceLitBytes input
+          in case EVM.Precompiled.execute 0x8 input' 32 of
           Nothing -> precompileFail
           Just output -> do
             let truncpaddedOutput = litBytes $ truncpadlit 32 output
@@ -1391,8 +1395,9 @@ p              assign (state . returndata) mempty
             next
 
         -- BLAKE2
-        0x9 -> case (BS.length input, 1 >= BS.last input) of
-          (213, True) -> case EVM.Precompiled.execute 0x9 input 64 of
+        0x9 -> let input' = forceLitBytes input
+          in case (BS.length input', 1 >= BS.last input') of
+          (213, True) -> case EVM.Precompiled.execute 0x9 input' 64 of
             Just output -> do
               let truncpaddedOutput = litBytes $ truncpadlit 64 output
               assign (state . stack) (1 : xs)
@@ -2456,28 +2461,29 @@ costOfCreate (FeeSchedule {..}) availableGas hashSize =
     initGas    = allButOne64th (availableGas - createCost)
 
 -- Gas cost of precompiles
-costOfPrecompile :: FeeSchedule Word -> Addr -> ByteString -> Word
+costOfPrecompile :: FeeSchedule Word -> Addr -> [SWord 8] -> Word
 costOfPrecompile (FeeSchedule {..}) precompileAddr input =
   case precompileAddr of
     -- ECRECOVER
     0x1 -> 3000
     -- SHA2-256
-    0x2 -> num $ (((BS.length input + 31) `div` 32) * 12) + 60
+    0x2 -> num $ (((length input + 31) `div` 32) * 12) + 60
     -- RIPEMD-160
-    0x3 -> num $ (((BS.length input + 31) `div` 32) * 120) + 600
+    0x3 -> num $ (((length input + 31) `div` 32) * 120) + 600
     -- IDENTITY
-    0x4 -> num $ (((BS.length input + 31) `div` 32) * 3) + 15
+    0x4 -> num $ (((length input + 31) `div` 32) * 3) + 15
     -- MODEXP
     0x5 -> num $ (f (num (max lenm lenb)) * num (max lene' 1)) `div` (num g_quaddivisor)
-      where (lenb, lene, lenm) = parseModexpLength input
+      where input' = forceLitBytes input
+            (lenb, lene, lenm) = parseModexpLength input'
             lene' | lene <= 32 && ez = 0
                   | lene <= 32 = num (log2 e')
                   | e' == 0 = 8 * (lene - 32)
                   | otherwise = num (log2 e') + 8 * (lene - 32)
 
-            ez = isZero (96 + lenb) lene input
+            ez = isZero (96 + lenb) lene input'
             e' = w256 $ word $ LS.toStrict $
-                   lazySlice (96 + lenb) (min 32 lene) input
+                   lazySlice (96 + lenb) (min 32 lene) input'
 
             f :: Integer -> Integer
             f x | x <= 64 = x * x
@@ -2488,9 +2494,9 @@ costOfPrecompile (FeeSchedule {..}) precompileAddr input =
     -- ECMUL
     0x7 -> g_ecmul
     -- ECPAIRING
-    0x8 -> num $ ((BS.length input) `div` 192) * (num g_pairing_point) + (num g_pairing_base)
+    0x8 -> num $ ((length input) `div` 192) * (num g_pairing_point) + (num g_pairing_base)
     -- BLAKE2
-    0x9 -> g_fround * (num $ asInteger $ lazySlice 0 4 input)
+    0x9 -> g_fround * (num $ asInteger $ lazySlice 0 4 (forceLitBytes input))
     _ -> error ("unimplemented precompiled contract " ++ show precompileAddr)
 
 -- Gas cost of memory expansion
@@ -2503,11 +2509,14 @@ memoryCost FeeSchedule{..} byteCount =
   in
     linearCost + quadraticCost
 
--- * Symbolic versions
+-- * Uninterpreted functions
 
 
-symKeccakN :: SInteger -> SInteger -> SInteger
+symKeccakN :: SInteger -> SInteger -> SWord 256
 symKeccakN = uninterpret "keccak"
+
+symSHA256N :: SInteger -> SInteger -> SWord 256
+symSHA256N = uninterpret "sha256"
 
 -- This is an ugly definition that can probably be done better
 -- with some fancy reflection / haskell dependent type /
@@ -2517,10 +2526,19 @@ symKeccakN = uninterpret "keccak"
 symKeccak :: [SWord 8] -> SymWord
 symKeccak bytes = case length bytes of
   0 -> litWord $ keccakBlob mempty
-  32 -> sw256 . sFromIntegral . symKeccakN 32 $ sFromIntegral $ (fromBytes bytes :: SWord 256)
-  64 -> sw256 . sFromIntegral . symKeccakN 64 $ sFromIntegral $ (fromBytes bytes :: SWord 512)
-  128 -> sw256 . sFromIntegral . symKeccakN 128 $ sFromIntegral $ (fromBytes bytes :: SWord 1024)
+  32 -> sw256 . symKeccakN 32 $ sFromIntegral $ (fromBytes bytes :: SWord 256)
+  64 -> sw256 . symKeccakN 64 $ sFromIntegral $ (fromBytes bytes :: SWord 512)
+  128 -> sw256 . symKeccakN 128 $ sFromIntegral $ (fromBytes bytes :: SWord 1024)
   n -> error $ "TODO: symkeccak for: " <> show n
+
+symSHA256 :: [SWord 8] -> [SWord 8]
+symSHA256 bytes = case length bytes of
+  0 -> litBytes $ BS.pack $ BA.unpack $ (Crypto.hash BS.empty :: Digest SHA256)
+  32 -> toBytes . symSHA256N 32 $ sFromIntegral $ (fromBytes bytes :: SWord 256)
+  64 -> toBytes . symSHA256N 64 $ sFromIntegral $ (fromBytes bytes :: SWord 512)
+  128 -> toBytes . symSHA256N 128 $ sFromIntegral $ (fromBytes bytes :: SWord 1024)
+  n -> error $ "TODO: symsha256 for: " <> show n
+
 
 -- * Arithmetic
 
