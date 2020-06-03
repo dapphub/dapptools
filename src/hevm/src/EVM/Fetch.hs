@@ -170,20 +170,14 @@ oracle state info q = do
     EVM.PleaseAskSMT jumpcondition pathconditions continue ->
       flip runReaderT state $ SBV.runQueryT $ do
          let pathconds = sAnd pathconditions
-         constrain pathconds
-         constrain (jumpcondition ./= 0)
-         noJump <- checkSat
-         resetAssertions
+         noJump <- checksat $ pathconds .&& jumpcondition ./= 0
          case noJump of
             -- Unsat means condition
             -- must be zero
             Unsat -> return $ continue (EVM.Known 0)
             -- Sat means its possible for condition
             -- to be nonzero.
-            Sat -> do constrain pathconds
-                      constrain (jumpcondition .== 0)
-                      jump <- checkSat
-                      resetAssertions
+            Sat -> do jump <- checksat $ pathconds .&& jumpcondition .== 0
                       -- can it also be zero?
                       case jump of
                         -- No. It must be nonzero
@@ -194,6 +188,15 @@ oracle state info q = do
     _ -> case info of
       Nothing -> zero q
       Just (n, url) -> http n url q
+
+
+checksat :: SBool -> Query CheckSatResult
+checksat b = do push 1
+                constrain b
+                m <- checkSat
+                pop 1
+                return m
+
 
 -- TODO: move me
 ufProperties :: Query ()
