@@ -57,6 +57,7 @@ newtype W256 = W256 Word256
 -- | convert between (WordN 256) and Word256
 type family ToSizzle (t :: Type) :: Type where
     ToSizzle W256 = (WordN 256)
+    ToSizzle Addr = (WordN 160)
 
 -- | Conversion from a fixed-sized BV to a sized bit-vector.
 class ToSizzleBV a where
@@ -70,6 +71,7 @@ class ToSizzleBV a where
 -- | Capture the correspondence between sized and fixed-sized BVs
 type family FromSizzle (t :: Type) :: Type where
    FromSizzle (WordN 256) = W256
+   FromSizzle (WordN 160) = Addr
 
 
 -- | Conversion from a sized BV to a fixed-sized bit-vector.
@@ -83,13 +85,18 @@ class FromSizzleBV a where
  
 instance (ToSizzleBV W256)
 instance (FromSizzleBV (WordN 256))
+instance (ToSizzleBV Addr)
+instance (FromSizzleBV (WordN 160))
 --instance {-# OVERLAPPING  #-} ToSizedBV (SWord 256) where toSized = Trans.sFromIntegral
 
 newtype Addr = Addr { addressWord160 :: Word160 }
   deriving (Num, Integral, Real, Ord, Enum, Eq, Bits, Generic)
 
-newtype SAddr = SAddr (SWord 160)
+newtype SAddr = SAddr { saddressWord160 :: SWord 160 }
   deriving (Num)
+
+litAddr :: Addr -> SAddr
+litAddr = SAddr . literal . toSizzle
 
 instance Read W256 where
   readsPrec _ "0x" = [(0, "")]
@@ -108,7 +115,7 @@ instance Show Addr where
     in replicate (40 - length h) '0' ++ h
 
 instance Show SAddr where
-  show (SAddr a)  = case unliteral a of
+  show (SAddr a) = case unliteral a of
     Nothing -> "<symbolic addr>"
     Just c -> show c
 
