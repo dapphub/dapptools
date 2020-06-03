@@ -88,6 +88,9 @@ instance (FromSizzleBV (WordN 256))
 newtype Addr = Addr { addressWord160 :: Word160 }
   deriving (Num, Integral, Real, Ord, Enum, Eq, Bits, Generic)
 
+newtype SAddr = SAddr (SWord 160)
+  deriving (Num)
+
 instance Read W256 where
   readsPrec _ "0x" = [(0, "")]
   readsPrec n s = first W256 <$> readsPrec n s
@@ -103,6 +106,11 @@ instance Show Addr where
   showsPrec _ s a =
     let h = showHex s a
     in replicate (40 - length h) '0' ++ h
+
+instance Show SAddr where
+  show (SAddr a)  = case unliteral a of
+    Nothing -> "<symbolic addr>"
+    Just c -> show c
 
 showAddrWith0x :: Addr -> String
 showAddrWith0x addr = "0x" ++ show addr
