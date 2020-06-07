@@ -13,9 +13,22 @@ in self-hs: super-hs:
       pkgs.haskell.lib.dontCheck
         (self-hs.callPackage x {});
     hevmBinPath = lib.makeBinPath (with pkgs; [bash coreutils git]);
+    sbv_8_4_prepatch = self-hs.callCabal2nix "sbv" (builtins.fetchGit {
+        url = "https://github.com/LeventErkok/sbv/";
+        rev = "b3facdfc959e0779fb8944743c0ec81e0d214ee3";
+    }) {inherit (pkgs) z3;};
+
   in {
     restless-git = dontCheck (import ./src/restless-git);
     wreq = pkgs.haskell.lib.doJailbreak super-hs.wreq;
+
+    # we use a pretty bleeding edge sbv version
+    sbv_8_4 = sbv_8_4_prepatch.overrideAttrs (attrs: {
+      postPatch = ''
+      sed -i -e 's|"z3"|"${pkgs.z3}/bin/z3"|' Data/SBV/Provers/Z3.hs
+      sed -i -e 's|"cvc4"|"${pkgs.cvc4}/bin/cvc4"|' Data/SBV/Provers/CVC4.hs'';
+    });
+
 
     # This package is somewhat unmaintained and doesn't compile with GHC 8.4,
     # so we have to use a GitHub fork that fixes it.

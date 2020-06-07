@@ -120,6 +120,8 @@ in rec {
 
   libff = self.callPackage (import ./nix/libff.nix) {};
 
+  cvc4 = self.callPackage (import ./nix/cvc4.nix) {};
+
   jays = (
     self.pkgs.haskell.lib.justStaticExecutables
       (self.haskellPackages.callPackage (import ./src/jays) {})
