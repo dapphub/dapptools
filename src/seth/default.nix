@@ -8,6 +8,8 @@ stdenv.mkDerivation rec {
 
   nativeBuildInputs = [makeWrapper];
   buildPhase = "true";
+  doCheck = true;
+  checkPhase = "make test";
   makeFlags = ["prefix=$(out)"];
   postInstall = let path = lib.makeBinPath [
     bc coreutils curl ethsign git gnused hevm jshon nodejs perl
