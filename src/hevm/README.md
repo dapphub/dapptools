@@ -1,18 +1,10 @@
 # hevm [![Build Status](https://travis-ci.com/dapphub/dapptools.svg?branch=master)](https://travis-ci.com/dapphub/dapptools)
 
-The `hevm` project is an implementation of the Ethereum virtual machine (EVM) made specifically for unit testing and debugging smart contracts.  It is developed by [DappHub](https://github.com/dapphub) and integrates especially well with the [`dapp` tool suite](https://github.com/dapphub/dapp). The `hevm` command line program can run unit tests, interactively debug contracts while showing the Solidity source, or run arbitrary EVM code.
+The `hevm` project is an implementation of the Ethereum virtual machine (EVM) made specifically for symbolic execution, unit testing and debugging of smart contracts. It is developed by [DappHub](https://github.com/dapphub) and integrates especially well with the [`dapp` tool suite](https://github.com/dapphub/dapp). The `hevm` command line program can symbolically execute smart contracts, run unit tests, interactively debug contracts while showing the Solidity source, or run arbitrary EVM code. Computations can be performed using local state set up in a `dapp` testing harness, or fetched on demand from live networks using `rpc` calls.
 
 ### Usage
 
-Note: the `hevm` test runner and debugger currently assumes the use of the `ds-test` framework for Solidity unit tests and the [`dapp` tool suite](https://github.com/dapphub/dapp).
-
-After running `dapp build`, you can run your unit test suite with
-
-    $ hevm dapp-test
-
-or you can enter the interactive debugger using
-
-    $ hevm interactive
+Note: some `hevm` commands (`dapp-test`, `interactive`) assumes the use of the `ds-test` framework for Solidity unit tests and the [`dapp` tool suite](https://github.com/dapphub/dapptools/tree/master/src/dapp), while others (`exec`, `symbolic`, ...) are available as standalone commands.
 
 ### Commands
 
@@ -23,17 +15,22 @@ or you can enter the interactive debugger using
 
     Commands:
 
-      exec         Execute a given program with specified env & calldata
-      dapp-test    Run unit tests
-      interactive  Browse and run unit tests interactively
-      flatten      Concat all dependencies for a given source file
+      symbolic        Execute symbolically, exploring all possible execution paths
+      exec            Execute a given program with specified env & calldata
+      equivalence     Prove equivalence between two programs using symbolic execution
+      dapp-test       Run unit tests
+      interactive     Browse and run unit tests interactively
 
-      bc-test      Run an Ethereum Blockchain/GeneralState test
-      vm-test      Run an Ethereum VMTest
-      compliance   Run Blockchain or VMTest compliance report
-
-      emacs        Emacs console
-      version      Show hevm version
+      bc-test         Run an Ethereum Blockchain/GeneralState test
+      vm-test         Run an Ethereum VMTest
+      merkle-test     Run a merkle test file and ensure the root matches
+      compliance      Run Blockchain or VMTest compliance report
+  
+      emacs           Emacs console
+      version         Show hevm version
+      flatten         Concat all dependencies for a given source file
+      rlp             Decode a RLP encoded bytestring
+      strip-metadata  Remove metadata from contract code bytestring
 
 ### Interactive debugger key bindings
 
@@ -42,10 +39,106 @@ or you can enter the interactive debugger using
   - `e`: step to end
   - `n`: step forwards by one instruction
   - `p`: step backwards by one instruction
+  - `0`: choose the branch which does not jump
+  - `1`: choose the branch which does jump
   - `N`: step to the next source position
   - `C-n`: step to the next source position and don't enter `CALL` or `CREATE`
   - `m`: toggle memory view
   - `h`: show key-binding help
+
+### `hevm symbolic`
+
+```sh
+Usage: hevm symbolic [--code TEXT] [--calldata TEXT] [--func-sig TEXT]
+                     [--address ADDR] [--caller ADDR] [--origin ADDR]
+                     [--coinbase ADDR] [--value W256] [--nonce W256] [--gas W256]
+                     [--number W256] [--timestamp W256] [--gaslimit W256]
+                     [--gasprice W256] [--create] [--maxcodesize W256]
+                     [--difficulty W256] [--debug] [--state STRING] [--rpc TEXT]
+                     [--block W256] [--json-file STRING] [--get-models]
+                     [--storage STORAGEMODE]
+```
+
+Run a symbolic execution against the given parameters, searching for assertion violations.
+
+If an `assert` is reachable, a counterexample will be returned.
+
+`--debug` enters an interactive debugger where the user can navigate the full execution space.
+
+The default value for `calldata` and `caller` are symbolic values. If `--func-sig` is given,
+calldata is assumed to be of the form suggested by the function signature.
+
+If the `--get-models` flag is given, example input values will be returned for each possible execution path. 
+This can be useful for automatic test case generation.
+
+Storage can take one of three forms, defaulting to `Symbolic`:
+
+- `Symbolic`: The default value of SLOAD is a symbolic value without further constraints. SLOAD and SSTORE can operate on symbolic locations.
+- `Initial`: The default value of SLOAD is zero. SLOAD and SSTORE can operate on symbolic locations.
+- `Concrete`: Storage defaults to zero or fetched from an rpc node if `--rpc` is provided. SLOAD or SSTOREs on symbolic locations will result in a runtime error.
+
+Minimum required flags:
+
+`--code` or (`--rpc` and `--address`).
+
+### `hevm exec`
+
+Run an EVM computation using specified parameters, using an interactive debugger when `--debug` flag is given.
+
+```sh
+Usage: hevm exec [--code TEXT] [--calldata TEXT] [--address ADDR] 
+                 [--caller ADDR] [--origin ADDR] [--coinbase ADDR]
+                 [--value W256] [--nonce W256] [--gas W256]
+                 [--number W256] [--timestamp W256] [--gaslimit W256]
+                 [--gasprice W256] [--create] [--maxcodesize W256]
+                 [--difficulty W256] [--debug] [--state STRING] [--rpc TEXT]
+                 [--block W256] [--json-file STRING]
+```
+Minimum required flags:
+
+`--code` or (`--rpc` and `--address`).
+
+If the execution returns an output, it will be written to stdout.
+
+Exit code indicates whether the execution was successful or errored/reverted.
+
+Simple example usage:
+```sh
+hevm exec --code 0x647175696e6550383480393834f3 --gas 0xff
+```
+
+Debug a mainnet transaction:
+```sh
+export ETH_RPC_URL=https://mainnet.infura.io/v3/YOUR_API_KEY_HERE
+export TXHASH=0xd2235b9554e51e8ff5b3de62039d5ab6e591164b593d892e42b2ffe0e3e4e426
+hevm exec --caller $(seth tx $TXHASH from) --address $(seth tx $TXHASH to) --calldata $(seth tx $TXHASH input) --rpc $ETH_RPC --block $(($(seth tx $TXHASH blockNumber)-1)) --gas $(seth tx $TXHASH gas) --debug
+```
+
+### `hevm equivalence`
+
+```sh
+Usage: hevm equiv --code-a TEXT --code-b TEXT [--func-sig TEXT]
+```
+
+Symbolically execute both the code given in `--code-a` and `--code-b` and try to prove equivalence between their output and storage.
+
+If `--func-sig` is given, calldata is assumed to take the form of the function given.
+If left out, calldata is a fully abstract buffer of at most 1024 bytes.
+
+### `hevm dapp-test`
+
+```
+Usage: hevm dapp-test [--json-file STRING] [--dapp-root STRING] [--debug]
+                      [--fuzz-runs INT] [--replay (TEXT,BYTESTRING)]
+                      [--rpc TEXT] [--verbose INT] [--coverage] [--state STRING]
+                      [--match STRING]
+```
+
+Run any ds-test testing functions. Run under the hood whenever `dapp test` or `dapp debug` is called. If testing functions have been given arguments, they will be randomly instantiated and run `--fuzz-runs` number of times. In `--debug` mode, property based tests will not be available unless given specific arguments using `--replay`.
+
+### `hevm interactive`
+
+Equivalent to `hevm dapp-test [options] --debug`
 
 ### Environment Variables 
 
