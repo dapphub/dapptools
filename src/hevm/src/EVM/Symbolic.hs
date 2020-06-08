@@ -138,9 +138,10 @@ symAbiArg n = error $ "TODO: symbolic abiencoding for" <> show n
 -- returns a list of possible final evm states
 interpret
   :: (EVM.Query -> IO (EVM ()))
+  -> Maybe Integer --max iterations
   -> Stepper a
   -> StateT VM IO (Either Stepper.Failure [a])
-interpret fetcher =
+interpret fetcher maxIter =
   eval . Operational.view
 
   where
@@ -154,54 +155,66 @@ interpret fetcher =
     eval (action Operational.:>>= k) =
       case action of
         Stepper.Exec ->
-          exec >>= interpret fetcher . k
+          exec >>= interpret fetcher maxIter . k
         Stepper.Run ->
-          run >>= interpret fetcher . k
+          run >>= interpret fetcher maxIter . k
         Stepper.Option (EVM.PleaseChoosePath continue) ->
           do vm <- State.get
-             a <- State.state (runState (continue 0)) >> interpret fetcher (k ())
-             put vm
-             b <- State.state (runState (continue 1)) >> interpret fetcher (k ())
-             return $ liftA2 (<>) a b
+             case maxIter of
+               Just maxiter -> 
+                 let pc' = view (state . pc) vm
+                     addr = view (state . contract) vm
+                     iters = view (iterations . at (addr, pc') . non 0) vm
+                 in if num maxiter <= iters then
+                      let Just lastChoice = view (cache . path . at ((addr, pc'), iters - 1)) vm
+                      in case lastChoice of
+                        -- try something different
+                        Known 0 -> State.state (runState (continue 1)) >> interpret fetcher maxIter (k ())
+                        Known 1 -> State.state (runState (continue 0)) >> interpret fetcher maxIter (k ())
+                        n -> error ("I don't see how this could have happened: " <> show n)
+                    else do a <- State.state (runState (continue 0)) >> interpret fetcher maxIter (k ())
+                            put vm
+                            b <- State.state (runState (continue 1)) >> interpret fetcher maxIter (k ())
+                            return $ liftA2 (<>) a b
+               Nothing -> do a <- State.state (runState (continue 0)) >> interpret fetcher maxIter (k ())
+                             put vm
+                             b <- State.state (runState (continue 1)) >> interpret fetcher maxIter (k ())
+                             return $ liftA2 (<>) a b
         Stepper.Wait q ->
           do m <- liftIO (fetcher q)
-             State.state (runState m) >> interpret fetcher (k ())
+             State.state (runState m) >> interpret fetcher maxIter (k ())
         Stepper.Note _ ->
           -- simply ignore the note here
-          interpret fetcher (k ())
+          interpret fetcher maxIter (k ())
         Stepper.Fail e ->
           pure (Left e)
         Stepper.EVM m ->
-          State.state (runState m) >>= interpret fetcher . k
+          State.state (runState m) >>= interpret fetcher maxIter . k
 
 type Precondition = [SWord 8] -> SBool
 type Postcondition = (VM, VM) -> SBool
 
-checkAssert :: ContractCode -> Maybe Text -> Symbolic (Either () ByteString)
-checkAssert code signature' = let post = Just $ \(_, output) ->
-                                    case view result output of
-                                      Just (EVM.VMFailure (EVM.UnrecognizedOpcode 254)) -> sFalse
-                                      _ -> sTrue
-                              in verify code signature' (const sTrue) post
+checkAssert :: ContractCode -> Maybe Integer -> Maybe Text -> Query (Either (VM, [VM]) ByteString)
+checkAssert code maxIter signature' = let post = Just $ \(_, output) ->
+                                            case view result output of
+                                              Just (EVM.VMFailure (EVM.UnrecognizedOpcode 254)) -> sFalse
+                                              _ -> sTrue
+                                      in verify code maxIter signature' (const sTrue) post
 
-verify :: ContractCode -> Maybe Text -> Precondition -> Maybe Postcondition -> Symbolic (Either () ByteString)
-verify (RuntimeCode runtimecode) signature' pre maybepost = do
--- If we want to assert the constraints of Fetch.ufProperties
--- we need this here:
---  registerUISMTFunction EVM.symKeccak32
-  query $ do
+verify :: ContractCode -> Maybe Integer -> Maybe Text -> Precondition -> Maybe Postcondition -> Query (Either (VM, [VM]) ByteString)
+verify (RuntimeCode runtimecode) maxIter signature' pre maybepost = do
     (calldata', cdlen, cdconstraint) <- case signature' of
       Nothing -> do cd <- sbytes256
                     len <- freshVar_
                     return (cd, len, len .<= 1024)
       Just sign -> do (input,len) <- symAbiArg $ fromJust (parseFunArgs sign)
                       return (litBytes (sig sign) <> input, len + 4, sTrue)
-    symstore <- freshArray_ Nothing
-    caller <- SAddr <$> freshVar_
-    let preState = (loadSymVM runtimecode symstore caller (calldata', cdlen)) & over pathConditions ((<>) [pre (drop 4 calldata'), cdconstraint])
+    symstore <- freshArray "Storage" Nothing
+    c <- freshVar_
+    let preState = (loadSymVM runtimecode symstore (SAddr c) (calldata', cdlen)) & over pathConditions ((<>) [pre (drop 4 calldata'), cdconstraint])
     --registerUISMTFunction EVM.symKeccak32
     smtState <- queryState
-    results <- io $ fst <$> runStateT (interpret (Fetch.oracle smtState Nothing) Stepper.runFully) preState
+    results <- io $ fst <$> runStateT (interpret (Fetch.oracle smtState Nothing) maxIter Stepper.runFully) preState
     case (maybepost, results) of
       (Just post, Right res) -> do let postC = sOr $ fmap (\postState -> (sAnd (view pathConditions postState)) .&& sNot (post (preState, postState))) res
                                    -- is it possible for any of these pathcondition => postcondition
@@ -211,11 +224,22 @@ verify (RuntimeCode runtimecode) signature' pre maybepost = do
                                    io $ print "checking postcondition..."
                                    sat <- checkSat
                                    case sat of
+                                     Unk -> do io $ print "postcondition query timed out"
+                                               return $ Left (preState, res)
                                      Unsat -> do io $ print "Q.E.D"
-                                                 return $ Left ()
+                                                 return $ Left (preState, res)
                                      Sat -> do io $ print "post condition violated:"
-                                               model <- mapM (getValue.fromSized) (drop 4 calldata')
+                                               cdlen <- num <$> getValue cdlen
+--                                                litcaller <- getValue c
+-- --                                               k <- getValue keccakstore
+--                                                let (x, y) = splitAt 32 (drop 4 calldata')
+--                                                keccakx <- getValue (readArray keccakstore (sFromIntegral (fromBytes x :: SWord 256)))
+--                                                keccaky <- getValue (readArray keccakstore (sFromIntegral (fromBytes y :: SWord 256)))
+--                                                io $ putStrLn $ "keccak(x):" <> show keccakx
+--                                                io $ putStrLn $ "keccak(y):" <> show keccaky
+--                                                io $ print $ "caller: " <> show (fromSizzle litcaller)
+                                               model <- mapM (getValue.fromSized) (take cdlen calldata')
                                                return $ Right (pack model)
-      (Nothing, Right _) -> do io $ print "Q.E.D"
-                               return $ Left ()
+      (Nothing, Right res) -> do io $ print "Q.E.D"
+                                 return $ Left (preState, res)
       (Nothing, Left _) -> error "unexpected error during symbolic execution"

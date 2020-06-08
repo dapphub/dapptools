@@ -14,14 +14,12 @@ import qualified EVM
 import Control.Lens hiding ((.=))
 import Control.Monad.Reader
 import Control.Monad.Trans.Maybe
-
 import Data.SBV.Control (registerUISMTFunction)
 import Data.SBV.Trans.Control
 import Data.SBV.Internals (sendStringToSolver, retrieveResponseFromSolver)
---import qualified Data.SBV.Control.Query as Trans
 import qualified Data.SBV.Internals as SBV
 import Data.SBV.Trans hiding (Word)
-import Data.SBV hiding (runSMT, newArray_, Word)
+import Data.SBV hiding (runSMT, newArray_, Word, addAxiom)
 import Data.Aeson
 import Data.Aeson.Lens
 import Data.ByteString (ByteString)
@@ -167,13 +165,22 @@ type Fetcher = EVM.Query -> IO (EVM ())
 oracle :: SBV.State -> Maybe (BlockNumber, Text) -> Fetcher
 oracle state info q = do
   case q of
-    EVM.PleaseAskSMT jumpcondition pathconditions continue ->
+    EVM.PleaseAskSMT jumpcondition pathconditions continue -> do
       flip runReaderT state $ SBV.runQueryT $ do
          let pathconds = sAnd pathconditions
          noJump <- checksat $ pathconds .&& jumpcondition ./= 0
          case noJump of
             -- Unsat means condition
-            -- must be zero
+            -- cannot be nonzero
+            -- We assume it to be zero in this case.
+            -- Theoretically, it is possible that our pathconditions
+            -- are inconsistent, either due to:
+            -- a) a false assumption
+            -- b) a previous timeout
+            -- We allow ourselves to ignore these cases with the motivation that
+            -- a) should be checked elsewhere and,
+            -- if b) occurs, we are in a unreachable path, and its better
+            -- to not keep on branching anyway.
             Unsat -> return $ continue (EVM.Known 0)
             -- Sat means its possible for condition
             -- to be nonzero.
@@ -183,29 +190,20 @@ oracle state info q = do
                         -- No. It must be nonzero
                         Unsat -> return $ continue (EVM.Known 1)
                         -- Yes. Both branches possible
-                        Sat -> return $ continue EVM.Unknown      
+                        Sat -> return $ continue EVM.Unknown
+                        -- Explore both branches in case of timeout
+                        Unk -> return $ continue EVM.Unknown
+
+            -- If the query times out, we simply explore both paths
+            Unk -> return $ continue EVM.Unknown
 
     _ -> case info of
       Nothing -> zero q
       Just (n, url) -> http n url q
 
-
 checksat :: SBool -> Query CheckSatResult
-checksat b = do push 1
+checksat b = do resetAssertions
                 constrain b
                 m <- checkSat
-                pop 1
+                resetAssertions
                 return m
-
-
--- TODO: move me
-ufProperties :: Query ()
-ufProperties = do
-  -- Altohugh this constraints are the right approach
-  -- z3 chokes when presented with this new information
-  sendStringToSolver $ concat ["(assert (forall ((a Int) (b Int))"
-                              , " (=>  (= (keccak32 a) (keccak32 b))"
-                              , "      (= a b))))"
-                              ]
-  k <- retrieveResponseFromSolver "synching with call above" Nothing
-  unless (concat k == "success") (error "smt synchronization failed")

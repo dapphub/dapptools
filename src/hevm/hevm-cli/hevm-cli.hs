@@ -26,7 +26,7 @@ import qualified EVM.VMTest as VMTest
 #endif
 
 import EVM (ExecMode(..))
-import EVM.ABI (sig, decodeAbiValue)
+import EVM.ABI (sig, decodeAbiValue, AbiType(..))
 import EVM.Concrete (createAddress)
 import EVM.Symbolic
 import EVM.Debug
@@ -61,11 +61,13 @@ import Data.Text                  (Text, unpack, pack, splitOn)
 import Data.Text.Encoding         (encodeUtf8)
 import Data.Maybe                 (fromMaybe, fromJust)
 import Data.Version               (showVersion)
-import Data.SBV hiding (Word, verbose)
+import Data.SBV hiding (Word, solver, verbose)
+import qualified Data.SBV as SBV
 import Data.SBV.Control hiding (Word, verbose, Version, timeout, create)
 import System.Directory           (withCurrentDirectory, listDirectory)
 import System.Exit                (die, exitFailure)
 import System.IO                  (hFlush, stdout)
+import System.Environment         (setEnv)
 import System.Process             (callProcess)
 import qualified Data.Aeson        as JSON
 import qualified Data.Aeson.Types  as JSON
@@ -90,12 +92,16 @@ import Options.Generic as Options
 -- automatically via the `optparse-generic` package.
 data Command w
   = Symbolic -- Execute a given program with specified env & calldata
-      { code        :: w ::: Maybe ByteString   <?> "Program bytecode"
-      , jsonFile    :: w ::: Maybe String       <?> "Filename or path to dapp build output (default: out/*.solc.json)"
-      , funcSig     :: w ::: Maybe Text         <?> "Function signature"
-      , debug       :: w ::: Bool               <?> "Run interactively"
+      { code          :: w ::: Maybe ByteString <?> "Program bytecode"
+      , jsonFile      :: w ::: Maybe String     <?> "Filename or path to dapp build output (default: out/*.solc.json)"
+      , funcSig       :: w ::: Maybe Text       <?> "Function signature"
+      , debug         :: w ::: Bool             <?> "Run interactively"
+      , getModels     :: w ::: Bool             <?> "Print example testcase for each execution path"
+      , smttimeout    :: w ::: Maybe Integer    <?> "Timeout given to smt solver in seconds"
+      , maxIterations :: w ::: Maybe Integer    <?> "Number of times we may revisit a particular branching point"
+      , solver        :: w ::: Maybe Text       <?> "Smt solver to use z3 (default) or cvc4"
       }
-  | Equiv -- prove equivalence between two programs
+  | Equivalence -- prove equivalence between two programs
     { codeA   :: w ::: ByteString <?> "Bytecode of the first program"
     , codeB   :: w ::: ByteString <?> "Bytecode of the second program"
     , funcSig :: w ::: Maybe Text <?> "Function signature"
@@ -103,7 +109,6 @@ data Command w
   | Exec -- Execute a given program with specified env & calldata
       { code        :: w ::: Maybe ByteString <?> "Program bytecode"
       , calldata    :: w ::: Maybe ByteString <?> "Tx: calldata"
-      , funcSig     :: w ::: Maybe Text       <?> "Function signature"
       , address     :: w ::: Maybe Addr       <?> "Tx: address"
       , caller      :: w ::: Maybe Addr       <?> "Tx: caller"
       , origin      :: w ::: Maybe Addr       <?> "Tx: origin"
@@ -243,7 +248,7 @@ main = do
   case cmd of
     Version {} -> putStrLn (showVersion Paths.version)
     Symbolic {} -> assert cmd
-    Equiv {} -> equivalenceCheck cmd
+    Equivalence {} -> equivalenceCheck cmd
     Exec {} ->
       launchExec cmd
     Abiencode {} ->
@@ -368,7 +373,7 @@ equivalenceCheck cmd =
            let (preStateA, preStateB) = both' (\x -> loadSymVM x symstore caller' (calldata', cdlen) & over EVM.pathConditions ((<>) [cdconstraint]))
                                           (bytecodeA, bytecodeB)
            smtState <- queryState
-           (aRes, bRes) <- both (\x -> io $ fst <$> runStateT (interpret (EVM.Fetch.oracle smtState Nothing) EVM.Stepper.runFully) x)
+           (aRes, bRes) <- both (\x -> io $ fst <$> runStateT (interpret (EVM.Fetch.oracle smtState Nothing) Nothing EVM.Stepper.runFully) x)
                              (preStateA, preStateB)
            resetAssertions
            case (aRes, bRes) of
@@ -380,12 +385,16 @@ equivalenceCheck cmd =
                -- for each pair of endstates, if there exists an input such both
                -- path conditions are satisfiably, then the results must be equal
                      (\ab -> let (aPath, bPath) = both' (view EVM.pathConditions) ab
+                                 (aSelf, bSelf) = both' (view (EVM.state . EVM.contract)) ab
+                                 (aEnv, bEnv) = both' (view (EVM.env . EVM.contracts)) ab
                                  (aResult, bResult) = both' (view EVM.result) ab
+                                 notSame = fromBool (aSelf /= bSelf)
+                                 (EVM.Symbolic aStorage, EVM.Symbolic bStorage) = (view EVM.storage (aEnv ^?! ix aSelf), view EVM.storage (bEnv ^?! ix bSelf))
                                  differingResults = case (aResult, bResult) of
-                                      (Just (EVM.VMSuccess a), Just (EVM.VMSuccess b)) -> a ./= b
+                                      (Just (EVM.VMSuccess a), Just (EVM.VMSuccess b)) -> a ./= b .|| notSame .|| aStorage ./= bStorage
                                       (Just (EVM.VMFailure _), Just (EVM.VMFailure _)) -> sFalse
                                       (Just _, Just _) -> sTrue
-                                      _ -> error "Internal error: a logical christmas miracle!"
+                                      _ -> error "Internal error during symbolic execution (should not be possible)"
                              in (sAnd aPath .&& sAnd bPath .&& differingResults))
                -- If there exists a pair of endstates where this is not the case,
                -- the following constraint is satisfiable
@@ -407,9 +416,19 @@ equivalenceCheck cmd =
 both' :: (a -> b) -> (a, a) -> (b, b)
 both' f (x, y) = (f x, f y)
 
+--cvc4 can only deal with timeouts given as a commandline option
+runSMTWithTimeOut :: Maybe Text -> Maybe Integer -> Symbolic a -> IO a
+runSMTWithTimeOut (Just "cvc4") Nothing sym  = runSMTWith cvc4 sym
+runSMTWithTimeOut _             Nothing sym  = runSMTWith z3{verbose=True} sym
+runSMTWithTimeOut (Just "cvc4") (Just n) sym = do setEnv "SBV_CVC4_OPTIONS" ("--lang=smt --incremental --interactive --no-interactive-prompt --model-witness-value --tlimit-per=" <> show n)
+                                                  a <- runSMTWith cvc4 sym
+                                                  setEnv "SBV_CVC4_OPTIONS" ""
+                                                  return a
+runSMTWithTimeOut _            (Just n) sym = runSMTWith z3 $ do setTimeOut n
+                                                                 sym
 
 -- Although it is tempting to fully abstract calldata and give any hints about the nature of the signature
--- doing so results in significant time spent in consulting z3 about rather trivial matters.
+-- doing so results in significant time spent in consulting z3 about rather trivial matters. But with cvc4 it is quite pleasant!
 
 -- If function signatures are known, they should always be given for best results.
 assert :: Command Options.Unwrapped -> IO ()
@@ -425,18 +444,45 @@ assert cmd =
                       Just typ -> do (input, len) <- symAbiArg typ
                                      return (litBytes (sig $ fromMaybe (error "not possibru") (funcSig cmd)) <> input, len + 4, sTrue)
   in if debug cmd
-     then void . runSMT . query $ do (calldata', len, lenConstraint) <- getCalldata
-                                     symstore <- freshArray_ Nothing
-                                     caller' <- SAddr <$> freshVar_
-                                     let preState = loadSymVM bytecode symstore caller' (calldata', len) & over EVM.pathConditions ((<>) [lenConstraint])
-                                     smtState <- queryState
-                                     io $ EVM.TTY.runFromVM srcinfo (EVM.Fetch.oracle smtState Nothing) preState
+     then runSMTWithTimeOut (solver cmd) (smttimeout cmd) $
+                                  query $ do (calldata', len, lenConstraint) <- getCalldata
+                                             symstore <- freshArray_ Nothing
+                                             caller' <- SAddr <$> freshVar_
+                                             let preState = loadSymVM bytecode symstore caller' (calldata', len) & over EVM.pathConditions ((<>) [lenConstraint])
 
-     else do results <- runSMT $ checkAssert (EVM.RuntimeCode bytecode) (funcSig cmd)
-             case results of
-               Left () -> print "All good"
-               Right a -> do print "Assertion violation:"
-                             print a
+                                             smtState <- queryState
+                                             io $ void $ EVM.TTY.runFromVM srcinfo (EVM.Fetch.oracle smtState Nothing) preState
+
+     else runSMTWithTimeOut (solver cmd) (smttimeout cmd) $
+             query $ do results <- checkAssert (EVM.RuntimeCode bytecode) (maxIterations cmd) (funcSig cmd)
+                        case results of
+                          Right a -> io $ do print "Assertion violation:"
+                                             die . show $ ByteStringS a
+                          Left (pre, posts) -> do io $ putStrLn $ "Explored: " <> show (length posts) <> " branches successfully"
+                                                  when (getModels cmd) $
+                                                    let (calldata', cdlen) = view (EVM.state . EVM.calldata) pre
+                                                    in forM_ (zip [1..] posts) $ \(i, postVM) -> do
+                                                      resetAssertions
+                                                      constrain (sAnd (view EVM.pathConditions postVM))
+                                                      io $ putStrLn $ "-- Branch (" <> show i <> "/" <> show (length posts) <> ") --"
+                                                      checkSat >>= \case
+                                                        Unk -> io $ putStrLn "Timed out"
+                                                        Unsat -> io $ putStrLn "Inconsistent path conditions: dead path"
+                                                        Sat -> do
+                                                          cdlen <- num <$> getValue cdlen
+                                                          calldatainput <- mapM (getValue.fromSized) (take cdlen calldata')
+                                                          io $ do
+                                                            print $ "Calldata:"
+                                                            print $ ByteStringS (ByteString.pack calldatainput)
+                                                          case view EVM.result postVM of
+                                                            Nothing -> error "internal error; no EVM result"
+                                                            Just (EVM.VMFailure (EVM.Revert "")) -> io . putStrLn $ "Reverted"
+                                                            Just (EVM.VMFailure (EVM.Revert msg)) -> io . putStrLn $ "Reverted: " <> show (decodeAbiValue AbiStringType $ Lazy.fromStrict (ByteString.drop 4 msg))
+                                                            Just (EVM.VMFailure err) -> io . putStrLn $ "Failed: " <> show err
+                                                            Just (EVM.VMSuccess []) -> io $ putStrLn "Stopped"
+                                                            Just (EVM.VMSuccess msg) -> do output <- mapM (getValue.fromSized) msg
+                                                                                           io . putStrLn $ "Returned: " <> show (ByteStringS (ByteString.pack output))
+
 
 dappCoverage :: UnitTestOptions -> Mode -> String -> IO ()
 dappCoverage opts _ solcFile =
@@ -489,7 +535,7 @@ launchExec cmd = do
 
        case optsMode cmd of
          Run -> io $ do
-           vm' <- execStateT (interpret (fetcher smtState) . void $ EVM.Stepper.execFully) vm1
+           vm' <- execStateT (interpret (fetcher smtState) Nothing . void $ EVM.Stepper.execFully) vm1
            case view EVM.result vm' of
              Nothing -> error "internal error; no EVM result"
              Just (EVM.VMFailure (EVM.Revert msg)) -> die . show . ByteStringS $ msg
