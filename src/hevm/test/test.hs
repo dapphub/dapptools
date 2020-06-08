@@ -161,8 +161,8 @@ main = defaultMain $ testGroup "hevm"
               in case view result output of
                 Just (VMSuccess out) -> (asWord out) .== (asWord x) + (asWord y)
                 _ -> sFalse
-        nothing <- runSMT $ verify (RuntimeCode safeAdd) (Just "add(uint256,uint256)") pre post
-        assert $ nothing == Left ()
+        Left (pre, res) <- runSMT $ query $ verify (RuntimeCode safeAdd) Nothing (Just "add(uint256,uint256)") pre post
+        putStrLn $ "successfully explored: " <> show (length res) <> " paths"
      ,
 
       testCase "x == y => x + y == 2 * y" $ do
@@ -185,9 +185,9 @@ main = defaultMain $ testGroup "hevm"
                  in case view result output of
                       Just (VMSuccess out) -> asWord out .== 2 * asWord y
                       _ -> sFalse
-        nothing <- runSMT $
-          verify (RuntimeCode safeAdd) (Just "add(uint256,uint256)") pre post
-        assert $ nothing == Left ()
+        Left (pre, res) <- runSMTWith z3 $ query $
+          verify (RuntimeCode safeAdd) Nothing (Just "add(uint256,uint256)") pre post
+        putStrLn $ "successfully explored: " <> show (length res) <> " paths"
       ,
         testCase "factorize 973013" $ do
         Just factor <- solcRuntime "PrimalityCheck"
@@ -199,8 +199,8 @@ main = defaultMain $ testGroup "hevm"
             }
           }
           |]
-        (Right bs) <- runSMTWith z3{verbose=True} $ checkAssert (RuntimeCode factor) (Just "factor(uint256,uint256)")
-        let AbiTuple xy = decodeAbiValue (AbiTupleType $ Vector.fromList [AbiUIntType 256, AbiUIntType 256]) (BS.fromStrict bs)
+        (Right bs) <- runSMTWith cvc4 $ query $ checkAssert (RuntimeCode factor) Nothing (Just "factor(uint256,uint256)")
+        let AbiTuple xy = decodeAbiValue (AbiTupleType $ Vector.fromList [AbiUIntType 256, AbiUIntType 256]) (BS.fromStrict (BS.drop 4 bs))
             [AbiUInt 256 x, AbiUInt 256 y] = Vector.toList xy
         assert $ x == 953 && y == 1021 || x == 1021 && y == 953
         ,
@@ -230,8 +230,8 @@ main = defaultMain $ testGroup "hevm"
               in case view result poststate of
                 Just (VMSuccess _) -> prex + 2 * (fromBytes y) .== postx
                 _ -> sFalse
-        nothing <- runSMT $ verify (RuntimeCode c) (Just "f(uint256)") pre post
-        assert $ nothing == Left ()
+        Left (pre, res) <- runSMT $ query $ verify (RuntimeCode c) Nothing (Just "f(uint256)") pre post
+        putStrLn $ "successfully explored: " <> show (length res) <> " paths"
         ,
         -- Inspired by these `msg.sender == to` token bugs
         -- which break linearity of totalSupply.
@@ -266,12 +266,12 @@ main = defaultMain $ testGroup "hevm"
               in case view result poststate of
                 Just (VMSuccess mempty) -> prex + prey .== postx + (posty :: SWord 256)
                 _ -> sFalse
-        (Right bs) <- runSMT $ verify (RuntimeCode c) (Just "f(uint256,uint256)") pre post
-        let AbiTuple xyz = decodeAbiValue (AbiTupleType $ Vector.fromList [AbiUIntType 256, AbiUIntType 256]) (BS.fromStrict bs)
+        (Right bs) <- runSMT $ query $ verify (RuntimeCode c) Nothing (Just "f(uint256,uint256)") pre post
+        let AbiTuple xyz = decodeAbiValue (AbiTupleType $ Vector.fromList [AbiUIntType 256, AbiUIntType 256]) (BS.fromStrict (BS.drop 4 bs))
             [AbiUInt 256 x, AbiUInt 256 y] = Vector.toList xyz
         assert $ x == y
         ,
-        testCase "Deposit contract loop" $ do
+        testCase "Deposit contract loop (z3)" $ do
           Just c <- solcRuntime "Deposit"
             [i|
             contract Deposit {
@@ -290,8 +290,30 @@ main = defaultMain $ testGroup "hevm"
 	      }
              }
             |]
-          res <- runSMT $ checkAssert (RuntimeCode c) (Just "deposit(uint256)")
-          assert $ res == Left ()
+          Left (pre, res) <- runSMTWith z3 $ query $ checkAssert (RuntimeCode c) Nothing (Just "deposit(uint256)")
+          putStrLn $ "successfully explored: " <> show (length res) <> " paths"
+        ,
+                testCase "Deposit contract loop (cvc4)" $ do
+          Just c <- solcRuntime "Deposit"
+            [i|
+            contract Deposit {
+	      function deposit(uint256 deposit_count) external pure {
+	        require(deposit_count < 2**32 - 1);
+	        ++deposit_count;
+	        bool found = false;
+	        for (uint height = 0; height < 32; height++) {
+	          if ((deposit_count & 1) == 1) {
+	            found = true;
+	            break;
+	          }
+	         deposit_count = deposit_count >> 1;
+	         }
+	        assert(found);
+	      }
+             }
+            |]
+          Left (pre, res) <- runSMTWith cvc4 $ query $ checkAssert (RuntimeCode c) Nothing (Just "deposit(uint256)")
+          putStrLn $ "successfully explored: " <> show (length res) <> " paths"
         ,
         testCase "Deposit contract loop (error version)" $ do
           Just c <- solcRuntime "Deposit"
@@ -312,47 +334,56 @@ main = defaultMain $ testGroup "hevm"
 	      }
              }
             |]
-          (Right bs) <- runSMT $ checkAssert (RuntimeCode c) (Just "deposit(uint8)")
-          let deposit = decodeAbiValue (AbiUIntType 8) (BS.fromStrict bs)
+          (Right bs) <- runSMT $ query $ checkAssert (RuntimeCode c) Nothing (Just "deposit(uint8)")
+          let deposit = decodeAbiValue (AbiUIntType 8) (BS.fromStrict (BS.drop 4 bs))
           assert $ deposit == AbiUInt 8 255
---      ,
-        -- -- this takes a really long time.
-        -- -- I wish cvc4 would get their shit together
-        -- -- because it seems to be able to do it faster
-        -- testCase "explore function dispatch" $ do
-        -- Just c <- solcRuntime "A"
-        --   [i|
-        --   contract A {
-        --     function f(uint x) public pure returns (uint) {
-        --       return x;
-        --     }
-        --   }
-        --   |]
-        -- nothing <- runSMTWith z3 $ checkAssert (RuntimeCode c) Nothing
-        -- assert $ nothing == Left ()
---        ,
+     ,
+        -- This test uses cvc4 instead of z3
+        testCase "explore function dispatch" $ do
+        Just c <- solcRuntime "A"
+          [i|
+          contract A {
+            function f(uint x) public pure returns (uint) {
+              return x;
+            }
+          }
+          |]
+        Left (pre, res) <- runSMTWith cvc4 $ query $ checkAssert (RuntimeCode c) Nothing Nothing
+        putStrLn $ "successfully explored: " <> show (length res) <> " paths"        
 
-        -- TODO: testcase for symbolic storage... A variation of the deposit contract example
-        -- above where `deposit_count` is a storage var seems to yield false negatives
+--         -- TODO: testcase for symbolic storage... A variation of the deposit contract example
+--         -- above where `deposit_count` is a storage var seems to yield false negatives
         
-        -- ,
+        ,
 
-        -- testCase "injectivity of keccak" $ do
+        testCase "injectivity of keccak (32 bytes)" $ do
+          Just c <- solcRuntime "A"
+            [i|
+            contract A {
+              function f(uint x, uint y) public pure {
+              if (keccak256(abi.encodePacked(x)) == keccak256(abi.encodePacked(y))) assert(x == y);
+              }
+            }
+            |]
+          Left (pre, res) <- runSMTWith cvc4 $ query $ checkAssert (RuntimeCode c) Nothing Nothing
+          putStrLn $ "successfully explored: " <> show (length res) <> " paths"
+--          assert $ nothing == Left ()
+
+        -- ,
+        -- testCase "injectivity of keccak (64 bytes)" $ do
         -- Just c <- solcRuntime "A"
         --   [i|
         --   contract A {
-        --     function f(uint x, uint y) public pure {
-        --        if (keccak256(abi.encodePacked(x)) == keccak256(abi.encodePacked(y))) assert(x == y);
+        --     function f(uint x, uint y, uint w, uint z) public pure {
+        --     if (keccak256(abi.encodePacked(x,y)) == keccak256(abi.encodePacked(w,z))) assert(x == w && y == z);
         --     }
         --   }
         --   |]
-        -- let pre = const sTrue
-        --     post = Just $ \(_, output) -> case view result output of
-        --       Just (EVM.VMFailure (EVM.UnrecognizedOpcode 254)) -> sFalse
-        --       _ -> sTrue
-        -- nothing <- runSMT $
-        --   verify (RuntimeCode c) "f(uint256,uint256)" pre post
+        -- nothing <- runSMTWith z3{verbose=True} $
+        --   checkAssert (RuntimeCode c) (Just "f(uint256,uint256,uint256,uint256)")
         -- assert $ nothing == Left ()
+
+
     ]
   ]
   where
