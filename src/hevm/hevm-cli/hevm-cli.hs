@@ -419,7 +419,7 @@ both' f (x, y) = (f x, f y)
 --cvc4 can only deal with timeouts given as a commandline option
 runSMTWithTimeOut :: Maybe Text -> Maybe Integer -> Symbolic a -> IO a
 runSMTWithTimeOut (Just "cvc4") Nothing sym  = runSMTWith cvc4 sym
-runSMTWithTimeOut _             Nothing sym  = runSMTWith z3{verbose=True} sym
+runSMTWithTimeOut _             Nothing sym  = runSMTWith z3 sym
 runSMTWithTimeOut (Just "cvc4") (Just n) sym = do setEnv "SBV_CVC4_OPTIONS" ("--lang=smt --incremental --interactive --no-interactive-prompt --model-witness-value --tlimit-per=" <> show n)
                                                   a <- runSMTWith cvc4 sym
                                                   setEnv "SBV_CVC4_OPTIONS" ""
