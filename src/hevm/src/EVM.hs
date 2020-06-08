@@ -151,7 +151,7 @@ instance Show Choose where
 -- | Alias for the type of e.g. @exec1@.
 type EVM a = State VM a
 
-type CodeLocation = (Addr, Word)
+type CodeLocation = (Addr, Int)
 data JumpCondition = Known Word | Unknown
   deriving (Show)
 
@@ -290,9 +290,10 @@ deriving instance Eq Contract
 
 -- | Various environmental data
 data Env = Env
-  { _contracts :: Map Addr Contract
-  , _chainId   :: Word
-  , _sha3Crack :: Map Word ByteString
+  { _contracts  :: Map Addr Contract
+  , _chainId    :: Word
+  , _sha3Crack  :: Map Word ByteString
+  , _keccakUsed :: [([SWord 8], SWord 256)]
   }
 
 
@@ -407,6 +408,7 @@ makeVm o = VM
     , _chainId = w256 $ vmoptChainId o
     , _contracts = Map.fromList
       [(vmoptAddress o, vmoptContract o)]
+    , _keccakUsed = mempty
     }
   , _cache = Cache (Map.fromList
     [(vmoptAddress o, vmoptContract o)])
@@ -635,9 +637,25 @@ exec1 = do
               forceConcrete xOffset' $
                 \xOffset -> forceConcrete xSize' $ \xSize -> do
                   let bytes = readMemory xOffset xSize vm
-                      (hash, invMap)  = case maybeLitBytes bytes of
-                                     Just bs -> (litWord $ keccakBlob bs, Map.singleton (keccakBlob bs) bs)
-                                     Nothing -> (symKeccak bytes, mempty)
+                  (hash, invMap) <- case maybeLitBytes bytes of
+                                     Just bs -> pure (litWord $ keccakBlob bs, Map.singleton (keccakBlob bs) bs)
+
+                                     -- Although we would like to simply assert that the uninterpreted function symkeccak'
+                                     -- is injective, this proves to cause a lot of concern for our smt solvers, probably
+                                     -- due to the introduction of universal quantifiers into the queries.
+
+                                     -- Instead, we keep track of all of the particular invocations of symkeccak' we see
+                                     -- (similarly to sha3Crack), and simply assert that injectivity holds for these
+                                     -- particular invocations.
+
+                                     Nothing -> do let hash' = symkeccak' bytes
+                                                       previousUsed = view (env . keccakUsed) vm
+                                                   env . keccakUsed <>= [(bytes, hash')]
+                                                   pathConditions <>= fmap (\(preimage, image) ->
+                                                                               image .== hash' .=> preimage .== bytes)
+                                                                           previousUsed
+                                                   return (sw256 hash', mempty)
+
                   burn (g_sha3 + g_sha3word * ceilDiv (num xSize) 32) $
                     accessMemoryRange fees xOffset xSize $ do
                       next
@@ -956,7 +974,7 @@ exec1 = do
                   in case maybeLitWord y of
                       Just y' -> jump y'
                       -- if the jump condition is symbolic, an smt query has to be made.
-                      Nothing -> askSMT self (num $ the state pc) y jump
+                      Nothing -> askSMT self (the state pc) y jump
             _ -> underrun
 
         -- op: PC
@@ -1450,7 +1468,7 @@ pushTo f x = f %= (x :)
 pushToSequence :: MonadState s m => ASetter s s (Seq a) (Seq a) -> a -> m ()
 pushToSequence f x = f %= (Seq.|> x)
 
-askSMT :: Addr -> Word -> SymWord -> (Word -> EVM ()) -> EVM ()
+askSMT :: Addr -> Int -> SymWord -> (Word -> EVM ()) -> EVM ()
 askSMT addr pcval jumpcondition continue = do
   -- We keep track of how many times we have come across this particular
   -- (contract, pc) combination in the `iteration` mapping.
@@ -2511,25 +2529,24 @@ memoryCost FeeSchedule{..} byteCount =
 
 -- * Uninterpreted functions
 
-
-symKeccakN :: SInteger -> SInteger -> SWord 256
-symKeccakN = uninterpret "keccak"
-
 symSHA256N :: SInteger -> SInteger -> SWord 256
 symSHA256N = uninterpret "sha256"
+
+symkeccakN :: SInteger -> SInteger -> SWord 256
+symkeccakN = uninterpret "keccak"
 
 -- This is an ugly definition that can probably be done better
 -- with some fancy reflection / haskell dependent type /
 -- type family magic
 -- but for now, let's go the ugly & easy route and just catch
 -- the most common uses of keccak
-symKeccak :: [SWord 8] -> SymWord
-symKeccak bytes = case length bytes of
-  0 -> litWord $ keccakBlob mempty
-  32 -> sw256 . symKeccakN 32 $ sFromIntegral $ (fromBytes bytes :: SWord 256)
-  64 -> sw256 . symKeccakN 64 $ sFromIntegral $ (fromBytes bytes :: SWord 512)
-  128 -> sw256 . symKeccakN 128 $ sFromIntegral $ (fromBytes bytes :: SWord 1024)
-  n -> error $ "TODO: symkeccak for: " <> show n
+symkeccak' :: [SWord 8] -> SWord 256
+symkeccak' bytes = case length bytes of
+  0 -> literal $ toSizzle $ keccak ""
+  32 -> symkeccakN 32 $ sFromIntegral $ (fromBytes bytes :: SWord 256)
+  64 -> symkeccakN 64 $ sFromIntegral $ (fromBytes bytes :: SWord 512)
+  128 -> symkeccakN 128 $ sFromIntegral $ (fromBytes bytes :: SWord 1024)
+  n -> error $ "TODO: symkeccak256 for: " <> show n
 
 symSHA256 :: [SWord 8] -> [SWord 8]
 symSHA256 bytes = case length bytes of
