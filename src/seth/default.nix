@@ -3,7 +3,7 @@
 
 stdenv.mkDerivation rec {
   name = "seth-${version}";
-  version = "0.8.4";
+  version = lib.fileContents ../../VERSION;
   src = ./.;
 
   nativeBuildInputs = [makeWrapper];
@@ -16,6 +16,10 @@ stdenv.mkDerivation rec {
       ${if glibcLocales != null then
         "--set LOCALE_ARCHIVE \"${glibcLocales}\"/lib/locale/locale-archive"
         else ""}
+  '';
+
+  postFixup = ''
+    sed -i s/VERSION_PLACEHOLDER/${version}/ $out/libexec/seth/seth---version
   '';
 
   meta = {
