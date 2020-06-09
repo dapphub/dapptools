@@ -11,10 +11,10 @@ stdenv.mkDerivation rec {
   postInstall = let path = lib.makeBinPath [
     coreutils perl seth
   ]; in ''
-    wrapProgram "$out/bin/token" --prefix PATH : "${path}" \
-      ${if glibcLocales != null then
-        "--set LOCALE_ARCHIVE \"${glibcLocales}\"/lib/locale/locale-archive"
-        else ""}
+    wrapProgram "$out/bin/token" --prefix PATH : ${path} \
+    ${lib.optionalString (glibcLocales != null) ''
+      --set LOCALE_ARCHIVE ${glibcLocales}/lib/locale/locale-archive
+    ''}
   '';
 
   meta = {
