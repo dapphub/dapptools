@@ -359,19 +359,8 @@ equivalenceCheck cmd =
   do let bytecodeA = hexByteString "--code" . strip0x $ codeA cmd
          bytecodeB = hexByteString "--code" . strip0x $ codeB cmd
          types = parseFunArgs =<< funcSig cmd
-         getCalldata = case types of
-                      Nothing -> do cd <- sbytes1024
-                                    len <- freshVar_
-                                    return (cd, len, len .<= 1024)
-                      Just typ -> do (input, len) <- symAbiArg typ
-                                     return (litBytes (sig $ fromMaybe (error "not possibru") (funcSig cmd)) <> input, len + 4, sTrue)
-
      void . runSMT . query $ do
-           (calldata', cdlen, cdconstraint) <- getCalldata
-           symstore <- freshArray_ Nothing
-           caller' <- SAddr <$> freshVar_
-           let (preStateA, preStateB) = both' (\x -> loadSymVM x symstore caller' (calldata', cdlen) & over EVM.pathConditions ((<>) [cdconstraint]))
-                                          (bytecodeA, bytecodeB)
+           (preStateA, preStateB) <- both (abstractVM (funcSig cmd)) (bytecodeA, bytecodeB)
            smtState <- queryState
            (aRes, bRes) <- both (\x -> io $ fst <$> runStateT (interpret (EVM.Fetch.oracle smtState Nothing) Nothing EVM.Stepper.runFully) x)
                              (preStateA, preStateB)
@@ -402,7 +391,9 @@ equivalenceCheck cmd =
 
                checkSat >>= \case
                   Unk -> error "solver said unknown!"
-                  Sat -> do model <- mapM (getValue.fromSized) calldata'
+                  Sat -> do let (calldata', cdlen) = view (EVM.state . EVM.calldata) preStateA
+                            cdlen <- num <$> getValue cdlen
+                            model <- mapM (getValue.fromSized) (take cdlen calldata')
                             io $ do putStrLn $ "Not equal!"
                                     putStrLn $ "Counterexample:"
                                     case types of
@@ -416,7 +407,7 @@ equivalenceCheck cmd =
 both' :: (a -> b) -> (a, a) -> (b, b)
 both' f (x, y) = (f x, f y)
 
---cvc4 can only deal with timeouts given as a commandline option
+-- cvc4 sets timeout via a commandline option instead of smtlib `(set-option)`
 runSMTWithTimeOut :: Maybe Text -> Maybe Integer -> Symbolic a -> IO a
 runSMTWithTimeOut (Just "cvc4") Nothing sym  = runSMTWith cvc4 sym
 runSMTWithTimeOut _             Nothing sym  = runSMTWith z3 sym
@@ -436,20 +427,9 @@ assert cmd =
   let bytecode = maybe (error "bytecode not given") (hexByteString "--code" . strip0x) (code cmd)
       root = fromMaybe "." (dappRoot cmd)
       srcinfo = ((,) root) <$> (jsonFile cmd)
-      types = parseFunArgs =<< funcSig cmd
-      getCalldata = case types of
-                      Nothing -> do cd <- sbytes1024
-                                    len <- freshVar_
-                                    return (cd, len, len .<= 1024)
-                      Just typ -> do (input, len) <- symAbiArg typ
-                                     return (litBytes (sig $ fromMaybe (error "not possibru") (funcSig cmd)) <> input, len + 4, sTrue)
   in if debug cmd
      then runSMTWithTimeOut (solver cmd) (smttimeout cmd) $
-                                  query $ do (calldata', len, lenConstraint) <- getCalldata
-                                             symstore <- freshArray_ Nothing
-                                             caller' <- SAddr <$> freshVar_
-                                             let preState = loadSymVM bytecode symstore caller' (calldata', len) & over EVM.pathConditions ((<>) [lenConstraint])
-
+                                  query $ do preState <- abstractVM (funcSig cmd) bytecode
                                              smtState <- queryState
                                              io $ void $ EVM.TTY.runFromVM srcinfo (EVM.Fetch.oracle smtState Nothing) preState
 
@@ -458,30 +438,33 @@ assert cmd =
                         case results of
                           Right a -> io $ do print "Assertion violation:"
                                              die . show $ ByteStringS a
-                          Left (pre, posts) -> do io $ putStrLn $ "Explored: " <> show (length posts) <> " branches successfully"
-                                                  when (getModels cmd) $
-                                                    let (calldata', cdlen) = view (EVM.state . EVM.calldata) pre
-                                                    in forM_ (zip [1..] posts) $ \(i, postVM) -> do
-                                                      resetAssertions
-                                                      constrain (sAnd (view EVM.pathConditions postVM))
-                                                      io $ putStrLn $ "-- Branch (" <> show i <> "/" <> show (length posts) <> ") --"
-                                                      checkSat >>= \case
-                                                        Unk -> io $ putStrLn "Timed out"
-                                                        Unsat -> io $ putStrLn "Inconsistent path conditions: dead path"
-                                                        Sat -> do
-                                                          cdlen <- num <$> getValue cdlen
-                                                          calldatainput <- mapM (getValue.fromSized) (take cdlen calldata')
-                                                          io $ do
-                                                            print $ "Calldata:"
-                                                            print $ ByteStringS (ByteString.pack calldatainput)
-                                                          case view EVM.result postVM of
-                                                            Nothing -> error "internal error; no EVM result"
-                                                            Just (EVM.VMFailure (EVM.Revert "")) -> io . putStrLn $ "Reverted"
-                                                            Just (EVM.VMFailure (EVM.Revert msg)) -> io . putStrLn $ "Reverted: " <> show (decodeAbiValue AbiStringType $ Lazy.fromStrict (ByteString.drop 4 msg))
-                                                            Just (EVM.VMFailure err) -> io . putStrLn $ "Failed: " <> show err
-                                                            Just (EVM.VMSuccess []) -> io $ putStrLn "Stopped"
-                                                            Just (EVM.VMSuccess msg) -> do output <- mapM (getValue.fromSized) msg
-                                                                                           io . putStrLn $ "Returned: " <> show (ByteStringS (ByteString.pack output))
+                          Left (pre, posts) ->
+                            do io $ putStrLn $ "Explored: " <> show (length posts) <> " branches successfully"
+                               -- When `--get-model` is passed, we print example calldata for each path
+                               when (getModels cmd) $
+                                 let (calldata', cdlen) = view (EVM.state . EVM.calldata) pre
+                                 in forM_ (zip [1..] posts) $ \(i, postVM) -> do
+                                   resetAssertions
+                                   constrain (sAnd (view EVM.pathConditions postVM))
+                                   io $ putStrLn $ "-- Branch (" <> show i <> "/" <> show (length posts) <> ") --"
+                                   checkSat >>= \case
+                                     Unk -> io $ putStrLn "Timed out"
+                                     Unsat -> io $ putStrLn "Inconsistent path conditions: dead path"
+                                     Sat -> do
+                                       cdlen <- num <$> getValue cdlen
+                                       calldatainput <- mapM (getValue.fromSized) (take cdlen calldata')
+                                       io $ do
+                                         print $ "Calldata:"
+                                         print $ ByteStringS (ByteString.pack calldatainput)
+                                       case view EVM.result postVM of
+                                         Nothing -> error "internal error; no EVM result"
+                                         Just (EVM.VMFailure (EVM.Revert "")) -> io . putStrLn $ "Reverted"
+                                         Just (EVM.VMFailure (EVM.Revert msg)) -> let inputbytes = (decodeAbiValue AbiStringType $ Lazy.fromStrict (ByteString.drop 4 msg))
+                                                                                  in io . putStrLn $ "Reverted: " <> show inputbytes
+                                         Just (EVM.VMFailure err) -> io . putStrLn $ "Failed: " <> show err
+                                         Just (EVM.VMSuccess []) -> io $ putStrLn "Stopped"
+                                         Just (EVM.VMSuccess msg) -> do output <- mapM (getValue.fromSized) msg
+                                                                        io . putStrLn $ "Returned: " <> show (ByteStringS (ByteString.pack output))
 
 
 dappCoverage :: UnitTestOptions -> Mode -> String -> IO ()
@@ -523,33 +506,29 @@ launchExec :: Command Options.Unwrapped -> IO ()
 launchExec cmd = do
   let root = fromMaybe "." (dappRoot cmd)
       srcinfo = ((,) root) <$> (jsonFile cmd)
-  void . runSMT . query $
-    do smtState <- queryState
-       vm <- vmFromCommand cmd
-       vm1 <- case state cmd of
-         Nothing -> pure vm
-           -- Note: this will load the code, so if you've specified a state
-           -- repository, then you effectively can't change `--code' after
-           -- the first run.
-         Just path -> io $ Facts.apply vm <$> Git.loadFacts (Git.RepoAt path)
+  vm <- vmFromCommand cmd
+  vm1 <- case state cmd of
+    Nothing -> pure vm
+    -- Note: this will load the code, so if you've specified a state
+    -- repository, then you effectively can't change `--code' after
+    -- the first run.
+    Just path -> Facts.apply vm <$> Git.loadFacts (Git.RepoAt path)
 
-       case optsMode cmd of
-         Run -> io $ do
-           vm' <- execStateT (interpret (fetcher smtState) Nothing . void $ EVM.Stepper.execFully) vm1
-           case view EVM.result vm' of
-             Nothing -> error "internal error; no EVM result"
-             Just (EVM.VMFailure (EVM.Revert msg)) -> die . show . ByteStringS $ msg
-             Just (EVM.VMFailure err) -> die . show $ err
-             Just (EVM.VMSuccess msg) -> putStrLn . show . ByteStringS $ EVM.forceLitBytes msg
-           case state cmd of
-             Nothing -> pure ()
-             Just path ->
-               Git.saveFacts (Git.RepoAt path) (Facts.vmFacts vm')
-         Debug -> io . void $ EVM.TTY.runFromVM srcinfo (fetcher smtState) vm1
-       return ()
-   where fetcher smt = case rpc cmd of
-           Nothing -> EVM.Fetch.oracle smt Nothing
-           Just url -> EVM.Fetch.oracle smt $ Just (block', url)
+  case optsMode cmd of
+    Run -> do
+      vm' <- execStateT (interpret fetcher Nothing . void $ EVM.Stepper.execFully) vm1
+      case view EVM.result vm' of
+        Nothing -> error "internal error; no EVM result"
+        Just (EVM.VMFailure (EVM.Revert msg)) -> die . show . ByteStringS $ msg
+        Just (EVM.VMFailure err) -> die . show $ err
+        Just (EVM.VMSuccess msg) -> print . ByteStringS $ EVM.forceLitBytes msg
+      case state cmd of
+        Nothing -> pure ()
+        Just path ->
+          Git.saveFacts (Git.RepoAt path) (Facts.vmFacts vm')
+    Debug -> void $ EVM.TTY.runFromVM srcinfo fetcher vm1
+  where fetcher = maybe EVM.Fetch.zero (EVM.Fetch.http block') (rpc cmd)
+        block'  = maybe EVM.Fetch.Latest EVM.Fetch.BlockNumber (block cmd)
 
 data Testcase = Testcase {
   _entries :: [(Text, Maybe Text)],
@@ -606,56 +585,36 @@ tohexOrText s = case "0x" `Char8.isPrefixOf` encodeUtf8 s of
                   False -> encodeUtf8 s
 
 
-vmFromCommand :: Command Options.Unwrapped -> Query EVM.VM
+vmFromCommand :: Command Options.Unwrapped -> IO EVM.VM
 vmFromCommand cmd = do
-  (cdata, cdlen, cdconstraint) <- case (calldata cmd, funcSig cmd) of
-    -- fully abstract calldata:
-    (Nothing, Nothing) -> do cd <- sbytes1024
-                             len <- freshVar_
-                             return (cd, len, len .<= 1024)
-    -- concrete calldata:
-    (Just cd, Nothing) -> let cddata = litBytes . (hexByteString "--calldata") $ strip0x cd
-                          in return (cddata, literal . num $ length cddata, sTrue)
-    -- abstract calldata based on signature
-    (Nothing, Just s) -> let Just typ = parseFunArgs s
-                         in do (input, len) <- symAbiArg typ
-                               return (litBytes (sig s) <> input, len + 4, sTrue)
-    -- Fail if both are given
-
-    -- NOTE: it should be possible to combine concrete and abstract calldata
-    -- in the future: we can allow calldata to be passed similarly to how hevm does abiencoding
-    (Just _, Just _) -> error "Incompatible options: calldata and funcSig (coming soon)"
-  caller' <- case caller cmd of
-    Nothing -> SAddr <$> freshVar_
-    Just c -> return $ litAddr c
   vm <- case (code cmd, rpc cmd) of
      (Nothing, Nothing) -> error "Missing: --code TEXT or --rpc TEXT"
-     (Just c,  Nothing) -> return $ vm1 (EVM.initialContract (codeType (hexByteString "--code" (strip0x c)))) (cdata, cdlen) caller'
-     (a     , Just url) -> io $ do maybeContract <- EVM.Fetch.fetchContractFrom block' url address'
-                                   case maybeContract of
-                                     Nothing -> error $ "contract not found: " <> show address'
-                                     Just contract' -> case a of
-                                       Nothing -> return $ vm1 contract' (cdata, cdlen) caller'
-                                       -- if both code and url is given,
-                                       -- fetch the contract then overwrite the code
-                                       Just c -> return $ (vm1 contract' (cdata, cdlen) caller') & set (EVM.state . EVM.code) c
-  return $ vm
-    & EVM.env . EVM.contracts . ix address' . EVM.balance +~ (w256 value')
-    & over EVM.pathConditions ((<>) [cdconstraint])
+     (Just c,  Nothing) -> return $ vm1 (EVM.initialContract (codeType (hexByteString "--code" (strip0x c))))
+     (a     , Just url) -> do maybeContract <- EVM.Fetch.fetchContractFrom block' url address'
+                              case maybeContract of
+                                Nothing -> error $ "contract not found: " <> show address'
+                                Just contract' -> case a of
+                                  Nothing -> return (vm1 contract')
+                                  -- if both code and url is given,
+                                  -- fetch the contract then overwrite the code
+                                  Just c -> return $ (vm1 contract') & set (EVM.state . EVM.code) c
+  return $ vm & EVM.env . EVM.contracts . ix address' . EVM.balance +~ (w256 value')
       where
         block'   = maybe EVM.Fetch.Latest EVM.Fetch.BlockNumber (block cmd)
         value'   = word value 0
+        caller'  = addr caller 0
         origin'  = addr origin 0
+        calldata' = litBytes $ bytes calldata ""
         codeType = if create cmd then EVM.InitCode else EVM.RuntimeCode
         address' = if create cmd
               then createAddress origin' (word nonce 0)
               else addr address 0xacab
-        vm1 c calldata' caller' = EVM.makeVm $ EVM.VMOpts
+        vm1 c = EVM.makeVm $ EVM.VMOpts
           { EVM.vmoptContract      = c
-          , EVM.vmoptCalldata      = calldata'
+          , EVM.vmoptCalldata      = (calldata', literal . num $ length calldata')
           , EVM.vmoptValue         = value'
           , EVM.vmoptAddress       = address'
-          , EVM.vmoptCaller        = caller'
+          , EVM.vmoptCaller        = litAddr caller'
           , EVM.vmoptOrigin        = origin'
           , EVM.vmoptGas           = word gas 0
           , EVM.vmoptGaslimit      = word gas 0
@@ -669,8 +628,10 @@ vmFromCommand cmd = do
           , EVM.vmoptSchedule      = FeeSchedule.istanbul
           , EVM.vmoptCreate        = create cmd
           }
+
         word f def = fromMaybe def (f cmd)
         addr f def = fromMaybe def (f cmd)
+        bytes f def = maybe def id (f cmd)
 
 launchTest :: ExecMode -> Command Options.Unwrapped ->  IO ()
 launchTest execmode cmd = do
