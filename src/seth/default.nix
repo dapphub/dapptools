@@ -12,14 +12,19 @@ stdenv.mkDerivation rec {
   checkPhase = "make test";
   makeFlags = ["prefix=$(out)"];
 
-  postInstall = let path = lib.makeBinPath [
-    bc coreutils curl ethsign git gnused hevm jshon nodejs perl
-  ]; in ''
-    wrapProgram "$out/bin/seth" \
-      --prefix PATH : ${path} \
-    ${lib.optionalString (glibcLocales != null) ''
-      --set LOCALE_ARCHIVE ${glibcLocales}/lib/locale/locale-archive
-    ''}
+  postInstall =
+    let
+      path = lib.makeBinPath [
+        bc coreutils curl ethsign git gnused jshon nodejs perl
+        bc coreutils curl ethsign git gnused hevm jshon nodejs perl
+      ];
+    in
+      ''
+        wrapProgram "$out/bin/seth" \
+          --prefix PATH : ${path} \
+        ${lib.optionalString (glibcLocales != null) ''
+          --set LOCALE_ARCHIVE ${glibcLocales}/lib/locale/locale-archive
+      ''}
   '';
 
   meta = {

@@ -13,13 +13,18 @@ stdenv.mkDerivation rec {
   checkPhase = "make test";
   makeFlags = ["prefix=$(out)"];
 
-  postInstall = let path = lib.makeBinPath [
-    coreutils git gnused gnumake hevm jshon jq nix nodejs perl seth solc
-  ]; in ''
-    wrapProgram "$out/bin/dapp" --prefix PATH : ${path} \
-    ${lib.optionalString (glibcLocales != null) ''
-      --set LOCALE_ARCHIVE ${glibcLocales}/lib/locale/locale-archive
-    ''}
+  postInstall =
+    let
+      path = lib.makeBinPath [
+        coreutils git gnused gnumake hevm jshon jq nix nodejs perl seth solc
+      ];
+    in
+      ''
+        wrapProgram "$out/bin/dapp" \
+          --prefix PATH : ${path} \
+        ${lib.optionalString (glibcLocales != null) ''
+          --set LOCALE_ARCHIVE ${glibcLocales}/lib/locale/locale-archive
+      ''}
   '';
 
   meta = {
