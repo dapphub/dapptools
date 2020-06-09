@@ -132,7 +132,6 @@ fetchSlotFrom n url addr slot =
     (\s -> fetchSlotWithSession n url s addr slot)
 
 
--- more like http + z3 now
 http :: BlockNumber -> Text -> EVM.Query -> IO (EVM ())
 http n url q =
   case q of
@@ -146,6 +145,7 @@ http n url q =
         Just x  -> return (continue x)
         Nothing -> error ("oracle error: " ++ show q)
     EVM.PleaseAskSMT jumpcondition pathconditions continue -> error "smt calls not available for this oracle"
+    q -> error ("oracle error: " <> show q)
 
 zero :: Monad m => EVM.Query -> m (EVM ())
 zero q =
@@ -161,7 +161,7 @@ zero q =
 
 type Fetcher = EVM.Query -> IO (EVM ())
 
--- like http + z3
+-- smtsolving + (http or zero)
 oracle :: SBV.State -> Maybe (BlockNumber, Text) -> Fetcher
 oracle state info q = do
   case q of

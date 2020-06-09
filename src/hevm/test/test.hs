@@ -275,19 +275,19 @@ main = defaultMain $ testGroup "hevm"
           Just c <- solcRuntime "Deposit"
             [i|
             contract Deposit {
-	      function deposit(uint256 deposit_count) external pure {
-	        require(deposit_count < 2**32 - 1);
-	        ++deposit_count;
-	        bool found = false;
-	        for (uint height = 0; height < 32; height++) {
-	          if ((deposit_count & 1) == 1) {
-	            found = true;
-	            break;
-	          }
-	         deposit_count = deposit_count >> 1;
-	         }
-	        assert(found);
-	      }
+              function deposit(uint256 deposit_count) external pure {
+                require(deposit_count < 2**32 - 1);
+                ++deposit_count;
+                bool found = false;
+                for (uint height = 0; height < 32; height++) {
+                  if ((deposit_count & 1) == 1) {
+                    found = true;
+                    break;
+                  }
+                 deposit_count = deposit_count >> 1;
+                 }
+                assert(found);
+              }
              }
             |]
           Left (pre, res) <- runSMTWith z3 $ query $ checkAssert (RuntimeCode c) Nothing (Just "deposit(uint256)")
@@ -297,19 +297,19 @@ main = defaultMain $ testGroup "hevm"
           Just c <- solcRuntime "Deposit"
             [i|
             contract Deposit {
-	      function deposit(uint256 deposit_count) external pure {
-	        require(deposit_count < 2**32 - 1);
-	        ++deposit_count;
-	        bool found = false;
-	        for (uint height = 0; height < 32; height++) {
-	          if ((deposit_count & 1) == 1) {
-	            found = true;
-	            break;
-	          }
-	         deposit_count = deposit_count >> 1;
-	         }
-	        assert(found);
-	      }
+              function deposit(uint256 deposit_count) external pure {
+                require(deposit_count < 2**32 - 1);
+                ++deposit_count;
+                bool found = false;
+                for (uint height = 0; height < 32; height++) {
+                  if ((deposit_count & 1) == 1) {
+                    found = true;
+                    break;
+                  }
+                 deposit_count = deposit_count >> 1;
+                 }
+                assert(found);
+              }
              }
             |]
           Left (pre, res) <- runSMTWith cvc4 $ query $ checkAssert (RuntimeCode c) Nothing (Just "deposit(uint256)")
@@ -319,19 +319,19 @@ main = defaultMain $ testGroup "hevm"
           Just c <- solcRuntime "Deposit"
             [i|
             contract Deposit {
-	      function deposit(uint8 deposit_count) external pure {
-	        require(deposit_count < 2**32 - 1);
-	        ++deposit_count;
-	        bool found = false;
-	        for (uint height = 0; height < 32; height++) {
-	          if ((deposit_count & 1) == 1) {
-	            found = true;
-	            break;
-	          }
-	         deposit_count = deposit_count >> 1;
-	         }
-	        assert(found);
-	      }
+              function deposit(uint8 deposit_count) external pure {
+                require(deposit_count < 2**32 - 1);
+                ++deposit_count;
+                bool found = false;
+                for (uint height = 0; height < 32; height++) {
+                  if ((deposit_count & 1) == 1) {
+                    found = true;
+                    break;
+                  }
+                 deposit_count = deposit_count >> 1;
+                 }
+                assert(found);
+              }
              }
             |]
           (Right bs) <- runSMT $ query $ checkAssert (RuntimeCode c) Nothing (Just "deposit(uint8)")
@@ -349,11 +349,7 @@ main = defaultMain $ testGroup "hevm"
           }
           |]
         Left (pre, res) <- runSMTWith cvc4 $ query $ checkAssert (RuntimeCode c) Nothing Nothing
-        putStrLn $ "successfully explored: " <> show (length res) <> " paths"        
-
---         -- TODO: testcase for symbolic storage... A variation of the deposit contract example
---         -- above where `deposit_count` is a storage var seems to yield false negatives
-        
+        putStrLn $ "successfully explored: " <> show (length res) <> " paths"
         ,
 
         testCase "injectivity of keccak (32 bytes)" $ do
@@ -361,27 +357,39 @@ main = defaultMain $ testGroup "hevm"
             [i|
             contract A {
               function f(uint x, uint y) public pure {
-              if (keccak256(abi.encodePacked(x)) == keccak256(abi.encodePacked(y))) assert(x == y);
+                if (keccak256(abi.encodePacked(x)) == keccak256(abi.encodePacked(y))) assert(x == y);
               }
             }
             |]
           Left (pre, res) <- runSMTWith cvc4 $ query $ checkAssert (RuntimeCode c) Nothing Nothing
           putStrLn $ "successfully explored: " <> show (length res) <> " paths"
---          assert $ nothing == Left ()
+        ,
+        testCase "injectivity of keccak (32 bytes)" $ do
+          Just c <- solcRuntime "A"
+            [i|
+            contract A {
+              function f(uint x, uint y) public pure {
+                if (keccak256(abi.encodePacked(x)) == keccak256(abi.encodePacked(y))) assert(x == y);
+              }
+            }
+            |]
+          Left (pre, res) <- runSMTWith cvc4 $ query $ checkAssert (RuntimeCode c) Nothing Nothing
+          putStrLn $ "successfully explored: " <> show (length res) <> " paths"
+       ,
 
-        -- ,
-        -- testCase "injectivity of keccak (64 bytes)" $ do
-        -- Just c <- solcRuntime "A"
-        --   [i|
-        --   contract A {
-        --     function f(uint x, uint y, uint w, uint z) public pure {
-        --     if (keccak256(abi.encodePacked(x,y)) == keccak256(abi.encodePacked(w,z))) assert(x == w && y == z);
-        --     }
-        --   }
-        --   |]
-        -- nothing <- runSMTWith z3{verbose=True} $
-        --   checkAssert (RuntimeCode c) (Just "f(uint256,uint256,uint256,uint256)")
-        -- assert $ nothing == Left ()
+        testCase "injectivity of keccak (64 bytes)" $ do
+          Just c <- solcRuntime "A"
+            [i|
+            contract A {
+              function f(uint x, uint y, uint w, uint z) public pure {
+                assert (keccak256(abi.encodePacked(x,y)) != keccak256(abi.encodePacked(w,z)));
+              }
+            }
+            |]
+          Right bs <- runSMTWith z3 $ query $ checkAssert (RuntimeCode c) Nothing (Just "f(uint256,uint256,uint256,uint256)")
+          let AbiTuple xywz = decodeAbiValue (AbiTupleType $ Vector.fromList [AbiUIntType 256, AbiUIntType 256, AbiUIntType 256, AbiUIntType 256]) (BS.fromStrict (BS.drop 4 bs))
+              [AbiUInt 256 x, AbiUInt 256 y, AbiUInt 256 w, AbiUInt 256 z] = Vector.toList xywz
+          assert $ x == w && y == z
 
 
     ]
@@ -399,6 +407,18 @@ runSimpleVM x ins = case loadVM x of
                        in case runState (assign (state.calldata) calldata' >> exec) vm of
                             (VMSuccess out, _) -> Just out
                             _ -> Nothing
+
+loadVM :: ByteString -> Maybe VM
+loadVM x =
+    case runState exec (vmForEthrunCreation x) of
+       (VMSuccess targetCode, vm1) -> do
+         let target = view (state . contract) vm1
+             vm2 = execState (replaceCodeOfSelf (RuntimeCode (forceLitBytes targetCode))) vm1
+         return $ snd $ flip runState vm2
+                (do resetState
+                    assign (state . gas) 0xffffffffffffffff -- kludge
+                    loadContract target)
+       _ -> Nothing
 
 hex :: ByteString -> ByteString
 hex s =
