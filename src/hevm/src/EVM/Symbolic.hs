@@ -61,6 +61,19 @@ mkSymbolicContract theContractCode store = Contract
             InitCode b    -> b
             RuntimeCode b -> b
 
+abstractVM :: Maybe Text -> ByteString ->  Query VM
+abstractVM signature' x = do
+  (cd', cdlen, cdconstraint) <-
+    case signature' of
+      Nothing -> do cd <- sbytes256
+                    len <- freshVar_
+                    return (cd, len, len .<= 1024)
+      Just sign -> do (input,len) <- symAbiArg $ fromJust (parseFunArgs sign)
+                      return (litBytes (sig sign) <> input, len + 4, sTrue)
+  symstore <- freshArray "Storage" Nothing
+  c <- SAddr <$> freshVar_
+  return $ loadSymVM x symstore c (cd', cdlen) & over pathConditions ((<>) [cdconstraint])
+
 loadSymVM :: ByteString -> SArray (WordN 256) (WordN 256) -> SAddr -> ([SWord 8], SWord 32) -> VM
 loadSymVM x initStore addr calldata =
     (makeVm $ VMOpts
@@ -83,19 +96,6 @@ loadSymVM x initStore addr calldata =
     , vmoptCreate = False
     }) & set (env . contracts . at (createAddress ethrunAddress 1))
              (Just (mkSymbolicContract (RuntimeCode x) initStore))
-
-
-loadVM :: ByteString -> Maybe VM
-loadVM x =
-    case runState exec (vmForEthrunCreation x) of
-       (VMSuccess targetCode, vm1) -> do
-         let target = view (state . contract) vm1
-             vm2 = execState (replaceCodeOfSelf (RuntimeCode (forceLitBytes targetCode))) vm1
-         return $ snd $ flip runState vm2
-                (do resetState
-                    assign (state . gas) 0xffffffffffffffff -- kludge
-                    loadContract target)
-       _ -> Nothing
 
 
 sbytes32, sbytes64, sbytes128, sbytes256, sbytes512, sbytes1024 :: Query ([SWord 8])
@@ -161,7 +161,7 @@ interpret fetcher maxIter =
         Stepper.Option (EVM.PleaseChoosePath continue) ->
           do vm <- State.get
              case maxIter of
-               Just maxiter -> 
+               Just maxiter ->
                  let pc' = view (state . pc) vm
                      addr = view (state . contract) vm
                      iters = view (iterations . at (addr, pc') . non 0) vm
@@ -203,43 +203,31 @@ checkAssert code maxIter signature' = let post = Just $ \(_, output) ->
 
 verify :: ContractCode -> Maybe Integer -> Maybe Text -> Precondition -> Maybe Postcondition -> Query (Either (VM, [VM]) ByteString)
 verify (RuntimeCode runtimecode) maxIter signature' pre maybepost = do
-    (calldata', cdlen, cdconstraint) <- case signature' of
-      Nothing -> do cd <- sbytes256
-                    len <- freshVar_
-                    return (cd, len, len .<= 1024)
-      Just sign -> do (input,len) <- symAbiArg $ fromJust (parseFunArgs sign)
-                      return (litBytes (sig sign) <> input, len + 4, sTrue)
-    symstore <- freshArray "Storage" Nothing
-    c <- freshVar_
-    let preState = (loadSymVM runtimecode symstore (SAddr c) (calldata', cdlen)) & over pathConditions ((<>) [pre (drop 4 calldata'), cdconstraint])
-    --registerUISMTFunction EVM.symKeccak32
+    preStateRaw <- abstractVM signature' runtimecode
+    let args = drop 4 $ fst $ view (state . calldata) preStateRaw
+    -- add the pre condition to the pathconditions to ensure that we are only exploring valid paths
+    let preState = over pathConditions ((++) [pre args]) preStateRaw
     smtState <- queryState
     results <- io $ fst <$> runStateT (interpret (Fetch.oracle smtState Nothing) maxIter Stepper.runFully) preState
     case (maybepost, results) of
       (Just post, Right res) -> do let postC = sOr $ fmap (\postState -> (sAnd (view pathConditions postState)) .&& sNot (post (preState, postState))) res
-                                   -- is it possible for any of these pathcondition => postcondition
-                                   -- implications to be false?
+                                   -- is there any path which can possibly violate
+                                   -- the postcondition?
                                    resetAssertions
                                    constrain postC
-                                   io $ print "checking postcondition..."
+                                   io $ putStrLn "checking postcondition..."
                                    sat <- checkSat
                                    case sat of
-                                     Unk -> do io $ print "postcondition query timed out"
+                                     Unk -> do io $ putStrLn "postcondition query timed out"
                                                return $ Left (preState, res)
-                                     Unsat -> do io $ print "Q.E.D"
+                                     Unsat -> do io $ putStrLn "Q.E.D"
                                                  return $ Left (preState, res)
-                                     Sat -> do io $ print "post condition violated:"
+                                     Sat -> do io $ putStrLn "post condition violated:"
+                                               let (calldata', cdlen) = view (state . calldata) preState
                                                cdlen <- num <$> getValue cdlen
---                                                litcaller <- getValue c
--- --                                               k <- getValue keccakstore
---                                                let (x, y) = splitAt 32 (drop 4 calldata')
---                                                keccakx <- getValue (readArray keccakstore (sFromIntegral (fromBytes x :: SWord 256)))
---                                                keccaky <- getValue (readArray keccakstore (sFromIntegral (fromBytes y :: SWord 256)))
---                                                io $ putStrLn $ "keccak(x):" <> show keccakx
---                                                io $ putStrLn $ "keccak(y):" <> show keccaky
---                                                io $ print $ "caller: " <> show (fromSizzle litcaller)
+
                                                model <- mapM (getValue.fromSized) (take cdlen calldata')
                                                return $ Right (pack model)
       (Nothing, Right res) -> do io $ print "Q.E.D"
                                  return $ Left (preState, res)
-      (Nothing, Left _) -> error "unexpected error during symbolic execution"
+      (_, Left _) -> error "unexpected error during symbolic execution"

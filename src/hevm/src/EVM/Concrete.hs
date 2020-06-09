@@ -19,6 +19,7 @@ import Data.Maybe      (fromMaybe)
 import Data.Semigroup  ((<>))
 import Data.Word       (Word8)
 import Data.SBV hiding (Word)
+import qualified Data.SBV as SBV
 import Data.SBV.Internals hiding (Word)
 import qualified Data.ByteString as BS
 
@@ -127,10 +128,6 @@ writeMemory bs1 (C _ n) (C _ src) (C _ dst) bs0 =
   let
     (a, b) = splitAt (num dst) bs0
     a'     = replicate (num dst - length a) 0
-    -- sliceMemory should work for both cases, but we are using 256 bit
-    -- words, whereas ByteString is only defined up to 64 bit. For large n,
-    -- src, dst this will cause problems (often in GeneralStateTests).
-    -- Later we could reimplement ByteString for 256 bit arguments.
     c      = if src > num (length bs1)
              then replicate (num n) 0
              else sliceWithZero (num src) (num n) bs1
