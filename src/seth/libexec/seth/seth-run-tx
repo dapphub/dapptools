@@ -27,7 +27,7 @@ DATA=$(echo "$tx" | seth --field input)
 if [[ "$TO" == 'null' ]]; then
     opts+=(--create --code "$DATA")
 else
-    opts+=(--caller "$TO" --calldata "$DATA")
+    opts+=(--address "$TO" --calldata "$DATA")
 fi
 
-hevm exec --address "$(echo "$tx" | seth --field to)" --block "$(echo "$tx" | seth --field blockNumber)" --gas "$(echo "$tx" | seth --field gas)" --nonce "$(echo "$tx" | seth --field nonce)" --rpc "$ETH_RPC_URL" "${opts[@]}" --value "$(echo "$tx" | seth --field value)"
+hevm exec --caller "$(echo "$tx" | seth --field from)" --block "$(echo "$tx" | seth --field blockNumber)" --gas "$(echo "$tx" | seth --field gas)" --nonce "$(echo "$tx" | seth --field nonce)" --rpc "$ETH_RPC_URL" "${opts[@]}" --value "$(echo "$tx" | seth --field value)"
