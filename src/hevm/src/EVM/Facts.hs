@@ -34,14 +34,15 @@ module EVM.Facts
   ) where
 
 import EVM.Concrete (Word)
-import EVM          (VM, Contract, balance, nonce, storage, bytecode, env, contracts)
+import EVM          (balance, nonce, storage, bytecode, env, contracts, contract, state)
 import EVM.Types    (Addr)
 
 import qualified EVM
 
 import Prelude hiding (Word)
 
-import Control.Lens    (view, set, at, ix, (&))
+import Control.Lens    (view, set, at, ix, (&), assign)
+import Control.Monad.State.Strict (execState, when)
 import Data.ByteString (ByteString)
 import Data.Monoid     ((<>))
 import Data.Ord        (comparing)
@@ -139,8 +140,9 @@ vmFacts vm = Set.fromList $ do
 apply1 :: VM -> Fact -> VM
 apply1 vm fact =
   case fact of
-    CodeFact    {..} ->
-      vm & set (env . contracts . at addr) (Just (EVM.initialContract (EVM.RuntimeCode blob)))
+    CodeFact    {..} -> flip execState vm $ do
+      assign (env . contracts . at addr) (Just (EVM.initialContract (EVM.RuntimeCode blob)))
+      when (view (state . contract) vm == addr) $ EVM.loadContract addr
     StorageFact {..} ->
       vm & set (env . contracts . ix addr . storage . at which) (Just what)
     BalanceFact {..} ->
