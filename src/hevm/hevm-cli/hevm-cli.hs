@@ -102,10 +102,10 @@ data Command w
       , solver        :: w ::: Maybe Text       <?> "Smt solver to use z3 (default) or cvc4"
       }
   | Equivalence -- prove equivalence between two programs
-    { codeA   :: w ::: ByteString <?> "Bytecode of the first program"
-    , codeB   :: w ::: ByteString <?> "Bytecode of the second program"
-    , funcSig :: w ::: Maybe Text <?> "Function signature"
-  }
+      { codeA   :: w ::: ByteString <?> "Bytecode of the first program"
+      , codeB   :: w ::: ByteString <?> "Bytecode of the second program"
+      , funcSig :: w ::: Maybe Text <?> "Function signature"
+      }
   | Exec -- Execute a given program with specified env & calldata
       { code        :: w ::: Maybe ByteString <?> "Program bytecode"
       , calldata    :: w ::: Maybe ByteString <?> "Tx: calldata"
@@ -587,17 +587,17 @@ tohexOrText s = case "0x" `Char8.isPrefixOf` encodeUtf8 s of
 
 vmFromCommand :: Command Options.Unwrapped -> IO EVM.VM
 vmFromCommand cmd = do
-  vm <- case (code cmd, rpc cmd) of
-     (Nothing, Nothing) -> error "Missing: --code TEXT or --rpc TEXT"
-     (Just c,  Nothing) -> return $ vm1 (EVM.initialContract (codeType (hexByteString "--code" (strip0x c))))
-     (a     , Just url) -> do maybeContract <- EVM.Fetch.fetchContractFrom block' url address'
-                              case maybeContract of
-                                Nothing -> error $ "contract not found: " <> show address'
-                                Just contract' -> case a of
-                                  Nothing -> return (vm1 contract')
-                                  -- if both code and url is given,
-                                  -- fetch the contract then overwrite the code
-                                  Just c -> return $ (vm1 contract') & set (EVM.state . EVM.code) c
+  vm <- case (rpc cmd) of
+     Nothing  -> return . vm1 . EVM.initialContract $ maybe (EVM.RuntimeCode "") (codeType . hexByteString "--code" . strip0x) (code cmd)
+     Just url -> do maybeContract <- EVM.Fetch.fetchContractFrom block' url address'
+                    case maybeContract of
+                      Nothing -> error $ "contract not found: " <> show address'
+                      Just contract' -> case (code cmd) of
+                        Nothing -> return (vm1 contract')
+                        -- if both code and url is given,
+                        -- fetch the contract then overwrite the code
+                        Just c -> return $ (vm1 contract') & set (EVM.state . EVM.code) c
+
   return $ vm & EVM.env . EVM.contracts . ix address' . EVM.balance +~ (w256 value')
       where
         block'   = maybe EVM.Fetch.Latest EVM.Fetch.BlockNumber (block cmd)
