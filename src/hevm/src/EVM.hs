@@ -701,7 +701,7 @@ exec1 = do
 
         -- op: CALLDATALOAD
         0x35 -> stackOp1 (const g_verylow) $
-          \x -> readSWord (forceLit x) (fst $ the state calldata)
+          \(S _ x) -> uncurry (readSWordWithBound (sFromIntegral x)) (the state calldata)
 
         -- op: CALLDATASIZE
         0x36 ->
@@ -716,7 +716,8 @@ exec1 = do
                 accessUnboundedMemoryRange fees xTo xSize $ do
                   next
                   assign (state . stack) xs
-                  copyBytesToMemory (fst $ the state calldata) xSize xFrom xTo
+                  let (cd, cdlen) = the state calldata
+                  copyBytesToMemory [ite (i .<= cdlen) x 0 | (x, i) <- zip cd [1..]] xSize xFrom xTo
             _ -> underrun
 
         -- op: CODESIZE
