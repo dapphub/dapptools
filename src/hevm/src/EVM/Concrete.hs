@@ -162,6 +162,19 @@ readSWord (C _ i) x =
   else swordAt (num i) x
 
 
+select' :: (Ord b, Num b, SymVal b, Mergeable a) => [a] -> a -> SBV b -> a
+select' xs err ind = walk xs ind err
+    where walk []     _ acc = acc
+          walk (e:es) i acc = walk es (i-1) (ite (i .== 0) e acc)
+
+-- Generates a ridiculously large set of constraints (roughly 25k) when
+-- the index is symbolic, but it still seems (kind of) manageable
+-- for the solvers.
+readSWordWithBound :: SWord 32 -> [SWord 8] -> SWord 32 -> SymWord
+readSWordWithBound ind xs bound =
+  let boundedList = [ite (i .<= bound) x 0 | (x, i) <- zip xs [1..]]
+  in sw256 . fromBytes $ [select' boundedList 0 (ind + j) | j <- [0..31]]
+
 blobSize :: ByteString -> Word
 blobSize x = w256 (num (BS.length x))
 
