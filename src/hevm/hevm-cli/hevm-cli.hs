@@ -457,7 +457,6 @@ vmFromCommand cmd = do
                                          Just c -> return $ vm1 (
                                                       EVM.initialContract (codeType $ hexByteString "--code" $ strip0x c)
                                                         & set EVM.storage     (view EVM.storage contract')
-                                                        & set EVM.origStorage (view EVM.origStorage contract')
                                                         & set EVM.balance     (view EVM.balance contract')
                                                         & set EVM.nonce       (view EVM.nonce contract')
                                                         & set EVM.external    (view EVM.external contract'))
