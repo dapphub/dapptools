@@ -39,6 +39,7 @@ module EVM.Solidity
   , sourceAsts
   , stripBytecodeMetadata
   , signature
+  , parseMethodInput
   , lineSubrange
   , astIdMap
   , astSrcMap
