@@ -30,4 +30,4 @@ else
     opts+=(--address "$TO" --calldata "$DATA")
 fi
 
-hevm exec --caller "$(echo "$tx" | seth --field from)" --block "$(echo "$tx" | seth --field blockNumber)" --gas "$(echo "$tx" | seth --field gas)" --nonce "$(echo "$tx" | seth --field nonce)" --rpc "$ETH_RPC_URL" "${opts[@]}" --value "$(echo "$tx" | seth --field value)"
+hevm exec --caller "$(echo "$tx" | seth --field from)" --block "$(("$(echo "$tx" | seth --field blockNumber)" - 1))" --gas "$(echo "$tx" | seth --field gas)" --nonce "$(echo "$tx" | seth --field nonce)" --rpc "$ETH_RPC_URL" "${opts[@]}" --value "$(echo "$tx" | seth --field value)"
