@@ -387,11 +387,29 @@ main = defaultMain $ testGroup "hevm"
             }
             |]
           Right bs <- runSMTWith z3 $ query $ checkAssert (RuntimeCode c) Nothing (Just "f(uint256,uint256,uint256,uint256)")
-          let AbiTuple xywz = decodeAbiValue (AbiTupleType $ Vector.fromList [AbiUIntType 256, AbiUIntType 256, AbiUIntType 256, AbiUIntType 256]) (BS.fromStrict (BS.drop 4 bs))
+          let AbiTuple xywz = decodeAbiValue (AbiTupleType $ Vector.fromList
+                                              [AbiUIntType 256, AbiUIntType 256,
+                                               AbiUIntType 256, AbiUIntType 256]) (BS.fromStrict (BS.drop 4 bs))
               [AbiUInt 256 x, AbiUInt 256 y, AbiUInt 256 w, AbiUInt 256 z] = Vector.toList xywz
           assert $ x == w && y == z
+       ,
 
-
+        testCase "calldata beyond calldatasize is 0 (z3)" $ do
+          Just c <- solcRuntime "A"
+            [i|
+            contract A {
+              function f() public pure {
+                uint y;
+                assembly {
+                  let x := calldatasize()
+                  y := calldataload(x)
+                }
+                assert(y == 0);
+              }
+            }
+            |]
+          Left (pre, res) <- runSMTWith z3 $ query $ checkAssert (RuntimeCode c) Nothing Nothing
+          putStrLn $ "successfully explored: " <> show (length res) <> " paths"
     ]
   ]
   where
