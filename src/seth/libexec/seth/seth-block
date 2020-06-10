@@ -7,9 +7,17 @@ set -e
 [[ $# = [12] ]] || seth --fail-usage "$0"
 
 if [[ $1 = 0x* ]]; then
-  block=$(seth get-block-by-hash "$1")
+  if [[ $SETH_FULL_BLOCK ]]; then
+      block=$(seth get-full-block-by-hash "$1")
+  else
+      block=$(seth get-block-by-hash "$1")
+  fi
 else
-  block=$(seth get-block-by-number "$1")
+  if [[ $SETH_FULL_BLOCK ]]; then
+      block=$(seth get-full-block-by-number "$1")
+  else
+      block=$(seth get-block-by-number "$1")
+  fi
 fi
 
 if [[ $block = null ]]; then

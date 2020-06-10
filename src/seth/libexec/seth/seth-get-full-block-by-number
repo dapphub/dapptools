@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+set -e
+number=$1
+[[ $1 = latest ]] || number=$(seth --to-hex "$1")
+jshon+=(-s "$number" -i append)
+jshon+=(-n true -i append)
+seth rpc eth_getBlockByNumber -- "${jshon[@]}"

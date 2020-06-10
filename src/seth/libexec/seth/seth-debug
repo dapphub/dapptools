@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+### seth-debug -- debug a transaction in hevm interactive
+### Usage: seth debug <tx-hash>
+###
+### Runs all the transactions in the block to get the correct state
+### then executes the given transaction in debug mode
+
+# Make temporary state directory
+set -e
+state=$(TMPDIR=. mktemp -d hevm.libs.XXXXX)
+
+export GIT_CONFIG_NOSYSTEM=1
+export GIT_AUTHOR_NAME=hevm
+export GIT_AUTHOR_EMAIL=hevm@dapphub.com
+export GIT_COMMITTER_NAME=$GIT_AUTHOR_NAME
+export GIT_COMMITTER_EMAIL=$GIT_AUTHOR_EMAIL
+gitopts=(-q --no-verify --no-gpg-sign --allow-empty -m "dapp test")
+( cd "$state" || exit ; git init -q && git add . && git commit "${gitopts[@]}" )
+
+targetTx=$(seth tx "$1")
+txs=($(seth block "$(echo "$targetTx" | seth --field blockNumber)" --full | seth --field transactions | seth --show-json))
+
+index=$(echo "$targetTx" | seth --field transactionIndex)
+
+j=0
+echo "running previous transactions in block..."
+for i in "${txs[@]}"; do
+    tx=$(echo "$i" | seth --show-json)
+    hash=$(echo "$tx" | seth --field hash)
+   if [[ "$1" = "$hash" ]]; then
+     seth run-tx "$tx" --state "$state" --debug
+     break
+   else
+     echo -en "\rtransaction ($j/$index)"
+     seth run-tx "$tx" --state "$state"
+     j=$((j + 1))
+   fi
+done

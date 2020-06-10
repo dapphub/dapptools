@@ -59,6 +59,9 @@ N,nonce=number       nonce value to use for the transaction
 V,value=number       amount (in wei) of ETH to send
 S,password=file      password for non-interactive signing
 
+  Options for seth-block(1):
+full                 get block with full transaction information
+
   Options for seth-call(1):
 B,block=number       block number (default: \`latest')
 
@@ -67,6 +70,10 @@ create               use the calldata to create a new object
 guess                guess the return value of the call
 status               exit failure on failed tx (Byzantium)
 resend               force current nonce to overwrite tx
+
+  Options for seth-run-tx(1):
+state=directory      git repo where state is kept
+debug                run in hevms interactive debugger
 
   Other options:
 async                do not wait for transaction receipt
@@ -116,6 +123,11 @@ while [[ $1 ]]; do
     -N|--nonce)      shift; export ETH_NONCE=$1;;
     -V|--value)      shift; export ETH_VALUE=$1;;
     -S|--password)   shift; export ETH_PASSWORD=$1;;
+
+       --state)      shift; export HEVM_STATE=$1;;
+       --debug)             export HEVM_DEBUG=yes;;
+
+       --full)              export SETH_FULL_BLOCK=yes;;
 
        --create)            export SETH_CREATE=yes;;
        --guess)             export SETH_GUESS=yes;;
