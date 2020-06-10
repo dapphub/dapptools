@@ -446,17 +446,25 @@ tohexOrText s = case "0x" `Char8.isPrefixOf` encodeUtf8 s of
 
 vmFromCommand :: Command Options.Unwrapped -> IO EVM.VM
 vmFromCommand cmd = do
-  vm <- case (rpc cmd) of
-     Nothing  -> return . vm1 . EVM.initialContract $ maybe (EVM.RuntimeCode "") (codeType . hexByteString "--code" . strip0x) (code cmd)
-     Just url -> do maybeContract <- EVM.Fetch.fetchContractFrom block' url address'
-                    case maybeContract of
-                      Nothing -> error $ "contract not found: " <> show address'
-                      Just contract' -> case (code cmd) of
-                        Nothing -> return (vm1 contract')
-                        -- if both code and url is given,
-                        -- fetch the contract and overwrite the code
-                        Just c -> return $ vm1 (contract' & set EVM.contractcode (codeType $ hexByteString "--code" $ strip0x c))
+  vm <- case (rpc cmd, address cmd, code cmd) of
+     (Just url, Just addr', _) -> do maybeContract <- EVM.Fetch.fetchContractFrom block' url addr'
+                                     case maybeContract of
+                                       Nothing -> error $ "contract not found: " <> show address' <> "and no --code given"
+                                       Just contract' -> case (code cmd) of
+                                         Nothing -> return (vm1 contract')
+                                         -- if both code and url is given,
+                                         -- fetch the contract and overwrite the code
+                                         Just c -> return $ vm1 (
+                                                      EVM.initialContract (codeType $ hexByteString "--code" $ strip0x c)
+                                                        & set EVM.storage     (view EVM.storage contract')
+                                                        & set EVM.origStorage (view EVM.origStorage contract')
+                                                        & set EVM.balance     (view EVM.balance contract')
+                                                        & set EVM.nonce       (view EVM.nonce contract')
+                                                        & set EVM.external    (view EVM.external contract'))
 
+     (_, _, Just c)  -> return $ vm1 $ EVM.initialContract $ codeType $ hexByteString "--code" $ strip0x c
+     (_, _, Nothing) -> error $ "must provide at least (rpc + address) or code"
+     
   return $ vm & EVM.env . EVM.contracts . ix address' . EVM.balance +~ (w256 value')
       where
         block'   = maybe EVM.Fetch.Latest EVM.Fetch.BlockNumber (block cmd)
