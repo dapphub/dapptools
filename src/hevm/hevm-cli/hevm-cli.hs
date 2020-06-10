@@ -454,8 +454,8 @@ vmFromCommand cmd = do
                       Just contract' -> case (code cmd) of
                         Nothing -> return (vm1 contract')
                         -- if both code and url is given,
-                        -- fetch the contract then overwrite the code
-                        Just c -> return $ (vm1 contract') & set (EVM.state . EVM.code) c
+                        -- fetch the contract and overwrite the code
+                        Just c -> return $ vm1 (contract' & set EVM.contractcode (codeType $ hexByteString "--code" $ strip0x c))
 
   return $ vm & EVM.env . EVM.contracts . ix address' . EVM.balance +~ (w256 value')
       where
@@ -490,6 +490,7 @@ vmFromCommand cmd = do
           }
         word f def = fromMaybe def (f cmd)
         addr f def = fromMaybe def (f cmd)
+        bytes f def = maybe def (hexByteString "bytes" . strip0x) (f cmd)
 
 launchTest :: ExecMode -> Command Options.Unwrapped ->  IO ()
 launchTest execmode cmd = do
