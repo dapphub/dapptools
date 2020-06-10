@@ -24,6 +24,8 @@ import qualified EVM.Stepper
 import qualified EVM.TTY as EVM.TTY
 import qualified EVM.Emacs as EVM.Emacs
 
+import Text.ParserCombinators.ReadP
+
 #if MIN_VERSION_aeson(1, 0, 0)
 import qualified EVM.VMTest as VMTest
 #endif
@@ -32,6 +34,7 @@ import EVM (ExecMode(..))
 import EVM.Concrete (createAddress)
 import EVM.Debug
 import EVM.Exec
+import EVM.ABI
 import EVM.Solidity
 import EVM.Types hiding (word)
 import EVM.UnitTest (UnitTestOptions, coverageReport, coverageForUnitTestContract)
@@ -41,6 +44,7 @@ import EVM.Dapp (findUnitTests, dappInfo)
 import EVM.RLP (rlpdecode)
 import qualified EVM.Patricia as Patricia
 import Data.Map (Map)
+import Numeric (readHex, showHex)
 
 import qualified EVM.Facts     as Facts
 import qualified EVM.Facts.Git as Git
@@ -56,7 +60,7 @@ import Control.Monad              (void, when, forM_)
 import Control.Monad.State.Strict (execState, runState, StateT, liftIO, execStateT)
 import Data.ByteString            (ByteString)
 import Data.List                  (intercalate, isSuffixOf)
-import Data.Text                  (Text, unpack, pack)
+import Data.Text                  (Text, unpack, pack, splitOn)
 import Data.Text.Encoding         (encodeUtf8)
 import Data.Maybe                 (fromMaybe, fromJust)
 import Data.Version               (showVersion)
@@ -67,6 +71,7 @@ import System.Process             (callProcess)
 import qualified Data.Aeson        as JSON
 import qualified Data.Aeson.Types  as JSON
 import Data.Aeson (FromJSON (..), (.:))
+import Data.Aeson.Lens hiding (values)
 import qualified Data.Vector as V
 import qualified Data.ByteString.Lazy  as Lazy
 
@@ -158,6 +163,10 @@ data Command w
   | Rlp  -- RLP decode a string and print the result
   { decode :: w ::: ByteString <?> "RLP encoded hexstring"
   }
+  | Abiencode
+  { abi  :: w ::: String      <?> "Signature of types to decode / encode"
+  , arg  :: w ::: [String]    <?> "Values to encode"
+  }
   | MerkleTest -- Insert a set of key values and check against the given root
   { file :: w ::: String <?> "Path to .json test file"
   }
@@ -223,6 +232,8 @@ main = do
     Version {} -> putStrLn (showVersion Paths.version)
     Exec {} ->
       launchExec cmd
+    Abiencode {} ->
+      print . ByteStringS $ abiencode (abi cmd) (arg cmd)
     VmTest {} ->
       launchTest ExecuteAsVMTest cmd
     BcTest {} ->
@@ -569,3 +580,11 @@ interpret fetcher =
           pure (Left e)
         EVM.Stepper.EVM m ->
           State.state (runState m) >>= interpret fetcher . k
+
+abiencode :: (AsValue s) => s -> [String] -> ByteString
+abiencode abi args =
+  let declarations = parseMethodInput <$> V.toList (abi ^?! key "inputs" . _Array)
+      sig = signature abi
+  in if length declarations == length args
+     then abiMethod sig $ AbiTuple . V.fromList $ zipWith makeAbiValue (snd <$> declarations) args
+     else error $ "wrong number of arguments:" <> show (length args) <> ": " <> show args

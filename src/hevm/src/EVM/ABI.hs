@@ -47,6 +47,9 @@ module EVM.ABI
   , encodeAbiValue
   , decodeAbiValue
   , parseTypeName
+  , makeAbiValue
+  , parseAbiValue
+  , sig
   ) where
 
 import EVM.Keccak (abiKeccak)
@@ -67,11 +70,14 @@ import Data.List          (intercalate)
 import GHC.Generics
 
 import Test.QuickCheck hiding ((.&.), label)
+import Text.ParserCombinators.ReadP
+import Control.Applicative
 
-import qualified Data.ByteString      as BS
-import qualified Data.ByteString.Lazy as BSLazy
-import qualified Data.Text            as Text
-import qualified Data.Vector          as Vector
+import qualified Data.ByteString       as BS
+import qualified Data.ByteString.Char8 as Char8
+import qualified Data.ByteString.Lazy  as BSLazy
+import qualified Data.Text             as Text
+import qualified Data.Vector           as Vector
 
 import qualified Text.Megaparsec      as P
 import qualified Text.Megaparsec.Char as P
@@ -324,6 +330,9 @@ encodeAbiValue = BSLazy.toStrict . runPut . putAbi
 decodeAbiValue :: AbiType -> BSLazy.ByteString -> AbiValue
 decodeAbiValue = runGet . getAbi
 
+sig :: Text -> BS.ByteString
+sig s = BSLazy.toStrict . runPut $ putWord32be (abiKeccak (encodeUtf8 s))
+
 abiMethod :: Text -> AbiValue -> BS.ByteString
 abiMethod s args = BSLazy.toStrict . runPut $ do
   putWord32be (abiKeccak (encodeUtf8 s))
@@ -468,3 +477,53 @@ instance Arbitrary AbiValue where
             (shrinkList shrink (Vector.toList v))
     AbiTuple v -> Vector.toList $ AbiTuple . Vector.fromList . shrink <$> v
     _ -> []
+
+
+-- Bool synonym with custom read instance
+-- to be able to parse lower case 'false' and 'true'
+data Boolz = Boolz Bool
+
+instance Read Boolz where
+  readsPrec _ ('T':'r':'u':'e':x) = [(Boolz True, x)]
+  readsPrec _ ('t':'r':'u':'e':x) = [(Boolz True, x)]
+  readsPrec _ ('f':'a':'l':'s':'e':x) = [(Boolz False, x)]
+  readsPrec _ ('F':'a':'l':'s':'e':x) = [(Boolz False, x)]
+  readsPrec _ [] = []
+  readsPrec n (_:t) = readsPrec n t
+
+makeAbiValue :: AbiType -> String -> AbiValue
+makeAbiValue typ str = case readP_to_S (parseAbiValue typ) str of
+  [] -> error "could not parse abi arguments"
+  ((val,_):_) -> val
+
+parseAbiValue :: AbiType -> ReadP AbiValue
+parseAbiValue (AbiUIntType n) = do W256 w256 <- readS_to_P reads
+                                   return $ AbiUInt n w256
+parseAbiValue (AbiIntType n) = do W256 w256 <- readS_to_P reads
+                                  return $ AbiInt n (num w256)
+parseAbiValue AbiAddressType = AbiAddress <$> readS_to_P reads
+parseAbiValue AbiBoolType = (do W256 w256 <- readS_to_P reads
+                                return $ AbiBool (w256 /= 0))
+                            <|> (do Boolz b <- readS_to_P reads
+                                    return $ AbiBool b)
+parseAbiValue (AbiBytesType n) = AbiBytes n <$> do ByteStringS bytes <- readS_to_P reads
+                                                   return bytes
+parseAbiValue AbiBytesDynamicType = AbiBytesDynamic <$> do ByteStringS bytes <- readS_to_P reads
+                                                           return bytes
+parseAbiValue AbiStringType = AbiString <$> do Char8.pack <$> readS_to_P reads
+parseAbiValue (AbiArrayDynamicType typ) =
+  AbiArrayDynamic typ <$> do a <- listP (parseAbiValue typ)
+                             return $ Vector.fromList a
+parseAbiValue (AbiArrayType n typ) =
+  AbiArray n typ <$> do a <- listP (parseAbiValue typ)
+                        return $ Vector.fromList a
+parseAbiValue (AbiTupleType _) = error "tuple types not supported"
+
+listP :: ReadP a -> ReadP [a]
+listP parser = between (char '[') (char ']') ((do skipSpaces
+                                                  a <- parser
+                                                  skipSpaces
+                                                  return a) `sepBy` (char ','))
+
+
+

@@ -1,16 +1,16 @@
 { lib, stdenv, fetchFromGitHub, makeWrapper, glibcLocales
-, bc, coreutils, curl, ethsign, git, gnused, jshon, nodejs, perl }:
+, bc, coreutils, curl, ethsign, git, gnused, jshon, nodejs, perl, hevm }:
 
 stdenv.mkDerivation rec {
   name = "seth-${version}";
-  version = "0.8.4";
+  version = "0.9.0";
   src = ./.;
 
   nativeBuildInputs = [makeWrapper];
   buildPhase = "true";
   makeFlags = ["prefix=$(out)"];
   postInstall = let path = lib.makeBinPath [
-    bc coreutils curl ethsign git gnused jshon nodejs perl
+    bc coreutils curl ethsign git gnused hevm jshon nodejs perl
   ]; in ''
     wrapProgram "$out/bin/seth" --prefix PATH : "${path}" \
       ${if glibcLocales != null then

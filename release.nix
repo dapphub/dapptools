@@ -20,7 +20,7 @@ let
     export PATH=${x.pkgs.hevm}/bin:${x.pkgs.jq}/bin:$PATH
     ${x.pkgs.hevm}/bin/hevm compliance \
       --tests ${ethereum-test-suite x} \
-      --skip "(RevertPrecompiledTouch_storage|Create2Recursive|Create1000|recursiveCreateReturn|randomStatetest647|multiOwnedRemoveOwner|walletRemoveOwnerRemovePending)" \
+      --skip "(RevertPrecompiledTouch_storage|Create2Recursive|Create1000|recursiveCreateReturn|randomStatetest647|multiOwnedRemoveOwner|walletRemoveOwnerRemovePending|static_Call50000|Return50000)" \
       --timeout 20 \
       --html > $out/index.html
   # Disable obsolete VMTests - gas expectations broken by Istanbul

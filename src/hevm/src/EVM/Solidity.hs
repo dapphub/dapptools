@@ -14,6 +14,7 @@ module EVM.Solidity
   , methodSignature
   , methodInputs
   , methodOutput
+  , parseMethodInput
   , abiMap
   , eventMap
   , contractName
@@ -32,6 +33,7 @@ module EVM.Solidity
   , sourceLines
   , sourceAsts
   , stripBytecodeMetadata
+  , signature
   , lineSubrange
   , astIdMap
   , astSrcMap
