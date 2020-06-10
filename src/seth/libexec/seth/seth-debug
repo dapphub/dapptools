@@ -25,14 +25,16 @@ index=$(echo "$targetTx" | seth --field transactionIndex)
 j=0
 echo "running previous transactions in block..."
 for i in "${txs[@]}"; do
-    tx=$(echo "$i" | seth --show-json)
-    hash=$(echo "$tx" | seth --field hash)
+   tx=$(echo "$i" | seth --show-json)
+   hash=$(echo "$tx" | seth --field hash)
+
    if [[ "$1" = "$hash" ]]; then
      seth run-tx "$tx" --state "$state" --debug
      break
    else
      echo -en "\rtransaction ($j/$index)"
-     seth run-tx "$tx" --state "$state"
+     # exit code 2 means REVERT or otherwise ok failure
+     res=$(seth run-tx "$tx" --state "$state") || ([[ $? == 2 ]] || seth --fail "hevm error while executing tx: $hash")
      j=$((j + 1))
    fi
 done
