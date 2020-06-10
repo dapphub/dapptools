@@ -1,0 +1,33 @@
+#!/usr/bin/env bash
+### seth-run-tx -- execute a transaction using hevm
+### Usage: seth run-tx <tx-hash> [<options>]
+### or:    seth run-tx <tx-info> [<options>]
+###
+### Run a transaction with hevm in the environment
+### of the given transaction
+###
+### With `--state`, load and save state from this repo
+opts=()
+[[ $HEVM_STATE ]] && opts+=(--state "$HEVM_STATE")
+[[ $HEVM_DEBUG ]] && opts+=(--debug)
+
+# if the argument begins with 0x, we assume it to be a tx hash
+# otherwise, we assume that it contains the result of a seth tx call
+if [[ $1 = 0x* ]]; then
+    tx=$(seth tx "$1")
+elif [[ $1 = blockHash* ]]; then
+    tx=$1
+else
+    seth --fail "Malformed transaction hash or data: $1"
+fi
+
+
+TO=$(echo "$tx" | seth --field to)
+DATA=$(echo "$tx" | seth --field input)
+if [[ "$TO" == 'null' ]]; then
+    opts+=(--create --code "$DATA")
+else
+    opts+=(--caller "$TO" --calldata "$DATA")
+fi
+
+hevm exec --address "$(echo "$tx" | seth --field to)" --block "$(echo "$tx" | seth --field blockNumber)" --gas "$(echo "$tx" | seth --field gas)" --nonce "$(echo "$tx" | seth --field nonce)" --rpc "$ETH_RPC_URL" "${opts[@]}" --value "$(echo "$tx" | seth --field value)"
