@@ -58,7 +58,7 @@ import Data.Text.Encoding         (encodeUtf8)
 import Data.Maybe                 (fromMaybe, fromJust)
 import Data.Version               (showVersion)
 import System.Directory           (withCurrentDirectory, listDirectory)
-import System.Exit                (die, exitFailure)
+import System.Exit                (die, exitFailure, exitWith, ExitCode(..))
 import System.IO                  (hFlush, stdout)
 import System.Process             (callProcess)
 import qualified Data.Aeson        as JSON
@@ -379,10 +379,12 @@ launchExec cmd = do
       case view EVM.result vm' of
         Nothing ->
           error "internal error; no EVM result"
-        Just (EVM.VMFailure (EVM.Revert msg)) ->
-          die . show . ByteStringS $ msg
-        Just (EVM.VMFailure err) ->
-          die . show $ err
+        Just (EVM.VMFailure (EVM.Revert msg)) -> do
+          putStrLn . show . ByteStringS $ msg
+          exitWith (ExitFailure 2)
+        Just (EVM.VMFailure err) -> do
+          print err
+          exitWith (ExitFailure 2)          
         Just (EVM.VMSuccess msg) -> do
           (print . ByteStringS) msg
           case state cmd of
