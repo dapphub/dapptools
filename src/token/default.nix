@@ -8,13 +8,17 @@ stdenv.mkDerivation rec {
   nativeBuildInputs = [makeWrapper];
   buildPhase = "true";
   makeFlags = ["prefix=$(out)"];
-  postInstall = let path = lib.makeBinPath [
-    coreutils perl seth
-  ]; in ''
-    wrapProgram "$out/bin/token" --prefix PATH : "${path}" \
-      ${if glibcLocales != null then
-        "--set LOCALE_ARCHIVE \"${glibcLocales}\"/lib/locale/locale-archive"
-        else ""}
+
+  postInstall =
+    let
+      path = lib.makeBinPath [ coreutils perl seth ];
+    in
+      ''
+        wrapProgram "$out/bin/token" \
+          --prefix PATH : ${path} \
+        ${lib.optionalString (glibcLocales != null) ''
+          --set LOCALE_ARCHIVE ${glibcLocales}/lib/locale/locale-archive
+      ''}
   '';
 
   meta = {
