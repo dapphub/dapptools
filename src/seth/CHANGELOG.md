@@ -4,6 +4,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## Unreleased
+
+### Added
+- New commands: 
+  - `seth source <address>` fetches the contract source from etherscan
+  - `seth bundle-source <address>` fetches contract source and compiles to combined json
+  - `seth run-tx <tx-hash> [--debug, --source <file>, --state <repository>]`,
+  set hevm options according to the options given and `hevm exec`
+  - `seth debug <tx-hash> [--no-src]` download etherscan source, execute previous txs in block and enter into an hevm interactive mode for the given tx. `--no-src` skips the first step.
+
+- `seth block` can now be passed `--full` option, which returns the full block.
+
+
 ## [0.9.0] - 2020-05-25
 
 ### Changed
