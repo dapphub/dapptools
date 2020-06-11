@@ -34,6 +34,16 @@
 ###    --status                   exit failure on failed tx (Byzantium)
 ###    --resend                   force current nonce to overwrite tx
 ###
+### Options for seth-debug(1):
+###
+###    --no-src                   don't try to fetch contract source
+###
+### Options for seth-run-tx(1):
+###
+###    --debug                    run in hevm interactive mode
+###    --source=<file>            path to combined.json source
+###    --state=<dir>              directory to store hevm state in
+###
 ### Other options:
 ###
 ###    --async                    do not wait for transaction receipt
@@ -78,6 +88,9 @@ source=file          combined-json source information file
 
   Options for seth-debug(1):
 no-src               don't fetch contract source
+
+  Options for seth-bundle-source(1):
+D,dir=directory      directory to store output
 
   Other options:
 async                do not wait for transaction receipt
@@ -131,6 +144,8 @@ while [[ $1 ]]; do
        --state)      shift; export HEVM_STATE=$1;;
        --debug)             export HEVM_DEBUG=yes;;
        --source)     shift; export DAPP_JSON=$1;;
+
+    -D,--dir)        shift; export SETH_DIR=$1;;
 
        --no-src)            export SETH_NOSRC=yes;;
 

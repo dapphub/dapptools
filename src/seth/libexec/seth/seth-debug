@@ -8,7 +8,6 @@
 ### Unless `--no-src` is given, source code for the `to` address
 ### will be passed along to hevm for better debugging xp
 
-# Make temporary state directory
 set -e
 
 state=$(TMPDIR=. mktemp -d hevm.libs.XXXXX)
@@ -25,17 +24,23 @@ targetTx=$(seth tx "$1")
 
 opts=()
 
+tidy() {
+    [[ "$SRCDIR" ]] && rm -rf "$SRCDIR"
+    rm -rf "$state"
+}
+
+trap tidy SIGINT SIGTERM
+
+
 if [[ -z "$SETH_NOSRC" ]]; then
   echo "fetching contract source from etherscan..."
-  COMBINEDJSON=$(TMPDIR=. mktemp)
-  set +e
-  seth bundle-source "$(echo "$targetTx" | seth --field to)" > "$COMBINEDJSON"
-  if [[ -n $? ]]; then
-      opts+=(--source "$COMBINEDJSON")
+  SRCDIR=$(TMPDIR=. mktemp -d seth.debug.XXXX)
+  if seth bundle-source "$(echo "$targetTx" | seth --field to)" --dir "$SRCDIR" > "$SRCDIR"/combined.json
+  then
+      opts+=(--source "$SRCDIR"/combined.json)
   else
       echo "no source available"
   fi
-  set -e
 fi
 
 txs=($(seth block "$(echo "$targetTx" | seth --field blockNumber)" --full | seth --field transactions | seth --show-json))
@@ -49,12 +54,13 @@ for i in "${txs[@]}"; do
    hash=$(echo "$tx" | seth --field hash)
 
    if [[ "$1" = "$hash" ]]; then
-     seth run-tx "$tx" --state "$state" --debug "${opts[@]}"  
+     seth run-tx "$tx" --state "$state" --debug "${opts[@]}"
+     tidy
      break
    else
      echo -en "\rtransaction ($j/$index)"
-     # exit code 2 means REVERT or otherwise ok failure
-     res=$(seth run-tx "$tx" --state "$state") || ([[ $? == 2 ]] || seth --fail "hevm error while executing tx: $hash")
+     # exit code 2 means REVERT or otherwise acceptable failure
+     seth run-tx "$tx" --state "$state" > /dev/null || [[ $? == 2 ]] || (tidy; seth --fail "hevm error while executing tx: $hash")
      j=$((j + 1))
    fi
 done
