@@ -74,6 +74,10 @@ resend               force current nonce to overwrite tx
   Options for seth-run-tx(1):
 state=directory      git repo where state is kept
 debug                run in hevms interactive debugger
+source=file          combined-json source information file
+
+  Options for seth-debug(1):
+no-src               don't fetch contract source
 
   Other options:
 async                do not wait for transaction receipt
@@ -126,6 +130,9 @@ while [[ $1 ]]; do
 
        --state)      shift; export HEVM_STATE=$1;;
        --debug)             export HEVM_DEBUG=yes;;
+       --source)     shift; export DAPP_JSON=$1;;
+
+       --no-src)            export SETH_NOSRC=yes;;
 
        --full)              export SETH_FULL_BLOCK=yes;;
 

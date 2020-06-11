@@ -1,12 +1,16 @@
 #!/usr/bin/env bash
 ### seth-debug -- debug a transaction in hevm interactive
-### Usage: seth debug <tx-hash>
+### Usage: seth debug <tx-hash> [<options>]
 ###
 ### Runs all the transactions in the block to get the correct state
 ### then executes the given transaction in debug mode
+###
+### Unless `--no-src` is given, source code for the `to` address
+### will be passed along to hevm for better debugging xp
 
 # Make temporary state directory
 set -e
+
 state=$(TMPDIR=. mktemp -d hevm.libs.XXXXX)
 
 export GIT_CONFIG_NOSYSTEM=1
@@ -18,6 +22,22 @@ gitopts=(-q --no-verify --no-gpg-sign --allow-empty -m "dapp test")
 ( cd "$state" || exit ; git init -q && git add . && git commit "${gitopts[@]}" )
 
 targetTx=$(seth tx "$1")
+
+opts=()
+
+if [[ -z "$SETH_NOSRC" ]]; then
+  echo "fetching contract source from etherscan..."
+  COMBINEDJSON=$(TMPDIR=. mktemp)
+  set +e
+  seth bundle-source "$(echo "$targetTx" | seth --field to)" > "$COMBINEDJSON"
+  if [[ -n $? ]]; then
+      opts+=(--source "$COMBINEDJSON")
+  else
+      echo "no source available"
+  fi
+  set -e
+fi
+
 txs=($(seth block "$(echo "$targetTx" | seth --field blockNumber)" --full | seth --field transactions | seth --show-json))
 
 index=$(echo "$targetTx" | seth --field transactionIndex)
@@ -29,7 +49,7 @@ for i in "${txs[@]}"; do
    hash=$(echo "$tx" | seth --field hash)
 
    if [[ "$1" = "$hash" ]]; then
-     seth run-tx "$tx" --state "$state" --debug
+     seth run-tx "$tx" --state "$state" --debug "${opts[@]}"  
      break
    else
      echo -en "\rtransaction ($j/$index)"

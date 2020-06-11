@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+### dapp-combined-json -- alias for solc --combined-json
+### Usage: dapp combined-json <source-file>
+###
+set -e
+
+info() {
+  while [[ $# -gt 0 ]]; do
+    opt=$1; shift
+    case $opt in
+      -*)
+        FLAGS=$opt;
+        ;;
+      *)
+        ARGS=$opt;
+        ;;
+    esac
+  done
+  echo >&2 "$FLAGS" "${0##*/}: $ARGS"
+}
+
+IFS=" " read -r -a opts <<<"$SOLC_FLAGS"
+json_opts=--combined-json=abi,bin,bin-runtime,srcmap,srcmap-runtime,ast,metadata
+solc --help | grep -q -- --storage-layout && json_opts+=,storage-layout
+solc --help | grep -q -- --overwrite && opts+=(--overwrite)
+
+set -x; solc "${opts[@]}" "${json_opts[@]}" "$@"
