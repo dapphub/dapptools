@@ -16,6 +16,7 @@
 in
   pkgs.lib.makeOverridable (
     { doCheck ? true
+    , extract ? true
     , deps ? []
     , solc ? pkgs.solc
     , test-hevm ? pkgs.dapp2.test-hevm
