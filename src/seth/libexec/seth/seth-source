@@ -19,18 +19,15 @@ set -e
 
 ADDR=$(seth --to-address "$1")
 
-RESPONSE=$(seth curl "http://api-cn.etherscan.com/api?module=contract&action=getsourcecode&address=""$ADDR""&apikey=""$ETHERSCAN_API_KEY""" | seth --show-json)
+RESPONSE=$(seth curl "http://api-cn.etherscan.com/api?module=contract&action=getsourcecode&address=${ADDR}&apikey=${ETHERSCAN_API_KEY}" | seth --show-json)
 
 MSG=$(echo "$RESPONSE" | seth --field message)
 
-ABI=$(echo "$RESPONSE" | seth --field result | jq '.[0].ABI' | seth --show-json) # | seth --field ABI)
+ABI=$(echo "$RESPONSE" | seth --field result | jq '.[0].ABI' | seth --show-json)
 
-[[ $MSG == OK ]] || seth fail "error: bad response: $MSG"
+[[ $MSG == OK ]] || seth --fail "error: bad response: $MSG"
 if [[ $ABI == "Contract source code not verified" ]]; then
     seth --fail "$ABI"
 else
     echo "$RESPONSE" | seth --field result
 fi
-
-
-
