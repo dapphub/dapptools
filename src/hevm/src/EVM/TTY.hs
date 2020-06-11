@@ -284,7 +284,8 @@ runFromVM oracle' vm = do
            }
     ui1 = updateUiVmState ui0 vm & set uiVmFirstState ui1
 
-  ui2 <- customMain mkVty Nothing (app opts) (ViewVm ui1)
+  v <- mkVty
+  ui2 <- customMain v mkVty Nothing (app opts) (ViewVm ui1)
   case ui2 of
     ViewVm ui -> return (view uiVm ui)
     _ -> error "internal error: customMain returned prematurely"
@@ -321,7 +322,8 @@ main opts root jsonFilePath = do
             , _testOpts = opts
             }
 
-        _ <- customMain mkVty Nothing (app opts) (ui :: UiState)
+        v <- mkVty
+        _ <- customMain v mkVty Nothing (app opts) (ui :: UiState)
         return ()
 
 -- ^ Specifies whether to do I/O blocking or VM halting while stepping.
