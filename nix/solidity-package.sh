@@ -8,7 +8,8 @@ export DAPP_OUT=out
 
 mkdir -p "$DAPP_OUT"
 mapfile -t files < <(find "${DAPP_SRC}" -name '*.sol')
-(set -x; solc "$REMAPPINGS" "$jsonopts" "$solcFlags" /=/ "${files[@]}" > "${DAPP_JSON}")
+json_file="$DAPP_OUT/dapp.sol.json"
+(set -x; solc "$REMAPPINGS" "$jsonopts" "$solcFlags" /=/ "${files[@]}" > "$json_file")
 
 mkdir lib
 echo "$LIBSCRIPT" > setup.sh
@@ -20,25 +21,21 @@ if [ "$doCheck" == 1 ]; then
 fi
 
 if [ "$extract" == 1 ]; then
-  mapfile -t contracts < <(<"$DAPP_JSON" jq '.contracts|keys[]' -r | sort -u -t: -k2 | sort)
-  data=$(<"$DAPP_JSON" jq '.contracts' -r)
-  count=1
+  mapfile -t contracts < <(<"$json_file" jq '.contracts|keys[]' -r | sort -u -t: -k2 | sort)
+  data=$(<"$json_file" jq '.contracts' -r)
   total=${#contracts[@]}
+  echo "Extracting build data... [Total: $total]"
   for path in "${contracts[@]}"; do
-    info -ne "Extracting build data... [$count/$total]\\r"
-    ((count++))
-    name="${path#*:}"
+    fileName="${path#*:}"
     contract=$(echo "$data" | jq '.[''"'"$path"'"'']')
-    echo "$contract" | jq '.["abi"]' -r > "$DAPP_OUT/$name.abi"
-    echo "$contract" | jq '.["bin"]' -r > "$DAPP_OUT/$name.bin"
-    echo "$contract" | jq '.["bin-runtime"]' -r > "$DAPP_OUT/$name.bin-runtime"
-    echo "$contract" | jq '.["metadata"]' -r > "$DAPP_OUT/$name.metadata"
+    echo "$contract" | jq '.["abi"]' -r > "$DAPP_OUT/$fileName.abi"
+    echo "$contract" | jq '.["bin"]' -r > "$DAPP_OUT/$fileName.bin"
+    echo "$contract" | jq '.["bin-runtime"]' -r > "$DAPP_OUT/$fileName.bin-runtime"
+    echo "$contract" | jq '.["metadata"]' -r > "$DAPP_OUT/$fileName.metadata"
   done
-  echo
-  info "warning: --extract is slow and may have filename collisions. All build data can be found in $DAPP_JSON.\\n"
 fi
 
-mkdir -p "$out/dapp/$name"
-cp -r "$src" "$out/dapp/$name/src"
-cp -r lib "$out/dapp/$name/lib"
-cp -r out "$out/dapp/$name/out"
+mkdir -p "$out/dapp/$fileName"
+cp -r "$src" "$out/dapp/$fileName/src"
+cp -r lib "$out/dapp/$fileName/lib"
+cp -r out "$out/dapp/$fileName/out"
