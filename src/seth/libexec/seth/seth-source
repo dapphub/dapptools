@@ -1,0 +1,36 @@
+#!/usr/bin/env bash
+### seth-source -- fetch the contract source from etherscan
+### Usage: seth source <address> [<options>]
+###
+### Requires an etherscan api key
+###
+set -e
+[[ $ETHERSCAN_API_KEY ]] || {
+  cat >&2 <<.
+
+  You need an Etherscan Api Key to verify contracts.
+  Create one at https://etherscan.io/myapikey
+
+  Then export it with \`export ETHERSCAN_API_KEY=xxxxxxxx'
+
+.
+  exit 1
+}
+
+ADDR=$(seth --to-address "$1")
+
+RESPONSE=$(seth curl "http://api-cn.etherscan.com/api?module=contract&action=getsourcecode&address=""$ADDR""&apikey=""$ETHERSCAN_API_KEY""" | seth --show-json)
+
+MSG=$(echo "$RESPONSE" | seth --field message)
+
+ABI=$(echo "$RESPONSE" | seth --field result | jq '.[0].ABI' | seth --show-json) # | seth --field ABI)
+
+[[ $MSG == OK ]] || seth fail "error: bad response: $MSG"
+if [[ $ABI == "Contract source code not verified" ]]; then
+    seth --fail "$ABI"
+else
+    echo "$RESPONSE" | seth --field result
+fi
+
+
+
