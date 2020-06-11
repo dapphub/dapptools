@@ -15,9 +15,6 @@ install:
   - cachix use dapp
 script:
   - |
-    nix-env -iA nixpkgs.shellcheck
-    grep -RHL --exclude-dir node_modules node src/*/libexec | xargs shellcheck --exclude=2001
-  - |
     [[ -z "$TRAVIS_PULL_REQUEST_SLUG" || "$TRAVIS_PULL_REQUEST_SLUG" == "dapphub/dapptools" ]] && cachix push --watch-store dapp &
   - |
     [[ "$TRAVIS_OS_NAME" == "osx" ]] && PLATFORM=darwin || PLATFORM=linux

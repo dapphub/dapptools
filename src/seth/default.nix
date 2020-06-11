@@ -1,13 +1,15 @@
 { lib, stdenv, fetchFromGitHub, makeWrapper, glibcLocales
-, bc, coreutils, curl, ethsign, git, gnused, jshon, nodejs, perl, hevm }:
+, bc, coreutils, curl, ethsign, git, gnused, jshon, nodejs, perl, hevm, shellcheck }:
 
 stdenv.mkDerivation rec {
   name = "seth-${version}";
   version = "0.9.0";
   src = ./.;
 
-  nativeBuildInputs = [makeWrapper];
+  nativeBuildInputs = [makeWrapper shellcheck];
   buildPhase = "true";
+  doCheck = true;
+  checkPhase = "make test";
   makeFlags = ["prefix=$(out)"];
   postInstall = let path = lib.makeBinPath [
     bc coreutils curl ethsign git gnused hevm jshon nodejs perl

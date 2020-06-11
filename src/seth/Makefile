@@ -13,6 +13,6 @@ uninstall:; rm -rf $(addprefix $(prefix)/,$(files))
 
 test:; ! grep '^#!/bin/sh' libexec/*/* && \
 grep '^#!/usr/bin/env bash' libexec/*/* | \
-cut -d: -f1 | xargs shellcheck
+cut -d: -f1 | xargs shellcheck --exclude=2001
 
 .PHONY: default dirs install link uninstall test

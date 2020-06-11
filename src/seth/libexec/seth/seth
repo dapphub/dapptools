@@ -81,7 +81,7 @@ if ! [[ $SETH_INIT ]]; then
   # shellcheck source=/dev/null
   [[ -e ~/.sethrc ]] && . ~/.sethrc
   # shellcheck source=/dev/null
-  [[ -e $XDG_CONFIG_HOME/seth/sethrc ]] && . $XDG_CONFIG_HOME/seth/sethrc
+  [[ -e $XDG_CONFIG_HOME/seth/sethrc ]] && . "$XDG_CONFIG_HOME"/seth/sethrc
   # shellcheck source=/dev/null
   [[ $(pwd) != ~ && -e .sethrc ]] && . .sethrc
 fi
@@ -168,7 +168,7 @@ if [[ ${#keystores[@]} -gt 0 ]]; then
   ETH_KEYSTORE=${ETH_KEYSTORE:-$keystore}
 fi
 
-[[ ! -z $ETH_KEYSTORE ]] && export ETH_KEYSTORE
+[[ -n $ETH_KEYSTORE ]] && export ETH_KEYSTORE
 export ETH_RPC_URL=${ETH_RPC_URL:-$eth_rpc_url}
 
 "${0##*/}-${1-help}" "${@:2}"
