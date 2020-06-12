@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-### dapp-combined-json -- alias for solc --combined-json
-### Usage: dapp combined-json <source-file>
+### seth-combined-json -- alias for solc --combined-json
+### Usage: seth combined-json <source-file>
 ###
 set -e
 

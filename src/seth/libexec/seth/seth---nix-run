@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+# Usage: seth --nix-run PKG COMMAND...
+# Example:
+#   $ seth --nix-run go-ethereum geth --version
+#
+# Runs a command with the binaries from a named Nix package in PATH.
+
+set -e
+
+have() { command -v "$1" >/dev/null; }
+{ have nix; } || {
+  echo >&2 "${0##*/}: error: The Nix package manager is required."
+  echo >&2 "${0##*/}: error: See https://dapp.tools for installation instructions."
+  exit 1
+}
+
+expr="$1"; shift
+
+nix run "(with import $DAPPTOOLS {}; $expr)" -c "$@"
