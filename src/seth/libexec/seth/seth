@@ -145,7 +145,7 @@ while [[ $1 ]]; do
        --debug)             export HEVM_DEBUG=yes;;
        --source)     shift; export DAPP_JSON=$1;;
 
-    -D,--dir)        shift; export SETH_DIR=$1;;
+    -D|--dir)        shift; export SETH_DIR=$1;;
 
        --no-src)            export SETH_NOSRC=yes;;
 
