@@ -44,4 +44,4 @@ if [[ "$OPT" -ne  0 ]]; then
     export SOLC_FLAGS="--optimize optimize-runs=$RUNS"
 fi
 
-dapp --use solc:"${SOLC_VERSION}" combined-json "$DIR"/"$NAME".sol
+seth --use solc:"${SOLC_VERSION}" combined-json "$DIR"/"$NAME".sol

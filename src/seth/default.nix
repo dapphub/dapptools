@@ -1,6 +1,5 @@
 { lib, stdenv, fetchFromGitHub, makeWrapper, glibcLocales
 , bc, coreutils, curl, ethsign, git, gnused, jq, jshon, nodejs, perl, hevm, shellcheck }:
-
 stdenv.mkDerivation rec {
   name = "seth-${version}";
   version = "0.9.0";
