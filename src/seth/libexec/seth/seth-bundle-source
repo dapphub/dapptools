@@ -8,6 +8,7 @@
 # not really sure why this is a list
 # seems like we always just want the first element
 set -e
+
 SRC=$(seth source "$1" | jq '.[0]')
 
 SOLC_VERSION=$(echo "$SRC" | jq '.CompilerVersion')
@@ -24,9 +25,9 @@ if [[ "$OPT" -ne  0 ]]; then
 fi
     
 if [[ "$SETH_DIR" ]]; then
-    srcfile="$SETH_DIR"/"$NAME"
+    srcfile="$SETH_DIR"/"$NAME";
 else
-    srcfile=$(TMPDIR=. mktemp "$NAME".XXXXX)
+    srcfile=$(TMPDIR=. mktemp "$NAME".XXXXX);
 fi
 
 echo "$SOURCE" | seth --show-json | tr -d '\r' > "$srcfile"

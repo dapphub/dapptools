@@ -35,11 +35,10 @@ trap tidy SIGINT SIGTERM
 if [[ -z "$SETH_NOSRC" ]]; then
   echo "fetching contract source from etherscan..."
   SRCDIR=$(TMPDIR=. mktemp -d seth.debug.XXXX)
-  if seth bundle-source "$(echo "$targetTx" | seth --field to)" --dir "$SRCDIR" > "$SRCDIR"/combined.json
-  then
-      opts+=(--source "$SRCDIR"/combined.json)
+  if seth bundle-source "$(echo "$targetTx" | seth --field to)" --dir "$SRCDIR" > "$SRCDIR"/combined.json ; then
+      opts+=(--source "$SRCDIR"/combined.json);
   else
-      echo "no source available"
+      echo "no source available";
   fi
 fi
 
