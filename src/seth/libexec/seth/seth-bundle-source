@@ -16,19 +16,32 @@ SOLC_VERSION=${SOLC_VERSION/'"'}
 SOLC_VERSION=${SOLC_VERSION/v}
 SOLC_VERSION=${SOLC_VERSION/+*}
 
-SOURCE=$(echo "$SRC" | jq '.SourceCode')
-OPT=$(echo "$SRC" | jq '.OptimizationUsed' | seth --show-json)
+SOURCE=$(echo "$SRC" | jq '.SourceCode' -r)
+
+    
+if [[ "$SETH_DIR" ]]; then
+    DIR="$SETH_DIR"
+else
+    DIR=.
+fi
+
 NAME=$(echo "$SRC" | jq '.ContractName' | seth --show-json)
+
+case "$SOURCE" in
+    \{*\})
+        CONTRACTS="$(echo "$SOURCE" | jq 'keys[]')"
+        for i in $CONTRACTS; do
+            clean=$(echo "$i" | tr -d '"')
+            echo "$SOURCE" | tr -d '\r' | jq ."$i".content | seth --show-json > "$DIR"/"$clean"
+        done;;
+        *)
+        echo "$SOURCE" | seth --show-json | tr -d '\r' > "$DIR/$NAME".sol;;
+esac
+
+OPT=$(echo "$SRC" | jq '.OptimizationUsed' | seth --show-json)
 if [[ "$OPT" -ne  0 ]]; then
     RUNS=$(echo "$SRC" | jq '.Runs')
     export SOLC_FLAGS="--optimize optimize-runs=$RUNS"
 fi
-    
-if [[ "$SETH_DIR" ]]; then
-    srcfile="$SETH_DIR"/"$NAME";
-else
-    srcfile=$(TMPDIR=. mktemp "$NAME".XXXXX);
-fi
 
-echo "$SOURCE" | seth --show-json | tr -d '\r' > "$srcfile"
-dapp --use solc:"${SOLC_VERSION}" combined-json "$srcfile"
+dapp --use solc:"${SOLC_VERSION}" combined-json "$DIR"/"$NAME".sol
