@@ -19,7 +19,11 @@ set -e
 
 ADDR=$(seth --to-address "$1")
 
-RESPONSE=$(seth curl "http://api-cn.etherscan.com/api?module=contract&action=getsourcecode&address=${ADDR}&apikey=${ETHERSCAN_API_KEY}" | seth --show-json)
+URL="https://api.etherscan.io"
+
+[[ "$ETHERSCAN_API_URL" ]] && URL="$ETHERSCAN_API_URL"
+
+RESPONSE=$(seth curl "${URL}/api?module=contract&action=getsourcecode&address=${ADDR}&apikey=${ETHERSCAN_API_KEY}" | seth --show-json)
 
 MSG=$(echo "$RESPONSE" | seth --field message)
 
