@@ -2,6 +2,7 @@ os:
   - linux
   - osx
 language: nix
+nix: 2.3.4
 sudo: required
 # workaround for a macOS specific issue with trusted users
 before_install:
