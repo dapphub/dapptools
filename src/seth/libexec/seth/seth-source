@@ -19,9 +19,7 @@ set -e
 
 ADDR=$(seth --to-address "$1")
 
-URL="https://api.etherscan.io"
-
-[[ "$ETHERSCAN_API_URL" ]] && URL="$ETHERSCAN_API_URL"
+URL="${ETHERSCAN_API_URL:-https://api.etherscan.io}"
 
 RESPONSE=$(seth curl "${URL}/api?module=contract&action=getsourcecode&address=${ADDR}&apikey=${ETHERSCAN_API_KEY}" | seth --show-json)
 
