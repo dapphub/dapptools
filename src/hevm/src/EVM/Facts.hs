@@ -34,7 +34,7 @@ module EVM.Facts
   ) where
 
 import EVM.Concrete (Word)
-import EVM          (balance, nonce, storage, bytecode, env, contracts, contract, state)
+import EVM          (VM, Contract, balance, nonce, storage, bytecode, env, contracts, contract, state)
 import EVM.Types    (Addr)
 
 import qualified EVM
