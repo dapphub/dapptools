@@ -20,6 +20,7 @@ import Data.Map (Map)
 import Data.Monoid ((<>))
 import Data.Word (Word32)
 
+import Control.Applicative ((<$>))
 import Control.Arrow ((>>>))
 import Control.Lens
 
@@ -33,7 +34,7 @@ data DappInfo = DappInfo
   , _dappUnitTests  :: [(Text, [(Text, [AbiType])])]
   , _dappEventMap   :: Map W256 Event
   , _dappAstIdMap   :: Map Int Value
-  , _dappAstSrcMap  :: (SrcMap -> Maybe Value)
+  , _dappAstSrcMap  :: SrcMap -> Maybe Value
   }
 
 makeLenses ''DappInfo
@@ -75,10 +76,8 @@ findUnitTests matcher =
     case preview (abiMap . ix unitTestMarkerAbi) c of
       Nothing -> []
       Just _  ->
-        let testNames = (unitTestMethodsFiltered matcher) c
-        in if null testNames
-           then []
-           else [(view contractName c, testNames)]
+        let testNames = unitTestMethodsFiltered matcher c
+        in ([(view contractName c, testNames) | not (null testNames)])
 
 unitTestMethodsFiltered :: (Text -> Bool) -> (SolcContract -> [(Text, [AbiType])])
 unitTestMethodsFiltered matcher c = filter (matcher . fst) $ unitTestMethods c
@@ -87,7 +86,7 @@ unitTestMethods :: SolcContract -> [(Text, [AbiType])]
 unitTestMethods = view abiMap
                   >>> Map.elems
                   >>> map (\f -> (view methodSignature f,
-                                  fmap snd $ view methodInputs f))
+                                  snd <$> view methodInputs f))
 
 traceSrcMap :: DappInfo -> Trace -> Maybe SrcMap
 traceSrcMap dapp trace =

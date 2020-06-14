@@ -113,12 +113,12 @@ interpret mode =
                   -- but stopping before the next instruction.
                   interpret StepNone (k r)
 
-            StepMany 0 -> do
+            StepMany 0 ->
               -- Finish the continuation until the next instruction;
               -- then, pause & await user.
               interpret StepNone restart
 
-            StepMany i -> do
+            StepMany i ->
               -- Run one instruction.
               interpret StepOne restart >>=
                 \case
@@ -275,7 +275,7 @@ handleCmd (UiDappLoaded dapp) = \case
     output (L [A ("unrecognized-command" :: Text)])
 
 handleCmd (UiVm s) = \case
-  ("step", [WFSAtom (HSString modeName)]) -> do
+  ("step", [WFSAtom (HSString modeName)]) ->
     case parseStepMode s modeName of
       Just mode -> do
         takeStep s StepNormally mode
@@ -385,7 +385,7 @@ takeStep ui policy mode = do
 
   case runState m ui of
 
-    (Stepped stepper, ui') -> do
+    (Stepped stepper, ui') ->
       put (UiVm (ui' & set uiVmNextStep stepper))
 
     (Blocked blocker, ui') ->

@@ -32,9 +32,9 @@ itemInfo bs | bs == mempty = (0, 0, False, False)
 rlpdecode :: ByteString -> Maybe RLP
 rlpdecode bs | optimal && pre + len == BS.length bs = if isList
                                                    then do
-                                                      items <- sequence $
-                                                        fmap (\(s, e) -> rlpdecode $ slice s e content) $
-                                                        rlplengths content 0 $ len
+                                                      items <- mapM
+                                                        (\(s, e) -> rlpdecode $ slice s e content) $
+                                                        rlplengths content 0 len
                                                       Just (List items)
                                                    else Just (BS content)
              | otherwise = Nothing

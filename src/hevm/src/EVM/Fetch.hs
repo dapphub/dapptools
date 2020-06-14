@@ -9,7 +9,7 @@ import EVM.Types    (Addr, W256, showAddrWith0x, showWordWith0x, hexText)
 import EVM.Concrete (Word, w256)
 import EVM          (EVM, Contract, initialContract, nonce, balance, external)
 
-import qualified EVM as EVM
+import qualified EVM
 
 import Control.Lens hiding ((.=))
 import Control.Monad.Trans.Maybe
@@ -69,7 +69,7 @@ fetchQuery
   -> IO (Maybe a)
 fetchQuery n f q = do
   x <- case q of
-    QueryCode addr -> do
+    QueryCode addr ->
       fmap hexText  <$>
         f (rpc "eth_getCode" [toRPC addr, toRPC n])
     QueryNonce addr ->
@@ -110,7 +110,7 @@ fetchContractWithSession n url sess addr = runMaybeT $ do
 
 fetchSlotWithSession
   :: BlockNumber -> Text -> Session -> Addr -> W256 -> IO (Maybe Word)
-fetchSlotWithSession n url sess addr slot = do
+fetchSlotWithSession n url sess addr slot =
   fmap w256 <$>
     fetchQuery n (fetchWithSession url sess) (QuerySlot addr slot)
 
@@ -125,11 +125,11 @@ fetchSlotFrom n url addr slot =
     (\s -> fetchSlotWithSession n url s addr slot)
 
 http :: BlockNumber -> Text -> EVM.Query -> IO (EVM ())
-http n url q = do
+http n url q =
   case q of
     EVM.PleaseFetchContract addr continue ->
       fetchContractFrom n url addr >>= \case
-        Just x  -> do
+        Just x  ->
           return (continue x)
         Nothing -> error ("oracle error: " ++ show q)
     EVM.PleaseFetchSlot addr slot continue ->
@@ -138,7 +138,7 @@ http n url q = do
         Nothing -> error ("oracle error: " ++ show q)
 
 zero :: Monad m => EVM.Query -> m (EVM ())
-zero q = do
+zero q =
   case q of
     EVM.PleaseFetchContract _ continue ->
       return (continue (initialContract (EVM.RuntimeCode mempty)))

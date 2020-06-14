@@ -27,7 +27,7 @@ loadDappInfo path file =
   withCurrentDirectory path $
     readSolc file >>=
       \case
-        Just (contractMap, cache) -> do
+        Just (contractMap, cache) ->
           pure (dappInfo "." contractMap cache)
         _ ->
           error "nope, sorry"
@@ -65,9 +65,9 @@ runBCTest :: (String, VMTest.Case) -> IO Bool
 runBCTest (name, x) = do
   let vm0 = VMTest.vmForCase EVM.ExecuteAsBlockchainTest x
   putStr (name ++ " ")
-  result <- do
-    evaluate $ do
-      execState (VMTest.interpret $ EVM.Stepper.execFully) vm0
+  result <-
+    evaluate $
+      execState (VMTest.interpret EVM.Stepper.execFully) vm0
   ok <- VMTest.checkExpectation False EVM.ExecuteAsBlockchainTest x result
   putStrLn (if ok then "ok" else "")
   return ok
@@ -78,7 +78,7 @@ ghciBCTest file = do
   parsed <- parser <$> LazyByteString.readFile file
   case parsed of
      Left "No cases to check." -> putStrLn "no-cases ok"
-     Left err -> putStrLn (show err)
+     Left err -> print err
      Right allTests ->
         mapM_ runBCTest (Map.toList allTests)
 

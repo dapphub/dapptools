@@ -40,7 +40,7 @@ main = defaultMain $ testGroup "hevm"
           _ -> False
     ]
   , testGroup "Solidity expressions"
-    [ testCase "Trivial" $ do
+    [ testCase "Trivial" $
         SolidityCall "x = 3;" []
           ===> AbiUInt 256 3
 
@@ -50,12 +50,12 @@ main = defaultMain $ testGroup "hevm"
         SolidityCall "x = a - 1;"
           [AbiUInt 8 0] ===> AbiUInt 8 255
 
-    , testCase "keccak256()" $ do
+    , testCase "keccak256()" $
         SolidityCall "x = uint(keccak256(abi.encodePacked(a)));"
           [AbiString ""] ===> AbiUInt 256 0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470
     ]
 
-  , testGroup "Precompiled contracts" $
+  , testGroup "Precompiled contracts"
       [ testGroup "Example (reverse)"
           [ testCase "success" $
               assertEqual "example contract reverses"

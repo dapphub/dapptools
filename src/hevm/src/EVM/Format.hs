@@ -21,7 +21,7 @@ import Data.ByteString.Builder (byteStringHex, toLazyByteString)
 import Data.ByteString.Lazy (toStrict, fromStrict)
 import Data.DoubleWord (signedWord)
 import Data.Foldable (toList)
-import Data.Maybe (catMaybes)
+import Data.Maybe (catMaybes, fromMaybe)
 import Data.Monoid ((<>))
 import Data.Text (Text, pack, unpack, intercalate)
 import Data.Text (dropEnd, splitOn)
@@ -56,14 +56,13 @@ showWordExact (C _ (W256 w)) = humanizeInteger w
 
 humanizeInteger :: (Num a, Integral a, Show a) => a -> Text
 humanizeInteger =
-  ( Text.intercalate ","
+  Text.intercalate ","
   . reverse
   . map Text.reverse
   . Text.chunksOf 3
   . Text.reverse
   . Text.pack
   . show
-  )
 
 -- TODO: make polymorphic
 showAbiValues :: Vector AbiValue -> Text
@@ -146,7 +145,7 @@ showTrace dapp trace =
             , "\x1b[0m"
             ] <> pos
         (topic:_) ->
-          case (Map.lookup (wordValue topic) (view dappEventMap dapp)) of
+          case Map.lookup (wordValue topic) (view dappEventMap dapp) of
             Just (Event name _ types) ->
               mconcat
                 [ "\x1b[36m"
@@ -202,8 +201,8 @@ showTrace dapp trace =
             <> "\x1b[1m"
             <> view (contractName . to contractNamePart) solc
             <> "::"
-            <> maybe ("[fallback function]")
-                 (\x -> maybe "[unknown method]" id (maybeAbiName solc x))
+            <> maybe "[fallback function]"
+                 (fromMaybe "[unknown method]" . maybeAbiName solc)
                  abi
             <> maybe ("(" <> formatBinary calldata <> ")")
                  -- todo: if unknown method, then just show raw calldata

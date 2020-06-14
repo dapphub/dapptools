@@ -25,9 +25,7 @@
 
 -}
 
-{-# Language DeriveAnyClass #-}
 {-# Language StrictData #-}
-{-# Language TemplateHaskell #-}
 
 module EVM.ABI
   ( AbiValue (..)
@@ -61,6 +59,7 @@ import Data.Binary.Put    (Put, runPut, putWord8, putWord32be)
 import Data.Bits          (shiftL, shiftR, (.&.))
 import Data.ByteString    (ByteString)
 import Data.DoubleWord    (Word256, Int256, signedWord)
+import Data.Functor       (($>))
 import Data.Monoid        ((<>))
 import Data.Text          (Text, pack)
 import Data.Text.Encoding (encodeUtf8)
@@ -206,7 +205,7 @@ getAbi t = label (Text.unpack (abiTypeSolidity t)) $
 
 putAbi :: AbiValue -> Put
 putAbi = \case
-  AbiUInt _ x -> do
+  AbiUInt _ x ->
     forM_ (reverse [0 .. 7]) $ \i ->
       putWord32be (fromIntegral (shiftR x (i * 32) .&. 0xffffffff))
 
@@ -246,7 +245,7 @@ getAbiHead :: Int -> [AbiType]
   -> Get [Either AbiType AbiValue]
 getAbiHead 0 _      = pure []
 getAbiHead _ []     = fail "ran out of types"
-getAbiHead n (t:ts) = do
+getAbiHead n (t:ts) =
   case abiKind t of
     Dynamic ->
       (Left t :) <$> (skip 32 *> getAbiHead (n - 1) ts)
@@ -356,7 +355,7 @@ typeWithArraySuffix v = do
         (P.many P.digitChar)
 
   let
-    parseSize :: AbiType -> [Char] -> AbiType
+    parseSize :: AbiType -> String -> AbiType
     parseSize t "" = AbiArrayDynamicType t
     parseSize t s  = AbiArrayType (read s) t
 
@@ -365,16 +364,16 @@ typeWithArraySuffix v = do
 basicType :: Vector AbiType -> P.Parsec () Text AbiType
 basicType v =
   P.choice
-    [ P.string "address" *> pure AbiAddressType
-    , P.string "bool"    *> pure AbiBoolType
-    , P.string "string"  *> pure AbiStringType
+    [ P.string "address" $> AbiAddressType
+    , P.string "bool"    $> AbiBoolType
+    , P.string "string"  $> AbiStringType
 
     , sizedType "uint" AbiUIntType
     , sizedType "int"  AbiIntType
     , sizedType "bytes" AbiBytesType
 
-    , P.string "bytes" *> pure AbiBytesDynamicType
-    , P.string "tuple" *> pure (AbiTupleType v)
+    , P.string "bytes" $> AbiBytesDynamicType
+    , P.string "tuple" $> AbiTupleType v
     ]
 
   where
@@ -439,7 +438,7 @@ genAbiValue = \case
      AbiArray n t . Vector.fromList <$>
        replicateM n (scale (`div` 2) (genAbiValue t))
    AbiTupleType ts ->
-     AbiTuple <$> (sequence . fmap genAbiValue $ ts)
+     AbiTuple <$> mapM genAbiValue ts
   where
     genUInt n =
        do x <- pack8 (div n 8) <$> replicateM n arbitrary
@@ -460,9 +459,9 @@ instance Arbitrary AbiType where
         <$> (getPositive <$> arbitrary)
         <*> scale (`div` 2) arbitrary
     ] <>
-    if n == 0
-    then []
-    else [AbiTupleType <$> scale (`div` 2) (Vector.fromList <$> arbitrary)]
+    ([AbiTupleType
+        <$> scale (`div` 2) (Vector.fromList <$> arbitrary)
+        | n /= 0])
 
 instance Arbitrary AbiValue where
   arbitrary = arbitrary >>= genAbiValue

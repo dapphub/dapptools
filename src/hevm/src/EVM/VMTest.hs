@@ -15,7 +15,7 @@ module EVM.VMTest
 import qualified EVM
 import qualified EVM.Concrete as EVM
 import qualified EVM.Exec
-import qualified EVM.FeeSchedule as EVM.FeeSchedule
+import qualified EVM.FeeSchedule
 import qualified EVM.Stepper as Stepper
 import qualified EVM.Fetch as Fetch
 
@@ -35,12 +35,11 @@ import Control.Monad
 import IPPrint.Colored (cpprint)
 
 import Data.ByteString (ByteString)
-import Data.Aeson ((.:), (.:?))
-import Data.Aeson (FromJSON (..))
+import Data.Aeson ((.:), (.:?), FromJSON (..))
+import Data.Bifunctor (bimap)
 import Data.Foldable (fold)
 import Data.Map (Map)
 import Data.Maybe (fromMaybe)
-import Data.List (intercalate)
 import Data.Witherable (Filterable, catMaybes)
 
 import qualified Data.Map          as Map
@@ -92,7 +91,7 @@ accountAt :: Addr -> Getter (Map Addr Contract) Contract
 accountAt a = (at a) . (to $ fromMaybe newAccount)
 
 touchAccount :: Addr -> Map Addr Contract -> Map Addr Contract
-touchAccount a cs = Map.insertWith (flip const) a newAccount cs
+touchAccount a = Map.insertWith (flip const) a newAccount
 
 newAccount :: Contract
 newAccount = Contract
@@ -128,8 +127,8 @@ checkStateFail diff x expectation vm (okState, okMoney, okNonce, okData, okCode)
     expected = expectedContracts expectation
     actual = view (EVM.env . EVM.contracts . to (fmap clearZeroStorage)) vm
 
-  putStr (intercalate " " reason)
-  if diff && (not okState) then do
+  putStr (unwords reason)
+  when (diff && (not okState)) $ do
     putStrLn "\nCheck balance/state: "
     printField (\v -> (show . toInteger  $ _nonce v) ++ " "
                    ++ (show . toInteger  $ _balance v) ++ " "
@@ -146,7 +145,6 @@ checkStateFail diff x expectation vm (okState, okMoney, okNonce, okData, okCode)
     printField (\v -> (show . toInteger  $ EVM._nonce v) ++ " "
                    ++ (show . toInteger  $ EVM._balance v) ++ " "
                    ++ (show . Map.toList $ EVM._storage v)) actual
-  else return ()
   return okState
 
 checkExpectation :: Bool -> EVM.ExecMode -> Case -> EVM.VM -> IO Bool
@@ -155,7 +153,7 @@ checkExpectation diff execmode x vm =
     (EVM.ExecuteAsBlockchainTest, Just expectation, _) -> do
       let (okState, b2, b3, b4, b5) =
             checkExpectedContracts vm (expectedContracts expectation)
-      _ <- if (not okState) then
+      _ <- if not okState then
                checkStateFail
                  diff x expectation vm (okState, b2, b3, b4, b5)
            else return True
@@ -168,12 +166,12 @@ checkExpectation diff execmode x vm =
         (s2, b2) = ("bad-output", checkExpectedOut output (expectedOut expectation))
         (s3, b3) = ("bad-gas", checkExpectedGas vm (expectedGas expectation))
         ss = map fst (filter (not . snd) [(s2, b2), (s3, b3)])
-      _ <- if (not okState) then
-               do checkStateFail
+      _ <- if not okState then
+               checkStateFail
                     diff x expectation vm (okState, ok2, ok3, ok4, ok5)
                else
                    return True
-      putStr (intercalate " " ss)
+      putStr (unwords ss)
       return (okState && b2 && b3)
 
     (_, Nothing, Just (EVM.VMSuccess _)) -> do
@@ -359,7 +357,7 @@ realizeContract x =
     & EVM.nonce   .~ EVM.w256 (x ^. nonce)
     & EVM.storage .~ (
         Map.fromList .
-        map (\(k, v) -> (EVM.w256 k, EVM.w256 v)) .
+        map (bimap EVM.w256 EVM.w256) .
         Map.toList $ x ^. storage
         )
 
@@ -385,13 +383,13 @@ errorFatal _ = False
 fromBlockchainCase :: BlockchainCase -> Either BlockchainError Case
 fromBlockchainCase (BlockchainCase blocks preState postState network) =
   case (blocks, network) of
-    ((block : []), "Istanbul") -> case blockTxs block of
-      (tx : []) -> case txToAddr tx of
+    ([block], "Istanbul") -> case blockTxs block of
+      [tx] -> case txToAddr tx of
         Nothing -> fromCreateBlockchainCase block tx preState postState
         Just _  -> fromNormalBlockchainCase block tx preState postState
       []        -> Left NoTxs
       _         -> Left TooManyTxs
-    ((_ : []), _) -> Left OldNetwork
+    ([_], _) -> Left OldNetwork
     (_, _)        -> Left TooManyBlocks
 
 fromCreateBlockchainCase :: Block -> Transaction
@@ -499,10 +497,10 @@ checkCreateTx tx block prestate = do
       createdAddr = EVM.createAddress origin senderNonce
       prevCode    = view (accountAt createdAddr .  code) prestate
       prevNonce   = view (accountAt createdAddr . nonce) prestate
-  if ((prevCode /= EVM.RuntimeCode mempty) || (prevNonce /= 0) || (not valid))
+  if (prevCode /= EVM.RuntimeCode mempty) || (prevNonce /= 0) || (not valid)
   then mzero
   else
-    return $
+    return
     ((Map.adjust ((over nonce   (+ 1))
                  . (over balance (subtract gasDeposit))) origin)
     . touchAccount origin
@@ -520,8 +518,7 @@ initTx x =
     initcode = EVM._contractcode (EVM.vmoptContract opts)
     creation = EVM.vmoptCreate   opts
   in
-    id
-    . (Map.adjust (over balance (subtract value)) origin)
+    (Map.adjust (over balance (subtract value)) origin)
     . (Map.adjust (over balance (+ value)) toAddr)
     . (if creation
        then (Map.adjust (set code initcode) toAddr)

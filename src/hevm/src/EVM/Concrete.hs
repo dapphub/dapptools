@@ -1,5 +1,4 @@
 {-# Language FlexibleInstances #-}
-{-# Language StandaloneDeriving #-}
 {-# Language StrictData #-}
 
 module EVM.Concrete where
@@ -112,8 +111,8 @@ wordValue :: Word -> W256
 wordValue (C _ x) = x
 
 sliceMemory :: (Integral a, Integral b) => a -> b -> ByteString -> ByteString
-sliceMemory o s m =
-  byteStringSliceWithDefaultZeroes (num o) (num s) m
+sliceMemory o s =
+  byteStringSliceWithDefaultZeroes (num o) (num s)
 
 writeMemory :: ByteString -> Word -> Word -> Word -> ByteString -> ByteString
 writeMemory bs1 (C _ n) (C _ src) (C _ dst) bs0 =
@@ -127,7 +126,7 @@ writeMemory bs1 (C _ n) (C _ src) (C _ dst) bs0 =
     c      = if src > num (BS.length bs1)
              then BS.replicate (num n) 0
              else sliceMemory src n bs1
-    b'     = BS.drop (num (n)) b
+    b'     = BS.drop (num n) b
   in
     a <> a' <> c <> b'
 
@@ -137,7 +136,7 @@ readMemoryWord (C _ i) m =
     go !a (-1) = a
     go !a !n = go (a + shiftL (num $ readByteOrZero (num i + n) m)
                               (8 * (31 - n))) (n - 1)
-  in {-# SCC readMemoryWord #-}
+  in {-# SCC "readMemoryWord" #-}
     w256 $ go (0 :: W256) (31 :: Int)
 
 readMemoryWord32 :: Word -> ByteString -> Word
@@ -146,16 +145,16 @@ readMemoryWord32 (C _ i) m =
     go !a (-1) = a
     go !a !n = go (a + shiftL (num $ readByteOrZero (num i + n) m)
                               (8 * (3 - n))) (n - 1)
-  in {-# SCC readMemoryWord32 #-}
+  in {-# SCC "readMemoryWord32" #-}
     w256 $ go (0 :: W256) (3 :: Int)
 
 setMemoryWord :: Word -> Word -> ByteString -> ByteString
-setMemoryWord (C _ i) (C _ x) m =
-  writeMemory (word256Bytes x) 32 0 (num i) m
+setMemoryWord (C _ i) (C _ x) =
+  writeMemory (word256Bytes x) 32 0 (num i)
 
 setMemoryByte :: Word -> Word8 -> ByteString -> ByteString
-setMemoryByte (C _ i) x m =
-  writeMemory (BS.singleton x) 1 0 (num i) m
+setMemoryByte (C _ i) x =
+  writeMemory (BS.singleton x) 1 0 (num i)
 
 readBlobWord :: Word -> ByteString -> Word
 readBlobWord (C _ i) x =
@@ -189,7 +188,7 @@ instance Bits Word where
   bitSize (C _ x) = bitSize x
   bitSizeMaybe (C _ x) = bitSizeMaybe x
   isSigned (C _ x) = isSigned x
-  testBit (C _ x) i = testBit x i
+  testBit (C _ x) = testBit x
   bit i = w256 (bit i)
   popCount (C _ x) = popCount x
 
@@ -244,5 +243,5 @@ createAddress :: Addr -> W256 -> Addr
 createAddress a n = num $ keccak $ rlpList [rlpWord160 a, rlpWord256 n]
 
 create2Address :: Addr -> W256 -> ByteString -> Addr
-create2Address a s b = num $ keccak $ mconcat $
+create2Address a s b = num $ keccak $ mconcat
   [BS.singleton 0xff, word160Bytes a, word256Bytes $ num s, word256Bytes $ keccak b]

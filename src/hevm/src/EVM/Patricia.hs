@@ -1,7 +1,7 @@
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
-{-# LANGUAGE TypeSynonymInstances #-}
 {-# LANGUAGE FlexibleInstances #-}
+
 module EVM.Patricia where
 
 import EVM.Keccak
@@ -81,7 +81,7 @@ rlpNode (Full refs val) = List $ toList (fmap rlpRef refs) <> [BS val]
 type NodeDB = DB ByteString Node
 
 instance Show (NodeDB Node) where
-  show n = show n
+  show = show
 
 putNode :: Node -> NodeDB Ref
 putNode node =
@@ -180,12 +180,12 @@ delete (Full refs val) (p:ps) = do
   let newRefs = Seq.update (num p) newRef refs
       nonEmpties = filter (\(_, ref) -> ref /= emptyRef) $ zip [0..15] $ toList newRefs
   case (nonEmpties, BS.null val) of
-    (([]), True)         -> return Empty
-    ((n, ref):[], True)  -> getNode ref >>= addPrefix [Nibble n]
+    ([], True)         -> return Empty
+    ([(n, ref)], True)  -> getNode ref >>= addPrefix [Nibble n]
     _                    -> return $ Full newRefs val
 
 insert :: Ref -> ByteString -> ByteString -> NodeDB Ref
-insert ref key val = insertRef ref (unpackNibbles key) val
+insert ref key = insertRef ref (unpackNibbles key)
 
 lookupIn :: Ref -> ByteString -> NodeDB ByteString
 lookupIn ref bs = lookupPath ref $ unpackNibbles bs
@@ -219,7 +219,7 @@ runMapDB = runDB putDB getDB
 
 insertValues :: [(ByteString, ByteString)] -> Maybe Ref
 insertValues inputs =
-  let trie = runTrie $ mapM_ insertPair $ inputs
+  let trie = runTrie $ mapM_ insertPair inputs
       mapDB = runMapDB $ runStateT trie (Literal Empty)
       result = snd <$> evalStateT mapDB Map.empty
       insertPair (key, value) = insertDB key value

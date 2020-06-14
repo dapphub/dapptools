@@ -1,7 +1,6 @@
 {-# Language PartialTypeSignatures #-}
 {-# Language FlexibleInstances #-}
 {-# Language ExtendedDefaultRules #-}
-{-# Language NamedFieldPuns #-}
 {-# Language PatternSynonyms #-}
 {-# Language RecordWildCards #-}
 {-# Language ScopedTypeVariables #-}
@@ -34,12 +33,11 @@ module EVM.Facts
   , fileToFact
   ) where
 
-import EVM          (VM, Contract)
 import EVM.Concrete (Word)
-import EVM          (balance, nonce, storage, bytecode, env, contracts)
+import EVM          (VM, Contract, balance, nonce, storage, bytecode, env, contracts)
 import EVM.Types    (Addr)
 
-import qualified EVM as EVM
+import qualified EVM
 
 import Prelude hiding (Word)
 
@@ -162,9 +160,9 @@ instance Ord Fact where
 
 -- Applies a set of facts to a VM.
 apply :: VM -> Set Fact -> VM
-apply vm =
+apply =
   -- The set's ordering is relevant; see `apply1`.
-  foldl apply1 vm
+  foldl apply1
 
 factToFile :: Fact -> File
 factToFile fact = case fact of
