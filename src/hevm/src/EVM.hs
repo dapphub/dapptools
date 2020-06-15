@@ -2255,6 +2255,9 @@ readOp x _ = case x of
   0x59 -> OpMsize
   0x5a -> OpGas
   0x5b -> OpJumpdest
+  0x5c -> OpBeginsub
+  0x5d -> OpReturnsub
+  0x5e -> OpJumpsub
   0xf0 -> OpCreate
   0xf1 -> OpCall
   0xf2 -> OpCallcode

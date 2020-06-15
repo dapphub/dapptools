@@ -67,6 +67,9 @@ data Op
   | OpMsize
   | OpGas
   | OpJumpdest
+  | OpBeginsub
+  | OpReturnsub
+  | OpJumpsub
   | OpCreate
   | OpCall
   | OpStaticcall
