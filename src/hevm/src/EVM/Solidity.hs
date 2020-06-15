@@ -220,7 +220,7 @@ readSolc fp =
       Nothing -> return Nothing
       Just (contracts, asts, sources) -> do
         sourceCache <- makeSourceCache sources asts
-        return (Just (contracts, sourceCache))
+        return $! Just (contracts, sourceCache)
 
 solidity :: Text -> Text -> IO (Maybe ByteString)
 solidity contract src = do
