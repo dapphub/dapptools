@@ -79,6 +79,7 @@ data Error
   | CallDepthLimitReached
   | MaxCodeSizeExceeded Word Word
   | PrecompileFailure
+  | InvalidSubroutineEntry
 
 deriving instance Show Error
 
@@ -906,6 +907,15 @@ exec1 = do
 
         -- op: JUMPDEST
         0x5b -> burn g_jumpdest next
+
+        -- op: BEGINSUB
+        0x5c -> vmError InvalidSubroutineEntry
+
+        -- op: JUMPSUB
+        0x5d -> burn g_jumpsub next
+
+        -- op: RETURNSUB
+        0x5e -> burn g_returnsub next
 
         -- op: EXP
         0x0a ->
