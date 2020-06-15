@@ -367,7 +367,7 @@ stripBytecodeMetadata bc | BS.length cl /= 2 = bc
   where
       l = BS.length bc
       (h, cl) = BS.splitAt (l - 2) bc
-      cl' = fromIntegral . runGet getWord16be . fromStrict $ cl
+      cl' = fromIntegral . runGet getWord16be $ fromStrict cl
       (bc', cbor) = BS.splitAt (BS.length h - cl') h
 
 -- | Every node in the AST has an ID, and other nodes reference those
