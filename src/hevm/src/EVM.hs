@@ -912,10 +912,10 @@ exec1 = do
         0x5c -> vmError InvalidSubroutineEntry
 
         -- op: JUMPSUB
-        0x5d -> burn g_jumpsub next
+        0x5d -> burn g_high next
 
         -- op: RETURNSUB
-        0x5e -> burn g_returnsub next
+        0x5e -> burn g_low next
 
         -- op: EXP
         0x0a ->
