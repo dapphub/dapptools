@@ -57,13 +57,18 @@ func getWallets(c *cli.Context, defaultKeyStores cli.StringSlice) []accounts.Wal
   } else {
     backends = append(backends, ledgerhub)
   }
-  if trezorhub, err := usbwallet.NewTrezorHub(); err != nil {
-    fmt.Fprintf(os.Stderr, "ethsign: failed to look for USB Trezors")
+  if trezorhub, err := usbwallet.NewTrezorHubWithHID(); err != nil {
+    fmt.Fprintf(os.Stderr, "ethsign: failed to look for USB Trezors (HID)")
+  } else {
+    backends = append(backends, trezorhub)
+  }
+  if trezorhub, err := usbwallet.NewTrezorHubWithWebUSB(); err != nil {
+    fmt.Fprintf(os.Stderr, "ethsign: failed to look for USB Trezors (WebUSD)")
   } else {
     backends = append(backends, trezorhub)
   }
 
-  manager := accounts.NewManager(backends...)
+  manager := accounts.NewManager(&accounts.Config{InsecureUnlockAllowed: false}, backends...)
 
   return manager.Wallets()
 }
@@ -434,13 +439,13 @@ func main() {
           return err
         }
 
-        var hash []byte
+        var msg []byte
         if c.Bool("no-prefix") == true {
-          hash = rawSignHash(data)
+          msg = data 
         } else {
-          hash = signHash(data)
+          msg = []byte(fmt.Sprintf("\x19Ethereum Signed Message:\n%d%s", len(data), data))
         }
-        signature, err := wallet.SignHashWithPassphrase(*acct, passphrase, hash)
+        signature, err := wallet.SignDataWithPassphrase(*acct, passphrase, "", msg)
         if err != nil {
           return cli.NewExitError(err, 1)
         }
