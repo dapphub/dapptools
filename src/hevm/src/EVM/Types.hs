@@ -142,7 +142,7 @@ readN :: Integral a => String -> a
 readN s = fromIntegral (read s :: Integer)
 
 readNull :: Read a => a -> String -> a
-readNull x s = fromMaybe x (Text.Read.readMaybe s)
+readNull x = fromMaybe x . Text.Read.readMaybe
 
 wordField :: JSON.Object -> Text -> JSON.Parser W256
 wordField x f = ((readNull 0) . Text.unpack)
