@@ -197,7 +197,7 @@ data FrameState = FrameState
   , _code         :: ByteString
   , _pc           :: Int
   , _stack        :: [Word]
-  , _return_stack :: [Word]
+  , _return_stack :: [Int]
   , _memory       :: ByteString
   , _memorySize   :: Int
   , _calldata     :: ByteString
@@ -912,7 +912,11 @@ exec1 = do
         0x5c -> vmError InvalidSubroutineEntry
 
         -- op: RETURNSUB
-        0x5d -> burn g_low next
+        0x5d -> case the state return_stack of
+            (x:xs) -> burn g_low $ do
+                state . pc .= x
+                state . return_stack .= xs
+            _ -> underrun
 
         -- op: JUMPSUB
         0x5e ->
@@ -921,10 +925,11 @@ exec1 = do
               burn g_high $ do
                 theCode <- use (state . code)
                 theReturnStack <- use (state . return_stack)
-                if BS.index theCode (num x) == 0x5c
+                thePc <- use (state . pc)
+                if x < num (BS.length theCode) && BS.index theCode (num x) == 0x5c
                   then if length theReturnStack < 1023 then do
                     state . stack .= xs
-                    state . return_stack %= (x :)
+                    state . return_stack %= (thePc + 1 :)
                     state . pc .= num (x + 1)
                   else vmError StackLimitExceeded
                 else vmError BadJumpDestination
