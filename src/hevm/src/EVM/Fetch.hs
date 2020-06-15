@@ -5,7 +5,7 @@ module EVM.Fetch where
 
 import Prelude hiding (Word)
 
-import EVM.Types    (Addr, W256, showAddrWith0x, showWordWith0x, hexText)
+import EVM.Types    (Addr, W256, showAddrWith0x, hexText)
 import EVM.Concrete (Word, w256)
 import EVM          (EVM, Contract, initialContract, nonce, balance, external)
 
@@ -52,11 +52,11 @@ instance ToRPC Addr where
   toRPC = showAddrWith0x
 
 instance ToRPC W256 where
-  toRPC = showWordWith0x
+  toRPC = show
 
 instance ToRPC BlockNumber where
   toRPC Latest          = "latest"
-  toRPC (BlockNumber n) = showWordWith0x n
+  toRPC (BlockNumber n) = show n
 
 readText :: Read a => Text -> a
 readText = read . unpack

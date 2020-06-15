@@ -70,9 +70,6 @@ instance Show Addr where
 showAddrWith0x :: Addr -> String
 showAddrWith0x addr = "0x" ++ show addr
 
-showWordWith0x :: W256 -> String
-showWordWith0x = show
-
 strip0x :: ByteString -> ByteString
 strip0x bs = if "0x" `Char8.isPrefixOf` bs then Char8.drop 2 bs else bs
 
