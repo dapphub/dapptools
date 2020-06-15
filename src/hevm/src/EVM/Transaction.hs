@@ -1,4 +1,3 @@
-{-# LANGUAGE TemplateHaskell #-}
 module EVM.Transaction where
 
 import Prelude hiding (Word)
@@ -32,7 +31,7 @@ data Transaction = Transaction
 
 ecrec :: W256 -> W256 -> W256 -> W256 -> Maybe Addr
 ecrec e v r s = (num . word) <$> EVM.Precompiled.execute 1 input 32
-  where input = BS.concat $ (word256Bytes <$> [e, v, r, s])
+  where input = BS.concat (word256Bytes <$> [e, v, r, s])
 
 sender :: Int -> Transaction -> Maybe Addr
 sender chainId tx = ecrec hash v' (txR tx) (txS tx)

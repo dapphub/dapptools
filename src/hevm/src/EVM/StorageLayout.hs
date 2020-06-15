@@ -165,10 +165,8 @@ grokValueType x =
        , preview (key "attributes" . key "type" . _String) x
        ) of
     (Just "ElementaryTypeName", _, Just typeName) ->
-      case parseTypeName mempty (head (words typeName)) of
-        Just t -> t
-        Nothing ->
-          error ("ungrokked value type: " ++ show typeName)
+      fromMaybe (error ("ungrokked value type: " ++ show typeName))
+        (parseTypeName mempty (head (words typeName)))
     (Just "UserDefinedTypeName", _, _) ->
       AbiAddressType
     (Just "ArrayTypeName", fmap toList -> Just [t], _)->

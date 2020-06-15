@@ -1,5 +1,4 @@
 {-# Language GADTs #-}
-{-# Language NamedFieldPuns #-}
 
 module EVM.Stepper
   ( Action (..)
@@ -118,5 +117,4 @@ entering t stepper = do
   pure x
 
 enter :: Text -> Stepper ()
-enter t = do
-  evm (EVM.pushTrace (EVM.EntryTrace t))
+enter t = evm (EVM.pushTrace (EVM.EntryTrace t))

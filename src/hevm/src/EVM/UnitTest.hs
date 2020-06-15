@@ -1,4 +1,3 @@
-{-# LANGUAGE ViewPatterns #-}
 module EVM.UnitTest where
 
 import Prelude hiding (Word)
@@ -12,7 +11,6 @@ import EVM.Exec
 import EVM.Format
 import EVM.Solidity
 import EVM.Types
-import EVM.Concrete (w256, wordAt, wordValue)
 
 import qualified EVM.FeeSchedule as FeeSchedule
 
@@ -21,6 +19,7 @@ import qualified EVM.Stepper as Stepper
 import qualified Control.Monad.Operational as Operational
 
 import Control.Lens hiding (Indexed)
+import Control.Monad ((>=>))
 import Control.Monad.State.Strict hiding (state)
 import qualified Control.Monad.State.Strict as State
 
@@ -33,8 +32,7 @@ import Data.Foldable      (toList)
 import Data.Map           (Map)
 import Data.Maybe         (fromMaybe, catMaybes, fromJust, isJust, fromMaybe, mapMaybe)
 import Data.Monoid        ((<>))
-import Data.Text          (Text, pack, unpack)
-import Data.Text          (isPrefixOf, stripSuffix, intercalate)
+import Data.Text          (isPrefixOf, stripSuffix, intercalate, Text, pack, unpack)
 import Data.Word          (Word32)
 import System.Environment (lookupEnv)
 import System.IO          (hFlush, stdout)
@@ -134,7 +132,7 @@ initializeUnitTest UnitTestOptions { .. } = do
 
   -- Let `setUp()' run to completion
   void Stepper.execFullyOrFail
-  (Stepper.evm $ use result) >>= \case
+  Stepper.evm (use result) >>= \case
     Just (VMFailure e) -> Stepper.evm (pushTrace (ErrorTrace e))
     _ -> Stepper.evm popTrace
 
@@ -161,7 +159,7 @@ execTest UnitTestOptions { .. } method args = do
       either (const (pure True)) (const (pure False))
   -- If we failed, put the error in the trace.
   -- It's not clear to me right now why this doesn't happen somewhere else.
-  (Stepper.evm $ use result) >>= \case
+  Stepper.evm (use result) >>= \case
     Just (VMFailure e) ->
         Stepper.evm (pushTrace (ErrorTrace e))
     _ -> pure ()
@@ -176,7 +174,7 @@ checkFailures UnitTestOptions { .. } method args bailed = do
      addr <- Stepper.evm $ use (state . contract)
 
      -- Ask whether any assertions failed
-     Stepper.evm $ popTrace
+     Stepper.evm popTrace
      Stepper.evm $ setupCall testParams addr "failed()" args
      Stepper.note "Checking whether assertions failed"
      res <- Stepper.execFullyOrFail >>= Stepper.decode AbiBoolType
@@ -187,7 +185,7 @@ checkFailures UnitTestOptions { .. } method args bailed = do
 -- | Randomly generates the calldata arguments and runs the test
 fuzzTest :: UnitTestOptions -> Text -> [AbiType] -> VM -> Property
 fuzzTest opts sig types vm = forAllShow (genAbiValue (AbiTupleType $ Vector.fromList types)) (show . ByteStringS . encodeAbiValue)
-  $ \args -> ioProperty $ do
+  $ \args -> ioProperty $
     (runStateT (interpret opts (runUnitTest opts sig args)) vm) >>= \case
       (Left _, _) -> return False
       (Right b, _) -> return b
@@ -332,7 +330,7 @@ coverageReport dapp cov =
       )
 
     f :: Text -> Vector ByteString -> Vector (Int, ByteString)
-    f name xs =
+    f name =
       Vector.imap
         (\i bs ->
            let
@@ -341,7 +339,6 @@ coverageReport dapp cov =
                then MultiSet.occur (name, i + 1) srcMapCov
                else -1
            in (n, bs))
-        xs
   in
     Map.mapWithKey f linesByName
 
@@ -426,7 +423,7 @@ runUnitTestContract
       case view result vm1 of
         Nothing -> error "internal error: setUp() did not end with a result"
         Just (VMFailure _) -> do
-          Text.putStrLn ("\x1b[31m[FAIL]\x1b[0m setUp()")
+          Text.putStrLn "\x1b[31m[FAIL]\x1b[0m setUp()"
           tick "\n"
           tick $ failOutput vm1 dapp opts "setUp()"
           pure False
@@ -505,11 +502,11 @@ runUnitTestContract
                                               decodeAbiValue (AbiTupleType (Vector.fromList types)) callData
                                          else fuzzRun (testName, types)
 
-          let inform = \(x, y) -> Text.putStrLn x >> pure y
+          let inform (x, y) = Text.putStrLn x >> pure y
 
           -- Run all the test cases and print their status updates
           details <-
-            mapM (\x -> runTest x >>= inform) testSigs
+            mapM (runTest >=> inform) testSigs
 
           let running = [x | Right x <- details]
           let bailing = [x | Left x <- details]
@@ -529,7 +526,7 @@ passOutput :: VM -> DappInfo -> UnitTestOptions -> Text -> Text
 passOutput vm dapp UnitTestOptions { .. } testName =
   case verbose of
     Just 2 ->
-      mconcat $
+      mconcat
         [ "Success: "
         , fromMaybe "" (stripSuffix "()" testName)
         , "\n"
@@ -541,7 +538,7 @@ passOutput vm dapp UnitTestOptions { .. } testName =
       ""
 
 failOutput :: VM -> DappInfo -> UnitTestOptions -> Text -> Text
-failOutput vm dapp UnitTestOptions { .. } testName = mconcat $
+failOutput vm dapp UnitTestOptions { .. } testName = mconcat
   [ "Failure: "
   , fromMaybe "" (stripSuffix "()" testName)
   , "\n"

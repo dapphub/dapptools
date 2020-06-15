@@ -1,0 +1,25 @@
+# HLint configuration file
+# https://github.com/ndmitchell/hlint
+##########################
+
+# This file contains a template configuration file, which is typically
+# placed as .hlint.yaml in the root of your project
+
+
+# Warnings currently triggered by your code
+- ignore: {name: "Use fewer imports"}
+- ignore: {name: "Use if"}
+- ignore: {name: "Use newtype instead of data"}
+- ignore: {name: "Redundant bracket"}
+- ignore: {name: "Reduce duplication"}
+- ignore: {name: "Redundant return"}
+- ignore: {name: "Use head"}
+- ignore: {name: "Use unwords"}
+- ignore: {name: "Use <$>"}
+- ignore: {name: "Use elem"}
+- ignore: {name: "Use infix"}
+- ignore: {name: "Use section"}
+- ignore: {name: "Move brackets to avoid $"}
+- ignore: {name: "Use zipWith"}
+- ignore: {name: "Redundant flip"}
+- ignore: {name: "Redundant $!"}

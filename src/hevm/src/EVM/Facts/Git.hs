@@ -1,4 +1,3 @@
-{-# Language ViewPatterns #-}
 
 -- This is a backend for the fact representation that uses a Git
 -- repository as the store.
@@ -9,8 +8,7 @@ module EVM.Facts.Git
   , RepoAt (..)
   ) where
 
-import EVM.Facts (Fact (..), File (..), Path (..), Data (..))
-import EVM.Facts (fileToFact, factToFile)
+import EVM.Facts (Fact (..), File (..), Path (..), Data (..), fileToFact, factToFile)
 
 import Control.Lens
 import Data.Set   (Set)
@@ -30,11 +28,11 @@ fileRepr = iso f g
   where
     f :: File -> Git.File
     f (File     (Path ps p)     (Data x)) =
-      (Git.File (Git.Path ps p) x)
+      Git.File (Git.Path ps p) x
 
     g :: Git.File -> File
     g (Git.File (Git.Path ps p) x) =
-      (File     (Path ps p)     (Data x))
+      File     (Path ps p)     (Data x)
 
 saveFacts :: RepoAt -> Set Fact -> IO ()
 saveFacts (RepoAt repo) facts =

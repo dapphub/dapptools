@@ -124,11 +124,11 @@ data SrcMap = SM {
 } deriving (Show, Eq, Ord, Generic)
 
 data SrcMapParseState
-  = F1 [Char] Int
-  | F2 Int [Char] Int
-  | F3 Int Int [Char] Int
+  = F1 String Int
+  | F2 Int String Int
+  | F3 Int Int String Int
   | F4 Int Int Int (Maybe JumpType)
-  | F5 Int Int Int JumpType [Char]
+  | F5 Int Int Int JumpType String
   | Fe
   deriving Show
 
@@ -142,7 +142,7 @@ makeLenses ''Method
 -- Obscure but efficient parser for the Solidity sourcemap format.
 makeSrcMaps :: Text -> Maybe (Seq SrcMap)
 makeSrcMaps = (\case (_, Fe, _) -> Nothing; x -> Just (done x))
-             . Text.foldl' (\x y -> go y x) (mempty, F1 [] 1, SM 0 0 0 JumpRegular 0)
+             . Text.foldl' (flip go) (mempty, F1 [] 1, SM 0 0 0 JumpRegular 0)
   where
     done (xs, s, p) = let (xs', _, _) = go ';' (xs, s, p) in xs'
     readR = read . reverse
@@ -258,7 +258,7 @@ readJSON json = do
         _contractAst =
           fromMaybe
             (error "JSON lacks abstract syntax trees.")
-            (preview (ix (Text.split (== ':') s !! 0) . key "AST") asts),
+            (preview (ix (head (Text.split (== ':') s)) . key "AST") asts),
 
         _constructorInputs =
           let
@@ -361,15 +361,14 @@ solidity' src = withSystemTempFile "hevm.sol" $ \path handle -> do
 -- as the codehash matches otherwise, we don't care if there is some
 -- difference there.
 stripBytecodeMetadata :: ByteString -> ByteString
-stripBytecodeMetadata bc = if BS.length cl /= 2
-                           then bc
-                           else if BS.length h >= cl' && (isRight . deserialiseFromBytes decodeTerm $ fromStrict cbor)
-                                then bc'
-                                else bc
-  where l = BS.length bc
-        (h, cl) = BS.splitAt (l - 2) bc
-        cl' = fromIntegral . runGet getWord16be . fromStrict $ cl
-        (bc', cbor) = BS.splitAt (BS.length h - cl') h
+stripBytecodeMetadata bc | BS.length cl /= 2 = bc
+                         | BS.length h >= cl' && (isRight . deserialiseFromBytes decodeTerm $ fromStrict cbor) = bc'
+                         | otherwise = bc
+  where
+      l = BS.length bc
+      (h, cl) = BS.splitAt (l - 2) bc
+      cl' = fromIntegral . runGet getWord16be $ fromStrict cl
+      (bc', cbor) = BS.splitAt (BS.length h - cl') h
 
 -- | Every node in the AST has an ID, and other nodes reference those
 -- IDs.  This function recurses through the tree looking for objects
@@ -393,9 +392,9 @@ astSrcMap astIds =
   where
     tmp :: Map (Int, Int, Int) Value
     tmp =
-      ( Map.fromList
-      . catMaybes
-      . map (\v ->
+       Map.fromList
+      . mapMaybe
+        (\v ->
           case preview (key "src" . _String) v of
             Just src ->
               case map (readMaybe . Text.unpack) (Text.split (== ':') src) of
@@ -407,4 +406,3 @@ astSrcMap astIds =
               Nothing)
       . Map.elems
       $ astIds
-      )

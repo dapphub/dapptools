@@ -18,15 +18,13 @@ import EVM.Dapp (dappUnitTests, unitTestMethods, dappSolcByName, dappSolcByHash,
 import EVM.Dapp (dappAstSrcMap)
 import EVM.Debug
 import EVM.Format (Signedness (..), showDec, showWordExact)
-import EVM.Format (showTraceTree)
-import EVM.Format (contractNamePart, contractPathPart)
+import EVM.Format (contractNamePart, contractPathPart, showTraceTree)
 import EVM.Hexdump (prettyHex)
 import EVM.Op
 import EVM.Solidity
 import EVM.Types hiding (padRight)
 import EVM.UnitTest (UnitTestOptions (..))
-import EVM.UnitTest (initialUnitTestVm)
-import EVM.UnitTest (initializeUnitTest, runUnitTest)
+import EVM.UnitTest (initialUnitTestVm, initializeUnitTest, runUnitTest)
 import EVM.StorageLayout
 
 import EVM.Stepper (Stepper)
@@ -34,7 +32,6 @@ import qualified EVM.Stepper as Stepper
 import qualified Control.Monad.Operational as Operational
 
 import EVM.Fetch (Fetcher)
-import qualified EVM.Fetch as Fetch
 
 import Control.Lens
 import Control.Monad.State.Strict hiding (state)
@@ -180,12 +177,12 @@ interpret mode =
                   -- but stopping before the next instruction.
                   interpret StepNone (k r)
 
-            StepMany 0 -> do
+            StepMany 0 ->
               -- Finish the continuation until the next instruction;
               -- then, pause & await user.
               interpret StepNone restart
 
-            StepMany i -> do
+            StepMany i ->
               -- Run one instruction.
               interpret StepOne restart >>=
                 \case
@@ -218,7 +215,7 @@ interpret mode =
                       r -> pure r
 
         -- Stepper wants to make a query and wait for the results?
-        Stepper.Wait q -> do
+        Stepper.Wait q ->
           -- Tell the TTY to run an I/O action to produce the next stepper.
           pure . Blocked $ do
             -- First run the fetcher, getting a VM state transition back.
@@ -296,12 +293,12 @@ runFromVM oracle' vm = do
 concreteTests :: UnitTestOptions -> (Text, [(Text, [AbiType])]) -> [(Text, Text)]
 concreteTests UnitTestOptions{..} (contractname, tests) = case replay of
   Nothing -> [(contractname, fst x) | x <- tests,
-                                      snd x == []]
+                                      null $ snd x]
   Just (sig, _) -> [(contractname, fst x) | x <- tests,
-                                            snd x == [] || fst x == sig]
+                                            null (snd x) || fst x == sig]
 
 main :: UnitTestOptions -> FilePath -> FilePath -> IO ()
-main opts root jsonFilePath = do
+main opts root jsonFilePath =
   readSolc jsonFilePath >>=
     \case
       Nothing ->
@@ -340,7 +337,7 @@ takeStep
   -> EventM n (Next UiState)
 takeStep ui policy mode =
   case nxt of
-    (Stepped stepper, ui') -> do
+    (Stepped stepper, ui') ->
       if vmResult (view (uiVm . result) ui)
         then continue (ViewVm ui)
       else
@@ -477,8 +474,8 @@ appEvent (ViewVm s) (VtyEvent (V.EvKey (V.KChar 'a') [])) =
       let
         s0 = view uiVmFirstState s
         s1 = set (uiVm . cache)   (view (uiVm . cache) s) s0
-        s2 = set (uiVmShowMemory) (view uiVmShowMemory s) s1
-        s3 = set (uiVmTestOpts)   (view uiVmTestOpts s) s2
+        s2 = set uiVmShowMemory (view uiVmShowMemory s) s1
+        s3 = set uiVmTestOpts   (view uiVmTestOpts s) s2
 
       in takeStep s3 StepTimidly StepNone
 
@@ -511,10 +508,10 @@ appEvent s (VtyEvent (V.EvKey V.KEsc [])) =
     (ViewContracts x) -> overview $ view browserVm x
     _ -> halt s
   where
-    overview(s') = continue . ViewVm $ s'
+    overview = continue . ViewVm
 
 -- UnitTest Picker: Enter - select from list
-appEvent (ViewPicker s) (VtyEvent (V.EvKey (V.KEnter) [])) = do
+appEvent (ViewPicker s) (VtyEvent (V.EvKey V.KEnter [])) =
   case listSelectedElement (view testPickerList s) of
     Nothing -> error "nothing selected"
     Just (_, x) ->
@@ -531,19 +528,19 @@ appEvent (ViewPicker s) (VtyEvent e) = do
   continue (ViewPicker s')
 
 -- Page: Down - scroll
-appEvent s (VtyEvent (V.EvKey (V.KDown) [])) = do
+appEvent s (VtyEvent (V.EvKey V.KDown [])) =
   vScrollBy (viewportScroll TracePane) 1 >> continue s
 
 -- Page: Up - scroll
-appEvent s (VtyEvent (V.EvKey (V.KUp) [])) = do
+appEvent s (VtyEvent (V.EvKey V.KUp [])) =
   vScrollBy (viewportScroll TracePane) (-1) >> continue s
 
 -- Page: C-f - Page down
-appEvent s (VtyEvent (V.EvKey (V.KChar 'f') [V.MCtrl])) = do
+appEvent s (VtyEvent (V.EvKey (V.KChar 'f') [V.MCtrl])) =
   vScrollPage (viewportScroll TracePane) Down >> continue s
 
 -- Page: C-b - Page up
-appEvent s (VtyEvent (V.EvKey (V.KChar 'b') [V.MCtrl])) = do
+appEvent s (VtyEvent (V.EvKey (V.KChar 'b') [V.MCtrl])) =
   vScrollPage (viewportScroll TracePane) Up >> continue s
 
 -- Default
@@ -719,7 +716,7 @@ drawVm ui =
         , vLimit 20 $ drawStackPane ui
         , drawSolidityPane ui
         , vLimit 20 $ drawTracePane ui
-        , vLimit 2 $ drawHelpBar
+        , vLimit 2 drawHelpBar
         ]
       )
       ( vBox
@@ -727,11 +724,11 @@ drawVm ui =
           [ vLimit 20 $ drawBytecodePane ui
           , vLimit 20 $ drawStackPane ui
           ]
-        , hBox $
+        , hBox
           [ drawSolidityPane ui
           , drawTracePane ui
           ]
-        , vLimit 2 $ drawHelpBar
+        , vLimit 2 drawHelpBar
         ]
       )
   ]
@@ -827,10 +824,7 @@ renderVm ui = updateUiVmState ui (view uiVm ui)
 updateUiVmState :: UiVmState -> VM -> UiVmState
 updateUiVmState ui vm =
   let
-    move =
-      case vmOpIx vm of
-        Nothing -> id
-        Just x -> listMoveTo x
+    move = maybe id listMoveTo (vmOpIx vm)
     address = view (state . contract) vm
     message =
       case view result vm of
@@ -839,7 +833,7 @@ updateUiVmState ui vm =
         Just (VMFailure (Revert msg)) ->
           Just ("VMFailure: " <> (show . ByteStringS $ msg))
         Just (VMFailure err) ->
-          Just ("VMFailure: " <> show (err))
+          Just ("VMFailure: " <> show err)
         Nothing ->
           Just ("Executing EVM code in " <> showAddrWith0x address)
     ui' = ui
@@ -874,10 +868,9 @@ updateUiVmState ui vm =
               1)
       where
         dapp =
-          case view uiVmDapp ui of
-            Just solcdapp -> solcdapp
-            Nothing ->
-              dappInfo "" mempty (SourceCache mempty mempty mempty mempty)
+          fromMaybe
+            (dappInfo "" mempty (SourceCache mempty mempty mempty mempty))
+            (view uiVmDapp ui)
 
 drawStackPane :: UiVmState -> UiWidget
 drawStackPane ui =
@@ -951,7 +944,7 @@ drawSolidityPane ui@(view uiVmDapp -> Just dapp) =
         Nothing -> padBottom Max (hBorderWithLabel (txt "<source not found>"))
         Just rows ->
           let
-            subrange i = lineSubrange rows (srcMapOffset sm, srcMapLength sm) i
+            subrange = lineSubrange rows (srcMapOffset sm, srcMapLength sm)
             lineNo =
               (snd . fromJust $
                 (srcMapCodePos

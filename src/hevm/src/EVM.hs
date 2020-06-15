@@ -25,10 +25,9 @@ import EVM.FeeSchedule (FeeSchedule (..))
 import qualified EVM.Precompiled
 
 import Data.Binary.Get (runGetOrFail)
-import Data.Bits (bit, testBit, complement)
-import Data.Bits (xor, shiftR, (.&.), (.|.), FiniteBits (..))
 import Data.Text (Text)
 import Data.Word (Word8, Word32)
+import Data.Bits (bit, testBit, complement, xor, shiftR, (.&.), (.|.), FiniteBits(..))
 
 import Control.Lens hiding (op, (:<), (|>))
 import Control.Monad.State.Strict hiding (state)
@@ -415,7 +414,7 @@ exec1 = do
     self = the state contract
     this = fromMaybe (error "internal error: state contract") (preview (ix (the state contract)) (the env contracts))
 
-    fees@(FeeSchedule {..}) = the block schedule
+    fees@FeeSchedule {..} = the block schedule
 
     doStop = finishFrame (FrameReturned "")
 
@@ -427,7 +426,7 @@ exec1 = do
     copyBytesToMemory (the state calldata) calldatasize 0 0
     executePrecompile fees self (the state gas) 0 calldatasize 0 0 []
     use (state . stack) >>= \case
-      (0:_) -> do
+      (0:_) ->
         fetchAccount self $ \_ -> do
           touchAccount self
           vmError PrecompileFailure
@@ -462,7 +461,7 @@ exec1 = do
           let !i = x - 0x80 + 1
           case preview (ix (num i - 1)) stk of
             Nothing -> underrun
-            Just y -> do
+            Just y ->
               limitStack 1 $
                 burn g_verylow $ do
                   next
@@ -493,12 +492,12 @@ exec1 = do
                     bytes         = readMemory (num xOffset) (num xSize) vm
                     log           = Log self bytes topics
 
-                burn (g_log + g_logdata * xSize + num n * g_logtopic) $ do
-                  accessMemoryRange fees xOffset xSize $ do
-                    traceLog log
-                    next
-                    assign (state . stack) xs'
-                    pushToSequence logs log
+                burn (g_log + g_logdata * xSize + num n * g_logtopic) $
+                  accessMemoryRange fees xOffset xSize
+                    $ do traceLog log
+                         next
+                         assign (state . stack) xs'
+                         pushToSequence logs log
             _ ->
               underrun
 
@@ -519,7 +518,7 @@ exec1 = do
 
         -- op: SDIV
         0x05 ->
-          stackOp2 (const g_low) (uncurry (sdiv))
+          stackOp2 (const g_low) (uncurry sdiv)
 
         -- op: MOD
         0x06 -> stackOp2 (const g_low) $ \case
@@ -529,9 +528,9 @@ exec1 = do
         -- op: SMOD
         0x07 -> stackOp2 (const g_low) $ uncurry smod
         -- op: ADDMOD
-        0x08 -> stackOp3 (const g_mid) $ (\(x, y, z) -> addmod x y z)
+        0x08 -> stackOp3 (const g_mid) (\(x, y, z) -> addmod x y z)
         -- op: MULMOD
-        0x09 -> stackOp3 (const g_mid) $ (\(x, y, z) -> mulmod x y z)
+        0x09 -> stackOp3 (const g_mid) (\(x, y, z) -> mulmod x y z)
 
         -- op: LT
         0x10 -> stackOp2 (const g_verylow) $ \(x, y) -> if x < y then 1 else 0
@@ -591,8 +590,8 @@ exec1 = do
         -- op: BALANCE
         0x31 ->
           case stk of
-            (x:xs) -> do
-              burn g_balance $ do
+            (x:xs) ->
+              burn g_balance $
                 fetchAccount (num x) $ \c -> do
                   next
                   assign (state . stack) xs
@@ -627,8 +626,8 @@ exec1 = do
         -- op: CALLDATACOPY
         0x37 ->
           case stk of
-            ((num -> xTo) : (num -> xFrom) : (num -> xSize) :xs) -> do
-              burn (g_verylow + g_copy * ceilDiv xSize 32) $ do
+            ((num -> xTo) : (num -> xFrom) : (num -> xSize) :xs) ->
+              burn (g_verylow + g_copy * ceilDiv xSize 32) $
                 accessUnboundedMemoryRange fees xTo xSize $ do
                   next
                   assign (state . stack) xs
@@ -643,8 +642,8 @@ exec1 = do
         -- op: CODECOPY
         0x39 ->
           case stk of
-            ((num -> memOffset) : (num -> codeOffset) : (num -> n) : xs) -> do
-              burn (g_verylow + g_copy * ceilDiv (num n) 32) $ do
+            ((num -> memOffset) : (num -> codeOffset) : (num -> n) : xs) ->
+              burn (g_verylow + g_copy * ceilDiv (num n) 32) $
                 accessUnboundedMemoryRange fees memOffset n $ do
                   next
                   assign (state . stack) xs
@@ -660,14 +659,14 @@ exec1 = do
         -- op: EXTCODESIZE
         0x3b ->
           case stk of
-            (x:xs) -> do
+            (x:xs) ->
               if x == num cheatCode
                 then do
                   next
                   assign (state . stack) xs
                   push (w256 1)
                 else
-                  burn g_extcode $ do
+                  burn g_extcode $
                     fetchAccount (num x) $ \c -> do
                       next
                       assign (state . stack) xs
@@ -682,9 +681,9 @@ exec1 = do
               : (num -> memOffset)
               : (num -> codeOffset)
               : (num -> codeSize)
-              : xs ) -> do
+              : xs ) ->
               burn (g_extcode + g_copy * ceilDiv (num codeSize) 32) $
-                accessUnboundedMemoryRange fees memOffset codeSize $ do
+                accessUnboundedMemoryRange fees memOffset codeSize $
                   fetchAccount (num extAccount) $ \c -> do
                     next
                     assign (state . stack) xs
@@ -700,8 +699,8 @@ exec1 = do
         -- op: RETURNDATACOPY
         0x3e ->
           case stk of
-            ((num -> xTo) : (num -> xFrom) : (num -> xSize) :xs) -> do
-              burn (g_verylow + g_copy * ceilDiv xSize 32) $ do
+            ((num -> xTo) : (num -> xFrom) : (num -> xSize) :xs) ->
+              burn (g_verylow + g_copy * ceilDiv xSize 32) $
                 accessUnboundedMemoryRange fees xTo xSize $ do
                   next
                   assign (state . stack) xs
@@ -713,11 +712,11 @@ exec1 = do
         -- op: EXTCODEHASH
         0x3f ->
           case stk of
-            (x:xs) -> do
+            (x:xs) ->
               burn g_extcodehash $ do
                 next
                 assign (state . stack) xs
-                fetchAccount (num x) $ \c -> do
+                fetchAccount (num x) $ \c ->
                    if accountEmpty c
                      then push (num (0 :: Int))
                      else push (num (keccak (view bytecode c)))
@@ -725,7 +724,7 @@ exec1 = do
               underrun
 
         -- op: BLOCKHASH
-        0x40 -> do
+        0x40 ->
           -- We adopt the fake block hash scheme of the VMTests,
           -- so that blockhash(i) is the hash of i as decimal ASCII.
           stackOp1 (const g_blockhash) $
@@ -780,7 +779,7 @@ exec1 = do
         -- op: MLOAD
         0x51 ->
           case stk of
-            (x:xs) -> do
+            (x:xs) ->
               burn g_verylow $
                 accessMemoryWord fees x $ do
                   next
@@ -790,7 +789,7 @@ exec1 = do
         -- op: MSTORE
         0x52 ->
           case stk of
-            (x:y:xs) -> do
+            (x:y:xs) ->
               burn g_verylow $
                 accessMemoryWord fees x $ do
                   next
@@ -801,7 +800,7 @@ exec1 = do
         -- op: MSTORE8
         0x53 ->
           case stk of
-            (x:y:xs) -> do
+            (x:y:xs) ->
               burn g_verylow $
                 accessMemoryRange fees x 1 $ do
                   next
@@ -823,7 +822,7 @@ exec1 = do
         0x55 ->
           notStatic $
           case stk of
-            (x:new:xs) -> do
+            (x:new:xs) ->
               accessStorage self x $ \current -> do
                 availableGas <- use (state . gas)
 
@@ -834,11 +833,10 @@ exec1 = do
                              (initialContract (EVM.RuntimeCode mempty))
                              . storage . at x . non 0)
 
-                    let cost =
-                          if (current == new) then g_sload
-                          else if (current == original) && (original == 0) then g_sset
-                          else if (current == original) then g_sreset
-                          else g_sload
+                    let cost | (current == new) = g_sload
+                             | (current == original) && (original == 0) = g_sset
+                             | (current == original) = g_sreset
+                             | otherwise = g_sload
 
                     burn cost $ do
                       next
@@ -846,24 +844,24 @@ exec1 = do
                       assign (env . contracts . ix (the state contract) . storage . at x)
                         (Just new)
 
-                      case (current == new) of
+                      case current == new of
                         True  -> noop
-                        False -> case (current == original) of
+                        False -> case current == original of
 
-                            True -> do if (original /= 0) && (new == 0)
+                            True -> if (original /= 0) && (new == 0)
                                            then refund r_sclear
                                            else noop
 
                             False -> do if (original /= 0)
                                             then
-                                              if (new == 0)
+                                              if new == 0
                                                  then refund r_sclear
                                                  else unRefund r_sclear
                                             else noop
 
-                                        if (original == new)
+                                        if original == new
                                            then
-                                             if (original == 0)
+                                             if original == 0
                                                 then refund (g_sset - g_sload)
                                                 else refund (g_sreset - g_sload)
                                            else noop
@@ -873,16 +871,16 @@ exec1 = do
         -- op: JUMP
         0x56 ->
           case stk of
-            (x:xs) -> do
-              burn g_mid $ do
+            (x:xs) ->
+              burn g_mid $
                 checkJump x xs
             _ -> underrun
 
         -- op: JUMPI
-        0x57 -> do
+        0x57 ->
           case stk of
-            (x:y:xs) -> do
-              burn g_high $ do
+            (x:y:xs) ->
+              burn g_high $
                 if y == 0
                   then assign (state . stack) xs >> next
                   else checkJump x xs
@@ -1020,10 +1018,10 @@ exec1 = do
                   maxsize = the block maxCodeSize
                 case view frames vm of
                   [] ->
-                    case (the tx isCreate) of
+                    case the tx isCreate of
                       True ->
                         if codesize > maxsize
-                        then do
+                        then
                           finishFrame (FrameErrored (MaxCodeSizeExceeded maxsize codesize))
                         else
                           burn (g_codedeposit * num (BS.length output)) $
@@ -1034,14 +1032,14 @@ exec1 = do
                     let
                       context = view frameContext frame
                     case context of
-                      CreationContext _ _ _ ->
+                      CreationContext {} ->
                         if codesize > maxsize
-                        then do
+                        then
                           finishFrame (FrameErrored (MaxCodeSizeExceeded maxsize codesize))
                         else
                           burn (g_codedeposit * num (BS.length output)) $
                             finishFrame (FrameReturned output)
-                      CallContext _ _ _ _ _ _ _ ->
+                      CallContext {} ->
                           finishFrame (FrameReturned output)
             _ -> underrun
 
@@ -1125,7 +1123,7 @@ exec1 = do
                 selfdestruct self
                 touchAccount xTo
 
-                let funds = (vm ^?! env . contracts . ix self . balance)
+                let funds = vm ^?! env . contracts . ix self . balance
                 if funds == 0
                   then
                     doStop
@@ -1205,9 +1203,9 @@ executePrecompile fees preCompileAddr gasCap inOffset inSize outOffset outSize x
   let input = readMemory (num inOffset) (num inSize) vm
       cost = costOfPrecompile fees preCompileAddr input
       notImplemented = error $ "precompile at address " <> show preCompileAddr <> " not yet implemented"
-      precompileFail = do burn (gasCap - cost) $ do
+      precompileFail = burn (gasCap - cost) $ do
                             assign (state . stack) (0 : xs)
-                            pushTrace $ ErrorTrace $ PrecompileFailure
+                            pushTrace $ ErrorTrace PrecompileFailure
                             next
   if cost > gasCap then
     burn gasCap $ do
@@ -1233,7 +1231,7 @@ executePrecompile fees preCompileAddr gasCap inOffset inSize outOffset outSize x
         -- SHA2-256
         0x2 ->
           let
-            hash  = BS.pack $ BA.unpack $ (Crypto.hash input :: Digest SHA256)
+            hash  = BS.pack $ BA.unpack (Crypto.hash input :: Digest SHA256)
           in do
             assign (state . stack) (1 : xs)
             assign (state . returndata) hash
@@ -1244,7 +1242,7 @@ executePrecompile fees preCompileAddr gasCap inOffset inSize outOffset outSize x
         0x3 ->
           let
             padding = BS.pack $ replicate 12 0
-            hash' = BS.pack $ BA.unpack $ (Crypto.hash input :: Digest RIPEMD160)
+            hash' = BS.pack $ BA.unpack (Crypto.hash input :: Digest RIPEMD160)
             hash  = padding <> hash'
           in do
             assign (state . stack) (1 : xs)
@@ -1269,9 +1267,9 @@ executePrecompile fees preCompileAddr gasCap inOffset inSize outOffset outSize x
                 truncpad (num lenm) (asBE (0 :: Int))
               False ->
                 let
-                  b = asInteger $ lazySlice 96 lenb $ input
-                  e = asInteger $ lazySlice (96 + lenb) lene $ input
-                  m = asInteger $ lazySlice (96 + lenb + lene) lenm $ input
+                  b = asInteger $ lazySlice 96 lenb input
+                  e = asInteger $ lazySlice (96 + lenb) lene input
+                  m = asInteger $ lazySlice (96 + lenb + lene) lenm input
                 in
                   padLeft (num lenm) (asBE (expFast b e m))
           in do
@@ -1344,15 +1342,15 @@ parseModexpLength input =
 
 isZero :: Word -> Word -> ByteString -> Bool
 isZero offset size bs =
-  LS.all (\x -> x == 0) $
+  LS.all (== 0) $
     LS.take (num size) $
-      LS.drop (num (offset)) $
+      LS.drop (num offset) $
         fromStrict bs
 
 asInteger :: LS.ByteString -> Integer
 asInteger xs = if xs == mempty then 0
   else 256 * asInteger (LS.init xs)
-      + (num $ LS.last xs)
+      + num (LS.last xs)
 
 -- * Opcode helper actions
 
@@ -1366,7 +1364,7 @@ pushToSequence :: MonadState s m => ASetter s s (Seq a) (Seq a) -> a -> m ()
 pushToSequence f x = f %= (Seq.|> x)
 
 fetchAccount :: Addr -> (Contract -> EVM ()) -> EVM ()
-fetchAccount addr continue = do
+fetchAccount addr continue =
   use (env . contracts . at addr) >>= \case
     Just c -> continue c
     Nothing ->
@@ -1405,9 +1403,7 @@ accessStorage addr slot continue =
             use (cache . fetched . at addr) >>= \case
               Nothing -> mkQuery
               Just cachedContract ->
-                case view (storage . at slot) cachedContract of
-                  Nothing -> mkQuery
-                  Just x -> continue x
+                maybe mkQuery continue (view (storage . at slot) cachedContract)
           else do
             assign (env . contracts . ix addr . storage . at slot) (Just 0)
             continue 0
@@ -1440,7 +1436,7 @@ accountEmpty c =
 finalize :: EVM ()
 finalize = do
   let
-    burnRemainingGas = use (state . gas) >>= (flip burn (noop))
+    burnRemainingGas = use (state . gas) >>= flip burn noop
     revertContracts  = use (tx . txReversion) >>= assign (env . contracts)
     revertSubstate   = assign (tx . substate) (SubState mempty mempty mempty)
 
@@ -1507,7 +1503,7 @@ finalize = do
   -- remove any destructed addresses
   destroyedAddresses <- use (tx . substate . selfdestructs)
   modifying (env . contracts)
-    (Map.filterWithKey (\k _ -> not (elem k destroyedAddresses)))
+    (Map.filterWithKey (\k _ -> (notElem k destroyedAddresses)))
   -- then, clear any remaining empty and touched addresses
   touchedAddresses <- use (tx . substate . touchedAccounts)
   modifying (env . contracts)
@@ -1568,12 +1564,10 @@ unRefund n = do
     (filter (\(a,b) -> not (a == self && b == n)) refs)
 
 touchAccount :: Addr -> EVM()
-touchAccount a =
-  pushTo ((tx . substate) . touchedAccounts) a
+touchAccount = pushTo ((tx . substate) . touchedAccounts)
 
 selfdestruct :: Addr -> EVM()
-selfdestruct a =
-  pushTo ((tx . substate) . selfdestructs) a
+selfdestruct = pushTo ((tx . substate) . selfdestructs)
 
 -- * Cheat codes
 
@@ -1598,11 +1592,11 @@ cheat (inOffset, inSize) (outOffset, outSize) = do
   case Map.lookup abi cheatActions of
     Nothing ->
       vmError (BadCheatCode abi)
-    Just (argTypes, action) -> do
+    Just (argTypes, action) ->
       case runGetOrFail
              (getAbiSeq (length argTypes) argTypes)
              (fromStrict input) of
-        Right ("", _, args) -> do
+        Right ("", _, args) ->
           action (toList args) >>= \case
             Nothing -> do
               next
@@ -1649,7 +1643,7 @@ delegateCall this xGas xTo xValue xInOffset xInSize xOutOffset xOutSize xs conti
   then do
     assign (state . stack) (0 : xs)
     assign (state . returndata) mempty
-    pushTrace $ ErrorTrace $ CallDepthLimitReached
+    pushTrace $ ErrorTrace CallDepthLimitReached
     next
   else case view execMode vm0 of
     ExecuteAsVMTest -> do
@@ -1724,7 +1718,7 @@ create self this xGas xValue xs newAddr initCode = do
   then do
     assign (state . stack) (0 : xs)
     assign (state . returndata) mempty
-    pushTrace $ ErrorTrace $ CallDepthLimitReached
+    pushTrace $ ErrorTrace CallDepthLimitReached
     next
   else if collision $ view (env . contracts . at newAddr) vm0
   then burn xGas $ do
@@ -1781,8 +1775,8 @@ create self this xGas xValue xs newAddr initCode = do
 -- | Replace a contract's code, like when CREATE returns
 -- from the constructor code.
 replaceCode :: Addr -> ContractCode -> EVM ()
-replaceCode target newCode = do
-  zoom (env . contracts . at target) $ do
+replaceCode target newCode =
+  zoom (env . contracts . at target) $
     get >>= \case
       Just now -> case (view contractcode now) of
         InitCode _ ->
@@ -1843,7 +1837,7 @@ finishFrame how = do
       use execMode >>= \case
         ExecuteNormally ->
           noop
-        _ -> do
+        _ ->
           finalize
 
     -- Are there some remaining frames?
@@ -1957,7 +1951,7 @@ accessUnboundedMemoryRange _ _ 0 continue = continue
 accessUnboundedMemoryRange fees f l continue = do
   m0 <- num <$> use (state . memorySize)
   do
-    let m1 = 32 * ceilDiv (max m0 (num(f) + num(l))) 32
+    let m1 = 32 * ceilDiv (max m0 (num f + num l)) 32
     burn (memoryCost fees m1 - memoryCost fees m0) $ do
       assign (state . memorySize) (num m1)
       continue
@@ -1969,15 +1963,14 @@ accessMemoryRange
   -> EVM ()
   -> EVM ()
 accessMemoryRange _ _ 0 continue = continue
-accessMemoryRange fees f l continue = do
+accessMemoryRange fees f l continue =
   if f + l < l
     then vmError IllegalOverflow
-    else do
-      accessUnboundedMemoryRange fees f l continue
+    else accessUnboundedMemoryRange fees f l continue
 
 accessMemoryWord
   :: FeeSchedule Word -> Word -> EVM () -> EVM ()
-accessMemoryWord fees x continue = accessMemoryRange fees x 32 continue
+accessMemoryWord fees x = accessMemoryRange fees x 32
 
 copyBytesToMemory
   :: ByteString -> Word -> Word -> Word -> EVM ()
@@ -2005,7 +1998,7 @@ word256At
   => Word -> (Word -> f Word)
   -> ByteString -> f ByteString
 word256At i = lens getter setter where
-  getter m = readMemoryWord i m
+  getter = readMemoryWord i
   setter m x = setMemoryWord i x m
 
 -- * Tracing
@@ -2049,8 +2042,7 @@ zipperRootForest z =
     Just z' -> zipperRootForest (Zipper.nextSpace z')
 
 traceForest :: VM -> Forest Trace
-traceForest vm =
-  view (traces . to zipperRootForest) vm
+traceForest = view (traces . to zipperRootForest)
 
 traceLog :: (MonadState VM m) => Log -> m ()
 traceLog log = do
@@ -2269,7 +2261,7 @@ readOp x _ = case x of
   0xfd -> OpRevert
   0xfa -> OpStaticcall
   0xff -> OpSelfdestruct
-  _    -> (OpUnknown x)
+  _    -> OpUnknown x
 
 mkCodeOps :: ByteString -> RegularVector.Vector (Int, Op)
 mkCodeOps bytes = RegularVector.fromList . toList $ go 0 bytes
@@ -2333,20 +2325,19 @@ costOfPrecompile (FeeSchedule {..}) precompileAddr input =
     -- MODEXP
     0x5 -> num $ (f (num (max lenm lenb)) * num (max lene' 1)) `div` (num g_quaddivisor)
       where (lenb, lene, lenm) = parseModexpLength input
-            lene' = if lene <= 32 && ez then 0
-                    else if lene <= 32 then num (log2 e')
-                    else if e' == 0 then 8 * (lene - 32)
-                    else num (log2 e') + 8 * (lene - 32)
+            lene' | lene <= 32 && ez = 0
+                  | lene <= 32 = num (log2 e')
+                  | e' == 0 = 8 * (lene - 32)
+                  | otherwise = num (log2 e') + 8 * (lene - 32)
 
             ez = isZero (96 + lenb) lene input
             e' = w256 $ word $ LS.toStrict $
                    lazySlice (96 + lenb) (min 32 lene) input
 
             f :: Integer -> Integer
-            f x = if x <= 64 then x * x
-                  else if x <= 1024
-                  then (x * x) `div` 4 + 96 * x - 3072
-                  else (x * x) `div` 16 + 480 * x - 199680
+            f x | x <= 64 = x * x
+                | x <= 1024 = (x * x) `div` 4 + 96 * x - 3072
+                | otherwise = (x * x) `div` 16 + 480 * x - 199680
     -- ECADD
     0x6 -> g_ecadd
     -- ECMUL
