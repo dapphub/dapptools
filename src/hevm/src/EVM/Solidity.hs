@@ -361,10 +361,9 @@ solidity' src = withSystemTempFile "hevm.sol" $ \path handle -> do
 -- as the codehash matches otherwise, we don't care if there is some
 -- difference there.
 stripBytecodeMetadata :: ByteString -> ByteString
-stripBytecodeMetadata bc
-  | BS.length cl /= 2 = bc
-  | BS.length h >= cl' && (isRight . deserialiseFromBytes decodeTerm $ fromStrict cbor) = bc'
-  | otherwise = bc
+stripBytecodeMetadata bc | BS.length cl /= 2 = bc
+                         | BS.length h >= cl' && (isRight . deserialiseFromBytes decodeTerm $ fromStrict cbor) = bc'
+                         | otherwise = bc
   where
       l = BS.length bc
       (h, cl) = BS.splitAt (l - 2) bc

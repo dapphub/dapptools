@@ -502,7 +502,7 @@ runUnitTestContract
                                               decodeAbiValue (AbiTupleType (Vector.fromList types)) callData
                                          else fuzzRun (testName, types)
 
-          let inform(x, y) = Text.putStrLn x >> pure y
+          let inform (x, y) = Text.putStrLn x >> pure y
 
           -- Run all the test cases and print their status updates
           details <-

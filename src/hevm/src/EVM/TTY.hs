@@ -293,7 +293,7 @@ runFromVM oracle' vm = do
 concreteTests :: UnitTestOptions -> (Text, [(Text, [AbiType])]) -> [(Text, Text)]
 concreteTests UnitTestOptions{..} (contractname, tests) = case replay of
   Nothing -> [(contractname, fst x) | x <- tests,
-                                      null (snd x)]
+                                      null $ snd x]
   Just (sig, _) -> [(contractname, fst x) | x <- tests,
                                             null (snd x) || fst x == sig]
 

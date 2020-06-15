@@ -459,9 +459,9 @@ instance Arbitrary AbiType where
         <$> (getPositive <$> arbitrary)
         <*> scale (`div` 2) arbitrary
     ] <>
-    ([AbiTupleType
+    [AbiTupleType
         <$> scale (`div` 2) (Vector.fromList <$> arbitrary)
-        | n /= 0])
+        | n /= 0]
 
 instance Arbitrary AbiValue where
   arbitrary = arbitrary >>= genAbiValue

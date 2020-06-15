@@ -833,11 +833,10 @@ exec1 = do
                              (initialContract (EVM.RuntimeCode mempty))
                              . storage . at x . non 0)
 
-                    let cost
-                          | (current == new) = g_sload
-                          | (current == original) && (original == 0) = g_sset
-                          | (current == original) = g_sreset
-                          | otherwise = g_sload
+                    let cost | (current == new) = g_sload
+                             | (current == original) && (original == 0) = g_sset
+                             | (current == original) = g_sreset
+                             | otherwise = g_sload
 
                     burn cost $ do
                       next
@@ -1404,7 +1403,7 @@ accessStorage addr slot continue =
             use (cache . fetched . at addr) >>= \case
               Nothing -> mkQuery
               Just cachedContract ->
-                (maybe mkQuery continue (view (storage . at slot) cachedContract))
+                maybe mkQuery continue (view (storage . at slot) cachedContract)
           else do
             assign (env . contracts . ix addr . storage . at slot) (Just 0)
             continue 0
@@ -1967,8 +1966,7 @@ accessMemoryRange _ _ 0 continue = continue
 accessMemoryRange fees f l continue =
   if f + l < l
     then vmError IllegalOverflow
-    else
-      accessUnboundedMemoryRange fees f l continue
+    else accessUnboundedMemoryRange fees f l continue
 
 accessMemoryWord
   :: FeeSchedule Word -> Word -> EVM () -> EVM ()
@@ -2327,21 +2325,19 @@ costOfPrecompile (FeeSchedule {..}) precompileAddr input =
     -- MODEXP
     0x5 -> num $ (f (num (max lenm lenb)) * num (max lene' 1)) `div` (num g_quaddivisor)
       where (lenb, lene, lenm) = parseModexpLength input
-            lene'
-              | lene <= 32 && ez = 0
-              | lene <= 32 = num (log2 e')
-              | e' == 0 = 8 * (lene - 32)
-              | otherwise = num (log2 e') + 8 * (lene - 32)
+            lene' | lene <= 32 && ez = 0
+                  | lene <= 32 = num (log2 e')
+                  | e' == 0 = 8 * (lene - 32)
+                  | otherwise = num (log2 e') + 8 * (lene - 32)
 
             ez = isZero (96 + lenb) lene input
             e' = w256 $ word $ LS.toStrict $
                    lazySlice (96 + lenb) (min 32 lene) input
 
             f :: Integer -> Integer
-            f x
-              | x <= 64 = x * x
-              | x <= 1024 = (x * x) `div` 4 + 96 * x - 3072
-              | otherwise = (x * x) `div` 16 + 480 * x - 199680
+            f x | x <= 64 = x * x
+                | x <= 1024 = (x * x) `div` 4 + 96 * x - 3072
+                | otherwise = (x * x) `div` 16 + 480 * x - 199680
     -- ECADD
     0x6 -> g_ecadd
     -- ECMUL
