@@ -196,6 +196,7 @@ data FrameState = FrameState
   , _code         :: ByteString
   , _pc           :: Int
   , _stack        :: [Word]
+  , _return_stack :: [Word]
   , _memory       :: ByteString
   , _memorySize   :: Int
   , _calldata     :: ByteString
@@ -277,6 +278,7 @@ blankState = FrameState
   , _code         = mempty
   , _pc           = 0
   , _stack        = mempty
+  , _return_stack = mempty
   , _memory       = mempty
   , _memorySize   = 0
   , _calldata     = mempty
@@ -351,6 +353,7 @@ makeVm o = VM
   , _state = FrameState
     { _pc = 0
     , _stack = mempty
+    , _return_stack = mempty
     , _memory = mempty
     , _memorySize = 0
     , _code = theCode
