@@ -4,6 +4,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.15.0] - 2020-06-15
+
+### Fixed
+
+- a golang error occurring for `MacOS Catalina` users: [#384](https://github.com/dapphub/dapptools/pull/384)
+
+[0.15.0]: https://github.com/dapphub/dapptools/tree/ethsign/0.15.0
+
 ## [0.14.0] - 2020-05-29
 
 ### Changed
