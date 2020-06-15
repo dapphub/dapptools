@@ -911,11 +911,24 @@ exec1 = do
         -- op: BEGINSUB
         0x5c -> vmError InvalidSubroutineEntry
 
-        -- op: JUMPSUB
-        0x5d -> burn g_high next
-
         -- op: RETURNSUB
-        0x5e -> burn g_low next
+        0x5d -> burn g_low next
+
+        -- op: JUMPSUB
+        0x5e ->
+          case stk of
+            (x:xs) ->
+              burn g_high $ do
+                theCode <- use (state . code)
+                theReturnStack <- use (state . return_stack)
+                if BS.index theCode (num x) == 0x5c
+                  then if length theReturnStack < 1023 then do
+                    state . stack .= xs
+                    state . return_stack %= (x :)
+                    state . pc .= num (x + 1)
+                  else vmError StackLimitExceeded
+                else vmError BadJumpDestination
+            _ -> underrun
 
         -- op: EXP
         0x0a ->
