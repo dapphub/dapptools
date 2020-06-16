@@ -225,4 +225,5 @@ test-suite test
     tasty-hunit >= 0.10,
     tasty-quickcheck >= 0.9,
     text >= 1.2,
-    vector >= 0.12
+    vector >= 0.12,
+    sbv >= 8.4
