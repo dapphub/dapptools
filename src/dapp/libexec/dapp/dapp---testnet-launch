@@ -55,7 +55,7 @@ else
   for i in $(seq 0 "$ACCOUNTS"); do
     address+=( "$(
       geth 2>/dev/null account new --datadir "$chaindir" --password=<(exit) 2>/dev/null \
-        | grep Address | sed 's/Address: {\(.*\)}/\1/')" )
+        | grep -o -E "0x[A-Fa-f0-9]*" )" )
     balance+=(-n {} -s "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff" -i balance \
       -i "${address[i]}")
   done
@@ -71,11 +71,12 @@ else
       -n 0 -i byzantiumBlock \
       -n 0 -i constantinopleBlock \
       -n 0 -i petersburgBlock \
+      -n 0 -i istanbulBlock \
       -n {} -n "$PERIOD" -i period -n 3000 -i epoch -i clique \
       -i config \
     -s 0x1 -i difficulty \
     -s 0xffffffffffffffff -i gaslimit \
-    -s "0x3132333400000000000000000000000000000000000000000000000000000000""${address[0]}""0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000" -i extraData \
+    -s "0x3132333400000000000000000000000000000000000000000000000000000000""${address[0]#0x}""0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000" -i extraData \
     -n {} \
       "${balance[@]}" \
     -i alloc
@@ -100,7 +101,7 @@ set +m
 geth \
   2> >(tee "$chaindir/geth.log" | grep --line-buffered Success | sed 's/^/geth: /' >&2) \
   --datadir "$chaindir" --networkid "$CHAINID" --port="$port" \
-  --mine --minerthreads=1 \
+  --mine --minerthreads=1 --allow-insecure-unlock \
   --rpc --rpcapi "web3,eth,net,debug,personal" --rpccorsdomain '*' --nodiscover \
   --rpcport="$RPC_PORT" --unlock="$(IFS=,; echo "${address[*]}")" --password=<(exit) &
 
