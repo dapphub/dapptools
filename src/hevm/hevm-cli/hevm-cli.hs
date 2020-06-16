@@ -46,7 +46,6 @@ import qualified EVM.Facts.Git as Git
 import qualified EVM.UnitTest
 
 import Control.Concurrent.Async   (async, waitCatch)
-import Control.Exception          (evaluate)
 import qualified Control.Monad.Operational as Operational
 import qualified Control.Monad.State.Class as State
 import Control.Lens
@@ -682,8 +681,8 @@ runVMTest diffmode execmode mode timelimit (name, x) = do
     action <- async $
       case mode of
         Run ->
-          Timeout.timeout (1e6 * (fromMaybe 10 timelimit)) . evaluate $ do
-            execState (VMTest.interpret . void $ EVM.Stepper.execFully) vm0
+          Timeout.timeout (1e6 * (fromMaybe 10 timelimit)) $
+            execStateT (EVM.Stepper.interpret EVM.Fetch.zero . void $ EVM.Stepper.execFully) vm0
         Debug ->
           Just <$> EVM.TTY.runFromVM Nothing EVM.Fetch.zero vm0
     waitCatch action

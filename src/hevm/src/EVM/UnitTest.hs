@@ -14,7 +14,7 @@ import EVM.Types
 
 import qualified EVM.FeeSchedule as FeeSchedule
 
-import EVM.Stepper (Stepper)
+import EVM.Stepper (Stepper, interpret)
 import qualified EVM.Stepper as Stepper
 import qualified Control.Monad.Operational as Operational
 
@@ -188,41 +188,12 @@ checkFailures UnitTestOptions { .. } method args bailed = do
 fuzzTest :: UnitTestOptions -> Text -> [AbiType] -> VM -> Property
 fuzzTest opts sig types vm = forAllShow (genAbiValue (AbiTupleType $ Vector.fromList types)) (show . ByteStringS . encodeAbiValue)
   $ \args -> ioProperty $
-    (runStateT (interpret opts (runUnitTest opts sig args)) vm) >>= \case
+    (runStateT (interpret (oracle opts) (runUnitTest opts sig args)) vm) >>= \case
       (Left _, _) -> return False
       (Right b, _) -> return b
 
 tick :: Text -> IO ()
 tick x = Text.putStr x >> hFlush stdout
-
-interpret
-  :: UnitTestOptions
-  -> Stepper a
-  -> StateT VM IO (Either Stepper.Failure a)
-interpret opts =
-  eval . Operational.view
-
-  where
-    eval
-      :: Operational.ProgramView Stepper.Action a
-      -> StateT VM IO (Either Stepper.Failure a)
-
-    eval (Operational.Return x) =
-      pure (Right x)
-
-    eval (action Operational.:>>= k) =
-      case action of
-        Stepper.Exec ->
-          exec >>= interpret opts . k
-        Stepper.Wait q ->
-          do m <- liftIO (oracle opts q)
-             State.state (runState m) >> interpret opts (k ())
-        Stepper.Note _ ->
-          interpret opts (k ())
-        Stepper.Fail e ->
-          pure (Left e)
-        Stepper.EVM m ->
-          State.state (runState m) >>= interpret opts . k
 
 -- | This is like an unresolved source mapping.
 data OpLocation = OpLocation
@@ -415,7 +386,7 @@ runUnitTestContract
       let vm0 = initialUnitTestVm opts theContract (Map.elems contractMap)
       vm1 <-
         execStateT
-          (interpret opts
+          (interpret oracle
             (Stepper.enter name >> initializeUnitTest opts))
           vm0
 
@@ -437,12 +408,12 @@ runUnitTestContract
               let argInfo = pack (if args == emptyAbi then "" else " with arguments: " <> show args)
               x <-
                 runStateT
-                  (interpret opts (execTest opts testName args))
+                  (interpret oracle (execTest opts testName args))
                   vm1
               case x of
                 (Right b, vm2) -> do
                   y <- runStateT
-                    (interpret opts (checkFailures opts testName args b))
+                    (interpret oracle (checkFailures opts testName args b))
                     vm2
                   case y of
                     (Right True,  vm) ->
@@ -486,7 +457,7 @@ runUnitTestContract
                         ppOutput = pack $ show abiValue
                     in do
                     -- Run the failing test again to get a proper trace
-                    vm2 <- execStateT (interpret opts (runUnitTest opts testName abiValue)) vm1
+                    vm2 <- execStateT (interpret oracle (runUnitTest opts testName abiValue)) vm1
                     pure ("\x1b[31m[FAIL]\x1b[0m "
                              <> testName <> ". Counterexample: " <> ppOutput
                              <> "\nRun:\n dapp test --replay '(\"" <> testName <> "\",\""

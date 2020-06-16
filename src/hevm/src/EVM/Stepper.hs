@@ -16,6 +16,7 @@ module EVM.Stepper
   , note
   , entering
   , enter
+  , interpret
   )
 where
 
@@ -29,8 +30,10 @@ where
 
 import Prelude hiding (fail)
 
-import Control.Monad.Operational (Program, singleton)
-import Control.Lens (view)
+import Control.Monad.Operational (Program, singleton, view, ProgramViewT(..), ProgramView)
+import Control.Monad.State.Strict (runState, join, liftIO, StateT)
+import qualified Control.Monad.State.Class as State
+import qualified EVM.Exec
 import Data.Binary.Get (runGetOrFail)
 import Data.Text (Text)
 import Data.SBV hiding (options)
@@ -39,6 +42,7 @@ import EVM (EVM, VM, VMResult (VMFailure, VMSuccess), Error (Query, Choose), Que
 import qualified EVM
 
 import EVM.ABI (AbiType, AbiValue, getAbi)
+import qualified EVM.Fetch as Fetch
 
 import Data.ByteString (ByteString)
 import qualified Data.ByteString.Lazy as LazyByteString
@@ -117,7 +121,7 @@ execFully =
 runFully :: Stepper EVM.VM
 runFully = do
   vm <- run
-  case view EVM.result vm of
+  case EVM._result vm of
     Nothing -> error "should not occur"
     Just (VMFailure (Query q)) ->
       wait q >> runFully
@@ -149,3 +153,29 @@ entering t stepper = do
 
 enter :: Text -> Stepper ()
 enter t = evm (EVM.pushTrace (EVM.EntryTrace t))
+
+interpret :: Fetch.Fetcher -> Stepper a -> StateT VM IO (Either Failure a)
+interpret fetcher =
+  eval . view
+
+  where
+    eval
+      :: ProgramView Action a
+      -> StateT VM IO (Either Failure a)
+
+    eval (Return x) =
+      pure (Right x)
+
+    eval (action :>>= k) =
+      case action of
+        Exec ->
+          EVM.Exec.exec >>= interpret fetcher . k
+        Wait q ->
+          do m <- liftIO (fetcher q)
+             State.state (runState m) >> interpret fetcher (k ())
+        Note _ ->
+          interpret fetcher (k ())
+        Fail e ->
+          pure (Left e)
+        EVM m ->
+          State.state (runState m) >>= interpret fetcher . k

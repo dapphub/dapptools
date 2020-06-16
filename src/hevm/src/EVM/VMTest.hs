@@ -9,7 +9,6 @@ module EVM.VMTest
 #endif
   , vmForCase
   , checkExpectation
-  , interpret
   ) where
 
 import qualified EVM
@@ -565,29 +564,3 @@ vmForCase mode x =
     & EVM.tx . EVM.txReversion .~ realizeContracts checkState
     & EVM.tx . EVM.substate . EVM.touchedAccounts .~ touchedAccounts
     & EVM.execMode .~ mode
-
-interpret :: Stepper a -> EVM a
-interpret =
-  eval . Operational.view
-
-  where
-    eval
-      :: Operational.ProgramView Stepper.Action a
-      -> EVM a
-
-    eval (Operational.Return x) =
-      pure x
-
-    eval (action Operational.:>>= k) =
-      case action of
-        Stepper.Exec ->
-          EVM.Exec.exec >>= interpret . k
-        Stepper.Wait q ->
-          do join (Fetch.zero q)
-             interpret (k ())
-        Stepper.Note _ ->
-          interpret (k ())
-        Stepper.Fail _ ->
-          error "VMTest stepper not supposed to fail"
-        Stepper.EVM m ->
-          State.state (runState m) >>= interpret . k
