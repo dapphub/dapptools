@@ -70,7 +70,7 @@ abstractVM signature' x = do
                     return (cd, len, len .<= 1024)
       Just sign -> do (input,len) <- symAbiArg $ fromJust (parseFunArgs sign)
                       return (litBytes (sig sign) <> input, len + 4, sTrue)
-  symstore <- freshArray "Storage" Nothing
+  symstore <- freshArray_ Nothing
   c <- SAddr <$> freshVar_
   return $ loadSymVM x symstore c (cd', cdlen) & over pathConditions ((<>) [cdconstraint])
 

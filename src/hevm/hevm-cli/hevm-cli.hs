@@ -19,8 +19,6 @@ import qualified EVM.Stepper
 import qualified EVM.TTY
 import qualified EVM.Emacs
 
-import Text.ParserCombinators.ReadP
-
 #if MIN_VERSION_aeson(1, 0, 0)
 import qualified EVM.VMTest as VMTest
 #endif
@@ -102,9 +100,13 @@ data Command w
       , solver        :: w ::: Maybe Text       <?> "Smt solver to use z3 (default) or cvc4"
       }
   | Equivalence -- prove equivalence between two programs
-      { codeA   :: w ::: ByteString <?> "Bytecode of the first program"
-      , codeB   :: w ::: ByteString <?> "Bytecode of the second program"
-      , funcSig :: w ::: Maybe Text <?> "Function signature"
+      { codeA         :: w ::: ByteString <?> "Bytecode of the first program"
+      , codeB         :: w ::: ByteString <?> "Bytecode of the second program"
+      , funcSig       :: w ::: Maybe Text <?> "Function signature"
+      , smttimeout    :: w ::: Maybe Integer    <?> "Timeout given to smt solver in seconds"
+      , maxIterations :: w ::: Maybe Integer    <?> "Number of times we may revisit a particular branching point"
+      , solver        :: w ::: Maybe Text       <?> "Smt solver to use z3 (default) or cvc4"
+
       }
   | Exec -- Execute a given program with specified env & calldata
       { code        :: w ::: Maybe ByteString <?> "Program bytecode"
@@ -359,10 +361,17 @@ equivalenceCheck cmd =
   do let bytecodeA = hexByteString "--code" . strip0x $ codeA cmd
          bytecodeB = hexByteString "--code" . strip0x $ codeB cmd
          types = parseFunArgs =<< funcSig cmd
-     void . runSMT . query $ do
-           (preStateA, preStateB) <- both (abstractVM (funcSig cmd)) (bytecodeA, bytecodeB)
+     void . runSMTWithTimeOut (solver cmd) (smttimeout cmd) . query $ do
+           preStateA <- abstractVM (funcSig cmd) bytecodeA
+           
+           let preself = preStateA ^. EVM.state . EVM.contract
+               precaller = preStateA ^. EVM.state . EVM.caller
+               EVM.Symbolic prestorage = preStateA ^?! EVM.env . EVM.contracts . ix preself . EVM.storage
+               (calldata', cdlen) = view (EVM.state . EVM.calldata) preStateA
+               preStateB = loadSymVM bytecodeB prestorage precaller (calldata', cdlen)
+
            smtState <- queryState
-           (aRes, bRes) <- both (\x -> io $ fst <$> runStateT (interpret (EVM.Fetch.oracle smtState Nothing) Nothing EVM.Stepper.runFully) x)
+           (aRes, bRes) <- both (\x -> io $ fst <$> runStateT (interpret (EVM.Fetch.oracle smtState Nothing) (maxIterations cmd) EVM.Stepper.runFully) x)
                              (preStateA, preStateB)
            resetAssertions
            case (aRes, bRes) of
@@ -372,7 +381,7 @@ equivalenceCheck cmd =
              (Right aVMs, Right bVMs) -> do
                let differingEndStates = flip fmap [(a,b) | a <- aVMs, b <- bVMs] $
                -- for each pair of endstates, if there exists an input such both
-               -- path conditions are satisfiably, then the results must be equal
+               -- path conditions are satisfiable, then the ending states must be equal
                      (\ab -> let (aPath, bPath) = both' (view EVM.pathConditions) ab
                                  (aSelf, bSelf) = both' (view (EVM.state . EVM.contract)) ab
                                  (aEnv, bEnv) = both' (view (EVM.env . EVM.contracts)) ab
@@ -391,8 +400,7 @@ equivalenceCheck cmd =
 
                checkSat >>= \case
                   Unk -> error "solver said unknown!"
-                  Sat -> do let (calldata', cdlen) = view (EVM.state . EVM.calldata) preStateA
-                            cdlen <- num <$> getValue cdlen
+                  Sat -> do cdlen <- num <$> getValue cdlen
                             model <- mapM (getValue.fromSized) (take cdlen calldata')
                             io $ do putStrLn $ "Not equal!"
                                     putStrLn $ "Counterexample:"
