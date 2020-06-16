@@ -407,7 +407,8 @@ equivalenceCheck cmd =
                                       Just typ -> print $ decodeAbiValue typ $ Lazy.fromStrict (ByteString.pack (drop 4 model))
                                       Nothing -> print $ ByteStringS (ByteString.pack model)
                                     exitFailure
-                  Unsat -> return ()
+                  Unsat -> io $ do putStrLn $ "Explored: " <> show (length aVMs) <> " execution paths of A and: " <> show (length bVMs) <> " paths of B."
+                                   putStrLn $ "No discrepancies found."
 
 
 -- prelude plz
@@ -446,7 +447,7 @@ assert cmd =
                           Right a -> io $ do print "Assertion violation:"
                                              die . show $ ByteStringS a
                           Left (pre, posts) ->
-                            do io $ putStrLn $ "Explored: " <> show (length posts) <> " branches successfully"
+                            do io $ putStrLn $ "Explored: " <> show (length posts) <> " branches without assertion violations"
                                -- When `--get-model` is passed, we print example calldata for each path
                                when (getModels cmd) $
                                  let (calldata', cdlen) = view (EVM.state . EVM.calldata) pre
@@ -466,8 +467,7 @@ assert cmd =
                                        case view EVM.result postVM of
                                          Nothing -> error "internal error; no EVM result"
                                          Just (EVM.VMFailure (EVM.Revert "")) -> io . putStrLn $ "Reverted"
-                                         Just (EVM.VMFailure (EVM.Revert msg)) -> let inputbytes = (decodeAbiValue AbiStringType $ Lazy.fromStrict (ByteString.drop 4 msg))
-                                                                                  in io . putStrLn $ "Reverted: " <> show inputbytes
+                                         Just (EVM.VMFailure (EVM.Revert msg)) -> io . putStrLn $ "Reverted" <> show (ByteStringS msg)
                                          Just (EVM.VMFailure err) -> io . putStrLn $ "Failed: " <> show err
                                          Just (EVM.VMSuccess []) -> io $ putStrLn "Stopped"
                                          Just (EVM.VMSuccess msg) -> do output <- mapM (getValue.fromSized) msg
