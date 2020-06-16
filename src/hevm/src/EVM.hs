@@ -945,9 +945,8 @@ exec1 = do
                          Just (current':new':[]) ->
                             unless (current' == new') $
                               if current' == original
-                              then if original /= 0 && new' == 0
-                                   then refund r_sclear
-                                   else noop
+                              then when (original /= 0 && new' == 0) $
+                                      refund r_sclear
                               else do
                                       when (original /= 0) $
                                         if new' == 0
@@ -1199,24 +1198,23 @@ exec1 = do
             [] -> underrun
             (xTo':_) -> forceConcrete xTo' $ \(num -> xTo) ->
               let
+                funds = view balance this
                 recipientExists = accountExists xTo vm
-                c_new = if not recipientExists && view balance this /= 0
+                c_new = if not recipientExists && funds /= 0
                         then num g_selfdestruct_newaccount
                         else 0
               in burn (g_selfdestruct + c_new) $ do
-                destructs <- use (tx . substate . selfdestructs)
-                if elem self destructs then noop else do refund r_selfdestruct
-                selfdestruct self
-                touchAccount xTo
+                   destructs <- use (tx . substate . selfdestructs)
+                   unless (elem self destructs) $ refund r_selfdestruct
+                   selfdestruct self
+                   touchAccount xTo
 
-                let funds = (vm ^?! env . contracts . ix self . balance)
-
-                when (funds > 0 && self /= xTo) $
-                  fetchAccount xTo $ \_ -> do
-                    assign (env . contracts . ix self . balance) 0
-                    modifying (env . contracts . ix xTo . balance)
-                      (+ (vm ^?! env . contracts . ix self . balance))
-                doStop
+                   if funds /= 0
+                   then fetchAccount xTo $ \_ -> do
+                          env . contracts . ix xTo . balance += funds
+                          assign (env . contracts . ix self . balance) 0
+                          doStop
+                   else doStop
 
         -- op: REVERT
         0xfd ->
