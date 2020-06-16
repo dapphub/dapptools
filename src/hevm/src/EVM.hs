@@ -924,14 +924,17 @@ exec1 = do
             (x:xs) ->
               burn g_high $ do
                 theCode <- use (state . code)
+                theCodeOps <- use (env . contracts . ix self . codeOps)
                 theReturnStack <- use (state . return_stack)
                 thePc <- use (state . pc)
-                if x < num (BS.length theCode) && BS.index theCode (num x) == 0x5c
-                  then if length theReturnStack < 1023 then do
-                    state . stack .= xs
-                    state . return_stack %= (thePc + 1 :)
-                    state . pc .= num (x + 1)
-                  else vmError StackLimitExceeded
+                if x < num (BS.length theCode) then
+                  case findOpAt x OpBeginsub theCodeOps of
+                    Nothing ->  vmError BadJumpDestination
+                    _ -> if length theReturnStack < 1023 then do
+                           state . stack .= xs
+                           state . return_stack %= (thePc + 1 :)
+                           state . pc .= num (x + 1)
+                         else vmError StackLimitExceeded
                 else vmError BadJumpDestination
             _ -> underrun
 
@@ -2136,14 +2139,16 @@ checkJump x xs = do
   theCode <- use (state . code)
   self <- use (state . codeContract)
   theCodeOps <- use (env . contracts . ix self . codeOps)
-  if x < num (BS.length theCode) && BS.index theCode (num x) == 0x5b
-    then
-      case RegularVector.find (\(i, op) -> i == num x && op == OpJumpdest) theCodeOps of
-        Nothing ->  vmError BadJumpDestination
-        _ -> do
-             state . stack .= xs
-             state . pc .= num x
-    else vmError BadJumpDestination
+  if x < num (BS.length theCode) then
+    case findOpAt x OpJumpdest theCodeOps of
+      Nothing ->  vmError BadJumpDestination
+      _ -> do
+           state . stack .= xs
+           state . pc .= num x
+  else vmError BadJumpDestination
+
+findOpAt :: (Integral n) => n -> Op -> RegularVector.Vector (Int, Op) -> Maybe (Int, Op)
+findOpAt x op ops = RegularVector.find (\(i, o) -> i == num x && o == op) ops
 
 opSize :: Word8 -> Int
 opSize x | x >= 0x60 && x <= 0x7f = num x - 0x60 + 2
