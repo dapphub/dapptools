@@ -28,7 +28,7 @@ import EVM.Fetch (Fetcher)
 import EVM.Op
 import EVM.Solidity
 import EVM.Stepper (Stepper)
-import EVM.TTY (currentSrcMap, showPc)
+import EVM.TTY (currentSrcMap)
 import EVM.Types
 import EVM.UnitTest hiding (interpret)
 import Prelude hiding (Word)
@@ -562,83 +562,3 @@ initialStateForTest opts@(UnitTestOptions {..}) dapp (contractPath, testName) =
       initialUnitTestVm opts testContract (Map.elems (view dappSolcByName dapp))
     ui1 =
       updateUiVmState ui0 vm0 & set uiVmFirstState ui1
-
-opString :: (Integral a, Show a) => (a, Op) -> String
-opString (i, o) = (showPc i <> " ") ++ case o of
-  OpStop -> "STOP"
-  OpAdd -> "ADD"
-  OpMul -> "MUL"
-  OpSub -> "SUB"
-  OpDiv -> "DIV"
-  OpSdiv -> "SDIV"
-  OpMod -> "MOD"
-  OpSmod -> "SMOD"
-  OpAddmod -> "ADDMOD"
-  OpMulmod -> "MULMOD"
-  OpExp -> "EXP"
-  OpSignextend -> "SIGNEXTEND"
-  OpLt -> "LT"
-  OpGt -> "GT"
-  OpSlt -> "SLT"
-  OpSgt -> "SGT"
-  OpEq -> "EQ"
-  OpIszero -> "ISZERO"
-  OpAnd -> "AND"
-  OpOr -> "OR"
-  OpXor -> "XOR"
-  OpNot -> "NOT"
-  OpByte -> "BYTE"
-  OpShl -> "SHL"
-  OpShr -> "SHR"
-  OpSar -> "SAR"
-  OpSha3 -> "SHA3"
-  OpAddress -> "ADDRESS"
-  OpBalance -> "BALANCE"
-  OpOrigin -> "ORIGIN"
-  OpCaller -> "CALLER"
-  OpCallvalue -> "CALLVALUE"
-  OpCalldataload -> "CALLDATALOAD"
-  OpCalldatasize -> "CALLDATASIZE"
-  OpCalldatacopy -> "CALLDATACOPY"
-  OpCodesize -> "CODESIZE"
-  OpCodecopy -> "CODECOPY"
-  OpGasprice -> "GASPRICE"
-  OpExtcodesize -> "EXTCODESIZE"
-  OpExtcodecopy -> "EXTCODECOPY"
-  OpReturndatasize -> "RETURNDATASIZE"
-  OpReturndatacopy -> "RETURNDATACOPY"
-  OpExtcodehash -> "EXTCODEHASH"
-  OpBlockhash -> "BLOCKHASH"
-  OpCoinbase -> "COINBASE"
-  OpTimestamp -> "TIMESTAMP"
-  OpNumber -> "NUMBER"
-  OpDifficulty -> "DIFFICULTY"
-  OpGaslimit -> "GASLIMIT"
-  OpChainid -> "CHAINID"
-  OpSelfbalance -> "SELFBALANCE"
-  OpPop -> "POP"
-  OpMload -> "MLOAD"
-  OpMstore -> "MSTORE"
-  OpMstore8 -> "MSTORE8"
-  OpSload -> "SLOAD"
-  OpSstore -> "SSTORE"
-  OpJump -> "JUMP"
-  OpJumpi -> "JUMPI"
-  OpPc -> "PC"
-  OpMsize -> "MSIZE"
-  OpGas -> "GAS"
-  OpJumpdest -> "JUMPDEST"
-  OpCreate -> "CREATE"
-  OpCall -> "CALL"
-  OpStaticcall -> "STATICCALL"
-  OpCallcode -> "CALLCODE"
-  OpReturn -> "RETURN"
-  OpDelegatecall -> "DELEGATECALL"
-  OpCreate2 -> "CREATE2"
-  OpSelfdestruct -> "SELFDESTRUCT"
-  OpDup x -> "DUP" ++ show x
-  OpSwap x -> "SWAP" ++ show x
-  OpLog x -> "LOG" ++ show x
-  OpPush x -> "PUSH " ++ show x
-  OpRevert -> "REVERT"
-  OpUnknown x -> "UNKNOWN " ++ show x
