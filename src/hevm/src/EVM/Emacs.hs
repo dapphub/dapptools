@@ -28,7 +28,7 @@ import EVM.Solidity
 import EVM.Stepper (Stepper)
 import EVM.TTY (currentSrcMap)
 import EVM.Types
-import EVM.UnitTest hiding (interpret)
+import EVM.UnitTest
 import Prelude hiding (Word)
 import System.Directory
 import System.IO

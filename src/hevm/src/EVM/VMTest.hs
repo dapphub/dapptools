@@ -9,22 +9,12 @@ module EVM.VMTest
 #endif
   , vmForCase
   , checkExpectation
-  , interpret
   ) where
 
 import qualified EVM
 import qualified EVM.Concrete as EVM
-import qualified EVM.Exec
 import qualified EVM.FeeSchedule
-import qualified EVM.Stepper as Stepper
-import qualified EVM.Fetch as Fetch
 
-import Control.Monad.State.Strict (runState, join)
-import qualified Control.Monad.Operational as Operational
-import qualified Control.Monad.State.Class as State
-
-import EVM (EVM)
-import EVM.Stepper (Stepper)
 import EVM.Transaction
 import EVM.Types
 
@@ -515,29 +505,3 @@ vmForCase x =
     & EVM.tx . EVM.txReversion .~ realizeContracts checkState
     & EVM.tx . EVM.origStorage .~ realizeContracts initState
     & EVM.tx . EVM.substate . EVM.touchedAccounts .~ touchedAccounts
-
-interpret :: Stepper a -> EVM a
-interpret =
-  eval . Operational.view
-
-  where
-    eval
-      :: Operational.ProgramView Stepper.Action a
-      -> EVM a
-
-    eval (Operational.Return x) =
-      pure x
-
-    eval (action Operational.:>>= k) =
-      case action of
-        Stepper.Exec ->
-          EVM.Exec.exec >>= interpret . k
-        Stepper.Wait q ->
-          do join (Fetch.zero q)
-             interpret (k ())
-        Stepper.Note _ ->
-          interpret (k ())
-        Stepper.Fail _ ->
-          error "VMTest stepper not supposed to fail"
-        Stepper.EVM m ->
-          State.state (runState m) >>= interpret . k

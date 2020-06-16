@@ -44,7 +44,6 @@ import qualified EVM.Facts.Git as Git
 import qualified EVM.UnitTest
 
 import Control.Concurrent.Async   (async, waitCatch)
-import Control.Exception          (evaluate)
 import qualified Control.Monad.Operational as Operational
 import qualified Control.Monad.State.Class as State
 import Control.Lens
@@ -365,7 +364,7 @@ launchExec cmd = do
 
   case optsMode cmd of
     Run -> do
-      vm' <- execStateT (interpret fetcher . void $ EVM.Stepper.execFully) vm1
+      vm' <- execStateT (EVM.Stepper.interpret fetcher . void $ EVM.Stepper.execFully) vm1
       case view EVM.result vm' of
         Nothing ->
           error "internal error; no EVM result"
@@ -522,8 +521,8 @@ runVMTest diffmode mode timelimit (name, x) = do
     action <- async $
       case mode of
         Run ->
-          Timeout.timeout (1e6 * (fromMaybe 10 timelimit)) . evaluate $ do
-            execState (VMTest.interpret . void $ EVM.Stepper.execFully) vm0
+          Timeout.timeout (1e6 * (fromMaybe 10 timelimit)) $
+            execStateT (EVM.Stepper.interpret EVM.Fetch.zero . void $ EVM.Stepper.execFully) vm0
         Debug ->
           Just <$> EVM.TTY.runFromVM Nothing EVM.Fetch.zero vm0
     waitCatch action
@@ -542,35 +541,6 @@ runVMTest diffmode mode timelimit (name, x) = do
       return False
 
 #endif
-
-interpret
-  :: (EVM.Query -> IO (EVM.EVM ()))
-  -> EVM.Stepper.Stepper a
-  -> StateT EVM.VM IO (Either EVM.Stepper.Failure a)
-interpret fetcher =
-  eval . Operational.view
-
-  where
-    eval
-      :: Operational.ProgramView EVM.Stepper.Action a
-      -> StateT EVM.VM IO (Either EVM.Stepper.Failure a)
-
-    eval (Operational.Return x) =
-      pure (Right x)
-
-    eval (action Operational.:>>= k) =
-      case action of
-        EVM.Stepper.Exec ->
-          exec >>= interpret fetcher . k
-        EVM.Stepper.Wait q ->
-          do m <- liftIO (fetcher q)
-             State.state (runState m) >> interpret fetcher (k ())
-        EVM.Stepper.Note _ ->
-          interpret fetcher (k ())
-        EVM.Stepper.Fail e ->
-          pure (Left e)
-        EVM.Stepper.EVM m ->
-          State.state (runState m) >>= interpret fetcher . k
 
 abiencode :: (AsValue s) => s -> [String] -> ByteString
 abiencode abi args =
