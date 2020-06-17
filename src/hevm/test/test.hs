@@ -161,7 +161,7 @@ main = defaultMain $ testGroup "hevm"
               in case view result output of
                 Just (VMSuccess out) -> (asWord out) .== (asWord x) + (asWord y)
                 _ -> sFalse
-        Left (pre, res) <- runSMT $ query $ verify (RuntimeCode safeAdd) Nothing (Just "add(uint256,uint256)") pre post
+        Left (pre, res) <- runSMT $ query $ verifyContract (RuntimeCode safeAdd) Nothing (Just "add(uint256,uint256)") SymbolicS pre post
         putStrLn $ "successfully explored: " <> show (length res) <> " paths"
      ,
 
@@ -186,7 +186,7 @@ main = defaultMain $ testGroup "hevm"
                       Just (VMSuccess out) -> asWord out .== 2 * asWord y
                       _ -> sFalse
         Left (pre, res) <- runSMTWith z3 $ query $
-          verify (RuntimeCode safeAdd) Nothing (Just "add(uint256,uint256)") pre post
+          verifyContract (RuntimeCode safeAdd) Nothing (Just "add(uint256,uint256)") SymbolicS pre post
         putStrLn $ "successfully explored: " <> show (length res) <> " paths"
       ,
         testCase "factorize 973013" $ do
@@ -230,7 +230,7 @@ main = defaultMain $ testGroup "hevm"
               in case view result poststate of
                 Just (VMSuccess _) -> prex + 2 * (fromBytes y) .== postx
                 _ -> sFalse
-        Left (pre, res) <- runSMT $ query $ verify (RuntimeCode c) Nothing (Just "f(uint256)") pre post
+        Left (pre, res) <- runSMT $ query $ verifyContract (RuntimeCode c) Nothing (Just "f(uint256)") SymbolicS pre post
         putStrLn $ "successfully explored: " <> show (length res) <> " paths"
         ,
         -- Inspired by these `msg.sender == to` token bugs
@@ -266,7 +266,7 @@ main = defaultMain $ testGroup "hevm"
               in case view result poststate of
                 Just (VMSuccess mempty) -> prex + prey .== postx + (posty :: SWord 256)
                 _ -> sFalse
-        (Right bs) <- runSMT $ query $ verify (RuntimeCode c) Nothing (Just "f(uint256,uint256)") pre post
+        (Right bs) <- runSMT $ query $ verifyContract (RuntimeCode c) Nothing (Just "f(uint256,uint256)") SymbolicS pre post
         let AbiTuple xyz = decodeAbiValue (AbiTupleType $ Vector.fromList [AbiUIntType 256, AbiUIntType 256]) (BS.fromStrict (BS.drop 4 bs))
             [AbiUInt 256 x, AbiUInt 256 y] = Vector.toList xyz
         assert $ x == y
