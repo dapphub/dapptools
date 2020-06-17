@@ -123,7 +123,7 @@ trap clean EXIT
 
 until curl -s "$ETH_RPC_URL"; do sleep 1; done
 
-ETH_FROM=$(seth rpc eth_coinbase)
+ETH_FROM=$(seth --rpc-url="$ETH_RPC_URL" rpc eth_coinbase)
 export ETH_FROM
 export ETH_KEYSTORE=$chaindir/keystore
 export ETH_PASSWORD=/dev/null
