@@ -1,31 +1,37 @@
 source $stdenv/setup
 unpackPhase
 
-jsonopts=--combined-json=abi,bin,bin-runtime,srcmap,srcmap-runtime,ast
+dir="$out/dapp/$name"
+opts=(--combined-json=abi,bin,bin-runtime,srcmap,srcmap-runtime,ast,metadata --overwrite)
 
-export DAPP_SRC=$src
-export DAPP_OUT=out
+mkdir -p "$dir"
+cd "$dir"
 
-find "$DAPP_SRC" -name '*.sol' | while read -r x; do
-  dir=${x%\/*}
-  dir=${dir#$DAPP_SRC}
-  dir=${dir#/}
-  mkdir -p "$DAPP_OUT/$dir"
-  (set -x; solc --overwrite $REMAPPINGS --allow-paths $DAPP_SRC $solcFlags --abi --bin --bin-runtime -o "$DAPP_OUT/$dir" "$x")
-  json_file=$DAPP_OUT/$dir/${x##*/}.json
-  (set -x; solc $REMAPPINGS --allow-paths $DAPP_SRC $solcFlags $jsonopts "$x" >"$json_file")
-done
+cp -r "$src" src
 
-mkdir lib
-echo "$LIBSCRIPT" > setup.sh
-source setup.sh
-export DAPP_LIB=lib
+mkdir -p lib
+source <(echo "$LIBSCRIPT")
 
-if [ "$doCheck" == 1 ]; then
-  dapp2-test-hevm
+mkdir -p out
+mapfile -t files < <(find "$dir/src" -name '*.sol')
+json_file="out/dapp.sol.json"
+(set -x; solc $REMAPPINGS "${opts[@]}" $solcFlags "${files[@]}" > "$json_file")
+
+if [[ "$doCheck" == 1 ]] && command -v dapp2-test-hevm >/dev/null 2>&1; then
+  DAPP_OUT=out dapp2-test-hevm
 fi
 
-mkdir -p $out/dapp/$name
-cp -r $src $out/dapp/$name/src
-cp -r lib $out/dapp/$name/lib
-cp -r out $out/dapp/$name/out
+if [ "$extract" == 1 ]; then
+  mapfile -t contracts < <(<"$json_file" jq '.contracts|keys[]' -r | sort -u -t: -k2 | sort)
+  data=$(<"$json_file" jq '.contracts' -r)
+  total=${#contracts[@]}
+  echo "Extracting build data... [Total: $total]"
+  for path in "${contracts[@]}"; do
+    fileName="${path#*:}"
+    contract=$(echo "$data" | jq '.["'"$path"'"]')
+    echo "$contract" | jq '.["abi"]' -r > "out/$fileName.abi"
+    echo "$contract" | jq '.["bin"]' -r > "out/$fileName.bin"
+    echo "$contract" | jq '.["bin-runtime"]' -r > "out/$fileName.bin-runtime"
+    echo "$contract" | jq '.["metadata"]' -r > "out/$fileName.metadata"
+  done
+fi
