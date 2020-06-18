@@ -400,16 +400,17 @@ equivalence cmd =
 -- cvc4 sets timeout via a commandline option instead of smtlib `(set-option)`
 runSMTWithTimeOut :: Maybe Text -> Maybe Integer -> Symbolic a -> IO a
 runSMTWithTimeOut (Just "cvc4") Nothing sym  = runSMTWith cvc4 sym
-runSMTWithTimeOut (Just "z3")   Nothing sym  = runSMTWith z3 sym
 runSMTWithTimeOut (Just "cvc4") (Just n) sym = do
   setEnv "SBV_CVC4_OPTIONS" ("--lang=smt --incremental --interactive --no-interactive-prompt --model-witness-value --tlimit-per=" <> show n)
   a <- runSMTWith cvc4 sym
   setEnv "SBV_CVC4_OPTIONS" ""
   return a
-runSMTWithTimeOut (Just "z3") (Just n) sym = runSMTWith z3 $
-  do setTimeOut n
-     sym 
-runSMTWithTimeOut _ _ _ = error "Unknown solver. Currently supported solvers; z3, cvc4"
+runSMTWithTimeOut solver timeout sym =
+  let runwithz3 = runSMTWith z3 $ maybe (return ()) setTimeOut timeout >> sym
+  in case solver of
+    Just "z3" -> runwithz3
+    Nothing   -> runwithz3
+    Just _ -> error "Unknown solver. Currently supported solvers; z3, cvc4"
 
 -- Although it is tempting to fully abstract calldata and give any hints about the nature of the signature
 -- doing so results in significant time spent in consulting z3 about rather trivial matters. But with cvc4 it is quite pleasant!
