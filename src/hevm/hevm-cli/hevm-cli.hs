@@ -106,13 +106,17 @@ data Command w
       , create        :: w ::: Bool             <?> "Tx: creation"
       , maxcodesize   :: w ::: Maybe W256       <?> "Block: max code size"
       , difficulty    :: w ::: Maybe W256       <?> "Block: difficulty"
+  -- remote state opts
+      , rpc         :: w ::: Maybe URL        <?> "Fetch state from a remote node"
+      , block       :: w ::: Maybe W256       <?> "Block state is be fetched from"
+
   -- symbolic execution opts
       , jsonFile      :: w ::: Maybe String     <?> "Filename or path to dapp build output (default: out/*.solc.json)"
-      , storageModel  :: w ::: Maybe StorageModel <?> "Select storage model: Concrete, Symbolic (default) or Initial"
+      , storageModel  :: w ::: Maybe StorageModel <?> "Select storage model: ConcreteS, SymbolicS (default) or InitialS"
       , funcSig       :: w ::: Maybe Text       <?> "Function signature" -- to be deprecated in favor of 'abi'
       , debug         :: w ::: Bool             <?> "Run interactively"
       , getModels     :: w ::: Bool             <?> "Print example testcase for each execution path"
-      , smttimeout    :: w ::: Maybe Integer    <?> "Timeout given to smt solver in seconds"
+      , smttimeout    :: w ::: Maybe Integer    <?> "Timeout given to smt solver in milliseconds"
       , maxIterations :: w ::: Maybe Integer    <?> "Number of times we may revisit a particular branching point"
       , solver        :: w ::: Maybe Text       <?> "Smt solver to use z3 (default) or cvc4"
       }
@@ -120,7 +124,7 @@ data Command w
       { codeA         :: w ::: ByteString <?> "Bytecode of the first program"
       , codeB         :: w ::: ByteString <?> "Bytecode of the second program"
       , funcSig       :: w ::: Maybe Text <?> "Function signature"
-      , smttimeout    :: w ::: Maybe Integer    <?> "Timeout given to smt solver in seconds"
+      , smttimeout    :: w ::: Maybe Integer    <?> "Timeout given to smt solver in milliseconds"
       , maxIterations :: w ::: Maybe Integer    <?> "Number of times we may revisit a particular branching point"
       , solver        :: w ::: Maybe Text       <?> "Smt solver to use z3 (default) or cvc4"
 
@@ -649,8 +653,8 @@ symvmFromCommand cmd = do
     -- Initial defaults to 0 for uninitialized storage slots,
     -- whereas the values of SymbolicS are unconstrained.
     Just InitialS  -> EVM.Symbolic <$> freshArray_ (Just 0)
-    Just ConcreteS -> EVM.Symbolic <$> freshArray_ Nothing
-    _ -> return $ EVM.Concrete mempty
+    Just ConcreteS -> return (EVM.Concrete mempty)
+    _ -> EVM.Symbolic <$> freshArray_ Nothing
 
   vm <- case (rpc cmd, address cmd, code cmd) of
     (Just url, Just addr', _) -> io (EVM.Fetch.fetchContractFrom block' url addr') >>= \case
@@ -667,7 +671,7 @@ symvmFromCommand cmd = do
                                         & set EVM.external    (view EVM.external contract')
                         in return $ vm1 cdlen calldata' caller' (contract'' & set EVM.storage store)
 
-    (_, _, Just c)  -> return $ vm1 cdlen calldata' caller' $ EVM.initialContract $ codeType $ decipher c
+    (_, _, Just c)  -> return $ vm1 cdlen calldata' caller' $ (EVM.initialContract . codeType $ decipher c) & set EVM.storage store
     (_, _, Nothing) -> error $ "must provide at least (rpc + address) or code"
 
   return $ vm & over EVM.pathConditions (<> [pathCond])
@@ -688,8 +692,8 @@ symvmFromCommand cmd = do
       , EVM.vmoptAddress       = address'
       , EVM.vmoptCaller        = caller'
       , EVM.vmoptOrigin        = origin'
-      , EVM.vmoptGas           = word gas 0
-      , EVM.vmoptGaslimit      = word gas 0
+      , EVM.vmoptGas           = word gas 0xffffffffffffffff
+      , EVM.vmoptGaslimit      = word gas 0xffffffffffffffff
       , EVM.vmoptCoinbase      = addr coinbase 0
       , EVM.vmoptNumber        = word number 0
       , EVM.vmoptTimestamp     = word timestamp 0
