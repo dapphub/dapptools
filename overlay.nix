@@ -101,19 +101,19 @@ in rec {
 
   solc-versions =
     let
-      fetchNixpkgs = { owner, attr }:
+      fetchSolcVersions = { owner, attr }:
         super.lib.mapAttrs
-          (_: nixpkgs: importSolc { inherit owner; inherit (nixpkgs) rev sha256; })
+          (_: nixpkgs: (importNixpkgs { inherit owner; inherit (nixpkgs) rev sha256; }).solc)
           (builtins.getAttr attr (import ./nix/solc-versions.nix));
-      importSolc = { owner, rev, sha256 }:
-        (import (self.pkgs.fetchFromGitHub {
+      importNixpkgs = { owner, rev, sha256 }:
+        import (self.pkgs.fetchFromGitHub {
           inherit owner rev sha256;
           repo = "nixpkgs";
-        }) {}).solc;
+        }) {};
       in
-        fetchNixpkgs { owner = "NixOS";   attr = super.system; }
+        fetchSolcVersions { owner = "NixOS";   attr = super.system; }
         //
-        fetchNixpkgs { owner = "dapphub"; attr = "unreleased"; };
+        fetchSolcVersions { owner = "dapphub"; attr = "unreleased"; };
   solc = solc-versions.solc_0_5_15;
 
   hevm = self.pkgs.haskell.lib.justStaticExecutables self.haskellPackages.hevm;
