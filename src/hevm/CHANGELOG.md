@@ -2,6 +2,7 @@
 
 ## 0.39 - unreleased
  - Exposes abi encoding to cli
+ - Added cheat code `hevm.store(address a, bytes32 location, bytes32 value)`
 
 ## 0.38 - 2020-04-23
  - Exposes metadata stripping of bytecode to the cli: `hevm strip-metadata --code X`. [357](https://github.com/dapphub/dapptools/pull/357).

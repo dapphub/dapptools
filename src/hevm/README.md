@@ -117,6 +117,19 @@ If you prefer to use your own installation of GHC and the basic Haskell package 
     $ CXXFLAGS="-fPIC $CXXFLAGS" cmake $ARGS ..
     $ make && sudo make install
 
+### Cheat codes
+
+Since Hevm is an EVM implementation mainly dedicated to testing and exploration, it features a set of `cheat codes` which can manipulate the environment in which the execution is run.
+
+These can be accessed by calling into a contract (typically called `Hevm`) at address `0x7109709ECfa91a80626fF3989D68f67F5b1DD12D`, which implements the following methods:
+
+- `function warp(uint x) public`
+sets the TIMESTAMP to `x`.
+
+- `function store(address c, bytes32 loc, bytes32 val) public`
+sets the slot `loc` to `val` of contract `c`.
+
+    
 ## Contact
 
 You can find us in the DappHub chat at https://dapphub.chat/, especially the `#dev` channel.
