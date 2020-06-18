@@ -1619,6 +1619,14 @@ cheatActions =
     [ action "warp(uint256)" [AbiUIntType 256] $
         \[AbiUInt 256 x] -> do
           assign (block . timestamp) (w256 (W256 x))
+          return Nothing,
+      action "store(address,bytes32,bytes32)" [AbiAddressType, AbiBytesType 32, AbiBytesType 32] $
+        \[AbiAddress a, AbiBytes 32 x, AbiBytes 32 y] -> do
+          let slot = w256 $ word x
+              new  = w256 $ word y
+          fetchAccount a $ \_ -> do
+            assign (env . contracts . ix a . storage . at slot)
+              (Just new)
           return Nothing
     ]
   where
