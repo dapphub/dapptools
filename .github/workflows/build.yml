@@ -19,9 +19,10 @@ jobs:
     steps:
       # linux VMs are currently limited at 14GB, which is too little
       - name: recover some space
-        run: sudo rm -rf /opt
-        if: ${{ matrix.os == 'ubuntu-latest' }}
-      - run: df -h
+        run: |
+          df -h
+          sudo rm -rf /opt
+          df -h
         if: ${{ matrix.os == 'ubuntu-latest' }}
       - uses: actions/checkout@v2
         with:
