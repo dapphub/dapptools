@@ -49,14 +49,46 @@ Note: some `hevm` commands (`dapp-test`, `interactive`) assumes the use of the `
 ### `hevm symbolic`
 
 ```sh
-Usage: hevm symbolic [--code TEXT] [--calldata TEXT] [--func-sig TEXT]
-                     [--address ADDR] [--caller ADDR] [--origin ADDR]
-                     [--coinbase ADDR] [--value W256] [--nonce W256] [--gas W256]
-                     [--number W256] [--timestamp W256] [--gaslimit W256]
-                     [--gasprice W256] [--create] [--maxcodesize W256]
-                     [--difficulty W256] [--debug] [--state STRING] [--rpc TEXT]
-                     [--block W256] [--json-file STRING] [--get-models]
-                     [--storage STORAGEMODE]
+Usage: hevm symbolic [--code TEXT] [--calldata TEXT] [--address ADDR]
+                     [--caller ADDR] [--origin ADDR] [--coinbase ADDR]
+                     [--value W256] [--nonce W256] [--gas W256] [--number W256]
+                     [--timestamp W256] [--gaslimit W256] [--gasprice W256]
+                     [--create] [--maxcodesize W256] [--difficulty W256]
+                     [--json-file STRING] [--storage-model STORAGEMODEL]
+                     [--func-sig TEXT] [--debug] [--get-models]
+                     [--smttimeout INTEGER] [--max-iterations INTEGER]
+                     [--solver TEXT]
+
+Available options:
+  -h,--help                Show this help text
+  --code TEXT              Program bytecode
+  --calldata TEXT          Tx: calldata
+  --address ADDR           Tx: address
+  --caller ADDR            Tx: caller
+  --origin ADDR            Tx: origin
+  --coinbase ADDR          Block: coinbase
+  --value W256             Tx: Eth amount
+  --nonce W256             Nonce of origin
+  --gas W256               Tx: gas amount
+  --number W256            Block: number
+  --timestamp W256         Block: timestamp
+  --gaslimit W256          Tx: gas limit
+  --gasprice W256          Tx: gas price
+  --create                 Tx: creation
+  --maxcodesize W256       Block: max code size
+  --difficulty W256        Block: difficulty
+  --json-file STRING       Filename or path to dapp build output (default:
+                           out/*.solc.json)
+  --storage-model STORAGEMODEL
+                           Select storage model: Concrete, Symbolic (default) or
+                           Initial
+  --func-sig TEXT          Function signature
+  --debug                  Run interactively
+  --get-models             Print example testcase for each execution path
+  --smttimeout INTEGER     Timeout given to smt solver in milliseconds
+  --max-iterations INTEGER Number of times we may revisit a particular branching
+                           point
+  --solver TEXT            Smt solver to use z3 (default) or cvc4
 ```
 
 Run a symbolic execution against the given parameters, searching for assertion violations.
@@ -70,6 +102,9 @@ calldata is assumed to be of the form suggested by the function signature.
 
 If the `--get-models` flag is given, example input values will be returned for each possible execution path. 
 This can be useful for automatic test case generation.
+
+The default timeout for smt queries is no timeout. If your program is taking longer than a couple of minutes to run, 
+you can experiment with configuring the timeout to somewhere around 10s by doing `--smttimeout 10000`
 
 Storage can take one of three forms, defaulting to `Symbolic`:
 
