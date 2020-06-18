@@ -11,9 +11,9 @@ jobs:
         # the attribute names defined in release.nix
         include:
           - os: ubuntu-latest
-            os_attr_name: linux
+            os_attr: linux
           - os: macos-latest
-            os_attr_name: darwin
+            os_attr: darwin
       fail-fast: false
     runs-on: ${{ matrix.os }}
     steps:
@@ -36,4 +36,4 @@ jobs:
         with:
           name: dapp
           signingKey: '${{ secrets.CACHIX_SIGNING_KEY }}'
-      - run: nix-build release.nix -A dapphub.${{ matrix.os_attr_name }}.stable
+      - run: nix-build release.nix -A dapphub.${{ matrix.os_attr }}.stable
