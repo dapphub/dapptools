@@ -17,21 +17,23 @@ jobs:
       fail-fast: false
     runs-on: ${{ matrix.os }}
     steps:
-    - name: recover some space
-      run: sudo rm -rf /opt
-      if: ${{ matrix.os == 'ubuntu-latest' }}
-    - run: df -h
-    - uses: actions/checkout@v2
-      with:
-        submodules: true
-    # v10
-    - uses: cachix/install-nix-action@63cf434de4e4292c6960639d56c5dd550e789d77
-      with:
-        # we use the nixpkgs defined in default.nix
-        skip_adding_nixpkgs_channel: true
-    # v6
-    - uses: cachix/cachix-action@490a246fbc7f92208d309eeb54383a4d828cedc1
-      with:
-        name: dapp
-        signingKey: '${{ secrets.CACHIX_SIGNING_KEY }}'
-    - run: nix-build release.nix -A dapphub.${{ matrix.os_attr_name }}.stable
+      # linux VMs are currently limited at 14GB, which is too little
+      - name: recover some space
+        run: sudo rm -rf /opt
+        if: ${{ matrix.os == 'ubuntu-latest' }}
+      - run: df -h
+        if: ${{ matrix.os == 'ubuntu-latest' }}
+      - uses: actions/checkout@v2
+        with:
+          submodules: true
+      # v10
+      - uses: cachix/install-nix-action@63cf434de4e4292c6960639d56c5dd550e789d77
+        with:
+          # we use the nixpkgs defined in default.nix
+          skip_adding_nixpkgs_channel: true
+      # v6
+      - uses: cachix/cachix-action@490a246fbc7f92208d309eeb54383a4d828cedc1
+        with:
+          name: dapp
+          signingKey: '${{ secrets.CACHIX_SIGNING_KEY }}'
+      - run: nix-build release.nix -A dapphub.${{ matrix.os_attr_name }}.stable
