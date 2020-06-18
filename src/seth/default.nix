@@ -1,4 +1,4 @@
-{ lib, stdenv, fetchFromGitHub, makeWrapper, glibcLocales
+{ lib, stdenv, fetchFromGitHub, makeWrapper, glibcLocales, jq
 , bc, coreutils, curl, ethsign, git, gnused, jshon, nodejs, perl, hevm, shellcheck }:
 
 stdenv.mkDerivation rec {
@@ -15,8 +15,7 @@ stdenv.mkDerivation rec {
   postInstall =
     let
       path = lib.makeBinPath [
-        bc coreutils curl ethsign git gnused jshon nodejs perl
-        bc coreutils curl ethsign git gnused hevm jshon nodejs perl
+        bc coreutils curl ethsign git gnused hevm jshon nodejs perl jq
       ];
     in
       ''
