@@ -15,6 +15,7 @@ import qualified EVM
 import qualified EVM.Concrete as EVM
 import qualified EVM.FeeSchedule
 
+import EVM.Symbolic
 import EVM.Transaction
 import EVM.Types
 
@@ -270,7 +271,7 @@ parseVmOpts v =
            <*> pure 0xffffffff
            <*> wordField env  "currentGasLimit"
            <*> wordField exec "gasPrice"
-           <*> pure (EVM.FeeSchedule.homestead)
+           <*> pure (EVM.FeeSchedule.istanbul)
            <*> pure 1
            <*> pure False
        _ ->

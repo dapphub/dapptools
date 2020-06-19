@@ -31,7 +31,7 @@ where
 import Prelude hiding (fail)
 
 import Control.Monad.Operational (Program, singleton, view, ProgramViewT(..), ProgramView)
-import Control.Monad.State.Strict (runState, join, liftIO, StateT)
+import Control.Monad.State.Strict (runState, liftIO, StateT)
 import qualified Control.Monad.State.Class as State
 import qualified EVM.Exec
 import Data.Binary.Get (runGetOrFail)
@@ -177,6 +177,8 @@ interpret fetcher =
              State.state (runState m) >> interpret fetcher (k ())
         Note _ ->
           interpret fetcher (k ())
+        Option _ ->
+          error "cannot make choices with this interpreter"
         Fail e ->
           pure (Left e)
         EVM m ->

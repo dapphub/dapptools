@@ -7,34 +7,28 @@ import Data.Text (Text)
 import Data.ByteString (ByteString)
 
 import qualified Data.Text as Text
-import Data.Maybe (fromMaybe, fromJust)
-import Data.Text.Encoding (encodeUtf8)
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy as BS (fromStrict)
 import qualified Data.ByteString.Base16 as Hex
-import Debug.Trace
 import Test.Tasty
 import Test.Tasty.QuickCheck-- hiding (forAll)
 import Test.Tasty.HUnit
 
-import Control.Monad.State.Strict (execState, runState, MonadIO, void)
-import Control.Lens hiding (List)
+import Control.Monad.State.Strict (execState, runState)
+import Control.Lens hiding (List, pre)
 
 import qualified Data.Vector as Vector
 import Data.String.Here
-import qualified EVM.FeeSchedule as FeeSchedule
 
 import Data.Binary.Put (runPut)
-import Data.SBV hiding ((===), forAll_)
-import Data.SBV.Control hiding ((===), isTheorem)
---import Data-SBV-Trans
+import Data.SBV hiding ((===), forAll)
+import Data.SBV.Control
 import Data.Binary.Get (runGetOrFail)
 
 import EVM
+import EVM.SymExec
 import EVM.Symbolic
-import EVM.Concrete hiding ((^))
 import EVM.ABI
-import EVM.Keccak
 import EVM.Exec
 import EVM.Patricia as Patricia
 import EVM.Precompiled
@@ -153,15 +147,15 @@ main = defaultMain $ testGroup "hevm"
           |]
         let asWord :: [SWord 8] -> SWord 256
             asWord = fromBytes
-            pre calldata = let (x, y) = splitAt 32 calldata
-                           in asWord x .<= asWord x + asWord y
-            post = Just $ \(prestate, output) ->
+            pre preVM = let (x, y) = splitAt 32 $ drop 4 (fst $ view (state . calldata) preVM)
+                        in asWord x .<= asWord x + asWord y
+            post = Just $ \(prestate, poststate) ->
               let input = fst $ view (state.calldata) prestate
                   (x, y) = splitAt 32 (drop 4 input)
-              in case view result output of
+              in case view result poststate of
                 Just (VMSuccess out) -> (asWord out) .== (asWord x) + (asWord y)
                 _ -> sFalse
-        Left (pre, res) <- runSMT $ query $ verifyContract (RuntimeCode safeAdd) Nothing (Just "add(uint256,uint256)") SymbolicS pre post
+        Left (_, res) <- runSMT $ query $ verifyContract (RuntimeCode safeAdd) Nothing (Just "add(uint256,uint256)") SymbolicS pre post
         putStrLn $ "successfully explored: " <> show (length res) <> " paths"
      ,
 
@@ -176,16 +170,16 @@ main = defaultMain $ testGroup "hevm"
           |]
         let asWord :: [SWord 8] -> SWord 256
             asWord = fromBytes
-            pre calldata = let (x, y) = splitAt 32 calldata
+            pre preVM = let (x, y) = splitAt 32 $ drop 4 $ (fst $ view (state . calldata) preVM)
                            in (asWord x .<= asWord x + asWord y)
                               .&& (x .== y)
-            post = Just $ \(prestate, output)
+            post = Just $ \(prestate, poststate)
               -> let input = fst $ view (state.calldata) prestate
-                     (x, y) = splitAt 32 (drop 4 input)
-                 in case view result output of
+                     (_, y) = splitAt 32 (drop 4 input)
+                 in case view result poststate of
                       Just (VMSuccess out) -> asWord out .== 2 * asWord y
                       _ -> sFalse
-        Left (pre, res) <- runSMTWith z3 $ query $
+        Left (_, res) <- runSMTWith z3 $ query $
           verifyContract (RuntimeCode safeAdd) Nothing (Just "add(uint256,uint256)") SymbolicS pre post
         putStrLn $ "successfully explored: " <> show (length res) <> " paths"
       ,
@@ -202,7 +196,7 @@ main = defaultMain $ testGroup "hevm"
         (Right bs) <- runSMTWith cvc4 $ query $ checkAssert (RuntimeCode factor) Nothing (Just "factor(uint256,uint256)")
         let AbiTuple xy = decodeAbiValue (AbiTupleType $ Vector.fromList [AbiUIntType 256, AbiUIntType 256]) (BS.fromStrict (BS.drop 4 bs))
             [AbiUInt 256 x, AbiUInt 256 y] = Vector.toList xy
-        assert $ x == 953 && y == 1021 || x == 1021 && y == 953
+        assertEqual "" True (x == 953 && y == 1021 || x == 1021 && y == 953)
         ,
         testCase "summary storage writes" $ do
         Just c <- solcRuntime "A"
@@ -215,9 +209,7 @@ main = defaultMain $ testGroup "hevm"
             }
           }
           |]
-        let asWord :: [SWord 8] -> SWord 256
-            asWord = fromBytes
-            pre = const sTrue
+        let pre = const sTrue
             post = Just $ \(prestate, poststate) ->
               let y = drop 4 $ fst (view (state.calldata) prestate)
                   this = view (state . codeContract) prestate
@@ -230,7 +222,7 @@ main = defaultMain $ testGroup "hevm"
               in case view result poststate of
                 Just (VMSuccess _) -> prex + 2 * (fromBytes y) .== postx
                 _ -> sFalse
-        Left (pre, res) <- runSMT $ query $ verifyContract (RuntimeCode c) Nothing (Just "f(uint256)") SymbolicS pre post
+        Left (_, res) <- runSMT $ query $ verifyContract (RuntimeCode c) Nothing (Just "f(uint256)") SymbolicS pre post
         putStrLn $ "successfully explored: " <> show (length res) <> " paths"
         ,
         -- Inspired by these `msg.sender == to` token bugs
@@ -249,27 +241,22 @@ main = defaultMain $ testGroup "hevm"
             }
           }
           |]
-        let asWord :: [SWord 8] -> SWord 256
-            asWord = fromBytes
-            pre = const sTrue
+        let pre = const sTrue
             post = Just $ \(prestate, poststate) ->
               let (x,y) = over both (fromBytes) (splitAt 32 $ drop 4 $ fst (view (state.calldata) prestate))
                   this = view (state . codeContract) prestate
-                  Just preC = view (env.contracts . at this) prestate
-                  Just postC = view (env.contracts . at this) poststate
-                  Symbolic prestore = _storage preC
-                  Symbolic poststore = _storage postC
-                  prex  = readArray prestore x
-                  postx = readArray poststore x
-                  prey  = readArray prestore y
-                  posty = readArray poststore y
+                  (Just preC, Just postC) = both' (view (env.contracts . at this)) (prestate, poststate)
+                  --Just postC = view (env.contracts . at this) poststate
+                  (Symbolic prestore, Symbolic poststore) = both' (view storage) (preC, postC)
+                  (prex,  prey)  = both' (readArray prestore) (x, y)
+                  (postx, posty) = both' (readArray poststore) (x, y)
               in case view result poststate of
-                Just (VMSuccess mempty) -> prex + prey .== postx + (posty :: SWord 256)
+                Just (VMSuccess _) -> prex + prey .== postx + (posty :: SWord 256)
                 _ -> sFalse
         (Right bs) <- runSMT $ query $ verifyContract (RuntimeCode c) Nothing (Just "f(uint256,uint256)") SymbolicS pre post
         let AbiTuple xyz = decodeAbiValue (AbiTupleType $ Vector.fromList [AbiUIntType 256, AbiUIntType 256]) (BS.fromStrict (BS.drop 4 bs))
             [AbiUInt 256 x, AbiUInt 256 y] = Vector.toList xyz
-        assert $ x == y
+        assertEqual "Catch storage collisions" x y
         ,
         testCase "Deposit contract loop (z3)" $ do
           Just c <- solcRuntime "Deposit"
@@ -290,7 +277,7 @@ main = defaultMain $ testGroup "hevm"
               }
              }
             |]
-          Left (pre, res) <- runSMTWith z3 $ query $ checkAssert (RuntimeCode c) Nothing (Just "deposit(uint256)")
+          Left (_, res) <- runSMTWith z3 $ query $ checkAssert (RuntimeCode c) Nothing (Just "deposit(uint256)")
           putStrLn $ "successfully explored: " <> show (length res) <> " paths"
         ,
                 testCase "Deposit contract loop (cvc4)" $ do
@@ -312,7 +299,7 @@ main = defaultMain $ testGroup "hevm"
               }
              }
             |]
-          Left (pre, res) <- runSMTWith cvc4 $ query $ checkAssert (RuntimeCode c) Nothing (Just "deposit(uint256)")
+          Left (_, res) <- runSMTWith cvc4 $ query $ checkAssert (RuntimeCode c) Nothing (Just "deposit(uint256)")
           putStrLn $ "successfully explored: " <> show (length res) <> " paths"
         ,
         testCase "Deposit contract loop (error version)" $ do
@@ -336,7 +323,7 @@ main = defaultMain $ testGroup "hevm"
             |]
           (Right bs) <- runSMT $ query $ checkAssert (RuntimeCode c) Nothing (Just "deposit(uint8)")
           let deposit = decodeAbiValue (AbiUIntType 8) (BS.fromStrict (BS.drop 4 bs))
-          assert $ deposit == AbiUInt 8 255
+          assertEqual "overflowing uint8" deposit (AbiUInt 8 255)
      ,
         -- This test uses cvc4 instead of z3
         testCase "explore function dispatch" $ do
@@ -348,7 +335,7 @@ main = defaultMain $ testGroup "hevm"
             }
           }
           |]
-        Left (pre, res) <- runSMTWith cvc4 $ query $ checkAssert (RuntimeCode c) Nothing Nothing
+        Left (_, res) <- runSMTWith cvc4 $ query $ checkAssert (RuntimeCode c) Nothing Nothing
         putStrLn $ "successfully explored: " <> show (length res) <> " paths"
         ,
 
@@ -361,7 +348,7 @@ main = defaultMain $ testGroup "hevm"
               }
             }
             |]
-          Left (pre, res) <- runSMTWith cvc4 $ query $ checkAssert (RuntimeCode c) Nothing Nothing
+          Left (_, res) <- runSMTWith cvc4 $ query $ checkAssert (RuntimeCode c) Nothing Nothing
           putStrLn $ "successfully explored: " <> show (length res) <> " paths"
         ,
         testCase "injectivity of keccak (32 bytes)" $ do
@@ -373,7 +360,7 @@ main = defaultMain $ testGroup "hevm"
               }
             }
             |]
-          Left (pre, res) <- runSMTWith cvc4 $ query $ checkAssert (RuntimeCode c) Nothing Nothing
+          Left (_, res) <- runSMTWith cvc4 $ query $ checkAssert (RuntimeCode c) Nothing Nothing
           putStrLn $ "successfully explored: " <> show (length res) <> " paths"
        ,
 
@@ -391,7 +378,8 @@ main = defaultMain $ testGroup "hevm"
                                               [AbiUIntType 256, AbiUIntType 256,
                                                AbiUIntType 256, AbiUIntType 256]) (BS.fromStrict (BS.drop 4 bs))
               [AbiUInt 256 x, AbiUInt 256 y, AbiUInt 256 w, AbiUInt 256 z] = Vector.toList xywz
-          assert $ x == w && y == z
+          assertEqual "x == w" x w
+          assertEqual "y == z" y z
        ,
 
         testCase "calldata beyond calldatasize is 0 (z3)" $ do
@@ -408,15 +396,12 @@ main = defaultMain $ testGroup "hevm"
               }
             }
             |]
-          Left (pre, res) <- runSMTWith z3 $ query $ checkAssert (RuntimeCode c) Nothing Nothing
+          Left (_, res) <- runSMTWith z3 $ query $ checkAssert (RuntimeCode c) Nothing Nothing
           putStrLn $ "successfully explored: " <> show (length res) <> " paths"
     ]
   ]
   where
     (===>) = assertSolidityComputation
-
-inUIntRange :: SInteger -> SBool
-inUIntRange x = 0 .<= x .&& x .< 2 ^ 256 - 1
 
 runSimpleVM :: ByteString -> ByteString -> Maybe [SWord 8]
 runSimpleVM x ins = case loadVM x of
@@ -480,12 +465,12 @@ runStatements stmts args t = do
         "foo(" <> Text.intercalate ","
                     (map (abiTypeSolidity . abiValueType) args) <> ")"
 
-  output <- runFunction [i|
+  out <- runFunction [i|
     function foo(${params}) public pure returns (${abiTypeSolidity t} x) {
       ${stmts}
     }
   |] (abiCalldata s (Vector.fromList args))
-  return $ maybe Nothing maybeLitBytes output
+  return $ maybe Nothing maybeLitBytes out
 
 newtype Bytes = Bytes ByteString
   deriving Eq

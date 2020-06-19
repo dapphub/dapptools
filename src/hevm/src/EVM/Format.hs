@@ -4,12 +4,12 @@ module EVM.Format where
 
 import Prelude hiding (Word)
 
-import EVM (VM, cheatCode, traceForest, traceData, Error (..), forceLitBytes,
-            maybeLitBytes)
+import EVM (VM, cheatCode, traceForest, traceData, Error (..))
 import EVM (Trace, TraceData (..), Log (..), Query (..), FrameContext (..))
 import EVM.Dapp (DappInfo, dappSolcByHash, showTraceLocation, dappEventMap)
-import EVM.Concrete (Word (..), wordValue, maybeLitWord)
-import EVM.Types (W256 (..), num, litBytes)
+import EVM.Concrete (Word (..), wordValue)
+import EVM.Symbolic (maybeLitWord, forceLitBytes, litBytes, maybeLitBytes)
+import EVM.Types (W256 (..), num)
 import EVM.ABI (AbiValue (..), Event (..), AbiType (..))
 import EVM.ABI (Indexed (NotIndexed), getAbiSeq, getAbi)
 import EVM.ABI (abiTypeSolidity, parseTypeName)
@@ -23,7 +23,7 @@ import Data.SBV hiding (Word)
 import Data.ByteString (ByteString)
 import Data.ByteString.Builder (byteStringHex, toLazyByteString)
 import Data.ByteString.Lazy (toStrict, fromStrict)
-import Data.DoubleWord (signedWord, Word256)
+import Data.DoubleWord (signedWord)
 import Data.Foldable (toList)
 import Data.Maybe (catMaybes, fromMaybe)
 import Data.Monoid ((<>))
@@ -165,7 +165,16 @@ showTrace dapp trace =
             , "\x1b[0m"
             ] <> pos
         (topic:_) ->
-          case maybeLitWord topic of
+          let unknownTopic =                    -- todo: catch ds-note
+                   mconcat
+                     [ "\x1b[36m"
+                     , "log" <> (pack (show (length topics))) <> "("
+                     , formatSBinary bytes <> ", "
+                     , intercalate ", " (map (pack . show) topics) <> ")"
+                     , "\x1b[0m"
+                     ] <> pos
+
+          in case maybeLitWord topic of
             Just top -> case Map.lookup (wordValue top) (view dappEventMap dapp) of
                  Just (Event name _ types) ->
                    mconcat
@@ -175,15 +184,8 @@ showTrace dapp trace =
                      -- todo: show indexed
                      , "\x1b[0m"
                      ] <> pos
-                 Nothing ->
-                   -- todo: catch ds-note
-                   mconcat
-                     [ "\x1b[36m"
-                     , "log" <> (pack (show (length topics))) <> "("
-                     , formatSBinary bytes <> ", "
-                     , intercalate ", " (map (pack . show) topics) <> ")"
-                     , "\x1b[0m"
-                     ] <> pos
+                 Nothing -> unknownTopic
+            Nothing -> unknownTopic
 
     QueryTrace q ->
       case q of
@@ -191,23 +193,25 @@ showTrace dapp trace =
           "fetch contract " <> pack (show addr) <> pos
         PleaseFetchSlot addr slot _ ->
           "fetch storage slot " <> pack (show slot) <> " from " <> pack (show addr) <> pos
+        PleaseAskSMT _ _ _ ->
+          "ask smt" <> pos
     ErrorTrace e ->
       case e of
-        Revert output ->
-          "\x1b[91merror\x1b[0m " <> "Revert " <> showError output <> pos
+        Revert out ->
+          "\x1b[91merror\x1b[0m " <> "Revert " <> showError out <> pos
         _ ->
           "\x1b[91merror\x1b[0m " <> pack (show e) <> pos
 
-    ReturnTrace output (CallContext _ _ hash (Just abi) _ _ _) ->
+    ReturnTrace out (CallContext _ _ hash (Just abi) _ _ _) ->
       case getAbiMethodOutput dapp hash abi of
         Nothing ->
-          "← " <> formatBinary (forceLitBytes output)
+          "← " <> formatBinary (forceLitBytes out)
         Just (_, t) ->
-          "← " <> abiTypeSolidity t <> " " <> showValue t (forceLitBytes output)
-    ReturnTrace output (CallContext {}) ->
-      "← " <> formatBinary (forceLitBytes output)
-    ReturnTrace output (CreationContext {}) ->
-      "← " <> pack (show (length output)) <> " bytes of code"
+          "← " <> abiTypeSolidity t <> " " <> showValue t (forceLitBytes out)
+    ReturnTrace out (CallContext {}) ->
+      "← " <> formatBinary (forceLitBytes out)
+    ReturnTrace out (CreationContext {}) ->
+      "← " <> pack (show (length out)) <> " bytes of code"
 
     EntryTrace t ->
       t
@@ -264,7 +268,7 @@ showError bs = case BS.take 4 bs of
 
 showValues :: [AbiType] -> [SWord 8] -> Text
 showValues ts sbs = case maybeLitBytes sbs of
-  Nothing -> "<symbolic " <> (abiTypeSolidity $ AbiTupleType (fromList ts))
+  Nothing -> "symbolic: " <> (abiTypeSolidity $ AbiTupleType (fromList ts))
   Just bs -> 
      case runGetOrFail (getAbiSeq (length ts) ts) (fromStrict bs) of
        Right (_, _, xs) -> showAbiValues xs
