@@ -57,6 +57,7 @@ library
     EVM.Stepper,
     EVM.StorageLayout,
     EVM.Symbolic,
+    EVM.SymExec
     EVM.Transaction,
     EVM.TTY,
     EVM.TTYCenteredList,
