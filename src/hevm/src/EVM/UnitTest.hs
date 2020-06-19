@@ -3,8 +3,9 @@ module EVM.UnitTest where
 import Prelude hiding (Word)
 
 import EVM
-import EVM.ABI
+import EVM.ABI hiding (sig)
 import EVM.Concrete
+import EVM.Symbolic
 import EVM.Dapp
 import EVM.Debug (srcMapCodePos)
 import EVM.Exec
@@ -227,7 +228,12 @@ currentOpLocation vm =
         (fromMaybe (error "internal error: op ix") (vmOpIx vm))
 
 execWithCoverage :: StateT CoverageState IO VMResult
-execWithCoverage = do
+execWithCoverage = do _ <- runWithCoverage
+                      Just res <- use (_1 . result)
+                      pure res
+
+runWithCoverage :: StateT CoverageState IO VM
+runWithCoverage = do
   -- This is just like `exec` except for every instruction evaluated,
   -- we also increment a counter indexed by the current code location.
   vm0 <- use _1
@@ -235,9 +241,10 @@ execWithCoverage = do
     Nothing -> do
       vm1 <- zoom _1 (State.state (runState exec1) >> get)
       zoom _2 (modify (MultiSet.insert (currentOpLocation vm1)))
-      execWithCoverage
-    Just r ->
-      pure r
+      runWithCoverage
+    Just _ -> pure vm0
+--    Just _ -> id
+      
 
 interpretWithCoverage
   :: UnitTestOptions
@@ -258,11 +265,15 @@ interpretWithCoverage opts =
       case action of
         Stepper.Exec ->
           execWithCoverage >>= interpretWithCoverage opts . k
+        Stepper.Run ->
+          runWithCoverage >>= interpretWithCoverage opts . k
         Stepper.Wait q ->
           do m <- liftIO (oracle opts q)
              zoom _1 (State.state (runState m)) >> interpretWithCoverage opts (k ())
         Stepper.Note _ ->
           interpretWithCoverage opts (k ())
+        Stepper.Option _ ->
+          error "cannot make choice in this interpreter"
         Stepper.Fail e ->
           pure (Left e)
         Stepper.EVM m ->

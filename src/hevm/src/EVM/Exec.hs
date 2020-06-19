@@ -2,6 +2,7 @@ module EVM.Exec where
 
 import EVM
 import EVM.Concrete (createAddress)
+import EVM.Symbolic (litAddr)
 import EVM.Types
 
 import qualified EVM.FeeSchedule as FeeSchedule
@@ -50,7 +51,7 @@ run :: MonadState VM m => m VM
 run =
   use EVM.result >>= \case
     Nothing -> State.state (runState exec1) >> run
-    Just x  -> State.get
+    Just _  -> State.get
 
 execWhile :: MonadState VM m => (VM -> Bool) -> m Int
 execWhile p = go 0

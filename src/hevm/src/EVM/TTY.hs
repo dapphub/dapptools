@@ -12,7 +12,7 @@ import Brick.Widgets.List
 
 import EVM
 import EVM.ABI (abiTypeSolidity, decodeAbiValue, AbiType(..), emptyAbi)
-import EVM.Concrete (SymWord(..))
+import EVM.Symbolic (SymWord(..), maybeLitBytes)
 import EVM.Dapp (DappInfo, dappInfo)
 import EVM.Dapp (dappUnitTests, unitTestMethods, dappSolcByName, dappSolcByHash, dappSources)
 import EVM.Dapp (dappAstSrcMap)
@@ -35,7 +35,6 @@ import EVM.Fetch (Fetcher)
 
 import Control.Lens
 import Control.Monad.State.Strict hiding (state)
-import Control.Monad.Trans.Maybe (runMaybeT)
 
 import Data.Aeson.Lens
 import Data.ByteString (ByteString)
@@ -45,9 +44,7 @@ import Data.Text (Text, unpack, pack)
 import Data.Text.Encoding (decodeUtf8)
 import Data.List (sort)
 import Data.Version (showVersion)
-import Numeric (showHex)
 import Data.SBV hiding (solver)
-import qualified Data.SBV.Internals as SBV
 
 import qualified Data.ByteString as BS
 import qualified Data.Map as Map
@@ -56,8 +53,6 @@ import qualified Data.Vector as Vec
 import qualified Data.Vector.Storable as SVec
 import qualified Graphics.Vty as V
 import qualified System.Console.Haskeline as Readline
-
-import qualified Data.SBV.Trans.Control as SBV
 
 import qualified EVM.TTYCenteredList as Centered
 
@@ -222,7 +217,6 @@ interpret mode =
         -- Stepper is waiting for user input from a query
         Stepper.Option _ -> do
                   -- pause & await user.
-                  -- TODO: fixme
                   pure (Stepped (Operational.singleton action >>= k))
 
         -- Stepper wants to make a query and wait for the results?
@@ -722,7 +716,7 @@ drawVmBrowser ui =
                   ]
                 ]
              where storageDisplay (Concrete s) = pack ( show ( Map.toList s))
-                   storageDisplay (Symbolic s) = pack "<symbolic>"
+                   storageDisplay (Symbolic _) = pack "<symbolic>"
           Just solc ->
             hBox
               [ borderWithLabel (txt "Contract information") . padBottom Max . padRight (Pad 2) $ vBox

@@ -13,17 +13,10 @@ module EVM.VMTest
 
 import qualified EVM
 import qualified EVM.Concrete as EVM
-import qualified EVM.Exec
+
 import qualified EVM.FeeSchedule
-import qualified EVM.Stepper as Stepper
-import qualified EVM.Fetch as Fetch
 
-import Control.Monad.State.Strict (runState, join)
-import qualified Control.Monad.Operational as Operational
-import qualified Control.Monad.State.Class as State
-
-import EVM (EVM, forceLitBytes)
-import EVM.Stepper (Stepper)
+import EVM.Symbolic
 import EVM.Transaction
 import EVM.Types
 
@@ -163,11 +156,11 @@ checkExpectation diff execmode x vm =
            else return True
       return okState
 
-    (_, Just expectation, Just (EVM.VMSuccess output)) -> do
+    (_, Just expectation, Just (EVM.VMSuccess output')) -> do
       let
         (okState, ok2, ok3, ok4, ok5) =
           checkExpectedContracts vm (expectedContracts expectation)
-        (s2, b2) = ("bad-output", checkExpectedOut (forceLitBytes output) (expectedOut expectation))
+        (s2, b2) = ("bad-output", checkExpectedOut (forceLitBytes output') (expectedOut expectation))
         (s3, b3) = ("bad-gas", checkExpectedGas vm (expectedGas expectation))
         ss = map fst (filter (not . snd) [(s2, b2), (s3, b3)])
       _ <- if not okState then
@@ -194,9 +187,9 @@ checkExpectation diff execmode x vm =
       error "internal error"
 
 checkExpectedOut :: ByteString -> Maybe ByteString -> Bool
-checkExpectedOut output ex = case ex of
+checkExpectedOut output' ex = case ex of
   Nothing       -> True
-  Just expected -> output == expected
+  Just expected -> output' == expected
 
 -- quotient account state by nullness
 (~=) :: Map Addr EVM.Contract -> Map Addr EVM.Contract -> Bool
@@ -310,7 +303,7 @@ parseVmOpts v =
            <*> pure 0xffffffff
            <*> wordField env  "currentGasLimit"
            <*> wordField exec "gasPrice"
-           <*> pure (EVM.FeeSchedule.homestead)
+           <*> pure (EVM.FeeSchedule.istanbul)
            <*> pure False
        _ ->
          JSON.typeMismatch "VM test case" (JSON.Object v)

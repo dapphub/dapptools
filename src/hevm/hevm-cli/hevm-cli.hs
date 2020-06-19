@@ -11,7 +11,8 @@
 {-# Language TypeOperators #-}
 
 import qualified EVM
-import EVM.Concrete (w256, litWord, sw256)
+import EVM.Concrete (createAddress)
+import EVM.Symbolic (forceLitBytes, litBytes, litAddr)
 import qualified EVM.FeeSchedule as FeeSchedule
 import qualified EVM.Fetch
 import qualified EVM.Flatten
@@ -24,11 +25,9 @@ import qualified EVM.VMTest as VMTest
 #endif
 
 import EVM (ExecMode(..))
-import EVM.ABI (sig, decodeAbiValue, AbiType(..))
-import EVM.Concrete (createAddress)
-import EVM.Symbolic
+import EVM.ABI (sig, decodeAbiValue)
+import EVM.SymExec
 import EVM.Debug
-import EVM.Exec
 import EVM.ABI
 import EVM.Solidity
 import EVM.Types hiding (word)
@@ -39,31 +38,26 @@ import EVM.Dapp (findUnitTests, dappInfo)
 import EVM.RLP (rlpdecode)
 import qualified EVM.Patricia as Patricia
 import Data.Map (Map)
-import Numeric (readHex, showHex)
 
 import qualified EVM.Facts     as Facts
 import qualified EVM.Facts.Git as Git
 import qualified EVM.UnitTest
 
 import Control.Concurrent.Async   (async, waitCatch)
-import qualified Control.Monad.Operational as Operational
-import qualified Control.Monad.State.Class as State
-import Control.Lens
-import Control.Applicative
-import Control.Monad              (void, when, forM_, (>=>))
-import Control.Monad.State.Strict (execState, runState, runStateT, StateT, liftIO, execStateT, lift)
+import Control.Lens hiding (pre)
+import Control.Monad              (void, when, forM_)
+import Control.Monad.State.Strict (execStateT)
 import Data.ByteString            (ByteString)
 import Data.List                  (intercalate, isSuffixOf)
-import Data.Text                  (Text, unpack, pack, splitOn)
+import Data.Text                  (Text, unpack, pack)
 import Data.Text.Encoding         (encodeUtf8)
 import Data.Maybe                 (fromMaybe, fromJust)
 import Data.Version               (showVersion)
-import Data.SBV hiding (Word, solver, verbose)
-import qualified Data.SBV as SBV
-import Data.SBV.Control hiding (Word, verbose, Version, timeout, create)
+import Data.SBV hiding (Word, solver, verbose, name)
+import Data.SBV.Control hiding (Version, timeout, create)
+import System.IO                  (hFlush, stdout)
 import System.Directory           (withCurrentDirectory, listDirectory)
 import System.Exit                (die, exitFailure)
-import System.IO                  (hFlush, stdout)
 import System.Environment         (setEnv)
 import System.Process             (callProcess)
 import qualified Data.Aeson        as JSON
@@ -244,14 +238,14 @@ unitTestOptions cmd = do
 
   let
     testn = testNumber params
-    block = if 0 == testn
+    block' = if 0 == testn
        then EVM.Fetch.Latest
        else EVM.Fetch.BlockNumber testn
 
   pure EVM.UnitTest.UnitTestOptions
     { EVM.UnitTest.oracle =
         case rpc cmd of
-         Just url -> EVM.Fetch.http block url
+         Just url -> EVM.Fetch.http block' url
          Nothing  -> EVM.Fetch.zero
     , EVM.UnitTest.verbose = verbose cmd
     , EVM.UnitTest.match   = pack $ fromMaybe "^test" (match cmd)
@@ -405,9 +399,9 @@ runSMTWithTimeOut (Just "cvc4") (Just n) sym = do
   a <- runSMTWith cvc4 sym
   setEnv "SBV_CVC4_OPTIONS" ""
   return a
-runSMTWithTimeOut solver timeout sym =
-  let runwithz3 = runSMTWith z3 $ maybe (return ()) setTimeOut timeout >> sym
-  in case solver of
+runSMTWithTimeOut smtsolver t sym =
+  let runwithz3 = runSMTWith z3 $ maybe (return ()) setTimeOut t >> sym
+  in case smtsolver of
     Just "z3" -> runwithz3
     Nothing   -> runwithz3
     Just _ -> error "Unknown solver. Currently supported solvers; z3, cvc4"
@@ -430,7 +424,7 @@ assert cmd = do
   else runSMTWithTimeOut (solver cmd) (smttimeout cmd) $ query $ do
          preState <- symvmFromCommand cmd
          verify preState (maxIterations cmd) (Just checkAssertions) >>= \case
-           Right a -> io $ do print "Assertion violation:"
+           Right a -> io $ do putStrLn "Assertion violation:"
                               die . show $ ByteStringS a
            Left (pre, posts) ->
              do io $ putStrLn $ "Explored: " <> show (length posts) <> " branches without assertion violations"
@@ -445,10 +439,10 @@ assert cmd = do
                       Unk -> io $ putStrLn "Timed out"
                       Unsat -> io $ putStrLn "Inconsistent path conditions: dead path"
                       Sat -> do
-                        cdlen <- num <$> getValue cdlen
-                        calldatainput <- mapM (getValue.fromSized) (take cdlen calldata')
+                        cdlen' <- num <$> getValue cdlen
+                        calldatainput <- mapM (getValue.fromSized) (take cdlen' calldata')
                         io $ do
-                          print $ "Calldata:"
+                          putStrLn "Calldata:"
                           print $ ByteStringS (ByteString.pack calldatainput)
                         case view EVM.result postVM of
                           Nothing -> error "internal error; no EVM result"
@@ -457,8 +451,8 @@ assert cmd = do
                           Just (EVM.VMFailure err) -> io . putStrLn $ "Failed: " <> show err
                           Just (EVM.VMSuccess []) -> io $ putStrLn "Stopped"
                           Just (EVM.VMSuccess msg) -> do
-                            output <- mapM (getValue.fromSized) msg
-                            io . putStrLn $ "Returned: " <> show (ByteStringS (ByteString.pack output))
+                            out <- mapM (getValue.fromSized) msg
+                            io . putStrLn $ "Returned: " <> show (ByteStringS (ByteString.pack out))
 
 
 dappCoverage :: UnitTestOptions -> Mode -> String -> IO ()
@@ -491,11 +485,6 @@ dappCoverage opts _ solcFile =
       Nothing ->
         error ("Failed to read Solidity JSON for `" ++ solcFile ++ "'")
 
-symbolEVM :: Symbolic (SWord 256, SWord 256)
-symbolEVM = do x <- symbolic "x"
-               y <- symbolic "y"
-               pure (x,y)
-
 launchExec :: Command Options.Unwrapped -> IO ()
 launchExec cmd = do
   let root = fromMaybe "." (dappRoot cmd)
@@ -515,7 +504,7 @@ launchExec cmd = do
         Nothing -> error "internal error; no EVM result"
         Just (EVM.VMFailure (EVM.Revert msg)) -> die . show . ByteStringS $ msg
         Just (EVM.VMFailure err) -> die . show $ err
-        Just (EVM.VMSuccess msg) -> print . ByteStringS $ EVM.forceLitBytes msg
+        Just (EVM.VMSuccess msg) -> print . ByteStringS $ forceLitBytes msg
       case state cmd of
         Nothing -> pure ()
         Just path ->
@@ -534,8 +523,8 @@ parseTups (JSON.Array arr) = do
   tupList <- mapM parseJSON (V.toList arr)
   mapM (\[k, v] -> do
                   rhs <- parseJSON v
-                  key <- parseJSON k
-                  return (key, rhs))
+                  lhs <- parseJSON k
+                  return (lhs, rhs))
          tupList
 parseTups invalid = JSON.typeMismatch "Malformed array" invalid
 
@@ -763,9 +752,9 @@ runVMTest diffmode execmode mode timelimit (name, x) = do
 #endif
 
 abiencode :: (AsValue s) => s -> [String] -> ByteString
-abiencode abi args =
-  let declarations = parseMethodInput <$> V.toList (abi ^?! key "inputs" . _Array)
-      sig = signature abi
+abiencode abijson args =
+  let declarations = parseMethodInput <$> V.toList (abijson ^?! key "inputs" . _Array)
+      sig' = signature abijson
   in if length declarations == length args
-     then abiMethod sig $ AbiTuple . V.fromList $ zipWith makeAbiValue (snd <$> declarations) args
+     then abiMethod sig' $ AbiTuple . V.fromList $ zipWith makeAbiValue (snd <$> declarations) args
      else error $ "wrong number of arguments:" <> show (length args) <> ": " <> show args

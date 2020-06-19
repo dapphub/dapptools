@@ -16,13 +16,13 @@ module EVM where
 import Prelude hiding (log, Word, exponent)
 
 import Data.SBV hiding (Word, output, Unknown)
-import qualified Data.SBV.Control as SBV
 import Data.Proxy (Proxy(..))
 import EVM.ABI
 import EVM.Types
 import EVM.Solidity
 import EVM.Keccak
 import EVM.Concrete hiding ((^))
+import EVM.Symbolic
 import EVM.Op
 import EVM.FeeSchedule (FeeSchedule (..))
 import qualified EVM.Precompiled
@@ -36,14 +36,13 @@ import Control.Monad.State.Strict hiding (state)
 import Data.ByteString              (ByteString)
 import Data.ByteString.Lazy         (fromStrict)
 import Data.Map.Strict              (Map)
-import Data.Maybe                   (fromMaybe, fromJust)
+import Data.Maybe                   (fromMaybe)
 import Data.Semigroup               (Semigroup (..))
 import Data.Sequence                (Seq)
 import Data.Vector.Storable         (Vector)
 import Data.Foldable                (toList)
 
 import Data.Tree
-import Numeric (readHex, showHex)
 
 import qualified Data.ByteString      as BS
 import qualified Data.ByteString.Lazy as LS
@@ -444,21 +443,6 @@ initialContract theContractCode = Contract
 
 next :: (?op :: Word8) => EVM ()
 next = modifying (state . pc) (+ (opSize ?op))
-
--- Note: these forms are crude and in general,
--- the continuation passing style `forceConcrete`
--- alternatives should be prefered for better error
--- handling
-forceLit :: SymWord -> Word
-forceLit (S whiff a) = case unliteral a of
-  Just c -> C whiff (fromSizzle c)
-  Nothing -> error "unexpected symbolic argument"
-
-forceLitBytes :: [SWord 8] -> ByteString
-forceLitBytes = BS.pack . fmap (fromSized . fromJust . unliteral)
-
-maybeLitBytes :: [SWord 8] -> Maybe ByteString
-maybeLitBytes xs = fmap (\x -> BS.pack (fmap fromSized x)) (mapM unliteral xs)
 
 exec1 :: EVM ()
 exec1 = do
@@ -922,15 +906,16 @@ exec1 = do
                     let original = case view storage this of
                                   Concrete _ -> fromMaybe 0 (Map.lookup (forceLit x) (view origStorage this))
                                   Symbolic _ -> 0 -- we don't use this value anywhere anyway
-                        cost = case mapM maybeLitWord (current:new:[]) of
-                                 -- if any of the arguments are symbolic,
-                                 -- assume worst case scenario
-                                 Nothing -> g_sset
-                                 Just (current':new':[]) ->
+                        cost = case (maybeLitWord current, maybeLitWord new) of
+                                 (Just current', Just new') ->
                                     if (current' == new') then g_sload
                                     else if (current' == original) && (original == 0) then g_sset
                                     else if (current' == original) then g_sreset
                                     else g_sload
+
+                                 -- if any of the arguments are symbolic,
+                                 -- assume worst case scenario
+                                 _ -> g_sset
 
                     burn cost $ do
                       next
@@ -938,11 +923,8 @@ exec1 = do
                       modifying (env . contracts . ix self . storage)
                         (writeStorage x new)
 
-                      case mapM maybeLitWord [current,new] of
-                         -- if any of the arguments are symbolic,
-                         -- don't mess with the refund counter
-                         Nothing -> noop
-                         Just (current':new':[]) ->
+                      case (maybeLitWord current, maybeLitWord new) of
+                         (Just current', Just new') ->
                             unless (current' == new') $
                               if current' == original
                               then when (original /= 0 && new' == 0) $
@@ -956,7 +938,9 @@ exec1 = do
                                         if original == 0
                                         then refund (g_sset - g_sload)
                                         else refund (g_sreset - g_sload)
-
+                         -- if any of the arguments are symbolic,
+                         -- don't change the refund counter
+                         _ -> noop
             _ -> underrun
 
         -- op: JUMP
@@ -973,7 +957,7 @@ exec1 = do
             (x:y:xs) -> forceConcrete x $ \x' ->
                 burn g_high $
                   let jump 0 = assign (state . stack) xs >> next
-                      jump _ = checkJump (forceLit x) xs
+                      jump _ = checkJump x' xs
                   in case maybeLitWord y of
                       Just y' -> jump y'
                       -- if the jump condition is symbolic, an smt query has to be made.
@@ -1142,7 +1126,6 @@ exec1 = do
                         assign (state . stack) xs
                         cheat (xInOffset, xInSize) (xOutOffset, xOutSize)
                   _ -> do
-                        theCaller <- use (state . caller)
                         delegateCall this xGas xTo self 0 xInOffset xInSize xOutOffset xOutSize xs $ do
                           touchAccount self
             _ -> underrun
@@ -1276,7 +1259,6 @@ precompiledContract this xGas precompileAddr recipient xValue inOffset inSize ou
     stk <- use (state . stack)
     case stk of
       (x:_) -> case maybeLitWord x of
-        Nothing -> vmError UnexpectedSymbolicArg
         Just 0 ->
           return ()
         Just 1 ->
@@ -1287,6 +1269,7 @@ precompiledContract this xGas precompileAddr recipient xValue inOffset inSize ou
             touchAccount self
             touchAccount recipient
             touchAccount precompileAddr
+        _ -> vmError UnexpectedSymbolicArg
       _ -> underrun
 
 executePrecompile

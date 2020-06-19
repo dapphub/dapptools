@@ -13,14 +13,11 @@ import Data.Aeson (FromJSON (..), (.:))
 import Data.Aeson (FromJSONKey (..), FromJSONKeyFunction (..))
 #endif
 
-import Text.ParserCombinators.ReadP
 import Data.SBV
 import Data.Kind
 import Data.Monoid ((<>))
 import Data.Bifunctor (first)
-import Data.Bits
 import Data.Char
-import Data.ByteString.Internal
 import Data.ByteString (ByteString)
 import Data.ByteString.Base16 as BS16
 import Data.ByteString.Builder (byteStringHex, toLazyByteString)
@@ -62,7 +59,6 @@ type family ToSizzle (t :: Type) :: Type where
 -- | Conversion from a fixed-sized BV to a sized bit-vector.
 class ToSizzleBV a where
    -- | Convert a fixed-sized bit-vector to the corresponding sized bit-vector,
-   -- for instance 'SWord16' to 'SWord 16'. See also 'fromSized'.
    toSizzle :: a -> ToSizzle a
 
    default toSizzle :: (Num (ToSizzle a), Integral a) => (a -> ToSizzle a)
@@ -87,16 +83,12 @@ instance (ToSizzleBV W256)
 instance (FromSizzleBV (WordN 256))
 instance (ToSizzleBV Addr)
 instance (FromSizzleBV (WordN 160))
---instance {-# OVERLAPPING  #-} ToSizedBV (SWord 256) where toSized = Trans.sFromIntegral
 
 newtype Addr = Addr { addressWord160 :: Word160 }
   deriving (Num, Integral, Real, Ord, Enum, Eq, Bits, Generic)
 
 newtype SAddr = SAddr { saddressWord160 :: SWord 160 }
   deriving (Num)
-
-litAddr :: Addr -> SAddr
-litAddr = SAddr . literal . toSizzle
 
 instance Read W256 where
   readsPrec _ "0x" = [(0, "")]
@@ -122,9 +114,6 @@ instance Show SAddr where
 showAddrWith0x :: Addr -> String
 showAddrWith0x addr = "0x" ++ show addr
 
-litBytes :: ByteString -> [SWord 8]
-litBytes bs = fmap (toSized . literal) (BS.unpack bs)
-
 strip0x :: ByteString -> ByteString
 strip0x bs = if "0x" `Char8.isPrefixOf` bs then Char8.drop 2 bs else bs
 
@@ -137,7 +126,7 @@ instance Show ByteStringS where
         Text.decodeUtf8 . toStrict . toLazyByteString . byteStringHex
 
 instance Read ByteStringS where
-    readsPrec n ('0':'x':x) = [(ByteStringS $ fst bytes, Text.unpack . Text.decodeUtf8 $ snd bytes)]
+    readsPrec _ ('0':'x':x) = [(ByteStringS $ fst bytes, Text.unpack . Text.decodeUtf8 $ snd bytes)]
        where bytes = BS16.decode (Text.encodeUtf8 (Text.pack x))
     readsPrec _ _ = []
 
@@ -260,9 +249,6 @@ asBE x = asBE (x `div` 256)
 
 word256Bytes :: W256 -> ByteString
 word256Bytes x = BS.pack [byteAt x (31 - i) | i <- [0..31]]
-
--- sword256Bytes :: (SWord _) -> 
--- sword256Bytes x = BS.pack [byteAt x (31 - i) | i <- [0..31]]
 
 word160Bytes :: Addr -> ByteString
 word160Bytes x = BS.pack [byteAt (addressWord160 x) (19 - i) | i <- [0..19]]

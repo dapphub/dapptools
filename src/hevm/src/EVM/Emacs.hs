@@ -22,6 +22,7 @@ import Data.SBV hiding (Word, output)
 import EVM
 import EVM.ABI
 import EVM.Concrete
+import EVM.Symbolic
 import EVM.Dapp
 import EVM.Debug (srcMapCodePos)
 import EVM.Fetch (Fetcher)
@@ -30,12 +31,11 @@ import EVM.Solidity
 import EVM.Stepper (Stepper)
 import EVM.TTY (currentSrcMap)
 import EVM.Types
-import EVM.UnitTest hiding (interpret)
+import EVM.UnitTest
 import Prelude hiding (Word)
 import System.Directory
 import System.IO
 import qualified Control.Monad.Operational as Operational
-import qualified Data.ByteString as BS
 import qualified Data.List as List
 import qualified Data.Map as Map
 import qualified Data.Set as Set
@@ -505,9 +505,9 @@ instance {-# OVERLAPPING #-} SDisplay String where
   sexp x = A (txt x)
 
 instance SDisplay Word where
-  sexp (C Dull x) = A (quoted (txt x))
   sexp (C (FromKeccak bs) x) =
     L [A "hash", A (txt x), sexp bs]
+  sexp (C _ x) = A (quoted (txt x))
 
 instance SDisplay ByteString where
   sexp = A . txt . pack . show . ByteStringS
