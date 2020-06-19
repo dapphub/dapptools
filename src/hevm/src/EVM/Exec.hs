@@ -2,6 +2,7 @@ module EVM.Exec where
 
 import EVM
 import EVM.Concrete (createAddress)
+import EVM.Symbolic (litAddr)
 import EVM.Types
 
 import qualified EVM.FeeSchedule as FeeSchedule

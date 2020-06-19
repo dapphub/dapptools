@@ -14,12 +14,9 @@ import qualified EVM
 import Control.Lens hiding ((.=))
 import Control.Monad.Reader
 import Control.Monad.Trans.Maybe
-import Data.SBV.Control (registerUISMTFunction)
 import Data.SBV.Trans.Control
-import Data.SBV.Internals (sendStringToSolver, retrieveResponseFromSolver)
 import qualified Data.SBV.Internals as SBV
 import Data.SBV.Trans hiding (Word)
-import Data.SBV hiding (runSMT, newArray_, Word, addAxiom)
 import Data.Aeson
 import Data.Aeson.Lens
 import Data.ByteString (ByteString)
@@ -144,8 +141,7 @@ http n url q =
       fetchSlotFrom n url addr (fromIntegral slot) >>= \case
         Just x  -> return (continue x)
         Nothing -> error ("oracle error: " ++ show q)
-    EVM.PleaseAskSMT jumpcondition pathconditions continue -> error "smt calls not available for this oracle"
-    q -> error ("oracle error: " <> show q)
+    EVM.PleaseAskSMT _ _ _ -> error "smt calls not available for this oracle"
 
 zero :: Monad m => EVM.Query -> m (EVM ())
 zero q =
@@ -154,7 +150,7 @@ zero q =
       return (continue (initialContract (EVM.RuntimeCode mempty)))
     EVM.PleaseFetchSlot _ _ continue ->
       return (continue 0)
-    EVM.PleaseAskSMT jumpcondition pathconds continue ->
+    EVM.PleaseAskSMT _ _ continue ->
       return $ continue EVM.Unknown
 
 
