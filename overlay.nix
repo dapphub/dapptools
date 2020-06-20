@@ -109,7 +109,7 @@ in rec {
         (import (self.pkgs.fetchFromGitHub {
           inherit owner rev sha256;
           repo = "nixpkgs";
-        }) {}).solc;
+        }) { system = super.system; }).solc;
       in
         fetchNixpkgs { owner = "NixOS";   attr = super.system; }
         //
