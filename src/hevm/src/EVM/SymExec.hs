@@ -15,14 +15,13 @@ import EVM.Stepper (Stepper)
 import qualified EVM.Stepper as Stepper
 import qualified Control.Monad.Operational as Operational
 import EVM.Types
-import EVM.Solidity
 import EVM.Symbolic (litBytes)
 import EVM.Concrete (createAddress)
 import qualified EVM.FeeSchedule as FeeSchedule
 import Data.SBV.Trans.Control
 import Data.SBV.Trans hiding (distinct)
 import Data.SBV hiding (runSMT, newArray_, addAxiom, distinct)
-import Data.Vector (toList, fromList)
+import Data.Vector (toList)
 
 import Control.Monad.IO.Class
 import qualified Control.Monad.State.Class as State
@@ -30,7 +29,6 @@ import Data.ByteString (ByteString, pack)
 import Data.Text (Text)
 import Control.Monad.State.Strict (runStateT, runState, StateT, get, put, zipWithM)
 import Control.Applicative
-import Data.Maybe (fromJust)
 
 -- | Convenience functions for generating large symbolic byte strings
 sbytes32, sbytes64, sbytes128, sbytes256, sbytes512, sbytes1024 :: Query ([SWord 8])
@@ -77,14 +75,14 @@ contractWithStore theContractCode store = initialContract theContractCode & set 
 -- Any argument given as "<symbolic>" or omitted at the tail of the list are
 -- kept symbolic.
 symCalldata :: Text -> [AbiType] -> [String] -> Query ([SWord 8], SWord 32)
-symCalldata sig' typesignature concreteArgs =
+symCalldata sig typesignature concreteArgs =
   let args = concreteArgs <> replicate (length typesignature - length concreteArgs)  "<symbolic>"
       mkArg typ "<symbolic>" = symAbiArg typ
       mkArg typ arg = let n = litBytes . encodeAbiValue $ makeAbiValue typ arg
                       in return (n, num (length n))
-      selector = litBytes $ sig sig'
+      sig' = litBytes $ selector sig
   in do calldatas <- zipWithM mkArg typesignature args
-        return (selector <> concat (fst <$> calldatas), 4 + (sum $ snd <$> calldatas))
+        return (sig' <> concat (fst <$> calldatas), 4 + (sum $ snd <$> calldatas))
 
 abstractVM :: Maybe (Text, [AbiType]) -> [String] -> ByteString -> StorageModel -> Query VM
 abstractVM typesignature concreteArgs x storagemodel = do

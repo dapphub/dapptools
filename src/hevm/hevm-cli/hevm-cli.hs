@@ -24,7 +24,7 @@ import qualified EVM.Emacs
 import qualified EVM.VMTest as VMTest
 #endif
 
-import EVM.ABI (sig, decodeAbiValue)
+import EVM.ABI (decodeAbiValue)
 import EVM.SymExec
 import EVM.Debug
 import EVM.ABI
@@ -245,8 +245,8 @@ unitTestOptions cmd = do
     , EVM.UnitTest.match   = pack $ fromMaybe "^test" (match cmd)
     , EVM.UnitTest.fuzzRuns = fromMaybe 100 (fuzzRuns cmd)
     , EVM.UnitTest.replay   = do
-        arg <- replay cmd
-        return (fst arg, LazyByteString.fromStrict (hexByteString "--replay" $ strip0x $ snd arg))
+        arg' <- replay cmd
+        return (fst arg', LazyByteString.fromStrict (hexByteString "--replay" $ strip0x $ snd arg'))
     , EVM.UnitTest.vmModifier = vmModifier
     , EVM.UnitTest.testParams = params
     }
@@ -643,7 +643,7 @@ symvmFromCommand cmd = do
     Just InitialS  -> EVM.Symbolic <$> freshArray_ (Just 0)
     Just ConcreteS -> return (EVM.Concrete mempty)
     Just SymbolicS -> EVM.Symbolic <$> freshArray_ Nothing
-    Nothing -> EVM.Symbolic <$> freshArray_ if create cmd then (Just 0) else Nothing
+    Nothing -> EVM.Symbolic <$> freshArray_ (if create cmd then (Just 0) else Nothing)
 
   vm <- case (rpc cmd, address cmd, code cmd) of
     (Just url, Just addr', _) -> io (EVM.Fetch.fetchContractFrom block' url addr') >>= \case
