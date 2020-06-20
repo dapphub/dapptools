@@ -6,4 +6,4 @@ else
   sig="$1 public"
 fi
 
-seth abi "function $sig"
+seth abi "function $sig" | jq '.[0]' -c
