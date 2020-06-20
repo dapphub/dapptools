@@ -28,14 +28,14 @@ readByteOrZero :: Int -> ByteString -> Word8
 readByteOrZero i bs = fromMaybe 0 (bs ^? ix i)
 
 byteStringSliceWithDefaultZeroes :: Int -> Int -> ByteString -> ByteString
-byteStringSliceWithDefaultZeroes offset size bs =
+byteStringSliceWithDefaultZeroes !offset !size !bs =
   if size == 0
   then ""
   -- else if offset > BS.length bs
   -- then BS.replicate size 0
   -- todo: this ^^ should work, investigate why it causes more GST fails
   else
-    let bs' = BS.take size (BS.drop offset bs)
+    let bs' = BS.take `seq` size `seq` (BS.drop offset bs)
     in bs' <> BS.replicate (size - BS.length bs') 0
 
 data Whiff = Dull | FromKeccak ByteString
