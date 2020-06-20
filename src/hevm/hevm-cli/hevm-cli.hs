@@ -650,7 +650,8 @@ symvmFromCommand cmd = do
     -- whereas the values of SymbolicS are unconstrained.
     Just InitialS  -> EVM.Symbolic <$> freshArray_ (Just 0)
     Just ConcreteS -> return (EVM.Concrete mempty)
-    _ -> EVM.Symbolic <$> freshArray_ Nothing
+    Just SymbolicS -> EVM.Symbolic <$> freshArray_ Nothing
+    Nothing -> EVM.Symbolic <$> freshArray_ if create cmd then (Just 0) else Nothing
 
   vm <- case (rpc cmd, address cmd, code cmd) of
     (Just url, Just addr', _) -> io (EVM.Fetch.fetchContractFrom block' url addr') >>= \case
