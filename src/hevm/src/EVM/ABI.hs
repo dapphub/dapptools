@@ -47,7 +47,7 @@ module EVM.ABI
   , parseTypeName
   , makeAbiValue
   , parseAbiValue
-  , sig
+  , selector
   ) where
 
 import EVM.Keccak (abiKeccak)
@@ -332,8 +332,8 @@ encodeAbiValue = BSLazy.toStrict . runPut . putAbi
 decodeAbiValue :: AbiType -> BSLazy.ByteString -> AbiValue
 decodeAbiValue = runGet . getAbi
 
-sig :: Text -> BS.ByteString
-sig s = BSLazy.toStrict . runPut $ putWord32be (abiKeccak (encodeUtf8 s))
+selector :: Text -> BS.ByteString
+selector s = BSLazy.toStrict . runPut $ putWord32be (abiKeccak (encodeUtf8 s))
 
 abiMethod :: Text -> AbiValue -> BS.ByteString
 abiMethod s args = BSLazy.toStrict . runPut $ do
