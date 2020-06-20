@@ -25,7 +25,7 @@ import qualified EVM.VMTest as VMTest
 #endif
 
 import EVM (ExecMode(..))
-import EVM.ABI (sig, decodeAbiValue)
+import EVM.ABI (decodeAbiValue)
 import EVM.SymExec
 import EVM.Debug
 import EVM.ABI
@@ -252,8 +252,8 @@ unitTestOptions cmd = do
     , EVM.UnitTest.match   = pack $ fromMaybe "^test" (match cmd)
     , EVM.UnitTest.fuzzRuns = fromMaybe 100 (fuzzRuns cmd)
     , EVM.UnitTest.replay   = do
-        arg <- replay cmd
-        return (fst arg, LazyByteString.fromStrict (hexByteString "--replay" $ strip0x $ snd arg))
+        arg' <- replay cmd
+        return (fst arg', LazyByteString.fromStrict (hexByteString "--replay" $ strip0x $ snd arg'))
     , EVM.UnitTest.vmModifier = vmModifier
     , EVM.UnitTest.testParams = params
     }
@@ -651,7 +651,7 @@ symvmFromCommand cmd = do
     Just InitialS  -> EVM.Symbolic <$> freshArray_ (Just 0)
     Just ConcreteS -> return (EVM.Concrete mempty)
     Just SymbolicS -> EVM.Symbolic <$> freshArray_ Nothing
-    Nothing -> EVM.Symbolic <$> freshArray_ if create cmd then (Just 0) else Nothing
+    Nothing -> EVM.Symbolic <$> freshArray_ (if create cmd then (Just 0) else Nothing)
 
   vm <- case (rpc cmd, address cmd, code cmd) of
     (Just url, Just addr', _) -> io (EVM.Fetch.fetchContractFrom block' url addr') >>= \case
@@ -729,33 +729,32 @@ launchTest execmode cmd = do
 
 #if MIN_VERSION_aeson(1, 0, 0)
 runVMTest :: Bool -> ExecMode -> Mode -> Maybe Int -> (String, VMTest.Case) -> IO Bool
-runVMTest = error ""
--- runVMTest diffmode execmode mode timelimit (name, x) = do
---   let vm0 = VMTest.vmForCase execmode x
---   putStr (name ++ " ")
---   hFlush stdout
---   result <- do
---     action <- async $
---       case mode of
---         Run ->
---           Timeout.timeout (1e6 * (fromMaybe 10 timelimit)) $
---             execStateT (EVM.Stepper.interpret EVM.Fetch.zero . void $ EVM.Stepper.execFully) vm0
---         Debug ->
---           Just <$> EVM.TTY.runFromVM Nothing EVM.Fetch.zero vm0
---     waitCatch action
---   case result of
---     Right (Just vm1) -> do
---       ok <- VMTest.checkExpectation diffmode execmode x vm1
---       putStrLn (if ok then "ok" else "")
---       return ok
---     Right Nothing -> do
---       putStrLn "timeout"
---       return False
---     Left e -> do
---       putStrLn $ "error: " ++ if diffmode
---         then show e
---         else (head . lines . show) e
---       return False
+runVMTest diffmode execmode mode timelimit (name, x) = do
+  let vm0 = VMTest.vmForCase execmode x
+  putStr (name ++ " ")
+  hFlush stdout
+  result <- do
+    action <- async $
+      case mode of
+        Run ->
+          Timeout.timeout (1e6 * (fromMaybe 10 timelimit)) $
+            execStateT (EVM.Stepper.interpret EVM.Fetch.zero . void $ EVM.Stepper.execFully) vm0
+        Debug ->
+          Just <$> EVM.TTY.runFromVM Nothing EVM.Fetch.zero vm0
+    waitCatch action
+  case result of
+    Right (Just vm1) -> do
+      ok <- VMTest.checkExpectation diffmode execmode x vm1
+      putStrLn (if ok then "ok" else "")
+      return ok
+    Right Nothing -> do
+      putStrLn "timeout"
+      return False
+    Left e -> do
+      putStrLn $ "error: " ++ if diffmode
+        then show e
+        else (head . lines . show) e
+      return False
 
 #endif
 

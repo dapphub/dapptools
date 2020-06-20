@@ -3,7 +3,7 @@ module EVM.UnitTest where
 import Prelude hiding (Word)
 
 import EVM
-import EVM.ABI hiding (sig)
+import EVM.ABI
 import EVM.Concrete
 import EVM.Symbolic
 import EVM.Dapp

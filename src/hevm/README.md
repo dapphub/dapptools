@@ -175,12 +175,12 @@ hevm exec --caller $(seth tx $TXHASH from) --address $(seth tx $TXHASH to) --cal
 ### `hevm equivalence`
 
 ```sh
-Usage: hevm equiv --code-a TEXT --code-b TEXT [--func-sig TEXT]
+Usage: hevm equiv --code-a TEXT --code-b TEXT [--abi TEXT]
 ```
 
 Symbolically execute both the code given in `--code-a` and `--code-b` and try to prove equivalence between their output and storage.
 
-If `--func-sig` is given, calldata is assumed to take the form of the function given.
+If `--abi` is given, calldata is assumed to take the form of the function given.
 If left out, calldata is a fully abstract buffer of at most 1024 bytes.
 
 ### `hevm dapp-test`
