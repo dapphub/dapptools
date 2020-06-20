@@ -18,7 +18,6 @@ module EVM.Solidity
   , methodSignature
   , methodInputs
   , methodOutput
-  , parseFunArgs
   , abiMap
   , eventMap
   , contractName
@@ -61,20 +60,20 @@ import Data.ByteString      (ByteString)
 import Data.ByteString.Lazy (fromStrict)
 import Data.Char            (isDigit)
 import Data.Either          (isRight)
-import Data.Foldable hiding (concat)
+import Data.Foldable
 import Data.Map.Strict      (Map)
 import Data.Maybe
 import Data.List.NonEmpty   (NonEmpty)
 import qualified Data.List.NonEmpty as NonEmpty
 import Data.Semigroup
 import Data.Sequence        (Seq)
-import Data.Text            (Text, pack, intercalate, splitOn, concat)
+import Data.Text            (Text, pack, intercalate)
 import Data.Text.Encoding   (encodeUtf8)
 import Data.Text.IO         (readFile, writeFile)
 import Data.Vector          (Vector)
 import Data.Word
 import GHC.Generics         (Generic)
-import Prelude hiding       (readFile, writeFile, concat)
+import Prelude hiding       (readFile, writeFile)
 import System.IO hiding     (readFile, writeFile)
 import System.IO.Temp
 import System.Process
@@ -404,18 +403,6 @@ parseMethodInput x =
   ( x ^?! key "name" . _String
   , force "internal error: method type" (parseTypeName' x)
   )
-
-
--- crude: assumes signature of form `foo(uint256,address)`
--- (no return data, no argnames)
-parseFunArgs :: Text -> Maybe AbiType
-parseFunArgs x =
- let (_:args) = splitOn "(" x
-     (argdata:_) = splitOn ")" $ concat args
-  in do args' <- if argdata == ""
-                 then return mempty
-                 else mapM (parseTypeName mempty) $ splitOn "," argdata
-        return $ AbiTupleType (Vector.fromList args')
 
 toCode :: Text -> ByteString
 toCode = fst . BS16.decode . encodeUtf8

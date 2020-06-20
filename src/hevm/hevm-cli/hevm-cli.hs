@@ -105,22 +105,23 @@ data Command w
       , block       :: w ::: Maybe W256       <?> "Block state is be fetched from"
 
   -- symbolic execution opts
-      , jsonFile      :: w ::: Maybe String     <?> "Filename or path to dapp build output (default: out/*.solc.json)"
+      , jsonFile      :: w ::: Maybe String       <?> "Filename or path to dapp build output (default: out/*.solc.json)"
       , storageModel  :: w ::: Maybe StorageModel <?> "Select storage model: ConcreteS, SymbolicS (default) or InitialS"
-      , funcSig       :: w ::: Maybe Text       <?> "Function signature" -- to be deprecated in favor of 'abi'
-      , debug         :: w ::: Bool             <?> "Run interactively"
-      , getModels     :: w ::: Bool             <?> "Print example testcase for each execution path"
-      , smttimeout    :: w ::: Maybe Integer    <?> "Timeout given to smt solver in milliseconds"
-      , maxIterations :: w ::: Maybe Integer    <?> "Number of times we may revisit a particular branching point"
-      , solver        :: w ::: Maybe Text       <?> "Smt solver to use z3 (default) or cvc4"
+      , abi           :: w ::: Maybe String       <?> "Signature of types to decode / encode"
+      , arg           :: w ::: [String]           <?> "Values to encode"
+      , debug         :: w ::: Bool               <?> "Run interactively"
+      , getModels     :: w ::: Bool               <?> "Print example testcase for each execution path"
+      , smttimeout    :: w ::: Maybe Integer      <?> "Timeout given to smt solver in milliseconds"
+      , maxIterations :: w ::: Maybe Integer      <?> "Number of times we may revisit a particular branching point"
+      , solver        :: w ::: Maybe Text         <?> "Smt solver to use z3 (default) or cvc4"
       }
   | Equivalence -- prove equivalence between two programs
-      { codeA         :: w ::: ByteString <?> "Bytecode of the first program"
-      , codeB         :: w ::: ByteString <?> "Bytecode of the second program"
-      , funcSig       :: w ::: Maybe Text <?> "Function signature"
-      , smttimeout    :: w ::: Maybe Integer    <?> "Timeout given to smt solver in milliseconds"
-      , maxIterations :: w ::: Maybe Integer    <?> "Number of times we may revisit a particular branching point"
-      , solver        :: w ::: Maybe Text       <?> "Smt solver to use z3 (default) or cvc4"
+      { codeA         :: w ::: ByteString    <?> "Bytecode of the first program"
+      , codeB         :: w ::: ByteString    <?> "Bytecode of the second program"
+      , abi           :: w ::: Maybe String  <?> "Signature of types to decode / encode"
+      , smttimeout    :: w ::: Maybe Integer <?> "Timeout given to smt solver in milliseconds"
+      , maxIterations :: w ::: Maybe Integer <?> "Number of times we may revisit a particular branching point"
+      , solver        :: w ::: Maybe Text    <?> "Smt solver to use z3 (default) or cvc4"
 
       }
   | Exec -- Execute a given program with specified env & calldata
@@ -198,8 +199,8 @@ data Command w
   { decode :: w ::: ByteString <?> "RLP encoded hexstring"
   }
   | Abiencode
-  { abi  :: w ::: String      <?> "Signature of types to decode / encode"
-  , arg  :: w ::: [String]    <?> "Values to encode"
+  { abi  :: w ::: Maybe String <?> "Signature of types to decode / encode"
+  , arg  :: w ::: [String]     <?> "Values to encode"
   }
   | MerkleTest -- Insert a set of key values and check against the given root
   { file :: w ::: String <?> "Path to .json test file"
@@ -375,13 +376,15 @@ equivalence :: Command Options.Unwrapped -> IO ()
 equivalence cmd =
   do let bytecodeA = hexByteString "--code" . strip0x $ codeA cmd
          bytecodeB = hexByteString "--code" . strip0x $ codeB cmd
-         types = parseFunArgs =<< funcSig cmd
+         maybeSignature = case abi cmd of
+           Nothing -> Nothing
+           Just abijson -> Just (signature abijson, snd <$> parseMethodInput <$> V.toList (abijson ^?! key "inputs" . _Array))
      void . runSMTWithTimeOut (solver cmd) (smttimeout cmd) . query $
-       equivalenceCheck bytecodeA bytecodeB (maxIterations cmd) (funcSig cmd) >>= \case
-         Right counterexample -> io $ do putStrLn $ "Not equal!"
-                                         putStrLn $ "Counterexample:"
-                                         case types of
-                                           Just typ -> print $ decodeAbiValue typ $ Lazy.fromStrict (ByteString.drop 4 counterexample)
+       equivalenceCheck bytecodeA bytecodeB (maxIterations cmd) maybeSignature >>= \case
+         Right counterexample -> io $ do putStrLn "Not equal!"
+                                         putStrLn "Counterexample:"
+                                         case maybeSignature of
+                                           Just (name, typ) -> putStrLn $ unpack name ++ show (decodeAbiValue (AbiTupleType (V.fromList typ)) $ Lazy.fromStrict (ByteString.drop 4 counterexample))
                                            Nothing -> print $ ByteStringS counterexample
                                          exitFailure
          Left (postAs, postBs) -> io $ do
@@ -624,7 +627,7 @@ vmFromCommand cmd = case (rpc cmd, address cmd, code cmd) of
 symvmFromCommand :: Command Options.Unwrapped -> Query EVM.VM
 symvmFromCommand cmd = do
   caller' <- maybe (SAddr <$> freshVar_) (return . litAddr) (caller cmd)
-  (calldata', cdlen, pathCond) <- case (calldata cmd, funcSig cmd) of
+  (calldata', cdlen, pathCond) <- case (calldata cmd, abi cmd) of
     -- fully abstract calldata (up to 1024 bytes)
     (Nothing, Nothing) -> do cd <- sbytes256
                              len <- freshVar_
@@ -632,10 +635,13 @@ symvmFromCommand cmd = do
     -- fully concrete calldata
     (Just c, Nothing) -> let cd = litBytes $ decipher c
                          in return (cd, num (length cd), sTrue)
-    -- calldata according to given abi
-    (Nothing, Just sign) -> do (input,len) <- symAbiArg $ fromJust (parseFunArgs sign)
-                               return (litBytes (sig sign) <> input, len + 4, sTrue)
-    _ -> error "incompatible options: calldata and funcSig"
+    -- calldata according to given abi with possible specializations from the `arg` list
+    (Nothing, Just abijson) -> let typs = snd <$> parseMethodInput <$> V.toList (abijson ^?! key "inputs" . _Array)
+                                   sig  = signature abijson
+                               in do (cd, cdlen) <- symCalldata sig typs (arg cmd)
+                                     return (cd, cdlen, sTrue)
+
+    _ -> error "incompatible options: calldata and abi"
 
   store <- case storageModel cmd of
     -- InitialS and SymbolicS can read and write to symbolic locations
@@ -722,39 +728,43 @@ launchTest execmode cmd = do
 
 #if MIN_VERSION_aeson(1, 0, 0)
 runVMTest :: Bool -> ExecMode -> Mode -> Maybe Int -> (String, VMTest.Case) -> IO Bool
-runVMTest diffmode execmode mode timelimit (name, x) = do
-  let vm0 = VMTest.vmForCase execmode x
-  putStr (name ++ " ")
-  hFlush stdout
-  result <- do
-    action <- async $
-      case mode of
-        Run ->
-          Timeout.timeout (1e6 * (fromMaybe 10 timelimit)) $
-            execStateT (EVM.Stepper.interpret EVM.Fetch.zero . void $ EVM.Stepper.execFully) vm0
-        Debug ->
-          Just <$> EVM.TTY.runFromVM Nothing EVM.Fetch.zero vm0
-    waitCatch action
-  case result of
-    Right (Just vm1) -> do
-      ok <- VMTest.checkExpectation diffmode execmode x vm1
-      putStrLn (if ok then "ok" else "")
-      return ok
-    Right Nothing -> do
-      putStrLn "timeout"
-      return False
-    Left e -> do
-      putStrLn $ "error: " ++ if diffmode
-        then show e
-        else (head . lines . show) e
-      return False
+runVMTest = error ""
+-- runVMTest diffmode execmode mode timelimit (name, x) = do
+--   let vm0 = VMTest.vmForCase execmode x
+--   putStr (name ++ " ")
+--   hFlush stdout
+--   result <- do
+--     action <- async $
+--       case mode of
+--         Run ->
+--           Timeout.timeout (1e6 * (fromMaybe 10 timelimit)) $
+--             execStateT (EVM.Stepper.interpret EVM.Fetch.zero . void $ EVM.Stepper.execFully) vm0
+--         Debug ->
+--           Just <$> EVM.TTY.runFromVM Nothing EVM.Fetch.zero vm0
+--     waitCatch action
+--   case result of
+--     Right (Just vm1) -> do
+--       ok <- VMTest.checkExpectation diffmode execmode x vm1
+--       putStrLn (if ok then "ok" else "")
+--       return ok
+--     Right Nothing -> do
+--       putStrLn "timeout"
+--       return False
+--     Left e -> do
+--       putStrLn $ "error: " ++ if diffmode
+--         then show e
+--         else (head . lines . show) e
+--       return False
 
 #endif
 
-abiencode :: (AsValue s) => s -> [String] -> ByteString
-abiencode abijson args =
-  let declarations = parseMethodInput <$> V.toList (abijson ^?! key "inputs" . _Array)
-      sig' = signature abijson
-  in if length declarations == length args
-     then abiMethod sig' $ AbiTuple . V.fromList $ zipWith makeAbiValue (snd <$> declarations) args
-     else error $ "wrong number of arguments:" <> show (length args) <> ": " <> show args
+abiencode :: (AsValue s) => Maybe s -> [String] -> ByteString
+abiencode maybeabijson args =
+  case maybeabijson of
+    Nothing -> error "missing required argument: abi"
+    Just abijson ->
+      let declarations = parseMethodInput <$> V.toList (abijson ^?! key "inputs" . _Array)
+          sig' = signature abijson
+      in if length declarations == length args
+         then abiMethod sig' $ AbiTuple . V.fromList $ zipWith makeAbiValue (snd <$> declarations) args
+         else error $ "wrong number of arguments:" <> show (length args) <> ": " <> show args
