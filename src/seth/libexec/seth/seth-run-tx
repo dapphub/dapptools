@@ -34,4 +34,6 @@ if [[ "$DAPP_JSON" ]]; then
     opts+=(--json-file "$DAPP_JSON")
 fi
 
-hevm exec --caller "$(echo "$tx" | seth --field from)" --block "$(("$(echo "$tx" | seth --field blockNumber)" - 1))" --gas "$(echo "$tx" | seth --field gas)" --nonce "$(echo "$tx" | seth --field nonce)" --rpc "$ETH_RPC_URL" "${opts[@]}" --value "$(echo "$tx" | seth --field value)"
+URL:="${ETH_RPC_HOST:-localhost}":"${ETH_RPC_PORT:-8545}"
+
+hevm exec --caller "$(echo "$tx" | seth --field from)" --block "$(("$(echo "$tx" | seth --field blockNumber)" - 1))" --gas "$(echo "$tx" | seth --field gas)" --nonce "$(echo "$tx" | seth --field nonce)" --rpc "$URL" "${opts[@]}" --value "$(echo "$tx" | seth --field value)"
