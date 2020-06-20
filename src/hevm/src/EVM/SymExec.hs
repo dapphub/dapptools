@@ -22,28 +22,79 @@ import qualified EVM.FeeSchedule as FeeSchedule
 import Data.SBV.Trans.Control
 import Data.SBV.Trans hiding (distinct)
 import Data.SBV hiding (runSMT, newArray_, addAxiom, distinct)
-import Data.Vector (toList)
+import Data.Vector (toList, fromList)
 
 import Control.Monad.IO.Class
 import qualified Control.Monad.State.Class as State
 import Data.ByteString (ByteString, pack)
 import Data.Text (Text)
-import Control.Monad.State.Strict (runStateT, runState, StateT, get, put)
+import Control.Monad.State.Strict (runStateT, runState, StateT, get, put, zipWithM)
 import Control.Applicative
 import Data.Maybe (fromJust)
+
+-- | Convenience functions for generating large symbolic byte strings
+sbytes32, sbytes64, sbytes128, sbytes256, sbytes512, sbytes1024 :: Query ([SWord 8])
+sbytes32 =  toBytes <$> freshVar_ @ (WordN 256)
+sbytes64 = liftA2 (<>) sbytes32 sbytes32
+sbytes128 = liftA2 (<>) sbytes64 sbytes64
+sbytes256 = liftA2 (<>) sbytes128 sbytes128
+sbytes512 = liftA2 (<>) sbytes256 sbytes256
+sbytes1024 = liftA2 (<>) sbytes512 sbytes512
+
+-- | Abstract calldata argument generation
+-- We don't assume input types are restricted to their proper range here;
+-- such assumptions should instead be given as preconditions.
+-- This could catch some interesting calldata mismanagement errors.
+symAbiArg :: AbiType -> Query ([SWord 8], SWord 32)
+symAbiArg (AbiUIntType n) | n `mod` 8 == 0 && n <= 256 = do x <- freshVar_ @ (WordN 256)
+                                                            return (toBytes x, 32)
+                          | otherwise = error "bad type"
+
+symAbiArg (AbiIntType n)  | n `mod` 8 == 0 && n <= 256 = do x <- freshVar_ @ (WordN 256)
+                                                            return (toBytes x, 32)
+                          | otherwise = error "bad type"
+
+symAbiArg AbiAddressType = do x <- freshVar_ @ (WordN 256)
+                              return (toBytes x, 32)
+
+symAbiArg (AbiBytesType n) | n <= 32 = do x <- freshVar_ @ (WordN 256)
+                                          return (toBytes x, 32)
+                           | otherwise = error "bad type"
+
+-- TODO: is this encoding correct?
+symAbiArg (AbiArrayType len typ) = do args <- mapM symAbiArg (replicate len typ)
+                                      return (litBytes (encodeAbiValue (AbiUInt 256 (fromIntegral len))) <> (concat $ fst <$> args), 32 + (sum $ snd <$> args))
+
+symAbiArg (AbiTupleType tuple) = do args <- mapM symAbiArg (toList tuple)
+                                    return (concat $ fst <$> args, sum $ snd <$> args)
+symAbiArg n = error $ "Unsupported symbolic abiencoding for" <> show n <> ". Please file an issue at https://github.com/dapphub/dapptools if you really need this."
 
 contractWithStore :: ContractCode -> Storage -> Contract
 contractWithStore theContractCode store = initialContract theContractCode & set storage store
 
-abstractVM :: Maybe Text -> ByteString -> StorageModel -> Query VM
-abstractVM signature' x storagemodel = do
+-- | Generates calldata matching given type signature, optionally specialized
+-- with concrete arguments.
+-- Any argument given as "<symbolic>" or omitted at the tail of the list are
+-- kept symbolic.
+symCalldata :: Text -> [AbiType] -> [String] -> Query ([SWord 8], SWord 32)
+symCalldata sig' typesignature concreteArgs =
+  let args = concreteArgs <> replicate (length typesignature - length concreteArgs)  "<symbolic>"
+      mkArg typ "<symbolic>" = symAbiArg typ
+      mkArg typ arg = let n = litBytes . encodeAbiValue $ makeAbiValue typ arg
+                      in return (n, num (length n))
+      selector = litBytes $ sig sig'
+  in do calldatas <- zipWithM mkArg typesignature args
+        return (selector <> concat (fst <$> calldatas), 4 + (sum $ snd <$> calldatas))
+
+abstractVM :: Maybe (Text, [AbiType]) -> [String] -> ByteString -> StorageModel -> Query VM
+abstractVM typesignature concreteArgs x storagemodel = do
   (cd', cdlen, cdconstraint) <-
-    case signature' of
+    case typesignature of
       Nothing -> do cd <- sbytes256
                     len <- freshVar_
                     return (cd, len, len .<= 1024)
-      Just sign -> do (input,len) <- symAbiArg $ fromJust (parseFunArgs sign)
-                      return (litBytes (sig sign) <> input, len + 4, sTrue)
+      Just (name, typs) -> do (cd, cdlen) <- symCalldata name typs concreteArgs
+                              return (cd, cdlen, sTrue)
   symstore <- case storagemodel of
     SymbolicS -> Symbolic <$> freshArray_ Nothing
     InitialS -> Symbolic <$> freshArray_ (Just 0)
@@ -73,43 +124,6 @@ loadSymVM x initStore addr calldata' =
     , vmoptCreate = False
     }) & set (env . contracts . at (createAddress ethrunAddress 1))
              (Just (contractWithStore x initStore))
-
-
-sbytes32, sbytes64, sbytes128, sbytes256, sbytes512, sbytes1024 :: Query ([SWord 8])
-sbytes32 =  toBytes <$> freshVar_ @ (WordN 256)
-sbytes64 = liftA2 (<>) sbytes32 sbytes32
-sbytes128 = liftA2 (<>) sbytes64 sbytes64
-sbytes256 = liftA2 (<>) sbytes128 sbytes128
-sbytes512 = liftA2 (<>) sbytes256 sbytes256
-sbytes1024 = liftA2 (<>) sbytes512 sbytes512
-
-
--- We don't assume input types are restricted to their proper range here;
--- such assumptions should instead be given as preconditions.
--- This could catch some interesting calldata mismanagement errors.
-symAbiArg :: AbiType -> Query ([SWord 8], SWord 32)
-symAbiArg (AbiUIntType n) | n `mod` 8 == 0 && n <= 256 = do x <- freshVar_ @ (WordN 256)
-                                                            return (toBytes x, 32)
-                          | otherwise = error "bad type"
-
-symAbiArg (AbiIntType n)  | n `mod` 8 == 0 && n <= 256 = do x <- freshVar_ @ (WordN 256)
-                                                            return (toBytes x, 32)
-                          | otherwise = error "bad type"
-
-symAbiArg AbiAddressType = do x <- freshVar_ @ (WordN 256)
-                              return (toBytes x, 32)
-
-symAbiArg (AbiBytesType n) | n <= 32 = do x <- freshVar_ @ (WordN 256)
-                                          return (toBytes x, 32)
-                           | otherwise = error "bad type"
-
--- TODO: is this encoding correct?
-symAbiArg (AbiArrayType len typ) = do args <- mapM symAbiArg (replicate len typ)
-                                      return (litBytes (encodeAbiValue (AbiUInt 256 (fromIntegral len))) <> (concat $ fst <$> args), 32 + (sum $ snd <$> args))
-
-symAbiArg (AbiTupleType tuple) = do args <- mapM symAbiArg (toList tuple)
-                                    return (concat $ fst <$> args, sum $ snd <$> args)
-symAbiArg n = error $ "Unsupported symbolic abiencoding for" <> show n <> ". Please file an issue at https://github.com/dapphub/dapptools if you really need this."
 
 -- Interpreter which explores all paths at
 -- branching points.
@@ -172,8 +186,8 @@ interpret fetcher maxIter =
 type Precondition = VM -> SBool
 type Postcondition = (VM, VM) -> SBool
 
-checkAssert :: ContractCode -> Maybe Integer -> Maybe Text -> Query (Either (VM, [VM]) ByteString)
-checkAssert c maxIter signature' = verifyContract c maxIter signature' SymbolicS (const sTrue) (Just checkAssertions)
+checkAssert :: ContractCode -> Maybe Integer -> Maybe (Text, [AbiType]) -> [String] -> Query (Either (VM, [VM]) ByteString)
+checkAssert c maxIter signature' concreteArgs = verifyContract c maxIter signature' concreteArgs SymbolicS (const sTrue) (Just checkAssertions)
 
 checkAssertions :: Postcondition
 checkAssertions (_, out) = case view result out of
@@ -185,9 +199,9 @@ data StorageModel = ConcreteS | SymbolicS | InitialS
 
 instance ParseField StorageModel
 
-verifyContract :: ContractCode -> Maybe Integer -> Maybe Text -> StorageModel -> Precondition -> Maybe Postcondition -> Query (Either (VM, [VM]) ByteString)
-verifyContract code' maxIter signature' storagemodel pre maybepost = do
-    preStateRaw <- abstractVM signature' theCode  storagemodel
+verifyContract :: ContractCode -> Maybe Integer -> Maybe (Text, [AbiType]) -> [String] -> StorageModel -> Precondition -> Maybe Postcondition -> Query (Either (VM, [VM]) ByteString)
+verifyContract code' maxIter signature' concreteArgs storagemodel pre maybepost = do
+    preStateRaw <- abstractVM signature' concreteArgs theCode  storagemodel
     -- add the pre condition to the pathconditions to ensure that we are only exploring valid paths
     let preState = over pathConditions ((++) [pre preStateRaw]) preStateRaw
     verify preState maxIter maybepost
@@ -223,9 +237,9 @@ verify preState maxIter maybepost = do
 
     (_, Left _) -> error "unexpected error during symbolic execution"
 
-equivalenceCheck :: ByteString -> ByteString -> Maybe Integer -> Maybe Text -> Query (Either ([VM], [VM]) ByteString)
+equivalenceCheck :: ByteString -> ByteString -> Maybe Integer -> Maybe (Text, [AbiType]) -> Query (Either ([VM], [VM]) ByteString)
 equivalenceCheck bytecodeA bytecodeB maxiter signature' = do
-  preStateA <- abstractVM signature' bytecodeA SymbolicS
+  preStateA <- abstractVM signature' [] bytecodeA SymbolicS
            
   let preself = preStateA ^. state . contract
       precaller = preStateA ^. state . caller
