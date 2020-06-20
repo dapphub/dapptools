@@ -155,7 +155,7 @@ main = defaultMain $ testGroup "hevm"
               in case view result poststate of
                 Just (VMSuccess out) -> (asWord out) .== (asWord x) + (asWord y)
                 _ -> sFalse
-        Left (_, res) <- runSMT $ query $ verifyContract (RuntimeCode safeAdd) Nothing (Just "add(uint256,uint256)") SymbolicS pre post
+        Left (_, res) <- runSMT $ query $ verifyContract (RuntimeCode safeAdd) Nothing (Just ("add(uint256,uint256)", [AbiUIntType 256, AbiUIntType 256])) [] SymbolicS pre post
         putStrLn $ "successfully explored: " <> show (length res) <> " paths"
      ,
 
@@ -180,7 +180,7 @@ main = defaultMain $ testGroup "hevm"
                       Just (VMSuccess out) -> asWord out .== 2 * asWord y
                       _ -> sFalse
         Left (_, res) <- runSMTWith z3 $ query $
-          verifyContract (RuntimeCode safeAdd) Nothing (Just "add(uint256,uint256)") SymbolicS pre post
+          verifyContract (RuntimeCode safeAdd) Nothing (Just ("add(uint256,uint256)", [AbiUIntType 256, AbiUIntType 256])) [] SymbolicS pre post
         putStrLn $ "successfully explored: " <> show (length res) <> " paths"
       ,
         testCase "factorize 973013" $ do
@@ -193,7 +193,7 @@ main = defaultMain $ testGroup "hevm"
             }
           }
           |]
-        (Right bs) <- runSMTWith cvc4 $ query $ checkAssert (RuntimeCode factor) Nothing (Just "factor(uint256,uint256)")
+        (Right bs) <- runSMTWith cvc4 $ query $ checkAssert (RuntimeCode factor) Nothing (Just ("factor(uint256,uint256)", [AbiUIntType 256, AbiUIntType 256])) []
         let AbiTuple xy = decodeAbiValue (AbiTupleType $ Vector.fromList [AbiUIntType 256, AbiUIntType 256]) (BS.fromStrict (BS.drop 4 bs))
             [AbiUInt 256 x, AbiUInt 256 y] = Vector.toList xy
         assertEqual "" True (x == 953 && y == 1021 || x == 1021 && y == 953)
@@ -222,7 +222,7 @@ main = defaultMain $ testGroup "hevm"
               in case view result poststate of
                 Just (VMSuccess _) -> prex + 2 * (fromBytes y) .== postx
                 _ -> sFalse
-        Left (_, res) <- runSMT $ query $ verifyContract (RuntimeCode c) Nothing (Just "f(uint256)") SymbolicS pre post
+        Left (_, res) <- runSMT $ query $ verifyContract (RuntimeCode c) Nothing (Just ("f(uint256)", [AbiUIntType 256])) [] SymbolicS pre post
         putStrLn $ "successfully explored: " <> show (length res) <> " paths"
         ,
         -- Inspired by these `msg.sender == to` token bugs
@@ -253,7 +253,7 @@ main = defaultMain $ testGroup "hevm"
               in case view result poststate of
                 Just (VMSuccess _) -> prex + prey .== postx + (posty :: SWord 256)
                 _ -> sFalse
-        (Right bs) <- runSMT $ query $ verifyContract (RuntimeCode c) Nothing (Just "f(uint256,uint256)") SymbolicS pre post
+        (Right bs) <- runSMT $ query $ verifyContract (RuntimeCode c) Nothing (Just ("f(uint256,uint256)", [AbiUIntType 256, AbiUIntType 256])) [] SymbolicS pre post
         let AbiTuple xyz = decodeAbiValue (AbiTupleType $ Vector.fromList [AbiUIntType 256, AbiUIntType 256]) (BS.fromStrict (BS.drop 4 bs))
             [AbiUInt 256 x, AbiUInt 256 y] = Vector.toList xyz
         assertEqual "Catch storage collisions" x y
@@ -277,7 +277,7 @@ main = defaultMain $ testGroup "hevm"
               }
              }
             |]
-          Left (_, res) <- runSMTWith z3 $ query $ checkAssert (RuntimeCode c) Nothing (Just "deposit(uint256)")
+          Left (_, res) <- runSMTWith z3 $ query $ checkAssert (RuntimeCode c) Nothing (Just ("deposit(uint256)", [AbiUIntType 256])) []
           putStrLn $ "successfully explored: " <> show (length res) <> " paths"
         ,
                 testCase "Deposit contract loop (cvc4)" $ do
@@ -299,7 +299,7 @@ main = defaultMain $ testGroup "hevm"
               }
              }
             |]
-          Left (_, res) <- runSMTWith cvc4 $ query $ checkAssert (RuntimeCode c) Nothing (Just "deposit(uint256)")
+          Left (_, res) <- runSMTWith cvc4 $ query $ checkAssert (RuntimeCode c) Nothing (Just ("deposit(uint256)", [AbiUIntType 256])) []
           putStrLn $ "successfully explored: " <> show (length res) <> " paths"
         ,
         testCase "Deposit contract loop (error version)" $ do
@@ -321,7 +321,7 @@ main = defaultMain $ testGroup "hevm"
               }
              }
             |]
-          (Right bs) <- runSMT $ query $ checkAssert (RuntimeCode c) Nothing (Just "deposit(uint8)")
+          (Right bs) <- runSMT $ query $ checkAssert (RuntimeCode c) Nothing (Just ("deposit(uint8)", [AbiUIntType 8])) []
           let deposit = decodeAbiValue (AbiUIntType 8) (BS.fromStrict (BS.drop 4 bs))
           assertEqual "overflowing uint8" deposit (AbiUInt 8 255)
      ,
@@ -335,7 +335,7 @@ main = defaultMain $ testGroup "hevm"
             }
           }
           |]
-        Left (_, res) <- runSMTWith cvc4 $ query $ checkAssert (RuntimeCode c) Nothing Nothing
+        Left (_, res) <- runSMTWith cvc4 $ query $ checkAssert (RuntimeCode c) Nothing Nothing []
         putStrLn $ "successfully explored: " <> show (length res) <> " paths"
         ,
 
@@ -348,7 +348,7 @@ main = defaultMain $ testGroup "hevm"
               }
             }
             |]
-          Left (_, res) <- runSMTWith cvc4 $ query $ checkAssert (RuntimeCode c) Nothing Nothing
+          Left (_, res) <- runSMTWith cvc4 $ query $ checkAssert (RuntimeCode c) Nothing Nothing []
           putStrLn $ "successfully explored: " <> show (length res) <> " paths"
         ,
         testCase "injectivity of keccak (32 bytes)" $ do
@@ -360,7 +360,7 @@ main = defaultMain $ testGroup "hevm"
               }
             }
             |]
-          Left (_, res) <- runSMTWith cvc4 $ query $ checkAssert (RuntimeCode c) Nothing Nothing
+          Left (_, res) <- runSMTWith cvc4 $ query $ checkAssert (RuntimeCode c) Nothing Nothing []
           putStrLn $ "successfully explored: " <> show (length res) <> " paths"
        ,
 
@@ -373,7 +373,7 @@ main = defaultMain $ testGroup "hevm"
               }
             }
             |]
-          Right bs <- runSMTWith z3 $ query $ checkAssert (RuntimeCode c) Nothing (Just "f(uint256,uint256,uint256,uint256)")
+          Right bs <- runSMTWith z3 $ query $ checkAssert (RuntimeCode c) Nothing (Just ("f(uint256,uint256,uint256,uint256)", replicate 4 (AbiUIntType 256))) []
           let AbiTuple xywz = decodeAbiValue (AbiTupleType $ Vector.fromList
                                               [AbiUIntType 256, AbiUIntType 256,
                                                AbiUIntType 256, AbiUIntType 256]) (BS.fromStrict (BS.drop 4 bs))
@@ -396,7 +396,7 @@ main = defaultMain $ testGroup "hevm"
               }
             }
             |]
-          Left (_, res) <- runSMTWith z3 $ query $ checkAssert (RuntimeCode c) Nothing Nothing
+          Left (_, res) <- runSMTWith z3 $ query $ checkAssert (RuntimeCode c) Nothing Nothing []
           putStrLn $ "successfully explored: " <> show (length res) <> " paths"
     ]
   ]
