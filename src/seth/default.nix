@@ -6,7 +6,7 @@ stdenv.mkDerivation rec {
   version = "0.9.0";
   src = ./.;
 
-  nativeBuildInputs = [makeWrapper shellcheck];
+  nativeBuildInputs = [ nodejs makeWrapper shellcheck ];
   dontBuild = true;
   doCheck = true;
   checkTarget = "test";
@@ -24,6 +24,13 @@ stdenv.mkDerivation rec {
         ${lib.optionalString (glibcLocales != null) ''
           --set LOCALE_ARCHIVE ${glibcLocales}/lib/locale/locale-archive
       ''}
+  '';
+
+  # the patching of nodejs shebangs is needed by the seth invocations in
+  # src/dapp-tests/integration/tests.sh.
+  # that's also the reason why nodejs is added to nativeBuildInputs
+  postFixup = ''
+    patchShebangs $out/libexec/seth
   '';
 
   meta = {
