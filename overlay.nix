@@ -36,6 +36,9 @@ in rec {
     inherit (self) pkgs;
   };
 
+  # experimental dapp builder, allows for easy overriding of phases
+  buildDappPackage = import ./nix/build-dapp-package.nix { inherit (self) pkgs; };
+
   # A merged Dappsys to act as the DAPPSYS_PATH for dapp-tests.
   dappsys-merged = self.symlinkJoin {
     name = "dappsys";
