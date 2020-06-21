@@ -7,7 +7,7 @@ stdenv.mkDerivation rec {
   src = ./.;
 
   nativeBuildInputs = [makeWrapper shellcheck];
-  buildPhase = "true";
+  dontBuild = true;
   doCheck = true;
   checkPhase = "make test";
   makeFlags = ["prefix=$(out)"];
