@@ -9,7 +9,7 @@ stdenv.mkDerivation rec {
   nativeBuildInputs = [makeWrapper shellcheck];
   dontBuild = true;
   doCheck = true;
-  checkPhase = "make test";
+  checkTarget = "test";
   makeFlags = ["prefix=$(out)"];
 
   postInstall =
