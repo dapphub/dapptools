@@ -34,6 +34,7 @@ let
     inherit dai;
     inherit dapp-which;
     inherit dapp;
+    inherit dapp-tests;
     inherit ethsign;
     inherit evmdis;
     inherit go-ethereum-unlimited;
