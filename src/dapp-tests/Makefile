@@ -1,3 +1,3 @@
-all:; ./run-tests
+test:; integration/tests.sh
 
-.PHONY: all
+.PHONY: test

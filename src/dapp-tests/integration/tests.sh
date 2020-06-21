@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
+
 set -e
+
 export SOLC_FLAGS="--evm-version constantinople"
 export DAPPSYS_PATH="lib"
-for x in *.sol; do
-  dapp test-standalone "$x"
-done
 
 error() {
     printf 1>&2 "fail: function '%s' at line %d.\n" "${FUNCNAME[1]}"  "${BASH_LINENO[0]}"
+    printf 1>&2 "got: %s" "$output"
     exit 1
 }
 
