@@ -1787,11 +1787,10 @@ cheatActions =
           return Nothing,
       action "store(address,bytes32,bytes32)" [AbiAddressType, AbiBytesType 32, AbiBytesType 32] $
         \[AbiAddress a, AbiBytes 32 x, AbiBytes 32 y] -> do
-          let slot = w256 $ word x
-              new  = w256 $ word y
+          let slot = w256lit $ word x
+              new  = w256lit $ word y
           fetchAccount a $ \_ -> do
-            assign (env . contracts . ix a . storage . at slot)
-              (Just new)
+            modifying (env . contracts . ix a . storage) (writeStorage slot new)
           return Nothing
     ]
   where
