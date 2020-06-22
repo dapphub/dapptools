@@ -51,21 +51,7 @@ in rec {
 
   # Here we can make e.g. integration tests for Dappsys,
   # or tests that verify Hevm correctness, etc.
-  dapp-tests = stdenv.mkDerivation {
-    name = "dapp-tests";
-    src = ./src/dapp-tests;
-    installPhase = "true";
-    buildInputs = [self.dapp];
-    buildPhase = ''
-      set -e
-      export DAPPSYS_PATH=${dappsys-merged}/dapp
-      ls "$DAPPSYS_PATH"
-      echo "$PATH"
-      patchShebangs .
-      make
-      mkdir "$out"
-    '';
-  };
+  dapp-tests = import ./src/dapp-tests { inherit (self) pkgs; };
 
   dapps = {
     maker-otc = import (self.pkgs.fetchFromGitHub {
