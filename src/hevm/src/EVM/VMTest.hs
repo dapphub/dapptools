@@ -178,7 +178,7 @@ checkExpectation diff x vm =
 checkExpectedContracts :: EVM.VM -> Map Addr Contract -> (Bool, Bool, Bool, Bool, Bool)
 checkExpectedContracts vm expected =
   let cs = vm ^. EVM.env . EVM.contracts . to (fmap (clearZeroStorage.clearOrigStorage))
-      expectedCs = fmap clearOrigStorage $ realizeContracts expected
+      expectedCs = clearOrigStorage <$> realizeContracts expected
   in ( (expectedCs ~= cs)
      , (clearBalance <$> expectedCs) ~= (clearBalance <$> cs)
      , (clearNonce   <$> expectedCs) ~= (clearNonce   <$> cs)
@@ -328,7 +328,7 @@ realizeContract x =
     & EVM.nonce   .~ EVM.w256 (x ^. nonce)
     & EVM.storage .~ EVM.Concrete (
         Map.fromList .
-        map (\(k, v) -> (EVM.w256 k, EVM.w256 v)) .
+        map (bimap EVM.w256 EVM.w256) .
         Map.toList $ x ^. storage
         )
     & EVM.origStorage .~ (

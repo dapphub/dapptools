@@ -245,7 +245,6 @@ runWithCoverage = do
       zoom _2 (modify (MultiSet.insert (currentOpLocation vm1)))
       runWithCoverage
     Just _ -> pure vm0
---    Just _ -> id
       
 
 interpretWithCoverage

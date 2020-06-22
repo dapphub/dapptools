@@ -21,7 +21,7 @@ import EVM.ABI
 import EVM.Types
 import EVM.Solidity
 import EVM.Keccak
-import EVM.Concrete hiding ((^))
+import EVM.Concrete
 import EVM.Symbolic
 import EVM.Op
 import EVM.FeeSchedule (FeeSchedule (..))
@@ -1515,7 +1515,7 @@ writeStorage (S _ loc) (S _ val) (Symbolic s) = Symbolic (writeArray s loc val)
 writeStorage loc val (Concrete s) = Concrete (Map.insert (forceLit loc) (forceLit val) s)
 
 accessStorage
-  :: Addr                  -- ^ Contract address
+  :: Addr                -- ^ Contract address
   -> SymWord             -- ^ Storage slot key
   -> (SymWord -> EVM ()) -- ^ Continuation
   -> EVM ()
@@ -1807,48 +1807,48 @@ delegateCall this gasGiven xTo xContext xValue xInOffset xInSize xOutOffset xOut
   \xGas -> do
     vm0 <- get
     fetchAccount xTo . const $
-          preuse (env . contracts . ix xTo) >>= \case
-            Nothing ->
-              vmError (NoSuchContract xTo)
-            Just target ->
-              burn xGas $ do
-                let newContext = CallContext
-                      { callContextOffset = xOutOffset
-                      , callContextSize = xOutSize
-                      , callContextCodehash = view codehash target
-                      , callContextReversion = view (env . contracts) vm0
-                      , callContextSubState = view (tx . substate) vm0
-                      , callContextAbi =
-                          if xInSize >= 4
-                          then case maybeLitBytes $
-                                        take 4 $ drop (num xInOffset) $ (view (state . memory) vm0)
-                               of Nothing -> Nothing
-                                  Just sigBytes -> Just . w256 $ word sigBytes
-                          else Nothing
-                      , callContextData = (readMemory (num xInOffset) (num xInSize) vm0)
-                      }
-  
-                pushTrace (FrameTrace newContext)
-                next
-                vm1 <- get
-  
-                pushTo frames $ Frame
-                  { _frameState = (set stack xs) (view state vm1)
-                  , _frameContext = newContext
+      preuse (env . contracts . ix xTo) >>= \case
+        Nothing ->
+          vmError (NoSuchContract xTo)
+        Just target ->
+          burn xGas $ do
+            let newContext = CallContext
+                  { callContextOffset = xOutOffset
+                  , callContextSize = xOutSize
+                  , callContextCodehash = view codehash target
+                  , callContextReversion = view (env . contracts) vm0
+                  , callContextSubState = view (tx . substate) vm0
+                  , callContextAbi =
+                      if xInSize >= 4
+                      then case maybeLitBytes $
+                                    take 4 $ drop (num xInOffset) $ (view (state . memory) vm0)
+                           of Nothing -> Nothing
+                              Just sigBytes -> Just . w256 $ word sigBytes
+                      else Nothing
+                  , callContextData = (readMemory (num xInOffset) (num xInSize) vm0)
                   }
   
-                zoom state $ do
-                  assign gas xGas
-                  assign pc 0
-                  assign code (view bytecode target)
-                  assign codeContract xTo
-                  assign stack mempty
-                  assign memory mempty
-                  assign memorySize 0
-                  assign returndata mempty
-                  assign calldata (readMemory (num xInOffset) (num xInSize) vm0, literal (num xInSize))
+            pushTrace (FrameTrace newContext)
+            next
+            vm1 <- get
   
-                continue
+            pushTo frames $ Frame
+              { _frameState = (set stack xs) (view state vm1)
+              , _frameContext = newContext
+              }
+  
+            zoom state $ do
+              assign gas xGas
+              assign pc 0
+              assign code (view bytecode target)
+              assign codeContract xTo
+              assign stack mempty
+              assign memory mempty
+              assign memorySize 0
+              assign returndata mempty
+              assign calldata (readMemory (num xInOffset) (num xInSize) vm0, literal (num xInSize))
+  
+            continue
 
 -- -- * Contract creation
 
