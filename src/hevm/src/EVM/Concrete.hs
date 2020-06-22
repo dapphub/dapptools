@@ -1,38 +1,22 @@
-{-# Language DataKinds #-}
 {-# Language FlexibleInstances #-}
 {-# Language StrictData #-}
 
-
 module EVM.Concrete where
 
-import Prelude hiding (Word, (^))
+import Prelude hiding (Word)
 
 import EVM.Keccak (keccak)
 import EVM.RLP
 import EVM.Types (Addr(..), W256 (..), num)
 import EVM.Types (word, padRight, word160Bytes, word256Bytes)
 
-import Data.Bits       (Bits (..), FiniteBits (..), shiftR)
+import Data.Bits       (Bits (..), FiniteBits (..))
 import Data.ByteString (ByteString)
-import Data.Semigroup  ((<>))
-import Data.Word       (Word8)
 import qualified Data.ByteString as BS
 
 wordAt :: Int -> ByteString -> W256
 wordAt i bs =
   word (padRight 32 (BS.drop i bs))
-
-byteStringSliceWithDefaultZeroes :: Int -> Int -> ByteString -> ByteString
-byteStringSliceWithDefaultZeroes offset size bs =
-  if size == 0
-  then ""
-  -- else if offset > BS.length bs
-  -- then BS.replicate size 0
-  -- todo: this ^^ should work, investigate why it causes more GST fails
-  else
-    let bs' = BS.take size (BS.drop offset bs)
-    in bs' <> BS.replicate (size - BS.length bs') 0
-
 
 -- This type can give insight into the provenance of a term
 data Whiff = Dull
@@ -48,24 +32,8 @@ w256 = C Dull
 
 data Word = C Whiff W256 --maybe to remove completely in the future
 
-wordToByte :: Word -> Word8
-wordToByte (C _ x) = num (x .&. 0xff)
-
 wordValue :: Word -> W256
 wordValue (C _ x) = x
-
-sliceMemory :: (Integral a, Integral b) => a -> b -> ByteString -> ByteString
-sliceMemory o s =
-  byteStringSliceWithDefaultZeroes (num o) (num s)
-
-readBlobWord :: Word -> ByteString -> Word
-readBlobWord (C _ i) x =
-  if i > num (BS.length x)
-  then 0
-  else w256 (wordAt (num i) x)
-
-blobSize :: ByteString -> Word
-blobSize x = w256 (num (BS.length x))
 
 keccakBlob :: ByteString -> Word
 keccakBlob x = C (FromKeccak x) (keccak x)
@@ -133,21 +101,6 @@ instance Real Word where
 
 instance Ord Word where
   compare (C _ x) (C _ y) = compare x y
-
--- Copied from the standard library just to get specialization.
--- We also use bit operations instead of modulo and multiply.
--- (This operation was significantly slow.)
-(^) :: W256 -> W256 -> W256
-x0 ^ y0 | y0 < 0    = errorWithoutStackTrace "Negative exponent"
-        | y0 == 0   = 1
-        | otherwise = f x0 y0
-    where
-          f x y | not (testBit y 0) = f (x * x) (y `shiftR` 1)
-                | y == 1      = x
-                | otherwise   = g (x * x) ((y - 1) `shiftR` 1) x
-          g x y z | not (testBit y 0) = g (x * x) (y `shiftR` 1) z
-                  | y == 1      = x * z
-                  | otherwise   = g (x * x) ((y - 1) `shiftR` 1) (x * z)
 
 createAddress :: Addr -> W256 -> Addr
 createAddress a n = num $ keccak $ rlpList [rlpWord160 a, rlpWord256 n]
