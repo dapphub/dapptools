@@ -221,7 +221,7 @@ interpret mode =
 
         -- Stepper wants to make a query and wait for the results?
         Stepper.Wait q ->
-          -- Tell the TTY to run a SBV.query action to produce the next stepper.
+          -- Tell the TTY to run an I/O action to produce the next stepper.
           pure . Blocked $ do
             -- First run the fetcher, getting a VM state transition back.
             m <- ?fetcher q
@@ -365,7 +365,6 @@ takeStep ui policy mode =
 
         StepTimidly ->
           error $ "step blocked unexpectedly" ++ show (view (uiVm . result) ui')
---                  ++ "blocker:" ++ show blocker
 
     (Returned (), ui') ->
       case policy of
@@ -660,8 +659,9 @@ drawHelpView =
         "N      Step fwds to the next source position\n" <>
         "C-n    Step fwds to the next source position skipping CALL & CREATE\n" <>
         "p      Step back by one instruction\n\n" <>
-        "P      Step back to the previous source position\n" <>
         "m      Toggle memory pane\n" <>
+        "0      Choose the branch which does not jump \n" <>
+        "1      Choose the branch which does jump \n" <>
         "Down   Scroll memory pane fwds\n" <>
         "Up     Scroll memory pane back\n" <>
         "C-f    Page memory pane fwds\n" <>
@@ -845,9 +845,6 @@ currentSrcMap dapp vm =
       Just (Runtime, solc) ->
         preview (runtimeSrcmap . ix i) solc
 
-nextSrcMap :: DappInfo -> VM -> Maybe SrcMap
-nextSrcMap dapp vm = currentSrcMap dapp (vm & over (state . pc) (+1))
-
 currentSolc :: DappInfo -> VM -> Maybe SolcContract
 currentSolc dapp vm =
   let
@@ -967,7 +964,6 @@ drawTracePane s =
   case view uiVmShowMemory s of
     True ->
       hBorderWithLabel (txt "Calldata")
---      <=> str (prettyHex 40 (view (uiVm . state . calldata) s))
       <=> str (prettyIfConcrete $ fst (view (uiVm . state . calldata) s))
       <=> hBorderWithLabel (txt "Returndata")
       <=> str (prettyIfConcrete (view (uiVm . state . returndata) s))
