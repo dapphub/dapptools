@@ -14,7 +14,7 @@ in self-hs: super-hs:
         (self-hs.callPackage x {});
     hevmBinPath = lib.makeBinPath (with pkgs; [bash coreutils git]);
     sbv_8_4_prepatch = self-hs.callCabal2nix "sbv" (builtins.fetchGit {
-        url = "https://github.com/LeventErkok/sbv";
+        url = "https://github.com/LeventErkok/sbv/";
         rev = "b3facdfc959e0779fb8944743c0ec81e0d214ee3";
     }) {inherit (pkgs) z3;};
 
