@@ -15,7 +15,7 @@ spins up a `geth <https://github.com/ethereum/go-ethereum/>`_ testnet at ``http:
 
 Once the testnet is up and running, you can interact with it through your favorite tool. We like to use `seth <https://dapp.tools/seth/>`_ for slicing and dicing transactions, querying the blockchain, converting between data formats, performing remote calls, and other everyday tasks.
 
-Specifically, you may want to check out the `connecting to the blockchain https://github.com/dapphub/seth#connecting-to-the-blockchain`_ section of the seth documentation.
+Specifically, you may want to check out the `connecting to the blockchain <https://github.com/dapphub/dapptools/tree/master/src/seth#connecting-to-the-blockchain>`_ section of the seth documentation.
 
 Testnet Flags
 ---------------
