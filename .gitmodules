@@ -10,6 +10,3 @@
 [submodule "submodules/terra"]
 	path = submodules/terra
 	url = https://github.com/makerdao/terra
-[submodule "src/dapp-tests/lib/ds-test"]
-	path = src/dapp-tests/lib/ds-test
-	url = https://github.com/dapphub/ds-test
