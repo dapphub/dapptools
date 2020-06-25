@@ -41,8 +41,8 @@ if [[ -z "$SETH_NOSRC" ]]; then
       echo "no source available";
   fi
 fi
-
-txs=($(seth block "$(echo "$targetTx" | seth --field blockNumber)" --full | seth --field transactions | seth --show-json))
+block=$(seth block "$(echo "$targetTx" | seth --field blockNumber)" --full)
+txs=($(echo "$block" | seth --field transactions | seth --show-json))
 
 index=$(echo "$targetTx" | seth --field transactionIndex)
 
@@ -59,7 +59,7 @@ for i in "${txs[@]}"; do
    else
      echo -en "\rtransaction ($j/$index)"
      # exit code 2 means REVERT or otherwise acceptable failure
-     seth run-tx "$tx" --state "$state" > /dev/null || [[ $? == 2 ]] || (tidy; seth --fail "hevm error while executing tx: $hash")
+     seth run-tx "$tx" --state "$state" --timestamp "$(echo "$block" | seth --field timestamp)" > /dev/null || [[ $? == 2 ]] || (tidy; seth --fail "hevm error while executing tx: $hash")
      j=$((j + 1))
    fi
 done
