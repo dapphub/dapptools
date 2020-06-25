@@ -83,6 +83,7 @@ resend               force current nonce to overwrite tx
 
   Options for seth-run-tx(1):
 state=directory      git repo where state is kept
+timestamp=number     block timestamp for the tx
 debug                run in hevms interactive debugger
 source=file          combined-json source information file
 
@@ -142,6 +143,7 @@ while [[ $1 ]]; do
     -S|--password)   shift; export ETH_PASSWORD=$1;;
 
        --state)      shift; export HEVM_STATE=$1;;
+       --timestamp)  shift; export HEVM_TIMESTAMP=$1;;
        --debug)             export HEVM_DEBUG=yes;;
        --source)     shift; export DAPP_JSON=$1;;
 
