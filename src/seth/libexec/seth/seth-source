@@ -3,7 +3,6 @@
 ### Usage: seth source <address> [<options>]
 ###
 ### Requires an etherscan api key
-###
 set -e
 [[ $ETHERSCAN_API_KEY ]] || {
   cat >&2 <<.
