@@ -12,9 +12,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `seth bundle-source <address>` fetches contract source and compiles to combined json
   - `seth run-tx <tx-hash> [--debug, --source <file>, --state <repository>]`,
   set hevm options according to the options given and `hevm exec`
-  - `seth debug <tx-hash> [--no-src]` download etherscan source, execute previous txs in block and enter into an hevm interactive mode for the given tx. `--no-src` skips the first step.
+  - `seth debug <tx-hash> [--no-src]` downloads etherscan source, executes previous txs in block and enters into an hevm interactive session for the given tx. `--no-src` skips the first step.
 
-- `seth block` can now be passed `--full` option, which returns the full block.
+- `seth block` can now be passed the `--full` option, which returns the full block.
 
 
 ## [0.9.0] - 2020-05-25
