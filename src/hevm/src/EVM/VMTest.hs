@@ -147,10 +147,10 @@ checkStateFail diff x expectation vm (okState, okMoney, okNonce, okData, okCode)
                    ++ (show . Map.toList $ EVM._storage v)) actual
   return okState
 
-checkExpectation :: Bool -> EVM.ExecMode -> Case -> EVM.VM -> IO Bool
-checkExpectation diff execmode x vm =
-  case (execmode, testExpectation x, view EVM.result vm) of
-    (EVM.ExecuteAsBlockchainTest, Just expectation, _) -> do
+checkExpectation :: Bool -> Case -> EVM.VM -> IO Bool
+checkExpectation diff x vm =
+  case (testExpectation x, view EVM.result vm) of
+    (Just expectation, _) -> do
       let (okState, b2, b3, b4, b5) =
             checkExpectedContracts vm (expectedContracts expectation)
       _ <- if not okState then
@@ -159,40 +159,16 @@ checkExpectation diff execmode x vm =
            else return True
       return okState
 
-    (_, Just expectation, Just (EVM.VMSuccess output)) -> do
-      let
-        (okState, ok2, ok3, ok4, ok5) =
-          checkExpectedContracts vm (expectedContracts expectation)
-        (s2, b2) = ("bad-output", checkExpectedOut output (expectedOut expectation))
-        (s3, b3) = ("bad-gas", checkExpectedGas vm (expectedGas expectation))
-        ss = map fst (filter (not . snd) [(s2, b2), (s3, b3)])
-      _ <- if not okState then
-               checkStateFail
-                    diff x expectation vm (okState, ok2, ok3, ok4, ok5)
-               else
-                   return True
-      putStr (unwords ss)
-      return (okState && b2 && b3)
-
-    (_, Nothing, Just (EVM.VMSuccess _)) -> do
+    (Nothing, Just (EVM.VMSuccess _)) -> do
       putStr "unexpected-success"
       return False
 
-    (_, Nothing, Just (EVM.VMFailure _)) ->
+    (Nothing, Just (EVM.VMFailure _)) ->
       return True
 
-    (_, Just _, Just (EVM.VMFailure _)) -> do
-      putStr "unexpected-failure"
-      return False
-
-    (_, _, Nothing) -> do
+    (_, Nothing) -> do
       cpprint (view EVM.result vm)
       error "internal error"
-
-checkExpectedOut :: ByteString -> Maybe ByteString -> Bool
-checkExpectedOut output ex = case ex of
-  Nothing       -> True
-  Just expected -> output == expected
 
 -- quotient account state by nullness
 (~=) :: Map Addr EVM.Contract -> Map Addr EVM.Contract -> Bool
@@ -229,13 +205,6 @@ clearNonce = set EVM.nonce 0
 
 clearCode :: EVM.Contract -> EVM.Contract
 clearCode = set EVM.contractcode (EVM.RuntimeCode mempty)
-
-checkExpectedGas :: EVM.VM -> Maybe W256 -> Bool
-checkExpectedGas vm ex = case ex of
-  Nothing -> True
-  Just expected -> case vm ^. EVM.state . EVM.gas of
-    EVM.C _ x | x == expected -> True
-    _ -> False
 
 #if MIN_VERSION_aeson(1, 0, 0)
 
@@ -528,15 +497,11 @@ initTx x =
        else id)
     $ checkState
 
-vmForCase :: EVM.ExecMode -> Case -> EVM.VM
-vmForCase mode x =
+vmForCase :: Case -> EVM.VM
+vmForCase x =
   let
     checkState = checkContracts x
-    initState =
-      case mode of
-        EVM.ExecuteAsBlockchainTest -> initTx x
-        EVM.ExecuteAsVMTest         -> checkState
-        EVM.ExecuteNormally         -> error "cannot initialize VM normally"
+    initState = initTx x
     opts = testVmOpts x
     creation = EVM.vmoptCreate opts
     touchedAccounts =
@@ -550,7 +515,6 @@ vmForCase mode x =
     & EVM.tx . EVM.txReversion .~ realizeContracts checkState
     & EVM.tx . EVM.origStorage .~ realizeContracts initState
     & EVM.tx . EVM.substate . EVM.touchedAccounts .~ touchedAccounts
-    & EVM.execMode .~ mode
 
 interpret :: Stepper a -> EVM a
 interpret =
