@@ -24,7 +24,6 @@ import Text.ParserCombinators.ReadP
 import qualified EVM.VMTest as VMTest
 #endif
 
-import EVM (ExecMode(..))
 import EVM.Concrete (createAddress, w256)
 import EVM.Debug
 import EVM.Exec
@@ -132,13 +131,6 @@ data Command w
       , diff    :: w ::: Bool      <?> "Print expected vs. actual state on failure"
       , timeout :: w ::: Maybe Int <?> "Execution timeout (default: 10 sec.)"
       }
-  | VmTest -- Run an Ethereum VMTest
-      { file    :: w ::: String    <?> "Path to .json test file"
-      , test    :: w ::: [String]  <?> "Test case filter - only run specified test method(s)"
-      , debug   :: w ::: Bool      <?> "Run interactively"
-      , diff    :: w ::: Bool      <?> "Print expected vs. actual state on failure"
-      , timeout :: w ::: Maybe Int <?> "Execution timeout (default: 10 sec.)"
-      }
   | Compliance -- Run Ethereum Blockhain or VMTest compliance report
       { tests   :: w ::: String       <?> "Path to Ethereum Tests directory"
       , group   :: w ::: Maybe String <?> "Report group to run: VM or Blockchain (default: Blockchain)"
@@ -228,10 +220,8 @@ main = do
       launchExec cmd
     Abiencode {} ->
       print . ByteStringS $ abiencode (abi cmd) (arg cmd)
-    VmTest {} ->
-      launchTest ExecuteAsVMTest cmd
     BcTest {} ->
-      launchTest ExecuteAsBlockchainTest cmd
+      launchTest cmd
     DappTest {} ->
       withCurrentDirectory root $ do
         testFile <- findJsonFile (jsonFile cmd)
@@ -452,23 +442,21 @@ tohexOrText s = case "0x" `Char8.isPrefixOf` encodeUtf8 s of
 
 vmFromCommand :: Command Options.Unwrapped -> IO EVM.VM
 vmFromCommand cmd = do
-  vm <- case (rpc cmd, address cmd, code cmd) of
-     (Just url, Just addr', _) -> do maybeContract <- EVM.Fetch.fetchContractFrom block' url addr'
-                                     case maybeContract of
-                                       Nothing -> error $ "contract not found: " <> show address' <> "and no --code given"
-                                       Just contract' -> case (code cmd) of
-                                         Nothing -> return (vm1 contract')
-                                         -- if both code and url is given,
-                                         -- fetch the contract and overwrite the code
-                                         Just c -> return $ vm1 (
-                                                      EVM.initialContract (codeType $ hexByteString "--code" $ strip0x c)
-                                                        & set EVM.storage     (view EVM.storage contract')
-                                                        & set EVM.balance     (view EVM.balance contract')
-                                                        & set EVM.nonce       (view EVM.nonce contract')
-                                                        & set EVM.external    (view EVM.external contract'))
+  vm <- case (rpc cmd, address cmd) of
+     (Just url, Just addr') -> do EVM.Fetch.fetchContractFrom block' url addr' >>= \case
+                                    Nothing -> error $ "contract not found: " <> show address'
+                                    Just contract' -> case code cmd of
+                                      Nothing -> return (vm1 contract')
+                                      -- if both code and url is given,
+                                      -- fetch the contract and overwrite the code
+                                      Just c -> return . vm1 $
+                                                   EVM.initialContract (codeType $ hexByteString "--code" $ strip0x c)
+                                                     & set EVM.storage     (view EVM.storage contract')
+                                                     & set EVM.balance     (view EVM.balance contract')
+                                                     & set EVM.nonce       (view EVM.nonce contract')
+                                                     & set EVM.external    (view EVM.external contract')
 
-     (_, _, Just c)  -> return $ vm1 $ EVM.initialContract $ codeType $ hexByteString "--code" $ strip0x c
-     (_, _, Nothing) -> error $ "must provide at least (rpc + address) or code"
+     _ -> return . vm1 . EVM.initialContract . codeType $ bytes code ""
      
   return $ vm & EVM.env . EVM.contracts . ix address' . EVM.balance +~ (w256 value')
       where
@@ -505,14 +493,10 @@ vmFromCommand cmd = do
         addr f def = fromMaybe def (f cmd)
         bytes f def = maybe def (hexByteString "bytes" . strip0x) (f cmd)
 
-launchTest :: ExecMode -> Command Options.Unwrapped ->  IO ()
-launchTest execmode cmd = do
+launchTest :: Command Options.Unwrapped ->  IO ()
+launchTest cmd = do
 #if MIN_VERSION_aeson(1, 0, 0)
-  let parser = case execmode of
-        ExecuteAsVMTest -> VMTest.parseSuite
-        ExecuteAsBlockchainTest -> VMTest.parseBCSuite
-        ExecuteNormally -> error "cannot launchTest normally"
-  parsed <- parser <$> LazyByteString.readFile (file cmd)
+  parsed <- VMTest.parseBCSuite <$> LazyByteString.readFile (file cmd)
   case parsed of
      Left "No cases to check." -> putStrLn "no-cases ok"
      Left err -> print err
@@ -522,16 +506,16 @@ launchTest execmode cmd = do
              then id
              else filter (\(x, _) -> elem x (test cmd))
        in
-         mapM_ (runVMTest (diff cmd) execmode (optsMode cmd) (timeout cmd)) $
+         mapM_ (runVMTest (diff cmd) (optsMode cmd) (timeout cmd)) $
            testFilter (Map.toList allTests)
 #else
   putStrLn "Not supported"
 #endif
 
 #if MIN_VERSION_aeson(1, 0, 0)
-runVMTest :: Bool -> ExecMode -> Mode -> Maybe Int -> (String, VMTest.Case) -> IO Bool
-runVMTest diffmode execmode mode timelimit (name, x) = do
-  let vm0 = VMTest.vmForCase execmode x
+runVMTest :: Bool -> Mode -> Maybe Int -> (String, VMTest.Case) -> IO Bool
+runVMTest diffmode mode timelimit (name, x) = do
+  let vm0 = VMTest.vmForCase x
   putStr (name ++ " ")
   hFlush stdout
   result <- do
@@ -545,7 +529,7 @@ runVMTest diffmode execmode mode timelimit (name, x) = do
     waitCatch action
   case result of
     Right (Just vm1) -> do
-      ok <- VMTest.checkExpectation diffmode execmode x vm1
+      ok <- VMTest.checkExpectation diffmode x vm1
       putStrLn (if ok then "ok" else "")
       return ok
     Right Nothing -> do

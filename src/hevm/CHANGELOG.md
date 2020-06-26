@@ -3,6 +3,8 @@
 ## 0.39 - unreleased
  - Exposes abi encoding to cli
  - Added cheat code `hevm.store(address a, bytes32 location, bytes32 value)`
+ - Removes `ExecMode`, always running as `ExecuteAsBlockchainTest`. This means that `hevm exec` now finalizes transactions as well.
+ - `--code` is now entirely optional. Not supplying it returns an empty contract, or whatever is stored in `--state`.
 
 ## 0.38 - 2020-04-23
  - Exposes metadata stripping of bytecode to the cli: `hevm strip-metadata --code X`. [357](https://github.com/dapphub/dapptools/pull/357).
