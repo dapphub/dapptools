@@ -7,6 +7,7 @@
 ### of the given transaction
 ###
 ### With `--state`, load and save state from this repo
+set -e
 opts=()
 [[ $HEVM_STATE ]] && opts+=(--state "$HEVM_STATE")
 [[ $HEVM_DEBUG ]] && opts+=(--debug)
