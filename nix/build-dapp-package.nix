@@ -47,7 +47,7 @@ in
           '')
           passthru.libPaths;
 
-      buildPhase = args.buildPhase or ''
+      buildPhase = ''
         opts=(--combined-json=abi,bin,bin-runtime,srcmap,srcmap-runtime,ast,metadata --overwrite)
 
         mkdir -p out
@@ -75,11 +75,11 @@ in
         fi
       '';
 
-      checkPhase = args.checkPhase or ''
+      checkPhase = ''
         DAPP_OUT=out dapp2-test-hevm
       '';
 
-      installPhase = args.installPhase or ''
+      installPhase = ''
         mkdir -p $out/dapp/$name
         cp -r $src $out/dapp/$name/src
         cp -r lib $out/dapp/$name/lib
