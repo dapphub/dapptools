@@ -100,7 +100,6 @@ data VM = VM
   , _logs          :: Seq Log
   , _traces        :: Zipper.TreePos Zipper.Empty Trace
   , _cache         :: Cache
-  , _execMode      :: ExecMode
   , _burned        :: Word
   }
 
@@ -117,8 +116,6 @@ data TraceData
   | ErrorTrace Error
   | EntryTrace Text
   | ReturnTrace ByteString FrameContext
-
-data ExecMode = ExecuteNormally | ExecuteAsBlockchainTest | ExecuteAsVMTest
 
 data Query where
   PleaseFetchContract :: Addr         -> (Contract -> EVM ()) -> Query
@@ -371,7 +368,6 @@ makeVm o = VM
     }
   , _cache = Cache $ Map.fromList
     [(vmoptAddress o, vmoptContract o)]
-  , _execMode = ExecuteNormally
   , _burned = 0
   } where theCode = case _contractcode (vmoptContract o) of
             InitCode b    -> b
@@ -1455,43 +1451,40 @@ finalize = do
       creation <- use (tx . isCreate)
       createe  <- use (state . contract)
       createeExists <- (Map.member createe) <$> use (env . contracts)
-      if (creation && createeExists)
+
+      if creation && createeExists
       then replaceCode createe (RuntimeCode output)
       else noop
 
-  use execMode >>= \case
-    ExecuteAsVMTest ->
-      noop
-    _ -> do
-      -- compute and pay the refund to the caller and the
-      -- corresponding payment to the miner
-      txOrigin     <- use (tx . origin)
-      sumRefunds   <- (sum . (snd <$>)) <$> (use (tx . substate . refunds))
-      miner        <- use (block . coinbase)
-      blockReward  <- r_block <$> (use (block . schedule))
-      gasPrice     <- use (tx . gasprice)
-      gasLimit     <- use (tx . txgaslimit)
-      gasRemaining <- use (state . gas)
+  -- compute and pay the refund to the caller and the
+  -- corresponding payment to the miner
+  txOrigin     <- use (tx . origin)
+  sumRefunds   <- (sum . (snd <$>)) <$> (use (tx . substate . refunds))
+  miner        <- use (block . coinbase)
+  blockReward  <- r_block <$> (use (block . schedule))
+  gasPrice     <- use (tx . gasprice)
+  gasLimit     <- use (tx . txgaslimit)
+  gasRemaining <- use (state . gas)
 
-      let
-        gasUsed      = gasLimit - gasRemaining
-        cappedRefund = min (quot gasUsed 2) sumRefunds
-        originPay    = (gasRemaining + cappedRefund) * gasPrice
-        minerPay     = gasPrice * (gasUsed - cappedRefund)
+  let
+    gasUsed      = gasLimit - gasRemaining
+    cappedRefund = min (quot gasUsed 2) sumRefunds
+    originPay    = (gasRemaining + cappedRefund) * gasPrice
+    minerPay     = gasPrice * (gasUsed - cappedRefund)
 
-      modifying (env . contracts)
-        (Map.adjust (over balance (+ originPay)) txOrigin)
-      modifying (env . contracts)
-        (Map.adjust (over balance (+ minerPay)) miner)
-      touchAccount miner
+  modifying (env . contracts)
+     (Map.adjust (over balance (+ originPay)) txOrigin)
+  modifying (env . contracts)
+     (Map.adjust (over balance (+ minerPay)) miner)
+  touchAccount miner
 
-      -- pay out the block reward, recreating the miner if necessary
-      preuse (env . contracts . ix miner) >>= \case
-        Nothing -> modifying (env . contracts)
-          (Map.insert miner (initialContract (EVM.RuntimeCode mempty)))
-        Just _  -> noop
-      modifying (env . contracts)
-        (Map.adjust (over balance (+ blockReward)) miner)
+  -- pay out the block reward, recreating the miner if necessary
+  preuse (env . contracts . ix miner) >>= \case
+    Nothing -> modifying (env . contracts)
+      (Map.insert miner (initialContract (EVM.RuntimeCode mempty)))
+    Just _  -> noop
+  modifying (env . contracts)
+    (Map.adjust (over balance (+ blockReward)) miner)
 
   -- perform state trie clearing (EIP 161), of selfdestructs
   -- and touched accounts. addresses are cleared if they have
@@ -1653,12 +1646,7 @@ delegateCall this xGas xTo xValue xInOffset xInSize xOutOffset xOutSize xs conti
     assign (state . returndata) mempty
     pushTrace $ ErrorTrace CallDepthLimitReached
     next
-  else case view execMode vm0 of
-    ExecuteAsVMTest -> do
-      assign (state . stack) (1 : xs)
-      next
-    _ ->
-      fetchAccount xTo . const $
+  else fetchAccount xTo . const $
         preuse (env . contracts . ix xTo) >>= \case
           Nothing ->
             vmError (NoSuchContract xTo)
@@ -1734,11 +1722,7 @@ create self this xGas xValue xs newAddr initCode = do
     modifying (env . contracts . ix self . nonce) succ
     next
   else burn xGas $
-    case (view execMode vm0) of
-      ExecuteAsVMTest -> do
-        assign (state . stack) (num newAddr : xs)
-        next
-      _ -> do
+     do
         touchAccount self
         touchAccount newAddr
         let
@@ -1842,11 +1826,7 @@ finishFrame how = do
           FrameReturned output -> VMSuccess output
           FrameReverted output -> VMFailure (Revert output)
           FrameErrored e       -> VMFailure e
-      use execMode >>= \case
-        ExecuteNormally ->
-          noop
-        _ ->
-          finalize
+      finalize
 
     -- Are there some remaining frames?
     nextFrame : remainingFrames -> do
