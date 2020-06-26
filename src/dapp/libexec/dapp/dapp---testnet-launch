@@ -10,6 +10,7 @@ period=seconds     use a block time instead of instamine
 accounts=number    create multiple accounts (default: 1)
 save=name          after finishing, save snapshot
 load=name          start from a previously saved snapshot
+dir=directory      testnet directory
 "
 
 eval "$(
@@ -20,6 +21,7 @@ RPC_PORT=8545
 PERIOD=0
 CHAINID=99
 ACCOUNTS=0
+gethdir=$HOME/.dapp/testnet
 
 while [[ $1 ]]; do
   case $1 in
@@ -30,11 +32,11 @@ while [[ $1 ]]; do
     --accounts)  shift; ACCOUNTS=$(($1 - 1));;
     --save)      shift; SAVE=$1;;
     --load)      shift; LOAD=$1;;
+    --dir)       shift; gethdir=$1;;
     *) printf "${0##*/}: internal error: %q\\n" "$1"; exit 1
   esac; shift
 done
 
-gethdir=$HOME/.dapp/testnet
 chaindir=$gethdir/$RPC_PORT
 
 if [[ $LOAD ]]; then
