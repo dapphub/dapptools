@@ -11,7 +11,7 @@
 {-# Language TypeOperators #-}
 
 import qualified EVM
-import EVM.Concrete (createAddress)
+import EVM.Concrete (createAddress, w256)
 import EVM.Symbolic (forceLitBytes, litBytes, litAddr)
 import qualified EVM.FeeSchedule as FeeSchedule
 import qualified EVM.Fetch
@@ -563,23 +563,24 @@ tohexOrText s = case "0x" `Char8.isPrefixOf` encodeUtf8 s of
 
 
 vmFromCommand :: Command Options.Unwrapped -> IO EVM.VM
-vmFromCommand cmd = case (rpc cmd, address cmd, code cmd) of
-  (Just url, Just addr', _) -> EVM.Fetch.fetchContractFrom block' url addr' >>= \case
-    Nothing -> error $ "contract not found: " <> show address' <> "and no --code given"
-    Just contract' -> case (code cmd) of
-      Nothing -> return (vm1 contract')
-      -- if both code and url is given,
-      -- fetch the contract and overwrite the code
-      Just c -> return $ vm1 (
-        EVM.initialContract (codeType $ decipher c)
-           & set EVM.storage     (view EVM.storage contract')
-           & set EVM.origStorage (view EVM.origStorage contract')
-           & set EVM.balance     (view EVM.balance contract')
-           & set EVM.nonce       (view EVM.nonce contract')
-           & set EVM.external    (view EVM.external contract'))
+vmFromCommand cmd = do
+  vm <- case (rpc cmd, address cmd) of
+     (Just url, Just addr') -> do EVM.Fetch.fetchContractFrom block' url addr' >>= \case
+                                    Nothing -> error $ "contract not found: " <> show address'
+                                    Just contract' -> case code cmd of
+                                      Nothing -> return (vm1 contract')
+                                      -- if both code and url is given,
+                                      -- fetch the contract and overwrite the code
+                                      Just c -> return . vm1 $
+                                                   EVM.initialContract (codeType $ hexByteString "--code" $ strip0x c)
+                                                     & set EVM.storage     (view EVM.storage contract')
+                                                     & set EVM.balance     (view EVM.balance contract')
+                                                     & set EVM.nonce       (view EVM.nonce contract')
+                                                     & set EVM.external    (view EVM.external contract')
 
-  (_, _, Just c)  -> return $ vm1 $ EVM.initialContract $ codeType $ decipher c
-  (_, _, Nothing) -> error $ "must provide at least (rpc + address) or code"
+     _ -> return . vm1 . EVM.initialContract . codeType $ bytes code ""
+
+  return $ vm & EVM.env . EVM.contracts . ix address' . EVM.balance +~ (w256 value')
    
   where
     decipher = hexByteString "bytes" . strip0x
