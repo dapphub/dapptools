@@ -11,6 +11,15 @@ error() {
     exit 1
 }
 
+test_hevm_symbolic() {
+    solc --bin-runtime -o . --overwrite factor.sol
+    # should find counterexample
+    hevm symbolic --code $(<A.bin-runtime) --abi $(seth --abi-function-json "factor(uint x, uint y)") && error || echo "hevm success: found counterexample"
+    rm -rf A.bin-runtime
+}
+
+test_hevm_symbolic
+
 test_calldata_1() {
     local output
     output=$(seth --to-uint256 1 )
