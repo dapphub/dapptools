@@ -55,6 +55,7 @@ test_hevm_symbolic() {
     # should find counterexample
     hevm symbolic --code $(<A.bin-runtime) --abi $(seth --abi-function-json "factor(uint x, uint y)") && error || echo "hevm success: found counterexample"
     rm -rf A.bin-runtime
+    hevm symbolic --code $(<dstoken.bin-runtime) --abi $(seth --abi-function-json "transferFrom(address, address, uint)") --get-models
 }
 
 test_hevm_symbolic
