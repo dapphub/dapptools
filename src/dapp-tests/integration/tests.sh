@@ -50,8 +50,16 @@ dapp_testnet() {
 
 dapp_testnet
 
-# SETH CALLDATA TESTS
+test_hevm_symbolic() {
+    solc --bin-runtime -o . --overwrite factor.sol
+    # should find counterexample
+    hevm symbolic --code $(<A.bin-runtime) --abi $(seth --abi-function-json "factor(uint x, uint y)") && error || echo "hevm success: found counterexample"
+    rm -rf A.bin-runtime
+}
 
+test_hevm_symbolic
+
+# SETH CALLDATA TESTS
 test_calldata_1() {
     local output
     output=$(seth --to-uint256 1 )
