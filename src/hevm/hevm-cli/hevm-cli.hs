@@ -56,7 +56,7 @@ import Data.SBV hiding (Word, solver, verbose, name)
 import Data.SBV.Control hiding (Version, timeout, create)
 import System.IO                  (hFlush, stdout)
 import System.Directory           (withCurrentDirectory, listDirectory)
-import System.Exit                (die, exitFailure)
+import System.Exit                (die, exitFailure, exitWith, ExitCode(..))
 import System.Environment         (setEnv)
 import System.Process             (callProcess)
 import qualified Data.Aeson        as JSON
@@ -173,7 +173,7 @@ data Command w
       , diff    :: w ::: Bool      <?> "Print expected vs. actual state on failure"
       , timeout :: w ::: Maybe Int <?> "Execution timeout (default: 10 sec.)"
       }
-  | Compliance -- Run Ethereum Blockhain or VMTest compliance report
+  | Compliance -- Run Ethereum Blockhain compliance report
       { tests   :: w ::: String       <?> "Path to Ethereum Tests directory"
       , group   :: w ::: Maybe String <?> "Report group to run: VM or Blockchain (default: Blockchain)"
       , match   :: w ::: Maybe String <?> "Test case filter - only run methods matching regex"
