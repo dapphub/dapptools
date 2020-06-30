@@ -495,14 +495,20 @@ launchExec cmd = do
     Run -> do
       vm' <- execStateT (EVM.Stepper.interpret fetcher Nothing . void $ EVM.Stepper.execFully) vm1
       case view EVM.result vm' of
-        Nothing -> error "internal error; no EVM result"
-        Just (EVM.VMFailure (EVM.Revert msg)) -> die . show . ByteStringS $ msg
-        Just (EVM.VMFailure err) -> die . show $ err
-        Just (EVM.VMSuccess msg) -> print . ByteStringS $ forceLitBytes msg
-      case state cmd of
-        Nothing -> pure ()
-        Just path ->
-          Git.saveFacts (Git.RepoAt path) (Facts.vmFacts vm')
+        Nothing ->
+          error "internal error; no EVM result"
+        Just (EVM.VMFailure (EVM.Revert msg)) -> do
+          print $ ByteStringS msg
+          exitWith (ExitFailure 2)
+        Just (EVM.VMFailure err) -> do
+          print err
+          exitWith (ExitFailure 2)          
+        Just (EVM.VMSuccess msg) -> do
+          print . ByteStringS  $ forceLitBytes msg
+          case state cmd of
+            Nothing -> pure ()
+            Just path ->
+              Git.saveFacts (Git.RepoAt path) (Facts.vmFacts vm')
     Debug -> void $ EVM.TTY.runFromVM srcinfo fetcher vm1
   where fetcher = maybe EVM.Fetch.zero (EVM.Fetch.http block') (rpc cmd)
         block'  = maybe EVM.Fetch.Latest EVM.Fetch.BlockNumber (block cmd)
