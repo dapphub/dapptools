@@ -63,7 +63,6 @@ test_hevm_symbolic() {
     rm -rf Token.bin-runtime
 
     # The contracts A and B should be equivalent:
-    # (This fails atm, something is wrong)
     solc --bin-runtime -o . --overwrite AB.sol
     hevm equivalence --code-a $(<A.bin-runtime) --code-b $(<B.bin-runtime) --solver cvc4
     rm -rf A.bin-runtime B.bin-runtime
