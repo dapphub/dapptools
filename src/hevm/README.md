@@ -22,9 +22,8 @@ Note: some `hevm` commands (`dapp-test`, `interactive`) assumes the use of the `
       interactive     Browse and run unit tests interactively
 
       bc-test         Run an Ethereum Blockchain/GeneralState test
-      vm-test         Run an Ethereum VMTest
       merkle-test     Run a merkle test file and ensure the root matches
-      compliance      Run Blockchain or VMTest compliance report
+      compliance      Run Blockchain compliance report
   
       emacs           Emacs console
       version         Show hevm version
