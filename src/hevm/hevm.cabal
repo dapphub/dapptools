@@ -115,7 +115,7 @@ library
     restless-git                      >= 0.7,
     rosezipper                        >= 0.2,
     s-cargot                          >= 0.1,
-    sbv                               >= 8.4,
+    sbv                               >= 8.6,
     scientific                        >= 0.3,
     semver-range                      >= 0.2,
     temporary                         >= 1.2,
@@ -188,7 +188,7 @@ executable hevm
     process                           >= 1.4,
     quickcheck-text                   >= 0.1,
     regex-tdfa                        >= 1.2,
-    sbv                               >= 8.4,
+    sbv                               >= 8.6,
     temporary                         >= 1.2,
     text                              >= 1.2,
     text-format                       >= 0.3,
@@ -227,4 +227,4 @@ test-suite test
     tasty-quickcheck >= 0.9,
     text >= 1.2,
     vector >= 0.12,
-    sbv >= 8.4
+    sbv >= 8.6
