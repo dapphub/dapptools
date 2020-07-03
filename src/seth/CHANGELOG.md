@@ -20,7 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - `seth --to-{hex,wei,word,address,dec,int256,ascii,fix,uint256}` and
   `seth --from-{ascii,wei}` can now read values from stdin.
-
+- `seth --abi-function-json` no longer returns a singleton list, but rather the JSON object it contained.
 
 ## [0.9.0] - 2020-05-25
 
