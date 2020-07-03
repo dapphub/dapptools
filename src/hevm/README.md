@@ -252,7 +252,7 @@ Also, hevm is in Hackage so you can execute `stack install hevm` to get it up an
 If you prefer to use your own installation of GHC and the basic Haskell package manager, Cabal, simply run:
 
     $ git clone https://github.com/dapphub/dapptools.git
-    $ cd dapptools/src/hevm && cabal configure && cabal install
+    $ cd dapptools/src/hevm && cabal v2-update && cabal v2-configure && cabal v2-install
 
 **Note:** If you are on macOS when building with Stack, you will first need to install the [secp256k1](https://github.com/bitcoin-core/secp256k1) and [libff](https://github.com/scipr-lab/libff) libraries. These commands should be enough:
 
