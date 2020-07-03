@@ -15,7 +15,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `seth debug <tx-hash> [--no-src]` downloads etherscan source, executes previous txs in block and enters into an hevm interactive session for the given tx. `--no-src` skips the first step.
 
 - `seth block` can now be passed the `--full` option, which returns the full block.
-
+### Changed
+- `seth --abi-function-json` no longer returns a singleton list, but rather the JSON object it contained.
 
 ## [0.9.0] - 2020-05-25
 
