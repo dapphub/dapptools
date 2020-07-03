@@ -25,7 +25,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `seth --from-{ascii,wei}` can now read values from stdin.
 - `seth call` now accepts empty calldata and also create transactions
   via `--create`.
-
+- `seth --abi-function-json` no longer returns a singleton list, but rather the JSON object it contained.
 
 ## [0.9.0] - 2020-05-25
 
