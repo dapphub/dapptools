@@ -418,8 +418,12 @@ assert cmd = do
   else runSMTWithTimeOut (solver cmd) (smttimeout cmd) $ query $ do
          preState <- symvmFromCommand cmd
          verify preState (maxIterations cmd) (Just checkAssertions) >>= \case
-           Right a -> io $ do putStrLn "Assertion violation:"
-                              die . show $ ByteStringS a
+           Right counterexample -> io $ do putStrLn "Assertion violation:"
+                                           case abi cmd of
+                                             Just abijson -> let name = signature abijson
+                                                                 typ = snd <$> parseMethodInput <$> V.toList (abijson ^?! key "inputs" . _Array)
+                                                             in die $ unpack name ++ show (decodeAbiValue (AbiTupleType (V.fromList typ)) $ Lazy.fromStrict (ByteString.drop 4 counterexample))
+                                             Nothing -> die . show $ ByteStringS counterexample
            Left (pre, posts) ->
              do io $ putStrLn $ "Explored: " <> show (length posts) <> " branches without assertion violations"
                 -- When `--get-model` is passed, we print example calldata for each path
