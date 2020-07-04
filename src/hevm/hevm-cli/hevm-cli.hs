@@ -367,9 +367,7 @@ equivalence :: Command Options.Unwrapped -> IO ()
 equivalence cmd =
   do let bytecodeA = hexByteString "--code" . strip0x $ codeA cmd
          bytecodeB = hexByteString "--code" . strip0x $ codeB cmd
-         maybeSignature = case abi cmd of
-           Nothing -> Nothing
-           Just abijson -> Just (signature abijson, snd <$> parseMethodInput <$> V.toList (abijson ^?! key "inputs" . _Array))
+         maybeSignature = parseAbi <$> abi cmd
      void . runSMTWithTimeOut (solver cmd) (smttimeout cmd) . query $
        equivalenceCheck bytecodeA bytecodeB (maxIterations cmd) maybeSignature >>= \case
          Right counterexample -> io $ do putStrLn "Not equal!"
@@ -420,8 +418,7 @@ assert cmd = do
          verify preState (maxIterations cmd) (Just checkAssertions) >>= \case
            Right counterexample -> io $ do putStrLn "Assertion violation:"
                                            case abi cmd of
-                                             Just abijson -> let name = signature abijson
-                                                                 typ = snd <$> parseMethodInput <$> V.toList (abijson ^?! key "inputs" . _Array)
+                                             Just abijson -> let (name, typ) = parseAbi abijson
                                                              in die $ unpack name ++ show (decodeAbiValue (AbiTupleType (V.fromList typ)) $ Lazy.fromStrict (ByteString.drop 4 counterexample))
                                              Nothing -> die . show $ ByteStringS counterexample
            Left (pre, posts) ->
@@ -639,8 +636,7 @@ symvmFromCommand cmd = do
     (Just c, Nothing) -> let cd = litBytes $ decipher c
                          in return (cd, num (length cd), sTrue)
     -- calldata according to given abi with possible specializations from the `arg` list
-    (Nothing, Just abijson) -> let typs = snd <$> parseMethodInput <$> V.toList (abijson ^?! key "inputs" . _Array)
-                                   sig  = signature abijson
+    (Nothing, Just abijson) -> let (sig, typs) = parseAbi abijson
                                in do (cd, cdlen) <- symCalldata sig typs (arg cmd)
                                      return (cd, cdlen, sTrue)
 
@@ -759,13 +755,15 @@ runVMTest diffmode mode timelimit (name, x) = do
 
 #endif
 
+parseAbi :: (AsValue s) => s -> (Text, [AbiType])
+parseAbi abijson = (signature abijson, snd <$> parseMethodInput <$> V.toList (fromMaybe (error "Malformed function abi") (abijson ^? key "inputs" . _Array)))
+
 abiencode :: (AsValue s) => Maybe s -> [String] -> ByteString
 abiencode maybeabijson args =
   case maybeabijson of
     Nothing -> error "missing required argument: abi"
     Just abijson ->
-      let declarations = parseMethodInput <$> V.toList (abijson ^?! key "inputs" . _Array)
-          sig' = signature abijson
+      let (sig', declarations) = parseAbi abijson
       in if length declarations == length args
-         then abiMethod sig' $ AbiTuple . V.fromList $ zipWith makeAbiValue (snd <$> declarations) args
+         then abiMethod sig' $ AbiTuple . V.fromList $ zipWith makeAbiValue declarations args
          else error $ "wrong number of arguments:" <> show (length args) <> ": " <> show args
