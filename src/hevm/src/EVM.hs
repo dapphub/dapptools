@@ -258,7 +258,7 @@ data ContractCode
 -- | A contract can either have concrete or symbolic storage
 -- depending on what type of execution we are doing
 data Storage
-  = Concrete (Map Word Word)
+  = Concrete (Map Word SymWord)
   | Symbolic (SArray (WordN 256) (WordN 256))
   deriving (Show)
 
@@ -1311,7 +1311,7 @@ p              assign (state . returndata) mempty
           let
             hash = case maybeLitBytes input of
                      Just input' -> litBytes $ BS.pack $ BA.unpack $ (Crypto.hash input' :: Digest SHA256)
-                     Nothing -> symSHA256 input --litBytes $ BS.pack $ BA.unpack $ (Crypto.hash input' :: Digest SHA256)
+                     Nothing -> symSHA256 input
           in do
             assign (state . stack) (1 : xs)
             assign (state . returndata) hash
@@ -1507,12 +1507,11 @@ fetchAccount addr continue =
 
 readStorage :: Storage -> SymWord -> Maybe (SymWord)
 readStorage (Symbolic s) (S _ loc) = Just . sw256 $ readArray s loc
-readStorage (Concrete s) loc = do v <- Map.lookup (forceLit loc) s
-                                  return $ litWord v
+readStorage (Concrete s) loc = Map.lookup (forceLit loc) s
 
 writeStorage :: SymWord -> SymWord -> Storage -> Storage
 writeStorage (S _ loc) (S _ val) (Symbolic s) = Symbolic (writeArray s loc val)
-writeStorage loc val (Concrete s) = Concrete (Map.insert (forceLit loc) (forceLit val) s)
+writeStorage loc val (Concrete s) = Concrete (Map.insert (forceLit loc) val s)
 
 accessStorage
   :: Addr                -- ^ Contract address
@@ -1523,6 +1522,7 @@ accessStorage addr slot continue =
   use (env . contracts . at addr) >>= \case
     Just c ->
       case readStorage (view storage c) slot of
+        -- Notice that if storage is symbolic, we always continue straight away
         Just x ->
           continue x
         Nothing ->

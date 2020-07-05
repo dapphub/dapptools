@@ -328,7 +328,7 @@ realizeContract x =
     & EVM.nonce   .~ EVM.w256 (x ^. nonce)
     & EVM.storage .~ EVM.Concrete (
         Map.fromList .
-        map (bimap EVM.w256 EVM.w256) .
+        map (bimap EVM.w256 (litWord . EVM.w256)) .
         Map.toList $ x ^. storage
         )
     & EVM.origStorage .~ (
