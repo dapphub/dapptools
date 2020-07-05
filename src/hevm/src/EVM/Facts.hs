@@ -35,7 +35,7 @@ module EVM.Facts
 
 import EVM          (VM, Contract)
 import EVM.Concrete (Word)
-import EVM.Symbolic (litWord)
+import EVM.Symbolic (litWord, SymWord, forceLit)
 import EVM          (balance, nonce, storage, bytecode, env, contracts, contract, state)
 import EVM.Types    (Addr)
 
@@ -122,10 +122,10 @@ storageFacts a x = case view storage x of
   EVM.Symbolic _ -> []
   EVM.Concrete s -> map f (Map.toList s)
   where
-    f :: (Word, Word) -> Fact
+    f :: (Word, SymWord) -> Fact
     f (k, v) = StorageFact
       { addr  = a
-      , what  = fromIntegral v
+      , what  = fromIntegral (forceLit v)
       , which = fromIntegral k
       }
 
