@@ -266,7 +266,7 @@ data Storage
 -- we mock an instance of Eq for symbolic storage.
 -- It should not (cannot) be used though.
 instance Eq Storage where
-  (==) (Concrete a) (Concrete b) = a == b
+  (==) (Concrete a) (Concrete b) = fmap forceLit a == fmap forceLit b
   (==) (Symbolic _) (Concrete _) = False
   (==) (Concrete _) (Symbolic _) = False
   (==) _ _ = error "do not compare two symbolic arrays like this!"
