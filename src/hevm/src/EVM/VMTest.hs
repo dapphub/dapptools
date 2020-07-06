@@ -192,7 +192,7 @@ clearOrigStorage = set EVM.origStorage mempty
 clearZeroStorage :: EVM.Contract -> EVM.Contract
 clearZeroStorage c = case EVM._storage c of
   EVM.Symbolic _ -> c
-  EVM.Concrete m -> let store = Map.filterWithKey (\_ x -> x /= 0) m
+  EVM.Concrete m -> let store = Map.filter (\x -> forceLit x /= 0) m
                     in set EVM.storage (EVM.Concrete store) c
 
 clearStorage :: EVM.Contract -> EVM.Contract
