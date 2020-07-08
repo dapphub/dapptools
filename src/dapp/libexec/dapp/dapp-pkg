@@ -1,60 +1,7 @@
 #!/usr/bin/env bash
-### dapp-pkg -- use the dapp package manager
-### Usage: dapp pkg [<command>] [<arg>...]
-###
-### Options:
-###
-###   init                 initialize dapp pkg workflow`
-###   list                 list installed packages
-###   install <package>    add a package
-###   uninstall <package>  remove a package
-###   selfupdate           update dapp(1)
+### dapp-pkg -- deprecated
 
-set -e
-
-if [[ ! -d "$DAPPTOOLS" ]]; then
-  [ "$1" = init ] || {
-    echo "Please run \`dapp pkg init\`"
-    exit 1
-  }
-fi
-
-case $1 in
-  init) {
-    curl -sS https://dapp.tools/install | sh
-  };;
-  list|ls) {
-    cd "$DAPPTOOLS"
-    mapfile -t installed < <(nix-env -q)
-    echo "${installed[@]}"
-  };;
-  selfupdate|self-update) {
-    echo "Updating dapptools..."
-    cd "$DAPPTOOLS"
-    git pull
-    git submodule update --recursive --remote
-    nix-env -f . -iA dapp
-  };;
-  install|update) {
-    shift
-    cd "$DAPPTOOLS"
-    git pull
-    git submodule update --recursive --remote
-    nix-env -f . -iA "$@"
-  };;
-  uninstall|remove) {
-    shift
-    nix-env -e "$@"
-  };;
-  *) {
-    echo "dapp package manager..."
-    echo "current directory: $DAPPTOOLS"
-    echo ""
-    echo "Options:"
-    echo "  init"
-    echo "  list"
-    echo "  install <package>"
-    echo "  uninstall <package>"
-    echo "  selfupdate"
-  }
-esac
+cat <<EOF
+This command has been deprecated. dapptools no longer uses git to install and manage dependencies.
+Please use nix instead <3.
+EOF
