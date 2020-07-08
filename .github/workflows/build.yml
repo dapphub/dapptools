@@ -37,4 +37,8 @@ jobs:
         with:
           name: dapp
           signingKey: '${{ secrets.CACHIX_SIGNING_KEY }}'
+      - uses: actions/cache@v2
+        with:
+          path: /nix/store
+          key: cache
       - run: nix-build release.nix -A dapphub.${{ matrix.os_attr }}.stable
