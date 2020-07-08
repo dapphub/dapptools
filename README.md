@@ -14,10 +14,11 @@ Contents:
 
 ## Installation
 
-Install `nix` if you haven't already:
+Install Nix if you haven't already:
 
 ```sh
-curl https://nixos.org/nix/install | sh
+# user must be in sudoers
+curl -L https://nixos.org/nix/install | sh
 
 # Run this or login again to use Nix
 . "$HOME/.nix-profile/etc/profile.d/nix.sh"
