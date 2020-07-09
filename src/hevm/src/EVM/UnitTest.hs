@@ -167,20 +167,23 @@ execTest UnitTestOptions { .. } method args = do
 
 checkFailures :: UnitTestOptions -> ABIMethod -> AbiValue -> Bool -> Stepper Bool
 checkFailures UnitTestOptions { .. } method args bailed = do
-     -- Decide whether the test is supposed to fail or succeed
-     let shouldFail = "testFail" `isPrefixOf` method
+   -- Decide whether the test is supposed to fail or succeed
+  let shouldFail = "testFail" `isPrefixOf` method
+  if bailed then
+    pure shouldFail
+  else do
 
-     -- The test subject should be loaded and initialized already
-     addr <- Stepper.evm $ use (state . contract)
+    -- The test subject should be loaded and initialized already
+    addr <- Stepper.evm $ use (state . contract)
 
-     -- Ask whether any assertions failed
-     Stepper.evm popTrace
-     Stepper.evm $ setupCall testParams addr "failed()" args
-     Stepper.note "Checking whether assertions failed"
-     res <- Stepper.execFullyOrFail >>= Stepper.decode AbiBoolType
-     let AbiBool failed = res
-     -- Return true if the test was successful
-     pure (shouldFail == (bailed || failed))
+    -- Ask whether any assertions failed
+    Stepper.evm popTrace
+    Stepper.evm $ setupCall testParams addr "failed()" args
+    Stepper.note "Checking whether assertions failed"
+    res <- Stepper.execFullyOrFail >>= Stepper.decode AbiBoolType
+    let AbiBool failed = res
+    -- Return true if the test was successful
+    pure (shouldFail == failed)
 
 -- | Randomly generates the calldata arguments and runs the test
 fuzzTest :: UnitTestOptions -> Text -> [AbiType] -> VM -> Property
@@ -454,13 +457,12 @@ runUnitTestContract
                     (Right False, vm) ->
                              pure ("\x1b[31m[FAIL]\x1b[0m "
                              <> testName <> argInfo, Left (failOutput vm dapp opts testName))
-                    (Left _, _)       ->
+                    (Left e, vm)       ->
                              pure ("\x1b[33m[OOPS]\x1b[0m "
-                             <> testName <> argInfo, Left ("VM error for " <> testName))
-
-                (Left _, _)       ->
+                             <> testName <> argInfo, Left (bailOutput e vm dapp opts testName))
+                (Left e, vm)       ->
                   pure ("\x1b[33m[OOPS]\x1b[0m "
-                        <> testName <> argInfo, Left ("VM error for " <> testName))
+                        <> testName <> argInfo, Left (bailOutput e vm dapp opts testName))
 
           -- Define the thread spawner for property based tests
           let fuzzRun (testName, types) = do
@@ -541,6 +543,18 @@ failOutput :: VM -> DappInfo -> UnitTestOptions -> Text -> Text
 failOutput vm dapp UnitTestOptions { .. } testName = mconcat
   [ "Failure: "
   , fromMaybe "" (stripSuffix "()" testName)
+  , "\n"
+  , indentLines 2 (formatTestLogs (view dappEventMap dapp) (view logs vm))
+  , case verbose of
+      Nothing -> ""
+      _       -> indentLines 2 (showTraceTree dapp vm)
+  ]
+
+bailOutput :: Stepper.Failure -> VM -> DappInfo -> UnitTestOptions -> Text -> Text
+bailOutput e vm dapp UnitTestOptions { .. } testName = mconcat
+  [ "VMError: "
+  , fromMaybe "" (stripSuffix "()" testName)
+  , " [" <> pack (show e) <> "]"
   , "\n"
   , indentLines 2 (formatTestLogs (view dappEventMap dapp) (view logs vm))
   , case verbose of
