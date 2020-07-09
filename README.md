@@ -32,9 +32,6 @@ curl https://dapp.tools/install | sh
 
 ### Installing custom solc versions
 
-For a list of the supported `solc` versions, check
-[`./nix/solc-versions.nix`](./nix/solc-versions.nix).
-
 You can specify a custom `solc` version to run within `dapp` with `dapp --use
 solc:x.y.z test`, but you can also install any supported `solc` "standalone"
 (i.e. add it to your `$PATH`) with:
@@ -44,14 +41,15 @@ nix-env -iA solc-versions.solc_x_y_z \
   -if https://github.com/dapphub/dapptools/tarball/master
 ```
 
-*(NOTE: if you haven't configured Cachix to use the `dapp` binary cache, you'll
-have to manually pass substituters in the above command in order to avoid
-compilation)*
+*(NOTE: if you haven't installed dapptools with the one-line installer, you'll
+have to manually pass substituters in the command above, or configure Cachix
+manually, to avoid compilation)*
+
+For a list of the supported `solc` versions, check
+[`./nix/solc-versions.nix`](./nix/solc-versions.nix).
 
 Versions of `solc` that haven't yet landed in nixpkgs can be found under the
-`unreleased` key: `solc-versions.unreleased.solc_x_y_z`. Again, refer to
-[`./nix/solc/versions.nix`](./nix/solc-versions.nix) for a list of supported
-unreleased versions.
+`unreleased` key: `solc-versions.unreleased.solc_x_y_z`.
 
 *(NOTE: not all versions are supported on macOS platforms.)*
 
