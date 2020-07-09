@@ -167,20 +167,23 @@ execTest UnitTestOptions { .. } method args = do
 
 checkFailures :: UnitTestOptions -> ABIMethod -> AbiValue -> Bool -> Stepper Bool
 checkFailures UnitTestOptions { .. } method args bailed = do
-     -- Decide whether the test is supposed to fail or succeed
-     let shouldFail = "testFail" `isPrefixOf` method
+   -- Decide whether the test is supposed to fail or succeed
+  let shouldFail = "testFail" `isPrefixOf` method
+  if bailed then
+    pure shouldFail
+  else do
 
-     -- The test subject should be loaded and initialized already
-     addr <- Stepper.evm $ use (state . contract)
+    -- The test subject should be loaded and initialized already
+    addr <- Stepper.evm $ use (state . contract)
 
-     -- Ask whether any assertions failed
-     Stepper.evm popTrace
-     Stepper.evm $ setupCall testParams addr "failed()" args
-     Stepper.note "Checking whether assertions failed"
-     res <- Stepper.execFullyOrFail >>= Stepper.decode AbiBoolType
-     let AbiBool failed = res
-     -- Return true if the test was successful
-     pure (shouldFail == (bailed || failed))
+    -- Ask whether any assertions failed
+    Stepper.evm popTrace
+    Stepper.evm $ setupCall testParams addr "failed()" args
+    Stepper.note "Checking whether assertions failed"
+    res <- Stepper.execFullyOrFail >>= Stepper.decode AbiBoolType
+    let AbiBool failed = res
+    -- Return true if the test was successful
+    pure (shouldFail == failed)
 
 -- | Randomly generates the calldata arguments and runs the test
 fuzzTest :: UnitTestOptions -> Text -> [AbiType] -> VM -> Property
