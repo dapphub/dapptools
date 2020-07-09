@@ -1,7 +1,4 @@
 #!/usr/bin/env bash
 ### dapp-pkg -- deprecated
 
-cat <<EOF
-This command has been deprecated. dapptools no longer uses git to install and manage dependencies.
-Please use nix instead <3.
-EOF
+echo "This command has been deprecated. Please check the dapptools README for new install instructions."
