@@ -5,6 +5,8 @@ let
   stdenv = self.pkgs.stdenv;
 
 in rec {
+  dapptoolsSrc = self.callPackage (import ./nix/dapptools-src.nix) {};
+
   haskellPackages = super.haskellPackages.override (old: {
     overrides = lib.composeExtensions (old.overrides or (_: _: {})) (
       import ./haskell.nix { inherit lib; pkgs = self; }
@@ -127,11 +129,6 @@ in rec {
   evmdis = self.callPackage ./nix/evmdis.nix {};
 
   token = self.callPackage (import ./src/token) {};
-  dai = self.callPackage (import ./submodules/dai-cli) {};
-
-  setzer = self.callPackage (import ./submodules/setzer) {};
-  terra = self.callPackage (import ./submodules/terra) {};
-  chief = self.callPackage (import ./submodules/chief) {};
 
   # We use this to run private testnets without
   # the pesky transaction size limit.

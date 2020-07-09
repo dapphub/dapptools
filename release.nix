@@ -31,7 +31,6 @@ let
 
   # These packages should always work and be available in the binary cache.
   stable = dist: with dist.pkgs; {
-    inherit dai;
     inherit dapp-which;
     inherit dapp;
     inherit dapp-tests;
@@ -43,7 +42,6 @@ let
     inherit qrtx-term;
     inherit qrtx;
     inherit seth;
-    inherit setzer;
     inherit token;
 
     hevm-compliance = hevmCompliance dist;

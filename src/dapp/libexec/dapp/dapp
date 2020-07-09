@@ -8,13 +8,10 @@
 
 set -e
 
-export DAPPTOOLS=${DAPPTOOLS-~/.dapp/dapptools}
 export DAPP_SRC=${DAPP_SRC-src}
 export DAPP_LIB=${DAPP_LIB-lib}
 export DAPP_OUT=${DAPP_OUT-out}
 export DAPP_JSON=${DAPP_JSON-${DAPP_OUT}/dapp.sol.json}
-
-set -e
 
 if ! [[ $DAPP_INIT ]]; then
   export DAPP_INIT=1

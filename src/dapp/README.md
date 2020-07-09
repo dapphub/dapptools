@@ -21,7 +21,6 @@ Commands:
    help            print help about dapp(1) or one of its subcommands
    init            bootstrap a new dapp
    install         install a smart contract library
-   pkg             use the dapp package manager
    test            run the test suite
    testnet         launch a testnet
    uninstall       remove a smart contract library
@@ -36,7 +35,6 @@ These variables can be set at the prompt or in a `.dapprc` file.
 
 |          Variable          |          Default           |               Synopsis                |
 |----------------------------|----------------------------|---------------------------------------|
-| `DAPPTOOLS`                | `~/.dapp/dapptools`        | Installed location of tools           |
 | `DAPP_SRC`                 | `src`                      | Project Solidity source directory     |
 | `DAPP_LIB`                 | `lib`                      | Directory for installed Dapp packages |
 | `DAPP_OUT`                 | `out`                      | Directory for compilation artifacts   |
