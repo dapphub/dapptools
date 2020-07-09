@@ -21,7 +21,6 @@ Commands:
    help            print help about dapp(1) or one of its subcommands
    init            bootstrap a new dapp
    install         install a smart contract library
-   pkg             use the dapp package manager
    test            run the test suite
    testnet         launch a testnet
    uninstall       remove a smart contract library

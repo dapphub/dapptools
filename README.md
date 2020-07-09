@@ -35,9 +35,9 @@ curl https://dapp.tools/install | sh
 For a list of the supported `solc` versions, check
 [`./nix/solc-versions.nix`](./nix/solc-versions.nix).
 
-You can specify a `solc` version to run within `dapp` with `dapp --use
-solc:x.y.z test`, but you can also install `solc` "standalone" (i.e. add it to
-your `$PATH`) with:
+You can specify a custom `solc` version to run within `dapp` with `dapp --use
+solc:x.y.z test`, but you can also install any supported `solc` "standalone"
+(i.e. add it to your `$PATH`) with:
 
 ```
 nix-env -iA solc-versions.solc_x_y_z \
