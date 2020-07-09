@@ -51,6 +51,8 @@ symAbiArg (AbiUIntType n) | n `mod` 8 == 0 && n <= 256 = do x <- freshVar_ @ (Wo
 symAbiArg (AbiIntType n)  | n `mod` 8 == 0 && n <= 256 = do x <- freshVar_ @ (WordN 256)
                                                             return (toBytes x, 32)
                           | otherwise = error "bad type"
+symAbiArg AbiBoolType = do x <- freshVar_ @ (WordN 256)
+                           return (toBytes x, 32)
 
 symAbiArg AbiAddressType = do x <- freshVar_ @ (WordN 256)
                               return (toBytes x, 32)

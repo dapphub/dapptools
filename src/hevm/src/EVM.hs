@@ -2515,26 +2515,23 @@ symSHA256N = uninterpret "sha256"
 symkeccakN :: SInteger -> SInteger -> SWord 256
 symkeccakN = uninterpret "keccak"
 
--- This is an ugly definition that can probably be done better
--- with some fancy reflection / haskell dependent type /
--- type family magic
--- but for now, let's go the ugly & easy route and just catch
--- the most common uses of keccak
+toSInt :: [SWord 8] -> SInteger
+toSInt bs = sum $ zipWith (\a i -> sFromIntegral $ a * 256 ^ i) bs [0..]
+
+
+-- | Although we'd like to define this directly as an uninterpreted function,
+-- we cannot because [a] is not a symbolic type. We must convert the list into a suitable
+-- symbolic type first. The only important property of this conversion is that it is injective.
+-- We embedd the bytestring as a pair of symbolic integers, this is a fairly easy solution.
 symkeccak' :: [SWord 8] -> SWord 256
 symkeccak' bytes = case length bytes of
   0 -> literal $ toSizzle $ keccak ""
-  32 -> symkeccakN 32 $ sFromIntegral $ (fromBytes bytes :: SWord 256)
-  64 -> symkeccakN 64 $ sFromIntegral $ (fromBytes bytes :: SWord 512)
-  128 -> symkeccakN 128 $ sFromIntegral $ (fromBytes bytes :: SWord 1024)
-  n -> error $ "TODO: symkeccak256 for: " <> show n
+  n -> symkeccakN (num n) (toSInt bytes)
 
 symSHA256 :: [SWord 8] -> [SWord 8]
 symSHA256 bytes = case length bytes of
   0 -> litBytes $ BS.pack $ BA.unpack $ (Crypto.hash BS.empty :: Digest SHA256)
-  32 -> toBytes . symSHA256N 32 $ sFromIntegral $ (fromBytes bytes :: SWord 256)
-  64 -> toBytes . symSHA256N 64 $ sFromIntegral $ (fromBytes bytes :: SWord 512)
-  128 -> toBytes . symSHA256N 128 $ sFromIntegral $ (fromBytes bytes :: SWord 1024)
-  n -> error $ "TODO: symsha256 for: " <> show n
+  n -> toBytes $ symSHA256N (num n) (toSInt bytes)
 
 
 -- * Arithmetic
