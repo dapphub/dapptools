@@ -5,8 +5,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
-### Added 
+### Added
 - Support for solc 0.6.7
+
+### Removed
+- Support for git submodules (setzer, dai-cli, chief, terra)
+- `dapp pkg` functionality - dapptools is now installed and upgraded as a Nix
+package only, without relying on git
+- `DAPPTOOLS` environment variable, which was only needed to support the
+git-based workflow above
+
+### Deprecated
+- `dapp pkg` subcommand is now a no-op, and will be removed in future
+versions.
 
 ## [0.27.0] - 2020-04-23
 ### Added
