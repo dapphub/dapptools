@@ -1,0 +1,9 @@
+cradle:
+  cabal:
+    - path: "./src"
+      component: "lib:hevm"
+    - path: "./test"
+      component: "test:test"
+    - path: "./hevm-cli"
+      component: "exe:hevm"
+
