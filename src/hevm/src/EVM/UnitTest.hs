@@ -454,13 +454,12 @@ runUnitTestContract
                     (Right False, vm) ->
                              pure ("\x1b[31m[FAIL]\x1b[0m "
                              <> testName <> argInfo, Left (failOutput vm dapp opts testName))
-                    (Left _, _)       ->
+                    (Left e, vm)       ->
                              pure ("\x1b[33m[OOPS]\x1b[0m "
-                             <> testName <> argInfo, Left ("VM error for " <> testName))
-
-                (Left _, _)       ->
+                             <> testName <> argInfo, Left (bailOutput e vm dapp opts testName))
+                (Left e, vm)       ->
                   pure ("\x1b[33m[OOPS]\x1b[0m "
-                        <> testName <> argInfo, Left ("VM error for " <> testName))
+                        <> testName <> argInfo, Left (bailOutput e vm dapp opts testName))
 
           -- Define the thread spawner for property based tests
           let fuzzRun (testName, types) = do
@@ -541,6 +540,18 @@ failOutput :: VM -> DappInfo -> UnitTestOptions -> Text -> Text
 failOutput vm dapp UnitTestOptions { .. } testName = mconcat
   [ "Failure: "
   , fromMaybe "" (stripSuffix "()" testName)
+  , "\n"
+  , indentLines 2 (formatTestLogs (view dappEventMap dapp) (view logs vm))
+  , case verbose of
+      Nothing -> ""
+      _       -> indentLines 2 (showTraceTree dapp vm)
+  ]
+
+bailOutput :: Stepper.Failure -> VM -> DappInfo -> UnitTestOptions -> Text -> Text
+bailOutput e vm dapp UnitTestOptions { .. } testName = mconcat
+  [ "VMError: "
+  , fromMaybe "" (stripSuffix "()" testName)
+  , " [" <> pack (show e) <> "]"
   , "\n"
   , indentLines 2 (formatTestLogs (view dappEventMap dapp) (view logs vm))
   , case verbose of
