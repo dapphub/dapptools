@@ -106,6 +106,7 @@ data Command w
 
   -- symbolic execution opts
       , jsonFile      :: w ::: Maybe String       <?> "Filename or path to dapp build output (default: out/*.solc.json)"
+      , dappRoot      :: w ::: Maybe String             <?> "Path to dapp project root directory (default: . )"
       , storageModel  :: w ::: Maybe StorageModel <?> "Select storage model: ConcreteS, SymbolicS (default) or InitialS"
       , abi           :: w ::: Maybe String       <?> "Signature of types to decode / encode"
       , arg           :: w ::: [String]           <?> "Values to encode"
@@ -146,6 +147,7 @@ data Command w
       , rpc         :: w ::: Maybe URL        <?> "Fetch state from a remote node"
       , block       :: w ::: Maybe W256       <?> "Block state is be fetched from"
       , jsonFile    :: w ::: Maybe String     <?> "Filename or path to dapp build output (default: out/*.solc.json)"
+      , dappRoot    :: w ::: Maybe String             <?> "Path to dapp project root directory (default: . )"
       }
   | DappTest -- Run DSTest unit tests
       { jsonFile    :: w ::: Maybe String             <?> "Filename or path to dapp build output (default: out/*.solc.json)"
