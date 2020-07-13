@@ -105,7 +105,7 @@ in rec {
         fetchSolcVersions { owner = "NixOS";   attr = super.system; }
         //
         fetchSolcVersions { owner = "dapphub"; attr = "unreleased"; };
-  solc = solc-versions.solc_0_5_15;
+  solc = solc-versions.solc_0_6_7;
 
   hevm = self.pkgs.haskell.lib.justStaticExecutables self.haskellPackages.hevm;
 
