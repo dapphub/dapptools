@@ -164,7 +164,7 @@ Simple example usage:
 hevm exec --code 0x647175696e6550383480393834f3 --gas 0xff
 ```
 
-Debug a mainnet transaction:
+Debug a mainnet transaction (older transactions require archive node):
 ```sh
 export ETH_RPC_URL=https://mainnet.infura.io/v3/YOUR_API_KEY_HERE
 export TXHASH=0xd2235b9554e51e8ff5b3de62039d5ab6e591164b593d892e42b2ffe0e3e4e426
