@@ -496,7 +496,7 @@ launchExec cmd = do
 
   case optsMode cmd of
     Run -> do
-      vm' <- execStateT (EVM.Stepper.interpret fetcher Nothing . void $ EVM.Stepper.execFully) vm1
+      vm' <- execStateT (interpret fetcher Nothing . void $ EVM.Stepper.execFully) vm1
       case view EVM.result vm' of
         Nothing ->
           error "internal error; no EVM result"
