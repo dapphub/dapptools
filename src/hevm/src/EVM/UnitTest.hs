@@ -182,7 +182,7 @@ checkFailures UnitTestOptions { .. } method args bailed = do
     Stepper.evm popTrace
     Stepper.evm $ setupCall testParams addr "failed()" args
     Stepper.note "Checking whether assertions failed"
-    res <- Stepper.execFullyOrFail >>= Stepper.decode (AbiBoolType . forceLitBytes)
+    res <- Stepper.execFullyOrFail >>= (Stepper.decode AbiBoolType) . forceLitBytes
     let AbiBool failed = res
     -- Return true if the test was successful
     pure (shouldFail == failed)
