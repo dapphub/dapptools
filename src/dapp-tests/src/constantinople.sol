@@ -1,4 +1,4 @@
-pragma solidity ^0.5.2;
+pragma solidity ^0.6.7;
 
 import "ds-test/test.sol";
 
@@ -102,7 +102,7 @@ contract ConstantinopleTests is DSTest {
           let top := mload(0x40)
           mstore(top, sload(deadcode_slot))
           let inithash := keccak256(top, 13)
-          mstore(sub(top, 11), address)
+          mstore(sub(top, 11), address())
           mstore8(top, 0xff)
           mstore(add(top, 21), salt)
           mstore(add(top, 53), inithash)
