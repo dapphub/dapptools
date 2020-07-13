@@ -2,7 +2,7 @@ name: "Release"
 on:
   push:
     tags:
-      - '[a-z]+/[0-9].[0-9]+.[0-9]+'
+      - '[a-z]+/[0-9]+.[0-9]+.[0-9]+'
 jobs:
   release:
     name: Create Release
