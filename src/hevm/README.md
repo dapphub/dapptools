@@ -4,7 +4,7 @@ The `hevm` project is an implementation of the Ethereum virtual machine (EVM) ma
 
 ### Usage
 
-Note: some `hevm` commands (`dapp-test`, `interactive`) assumes the use of the `ds-test` framework for Solidity unit tests and the [`dapp` tool suite](https://github.com/dapphub/dapptools/tree/master/src/dapp), while others (`exec`, `symbolic`, ...) are available as standalone commands.
+Note: some `hevm` commands (`dapp-test`, `interactive`) assume the use of the `ds-test` framework for Solidity unit tests and the [`dapp` tool suite](https://github.com/dapphub/dapptools/tree/master/src/dapp), while others (`exec`, `symbolic`, ...) are available as standalone commands.
 
 ### Commands
 
