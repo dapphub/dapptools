@@ -340,11 +340,11 @@ toCode = fst . BS16.decode . encodeUtf8
 solidity' :: Text -> IO (Text, Text)
 solidity' src = withSystemTempFile "hevm.sol" $ \path handle -> do
   hClose handle
-  writeFile path ("pragma solidity ^0.5.2;\n" <> src)
+  writeFile path ("pragma solidity ^0.6.7;\n" <> src)
   x <- pack <$>
     readProcess
       "solc"
-      ["--combined-json=bin-runtime,bin,srcmap,srcmap-runtime,abi,ast", path]
+      ["--combined-json=bin-runtime,bin,srcmap,srcmap-runtime,abi,ast,storage-layout", path]
       ""
   return (x, pack path)
 
