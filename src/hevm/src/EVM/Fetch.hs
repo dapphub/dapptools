@@ -128,7 +128,6 @@ fetchSlotFrom n url addr slot =
   Session.withAPISession
     (\s -> fetchSlotWithSession n url s addr slot)
 
-
 http :: BlockNumber -> Text -> EVM.Query -> IO (EVM ())
 http n url q =
   case q of
