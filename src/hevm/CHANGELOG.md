@@ -1,6 +1,6 @@
 # hevm changelog
 
-## 0.39 - unreleased
+## 0.39 - 2020-07-13
  - Exposes abi encoding to cli
  - Added cheat code `hevm.store(address a, bytes32 location, bytes32 value)`
  - Removes `ExecMode`, always running as `ExecuteAsBlockchainTest`. This means that `hevm exec` now finalizes transactions as well.
