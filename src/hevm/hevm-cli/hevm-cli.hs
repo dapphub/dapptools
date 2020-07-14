@@ -486,13 +486,15 @@ launchExec :: Command Options.Unwrapped -> IO ()
 launchExec cmd = do
   let root = fromMaybe "." (dappRoot cmd)
       srcinfo = ((,) root) <$> (jsonFile cmd)
+
   vm <- vmFromCommand cmd
   vm1 <- case state cmd of
     Nothing -> pure vm
-    -- Note: this will load the code, so if you've specified a state
-    -- repository, then you effectively can't change `--code' after
-    -- the first run.
-    Just path -> Facts.apply vm <$> Git.loadFacts (Git.RepoAt path)
+    Just path -> 
+      -- Note: this will load the code, so if you've specified a state
+      -- repository, then you effectively can't change `--code' after
+      -- the first run.
+      Facts.apply vm <$> Git.loadFacts (Git.RepoAt path)
 
   case optsMode cmd of
     Run -> do
@@ -513,8 +515,8 @@ launchExec cmd = do
             Just path ->
               Git.saveFacts (Git.RepoAt path) (Facts.vmFacts vm')
     Debug -> void $ EVM.TTY.runFromVM srcinfo fetcher vm1
-  where fetcher = maybe EVM.Fetch.zero (EVM.Fetch.http block') (rpc cmd)
-        block'  = maybe EVM.Fetch.Latest EVM.Fetch.BlockNumber (block cmd)
+   where fetcher = maybe EVM.Fetch.zero (EVM.Fetch.http block') (rpc cmd)
+         block'  = maybe EVM.Fetch.Latest EVM.Fetch.BlockNumber (block cmd)
 
 data Testcase = Testcase {
   _entries :: [(Text, Maybe Text)],
@@ -590,41 +592,41 @@ vmFromCommand cmd = do
      _ -> return . vm1 . EVM.initialContract . codeType $ bytes code ""
 
   return $ vm & EVM.env . EVM.contracts . ix address' . EVM.balance +~ (w256 value')
-   
-  where
-    decipher = hexByteString "bytes" . strip0x
-    block'   = maybe EVM.Fetch.Latest EVM.Fetch.BlockNumber (block cmd)
-    value'   = word value 0
-    caller'  = addr caller 0
-    origin'  = addr origin 0
-    calldata' = litBytes $ bytes calldata ""
-    codeType = if create cmd then EVM.InitCode else EVM.RuntimeCode
-    address' = if create cmd
-          then createAddress origin' (word nonce 0)
-          else addr address 0xacab
-    vm1 c = EVM.makeVm $ EVM.VMOpts
-      { EVM.vmoptContract      = c
-      , EVM.vmoptCalldata      = (calldata', literal . num $ length calldata')
-      , EVM.vmoptValue         = value'
-      , EVM.vmoptAddress       = address'
-      , EVM.vmoptCaller        = litAddr caller'
-      , EVM.vmoptOrigin        = origin'
-      , EVM.vmoptGas           = word gas 0
-      , EVM.vmoptGaslimit      = word gas 0
-      , EVM.vmoptCoinbase      = addr coinbase 0
-      , EVM.vmoptNumber        = word number 0
-      , EVM.vmoptTimestamp     = word timestamp 0
-      , EVM.vmoptBlockGaslimit = word gaslimit 0
-      , EVM.vmoptGasprice      = word gasprice 0
-      , EVM.vmoptMaxCodeSize   = word maxcodesize 0xffffffff
-      , EVM.vmoptDifficulty    = word difficulty 0
-      , EVM.vmoptSchedule      = FeeSchedule.istanbul
-      , EVM.vmoptChainId       = word chainid 1
-      , EVM.vmoptCreate        = create cmd
-      }
-    word f def = fromMaybe def (f cmd)
-    addr f def = fromMaybe def (f cmd)
-    bytes f def = maybe def decipher (f cmd)
+      where
+        decipher = hexByteString "bytes" . strip0x
+        block'   = maybe EVM.Fetch.Latest EVM.Fetch.BlockNumber (block cmd)
+        value'   = word value 0
+        caller'  = addr caller 0
+        origin'  = addr origin 0
+        calldata' = litBytes $ bytes calldata ""
+        codeType = if create cmd then EVM.InitCode else EVM.RuntimeCode
+        address' = if create cmd
+              then createAddress origin' (word nonce 0)
+              else addr address 0xacab
+
+        vm1 c = EVM.makeVm $ EVM.VMOpts
+          { EVM.vmoptContract      = c
+          , EVM.vmoptCalldata      = (calldata', literal . num $ length calldata')
+          , EVM.vmoptValue         = value'
+          , EVM.vmoptAddress       = address'
+          , EVM.vmoptCaller        = litAddr caller'
+          , EVM.vmoptOrigin        = origin'
+          , EVM.vmoptGas           = word gas 0
+          , EVM.vmoptGaslimit      = word gas 0
+          , EVM.vmoptCoinbase      = addr coinbase 0
+          , EVM.vmoptNumber        = word number 0
+          , EVM.vmoptTimestamp     = word timestamp 0
+          , EVM.vmoptBlockGaslimit = word gaslimit 0
+          , EVM.vmoptGasprice      = word gasprice 0
+          , EVM.vmoptMaxCodeSize   = word maxcodesize 0xffffffff
+          , EVM.vmoptDifficulty    = word difficulty 0
+          , EVM.vmoptSchedule      = FeeSchedule.istanbul
+          , EVM.vmoptChainId       = word chainid 1
+          , EVM.vmoptCreate        = create cmd
+          }
+        word f def = fromMaybe def (f cmd)
+        addr f def = fromMaybe def (f cmd)
+        bytes f def = maybe def decipher (f cmd)
 
 symvmFromCommand :: Command Options.Unwrapped -> Query EVM.VM
 symvmFromCommand cmd = do
@@ -761,11 +763,9 @@ parseAbi :: (AsValue s) => s -> (Text, [AbiType])
 parseAbi abijson = (signature abijson, snd <$> parseMethodInput <$> V.toList (fromMaybe (error "Malformed function abi") (abijson ^? key "inputs" . _Array)))
 
 abiencode :: (AsValue s) => Maybe s -> [String] -> ByteString
-abiencode maybeabijson args =
-  case maybeabijson of
-    Nothing -> error "missing required argument: abi"
-    Just abijson ->
-      let (sig', declarations) = parseAbi abijson
-      in if length declarations == length args
-         then abiMethod sig' $ AbiTuple . V.fromList $ zipWith makeAbiValue declarations args
-         else error $ "wrong number of arguments:" <> show (length args) <> ": " <> show args
+abiencode Nothing args = error "missing required argument: abi"
+abiencode (Just abijson) args = 
+  let (sig', declarations) = parseAbi abijson
+  in if length declarations == length args
+     then abiMethod sig' $ AbiTuple . V.fromList $ zipWith makeAbiValue declarations args
+     else error $ "wrong number of arguments:" <> show (length args) <> ": " <> show args

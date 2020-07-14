@@ -12,7 +12,7 @@ import EVM.Symbolic (maybeLitWord, forceLitBytes, litBytes, maybeLitBytes)
 import EVM.Types (W256 (..), num)
 import EVM.ABI (AbiValue (..), Event (..), AbiType (..))
 import EVM.ABI (Indexed (NotIndexed), getAbiSeq, getAbi)
-import EVM.ABI (abiTypeSolidity, parseTypeName)
+import EVM.ABI (parseTypeName)
 import EVM.Solidity (SolcContract, contractName, abiMap)
 import EVM.Solidity (methodOutput, methodSignature)
 
@@ -207,7 +207,7 @@ showTrace dapp trace =
         Nothing ->
           "← " <> formatBinary (forceLitBytes out)
         Just (_, t) ->
-          "← " <> abiTypeSolidity t <> " " <> showValue t (forceLitBytes out)
+          "← " <> pack (show t) <> " " <> showValue t (forceLitBytes out)
     ReturnTrace out (CallContext {}) ->
       "← " <> formatBinary (forceLitBytes out)
     ReturnTrace out (CreationContext {}) ->
@@ -268,7 +268,7 @@ showError bs = case BS.take 4 bs of
 
 showValues :: [AbiType] -> [SWord 8] -> Text
 showValues ts sbs = case maybeLitBytes sbs of
-  Nothing -> "symbolic: " <> (abiTypeSolidity $ AbiTupleType (fromList ts))
+  Nothing -> "symbolic: " <> (pack . show $ AbiTupleType (fromList ts))
   Just bs -> 
      case runGetOrFail (getAbiSeq (length ts) ts) (fromStrict bs) of
        Right (_, _, xs) -> showAbiValues xs
