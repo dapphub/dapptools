@@ -294,6 +294,7 @@ runFromVM maybesrcinfo oracle' vm = do
            , _uiVmTestOpts = opts
            }
     ui1 = updateUiVmState ui0 vm & set uiVmFirstState ui1
+
   v <- mkVty
   ui2 <- customMain v mkVty Nothing (app opts) (ViewVm ui1)
   case ui2 of
@@ -364,14 +365,14 @@ takeStep ui policy mode =
             StepNormally StepNone
 
         StepTimidly ->
-          error $ "step blocked unexpectedly" ++ show (view (uiVm . result) ui')
+          error "step blocked unexpectedly"
 
     (Returned (), ui') ->
       case policy of
         StepNormally ->
           continue (ViewVm ui')
         StepTimidly ->
-          error $ "step halted unexpectedly" ++ show (view (uiVm . result) ui)
+          error "step halted unexpectedly"
   where
     vmResult Nothing = False
     vmResult (Just (VMFailure (Query _))) = False
