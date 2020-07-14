@@ -1298,7 +1298,7 @@ executePrecompile preCompileAddr gasCap inOffset inSize outOffset outSize xs  = 
             Nothing -> do
               -- return no output for invalid signature
               assign (state . stack) (1 : xs)
-p              assign (state . returndata) mempty
+              assign (state . returndata) mempty
               next
             Just (litBytes -> output) -> do
               assign (state . stack) (1 : xs)
