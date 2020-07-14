@@ -14,6 +14,7 @@ module EVM.Stepper
   , note
   , entering
   , enter
+  , interpret
   )
 where
 
@@ -27,14 +28,18 @@ where
 
 import Prelude hiding (fail)
 
-import Control.Monad.Operational (Program, singleton)
+import Control.Monad.Operational (Program, singleton, view, ProgramViewT(..), ProgramView)
+import Control.Monad.State.Strict (runState, join, liftIO, StateT)
+import qualified Control.Monad.State.Class as State
+import qualified EVM.Exec
 import Data.Binary.Get (runGetOrFail)
 import Data.Text (Text)
 
-import EVM (EVM, VMResult (VMFailure, VMSuccess), Error (Query), Query)
+import EVM (EVM, VM, VMResult (VMFailure, VMSuccess), Error (Query), Query)
 import qualified EVM
 
 import EVM.ABI (AbiType, AbiValue, getAbi)
+import qualified EVM.Fetch as Fetch
 
 import Data.ByteString (ByteString)
 import qualified Data.ByteString.Lazy as LazyByteString
@@ -44,6 +49,9 @@ data Action a where
 
   -- | Keep executing until an intermediate result is reached
   Exec ::            Action VMResult
+
+  -- | Keep executing until the final state is reached
+  Run ::             Action VM
 
   -- | Short-circuit with a failure
   Fail :: Failure -> Action a
@@ -72,6 +80,9 @@ type Stepper a = Program Action a
 exec :: Stepper VMResult
 exec = singleton Exec
 
+run :: Stepper VM
+run = singleton Run
+
 fail :: Failure -> Stepper a
 fail = singleton . Fail
 
@@ -94,6 +105,17 @@ execFully =
       pure (Left x)
     VMSuccess x ->
       pure (Right x)
+
+-- | Run the VM until its final state
+runFully :: Stepper EVM.VM
+runFully = do
+  vm <- run
+  case EVM._result vm of
+    Nothing -> error "should not occur"
+    Just (VMFailure (Query q)) ->
+      wait q >> runFully
+    Just _ -> 
+      pure vm
 
 execFullyOrFail :: Stepper ByteString
 execFullyOrFail = execFully >>= either (fail . VMFailed) pure
@@ -118,3 +140,31 @@ entering t stepper = do
 
 enter :: Text -> Stepper ()
 enter t = evm (EVM.pushTrace (EVM.EntryTrace t))
+
+interpret :: Fetch.Fetcher -> Stepper a -> StateT VM IO (Either Failure a)
+interpret fetcher =
+  eval . view
+
+  where
+    eval
+      :: ProgramView Action a
+      -> StateT VM IO (Either Failure a)
+
+    eval (Return x) =
+      pure (Right x)
+
+    eval (action :>>= k) =
+      case action of
+        Exec ->
+          EVM.Exec.exec >>= interpret fetcher . k
+        Run ->
+          EVM.Exec.run >>= interpret fetcher . k
+        Wait q ->
+          do m <- liftIO (fetcher q)
+             State.state (runState m) >> interpret fetcher (k ())
+        Note _ ->
+          interpret fetcher (k ())
+        Fail e ->
+          pure (Left e)
+        EVM m ->
+          State.state (runState m) >>= interpret fetcher . k
