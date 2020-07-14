@@ -36,11 +36,10 @@ if [[ -z "$SETH_NOSRC" ]]; then
     echo >&2 "${0##*/}: warning: no source available"
   fi
 fi
-
-index="$(<<< "$targetTx" seth --field transactionIndex)"
-block=$(seth block "$(<<< "$targetTx" seth --field blockNumber)" --full)
+index="$(<<< "$targetTx" seth --field transactionIndex | seth --to-dec)"
+block=$(seth block "$(<<< "$targetTx" seth --field blockNumber | seth --to-dec)" --full)
 txs=($(<<< "$block" seth --field transactions | seth --show-json))
-timestamp="$(<<< "$block" seth --field timestamp)"
+timestamp="$(<<< "$block" seth --field timestamp | seth --to-dec)"
 
 j=0
 for i in "${txs[@]}"; do

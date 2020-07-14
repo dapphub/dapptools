@@ -4,23 +4,10 @@ set -e
 show-json() {
   if [[ $1 = \"*\" ]]; then
     unquoted=$(jshon <<<"[$1]" -a -u)
-    if is-short-hexnum 20 "$unquoted"; then
-      show-hexnum "$unquoted"
-    else
-      echo "$unquoted"
-    fi
+    echo "$unquoted"
   else
     echo "$1"
   fi
-}
-
-is-short-hexnum() {
-  [[ ${#2} -lt $1 && $2 =~ 0x[[:xdigit:]]+ ]]
-}
-
-show-hexnum() {
-  digits=${1:2}
-  bc <<<"ibase=16; $(tr a-f A-F <<<"$digits")"
 }
 
 if [[ $SETH_JSON ]]; then
