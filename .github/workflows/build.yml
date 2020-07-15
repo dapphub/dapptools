@@ -30,10 +30,5 @@ jobs:
         with:
           # we use the nixpkgs defined in default.nix
           skip_adding_nixpkgs_channel: true
-      # v6
-      - uses: cachix/cachix-action@490a246fbc7f92208d309eeb54383a4d828cedc1
-        with:
-          name: dapp
-          signingKey: '${{ secrets.CACHIX_SIGNING_KEY }}'
       - name: run integration tests
         run: nix-shell --pure src/dapp-tests/shell.nix --command 'make --directory src/dapp-tests'
