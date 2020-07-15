@@ -225,7 +225,7 @@ verify preState maxIter rpcinfo maybepost = do
       checkSat >>= \case
         Unk -> do io $ putStrLn "postcondition query timed out"
                   return $ Left (preState, res)
-        Unsat -> do io $ putStrLn "Q.E.D"
+        Unsat -> do io $ putStrLn "Q.E.D."
                     return $ Left (preState, res)
         Sat -> do io $ putStrLn "post condition violated:"
                   let (calldata', cdlen') = view (state . calldata) preState
@@ -233,7 +233,7 @@ verify preState maxIter rpcinfo maybepost = do
                   model <- mapM (getValue.fromSized) (take cdlen calldata')
                   return $ Right (pack model)
 
-    (Nothing, Right res) -> do io $ putStrLn "Q.E.D"
+    (Nothing, Right res) -> do io $ putStrLn "Q.E.D."
                                return $ Left (preState, res)
 
     (_, Left _) -> error "unexpected error during symbolic execution"
