@@ -12,7 +12,7 @@
 
 import qualified EVM
 import EVM.Concrete (createAddress, w256)
-import EVM.Symbolic (forceLitBytes, litBytes, litAddr, w256lit, sw256)
+import EVM.Symbolic (forceLitBytes, litBytes, litAddr, w256lit, sw256, SymWord(..))
 import qualified EVM.FeeSchedule as FeeSchedule
 import qualified EVM.Fetch
 import qualified EVM.Flatten
@@ -355,16 +355,15 @@ dappTest opts _ solcFile =
         error ("Failed to read Solidity JSON for `" ++ solcFile ++ "'")
 
 regexMatches :: Text -> Text -> Bool
-regexMatches = error ""
--- regexMatches regexSource =
---   let
---     compOpts =
---       Regex.defaultCompOpt { Regex.lastStarGreedy = True }
---     execOpts =
---       Regex.defaultExecOpt { Regex.captureGroups = False }
---     regex = Regex.makeRegexOpts compOpts execOpts (unpack regexSource)
---   in
---     Regex.matchTest regex . Seq.fromList . unpack
+regexMatches regexSource =
+  let
+    compOpts =
+      Regex.defaultCompOpt { Regex.lastStarGreedy = True }
+    execOpts =
+      Regex.defaultExecOpt { Regex.captureGroups = False }
+    regex = Regex.makeRegexOpts compOpts execOpts (unpack regexSource)
+  in
+    Regex.matchTest regex . Seq.fromList . unpack
 
 equivalence :: Command Options.Unwrapped -> IO ()
 equivalence cmd =
@@ -445,9 +444,11 @@ assert cmd = do
                 let vmErrs = checkForVMErrors posts
                 unless (null vmErrs) $ io $ do putStrLn $ "However, " <> show (length vmErrs) <> " branch(es) errored while exploring:"
                                                print vmErrs
-                -- When `--get-model` is passed, we print example calldata for each path
+                -- When `--get-model` is passed, we print example vm info for each path
                 when (getModels cmd) $
                   let (calldata', cdlen) = view (EVM.state . EVM.calldata) pre
+                      S _ cvalue = view (EVM.state . EVM.callvalue) pre
+                      SAddr caller' = view (EVM.state . EVM.caller) pre
                   in forM_ (zip [1..] posts) $ \(i, postVM) -> do
                     resetAssertions
                     constrain (sAnd (view EVM.pathConditions postVM))
@@ -458,13 +459,19 @@ assert cmd = do
                       Sat -> do
                         cdlen' <- num <$> getValue cdlen
                         calldatainput <- mapM (getValue.fromSized) (take cdlen' calldata')
+                        callvalue' <- num <$> getValue cvalue
+                        caller'' <- num <$> getValue caller'
                         io $ do
                           putStrLn "Calldata:"
                           print $ ByteStringS (ByteString.pack calldatainput)
+                          putStrLn "Caller:"
+                          print caller''
+                          putStrLn "Callvalue:"
+                          print callvalue'
                         case view EVM.result postVM of
                           Nothing -> error "internal error; no EVM result"
                           Just (EVM.VMFailure (EVM.Revert "")) -> io . putStrLn $ "Reverted"
-                          Just (EVM.VMFailure (EVM.Revert msg)) -> io . putStrLn $ "Reverted" <> show (ByteStringS msg)
+                          Just (EVM.VMFailure (EVM.Revert msg)) -> io . putStrLn $ "Reverted: " <> show (ByteStringS msg)
                           Just (EVM.VMFailure err) -> io . putStrLn $ "Failed: " <> show err
                           Just (EVM.VMSuccess []) -> io $ putStrLn "Stopped"
                           Just (EVM.VMSuccess msg) -> do
