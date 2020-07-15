@@ -2,12 +2,14 @@
 
 set -e
 
+# clean up
+trap 'kill -9 $PID_GETH && rm -rf "$TMPDIR"' EXIT
+
 error() {
     printf 1>&2 "fail: function '%s' at line %d.\n" "${FUNCNAME[1]}"  "${BASH_LINENO[0]}"
     printf 1>&2 "got: %s" "$output"
     exit 1
 }
-
 
 # tests some of the behaviour of
 # `dapp testnet`
@@ -19,6 +21,7 @@ dapp_testnet() {
   TMPDIR=$(mktemp -d)
 
   dapp testnet --dir "$TMPDIR" &
+  PID_GETH=$!
   # give it a few secs to start up
   sleep 5
   read -r ACC BAL <<< "$(seth ls --keystore "$TMPDIR"/8545/keystore)"
@@ -43,11 +46,6 @@ dapp_testnet() {
 
   # since we have one tx per block, seth run-tx and seth debug are equivalent
   [[ $(seth run-tx "$TX") = 0x ]] || error
-
-  # clean up
-  trap "exit 1" HUP INT PIPE QUIT TERM
-  trap 'rm -rf "$TMPDIR" && kill -s 9 $(pgrep geth)' EXIT
-  
 }
 
 dapp_testnet
