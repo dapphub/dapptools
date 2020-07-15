@@ -258,7 +258,7 @@ parseVmOpts v =
          EVM.VMOpts
            <$> (dataField exec "code" >>= pure . EVM.initialContract . EVM.RuntimeCode)
            <*> (dataField exec "data" >>= \a -> pure ( (litBytes a), literal . num $ BS.length a))
-           <*> wordField exec "value"
+           <*> (w256lit <$> wordField exec "value")
            <*> addrField exec "address"
            <*> (litAddr <$> addrField exec "caller")
            <*> addrField exec "origin"
@@ -382,7 +382,7 @@ fromCreateBlockchainCase block tx preState postState =
          (EVM.VMOpts
           { vmoptContract      = EVM.initialContract (EVM.InitCode (txData tx))
           , vmoptCalldata      = (mempty, 0)
-          , vmoptValue         = txValue tx
+          , vmoptValue         = w256lit $ txValue tx
           , vmoptAddress       = createdAddr
           , vmoptCaller        = (litAddr origin)
           , vmoptOrigin        = origin
@@ -420,7 +420,7 @@ fromNormalBlockchainCase block tx preState postState =
         (EVM.VMOpts
          { vmoptContract      = EVM.initialContract theCode
          , vmoptCalldata      = (litBytes $ txData tx, literal . num . BS.length $ txData tx)
-         , vmoptValue         = txValue tx
+         , vmoptValue         = litWord (EVM.w256 $ txValue tx)
          , vmoptAddress       = toAddr
          , vmoptCaller        = (litAddr origin)
          , vmoptOrigin        = origin
@@ -496,8 +496,8 @@ initTx x =
     initcode = EVM._contractcode (EVM.vmoptContract opts)
     creation = EVM.vmoptCreate   opts
   in
-    (Map.adjust (over balance (subtract value)) origin)
-    . (Map.adjust (over balance (+ value)) toAddr)
+    (Map.adjust (over balance (subtract (EVM.wordValue $ forceLit value))) origin)
+    . (Map.adjust (over balance (+ (EVM.wordValue $ forceLit value))) toAddr)
     . (if creation
        then (Map.adjust (set code initcode) toAddr)
           . (Map.adjust (set nonce 1) toAddr)
