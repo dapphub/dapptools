@@ -112,17 +112,17 @@ data Command w
       , arg           :: w ::: [String]           <?> "Values to encode"
       , debug         :: w ::: Bool               <?> "Run interactively"
       , getModels     :: w ::: Bool               <?> "Print example testcase for each execution path"
-      , smttimeout    :: w ::: Maybe Integer      <?> "Timeout given to smt solver in milliseconds"
+      , smttimeout    :: w ::: Maybe Integer      <?> "Timeout given to SMT solver in milliseconds"
       , maxIterations :: w ::: Maybe Integer      <?> "Number of times we may revisit a particular branching point"
-      , solver        :: w ::: Maybe Text         <?> "Smt solver to use z3 (default) or cvc4"
+      , solver        :: w ::: Maybe Text         <?> "Used SMT solver: z3 (default) or cvc4"
       }
   | Equivalence -- prove equivalence between two programs
       { codeA         :: w ::: ByteString    <?> "Bytecode of the first program"
       , codeB         :: w ::: ByteString    <?> "Bytecode of the second program"
       , sig           :: w ::: Maybe Text    <?> "Signature of types to decode / encode"
-      , smttimeout    :: w ::: Maybe Integer <?> "Timeout given to smt solver in milliseconds"
+      , smttimeout    :: w ::: Maybe Integer <?> "Timeout given to SMT solver in milliseconds"
       , maxIterations :: w ::: Maybe Integer <?> "Number of times we may revisit a particular branching point"
-      , solver        :: w ::: Maybe Text    <?> "Smt solver to use z3 (default) or cvc4"
+      , solver        :: w ::: Maybe Text    <?> "Used SMT solver: z3 (default) or cvc4"
       }
   | Exec -- Execute a given program with specified env & calldata
       { code        :: w ::: Maybe ByteString <?> "Program bytecode"
