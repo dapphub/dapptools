@@ -15,7 +15,7 @@ import EVM.Stepper (Stepper)
 import qualified EVM.Stepper as Stepper
 import qualified Control.Monad.Operational as Operational
 import EVM.Types
-import EVM.Symbolic (litBytes)
+import EVM.Symbolic (litBytes, SymWord, sw256)
 import EVM.Concrete (createAddress)
 import qualified EVM.FeeSchedule as FeeSchedule
 import Data.SBV.Trans.Control
@@ -100,14 +100,15 @@ abstractVM typesignature concreteArgs x storagemodel = do
     InitialS -> Symbolic <$> freshArray_ (Just 0)
     ConcreteS -> return $ Concrete mempty
   c <- SAddr <$> freshVar_
-  return $ loadSymVM (RuntimeCode x) symstore c (cd', cdlen) & over pathConditions ((<>) [cdconstraint])
+  value' <- sw256 <$> freshVar_
+  return $ loadSymVM (RuntimeCode x) symstore c value' (cd', cdlen) & over pathConditions ((<>) [cdconstraint])
 
-loadSymVM :: ContractCode -> Storage -> SAddr -> ([SWord 8], SWord 32) -> VM
-loadSymVM x initStore addr calldata' =
+loadSymVM :: ContractCode -> Storage -> SAddr -> SymWord -> ([SWord 8], SWord 32) -> VM
+loadSymVM x initStore addr callvalue' calldata' =
     (makeVm $ VMOpts
     { vmoptContract = contractWithStore x initStore
     , vmoptCalldata = calldata'
-    , vmoptValue = 0
+    , vmoptValue = callvalue'
     , vmoptAddress = createAddress ethrunAddress 1
     , vmoptCaller = addr
     , vmoptOrigin = ethrunAddress --todo: generalize
@@ -243,9 +244,10 @@ equivalenceCheck bytecodeA bytecodeB maxiter signature' = do
            
   let preself = preStateA ^. state . contract
       precaller = preStateA ^. state . caller
+      callvalue' = preStateA ^. state . callvalue
       prestorage = preStateA ^?! env . contracts . ix preself . storage
       (calldata', cdlen) = view (state . calldata) preStateA
-      preStateB = loadSymVM (RuntimeCode bytecodeB) prestorage precaller (calldata', cdlen)
+      preStateB = loadSymVM (RuntimeCode bytecodeB) prestorage precaller callvalue' (calldata', cdlen)
 
   smtState <- queryState
   (aRes, bRes) <- both (\x -> io $ fst <$> runStateT (interpret (Fetch.oracle smtState Nothing) maxiter Stepper.runFully) x)

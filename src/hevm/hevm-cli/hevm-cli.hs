@@ -12,7 +12,7 @@
 
 import qualified EVM
 import EVM.Concrete (createAddress, w256)
-import EVM.Symbolic (forceLitBytes, litBytes, litAddr)
+import EVM.Symbolic (forceLitBytes, litBytes, litAddr, w256lit, sw256)
 import qualified EVM.FeeSchedule as FeeSchedule
 import qualified EVM.Fetch
 import qualified EVM.Flatten
@@ -627,7 +627,7 @@ vmFromCommand cmd = do
         vm1 c = EVM.makeVm $ EVM.VMOpts
           { EVM.vmoptContract      = c
           , EVM.vmoptCalldata      = (calldata', literal . num $ length calldata')
-          , EVM.vmoptValue         = value'
+          , EVM.vmoptValue         = w256lit value'
           , EVM.vmoptAddress       = address'
           , EVM.vmoptCaller        = litAddr caller'
           , EVM.vmoptOrigin        = origin'
@@ -651,6 +651,7 @@ vmFromCommand cmd = do
 symvmFromCommand :: Command Options.Unwrapped -> Query EVM.VM
 symvmFromCommand cmd = do
   caller' <- maybe (SAddr <$> freshVar_) (return . litAddr) (caller cmd)
+  callvalue' <- maybe (sw256 <$> freshVar_) (return . w256lit) (value cmd)
   (calldata', cdlen, pathCond) <- case (calldata cmd, sig cmd) of
     -- fully abstract calldata (up to 1024 bytes)
     (Nothing, Nothing) -> do cd <- sbytes256
@@ -690,9 +691,9 @@ symvmFromCommand cmd = do
                                         & set EVM.balance     (view EVM.balance contract')
                                         & set EVM.nonce       (view EVM.nonce contract')
                                         & set EVM.external    (view EVM.external contract')
-                        in return $ vm1 cdlen calldata' caller' (contract'' & set EVM.storage store)
+                        in return $ vm1 cdlen calldata' callvalue' caller' (contract'' & set EVM.storage store)
 
-    (_, _, Just c)  -> return $ vm1 cdlen calldata' caller' $ (EVM.initialContract . codeType $ decipher c) & set EVM.storage store
+    (_, _, Just c)  -> return $ vm1 cdlen calldata' callvalue' caller' $ (EVM.initialContract . codeType $ decipher c) & set EVM.storage store
     (_, _, Nothing) -> error $ "must provide at least (rpc + address) or code"
 
   return $ vm & over EVM.pathConditions (<> [pathCond])
@@ -700,16 +701,15 @@ symvmFromCommand cmd = do
   where
     decipher = hexByteString "bytes" . strip0x
     block'   = maybe EVM.Fetch.Latest EVM.Fetch.BlockNumber (block cmd)
-    value'   = word value 0
     origin'  = addr origin 0
     codeType = if create cmd then EVM.InitCode else EVM.RuntimeCode
     address' = if create cmd
           then createAddress origin' (word nonce 0)
           else addr address 0xacab
-    vm1 cdlen calldata' caller' c = EVM.makeVm $ EVM.VMOpts
+    vm1 cdlen calldata' callvalue' caller' c = EVM.makeVm $ EVM.VMOpts
       { EVM.vmoptContract      = c
       , EVM.vmoptCalldata      = (calldata', cdlen)
-      , EVM.vmoptValue         = value'
+      , EVM.vmoptValue         = callvalue'
       , EVM.vmoptAddress       = address'
       , EVM.vmoptCaller        = caller'
       , EVM.vmoptOrigin        = origin'

@@ -149,6 +149,7 @@ main = defaultMain $ testGroup "hevm"
             asWord = fromBytes
             pre preVM = let (x, y) = splitAt 32 $ drop 4 (fst $ view (state . calldata) preVM)
                         in asWord x .<= asWord x + asWord y
+                           .&& view (state . callvalue) preVM .== 0
             post = Just $ \(prestate, poststate) ->
               let input = fst $ view (state.calldata) prestate
                   (x, y) = splitAt 32 (drop 4 input)
@@ -173,6 +174,7 @@ main = defaultMain $ testGroup "hevm"
             pre preVM = let (x, y) = splitAt 32 $ drop 4 $ (fst $ view (state . calldata) preVM)
                            in (asWord x .<= asWord x + asWord y)
                               .&& (x .== y)
+                              .&& view (state . callvalue) preVM .== 0
             post = Just $ \(prestate, poststate)
               -> let input = fst $ view (state.calldata) prestate
                      (_, y) = splitAt 32 (drop 4 input)
@@ -209,7 +211,7 @@ main = defaultMain $ testGroup "hevm"
             }
           }
           |]
-        let pre = const sTrue
+        let pre vm = 0 .== view (state . callvalue) vm
             post = Just $ \(prestate, poststate) ->
               let y = drop 4 $ fst (view (state.calldata) prestate)
                   this = view (state . codeContract) prestate
@@ -241,7 +243,7 @@ main = defaultMain $ testGroup "hevm"
             }
           }
           |]
-        let pre = const sTrue
+        let pre vm = 0 .== view (state . callvalue) vm
             post = Just $ \(prestate, poststate) ->
               let (x,y) = over both (fromBytes) (splitAt 32 $ drop 4 $ fst (view (state.calldata) prestate))
                   this = view (state . codeContract) prestate

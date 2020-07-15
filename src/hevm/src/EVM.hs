@@ -165,7 +165,7 @@ data Cache = Cache
 data VMOpts = VMOpts
   { vmoptContract :: Contract
   , vmoptCalldata :: ([SWord 8], (SWord 32)) -- maximum size of uint32 as per eip 1985
-  , vmoptValue :: W256
+  , vmoptValue :: SymWord
   , vmoptAddress :: Addr
   , vmoptCaller :: SAddr
   , vmoptOrigin :: Addr
@@ -219,7 +219,7 @@ data FrameState = FrameState
   , _memory       :: [SWord 8]
   , _memorySize   :: Int
   , _calldata     :: ([SWord 8], (SWord 32))
-  , _callvalue    :: Word
+  , _callvalue    :: SymWord
   , _caller       :: SAddr
   , _gas          :: Word
   , _returndata   :: [SWord 8]
@@ -232,7 +232,7 @@ data TxState = TxState
   , _txgaslimit      :: Word
   , _origin          :: Addr
   , _toAddr          :: Addr
-  , _value           :: Word
+  , _value           :: SymWord
   , _substate        :: SubState
   , _isCreate        :: Bool
   , _txReversion     :: Map Addr Contract
@@ -370,7 +370,7 @@ makeVm o = VM
     , _txgaslimit = w256 $ vmoptGaslimit o
     , _origin = vmoptOrigin o
     , _toAddr = vmoptAddress o
-    , _value = w256 $ vmoptValue o
+    , _value = vmoptValue o
     , _substate = SubState mempty mempty mempty
     , _isCreate = vmoptCreate o
     , _txReversion = Map.fromList
@@ -396,7 +396,7 @@ makeVm o = VM
     , _contract = vmoptAddress o
     , _codeContract = vmoptAddress o
     , _calldata = vmoptCalldata o
-    , _callvalue = w256 $ vmoptValue o
+    , _callvalue = vmoptValue o
     , _caller = vmoptCaller o
     , _gas = w256 $ vmoptGas o
     , _returndata = mempty
@@ -678,7 +678,7 @@ exec1 = do
         -- op: CALLVALUE
         0x34 ->
           limitStack 1 . burn g_base $
-            next >> push (the state callvalue)
+            next >> pushSym (the state callvalue)
 
         -- op: CALLDATALOAD
         0x35 -> stackOp1 (const g_verylow) $
@@ -1034,7 +1034,7 @@ exec1 = do
                       cheat (xInOffset, xInSize) (xOutOffset, xOutSize)
                   _ -> delegateCall this xGas xTo xTo xValue xInOffset xInSize xOutOffset xOutSize xs $ do
                             zoom state $ do
-                              assign callvalue xValue
+                              assign callvalue (litWord xValue)
                               assign caller (litAddr self)
                               assign contract xTo
                             zoom (env . contracts) $ do
@@ -1063,7 +1063,7 @@ exec1 = do
                     precompiledContract this xGas xTo self xValue xInOffset xInSize xOutOffset xOutSize xs
                   _ -> delegateCall this xGas xTo self xValue xInOffset xInSize xOutOffset xOutSize xs $ do
                          zoom state $ do
-                           assign callvalue xValue
+                           assign callvalue (litWord xValue)
                            assign caller (litAddr self)
                          touchAccount self
             _ ->
@@ -1916,7 +1916,7 @@ create self this xGas xValue xs newAddr initCode = do
             & set contract   newAddr
             & set codeContract newAddr
             & set code       initCode
-            & set callvalue  xValue
+            & set callvalue  (litWord xValue)
             & set caller     (litAddr self)
             & set gas        xGas
 
