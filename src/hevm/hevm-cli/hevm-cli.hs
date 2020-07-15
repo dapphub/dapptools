@@ -44,7 +44,7 @@ import qualified EVM.UnitTest
 
 import Control.Concurrent.Async   (async, waitCatch)
 import Control.Lens hiding (pre)
-import Control.Monad              (void, when, forM_)
+import Control.Monad              (void, when, forM_, unless)
 import Control.Monad.State.Strict (execStateT)
 import Data.ByteString            (ByteString)
 import Data.List                  (intercalate, isSuffixOf)
@@ -355,15 +355,16 @@ dappTest opts _ solcFile =
         error ("Failed to read Solidity JSON for `" ++ solcFile ++ "'")
 
 regexMatches :: Text -> Text -> Bool
-regexMatches regexSource =
-  let
-    compOpts =
-      Regex.defaultCompOpt { Regex.lastStarGreedy = True }
-    execOpts =
-      Regex.defaultExecOpt { Regex.captureGroups = False }
-    regex = Regex.makeRegexOpts compOpts execOpts (unpack regexSource)
-  in
-    Regex.matchTest regex . Seq.fromList . unpack
+regexMatches = error ""
+-- regexMatches regexSource =
+--   let
+--     compOpts =
+--       Regex.defaultCompOpt { Regex.lastStarGreedy = True }
+--     execOpts =
+--       Regex.defaultExecOpt { Regex.captureGroups = False }
+--     regex = Regex.makeRegexOpts compOpts execOpts (unpack regexSource)
+--   in
+--     Regex.matchTest regex . Seq.fromList . unpack
 
 equivalence :: Command Options.Unwrapped -> IO ()
 equivalence cmd =
@@ -404,6 +405,14 @@ runSMTWithTimeOut smtsolver t sym =
     Nothing   -> runwithz3
     Just _ -> error "Unknown solver. Currently supported solvers; z3, cvc4"
 
+
+checkForVMErrors :: [EVM.VM] -> [String]
+checkForVMErrors [] = []
+checkForVMErrors (vm:vms) = case view EVM.result vm of
+  Just (EVM.VMFailure EVM.UnexpectedSymbolicArg) -> ("Unexpected symbolic argument at opcode: " <>
+                                             maybe "??" show (EVM.vmOp vm) <> ". Not supported (yet!)"):checkForVMErrors vms
+  _ -> checkForVMErrors vms
+
 -- Although it is tempting to fully abstract calldata and give any hints about the nature of the signature
 -- doing so results in significant time spent in consulting z3 about rather trivial matters. But with cvc4 it is quite pleasant!
 
@@ -433,6 +442,9 @@ assert cmd = do
                                              Nothing -> die . show $ ByteStringS counterexample
            Left (pre, posts) ->
              do io $ putStrLn $ "Explored: " <> show (length posts) <> " branches without assertion violations"
+                let vmErrs = checkForVMErrors posts
+                unless (null vmErrs) $ io $ do putStrLn $ "However, " <> show (length vmErrs) <> " branch(es) errored while exploring:"
+                                               print vmErrs
                 -- When `--get-model` is passed, we print example calldata for each path
                 when (getModels cmd) $
                   let (calldata', cdlen) = view (EVM.state . EVM.calldata) pre
