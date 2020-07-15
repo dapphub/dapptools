@@ -3,7 +3,8 @@
 set -e
 
 # clean up
-trap 'kill -9 $PID_GETH && rm -rf "$TMPDIR"' EXIT
+trap 'pkill dapp && rm -rf "$TMPDIR"' EXIT
+trap "echo boo && exit 1" SIGINT SIGTERM
 
 error() {
     printf 1>&2 "fail: function '%s' at line %d.\n" "${FUNCNAME[1]}"  "${BASH_LINENO[0]}"
@@ -21,7 +22,7 @@ dapp_testnet() {
   TMPDIR=$(mktemp -d)
 
   dapp testnet --dir "$TMPDIR" &
-  PID_GETH=$!
+  PID_DAPP=$!
   # give it a few secs to start up
   sleep 5
   read -r ACC BAL <<< "$(seth ls --keystore "$TMPDIR"/8545/keystore)"
