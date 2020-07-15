@@ -88,10 +88,10 @@ Available options:
   --arg STRING...          Values to encode
   --debug                  Run interactively
   --get-models             Print example testcase for each execution path
-  --smttimeout INTEGER     Timeout given to smt solver in milliseconds
+  --smttimeout INTEGER     Timeout given to SMT solver in milliseconds
   --max-iterations INTEGER Number of times we may revisit a particular branching
                            point
-  --solver TEXT            Smt solver to use z3 (default) or cvc4
+  --solver TEXT            Used SMT solver: z3 (default) or cvc4
 ```
 
 Run a symbolic execution against the given parameters, searching for assertion violations.
@@ -125,7 +125,7 @@ hevm symbolic --sig "transfer(address,uint256)" --arg "<symbolic>" --arg 0 --cod
 If the `--get-models` flag is given, example input values will be returned for each possible execution path. 
 This can be useful for automatic test case generation.
 
-The default timeout for smt queries is no timeout. If your program is taking longer than a couple of minutes to run, 
+The default timeout for SMT queries is no timeout. If your program is taking longer than a couple of minutes to run, 
 you can experiment with configuring the timeout to somewhere around 10s by doing `--smttimeout 10000`
 
 Storage can take one of three forms, defaulting to `SymbolicS` unless `--create` is provided, in which case it defaults to `InitialS`:
@@ -184,10 +184,10 @@ cd mystate && git show HEAD
 ### `hevm equivalence`
 
 ```sh
-Usage: hevm equiv --code-a TEXT --code-b TEXT [--sig TEXT]
+Usage: hevm equivalence --code-a TEXT --code-b TEXT [--sig TEXT]
 ```
 
-Symbolically execute both the code given in `--code-a` and `--code-b` and try to prove equivalence between their output and storage.
+Symbolically execute both the code given in `--code-a` and `--code-b` and try to prove equivalence between their outputs and storages.
 
 If `--sig` is given, calldata is assumed to take the form of the function given.
 If left out, calldata is a fully abstract buffer of at most 1024 bytes.
