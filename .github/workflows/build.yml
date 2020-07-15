@@ -36,4 +36,4 @@ jobs:
           name: dapp
           signingKey: '${{ secrets.CACHIX_SIGNING_KEY }}'
       - name: run integration tests
-        run: nix-shell src/dapp-tests/shell.nix --command 'make --directory src/dapp-tests'
+        run: nix-shell --pure src/dapp-tests/shell.nix --command 'make --directory src/dapp-tests'
