@@ -17,13 +17,6 @@ jobs:
       fail-fast: false
     runs-on: ${{ matrix.os }}
     steps:
-      # linux VMs are currently limited at 14GB, which is too little
-      - name: recover some space
-        run: |
-          df -h
-          sudo rm -rf /opt
-          df -h
-        if: ${{ matrix.os == 'ubuntu-latest' }}
       - uses: actions/checkout@v2
       # v10
       - uses: cachix/install-nix-action@63cf434de4e4292c6960639d56c5dd550e789d77
