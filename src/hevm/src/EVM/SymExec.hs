@@ -204,15 +204,15 @@ verifyContract code' maxIter signature' concreteArgs storagemodel pre maybepost 
     preStateRaw <- abstractVM signature' concreteArgs theCode  storagemodel
     -- add the pre condition to the pathconditions to ensure that we are only exploring valid paths
     let preState = over pathConditions ((++) [pre preStateRaw]) preStateRaw
-    verify preState maxIter maybepost
+    verify preState maxIter Nothing maybepost
   where theCode = case code' of
           InitCode b    -> b
           RuntimeCode b -> b
 
-verify :: VM -> Maybe Integer -> Maybe Postcondition -> Query (Either (VM, [VM]) ByteString)
-verify preState maxIter maybepost = do
+verify :: VM -> Maybe Integer -> Maybe (Fetch.BlockNumber, Text) -> Maybe Postcondition -> Query (Either (VM, [VM]) ByteString)
+verify preState maxIter rpcinfo maybepost = do
   smtState <- queryState
-  results <- io $ fst <$> runStateT (interpret (Fetch.oracle smtState Nothing) maxIter Stepper.runFully) preState
+  results <- io $ fst <$> runStateT (interpret (Fetch.oracle smtState rpcinfo) maxIter Stepper.runFully) preState
   case (maybepost, results) of
     (Just post, Right res) -> do
       let postC = sOr $ fmap (\postState -> (sAnd (view pathConditions postState)) .&& sNot (post (preState, postState))) res

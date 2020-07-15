@@ -413,15 +413,17 @@ assert cmd = do
 
   let root = fromMaybe "." (dappRoot cmd)
       srcinfo = ((,) root) <$> (jsonFile cmd)
+      block'  = maybe EVM.Fetch.Latest EVM.Fetch.BlockNumber (block cmd)
+      rpcinfo = (,) block' <$> rpc cmd
   if debug cmd
   then runSMTWithTimeOut (solver cmd) (smttimeout cmd) $ query $ do
          preState <- symvmFromCommand cmd
          smtState <- queryState
-         io $ void $ EVM.TTY.runFromVM srcinfo (EVM.Fetch.oracle smtState Nothing) preState
+         io $ void $ EVM.TTY.runFromVM srcinfo (EVM.Fetch.oracle smtState rpcinfo) preState
 
   else runSMTWithTimeOut (solver cmd) (smttimeout cmd) $ query $ do
          preState <- symvmFromCommand cmd
-         verify preState (maxIterations cmd) (Just checkAssertions) >>= \case
+         verify preState (maxIterations cmd) rpcinfo (Just checkAssertions) >>= \case
            Right counterexample -> io $ do putStrLn "Assertion violation:"
                                            case sig cmd of
                                              Just sig' -> do method' <- functionAbi sig'
@@ -770,7 +772,7 @@ parseAbi :: (AsValue s) => s -> (Text, [AbiType])
 parseAbi abijson = (signature abijson, snd <$> parseMethodInput <$> V.toList (fromMaybe (error "Malformed function abi") (abijson ^? key "inputs" . _Array)))
 
 abiencode :: (AsValue s) => Maybe s -> [String] -> ByteString
-abiencode Nothing args = error "missing required argument: abi"
+abiencode Nothing _ = error "missing required argument: abi"
 abiencode (Just abijson) args = 
   let (sig', declarations) = parseAbi abijson
   in if length declarations == length args
