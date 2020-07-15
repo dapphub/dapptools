@@ -23,6 +23,7 @@ module EVM.Solidity
   , contractName
   , constructorInputs
   , creationCode
+  , functionAbi
   , makeSrcMaps
   , readSolc
   , readJSON
@@ -281,6 +282,14 @@ solcRuntime contract src = do
   (json, path) <- solidity' src
   let Just (solc, _, _) = readJSON json
   return (solc ^? ix (path <> ":" <> contract) . runtimeCode)
+
+functionAbi :: Text -> IO Method
+functionAbi f = do
+  (json, path) <- solidity' ("contract ABI { function " <> f <> " public {}}")
+  let Just (solc, _, _) = readJSON json
+  case Map.toList $ solc ^?! ix (path <> ":ABI") . abiMap of
+     [(_,b)] -> return b
+     _ -> error "hevm internal error: unexpected abi format"
 
 force :: String -> Maybe a -> a
 force s = fromMaybe (error s)

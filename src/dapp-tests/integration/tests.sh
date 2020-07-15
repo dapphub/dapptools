@@ -53,9 +53,9 @@ dapp_testnet
 test_hevm_symbolic() {
     solc --bin-runtime -o . --overwrite factor.sol
     # should find counterexample
-    hevm symbolic --code $(<A.bin-runtime) --abi $(seth --abi-function-json "factor(uint x, uint y)") && error || echo "hevm success: found counterexample"
+    hevm symbolic --code $(<A.bin-runtime) --sig "factor(uint x, uint y)" && error || echo "hevm success: found counterexample"
     rm -rf A.bin-runtime
-    hevm symbolic --code $(<dstoken.bin-runtime) --abi $(seth --abi-function-json "transferFrom(address, address, uint)") --get-models
+    hevm symbolic --code $(<dstoken.bin-runtime) --sig "transferFrom(address, address, uint)" --get-models
 
     solc --bin-runtime -o . --overwrite token.sol
     # This one explores all paths (cvc4 is better at this)

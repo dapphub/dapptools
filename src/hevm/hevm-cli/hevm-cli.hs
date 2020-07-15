@@ -106,9 +106,9 @@ data Command w
 
   -- symbolic execution opts
       , jsonFile      :: w ::: Maybe String       <?> "Filename or path to dapp build output (default: out/*.solc.json)"
-      , dappRoot      :: w ::: Maybe String             <?> "Path to dapp project root directory (default: . )"
+      , dappRoot      :: w ::: Maybe String       <?> "Path to dapp project root directory (default: . )"
       , storageModel  :: w ::: Maybe StorageModel <?> "Select storage model: ConcreteS, SymbolicS (default) or InitialS"
-      , abi           :: w ::: Maybe String       <?> "Signature of types to decode / encode"
+      , sig           :: w ::: Maybe Text         <?> "Signature of types to decode / encode"
       , arg           :: w ::: [String]           <?> "Values to encode"
       , debug         :: w ::: Bool               <?> "Run interactively"
       , getModels     :: w ::: Bool               <?> "Print example testcase for each execution path"
@@ -119,7 +119,7 @@ data Command w
   | Equivalence -- prove equivalence between two programs
       { codeA         :: w ::: ByteString    <?> "Bytecode of the first program"
       , codeB         :: w ::: ByteString    <?> "Bytecode of the second program"
-      , abi           :: w ::: Maybe String  <?> "Signature of types to decode / encode"
+      , sig           :: w ::: Maybe Text    <?> "Signature of types to decode / encode"
       , smttimeout    :: w ::: Maybe Integer <?> "Timeout given to smt solver in milliseconds"
       , maxIterations :: w ::: Maybe Integer <?> "Number of times we may revisit a particular branching point"
       , solver        :: w ::: Maybe Text    <?> "Smt solver to use z3 (default) or cvc4"
@@ -369,7 +369,11 @@ equivalence :: Command Options.Unwrapped -> IO ()
 equivalence cmd =
   do let bytecodeA = hexByteString "--code" . strip0x $ codeA cmd
          bytecodeB = hexByteString "--code" . strip0x $ codeB cmd
-         maybeSignature = parseAbi <$> abi cmd
+     maybeSignature <- case sig cmd of
+       Nothing -> return Nothing
+       Just sig' -> do method' <- functionAbi sig'
+                       return $ Just (view methodSignature method', snd <$> view methodInputs method')
+
      void . runSMTWithTimeOut (solver cmd) (smttimeout cmd) . query $
        equivalenceCheck bytecodeA bytecodeB (maxIterations cmd) maybeSignature >>= \case
          Right counterexample -> io $ do putStrLn "Not equal!"
@@ -419,9 +423,11 @@ assert cmd = do
          preState <- symvmFromCommand cmd
          verify preState (maxIterations cmd) (Just checkAssertions) >>= \case
            Right counterexample -> io $ do putStrLn "Assertion violation:"
-                                           case abi cmd of
-                                             Just abijson -> let (name, typ) = parseAbi abijson
-                                                             in die $ unpack name ++ show (decodeAbiValue (AbiTupleType (V.fromList typ)) $ Lazy.fromStrict (ByteString.drop 4 counterexample))
+                                           case sig cmd of
+                                             Just sig' -> do method' <- functionAbi sig'
+                                                             let typ = snd <$> view methodInputs method'
+                                                                 name = view methodSignature method'
+                                                             die $ unpack name ++ show (decodeAbiValue (AbiTupleType (V.fromList typ)) $ Lazy.fromStrict (ByteString.drop 4 counterexample))
                                              Nothing -> die . show $ ByteStringS counterexample
            Left (pre, posts) ->
              do io $ putStrLn $ "Explored: " <> show (length posts) <> " branches without assertion violations"
@@ -631,7 +637,7 @@ vmFromCommand cmd = do
 symvmFromCommand :: Command Options.Unwrapped -> Query EVM.VM
 symvmFromCommand cmd = do
   caller' <- maybe (SAddr <$> freshVar_) (return . litAddr) (caller cmd)
-  (calldata', cdlen, pathCond) <- case (calldata cmd, abi cmd) of
+  (calldata', cdlen, pathCond) <- case (calldata cmd, sig cmd) of
     -- fully abstract calldata (up to 1024 bytes)
     (Nothing, Nothing) -> do cd <- sbytes256
                              len <- freshVar_
@@ -640,9 +646,10 @@ symvmFromCommand cmd = do
     (Just c, Nothing) -> let cd = litBytes $ decipher c
                          in return (cd, num (length cd), sTrue)
     -- calldata according to given abi with possible specializations from the `arg` list
-    (Nothing, Just abijson) -> let (sig, typs) = parseAbi abijson
-                               in do (cd, cdlen) <- symCalldata sig typs (arg cmd)
-                                     return (cd, cdlen, sTrue)
+    (Nothing, Just sig') -> do method' <- io $ functionAbi sig'
+                               let typs = snd <$> view methodInputs method'
+                               (cd, cdlen) <- symCalldata (view methodSignature method') typs (arg cmd)
+                               return (cd, cdlen, sTrue)
 
     _ -> error "incompatible options: calldata and abi"
 
