@@ -54,7 +54,7 @@ Usage: hevm symbolic [--code TEXT] [--calldata TEXT] [--address ADDR]
                      [--timestamp W256] [--gaslimit W256] [--gasprice W256]
                      [--create] [--maxcodesize W256] [--difficulty W256]
                      [--rpc TEXT] [--block W256] [--json-file STRING]
-                     [--storage-model STORAGEMODEL] [--abi STRING]
+                     [--storage-model STORAGEMODEL] [--sig STRING]
                      [--arg STRING]... [--debug] [--get-models]
                      [--smttimeout INTEGER] [--max-iterations INTEGER]
                      [--solver TEXT]
@@ -84,7 +84,7 @@ Available options:
   --storage-model STORAGEMODEL
                            Select storage model: ConcreteS, SymbolicS (default)
                            or InitialS
-  --abi STRING             Signature of types to decode / encode
+  --sig STRING             Signature of types to decode / encode
   --arg STRING...          Values to encode
   --debug                  Run interactively
   --get-models             Print example testcase for each execution path
@@ -103,23 +103,23 @@ If an `assert` is reachable, a counterexample will be returned.
 The default value for `calldata` and `caller` are symbolic values, but can be specialized to concrete functions with their corresponding flags.
 
 One can also specialize specific arguments to a function signature, while leaving others abstract.
-If `--abi` is given, calldata is assumed to be of the form suggested by the function signature. An convenient way of generating this function abi is through `seth --abi-function-json "foo()"`. With this flag, specific arguments can be instantiated to concrete values via the `--arg` flag. 
+If `--sig` is given, calldata is assumed to be of the form suggested by the function signature. With this flag, specific arguments can be instantiated to concrete values via the `--arg` flag. 
 
 This is best illustrated through a few examples:
 
 Calldata specialized to the bytestring `0xa9059cbb` followed by 64 symbolic bytes:
 ```sh
-hevm symbolic --abi $(seth --abi-function-json "transfer(address,uint256)") --code $(<dstoken.bin-runtime)
+hevm symbolic --sig "transfer(address,uint256)" --code $(<dstoken.bin-runtime)
 ```
 
 Calldata specialized to the bytestring `0xa9059cbb0000000000000000000000007cfa93148b0b13d88c1dce8880bd4e175fb0dedf` followed by 32 symbolic bytes.
 ```sh
-hevm symbolic --abi $(seth --abi-function-json "transfer(address,uint256)") --arg 0x7cFA93148B0B13d88c1DcE8880bd4e175fb0DeDF --code $(<dstoken.bin-runtime)
+hevm symbolic --sig "transfer(address,uint256)" --arg 0x7cFA93148B0B13d88c1DcE8880bd4e175fb0DeDF --code $(<dstoken.bin-runtime)
 ```
 
 Calldata specialized to the bytestring `0xa9059cbb` followed by 32 symbolic bytes, followed by the bytestring `0000000000000000000000000000000000000000000000000000000000000000`:
 ```sh
-hevm symbolic --abi $(seth --abi-function-json "transfer(address,uint256)") --arg "<symbolic>" --arg 0 --code $(<dstoken.bin-runtime)
+hevm symbolic --sig "transfer(address,uint256)" --arg "<symbolic>" --arg 0 --code $(<dstoken.bin-runtime)
 ```
 
 If the `--get-models` flag is given, example input values will be returned for each possible execution path. 
@@ -184,12 +184,12 @@ cd mystate && git show HEAD
 ### `hevm equivalence`
 
 ```sh
-Usage: hevm equiv --code-a TEXT --code-b TEXT [--abi TEXT]
+Usage: hevm equiv --code-a TEXT --code-b TEXT [--sig TEXT]
 ```
 
 Symbolically execute both the code given in `--code-a` and `--code-b` and try to prove equivalence between their output and storage.
 
-If `--abi` is given, calldata is assumed to take the form of the function given.
+If `--sig` is given, calldata is assumed to take the form of the function given.
 If left out, calldata is a fully abstract buffer of at most 1024 bytes.
 
 ### `hevm dapp-test`
