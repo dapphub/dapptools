@@ -22,7 +22,6 @@ dapp_testnet() {
   TMPDIR=$(mktemp -d)
 
   dapp testnet --dir "$TMPDIR" &
-  PID_DAPP=$!
   # give it a few secs to start up
   sleep 5
   read -r ACC BAL <<< "$(seth ls --keystore "$TMPDIR"/8545/keystore)"
