@@ -6,6 +6,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+### Changed
+- `seth --show-json` no longer prints short bytestrings as decimal numbers.
+
 ### Added
 - New commands: 
   - `seth source <address>` fetches the contract source from etherscan
