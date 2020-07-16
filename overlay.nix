@@ -24,32 +24,12 @@ in rec {
     inherit (self) solidityPackage dappsys;
   };
 
-  dappsys = self.callPackage (
-    self.pkgs.fetchFromGitHub {
-      owner = "dapphub";
-      repo = "dappsys";
-      rev = "933fb468f72f1a81ee8b6d90b17ffdf25d8e1067";
-      sha256 = "06k5j597y4i1q6zcpqxzbflzq6qp62nrnjs6slh7vk70wjccrbh9";
-      fetchSubmodules = true;
-    }
-  ) {};
-
   solidityPackage = import ./nix/solidity-package.nix {
     inherit (self) pkgs;
   };
 
   # experimental dapp builder, allows for easy overriding of phases
   buildDappPackage = import ./nix/build-dapp-package.nix { inherit (self) pkgs; };
-
-  # A merged Dappsys to act as the DAPPSYS_PATH for dapp-tests.
-  dappsys-merged = self.symlinkJoin {
-    name = "dappsys";
-    paths = map builtins.toString (lib.attrVals [
-      "ds-test"
-      "ds-auth"
-      "ds-math"
-    ] dappsys);
-  };
 
   # Here we can make e.g. integration tests for Dappsys,
   # or tests that verify Hevm correctness, etc.
