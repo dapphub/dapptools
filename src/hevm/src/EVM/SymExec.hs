@@ -130,7 +130,7 @@ loadSymVM x initStore addr callvalue' calldata' =
 -- branching points.
 -- returns a list of possible final evm states
 interpret
-  :: (EVM.Query -> IO (EVM ()))
+  :: Fetch.Fetcher
   -> Maybe Integer --max iterations
   -> Stepper a
   -> StateT VM IO (Either Stepper.Failure [a])
