@@ -48,7 +48,7 @@ fi
 if [ "$DAPP_LINK_TEST_LIBRARIES" = 1 ]; then
   DAPP_LINK_TEST_LIBRARIES=0 dapp build
   sender=0x00a329c0648769a73afac7f9381e08fb43dbea72
-  nonce=1048576
+  nonce=48576
   mapfile -t libraries < <(dapp --find-libraries)
 
   if [[ ${#libraries[@]} -eq 0 ]]; then exit; fi
