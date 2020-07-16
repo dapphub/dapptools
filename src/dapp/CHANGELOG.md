@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## Unreleased
 
 ### Fixed
-Support for libraries. To test a project which includes libraries you need to use:
+- Support for libraries. To test a project which includes libraries you need to use:
 ```sh
 DAPP_BUILD_EXTRACT=1 dapp test
 ```
