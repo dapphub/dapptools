@@ -1,5 +1,46 @@
 # hevm changelog
 
+## 0.40 - 2020-07-22
+
+- hevm is now capable of symbolic execution!
+
+### Changed
+As a result, the types of several registers of the EVM have changed to admit symbolic values as well as concrete ones.
+
+  - state.stack: `Word` -> `SymWord`.
+  - state.memory: `ByteString` -> `[SWord 8]`.
+  - state.callvalue: `W256` -> `SymWord`.
+  - state.caller: `Addr` -> `SAddr`.
+  - state.returndata: `ByteString` -> `[SWord 8]`.
+  - state.calldata: `ByteString` -> `([SWord 8], (SWord 32))`. The first element is a list of symbolic bytes, the second is the length of calldata. We have `fst calldata !! i .== 0` for all `snd calldata < i`.
+  
+  - tx.value: `W256` -> `SymWord`.
+  
+  - contract.storage: `Map Word Word` -> `Storage`, defined as:
+```hs
+data Storage
+  = Concrete (Map Word SymWord)
+  | Symbolic (SArray (WordN 256) (WordN 256))
+  deriving (Show)
+```
+
+### Added
+New cli commands:
+ - `hevm symbolic`: search for assertion violations, or step through a symbolic execution in debug mode.
+ - `hevm equivalence`: compare two programs for equivalence.
+
+See the README for details on usage.
+
+The new module `EVM.SymExec` exposes several library functions dealing with symbolic execution.
+In particular, 
+ - `SymExec.interpret`: implements an operational monad script similar to `TTY.interpret` and `Stepper.interpret`, but returns a list of final VM states rather than a single VM.
+ - `SymExec.verify`: takes a prestate and a postcondition, symbolically executes the prestate and checks that all final states matches the postcondition.
+
+### Removed
+
+The concrete versions of a lot of arithmetic operations, replaced with their more general symbolic counterpart.
+
+
 ## 0.39 - 2020-07-13
  - Exposes abi encoding to cli
  - Added cheat code `hevm.store(address a, bytes32 location, bytes32 value)`
