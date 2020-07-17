@@ -2,5 +2,6 @@
 ### seth---to-uint256 -- convert an integer into uint256 value
 ### Usage: seth --to-uint256 <value>
 set -e
+[[ $1 ]] || set -- "$(cat)"
 hex=$(seth --to-hex "$1")
 printf "0x%64s\\n" "${hex#0x}" | tr ' ' 0

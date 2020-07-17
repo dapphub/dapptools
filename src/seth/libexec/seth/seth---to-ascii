@@ -2,6 +2,7 @@
 ### seth---to-ascii -- convert hexdata into text data
 ### Usage: seth --to-ascii [<hexdata>]
 set -e
+[[ $1 ]] || set -- "$(cat)"
 hexdata=$(seth --to-hexdata "$@")
 format=$(sed 's/../\\x&/g' <<<"${hexdata#0x}")
 bash -c "printf '$format\\n'"
