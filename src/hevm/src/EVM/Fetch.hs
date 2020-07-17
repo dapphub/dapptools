@@ -5,7 +5,7 @@ module EVM.Fetch where
 
 import Prelude hiding (Word)
 
-import EVM.Types    (Addr, W256, showAddrWith0x, hexText)
+import EVM.Types    (Addr, W256, hexText)
 import EVM.Concrete (Word, w256)
 import EVM          (EVM, Contract, initialContract, nonce, balance, external)
 
@@ -53,7 +53,7 @@ class ToRPC a where
   toRPC :: a -> String
 
 instance ToRPC Addr where
-  toRPC = showAddrWith0x
+  toRPC = show
 
 instance ToRPC W256 where
   toRPC = show

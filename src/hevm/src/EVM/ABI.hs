@@ -98,7 +98,7 @@ data AbiValue
 instance Show AbiValue where
   show (AbiUInt _ n)         = show n
   show (AbiInt  _ n)         = show n
-  show (AbiAddress n)        = showAddrWith0x n
+  show (AbiAddress n)        = show n
   show (AbiBool b)           = if b then "true" else "false"
   show (AbiBytes      _ b)   = show (ByteStringS b)
   show (AbiBytesDynamic b)   = show (ByteStringS b)

@@ -871,7 +871,7 @@ updateUiVmState ui vm =
         Just (VMFailure err) ->
           Just ("VMFailure: " <> show err)
         Nothing ->
-          Just ("Executing EVM code in " <> showAddrWith0x address)
+          Just ("Executing EVM code in " <> show address)
     ui' = ui
       & set uiVm vm
       & set uiVmStackList
