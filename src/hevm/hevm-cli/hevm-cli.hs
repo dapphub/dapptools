@@ -432,13 +432,13 @@ assert cmd = do
   else runSMTWithTimeOut (solver cmd) (smttimeout cmd) $ query $ do
          preState <- symvmFromCommand cmd
          verify preState (maxIterations cmd) rpcinfo (Just checkAssertions) >>= \case
-           Right counterexample -> io $ do putStrLn "Assertion violation:"
+           Right counterexample -> io $ do putStrLn "Assertion violation found."
                                            case sig cmd of
                                              Just sig' -> do method' <- functionAbi sig'
                                                              let typ = snd <$> view methodInputs method'
                                                                  name = view methodSignature method'
                                                              die $ unpack name ++ show (decodeAbiValue (AbiTupleType (V.fromList typ)) $ Lazy.fromStrict (ByteString.drop 4 counterexample))
-                                             Nothing -> die . show $ ByteStringS counterexample
+                                             Nothing -> exitWith (ExitFailure 1)
            Left (pre, posts) ->
              do io $ putStrLn $ "Explored: " <> show (length posts) <> " branches without assertion violations"
                 let vmErrs = checkForVMErrors posts
