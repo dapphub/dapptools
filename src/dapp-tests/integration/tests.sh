@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 
-set -ex
+set -e
 
 # clean up
-trap 'pkill dapp && rm -rf "$TMPDIR"' EXIT
+trap 'killall geth && rm -rf "$TMPDIR"' EXIT
 trap "echo boo && exit 1" SIGINT SIGTERM
 
 error() {
@@ -23,7 +23,7 @@ dapp_testnet() {
 
   dapp testnet --dir "$TMPDIR" &
   # give it a few secs to start up
-  sleep 10
+  sleep 20
   read -r ACC BAL <<< "$(seth ls --keystore "$TMPDIR/8545/keystore")"
   # The account has maximum balance
   [[ $(seth --to-hex "$BAL") = $(seth --to-int256 -1) ]] || error

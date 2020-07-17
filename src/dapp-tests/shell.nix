@@ -5,5 +5,5 @@
 pkgs.mkShell {
   name = "dapp-tests";
 
-  buildInputs = with pkgs; [ bash curl dapp gnumake hevm procps seth solc ];
+  buildInputs = with pkgs; [ killall cacert bash curl dapp gnumake hevm procps seth solc ];
 }
