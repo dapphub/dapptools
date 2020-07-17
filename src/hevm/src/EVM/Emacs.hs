@@ -444,7 +444,7 @@ quoted :: Text -> Text
 quoted x = "\"" <> x <> "\""
 
 instance SDisplay Addr where
-  sexp = A . quoted . pack . showAddrWith0x
+  sexp = A . quoted . pack . show
 
 instance SDisplay Contract where
   sexp x =

@@ -107,7 +107,7 @@ checkStateFail diff x expectation vm (okState, okMoney, okNonce, okData, okCode)
   let
     printField :: (v -> String) -> Map Addr v -> IO ()
     printField f d = putStrLn $ Map.foldrWithKey (\k v acc ->
-      acc ++ showAddrWith0x k ++ " : " ++ f v ++ "\n") "" d
+      acc ++ show k ++ " : " ++ f v ++ "\n") "" d
 
     reason = map fst (filter (not . snd)
         [ ("bad-state",       okMoney || okNonce || okData  || okCode || okState)

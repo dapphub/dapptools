@@ -21,12 +21,14 @@ import qualified EVM.FeeSchedule as FeeSchedule
 import Data.SBV.Trans.Control
 import Data.SBV.Trans hiding (distinct)
 import Data.SBV hiding (runSMT, newArray_, addAxiom, distinct)
-import Data.Vector (toList)
+import Data.Vector (toList, fromList)
 
 import Control.Monad.IO.Class
 import qualified Control.Monad.State.Class as State
 import Data.ByteString (ByteString, pack)
-import Data.Text (Text)
+import qualified Data.ByteString
+import qualified Data.ByteString.Lazy as Lazy
+import Data.Text (Text, splitOn, unpack)
 import Control.Monad.State.Strict (runStateT, runState, StateT, get, put, zipWithM)
 import Control.Applicative
 
@@ -187,7 +189,7 @@ interpret fetcher maxIter =
 type Precondition = VM -> SBool
 type Postcondition = (VM, VM) -> SBool
 
-checkAssert :: ContractCode -> Maybe Integer -> Maybe (Text, [AbiType]) -> [String] -> Query (Either (VM, [VM]) ByteString)
+checkAssert :: ContractCode -> Maybe Integer -> Maybe (Text, [AbiType]) -> [String] -> Query (Either (VM, [VM]) VM)
 checkAssert c maxIter signature' concreteArgs = verifyContract c maxIter signature' concreteArgs SymbolicS (const sTrue) (Just checkAssertions)
 
 checkAssertions :: Postcondition
@@ -200,7 +202,7 @@ data StorageModel = ConcreteS | SymbolicS | InitialS
 
 instance ParseField StorageModel
 
-verifyContract :: ContractCode -> Maybe Integer -> Maybe (Text, [AbiType]) -> [String] -> StorageModel -> Precondition -> Maybe Postcondition -> Query (Either (VM, [VM]) ByteString)
+verifyContract :: ContractCode -> Maybe Integer -> Maybe (Text, [AbiType]) -> [String] -> StorageModel -> Precondition -> Maybe Postcondition -> Query (Either (VM, [VM]) VM)
 verifyContract code' maxIter signature' concreteArgs storagemodel pre maybepost = do
     preStateRaw <- abstractVM signature' concreteArgs theCode  storagemodel
     -- add the pre condition to the pathconditions to ensure that we are only exploring valid paths
@@ -210,7 +212,7 @@ verifyContract code' maxIter signature' concreteArgs storagemodel pre maybepost 
           InitCode b    -> b
           RuntimeCode b -> b
 
-verify :: VM -> Maybe Integer -> Maybe (Fetch.BlockNumber, Text) -> Maybe Postcondition -> Query (Either (VM, [VM]) ByteString)
+verify :: VM -> Maybe Integer -> Maybe (Fetch.BlockNumber, Text) -> Maybe Postcondition -> Query (Either (VM, [VM]) VM)
 verify preState maxIter rpcinfo maybepost = do
   smtState <- queryState
   results <- io $ fst <$> runStateT (interpret (Fetch.oracle smtState rpcinfo) maxIter Stepper.runFully) preState
@@ -227,30 +229,14 @@ verify preState maxIter rpcinfo maybepost = do
                   return $ Left (preState, res)
         Unsat -> do io $ putStrLn "Q.E.D."
                     return $ Left (preState, res)
-        Sat -> do io $ putStrLn "post condition violated:"
-                  let (calldata', cdlen) = view (state . calldata) preState
-                      SAddr caller' = view (state . caller) preState
-                      S _ cvalue = view (state . callvalue) preState
-                  cdlen' <- num <$> getValue cdlen
-                  calldatainput <- mapM (getValue.fromSized) (take cdlen' calldata')
-                  callvalue' <- num <$> getValue cvalue
-                  caller'' <- num <$> getValue caller'
-                  io $ do
-                    putStrLn "Calldata:"
-                    print $ ByteStringS (pack calldatainput)
-                    putStrLn "Caller:"
-                    print caller''
-                    putStrLn "Callvalue:"
-                    print callvalue'
-
-                  return $ Right (pack calldatainput)
+        Sat -> return $ Right preState
 
     (Nothing, Right res) -> do io $ putStrLn "Q.E.D."
                                return $ Left (preState, res)
 
     (_, Left _) -> error "unexpected error during symbolic execution"
 
-equivalenceCheck :: ByteString -> ByteString -> Maybe Integer -> Maybe (Text, [AbiType]) -> Query (Either ([VM], [VM]) ByteString)
+equivalenceCheck :: ByteString -> ByteString -> Maybe Integer -> Maybe (Text, [AbiType]) -> Query (Either ([VM], [VM]) VM)
 equivalenceCheck bytecodeA bytecodeB maxiter signature' = do
   preStateA <- abstractVM signature' [] bytecodeA SymbolicS
            
@@ -290,10 +276,34 @@ equivalenceCheck bytecodeA bytecodeB maxiter signature' = do
 
       checkSat >>= \case
          Unk -> error "solver said unknown!"
-         Sat -> do cdlen' <- num <$> getValue cdlen
-                   model <- mapM (getValue.fromSized) (take cdlen' calldata')
-                   return (Right (pack model))
+         Sat -> return $ Right preStateA
          Unsat -> return $ Left (aVMs, bVMs)
 
 both' :: (a -> b) -> (a, a) -> (b, b)
 both' f (x, y) = (f x, f y)
+
+showCounterexample :: VM -> Maybe (Text, [AbiType]) -> Query ()
+showCounterexample vm maybesig = do
+  let (calldata', cdlen) = view (EVM.state . EVM.calldata) vm
+      S _ cvalue = view (EVM.state . EVM.callvalue) vm
+      SAddr caller' = view (EVM.state . EVM.caller) vm
+  cdlen' <- num <$> getValue cdlen
+  calldatainput <- mapM (getValue.fromSized) (take cdlen' calldata')
+  callvalue' <- num <$> getValue cvalue
+  caller'' <- num <$> getValue caller'
+  io $ do
+    putStrLn "Calldata:"
+    print $ ByteStringS (pack calldatainput)
+
+    -- pretty print calldata input if signature is available
+    case maybesig of
+      Just (name, types) -> putStrLn $ unpack (head (splitOn "(" name)) ++
+        show (decodeAbiValue (AbiTupleType (fromList types)) $ Lazy.fromStrict (pack $ drop 4 calldatainput))
+      Nothing -> return ()
+
+    putStrLn "Caller:"
+    print (Addr caller'')
+    putStrLn "Callvalue:"
+    print callvalue'
+
+

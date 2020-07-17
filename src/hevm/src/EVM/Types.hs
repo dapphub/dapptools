@@ -104,15 +104,12 @@ instance Read Addr where
 instance Show Addr where
   showsPrec _ s a =
     let h = showHex s a
-    in replicate (40 - length h) '0' ++ h
+    in "0x" ++ replicate (40 - length h) '0' ++ h
 
 instance Show SAddr where
   show (SAddr a) = case unliteral a of
     Nothing -> "<symbolic addr>"
     Just c -> show c
-
-showAddrWith0x :: Addr -> String
-showAddrWith0x addr = "0x" ++ show addr
 
 strip0x :: ByteString -> ByteString
 strip0x bs = if "0x" `Char8.isPrefixOf` bs then Char8.drop 2 bs else bs
