@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+### seth---to-fix -- convert wei into decimal
+### Usage: seth --to-fix <decimals> <wei>
 set -e
 [[ $# = 2 ]] || seth --fail-usage "$0"
 [[ ${#2} -lt $1 ]] && exec printf "0.%0${1}d\\n" "$2"

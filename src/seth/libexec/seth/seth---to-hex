@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+### seth---to-hex -- convert decimal into hex
+### Usage: seth --to-hex <dec>
 set -e
 if [[ $1 =~ ^[[:digit:]]+$ ]]; then
   hexnum=$(bc <<<"obase=16; $1")

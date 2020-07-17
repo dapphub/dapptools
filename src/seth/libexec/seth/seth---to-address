@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+### seth---to-address -- convert hex into checksummed address
+### Usage: seth --to-address <hex>
 set -e
 hexdata=$(seth --to-hexdata "$@")
 [[ ${#hexdata} = 42 ]] ||

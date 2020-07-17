@@ -1,12 +1,19 @@
 #!/usr/bin/env bash
-### Usage: seth --to-hexdata [<hexdata>]
+### Usage: seth --to-hexdata [<hex>|</path>|<@tag>]
+###
+### Output lowercase, 0x-prefixed hex, converting from the
+### input provided as an argument or stdin, which can be:
+###   - mixed case hex with or without 0x prefix
+###   - absolute path to file
+###   - @tag, where $TAG is defined in environment variables
+
 set -e
 
 if [[ $# = 0 ]]; then
   set -- "$(cat)"
 elif [[ $# != 1 ]]; then
   seth --fail-usage "$0"
-fi    
+fi
 
 if [[ $1 = @* ]]; then
   value=$(seth lookup "$1")
