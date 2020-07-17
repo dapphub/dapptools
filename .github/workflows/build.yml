@@ -29,7 +29,7 @@ jobs:
       - uses: cachix/install-nix-action@63cf434de4e4292c6960639d56c5dd550e789d77
         with:
           # we use the nixpkgs defined in default.nix
-          skip_adding_nixpkgs_channel: true
+          skip_adding_nixpkgs_channel: false
       # v6
       - uses: cachix/cachix-action@490a246fbc7f92208d309eeb54383a4d828cedc1
         with:
