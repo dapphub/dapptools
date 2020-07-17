@@ -15,7 +15,7 @@ import EVM.Stepper (Stepper)
 import qualified EVM.Stepper as Stepper
 import qualified Control.Monad.Operational as Operational
 import EVM.Types
-import EVM.Symbolic (litBytes, SymWord, sw256)
+import EVM.Symbolic (litBytes, SymWord(..), sw256)
 import EVM.Concrete (createAddress)
 import qualified EVM.FeeSchedule as FeeSchedule
 import Data.SBV.Trans.Control
@@ -228,10 +228,22 @@ verify preState maxIter rpcinfo maybepost = do
         Unsat -> do io $ putStrLn "Q.E.D."
                     return $ Left (preState, res)
         Sat -> do io $ putStrLn "post condition violated:"
-                  let (calldata', cdlen') = view (state . calldata) preState
-                  cdlen <- num <$> getValue cdlen'
-                  model <- mapM (getValue.fromSized) (take cdlen calldata')
-                  return $ Right (pack model)
+                  let (calldata', cdlen) = view (state . calldata) preState
+                      SAddr caller' = view (state . caller) preState
+                      S _ cvalue = view (state . callvalue) preState
+                  cdlen' <- num <$> getValue cdlen
+                  calldatainput <- mapM (getValue.fromSized) (take cdlen' calldata')
+                  callvalue' <- num <$> getValue cvalue
+                  caller'' <- num <$> getValue caller'
+                  io $ do
+                    putStrLn "Calldata:"
+                    print $ ByteStringS (pack calldatainput)
+                    putStrLn "Caller:"
+                    print caller''
+                    putStrLn "Callvalue:"
+                    print callvalue'
+
+                  return $ Right (pack calldatainput)
 
     (Nothing, Right res) -> do io $ putStrLn "Q.E.D."
                                return $ Left (preState, res)
