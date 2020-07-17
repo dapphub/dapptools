@@ -24,7 +24,6 @@ import qualified EVM.Emacs
 import qualified EVM.VMTest as VMTest
 #endif
 
-import EVM.ABI (decodeAbiValue)
 import EVM.SymExec
 import EVM.Debug
 import EVM.ABI
@@ -376,12 +375,10 @@ equivalence cmd =
 
      void . runSMTWithTimeOut (solver cmd) (smttimeout cmd) . query $
        equivalenceCheck bytecodeA bytecodeB (maxIterations cmd) maybeSignature >>= \case
-         Right counterexample -> io $ do putStrLn "Not equal!"
-                                         putStrLn "Counterexample:"
-                                         case maybeSignature of
-                                           Just (name, typ) -> putStrLn $ unpack name ++ show (decodeAbiValue (AbiTupleType (V.fromList typ)) $ Lazy.fromStrict (ByteString.drop 4 counterexample))
-                                           Nothing -> print $ ByteStringS counterexample
-                                         exitFailure
+         Right vm -> do io $ putStrLn "Not equal!"
+                        io $ putStrLn "Counterexample:"
+                        showCounterexample vm maybeSignature
+                        io $ exitFailure
          Left (postAs, postBs) -> io $ do
            putStrLn $ "Explored: " <> show (length postAs)
                        <> " execution paths of A and: "
@@ -423,6 +420,12 @@ assert cmd = do
       srcinfo = ((,) root) <$> (jsonFile cmd)
       block'  = maybe EVM.Fetch.Latest EVM.Fetch.BlockNumber (block cmd)
       rpcinfo = (,) block' <$> rpc cmd
+  maybesig <- case sig cmd of
+        Nothing -> return Nothing
+        Just sig' -> do method' <- functionAbi sig'
+                        let typ = snd <$> view methodInputs method'
+                            name = view methodSignature method'
+                        return $ Just (name,typ)
   if debug cmd
   then runSMTWithTimeOut (solver cmd) (smttimeout cmd) $ query $ do
          preState <- symvmFromCommand cmd
@@ -432,13 +435,9 @@ assert cmd = do
   else runSMTWithTimeOut (solver cmd) (smttimeout cmd) $ query $ do
          preState <- symvmFromCommand cmd
          verify preState (maxIterations cmd) rpcinfo (Just checkAssertions) >>= \case
-           Right counterexample -> io $ do putStrLn "Assertion violation found."
-                                           case sig cmd of
-                                             Just sig' -> do method' <- functionAbi sig'
-                                                             let typ = snd <$> view methodInputs method'
-                                                                 name = view methodSignature method'
-                                                             die $ unpack name ++ show (decodeAbiValue (AbiTupleType (V.fromList typ)) $ Lazy.fromStrict (ByteString.drop 4 counterexample))
-                                             Nothing -> exitWith (ExitFailure 1)
+           Right _ -> do io $ putStrLn "Assertion violation found."
+                         showCounterexample preState maybesig
+                         io $ exitWith (ExitFailure 1)
            Left (pre, posts) ->
              do io $ putStrLn $ "Explored: " <> show (length posts) <> " branches without assertion violations"
                 let vmErrs = checkForVMErrors posts
@@ -446,10 +445,7 @@ assert cmd = do
                                                print vmErrs
                 -- When `--get-model` is passed, we print example vm info for each path
                 when (getModels cmd) $
-                  let (calldata', cdlen) = view (EVM.state . EVM.calldata) pre
-                      S _ cvalue = view (EVM.state . EVM.callvalue) pre
-                      SAddr caller' = view (EVM.state . EVM.caller) pre
-                  in forM_ (zip [1..] posts) $ \(i, postVM) -> do
+                  forM_ (zip [1..] posts) $ \(i, postVM) -> do
                     resetAssertions
                     constrain (sAnd (view EVM.pathConditions postVM))
                     io $ putStrLn $ "-- Branch (" <> show i <> "/" <> show (length posts) <> ") --"
@@ -457,17 +453,7 @@ assert cmd = do
                       Unk -> io $ putStrLn "Timed out"
                       Unsat -> io $ putStrLn "Inconsistent path conditions: dead path"
                       Sat -> do
-                        cdlen' <- num <$> getValue cdlen
-                        calldatainput <- mapM (getValue.fromSized) (take cdlen' calldata')
-                        callvalue' <- num <$> getValue cvalue
-                        caller'' <- num <$> getValue caller'
-                        io $ do
-                          putStrLn "Calldata:"
-                          print $ ByteStringS (ByteString.pack calldatainput)
-                          putStrLn "Caller:"
-                          print caller''
-                          putStrLn "Callvalue:"
-                          print callvalue'
+                        showCounterexample pre maybesig
                         case view EVM.result postVM of
                           Nothing -> error "internal error; no EVM result"
                           Just (EVM.VMFailure (EVM.Revert "")) -> io . putStrLn $ "Reverted"

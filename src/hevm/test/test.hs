@@ -1,10 +1,14 @@
 {-# Language OverloadedStrings #-}
 {-# Language QuasiQuotes #-}
+{-# Language TypeSynonymInstances #-}
+{-# Language FlexibleInstances #-}
 {-# Language GeneralizedNewtypeDeriving #-}
 {-# Language DataKinds #-}
 {-# Language StandaloneDeriving #-}
 import Data.Text (Text)
 import Data.ByteString (ByteString)
+
+import Prelude hiding (fail)
 
 import qualified Data.Text as Text
 import qualified Data.ByteString as BS
@@ -20,12 +24,14 @@ import Control.Lens hiding (List, pre)
 import qualified Data.Vector as Vector
 import Data.String.Here
 
+import Control.Monad.Fail
+
 import Data.Binary.Put (runPut)
 import Data.SBV hiding ((===), forAll)
 import Data.SBV.Control
 import Data.Binary.Get (runGetOrFail)
 
-import EVM
+import EVM hiding (Query)
 import EVM.SymExec
 import EVM.Symbolic
 import EVM.ABI
@@ -35,6 +41,9 @@ import EVM.Precompiled
 import EVM.RLP
 import EVM.Solidity
 import EVM.Types
+
+instance MonadFail Query where
+    fail = io . fail
 
 main :: IO ()
 main = defaultMain $ testGroup "hevm"
@@ -195,7 +204,10 @@ main = defaultMain $ testGroup "hevm"
             }
           }
           |]
-        (Right bs) <- runSMTWith cvc4 $ query $ checkAssert (RuntimeCode factor) Nothing (Just ("factor(uint256,uint256)", [AbiUIntType 256, AbiUIntType 256])) []
+        bs <- runSMTWith cvc4 $ query $ do
+          Right vm <- checkAssert (RuntimeCode factor) Nothing (Just ("factor(uint256,uint256)", [AbiUIntType 256, AbiUIntType 256])) []
+          BS.pack <$> mapM (getValue.fromSized) (view (state . calldata . _1) vm)
+
         let AbiTuple xy = decodeAbiValue (AbiTupleType $ Vector.fromList [AbiUIntType 256, AbiUIntType 256]) (BS.fromStrict (BS.drop 4 bs))
             [AbiUInt 256 x, AbiUInt 256 y] = Vector.toList xy
         assertEqual "" True (x == 953 && y == 1021 || x == 1021 && y == 953)
@@ -255,7 +267,10 @@ main = defaultMain $ testGroup "hevm"
               in case view result poststate of
                 Just (VMSuccess _) -> prex + prey .== postx + (posty :: SWord 256)
                 _ -> sFalse
-        (Right bs) <- runSMT $ query $ verifyContract (RuntimeCode c) Nothing (Just ("f(uint256,uint256)", [AbiUIntType 256, AbiUIntType 256])) [] SymbolicS pre post
+        bs <- runSMT $ query $ do
+          Right vm <- verifyContract (RuntimeCode c) Nothing (Just ("f(uint256,uint256)", [AbiUIntType 256, AbiUIntType 256])) [] SymbolicS pre post
+          BS.pack <$> mapM (getValue.fromSized) (view (state . calldata . _1) vm)
+
         let AbiTuple xyz = decodeAbiValue (AbiTupleType $ Vector.fromList [AbiUIntType 256, AbiUIntType 256]) (BS.fromStrict (BS.drop 4 bs))
             [AbiUInt 256 x, AbiUInt 256 y] = Vector.toList xyz
         assertEqual "Catch storage collisions" x y
@@ -323,7 +338,10 @@ main = defaultMain $ testGroup "hevm"
               }
              }
             |]
-          (Right bs) <- runSMT $ query $ checkAssert (RuntimeCode c) Nothing (Just ("deposit(uint8)", [AbiUIntType 8])) []
+          bs <- runSMT $ query $ do
+            Right vm <- checkAssert (RuntimeCode c) Nothing (Just ("deposit(uint8)", [AbiUIntType 8])) []
+            BS.pack <$> mapM (getValue.fromSized) (view (state . calldata . _1) vm)
+
           let deposit = decodeAbiValue (AbiUIntType 8) (BS.fromStrict (BS.drop 4 bs))
           assertEqual "overflowing uint8" deposit (AbiUInt 8 255)
      ,
@@ -375,7 +393,10 @@ main = defaultMain $ testGroup "hevm"
               }
             }
             |]
-          Right bs <- runSMTWith z3 $ query $ checkAssert (RuntimeCode c) Nothing (Just ("f(uint256,uint256,uint256,uint256)", replicate 4 (AbiUIntType 256))) []
+          bs <- runSMTWith z3 $ query $ do
+            Right vm <- checkAssert (RuntimeCode c) Nothing (Just ("f(uint256,uint256,uint256,uint256)", replicate 4 (AbiUIntType 256))) []
+            BS.pack <$> mapM (getValue.fromSized) (view (state . calldata . _1) vm)
+              
           let AbiTuple xywz = decodeAbiValue (AbiTupleType $ Vector.fromList
                                               [AbiUIntType 256, AbiUIntType 256,
                                                AbiUIntType 256, AbiUIntType 256]) (BS.fromStrict (BS.drop 4 bs))
