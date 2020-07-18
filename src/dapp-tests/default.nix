@@ -20,10 +20,5 @@ in
     src = ./.;
     deps = [ ds-test ];
 
-    preInstallPhases = [ "postCheckPhase" ];
-    checkInputs = with pkgs; [ hevm jq seth ];
-    postCheckPhase = ''
-      patchShebangs integration
-      make
-    '';
+    checkInputs = with pkgs; [ hevm jq seth dapp solc ];
   }

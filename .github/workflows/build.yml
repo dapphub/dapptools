@@ -22,10 +22,12 @@ jobs:
       - uses: cachix/install-nix-action@63cf434de4e4292c6960639d56c5dd550e789d77
         with:
           # we use the nixpkgs defined in default.nix
-          skip_adding_nixpkgs_channel: true
+          skip_adding_nixpkgs_channel: false
       # v6
       - uses: cachix/cachix-action@490a246fbc7f92208d309eeb54383a4d828cedc1
         with:
           name: dapp
           signingKey: '${{ secrets.CACHIX_SIGNING_KEY }}'
+      - name: run integration tests
+        run: nix-env -iA nixpkgs.bashInteractive && nix-shell --pure src/dapp-tests/shell.nix --command 'make --directory src/dapp-tests'
       - run: nix-build release.nix -A dapphub.${{ matrix.os_attr }}.stable
