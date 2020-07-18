@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-set -e
+set -ex
 
 # clean up
 trap 'killall geth && rm -rf "$TMPDIR"' EXIT
