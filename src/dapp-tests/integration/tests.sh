@@ -4,7 +4,7 @@ set -ex
 
 # clean up
 trap 'killall geth && rm -rf "$TMPDIR"' EXIT
-trap "echo boo && exit 1" SIGINT SIGTERM
+trap "exit 1" SIGINT SIGTERM
 
 error() {
     printf 1>&2 "fail: function '%s' at line %d.\n" "${FUNCNAME[1]}"  "${BASH_LINENO[0]}"
