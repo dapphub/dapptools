@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+### seth---min-int -- print the minimum int of the given bits
+### Usage: seth --min-int [<bits>]
+set -e
+[[ $1 ]] && bits=$1 || bits=256
+echo "0x$(bc <<< "obase=16; 2^$bits / 2" | tr A-F a-f)"

@@ -13,8 +13,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `seth run-tx <tx-hash> [--debug, --source <file>, --state <repository>]`,
   set hevm options according to the options given and `hevm exec`
   - `seth debug <tx-hash> [--no-src]` downloads etherscan source, executes previous txs in block and enters into an hevm interactive session for the given tx. `--no-src` skips the first step.
+  - `seth --{max-uint,max-int,min-int}` print the largest numbers (in hex) of a given bitsize
 
 - `seth block` can now be passed the `--full` option, which returns the full block.
+
+### Changed
+- `seth --to-{hex,wei,word,address,dec,int256,ascii,fix,uint256}` and
+  `seth --from-{ascii,wei}` can now read values from stdin.
 
 
 ## [0.9.0] - 2020-05-25

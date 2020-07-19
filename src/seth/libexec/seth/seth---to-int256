@@ -2,5 +2,6 @@
 ### seth---to-int256 -- convert an integer into int256 value
 ### Usage: seth --to-int256 <value>
 set -e
+[[ $1 ]] || set -- "$(cat)"
 export BC_LINE_LENGTH=100
 seth --to-uint256 "$(bc <<< "(2^256 * ($1 < 0)) + $1")"

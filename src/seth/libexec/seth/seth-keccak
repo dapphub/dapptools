@@ -4,12 +4,15 @@
 */
 var keccak256 = require('./sha3.js').keccak256;
 
-if (!process.argv[2]) {
+var data;
+if (process.argv.length < 3) {
+  data = require("fs").readFileSync("/dev/stdin", { encoding: "utf-8" })
+} else if (process.argv.length == 3) {
+  data = process.argv[2];
+} else {
   console.error("seth-keccak -- print the Keccak hash of an arbitrary piece of data")
   process.exit(1)
 }
-
-var data = process.argv[2];
 
 if (data.startsWith('0x')) {
   data = data.replace('0x','')
@@ -19,4 +22,3 @@ if (data.startsWith('0x')) {
   var res = keccak256(data)
   console.log(`0x${res}`)
 }
-

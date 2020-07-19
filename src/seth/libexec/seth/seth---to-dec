@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+### seth---to-dec -- convert hex into decimal
+### Usage: seth --to-dec <hex>
 set -e
 [[ $1 ]] || exec xargs -n1 "$0"
 hexdata=$(seth --to-hexdata "$1")

@@ -2,6 +2,7 @@
 ### seth---to-wei -- convert an ETH amount into wei
 ### Usage: seth --to-wei <value> [<unit>]
 set -e
+[[ $1 ]] || set -- "$(cat)"
 [[ $1 ]] || seth --fail-usage "$0"
 set -- "$*"
 [[ $1 = *" "* ]] || set -- "$1 wei"
