@@ -807,27 +807,29 @@ isNextSourcePosition ui vm =
 isNextSourcePositionWithoutEntering
   :: UiVmState -> Pred VM
 isNextSourcePositionWithoutEntering ui vm =
-  let
-    vm0             = view uiVm ui
-    Just dapp       = view uiVmDapp ui
-    initialPosition = currentSrcMap dapp vm0
-    initialHeight   = length (view frames vm0)
-  in
-    case currentSrcMap dapp vm of
-      Nothing ->
-        True
-      Just here ->
-        let
-          moved = Just here /= initialPosition
-          deeper = length (view frames vm) > initialHeight
-          boring =
-            case srcMapCode (view dappSources dapp) here of
-              Just bs ->
-                BS.isPrefixOf "contract " bs
-              Nothing ->
-                True
-        in
-           moved && not deeper && not boring
+  case view uiVmDapp ui of
+    Nothing -> True
+    Just dapp ->
+      let
+        vm0             = view uiVm ui
+        initialPosition = currentSrcMap dapp vm0
+        initialHeight   = length (view frames vm0)
+      in
+        case currentSrcMap dapp vm of
+          Nothing ->
+            True
+          Just here ->
+            let
+              moved = Just here /= initialPosition
+              deeper = length (view frames vm) > initialHeight
+              boring =
+                case srcMapCode (view dappSources dapp) here of
+                  Just bs ->
+                    BS.isPrefixOf "contract " bs
+                  Nothing ->
+                    True
+            in
+               moved && not deeper && not boring
 
 isExecutionHalted :: UiVmState -> Pred VM
 isExecutionHalted _ vm = isJust (view result vm)
