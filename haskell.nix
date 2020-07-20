@@ -53,8 +53,8 @@ in self-hs: super-hs:
       }
     ).overrideAttrs (attrs: {
       postInstall = ''
-        wrapProgram $out/bin/hevm --suffix PATH \
-          : "${lib.makeBinPath (with pkgs; [bash coreutils git])}"
+        wrapProgram $out/bin/hevm --prefix PATH \
+          : "${lib.makeBinPath (with pkgs; [bash coreutils git solc])}"
       '';
 
       enableSeparateDataOutput = true;
