@@ -365,7 +365,7 @@ Decodes a calldata bytestring into a list of input arguments.
 
     seth --calldata-decode <signature> <hexstring>
 
-    
+
 ### `seth age`
 
 Show the timestamp of a block (the latest block by default).
@@ -393,7 +393,9 @@ The `<block>` may be either a block hash or a block number.
 Call a contract without updating the blockchain.
 
     seth call [<options>] <to> <sig> [<args>...]
-    seth call [<options>] <to> <calldata>
+    seth call [<options>] <to> [<calldata>]
+    seth call [<options>] --create <code> <sig> [<args>]
+    seth call [<options>] --create <code> [<data>]
 
 When given `<sig>` of the form `<name>(<types>)`, perform ABI encoding
 to infer the calldata.
@@ -403,12 +405,26 @@ When `<sig>` also includes a return type, as
 
 Otherwise `<calldata>` should be hex data.
 
+When `--create` is passed, read the `<code>` to use in a creation call,
+optionally passing additional hex `<data>` or structured `<sig>` and
+`<args>`.
+
 | Flag      | Variable    | Default  | Synopsis               |
 | --------- | ----------- | -------- | ---------------------- |
 | `--block` | `ETH_BLOCK` | `latest` | block number           |
 | `--from`  | `ETH_FROM`  | n/a      | simulated sender       |
 | `--gas`   | `ETH_GAS`   | n/a      | simulated gas quantity |
 | `--value` | `ETH_VALUE` | `0`      | simulated ether value  |
+
+By default, calls are made to the defined RPC node. With `--hevm`, calls
+are evaluated locally with [`hevm`].
+
+If `--debug` is passed, the call will be displayed interactively in the
+`hevm` debugger.
+
+If `--code <code>` is passed, the `<to>` address will have its runtime
+bytecode overwritten with `<code>`, against which the call will then be
+evaluated.
 
 ### `seth calldata`
 
@@ -648,6 +664,7 @@ Show all fields unless `<field>` is given.
 [Dai stablecoin system]: https://makerdao.com
 [Dai]: https://makerdao.com
 [OasisDEX]: https://oasisdex.com
-[`ethsign`]: https://github.com/dapphub/dapptools/blob/master/src/ethsign/README
+[`ethsign`]: https://github.com/dapphub/dapptools/blob/master/src/ethsign/README.md
+[`hevm`]: https://github.com/dapphub/dapptools/blob/master/src/hevm/README.md
 
 [Ledger Wallet Linux instructions]: https://ledger.zendesk.com/hc/en-us/articles/115005165269-What-if-Ledger-Wallet-is-not-recognized-on-Linux-
