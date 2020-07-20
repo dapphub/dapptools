@@ -16,6 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `seth --{max-uint,max-int,min-int}` print the largest numbers (in hex) of a given bitsize
   - `seth call --hevm` executes a call via hevm, rather than the RPC
   - `seth call --debug` executes a call interactively via hevm
+  - `seth --verbose` prints some seth debugging information to stderr
 
 - `seth block` can now be passed the `--full` option, which returns the full block.
 

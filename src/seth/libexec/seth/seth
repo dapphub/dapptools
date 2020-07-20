@@ -104,6 +104,7 @@ D,dir=directory      directory to store output
 async                do not wait for transaction receipt
 follow               go into a loop watching for new logs
 j,json               print output as JSON (if applicable)
+v,verbose            print additional debugging information
 "
 
 set -e
@@ -161,6 +162,8 @@ while [[ $1 ]]; do
        --no-src)            export SETH_NOSRC=yes;;
 
        --full)              export SETH_FULL_BLOCK=yes;;
+
+    -v|--verbose)           export SETH_VERBOSE=yes;;
 
        --create)            export SETH_CREATE=yes;;
        --guess)             export SETH_GUESS=yes;;
