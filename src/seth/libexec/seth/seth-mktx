@@ -31,5 +31,5 @@ fi
 
 if [ -n "$ETH_PASSWORD" ]; then args+=(--passphrase-file "$ETH_PASSWORD"); fi
 
-tx=$(ethsign tx "${args[@]}")
+tx=$([[ $SETH_VERBOSE ]] && set -x; ethsign tx "${args[@]}")
 echo "$tx"

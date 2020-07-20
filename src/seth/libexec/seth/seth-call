@@ -92,9 +92,9 @@ else
   [[ "$DAPP_JSON" ]] && opts+=(--json-file "$DAPP_JSON")
 
   if [[ "$HEVM_DEBUG" ]]; then
-    hevm exec "${opts[@]}"
+    ([[ $SETH_VERBOSE ]] && set -x; hevm exec "${opts[@]}")
   else
-    result=$(hevm exec "${opts[@]}")
+    result=$([[ $SETH_VERBOSE ]] && set -x; hevm exec "${opts[@]}")
     seth --abi-decode "$2" "$result"
   fi
 fi

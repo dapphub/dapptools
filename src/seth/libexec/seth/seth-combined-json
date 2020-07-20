@@ -24,4 +24,4 @@ json_opts=--combined-json=abi,bin,bin-runtime,srcmap,srcmap-runtime,ast,metadata
 solc --help | grep -q -- --storage-layout && json_opts+=,storage-layout
 solc --help | grep -q -- --overwrite && opts+=(--overwrite)
 
-(set -x; solc "${opts[@]}" "${json_opts[@]}" "$@")
+([[ $SETH_VERBOSE ]] && set -x; solc "${opts[@]}" "${json_opts[@]}" "$@")
