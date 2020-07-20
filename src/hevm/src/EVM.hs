@@ -1294,7 +1294,9 @@ executePrecompile preCompileAddr gasCap inOffset inSize outOffset outSize xs  = 
       case preCompileAddr of
         -- ECRECOVER
         0x1 ->
-          case EVM.Precompiled.execute 0x1 (truncpadlit 128 (forceLitBytes input)) 32 of
+         -- TODO: support symbolic variant
+         forceConcreteBytes input $ \input' ->
+          case EVM.Precompiled.execute 0x1 (truncpadlit 128 input') 32 of
             Nothing -> do
               -- return no output for invalid signature
               assign (state . stack) (1 : xs)
@@ -1320,9 +1322,12 @@ executePrecompile preCompileAddr gasCap inOffset inSize outOffset outSize xs  = 
 
         -- RIPEMD-160
         0x3 ->
+         -- TODO: support symbolic variant
+         forceConcreteBytes input $ \input' ->
+
           let
             padding = BS.pack $ replicate 12 0
-            hash' = BS.pack $ BA.unpack $ (Crypto.hash (forceLitBytes input) :: Digest RIPEMD160)
+            hash' = BS.pack $ BA.unpack (Crypto.hash input' :: Digest RIPEMD160)
             hash  = litBytes $ padding <> hash'
           in do
             assign (state . stack) (1 : xs)
@@ -1339,8 +1344,10 @@ executePrecompile preCompileAddr gasCap inOffset inSize outOffset outSize xs  = 
 
         -- MODEXP
         0x5 ->
+         -- TODO: support symbolic variant
+         forceConcreteBytes input $ \input' ->
+
           let
-            input' = forceLitBytes input
             (lenb, lene, lenm) = parseModexpLength input'
 
             output = litBytes $
@@ -1361,8 +1368,10 @@ executePrecompile preCompileAddr gasCap inOffset inSize outOffset outSize xs  = 
             next
 
         -- ECADD
-        0x6 -> let input' = forceLitBytes input
-          in case EVM.Precompiled.execute 0x6 (truncpadlit 128 input') 64 of
+        0x6 ->
+         -- TODO: support symbolic variant
+         forceConcreteBytes input $ \input' ->
+           case EVM.Precompiled.execute 0x6 (truncpadlit 128 input') 64 of
           Nothing -> precompileFail
           Just output -> do
             let truncpaddedOutput = litBytes $ truncpadlit 64 output
@@ -1372,8 +1381,11 @@ executePrecompile preCompileAddr gasCap inOffset inSize outOffset outSize xs  = 
             next
 
         -- ECMUL
-        0x7 -> let input' = forceLitBytes input
-          in case EVM.Precompiled.execute 0x7 (truncpadlit 96 input') 64 of
+        0x7 ->
+         -- TODO: support symbolic variant
+         forceConcreteBytes input $ \input' ->
+
+          case EVM.Precompiled.execute 0x7 (truncpadlit 96 input') 64 of
           Nothing -> precompileFail
           Just output -> do
             let truncpaddedOutput = litBytes $ truncpadlit 64 output
@@ -1383,8 +1395,11 @@ executePrecompile preCompileAddr gasCap inOffset inSize outOffset outSize xs  = 
             next
 
         -- ECPAIRING
-        0x8 -> let input' = forceLitBytes input
-          in case EVM.Precompiled.execute 0x8 input' 32 of
+        0x8 ->
+         -- TODO: support symbolic variant
+         forceConcreteBytes input $ \input' ->
+
+          case EVM.Precompiled.execute 0x8 input' 32 of
           Nothing -> precompileFail
           Just output -> do
             let truncpaddedOutput = litBytes $ truncpadlit 32 output
@@ -1394,17 +1409,20 @@ executePrecompile preCompileAddr gasCap inOffset inSize outOffset outSize xs  = 
             next
 
         -- BLAKE2
-        0x9 -> let input' = forceLitBytes input
-          in case (BS.length input', 1 >= BS.last input') of
-          (213, True) -> case EVM.Precompiled.execute 0x9 input' 64 of
-            Just output -> do
-              let truncpaddedOutput = litBytes $ truncpadlit 64 output
-              assign (state . stack) (1 : xs)
-              assign (state . returndata) truncpaddedOutput
-              copyBytesToMemory truncpaddedOutput outSize 0 outOffset
-              next
-            Nothing -> precompileFail
-          _ -> precompileFail
+        0x9 ->
+         -- TODO: support symbolic variant
+         forceConcreteBytes input $ \input' -> do
+
+          case (BS.length input', 1 >= BS.last input') of
+            (213, True) -> case EVM.Precompiled.execute 0x9 input' 64 of
+              Just output -> do
+                let truncpaddedOutput = litBytes $ truncpadlit 64 output
+                assign (state . stack) (1 : xs)
+                assign (state . returndata) truncpaddedOutput
+                copyBytesToMemory truncpaddedOutput outSize 0 outOffset
+                next
+              Nothing -> precompileFail
+            _ -> precompileFail
 
 
         _   -> notImplemented
@@ -1680,7 +1698,6 @@ forceConcreteAddr :: SAddr -> (Addr -> EVM ()) -> EVM ()
 forceConcreteAddr n continue = case maybeLitAddr n of
   Nothing -> vmError UnexpectedSymbolicArg
   Just c -> continue c
-
 
 forceConcrete :: SymWord -> (Word -> EVM ()) -> EVM ()
 forceConcrete n continue = case maybeLitWord n of
