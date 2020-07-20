@@ -26,6 +26,9 @@
 ### Options for seth-call(1):
 ###
 ###    -B, --block=<number>       block number (default: `latest')
+###    --hevm                     execute with hevm
+###    --debug                    execute with hevm interactive mode
+###    --code                     overwrite the code of the called contract (hevm only)
 ###
 ### Options for seth-send(1):
 ###
@@ -43,6 +46,7 @@
 ###    --debug                    run in hevm interactive mode
 ###    --source=<file>            path to combined.json source
 ###    --state=<dir>              directory to store hevm state in
+###
 ###
 ### Other options:
 ###
@@ -74,6 +78,9 @@ full                 get block with full transaction information
 
   Options for seth-call(1):
 B,block=number       block number (default: \`latest')
+hevm                 execute with hevm
+debug                execute with hevm interactive mode
+code                 bytecode to replace the called contract with
 
   Options for seth-send(1):
 create               use the calldata to create a new object
@@ -84,7 +91,7 @@ resend               force current nonce to overwrite tx
   Options for seth-run-tx(1):
 state=directory      git repo where state is kept
 timestamp=number     block timestamp for the tx
-debug                run in hevms interactive debugger
+debug                run in hevm's interactive debugger
 source=file          combined-json source information file
 
   Options for seth-debug(1):
@@ -145,7 +152,9 @@ while [[ $1 ]]; do
        --state)      shift; export HEVM_STATE=$1;;
        --timestamp)  shift; export HEVM_TIMESTAMP=$1;;
        --debug)             export HEVM_DEBUG=yes;;
+       --hevm)              export HEVM_EXEC=yes;;
        --source)     shift; export DAPP_JSON=$1;;
+       --code)       shift; export HEVM_CODE=$1;;
 
     -D|--dir)        shift; export SETH_DIR=$1;;
 

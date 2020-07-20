@@ -9,6 +9,7 @@
 ###
 ### If <sig> has the form `<name>(<types>)', infer <data> from <sig>/<args>.
 ### If no <data> is given, just call <to> without any calldata.
+###
 ### With `--create', create a new object initialized from <code> and <data>.
 ### With `--create' and <sig>, encode constructor args <args> into <data>.
 ###
@@ -16,8 +17,13 @@
 ### With `-F <sender>', simulate calling <to> from <sender>
 ### With `-V <value>', simulate transferring <value> to <to>.
 ###
+### With `--hevm`, execute the call locally with hevm
+### With `--code`, overwrite the called contract code
+### With `--debug`, execute the call with hevm's interactive debugger
+###
 ### See also seth-send(1), seth-estimate(1), seth-storage(1), seth-code(1).
 set -e
+
 [[ $1 ]] || seth --fail-usage "$0"
 if [[ $SETH_CREATE ]]; then
   DATA=$(seth --to-hexdata "$1")
@@ -32,13 +38,63 @@ else
     DATA=$(seth calldata "${@:2}")
   fi
 fi
-jshon+=(-n {})
-[[ $TO ]] && jshon+=(-s "$TO" -i to)
-[[ $DATA ]] && jshon+=(-s "$DATA" -i data)
-# shellcheck disable=SC2207
-jshon+=($(seth --send-params))
-jshon+=(-i append)
-[[ $ETH_BLOCK = [0-9]* ]] && ETH_BLOCK=$(seth --to-hex "$ETH_BLOCK")
-jshon+=(-s "${ETH_BLOCK-latest}" -i append)
-result=$(seth rpc eth_call -- "${jshon[@]}")
-seth --abi-decode "$2" "$result"
+
+if [[ -z "$HEVM_DEBUG" && -z "$HEVM_EXEC" ]]; then
+  jshon+=(-n {})
+  [[ $TO ]] && jshon+=(-s "$TO" -i to)
+  [[ $DATA ]] && jshon+=(-s "$DATA" -i data)
+  # shellcheck disable=SC2207
+  jshon+=($(seth --send-params))
+  jshon+=(-i append)
+  [[ $ETH_BLOCK = [0-9]* ]] && ETH_BLOCK=$(seth --to-hex "$ETH_BLOCK")
+  jshon+=(-s "${ETH_BLOCK-latest}" -i append)
+  result=$(seth rpc eth_call -- "${jshon[@]}")
+  seth --abi-decode "$2" "$result"
+else
+  opts=()
+  [[ "$HEVM_DEBUG" ]] && opts+=(--debug)
+  [[ "$HEVM_STATE" ]] && opts+=(--state "$HEVM_STATE")
+
+  opts+=(--rpc "$ETH_RPC_URL")
+  opts+=(--caller "${ETH_FROM:=0x0000000000000000000000000000000000000000}")
+  opts+=(--value  "$(seth --to-wei "${ETH_VALUE:-0}")")
+  opts+=(--nonce  "${ETH_NONCE:-$(seth nonce "$ETH_FROM")}")
+  opts+=(--origin "${ETH_ORIGIN:-${ETH_FROM}}")
+
+  block=$(seth block "${ETH_BLOCK:-latest}")
+
+  opts+=(--gas      "${ETH_GAS:-200000}")
+  opts+=(--gasprice "${ETH_GAS_PRICE:-$(seth gas-price)}")
+  opts+=(--gaslimit "${ETH_GAS_LIMIT:-$(seth --field gasLimit <<< "$block")}")
+
+  opts+=(--block     "${ETH_BLOCK:-$(seth --field number <<< "$block")}")
+  opts+=(--number    "${ETH_NUMBER:-$(seth --field number <<< "$block")}")
+  opts+=(--timestamp "${HEVM_TIMESTAMP:-$(seth --field timestamp <<< "$block")}")
+
+  if [[ "$SETH_CREATE" ]]; then
+    opts+=(--create)
+    opts+=(--code "$DATA")
+  else
+    opts+=(--address "$TO")
+    opts+=(--calldata "$DATA")
+    [[ "$HEVM_CODE" ]] && opts+=(--code "$HEVM_CODE")
+  fi
+
+  if [[ -z "$SETH_CREATE" && -z "$SETH_NOSRC" && "$HEVM_DEBUG" ]]; then
+    echo >&2 "${0##*/}: info: fetching contract source from etherscan..."
+    SRCDIR=$(TMPDIR=. mktemp -d seth.debug.XXXX)
+    if seth bundle-source "$TO" --dir "$SRCDIR" > "$SRCDIR/combined.json" ; then
+      DAPP_JSON="$SRCDIR/combined.json"
+    else
+      echo >&2 "${0##*/}: warning: no source available"
+    fi
+  fi
+  [[ "$DAPP_JSON" ]] && opts+=(--json-file "$DAPP_JSON")
+
+  if [[ "$HEVM_DEBUG" ]]; then
+    hevm exec "${opts[@]}"
+  else
+    result=$(hevm exec "${opts[@]}")
+    seth --abi-decode "$2" "$result"
+  fi
+fi
