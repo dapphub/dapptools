@@ -1,12 +1,16 @@
 #!/usr/bin/env bash
 ### seth-call -- call a contract without updating the blockchain
 ### Usage: seth call [<options>] <to> <sig> [<args>]
-###    or: seth call [<options>] <to> <data>
+###    or: seth call [<options>] <to> [<data>]
+###    or: seth call [<options>] --create <code> <sig> [<args>]
+###    or: seth call [<options>] --create <code> [<data>]
 ###
 ### Perform a local call to <to> without publishing a transaction.
 ###
-### With <sig> of the form `<name>(<types>)', infer <data> from <sig>/<args>.
-### With `name(<in-types>)(<out-types>)', also decode the return values.
+### If <sig> has the form `<name>(<types>)', infer <data> from <sig>/<args>.
+### If no <data> is given, just call <to> without any calldata.
+### With `--create', create a new object initialized from <code> and <data>.
+### With `--create' and <sig>, encode constructor args <args> into <data>.
 ###
 ### With `-B <block>', use the state of the blockchain as of <block>.
 ### With `-F <sender>', simulate calling <to> from <sender>
@@ -14,12 +18,23 @@
 ###
 ### See also seth-send(1), seth-estimate(1), seth-storage(1), seth-code(1).
 set -e
-[[ $2 ]] || seth --fail-usage "$0"
-TO=$(seth --to-address "$1")
-DATA=$(seth calldata "${@:2}")
+[[ $1 ]] || seth --fail-usage "$0"
+if [[ $SETH_CREATE ]]; then
+  DATA=$(seth --to-hexdata "$1")
+  if [[ $2 ]]; then
+    args=$(seth calldata "${@:2}")
+    args=${args#0x}
+    DATA+=${args:8}
+  fi
+else
+  TO=$(seth --to-address "$1")
+  if [[ $2 ]]; then
+    DATA=$(seth calldata "${@:2}")
+  fi
+fi
 jshon+=(-n {})
-jshon+=(-s "$TO"   -i to)
-jshon+=(-s "$DATA" -i data)
+[[ $TO ]] && jshon+=(-s "$TO" -i to)
+[[ $DATA ]] && jshon+=(-s "$DATA" -i data)
 # shellcheck disable=SC2207
 jshon+=($(seth --send-params))
 jshon+=(-i append)
