@@ -16,8 +16,6 @@
 ### With `--async', print the transaction hash and exit immediately.
 ### With `--create', print the address of the newly created object.
 ### With `--resend', force current nonce to overwrite a pending transaction.
-### With <to>, print an educated guess of the call's return value.
-### Note: The return value will be wrong if other transactions interfere.
 ###
 ### See also seth-call(1), seth-sign(1), seth-publish(1), seth-receipt(1).
 set -e
