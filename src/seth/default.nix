@@ -1,5 +1,7 @@
 { lib, stdenv, fetchFromGitHub, makeWrapper, glibcLocales, solc, nix
-, bc, coreutils, curl, ethsign, git, gnused, jq, jshon, nodejs, perl, hevm, shellcheck }:
+, bc, coreutils, curl, ethsign, git, gnused, jq, jshon, nodejs, perl
+,  hevm, shellcheck, dapptoolsSrc }:
+
 stdenv.mkDerivation rec {
   name = "seth-${version}";
   version = "0.9.0";
@@ -20,6 +22,7 @@ stdenv.mkDerivation rec {
       ''
         wrapProgram "$out/bin/seth" \
           --prefix PATH : ${path} \
+          --set DAPPTOOLS ${dapptoolsSrc} \
         ${lib.optionalString (glibcLocales != null) ''
           --set LOCALE_ARCHIVE ${glibcLocales}/lib/locale/locale-archive
       ''}
