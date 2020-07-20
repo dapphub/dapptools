@@ -6,7 +6,6 @@ module EVM.SymExec where
 
 import Control.Lens hiding (pre)
 import EVM hiding (Query, push)
-import qualified EVM as EVM
 import EVM.Exec
 import Options.Generic as Options
 import qualified EVM.Fetch as Fetch
@@ -26,7 +25,6 @@ import Data.Vector (toList, fromList)
 import Control.Monad.IO.Class
 import qualified Control.Monad.State.Class as State
 import Data.ByteString (ByteString, pack)
-import qualified Data.ByteString
 import qualified Data.ByteString.Lazy as Lazy
 import Data.Text (Text, splitOn, unpack)
 import Control.Monad.State.Strict (runStateT, runState, StateT, get, put, zipWithM)
