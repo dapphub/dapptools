@@ -459,8 +459,9 @@ appEvent (ViewVm s) (VtyEvent (V.EvKey (V.KChar ' ') [])) =
 
 -- Vm Overview: n - step
 appEvent (ViewVm s) (VtyEvent (V.EvKey (V.KChar 'n') [])) =
-  takeStep s StepNormally StepOne
-
+  case view (uiVm . result) s of
+    Just _ -> continue (ViewVm s)
+    _ -> takeStep s StepNormally StepOne
 
 -- Vm Overview: N - step
 appEvent (ViewVm s) (VtyEvent (V.EvKey (V.KChar 'N') [])) =
