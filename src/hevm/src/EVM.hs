@@ -71,7 +71,7 @@ data Error
   | Revert ByteString
   | NoSuchContract Addr
   | OutOfGas Word Word
-  | BadCheatCode Word32
+  | BadCheatCode (Maybe Word32)
   | StackLimitExceeded
   | IllegalOverflow
   | Query Query
@@ -1750,31 +1750,34 @@ cheat
   => (Word, Word) -> (Word, Word)
   -> EVM ()
 cheat (inOffset, inSize) (outOffset, outSize) = do
-  mem <- use (state . memory)
   vm <- get
-  let abi = num (wordValue (forceLit (readMemoryWord32 inOffset mem)))
-      input = readMemory (inOffset + 4) (inSize - 4) vm
-  case Map.lookup abi cheatActions of
-    Nothing ->
-      vmError (BadCheatCode abi)
-    Just (argTypes, action) ->
-      case runGetOrFail
-             (getAbiSeq (length argTypes) argTypes)
-             (LS.fromStrict $ forceLitBytes input) of
-        Right ("", _, args) ->
-          action (toList args) >>= \case
-            Nothing -> do
-              next
-              push 1
-            Just (litBytes . encodeAbiValue -> bs) -> do
-              next
-              modifying (state . memory)
-                (writeMemory bs outSize 0 outOffset)
-              push 1
-        Left _ ->
-          vmError (BadCheatCode abi)
-        Right _ ->
-          vmError (BadCheatCode abi)
+  if inSize >= 4
+  then case maybeLitBytes $
+            take 4 $ drop (num inOffset) $ view (state . memory) vm
+       of Nothing -> vmError (BadCheatCode Nothing)
+          Just (num . word -> abi) ->
+            let input = readMemory (inOffset + 4) (inSize - 4) vm
+            in case Map.lookup abi cheatActions of
+                Nothing ->
+                  vmError (BadCheatCode (Just abi))
+                Just (argTypes, action) ->
+                  case runGetOrFail
+                         (getAbiSeq (length argTypes) argTypes)
+                         (LS.fromStrict $ forceLitBytes input) of
+                    Right ("", _, args) ->
+                      action (toList args) >>= \case
+                        Nothing -> do
+                          next
+                          push 1
+                        Just (litBytes . encodeAbiValue -> bs) -> do
+                          next
+                          modifying (state . memory)
+                            (writeMemory bs outSize 0 outOffset)
+                          push 1
+                    _ ->
+                      vmError (BadCheatCode (Just abi))
+
+  else vmError (BadCheatCode Nothing)
 
 type CheatAction = ([AbiType], [AbiValue] -> EVM (Maybe AbiValue))
 
