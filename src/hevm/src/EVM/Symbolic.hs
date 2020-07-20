@@ -118,8 +118,8 @@ writeMemory bs1 (C _ n) (C _ src) (C _ dst) bs0 =
 readMemoryWord :: Word -> [SWord 8] -> SymWord
 readMemoryWord (C _ i) m = sw256 $ fromBytes $ truncpad 32 (drop (num i) m)
 
-readMemoryWord32 :: Word -> [SWord 8] -> SymWord
-readMemoryWord32 (C _ i) m = sw256 $ fromBytes $ truncpad 4 (drop (num i) m)
+readMemoryWord32 :: Word -> [SWord 8] -> SWord 32
+readMemoryWord32 (C _ i) m = fromBytes $ truncpad 4 (drop (num i) m)
 
 setMemoryWord :: Word -> SymWord -> [SWord 8] -> [SWord 8]
 setMemoryWord (C _ i) (S _ x) =
