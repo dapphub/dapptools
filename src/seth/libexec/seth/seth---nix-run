@@ -15,6 +15,5 @@ have() { command -v "$1" >/dev/null; }
 }
 
 expr="$1"; shift
-export DAPPTOOLS=${DAPPTOOLS-~/.dapp/dapptools} # TODO: fix purity
 
 nix run "(with import $DAPPTOOLS {}; $expr)" -c "$@"
