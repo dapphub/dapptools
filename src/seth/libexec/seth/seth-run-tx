@@ -3,42 +3,42 @@
 ### Usage: seth run-tx <tx-hash> [<options>]
 ### or:    seth run-tx <tx-info> [<options>]
 ###
-### Run a transaction with hevm in the environment
-### of the given transaction
+### Run a transaction with hevm in the environment of the given transaction.
 ###
-### With `--state`, load and save state from this repo
+### With `--state dir`, load and save state from `dir`
+### With `--debug`, execute with hevm's interactive debugger
 set -e
-opts=()
-[[ $HEVM_STATE ]] && opts+=(--state "$HEVM_STATE")
-[[ $HEVM_DEBUG ]] && opts+=(--debug)
 
 # if the argument begins with 0x, we assume it to be a tx hash
 # otherwise, we assume that it contains the result of a seth tx call
 if [[ $1 = 0x* ]]; then
-    tx=$(seth tx "$1")
+  tx=$(seth tx "$1")
 elif [[ $1 = blockHash* ]]; then
-    tx=$1
+  tx=$1
 else
-    seth --fail "Malformed transaction hash or data: $1"
+  seth --fail "${0##*/}: malformed transaction hash or data: $1"
 fi
 
-# if `--timestamp` is not provided, we fetch it from the tx block
-if [[ -z $HEVM_TIMESTAMP ]]; then
-    HEVM_TIMESTAMP=$(seth block "$(echo "$tx" | seth --field blockNumber)" timestamp)
-fi
-
-TO=$(echo "$tx" | seth --field to)
-DATA=$(echo "$tx" | seth --field input)
+TO=$(<<< "$tx" seth --field to)
+DATA=$(<<< "$tx" seth --field input)
 if [[ "$TO" == 'null' ]]; then
-    opts+=(--create --code "$DATA")
+  opts+=(--create --code "$DATA")
 else
-    opts+=(--address "$TO" --calldata "$DATA")
+  opts+=(--address "$TO" --calldata "$DATA")
 fi
 
-if [[ "$DAPP_JSON" ]]; then
-    opts+=(--json-file "$DAPP_JSON")
-fi
+opts+=(--caller "$(<<< "$tx" seth --field from)" )
+opts+=(--origin "$(<<< "$tx" seth --field from)")
+opts+=(--value  "$(<<< "$tx" seth --field value)")
+opts+=(--gas    "$(<<< "$tx" seth --field gas)")
+opts+=(--nonce  "$(<<< "$tx" seth --field nonce)")
+opts+=(--number "$(<<< "$tx" seth --field blockNumber)")
+opts+=(--block  "$(("$(<<< "$tx" seth --field blockNumber)" - 1))")
+opts+=(--rpc    "${ETH_RPC_URL:-${ETH_RPC_HOST:-http://127.0.0.1}:${ETH_RPC_PORT:-8545}}")
+opts+=(--timestamp "${HEVM_TIMESTAMP:-$(seth block "$(<<< "$tx" seth --field blockNumber)" timestamp)}")
 
-URL="${ETH_RPC_URL:-${ETH_RPC_HOST:-http://127.0.0.1}:${ETH_RPC_PORT:-8545}}"
+[[ "$HEVM_STATE" ]] && opts+=(--state "$HEVM_STATE")
+[[ "$HEVM_DEBUG" ]] && opts+=(--debug)
+[[ "$DAPP_JSON" ]]  && opts+=(--json-file "$DAPP_JSON")
 
-hevm exec --caller "$(echo "$tx" | seth --field from)" --block "$(("$(echo "$tx" | seth --field blockNumber)" - 1))" --gas "$(echo "$tx" | seth --field gas)" --nonce "$(echo "$tx" | seth --field nonce)" --rpc "$URL" "${opts[@]}" --value "$(echo "$tx" | seth --field value)" --timestamp "$HEVM_TIMESTAMP" --origin "$(echo "$tx" | seth --field from)" --number "$(echo "$tx" | seth --field blockNumber)"
+hevm exec "${opts[@]}"

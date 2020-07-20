@@ -7,10 +7,9 @@
 ###
 ### Unless `--no-src` is given, source code for the `to` address
 ### will be passed along to hevm for better debugging xp
-
 set -e
 
-state=$(TMPDIR=. mktemp -d hevm.libs.XXXXX)
+state=$(TMPDIR=. mktemp -d hevm.libs.XXXXX -p /tmp)
 
 export GIT_CONFIG_NOSYSTEM=1
 export GIT_AUTHOR_NAME=hevm
@@ -22,44 +21,41 @@ gitopts=(-q --no-verify --no-gpg-sign --allow-empty -m "dapp test")
 
 targetTx=$(seth tx "$1")
 
-opts=()
-
 tidy() {
-    [[ "$SRCDIR" ]] && rm -rf "$SRCDIR"
-    rm -rf "$state"
+  [[ "$SRCDIR" ]] && rm -rf "$SRCDIR"
+  rm -rf "$state"
 }
-
 trap tidy SIGINT SIGTERM
 
-
 if [[ -z "$SETH_NOSRC" ]]; then
-  echo "fetching contract source from etherscan..."
-  SRCDIR=$(TMPDIR=. mktemp -d seth.debug.XXXX)
-  if seth bundle-source "$(echo "$targetTx" | seth --field to)" --dir "$SRCDIR" > "$SRCDIR"/combined.json ; then
-      opts+=(--source "$SRCDIR"/combined.json);
+  echo >&2 "${0##*/}: info: fetching contract source from etherscan..."
+  SRCDIR=$(TMPDIR=. mktemp -d seth.debug.XXXX -p /tmp)
+  if seth bundle-source "$(<<< "$targetTx" seth --field to)" --dir "$SRCDIR" > "$SRCDIR"/combined.json ; then
+    opts=(--source "$SRCDIR"/combined.json);
   else
-      echo "no source available";
+    echo >&2 "${0##*/}: warning: no source available"
   fi
 fi
-block=$(seth block "$(echo "$targetTx" | seth --field blockNumber)" --full)
-txs=($(echo "$block" | seth --field transactions | seth --show-json))
 
-index=$(echo "$targetTx" | seth --field transactionIndex)
+index="$(<<< "$targetTx" seth --field transactionIndex)"
+block=$(seth block "$(<<< "$targetTx" seth --field blockNumber)" --full)
+txs=($(<<< "$block" seth --field transactions | seth --show-json))
+timestamp="$(<<< "$block" seth --field timestamp)"
 
 j=0
-echo "running previous transactions in block..."
 for i in "${txs[@]}"; do
-   tx=$(echo "$i" | seth --show-json)
-   hash=$(echo "$tx" | seth --field hash)
+  tx=$(<<< "$i" seth --show-json)
+  hash=$(<<< "$tx" seth --field hash)
 
-   if [[ "$1" = "$hash" ]]; then
-     seth run-tx "$tx" --state "$state" --debug "${opts[@]}"
-     tidy
-     break
-   else
-     echo -en "\rtransaction ($j/$index)"
-     # exit code 2 means REVERT or otherwise acceptable failure
-     seth run-tx "$tx" --state "$state" --timestamp "$(echo "$block" | seth --field timestamp)" > /dev/null || [[ $? == 2 ]] || (tidy; seth --fail "hevm error while executing tx: $hash")
-     j=$((j + 1))
-   fi
+  if [[ "$1" = "$hash" ]]; then
+    [[ $j = 0 ]] || echo ""
+    seth run-tx "$tx" --state "$state" --debug "${opts[@]}"
+    tidy
+    break
+  else
+    echo -en >&2 "\r${0##*/}: info: transaction ($j/$index)"
+    # exit code 2 means REVERT or otherwise acceptable failure
+    seth run-tx "$tx" --state "$state" --timestamp "$timestamp" > /dev/null || [[ $? == 2 ]] || (tidy; echo ""; seth --fail "${0##*/}: error: hevm error while executing tx: $hash")
+    j=$((j + 1))
+  fi
 done
