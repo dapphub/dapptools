@@ -244,7 +244,8 @@ equivalenceCheck bytecodeA bytecodeB maxiter signature' = do
       callvalue' = preStateA ^. state . callvalue
       prestorage = preStateA ^?! env . contracts . ix preself . storage
       (calldata', cdlen) = view (state . calldata) preStateA
-      preStateB = loadSymVM (RuntimeCode bytecodeB) prestorage precaller callvalue' (calldata', cdlen)
+      pathconds = view pathConditions preStateA
+      preStateB = loadSymVM (RuntimeCode bytecodeB) prestorage precaller callvalue' (calldata', cdlen) & set pathConditions pathconds
 
   smtState <- queryState
   (aRes, bRes) <- both (\x -> io $ fst <$> runStateT (interpret (Fetch.oracle smtState Nothing) maxiter Stepper.runFully) x)
@@ -254,7 +255,7 @@ equivalenceCheck bytecodeA bytecodeB maxiter signature' = do
     (Right _, Left errB) -> error $ "B Failed: " <> show errB
     (Left errA, Left errB) -> error $ "A Failed: " <> show errA <> "\nand B Failed:" <> show errB
     (Right aVMs, Right bVMs) -> do
-      let differingEndStates = zipWith distinct aVMs bVMs
+      let differingEndStates = uncurry distinct <$> [(a,b) | a <- aVMs, b <- bVMs]
           distinct a b = let (aPath, bPath) = both' (view pathConditions) (a, b)
                              (aSelf, bSelf) = both' (view (state . contract)) (a, b)
                              (aEnv, bEnv) = both' (view (env . contracts)) (a, b)
