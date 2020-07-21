@@ -12,7 +12,8 @@ import Control.Lens hiding (op, (:<), (|>), (.>))
 import Data.Maybe                   (fromMaybe, fromJust)
 
 import EVM.Types
-import EVM.Concrete
+import EVM.Concrete (Word (..), Whiff(..))
+import qualified EVM.Concrete as Concrete
 import Data.SBV hiding (runSMT, newArray_, addAxiom, Word)
 
 
@@ -91,46 +92,44 @@ sgt :: SymWord -> SymWord -> SymWord
 sgt (S _ x) (S _ y) =
   sw256 $ ite (sFromIntegral x .> (sFromIntegral y :: (SInt 256))) 1 0
 
-
 -- | Operations over symbolic memory (list of symbolic bytes)
-
 swordAt :: Int -> [SWord 8] -> SymWord
 swordAt i bs = sw256 . fromBytes $ truncpad 32 $ drop i bs
 
-readByteOrZero :: Int -> [SWord 8] -> SWord 8
-readByteOrZero i bs = fromMaybe 0 (bs ^? ix i)
+readByteOrZero' :: Int -> [SWord 8] -> SWord 8
+readByteOrZero' i bs = fromMaybe 0 (bs ^? ix i)
 
-sliceWithZero :: Int -> Int -> [SWord 8] -> [SWord 8]
-sliceWithZero o s m = truncpad s $ drop o m
+sliceWithZero' :: Int -> Int -> [SWord 8] -> [SWord 8]
+sliceWithZero' o s m = truncpad s $ drop o m
 
-writeMemory :: [SWord 8] -> Word -> Word -> Word -> [SWord 8] -> [SWord 8]
-writeMemory bs1 (C _ n) (C _ src) (C _ dst) bs0 =
+writeMemory' :: [SWord 8] -> Word -> Word -> Word -> [SWord 8] -> [SWord 8]
+writeMemory' bs1 (C _ n) (C _ src) (C _ dst) bs0 =
   let
     (a, b) = splitAt (num dst) bs0
     a'     = replicate (num dst - length a) 0
     c      = if src > num (length bs1)
              then replicate (num n) 0
-             else sliceWithZero (num src) (num n) bs1
+             else sliceWithZero' (num src) (num n) bs1
     b'     = drop (num (n)) b
   in
     a <> a' <> c <> b'
 
-readMemoryWord :: Word -> [SWord 8] -> SymWord
-readMemoryWord (C _ i) m = sw256 $ fromBytes $ truncpad 32 (drop (num i) m)
+readMemoryWord' :: Word -> [SWord 8] -> SymWord
+readMemoryWord' (C _ i) m = sw256 $ fromBytes $ truncpad 32 (drop (num i) m)
 
-readMemoryWord32 :: Word -> [SWord 8] -> SWord 32
-readMemoryWord32 (C _ i) m = fromBytes $ truncpad 4 (drop (num i) m)
+readMemoryWord32' :: Word -> [SWord 8] -> SWord 32
+readMemoryWord32' (C _ i) m = fromBytes $ truncpad 4 (drop (num i) m)
 
-setMemoryWord :: Word -> SymWord -> [SWord 8] -> [SWord 8]
-setMemoryWord (C _ i) (S _ x) =
-  writeMemory (toBytes x) 32 0 (num i)
+setMemoryWord' :: Word -> SymWord -> [SWord 8] -> [SWord 8]
+setMemoryWord' (C _ i) (S _ x) =
+  writeMemory' (toBytes x) 32 0 (num i)
 
-setMemoryByte :: Word -> SWord 8 -> [SWord 8] -> [SWord 8]
-setMemoryByte (C _ i) x =
-  writeMemory [x] 1 0 (num i)
+setMemoryByte' :: Word -> SWord 8 -> [SWord 8] -> [SWord 8]
+setMemoryByte' (C _ i) x =
+  writeMemory' [x] 1 0 (num i)
 
-readSWord :: Word -> [SWord 8] -> SymWord
-readSWord (C _ i) x =
+readSWord' :: Word -> [SWord 8] -> SymWord
+readSWord' (C _ i) x =
   if i > num (length x)
   then 0
   else swordAt (num i) x
@@ -144,11 +143,98 @@ select' xs err ind = walk xs ind err
 -- Generates a ridiculously large set of constraints (roughly 25k) when
 -- the index is symbolic, but it still seems (kind of) manageable
 -- for the solvers.
-readSWordWithBound :: SWord 32 -> [SWord 8] -> SWord 32 -> SymWord
-readSWordWithBound ind xs bound =
+readSWordWithBound :: SWord 32 -> Buffer -> SWord 32 -> SymWord
+readSWordWithBound ind (SymbolicBuffer xs) bound =
   let boundedList = [ite (i .<= bound) x 0 | (x, i) <- zip xs [1..]]
   in sw256 . fromBytes $ [select' boundedList 0 (ind + j) | j <- [0..31]]
+readSWordWithBound ind (ConcreteBuffer xs) bound =
+  case fromSized <$> unliteral ind of
+    Nothing -> readSWordWithBound ind (SymbolicBuffer (litBytes xs)) bound
+    Just x' ->                                       
+       -- INVARIANT: bound should always be length xs for concrete bytes
+       -- so we should be able to safely ignore it here
+         litWord $ Concrete.readMemoryWord (num x') xs
 
+
+-- | Operations over buffers (concrete or symbolic)
+
+-- | A buffer is a list of bytes. For concrete execution, this is simply `ByteString`.
+-- In symbolic settings, it is a list of symbolic bitvectors of size 8.
+data Buffer
+  = ConcreteBuffer ByteString
+  | SymbolicBuffer [SWord 8]
+  deriving (Show)
+
+instance Semigroup Buffer where
+  ConcreteBuffer a <> ConcreteBuffer b = ConcreteBuffer (a <> b)
+  ConcreteBuffer a <> SymbolicBuffer b = SymbolicBuffer (litBytes a <> b)
+  SymbolicBuffer a <> ConcreteBuffer b = SymbolicBuffer (a <> litBytes b)
+  SymbolicBuffer a <> SymbolicBuffer b = SymbolicBuffer (a <> b)
+
+instance Monoid Buffer where
+  mempty = ConcreteBuffer mempty
+
+instance EqSymbolic Buffer where
+  ConcreteBuffer a .== ConcreteBuffer b = literal (a == b)
+  ConcreteBuffer a .== SymbolicBuffer b = litBytes a .== b
+  SymbolicBuffer a .== ConcreteBuffer b = a .== litBytes b
+  SymbolicBuffer a .== SymbolicBuffer b = a .== b
+
+
+-- a whole foldable instance seems overkill, but length is always good to have!
+len :: Buffer -> Int
+len (SymbolicBuffer bs) = length bs
+len (ConcreteBuffer bs) = BS.length bs
+
+grab :: Int -> Buffer -> Buffer
+grab n (SymbolicBuffer bs) = SymbolicBuffer $ take n bs
+grab n (ConcreteBuffer bs) = ConcreteBuffer $ BS.take n bs
+
+ditch :: Int -> Buffer -> Buffer
+ditch n (SymbolicBuffer bs) = SymbolicBuffer $ drop n bs
+ditch n (ConcreteBuffer bs) = ConcreteBuffer $ BS.drop n bs
+
+readByteOrZero :: Int -> Buffer -> SWord 8
+readByteOrZero i (SymbolicBuffer bs) = readByteOrZero' i bs
+readByteOrZero i (ConcreteBuffer bs) = num $ Concrete.readByteOrZero i bs
+
+sliceWithZero :: Int -> Int -> Buffer -> Buffer
+sliceWithZero o s (SymbolicBuffer m) = SymbolicBuffer (sliceWithZero' o s m)
+sliceWithZero o s (ConcreteBuffer m) = ConcreteBuffer (Concrete.byteStringSliceWithDefaultZeroes o s m)
+
+writeMemory :: Buffer -> Word -> Word -> Word -> Buffer -> Buffer
+writeMemory (ConcreteBuffer bs1) n src dst (ConcreteBuffer bs0) =
+  ConcreteBuffer (Concrete.writeMemory bs1 n src dst bs0)
+writeMemory (ConcreteBuffer bs1) n src dst (SymbolicBuffer bs0) =
+  SymbolicBuffer (writeMemory' (litBytes bs1) n src dst bs0)
+writeMemory (SymbolicBuffer bs1) n src dst (ConcreteBuffer bs0) =
+  SymbolicBuffer (writeMemory' bs1 n src dst (litBytes bs0))
+writeMemory (SymbolicBuffer bs1) n src dst (SymbolicBuffer bs0) =
+  SymbolicBuffer (writeMemory' bs1 n src dst bs0)
+
+readMemoryWord :: Word -> Buffer -> SymWord
+readMemoryWord i (SymbolicBuffer m) = readMemoryWord' i m
+readMemoryWord i (ConcreteBuffer m) = litWord $ Concrete.readMemoryWord i m
+
+readMemoryWord32 :: Word -> Buffer -> SWord 32
+readMemoryWord32 i (SymbolicBuffer m) = readMemoryWord32' i m
+readMemoryWord32 i (ConcreteBuffer m) = num $ Concrete.readMemoryWord32 i m
+
+setMemoryWord :: Word -> SymWord -> Buffer -> Buffer
+setMemoryWord i x (SymbolicBuffer z) = SymbolicBuffer $ setMemoryWord' i x z
+setMemoryWord i x (ConcreteBuffer z) = case maybeLitWord x of
+  Just x' -> ConcreteBuffer $ Concrete.setMemoryWord i x' z
+  Nothing -> SymbolicBuffer $ setMemoryWord' i x (litBytes z)
+
+setMemoryByte :: Word -> SWord 8 -> Buffer -> Buffer
+setMemoryByte i x (SymbolicBuffer m) = SymbolicBuffer $ setMemoryByte' i x m
+setMemoryByte i x (ConcreteBuffer m) = case fromSized <$> unliteral x of
+  Nothing -> SymbolicBuffer $ setMemoryByte' i x (litBytes m)
+  Just x' -> ConcreteBuffer $ Concrete.setMemoryByte i x' m
+
+readSWord :: Word -> Buffer -> SymWord
+readSWord i (SymbolicBuffer x) = readSWord' i x
+readSWord i (ConcreteBuffer x) = num $ Concrete.readMemoryWord i x
 
 -- | Custom instances for SymWord, many of which have direct
 -- analogues for concrete words defined in Concrete.hs

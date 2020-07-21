@@ -12,7 +12,7 @@
 
 import qualified EVM
 import EVM.Concrete (createAddress, w256)
-import EVM.Symbolic (forceLitBytes, litBytes, litAddr, w256lit, sw256, SymWord(..))
+import EVM.Symbolic (forceLitBytes, litBytes, litAddr, w256lit, sw256, SymWord(..), Buffer(..), len)
 import qualified EVM.FeeSchedule as FeeSchedule
 import qualified EVM.Fetch
 import qualified EVM.Flatten
@@ -459,8 +459,9 @@ assert cmd = do
                           Just (EVM.VMFailure (EVM.Revert "")) -> io . putStrLn $ "Reverted"
                           Just (EVM.VMFailure (EVM.Revert msg)) -> io . putStrLn $ "Reverted: " <> show (ByteStringS msg)
                           Just (EVM.VMFailure err) -> io . putStrLn $ "Failed: " <> show err
-                          Just (EVM.VMSuccess []) -> io $ putStrLn "Stopped"
-                          Just (EVM.VMSuccess msg) -> do
+                          Just (EVM.VMSuccess mempty) -> io $ putStrLn "Stopped"
+                          Just (EVM.VMSuccess (ConcreteBuffer msg)) -> io $ print (ByteStringS msg)
+                          Just (EVM.VMSuccess (SymbolicBuffer msg)) -> do
                             out <- mapM (getValue.fromSized) msg
                             io . putStrLn $ "Returned: " <> show (ByteStringS (ByteString.pack out))
 
@@ -520,9 +521,12 @@ launchExec cmd = do
           exitWith (ExitFailure 2)
         Just (EVM.VMFailure err) -> do
           print err
-          exitWith (ExitFailure 2)          
-        Just (EVM.VMSuccess msg) -> do
-          print . ByteStringS  $ forceLitBytes msg
+          exitWith (ExitFailure 2)
+        Just (EVM.VMSuccess buf) -> do
+          let msg = case buf of
+                SymbolicBuffer msg' -> forceLitBytes msg'
+                ConcreteBuffer msg' -> msg'
+          print $ ByteStringS msg
           case state cmd of
             Nothing -> pure ()
             Just path ->
@@ -611,7 +615,7 @@ vmFromCommand cmd = do
         value'   = word value 0
         caller'  = addr caller 0
         origin'  = addr origin 0
-        calldata' = litBytes $ bytes calldata ""
+        calldata' = ConcreteBuffer $ bytes calldata ""
         codeType = if create cmd then EVM.InitCode else EVM.RuntimeCode
         address' = if create cmd
               then createAddress origin' (word nonce 0)
@@ -619,7 +623,7 @@ vmFromCommand cmd = do
 
         vm1 c = EVM.makeVm $ EVM.VMOpts
           { EVM.vmoptContract      = c
-          , EVM.vmoptCalldata      = (calldata', literal . num $ length calldata')
+          , EVM.vmoptCalldata      = (calldata', literal . num $ len calldata')
           , EVM.vmoptValue         = w256lit value'
           , EVM.vmoptAddress       = address'
           , EVM.vmoptCaller        = litAddr caller'
@@ -649,15 +653,15 @@ symvmFromCommand cmd = do
     -- fully abstract calldata (up to 1024 bytes)
     (Nothing, Nothing) -> do cd <- sbytes256
                              len <- freshVar_
-                             return (cd, len, len .<= 1024)
+                             return (SymbolicBuffer cd, len, len .<= 1024)
     -- fully concrete calldata
-    (Just c, Nothing) -> let cd = litBytes $ decipher c
-                         in return (cd, num (length cd), sTrue)
+    (Just c, Nothing) -> let cd = ConcreteBuffer $ decipher c
+                         in return (cd, num (len cd), sTrue)
     -- calldata according to given abi with possible specializations from the `arg` list
     (Nothing, Just sig') -> do method' <- io $ functionAbi sig'
                                let typs = snd <$> view methodInputs method'
                                (cd, cdlen) <- symCalldata (view methodSignature method') typs (arg cmd)
-                               return (cd, cdlen, sTrue)
+                               return (SymbolicBuffer cd, cdlen, sTrue)
 
     _ -> error "incompatible options: calldata and abi"
 
