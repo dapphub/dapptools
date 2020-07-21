@@ -261,6 +261,7 @@ parseVmOpts v =
            <*> wordField env  "currentGasLimit"
            <*> wordField exec "gasPrice"
            <*> pure (EVM.FeeSchedule.homestead)
+           <*> pure 99
            <*> pure False
        _ ->
          JSON.typeMismatch "VM test case" (JSON.Object v)
@@ -379,6 +380,7 @@ fromCreateBlockchainCase block tx preState postState =
           , vmoptBlockGaslimit = blockGasLimit block
           , vmoptGasprice      = txGasPrice tx
           , vmoptSchedule      = feeSchedule
+          , vmoptChainId       = 99
           , vmoptCreate        = True
           })
         checkState
@@ -416,6 +418,7 @@ fromNormalBlockchainCase block tx preState postState =
          , vmoptBlockGaslimit = blockGasLimit block
          , vmoptGasprice      = txGasPrice tx
          , vmoptSchedule      = feeSchedule
+         , vmoptChainId       = 99
          , vmoptCreate        = False
          })
         checkState

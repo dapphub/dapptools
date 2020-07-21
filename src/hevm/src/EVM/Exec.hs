@@ -36,6 +36,7 @@ vmForEthrunCreation creationCode =
     , vmoptGaslimit = 0xffffffffffffffff
     , vmoptMaxCodeSize = 0xffffffff
     , vmoptSchedule = FeeSchedule.istanbul
+    , vmoptChainId = 1
     , vmoptCreate = False
     }) & set (env . contracts . at ethrunAddress)
              (Just (initialContract (RuntimeCode mempty)))
