@@ -5,6 +5,34 @@ let
   stdenv = self.pkgs.stdenv;
 
 in rec {
+
+  containers = {
+    hevm = self.pkgs.dockerTools.buildImage {
+      name = "hevm";
+      contents = hevm;
+      config.Entrypoint = [ "/bin/hevm" ];
+    };
+    seth = self.pkgs.dockerTools.buildImage {
+      name = "seth";
+      contents = seth;
+      config.Entrypoint = [ "/bin/seth" ];
+    };
+    dapp = self.pkgs.dockerTools.buildImage {
+      name = "dapp";
+      contents = [ dapp ];
+      runAsRoot = ''
+        mkdir -p /usr/bin
+        ln -s ${self.pkgs.coreutils}/bin/env /usr/bin/env
+      '';
+      config = {
+        Entrypoint = [ "/bin/dapp" ];
+        Env = [
+          "SSL_CERT_FILE=${self.pkgs.cacert.out}/etc/ssl/certs/ca-bundle.crt"
+        ];
+      };
+    };
+  };
+
   dapptoolsSrc = self.callPackage (import ./nix/dapptools-src.nix) {};
 
   haskellPackages = super.haskellPackages.override (old: {
