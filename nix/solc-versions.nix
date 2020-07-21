@@ -36,7 +36,7 @@ rec {
   };
 
   # some versions do not compile on macOS
-  x86_64-darwin = removeAttrs x86_64-linux [ "solc_0_4_6" "solc_0_4_8" "solc_0_4_11" "solc_0_4_12" "solc_0_4_24" ];
+  x86_64-darwin = removeAttrs x86_64-linux [ "solc_0_4_6" "solc_0_4_8" "solc_0_4_11" "solc_0_4_12" "solc_0_4_18" "solc_0_4_24" ];
 
   # these versions have not been upstreamed on NixOS/nixpkgs yet, and come from our fork at dapptools/nixpkgs
   unreleased = {
