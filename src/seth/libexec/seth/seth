@@ -217,6 +217,6 @@ if [[ ${#keystores[@]} -gt 0 ]]; then
 fi
 
 [[ -n $ETH_KEYSTORE ]] && export ETH_KEYSTORE
-export ETH_RPC_URL=${ETH_RPC_URL:-$eth_rpc_url}
+export ETH_RPC_URL=${ETH_RPC_URL:-${eth_rpc_url:-${ETH_RPC_HOST:-http://127.0.0.1}:${ETH_RPC_PORT:-8545}}}
 
 "${0##*/}-${1-help}" "${@:2}"
