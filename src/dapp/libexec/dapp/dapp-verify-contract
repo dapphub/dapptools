@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-set -ex
 
 [[ $ETHERSCAN_API_KEY ]] || {
   cat >&2 <<.
@@ -49,7 +48,7 @@ version="v${version}"
 
 # Get the list of supported solc versions and compare
 # Etherscan uses the js solc, which is not guaranteed to match the C distribution signature
-set +x
+
 version_list=$(curl -fsS "https://raw.githubusercontent.com/ethereum/solc-bin/gh-pages/bin/list.txt")
 # There have been a couple of instances where the solc js release used by
 #   Etherscan does not match the tag of the C distributions.
@@ -63,7 +62,7 @@ if [[ $version_list != *"$version"* ]]; then
     echo "Attempting ${version}"
   fi
 fi
-set -x
+
 
 if [[ "$optimized" = "true" ]]; then
   optimized=1
