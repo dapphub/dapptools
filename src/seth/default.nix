@@ -1,6 +1,6 @@
 { lib, stdenv, fetchFromGitHub, makeWrapper, glibcLocales, solc, nix
-, bc, coreutils, curl, ethsign, git, gnused, jq, jshon, nodejs, perl
-,  hevm, shellcheck, dapptoolsSrc }:
+, bc, coreutils, curl, ethsign, git, gnugrep, gnused, jq, jshon, nodejs
+, perl, hevm, shellcheck, dapptoolsSrc }:
 
 stdenv.mkDerivation rec {
   name = "seth-${version}";
@@ -16,7 +16,7 @@ stdenv.mkDerivation rec {
   postInstall =
     let
       path = lib.makeBinPath [
-        bc coreutils curl ethsign git gnused nix jq hevm jshon nodejs perl solc
+        bc coreutils curl ethsign git gnugrep gnused nix jq hevm jshon nodejs perl solc
       ];
     in
       ''
