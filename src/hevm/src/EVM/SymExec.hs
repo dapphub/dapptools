@@ -14,7 +14,7 @@ import EVM.Stepper (Stepper)
 import qualified EVM.Stepper as Stepper
 import qualified Control.Monad.Operational as Operational
 import EVM.Types
-import EVM.Symbolic (litBytes, SymWord(..), sw256)
+import EVM.Symbolic (litBytes, SymWord(..), sw256, Buffer(..))
 import EVM.Concrete (createAddress)
 import qualified EVM.FeeSchedule as FeeSchedule
 import Data.SBV.Trans.Control
@@ -26,6 +26,7 @@ import Control.Monad.IO.Class
 import qualified Control.Monad.State.Class as State
 import Data.ByteString (ByteString, pack)
 import qualified Data.ByteString.Lazy as Lazy
+import qualified Data.ByteString as BS
 import Data.Text (Text, splitOn, unpack)
 import Control.Monad.State.Strict (runStateT, runState, StateT, get, put, zipWithM)
 import Control.Applicative
@@ -101,9 +102,9 @@ abstractVM typesignature concreteArgs x storagemodel = do
     ConcreteS -> return $ Concrete mempty
   c <- SAddr <$> freshVar_
   value' <- sw256 <$> freshVar_
-  return $ loadSymVM (RuntimeCode x) symstore c value' (cd', cdlen) & over pathConditions ((<>) [cdconstraint])
+  return $ loadSymVM (RuntimeCode x) symstore c value' (SymbolicBuffer cd', cdlen) & over pathConditions ((<>) [cdconstraint])
 
-loadSymVM :: ContractCode -> Storage -> SAddr -> SymWord -> ([SWord 8], SWord 32) -> VM
+loadSymVM :: ContractCode -> Storage -> SAddr -> SymWord -> (Buffer, SWord 32) -> VM
 loadSymVM x initStore addr callvalue' calldata' =
     (makeVm $ VMOpts
     { vmoptContract = contractWithStore x initStore
@@ -286,17 +287,19 @@ showCounterexample vm maybesig = do
       S _ cvalue = view (EVM.state . EVM.callvalue) vm
       SAddr caller' = view (EVM.state . EVM.caller) vm
   cdlen' <- num <$> getValue cdlen
-  calldatainput <- mapM (getValue.fromSized) (take cdlen' calldata')
+  calldatainput <- case calldata' of
+    SymbolicBuffer cd -> mapM (getValue.fromSized) (take cdlen' cd) >>= return . pack
+    ConcreteBuffer cd -> return $ BS.take cdlen' cd
   callvalue' <- num <$> getValue cvalue
   caller'' <- num <$> getValue caller'
   io $ do
     putStrLn "Calldata:"
-    print $ ByteStringS (pack calldatainput)
+    print $ ByteStringS calldatainput
 
     -- pretty print calldata input if signature is available
     case maybesig of
       Just (name, types) -> putStrLn $ unpack (head (splitOn "(" name)) ++
-        show (decodeAbiValue (AbiTupleType (fromList types)) $ Lazy.fromStrict (pack $ drop 4 calldatainput))
+        show (decodeAbiValue (AbiTupleType (fromList types)) $ Lazy.fromStrict (BS.drop 4 calldatainput))
       Nothing -> return ()
 
     putStrLn "Caller:"

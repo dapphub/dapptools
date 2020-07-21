@@ -12,7 +12,7 @@ import Brick.Widgets.List
 
 import EVM
 import EVM.ABI (abiTypeSolidity, decodeAbiValue, AbiType(..), emptyAbi)
-import EVM.Symbolic (SymWord(..), maybeLitBytes)
+import EVM.Symbolic (SymWord(..), maybeLitBytes, Buffer(..))
 import EVM.Dapp (DappInfo, dappInfo)
 import EVM.Dapp (dappUnitTests, unitTestMethods, dappSolcByName, dappSolcByHash, dappSources)
 import EVM.Dapp (dappAstSrcMap)
@@ -958,10 +958,9 @@ withHighlight :: Bool -> Widget n -> Widget n
 withHighlight False = withDefAttr dimAttr
 withHighlight True  = withDefAttr boldAttr
 
-prettyIfConcrete :: [SWord 8] -> String
-prettyIfConcrete x = case maybeLitBytes x of
-  Just lits -> prettyHex 40 lits
-  Nothing -> show x
+prettyIfConcrete :: Buffer -> String
+prettyIfConcrete (SymbolicBuffer x) = show x
+prettyIfConcrete (ConcreteBuffer x) = prettyHex 40 x
 
 drawTracePane :: UiVmState -> UiWidget
 drawTracePane s =

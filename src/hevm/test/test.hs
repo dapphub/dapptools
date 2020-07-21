@@ -156,14 +156,15 @@ main = defaultMain $ testGroup "hevm"
           |]
         let asWord :: [SWord 8] -> SWord 256
             asWord = fromBytes
-            pre preVM = let (x, y) = splitAt 32 $ drop 4 (fst $ view (state . calldata) preVM)
+            pre preVM = let SymbolicBuffer bs = ditch 4 (fst $ view (state . calldata) preVM)
+                            (x, y) = splitAt 32 bs
                         in asWord x .<= asWord x + asWord y
                            .&& view (state . callvalue) preVM .== 0
             post = Just $ \(prestate, poststate) ->
-              let input = fst $ view (state.calldata) prestate
+              let SymbolicBuffer input = fst $ view (state.calldata) prestate
                   (x, y) = splitAt 32 (drop 4 input)
               in case view result poststate of
-                Just (VMSuccess out) -> (asWord out) .== (asWord x) + (asWord y)
+                Just (VMSuccess (SymbolicBuffer out)) -> (asWord out) .== (asWord x) + (asWord y)
                 _ -> sFalse
         Left (_, res) <- runSMT $ query $ verifyContract (RuntimeCode safeAdd) Nothing (Just ("add(uint256,uint256)", [AbiUIntType 256, AbiUIntType 256])) [] SymbolicS pre post
         putStrLn $ "successfully explored: " <> show (length res) <> " paths"
@@ -180,15 +181,16 @@ main = defaultMain $ testGroup "hevm"
           |]
         let asWord :: [SWord 8] -> SWord 256
             asWord = fromBytes
-            pre preVM = let (x, y) = splitAt 32 $ drop 4 $ (fst $ view (state . calldata) preVM)
+            pre preVM = let SymbolicBuffer bs = ditch 4 (fst $ view (state . calldata) preVM)
+                            (x, y) = splitAt 32 bs
                            in (asWord x .<= asWord x + asWord y)
                               .&& (x .== y)
                               .&& view (state . callvalue) preVM .== 0
             post = Just $ \(prestate, poststate)
-              -> let input = fst $ view (state.calldata) prestate
+              -> let SymbolicBuffer input = fst $ view (state.calldata) prestate
                      (_, y) = splitAt 32 (drop 4 input)
                  in case view result poststate of
-                      Just (VMSuccess out) -> asWord out .== 2 * asWord y
+                      Just (VMSuccess (SymbolicBuffer out)) -> asWord out .== 2 * asWord y
                       _ -> sFalse
         Left (_, res) <- runSMTWith z3 $ query $
           verifyContract (RuntimeCode safeAdd) Nothing (Just ("add(uint256,uint256)", [AbiUIntType 256, AbiUIntType 256])) [] SymbolicS pre post
@@ -206,7 +208,9 @@ main = defaultMain $ testGroup "hevm"
           |]
         bs <- runSMTWith cvc4 $ query $ do
           Right vm <- checkAssert (RuntimeCode factor) Nothing (Just ("factor(uint256,uint256)", [AbiUIntType 256, AbiUIntType 256])) []
-          BS.pack <$> mapM (getValue.fromSized) (view (state . calldata . _1) vm)
+          case view (state . calldata . _1) vm of
+            SymbolicBuffer bs -> BS.pack <$> mapM (getValue.fromSized) bs
+            ConcreteBuffer _ -> error "unexpected"
 
         let AbiTuple xy = decodeAbiValue (AbiTupleType $ Vector.fromList [AbiUIntType 256, AbiUIntType 256]) (BS.fromStrict (BS.drop 4 bs))
             [AbiUInt 256 x, AbiUInt 256 y] = Vector.toList xy
@@ -225,7 +229,7 @@ main = defaultMain $ testGroup "hevm"
           |]
         let pre vm = 0 .== view (state . callvalue) vm
             post = Just $ \(prestate, poststate) ->
-              let y = drop 4 $ fst (view (state.calldata) prestate)
+              let SymbolicBuffer y = ditch 4 $ fst (view (state.calldata) prestate)
                   this = view (state . codeContract) prestate
                   Just preC = view (env.contracts . at this) prestate
                   Just postC = view (env.contracts . at this) poststate
@@ -257,7 +261,8 @@ main = defaultMain $ testGroup "hevm"
           |]
         let pre vm = 0 .== view (state . callvalue) vm
             post = Just $ \(prestate, poststate) ->
-              let (x,y) = over both (fromBytes) (splitAt 32 $ drop 4 $ fst (view (state.calldata) prestate))
+              let SymbolicBuffer bs = fst (view (state.calldata) prestate)
+                  (x,y) = over both (fromBytes) (splitAt 32 $ drop 4 bs)
                   this = view (state . codeContract) prestate
                   (Just preC, Just postC) = both' (view (env.contracts . at this)) (prestate, poststate)
                   --Just postC = view (env.contracts . at this) poststate
@@ -269,7 +274,9 @@ main = defaultMain $ testGroup "hevm"
                 _ -> sFalse
         bs <- runSMT $ query $ do
           Right vm <- verifyContract (RuntimeCode c) Nothing (Just ("f(uint256,uint256)", [AbiUIntType 256, AbiUIntType 256])) [] SymbolicS pre post
-          BS.pack <$> mapM (getValue.fromSized) (view (state . calldata . _1) vm)
+          case view (state . calldata . _1) vm of
+            SymbolicBuffer bs -> BS.pack <$> mapM (getValue.fromSized) bs
+            ConcreteBuffer bs -> error "unexpected"
 
         let AbiTuple xyz = decodeAbiValue (AbiTupleType $ Vector.fromList [AbiUIntType 256, AbiUIntType 256]) (BS.fromStrict (BS.drop 4 bs))
             [AbiUInt 256 x, AbiUInt 256 y] = Vector.toList xyz
@@ -340,7 +347,9 @@ main = defaultMain $ testGroup "hevm"
             |]
           bs <- runSMT $ query $ do
             Right vm <- checkAssert (RuntimeCode c) Nothing (Just ("deposit(uint8)", [AbiUIntType 8])) []
-            BS.pack <$> mapM (getValue.fromSized) (view (state . calldata . _1) vm)
+            case view (state . calldata . _1) vm of
+              SymbolicBuffer bs -> BS.pack <$> mapM (getValue.fromSized) bs
+              ConcreteBuffer _ -> error "unexpected"
 
           let deposit = decodeAbiValue (AbiUIntType 8) (BS.fromStrict (BS.drop 4 bs))
           assertEqual "overflowing uint8" deposit (AbiUInt 8 255)
@@ -395,7 +404,9 @@ main = defaultMain $ testGroup "hevm"
             |]
           bs <- runSMTWith z3 $ query $ do
             Right vm <- checkAssert (RuntimeCode c) Nothing (Just ("f(uint256,uint256,uint256,uint256)", replicate 4 (AbiUIntType 256))) []
-            BS.pack <$> mapM (getValue.fromSized) (view (state . calldata . _1) vm)
+            case view (state . calldata . _1) vm of
+              SymbolicBuffer bs -> BS.pack <$> mapM (getValue.fromSized) bs
+              ConcreteBuffer _ -> error "unexpected"
               
           let AbiTuple xywz = decodeAbiValue (AbiTupleType $ Vector.fromList
                                               [AbiUIntType 256, AbiUIntType 256,
@@ -426,20 +437,20 @@ main = defaultMain $ testGroup "hevm"
   where
     (===>) = assertSolidityComputation
 
-runSimpleVM :: ByteString -> ByteString -> Maybe [SWord 8]
+runSimpleVM :: ByteString -> ByteString -> Maybe ByteString
 runSimpleVM x ins = case loadVM x of
                       Nothing -> Nothing
-                      Just vm -> let calldata' = (litBytes ins, literal . num $ BS.length ins)
+                      Just vm -> let calldata' = (ConcreteBuffer ins, literal . num $ BS.length ins)
                        in case runState (assign (state.calldata) calldata' >> exec) vm of
-                            (VMSuccess out, _) -> Just out
+                            (VMSuccess (ConcreteBuffer bs), _) -> Just bs
                             _ -> Nothing
 
 loadVM :: ByteString -> Maybe VM
 loadVM x =
     case runState exec (vmForEthrunCreation x) of
-       (VMSuccess targetCode, vm1) -> do
+       (VMSuccess (ConcreteBuffer targetCode), vm1) -> do
          let target = view (state . contract) vm1
-             vm2 = execState (replaceCodeOfSelf (RuntimeCode (forceLitBytes targetCode))) vm1
+             vm2 = execState (replaceCodeOfSelf (RuntimeCode targetCode)) vm1
          return $ snd $ flip runState vm2
                 (do resetState
                     assign (state . gas) 0xffffffffffffffff -- kludge
@@ -469,7 +480,7 @@ defaultDataLocation t =
   then "memory"
   else ""
 
-runFunction :: Text -> ByteString -> IO (Maybe [SWord 8])
+runFunction :: Text -> ByteString -> IO (Maybe ByteString)
 runFunction c input = do
   Just x <- singleContract "X" c
   return $ runSimpleVM x input
@@ -488,12 +499,11 @@ runStatements stmts args t = do
         "foo(" <> Text.intercalate ","
                     (map (abiTypeSolidity . abiValueType) args) <> ")"
 
-  out <- runFunction [i|
+  runFunction [i|
     function foo(${params}) public pure returns (${abiTypeSolidity t} x) {
       ${stmts}
     }
   |] (abiCalldata s (Vector.fromList args))
-  return $ maybe Nothing maybeLitBytes out
 
 newtype Bytes = Bytes ByteString
   deriving Eq

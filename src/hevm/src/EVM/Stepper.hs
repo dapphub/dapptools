@@ -36,7 +36,7 @@ import qualified Control.Monad.State.Class as State
 import qualified EVM.Exec
 import Data.Binary.Get (runGetOrFail)
 import Data.Text (Text)
-import Data.SBV hiding (options)
+import EVM.Symbolic (Buffer)
 
 import EVM (EVM, VM, VMResult (VMFailure, VMSuccess), Error (Query, Choose), Query, Choose)
 import qualified EVM
@@ -105,7 +105,7 @@ note :: Text -> Stepper ()
 note = singleton . Note
 
 -- | Run the VM until final result, resolving all queries
-execFully :: Stepper (Either Error [SWord 8])
+execFully :: Stepper (Either Error Buffer)
 execFully =
   exec >>= \case
     VMFailure (Query q) ->
@@ -130,7 +130,7 @@ runFully = do
     Just _ -> 
       pure vm
 
-execFullyOrFail :: Stepper [SWord 8]
+execFullyOrFail :: Stepper Buffer
 execFullyOrFail = execFully >>= either (fail . VMFailed) pure
 
 -- | Decode a blob as an ABI value, failing if ABI encoding wrong

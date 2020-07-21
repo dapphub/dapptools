@@ -4,7 +4,7 @@ import Prelude hiding (Word)
 
 import EVM
 import EVM.ABI
-import EVM.Concrete
+import EVM.Concrete hiding (readMemoryWord)
 import EVM.Symbolic
 import EVM.Dapp
 import EVM.Debug (srcMapCodePos)
@@ -116,27 +116,30 @@ initializeUnitTest UnitTestOptions { .. } = do
 
   -- Constructor is loaded; run until it returns code
   bytes <- Stepper.execFullyOrFail
-  addr <- Stepper.evm (use (state . contract))
+  case bytes of
+    SymbolicBuffer bs -> error "unexpected symbolic contract bytecode"
+    ConcreteBuffer bs -> do
+      addr <- Stepper.evm (use (state . contract))
 
-  -- Mutate the current contract to use the new code
-  Stepper.evm $ replaceCodeOfSelf (RuntimeCode (forceLitBytes bytes))
+      -- Mutate the current contract to use the new code
+      Stepper.evm $ replaceCodeOfSelf (RuntimeCode bs)
 
-  -- Give a balance to the test target
-  Stepper.evm $
-    env . contracts . ix addr . balance += w256 (testBalanceCreate testParams)
+      -- Give a balance to the test target
+      Stepper.evm $
+        env . contracts . ix addr . balance += w256 (testBalanceCreate testParams)
 
-  -- Initialize the test contract
-  Stepper.evm $
-    setupCall testParams addr "setUp()" emptyAbi
-  Stepper.evm (popTrace >> pushTrace (EntryTrace "initialize test"))
+      -- Initialize the test contract
+      Stepper.evm $
+        setupCall testParams addr "setUp()" emptyAbi
+      Stepper.evm (popTrace >> pushTrace (EntryTrace "initialize test"))
 
-  Stepper.note "Running `setUp()'"
+      Stepper.note "Running `setUp()'"
 
-  -- Let `setUp()' run to completion
-  void Stepper.execFullyOrFail
-  Stepper.evm (use result) >>= \case
-    Just (VMFailure e) -> Stepper.evm (pushTrace (ErrorTrace e))
-    _ -> Stepper.evm popTrace
+      -- Let `setUp()' run to completion
+      void Stepper.execFullyOrFail
+      Stepper.evm (use result) >>= \case
+        Just (VMFailure e) -> Stepper.evm (pushTrace (ErrorTrace e))
+        _ -> Stepper.evm popTrace
 
 
 -- | Assuming a test contract is loaded and initialized, this stepper
@@ -182,7 +185,7 @@ checkFailures UnitTestOptions { .. } method args bailed = do
     Stepper.evm popTrace
     Stepper.evm $ setupCall testParams addr "failed()" args
     Stepper.note "Checking whether assertions failed"
-    res <- Stepper.execFullyOrFail >>= (Stepper.decode AbiBoolType) . forceLitBytes
+    res <- Stepper.execFullyOrFail >>= \(ConcreteBuffer bs) -> (Stepper.decode AbiBoolType bs)
     let AbiBool failed = res
     -- Return true if the test was successful
     pure (shouldFail == failed)
@@ -562,25 +565,25 @@ formatTestLog events (Log _ args (topic:_)) =
                        Just $ formatSBytes args
                
                      "log_named_bytes32" ->
-                       let key = take 32 args
-                           val = drop 32 args
+                       let key = grab 32 args
+                           val = ditch 32 args
                        in Just $ formatSString key <> ": " <> formatSBytes val
                
                      "log_named_address" ->
-                       let key = take 32 args
-                           val = drop 44 args
+                       let key = grab 32 args
+                           val = ditch 44 args
                        in Just $ formatSString key <> ": " <> formatSBinary val
                
                      "log_named_int" ->
-                       let key = take 32 args
-                           val = case maybeLitWord (swordAt 32 args) of
+                       let key = grab 32 args
+                           val = case maybeLitWord (readMemoryWord 32 args) of
                              Just c -> showDec Signed (wordValue c)
                              Nothing -> "<symbolic int>"
                       in Just $ formatSString key <> ": " <> val
                
                      "log_named_uint" ->
-                       let key = take 32 args
-                           val = case maybeLitWord (swordAt 32 args) of
+                       let key = grab 32 args
+                           val = case maybeLitWord (readMemoryWord 32 args) of
                              Just c -> showDec Unsigned (wordValue c)
                              Nothing -> "<symbolic uint>"
                        in Just $ formatSString key <> ": " <> val
@@ -599,7 +602,7 @@ setupCall params target sig args  = do
   let TestVMParams {..} = params
   resetState
   loadContract target
-  assign (state . calldata) $ (litBytes $ abiMethod sig args, literal . num . BS.length $ abiMethod sig args)
+  assign (state . calldata) $ (ConcreteBuffer $ abiMethod sig args, literal . num . BS.length $ abiMethod sig args)
   assign (state . caller) (litAddr testCaller)
   assign (state . gas) (w256 testGasCall)
 
@@ -609,7 +612,7 @@ initialUnitTestVm (UnitTestOptions {..}) theContract _ =
     TestVMParams {..} = testParams
     vm = makeVm $ VMOpts
            { vmoptContract = initialContract (InitCode (view creationCode theContract))
-           , vmoptCalldata = ([], 0)
+           , vmoptCalldata = (mempty, 0)
            , vmoptValue = 0
            , vmoptAddress = testAddress
            , vmoptCaller = litAddr testCaller

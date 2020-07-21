@@ -8,7 +8,7 @@ import EVM (VM, cheatCode, traceForest, traceData, Error (..))
 import EVM (Trace, TraceData (..), Log (..), Query (..), FrameContext (..))
 import EVM.Dapp (DappInfo, dappSolcByHash, showTraceLocation, dappEventMap)
 import EVM.Concrete (Word (..), wordValue)
-import EVM.Symbolic (maybeLitWord, forceLitBytes, litBytes, maybeLitBytes)
+import EVM.Symbolic (maybeLitWord, forceLitBytes, litBytes, maybeLitBytes, Buffer(..), len)
 import EVM.Types (W256 (..), num)
 import EVM.ABI (AbiValue (..), Event (..), AbiType (..))
 import EVM.ABI (Indexed (NotIndexed), getAbiSeq, getAbi)
@@ -114,10 +114,9 @@ formatBytes b =
     then formatQString s
     else formatBinary b
 
-formatSBytes :: [SWord 8] -> Text
-formatSBytes b = case maybeLitBytes b of
-  Nothing -> "<" <> pack (show (length b)) <> " symbolic bytes>"
-  Just bs -> formatBytes bs
+formatSBytes :: Buffer -> Text
+formatSBytes (SymbolicBuffer b) = "<" <> pack (show (length b)) <> " symbolic bytes>"
+formatSBytes (ConcreteBuffer b) = formatBytes b
 
 formatQString :: ByteString -> Text
 formatQString = pack . show
@@ -125,19 +124,17 @@ formatQString = pack . show
 formatString :: ByteString -> Text
 formatString bs = decodeUtf8 (fst (BS.spanEnd (== 0) bs))
 
-formatSString :: [SWord 8] -> Text
-formatSString bs = case maybeLitBytes bs of
- Nothing -> "<" <> pack (show (length bs)) <> " symbolic bytes (string)>"
- Just x  -> formatString x
+formatSString :: Buffer -> Text
+formatSString (SymbolicBuffer bs) = "<" <> pack (show (length bs)) <> " symbolic bytes (string)>"
+formatSString (ConcreteBuffer bs) = formatString bs
 
 formatBinary :: ByteString -> Text
 formatBinary =
   (<>) "0x" . decodeUtf8 . toStrict . toLazyByteString . byteStringHex
 
-formatSBinary :: [SWord 8] -> Text
-formatSBinary bs = case maybeLitBytes bs of
-  Just b -> formatBinary b
-  Nothing -> "<" <> pack (show (length bs)) <> " symbolic bytes>"
+formatSBinary :: Buffer -> Text
+formatSBinary (SymbolicBuffer bs) = "<" <> pack (show (length bs)) <> " symbolic bytes>"
+formatSBinary (ConcreteBuffer bs) = formatBinary bs
 
 showTraceTree :: DappInfo -> VM -> Text
 showTraceTree dapp =
@@ -205,13 +202,13 @@ showTrace dapp trace =
     ReturnTrace out (CallContext _ _ hash (Just abi) _ _ _) ->
       case getAbiMethodOutput dapp hash abi of
         Nothing ->
-          "← " <> formatBinary (forceLitBytes out)
+          "← " <> formatSBinary out
         Just (_, t) ->
-          "← " <> pack (show t) <> " " <> showValue t (forceLitBytes out)
+          "← " <> pack (show t) <> " " <> showValue t out
     ReturnTrace out (CallContext {}) ->
-      "← " <> formatBinary (forceLitBytes out)
+      "← " <> formatSBinary out
     ReturnTrace out (CreationContext {}) ->
-      "← " <> pack (show (length out)) <> " bytes of code"
+      "← " <> pack (show (len out)) <> " bytes of code"
 
     EntryTrace t ->
       t
@@ -253,29 +250,26 @@ getAbiTypes abi = map (parseTypeName mempty) types
       filter (/= "") $
         splitOn "," (dropEnd 1 (last (splitOn "(" abi)))
 
-showCall :: [AbiType] -> [SWord 8] -> Text
-showCall = showValues
-  -- case runGetOrFail (getAbiSeq (length ts) ts)
-  --        (fromStrict (BS.drop 4 bs)) of
-  --   Right (_, _, xs) -> showAbiValues xs
-  --   Left (_, _, _)   -> formatBinary bs
+showCall :: [AbiType] -> Buffer -> Text
+showCall ts (SymbolicBuffer bs) = showValues ts $ SymbolicBuffer (drop 4 bs)
+showCall ts (ConcreteBuffer bs) = showValues ts $ ConcreteBuffer (BS.drop 4 bs)
 
 showError :: ByteString -> Text
 showError bs = case BS.take 4 bs of
   -- Method ID for Error(string)
-  "\b\195y\160" -> showCall [AbiStringType] (litBytes bs)
+  "\b\195y\160" -> showCall [AbiStringType] (ConcreteBuffer bs)
   _             -> formatBinary bs
 
-showValues :: [AbiType] -> [SWord 8] -> Text
-showValues ts sbs = case maybeLitBytes sbs of
-  Nothing -> "symbolic: " <> (pack . show $ AbiTupleType (fromList ts))
-  Just bs -> 
-     case runGetOrFail (getAbiSeq (length ts) ts) (fromStrict bs) of
-       Right (_, _, xs) -> showAbiValues xs
-       Left (_, _, _)   -> formatBinary bs
+showValues :: [AbiType] -> Buffer -> Text
+showValues ts (SymbolicBuffer sbs) = "symbolic: " <> (pack . show $ AbiTupleType (fromList ts))
+showValues ts (ConcreteBuffer bs) =
+  case runGetOrFail (getAbiSeq (length ts) ts) (fromStrict bs) of
+    Right (_, _, xs) -> showAbiValues xs
+    Left (_, _, _)   -> formatBinary bs
 
-showValue :: AbiType -> ByteString -> Text
-showValue t bs =
+showValue :: AbiType -> Buffer -> Text
+showValue t (SymbolicBuffer _) = "symbolic: " <> (pack $ show t)
+showValue t (ConcreteBuffer bs) =
   case runGetOrFail (getAbi t) (fromStrict bs) of
     Right (_, _, x) -> showAbiValue x
     Left (_, _, _)  -> formatBinary bs
