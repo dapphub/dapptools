@@ -21,7 +21,7 @@ import EVM.ABI
 import EVM.Types
 import EVM.Solidity
 import EVM.Keccak
-import EVM.Concrete
+import EVM.Concrete (Word(..), Whiff(..), w256, sliceMemory, createAddress, wordValue, keccakBlob, create2Address)
 import EVM.Symbolic
 import EVM.Op
 import EVM.FeeSchedule (FeeSchedule (..))
@@ -87,7 +87,7 @@ deriving instance Show Error
 -- | The possible result states of a VM
 data VMResult
   = VMFailure Error -- ^ An operation failed
-  | VMSuccess [SWord 8] -- ^ Reached STOP, RETURN, or end-of-code
+  | VMSuccess Buffer -- ^ Reached STOP, RETURN, or end-of-code
 
 deriving instance Show VMResult
 
@@ -119,7 +119,7 @@ data TraceData
   | QueryTrace Query
   | ErrorTrace Error
   | EntryTrace Text
-  | ReturnTrace [SWord 8] FrameContext
+  | ReturnTrace Buffer FrameContext
 
 data Query where
   PleaseFetchContract :: Addr         -> (Contract   -> EVM ()) -> Query
@@ -164,7 +164,7 @@ data Cache = Cache
 -- | A way to specify an initial VM state
 data VMOpts = VMOpts
   { vmoptContract :: Contract
-  , vmoptCalldata :: ([SWord 8], (SWord 32)) -- maximum size of uint32 as per eip 1985
+  , vmoptCalldata :: (Buffer, (SWord 32)) -- maximum size of uint32 as per eip 1985
   , vmoptValue :: SymWord
   , vmoptAddress :: Addr
   , vmoptCaller :: SAddr
@@ -183,7 +183,7 @@ data VMOpts = VMOpts
   } deriving Show
 
 -- | A log entry
-data Log = Log Addr [SWord 8] [SymWord]
+data Log = Log Addr Buffer [SymWord]
 
 -- | An entry in the VM's "call/create stack"
 data Frame = Frame
@@ -203,7 +203,7 @@ data FrameContext
     , callContextSize      :: Word
     , callContextCodehash  :: W256
     , callContextAbi       :: Maybe Word
-    , callContextData      :: [SWord 8]
+    , callContextData      :: Buffer
     , callContextReversion :: Map Addr Contract
     , callContextSubState  :: SubState
     }
@@ -215,13 +215,13 @@ data FrameState = FrameState
   , _code         :: ByteString
   , _pc           :: Int
   , _stack        :: [SymWord]
-  , _memory       :: [SWord 8]
+  , _memory       :: Buffer
   , _memorySize   :: Int
-  , _calldata     :: ([SWord 8], (SWord 32))
+  , _calldata     :: (Buffer, (SWord 32))
   , _callvalue    :: SymWord
   , _caller       :: SAddr
   , _gas          :: Word
-  , _returndata   :: [SWord 8]
+  , _returndata   :: Buffer
   , _static       :: Bool
   }
 
@@ -458,7 +458,7 @@ exec1 = do
 
     fees@FeeSchedule {..} = the block schedule
 
-    doStop = finishFrame (FrameReturned [])
+    doStop = finishFrame (FrameReturned mempty)
 
   if self > 0x0 && self <= 0x9 then do
     -- call to precompile
@@ -620,8 +620,8 @@ exec1 = do
               forceConcrete xOffset' $
                 \xOffset -> forceConcrete xSize' $ \xSize -> do
                   let bytes = readMemory xOffset xSize vm
-                  (hash, invMap) <- case maybeLitBytes bytes of
-                                     Just bs -> pure (litWord $ keccakBlob bs, Map.singleton (keccakBlob bs) bs)
+                  (hash, invMap) <- case readMemory xOffset xSize vm of
+                                     ConcreteBuffer bs -> pure (litWord $ keccakBlob bs, Map.singleton (keccakBlob bs) bs)
 
                                      -- Although we would like to simply assert that the uninterpreted function symkeccak'
                                      -- is injective, this proves to cause a lot of concern for our smt solvers, probably
@@ -631,11 +631,12 @@ exec1 = do
                                      -- (similarly to sha3Crack), and simply assert that injectivity holds for these
                                      -- particular invocations.
 
-                                     Nothing -> do let hash' = symkeccak' bytes
+                                     SymbolicBuffer bs -> do
+                                                   let hash' = symkeccak' bs
                                                        previousUsed = view (env . keccakUsed) vm
-                                                   env . keccakUsed <>= [(bytes, hash')]
+                                                   env . keccakUsed <>= [(bs, hash')]
                                                    pathConditions <>= fmap (\(preimage, image) ->
-                                                                               image .== hash' .=> preimage .== bytes)
+                                                                               image .== hash' .=> preimage .== bs)
                                                                            previousUsed
                                                    return (sw256 hash', mempty)
 
@@ -696,8 +697,11 @@ exec1 = do
                 accessUnboundedMemoryRange fees xTo xSize $ do
                   next
                   assign (state . stack) xs
-                  let (cd, cdlen) = the state calldata
-                  copyBytesToMemory [ite (i .<= cdlen) x 0 | (x, i) <- zip cd [1..]] xSize xFrom xTo
+                  case the state calldata of
+                    (SymbolicBuffer cd, cdlen) -> copyBytesToMemory (SymbolicBuffer [ite (i .<= cdlen) x 0 | (x, i) <- zip cd [1..]]) xSize xFrom xTo
+                    -- when calldata is concrete,
+                    -- the bound should always be equal to the bytestring length
+                    (cd, _) -> copyBytesToMemory cd xSize xFrom xTo 
             _ -> underrun
 
         -- op: CODESIZE
@@ -713,7 +717,7 @@ exec1 = do
                 accessUnboundedMemoryRange fees memOffset n $ do
                   next
                   assign (state . stack) xs
-                  copyBytesToMemory (litBytes (the state code))
+                  copyBytesToMemory (ConcreteBuffer (the state code))
                     n codeOffset memOffset
             _ -> underrun
 
@@ -755,14 +759,14 @@ exec1 = do
                       fetchAccount (num extAccount) $ \c -> do
                         next
                         assign (state . stack) xs
-                        copyBytesToMemory (litBytes (view bytecode c))
+                        copyBytesToMemory (ConcreteBuffer (view bytecode c))
                           codeSize codeOffset memOffset
             _ -> underrun
 
         -- op: RETURNDATASIZE
         0x3d ->
           limitStack 1 . burn g_base $
-            next >> push (num $ length (the state returndata))
+            next >> push (num $ len (the state returndata))
 
         -- op: RETURNDATACOPY
         0x3e ->
@@ -773,7 +777,7 @@ exec1 = do
                   accessUnboundedMemoryRange fees xTo xSize $ do
                     next
                     assign (state . stack) xs
-                    if length (the state returndata) < num xFrom + num xSize
+                    if len (the state returndata) < num xFrom + num xSize
                     then vmError InvalidMemoryAccess
                     else copyBytesToMemory (the state returndata) xSize xFrom xTo
             _ -> underrun
@@ -1006,7 +1010,7 @@ exec1 = do
                   let
                     newAddr = createAddress self (wordValue (view nonce this))
                     (cost, gas') = costOfCreate fees availableGas 0
-                  burn (cost - gas') $ forceConcreteBytes (readMemory (num xOffset) (num xSize) vm) $ \initCode ->
+                  burn (cost - gas') $ forceConcreteBuffer (readMemory (num xOffset) (num xSize) vm) $ \initCode ->
                     create self this gas' xValue xs newAddr initCode
             _ -> underrun
 
@@ -1075,7 +1079,7 @@ exec1 = do
               accessMemoryRange fees xOffset xSize $ do
                 let
                   output = readMemory xOffset xSize vm
-                  codesize = num (length output)
+                  codesize = num (len output)
                   maxsize = the block maxCodeSize
                 case view frames vm of
                   [] ->
@@ -1085,7 +1089,7 @@ exec1 = do
                         then
                           finishFrame (FrameErrored (MaxCodeSizeExceeded maxsize codesize))
                         else
-                          burn (g_codedeposit * num (length output)) $
+                          burn (g_codedeposit * codesize) $
                             finishFrame (FrameReturned output)
                       False ->
                         finishFrame (FrameReturned output)
@@ -1098,7 +1102,7 @@ exec1 = do
                         then
                           finishFrame (FrameErrored (MaxCodeSizeExceeded maxsize codesize))
                         else
-                          burn (g_codedeposit * num (length output)) $
+                          burn (g_codedeposit * codesize) $
                             finishFrame (FrameReturned output)
                       CallContext {} ->
                           finishFrame (FrameReturned output)
@@ -1137,11 +1141,11 @@ exec1 = do
               \(xValue, xOffset, xSize, xSalt) ->
                 accessMemoryRange fees xOffset xSize $ do
                   availableGas <- use (state . gas)
-                  let
-                    initCode = forceLitBytes $ readMemory (num xOffset) (num xSize) vm
+                  forceConcreteBuffer (readMemory (num xOffset) (num xSize) vm) $ \initCode ->
+                   let
                     newAddr  = create2Address self (num xSalt) initCode
                     (cost, gas') = costOfCreate fees availableGas xSize
-                  burn (cost - gas') $
+                   in burn (cost - gas') $
                     create self this gas' xValue xs newAddr initCode
             _ -> underrun
 
@@ -1294,25 +1298,25 @@ executePrecompile preCompileAddr gasCap inOffset inSize outOffset outSize xs  = 
         -- ECRECOVER
         0x1 ->
          -- TODO: support symbolic variant
-         forceConcreteBytes input $ \input' ->
+         forceConcreteBuffer input $ \input' ->
           case EVM.Precompiled.execute 0x1 (truncpadlit 128 input') 32 of
             Nothing -> do
               -- return no output for invalid signature
               assign (state . stack) (1 : xs)
               assign (state . returndata) mempty
               next
-            Just (litBytes -> output) -> do
+            Just output -> do
               assign (state . stack) (1 : xs)
-              assign (state . returndata) output
-              copyBytesToMemory output outSize 0 outOffset
+              assign (state . returndata) (ConcreteBuffer output)
+              copyBytesToMemory (ConcreteBuffer output) outSize 0 outOffset
               next
 
         -- SHA2-256
         0x2 ->
           let
-            hash = case maybeLitBytes input of
-                     Just input' -> litBytes $ BS.pack $ BA.unpack $ (Crypto.hash input' :: Digest SHA256)
-                     Nothing -> symSHA256 input
+            hash = case input of
+                     ConcreteBuffer input' -> ConcreteBuffer $ BS.pack $ BA.unpack $ (Crypto.hash input' :: Digest SHA256)
+                     SymbolicBuffer input' -> SymbolicBuffer $ symSHA256 input'
           in do
             assign (state . stack) (1 : xs)
             assign (state . returndata) hash
@@ -1322,12 +1326,12 @@ executePrecompile preCompileAddr gasCap inOffset inSize outOffset outSize xs  = 
         -- RIPEMD-160
         0x3 ->
          -- TODO: support symbolic variant
-         forceConcreteBytes input $ \input' ->
+         forceConcreteBuffer input $ \input' ->
 
           let
             padding = BS.pack $ replicate 12 0
             hash' = BS.pack $ BA.unpack (Crypto.hash input' :: Digest RIPEMD160)
-            hash  = litBytes $ padding <> hash'
+            hash  = ConcreteBuffer $ padding <> hash'
           in do
             assign (state . stack) (1 : xs)
             assign (state . returndata) hash
@@ -1344,12 +1348,12 @@ executePrecompile preCompileAddr gasCap inOffset inSize outOffset outSize xs  = 
         -- MODEXP
         0x5 ->
          -- TODO: support symbolic variant
-         forceConcreteBytes input $ \input' ->
+         forceConcreteBuffer input $ \input' ->
 
           let
             (lenb, lene, lenm) = parseModexpLength input'
 
-            output = litBytes $
+            output = ConcreteBuffer $
               case (isZero (96 + lenb + lene) lenm input') of
                  True ->
                    truncpadlit (num lenm) (asBE (0 :: Int))
@@ -1369,11 +1373,11 @@ executePrecompile preCompileAddr gasCap inOffset inSize outOffset outSize xs  = 
         -- ECADD
         0x6 ->
          -- TODO: support symbolic variant
-         forceConcreteBytes input $ \input' ->
+         forceConcreteBuffer input $ \input' ->
            case EVM.Precompiled.execute 0x6 (truncpadlit 128 input') 64 of
           Nothing -> precompileFail
           Just output -> do
-            let truncpaddedOutput = litBytes $ truncpadlit 64 output
+            let truncpaddedOutput = ConcreteBuffer $ truncpadlit 64 output
             assign (state . stack) (1 : xs)
             assign (state . returndata) truncpaddedOutput
             copyBytesToMemory truncpaddedOutput outSize 0 outOffset
@@ -1382,12 +1386,12 @@ executePrecompile preCompileAddr gasCap inOffset inSize outOffset outSize xs  = 
         -- ECMUL
         0x7 ->
          -- TODO: support symbolic variant
-         forceConcreteBytes input $ \input' ->
+         forceConcreteBuffer input $ \input' ->
 
           case EVM.Precompiled.execute 0x7 (truncpadlit 96 input') 64 of
           Nothing -> precompileFail
           Just output -> do
-            let truncpaddedOutput = litBytes $ truncpadlit 64 output
+            let truncpaddedOutput = ConcreteBuffer $ truncpadlit 64 output
             assign (state . stack) (1 : xs)
             assign (state . returndata) truncpaddedOutput
             copyBytesToMemory truncpaddedOutput outSize 0 outOffset
@@ -1396,12 +1400,12 @@ executePrecompile preCompileAddr gasCap inOffset inSize outOffset outSize xs  = 
         -- ECPAIRING
         0x8 ->
          -- TODO: support symbolic variant
-         forceConcreteBytes input $ \input' ->
+         forceConcreteBuffer input $ \input' ->
 
           case EVM.Precompiled.execute 0x8 input' 32 of
           Nothing -> precompileFail
           Just output -> do
-            let truncpaddedOutput = litBytes $ truncpadlit 32 output
+            let truncpaddedOutput = ConcreteBuffer $ truncpadlit 32 output
             assign (state . stack) (1 : xs)
             assign (state . returndata) truncpaddedOutput
             copyBytesToMemory truncpaddedOutput outSize 0 outOffset
@@ -1410,12 +1414,12 @@ executePrecompile preCompileAddr gasCap inOffset inSize outOffset outSize xs  = 
         -- BLAKE2
         0x9 ->
          -- TODO: support symbolic variant
-         forceConcreteBytes input $ \input' -> do
+         forceConcreteBuffer input $ \input' -> do
 
           case (BS.length input', 1 >= BS.last input') of
             (213, True) -> case EVM.Precompiled.execute 0x9 input' 64 of
               Just output -> do
-                let truncpaddedOutput = litBytes $ truncpadlit 64 output
+                let truncpaddedOutput = ConcreteBuffer $ truncpadlit 64 output
                 assign (state . stack) (1 : xs)
                 assign (state . returndata) truncpaddedOutput
                 copyBytesToMemory truncpaddedOutput outSize 0 outOffset
@@ -1603,7 +1607,7 @@ finalize = do
       createeExists <- (Map.member createe) <$> use (env . contracts)
 
       if creation && createeExists
-      then replaceCode createe (RuntimeCode $ forceLitBytes output)
+      then forceConcreteBuffer output $ \code' -> replaceCode createe (RuntimeCode code')
       else noop
 
   -- compute and pay the refund to the caller and the
@@ -1728,10 +1732,11 @@ forceConcrete6 (k,l,m,n,o,p) continue = case (maybeLitWord k, maybeLitWord l, ma
   (Just a, Just b, Just c, Just d, Just e, Just f) -> continue (a, b, c, d, e, f)
   _ -> vmError UnexpectedSymbolicArg
 
-forceConcreteBytes :: [SWord 8] -> (ByteString -> EVM ()) -> EVM ()
-forceConcreteBytes n continue = case maybeLitBytes n of
+forceConcreteBuffer :: Buffer -> (ByteString -> EVM ()) -> EVM ()
+forceConcreteBuffer (SymbolicBuffer b) continue = case maybeLitBytes b of
   Nothing -> vmError UnexpectedSymbolicArg
-  Just c -> continue c
+  Just bs -> continue bs
+forceConcreteBuffer (ConcreteBuffer b) continue = continue b
 
 -- * Substate manipulation
 refund :: Word -> EVM ()
@@ -1766,34 +1771,36 @@ cheat
   => (Word, Word) -> (Word, Word)
   -> EVM ()
 cheat (inOffset, inSize) (outOffset, outSize) = do
+  mem <- use (state . memory)
   vm <- get
-  if inSize >= 4
-  then case maybeLitBytes $
-            take 4 $ drop (num inOffset) $ view (state . memory) vm
-       of Nothing -> vmError (BadCheatCode Nothing)
-          Just (num . word -> abi) ->
-            let input = readMemory (inOffset + 4) (inSize - 4) vm
-            in case Map.lookup abi cheatActions of
+  let
+    abi = readMemoryWord32 inOffset mem
+    input = readMemory (inOffset + 4) (inSize - 4) vm
+  case fromSized <$> unliteral abi of
+    Nothing -> vmError UnexpectedSymbolicArg
+    Just abi -> 
+              case Map.lookup abi cheatActions of
                 Nothing ->
                   vmError (BadCheatCode (Just abi))
                 Just (argTypes, action) ->
-                  case runGetOrFail
-                         (getAbiSeq (length argTypes) argTypes)
-                         (LS.fromStrict $ forceLitBytes input) of
-                    Right ("", _, args) ->
-                      action (toList args) >>= \case
-                        Nothing -> do
-                          next
-                          push 1
-                        Just (litBytes . encodeAbiValue -> bs) -> do
-                          next
-                          modifying (state . memory)
-                            (writeMemory bs outSize 0 outOffset)
-                          push 1
-                    _ ->
-                      vmError (BadCheatCode (Just abi))
-
-  else vmError (BadCheatCode Nothing)
+                  case input of
+                    SymbolicBuffer _ -> vmError UnexpectedSymbolicArg
+                    ConcreteBuffer input' ->
+                      case runGetOrFail
+                             (getAbiSeq (length argTypes) argTypes)
+                             (LS.fromStrict input') of
+                        Right ("", _, args) ->
+                          action (toList args) >>= \case
+                            Nothing -> do
+                              next
+                              push 1
+                            Just (encodeAbiValue -> bs) -> do
+                              next
+                              modifying (state . memory)
+                                (writeMemory (ConcreteBuffer bs) outSize 0 outOffset)
+                              push 1
+                        _ ->
+                          vmError (BadCheatCode (Just abi))
 
 type CheatAction = ([AbiType], [AbiValue] -> EVM (Maybe AbiValue))
 
@@ -1839,10 +1846,9 @@ delegateCall this gasGiven xTo xContext xValue xInOffset xInSize xOutOffset xOut
                   , callContextSubState = view (tx . substate) vm0
                   , callContextAbi =
                       if xInSize >= 4
-                      then case maybeLitBytes $
-                                    take 4 $ drop (num xInOffset) $ (view (state . memory) vm0)
+                      then case unliteral $ readMemoryWord32 xInOffset (view (state . memory) vm0)
                            of Nothing -> Nothing
-                              Just sigBytes -> Just . w256 $ word sigBytes
+                              Just abi -> Just . w256 $ num abi
                       else Nothing
                   , callContextData = (readMemory (num xInOffset) (num xInSize) vm0)
                   }
@@ -1979,8 +1985,8 @@ underrun = vmError StackUnderrun
 
 -- | A stack frame can be popped in three ways.
 data FrameResult
-  = FrameReturned [SWord 8] -- ^ STOP, RETURN, or no more code
-  | FrameReverted [SWord 8] -- ^ REVERT
+  = FrameReturned Buffer -- ^ STOP, RETURN, or no more code
+  | FrameReverted Buffer -- ^ REVERT
   | FrameErrored Error -- ^ Any other error
   deriving Show
 
@@ -1999,7 +2005,8 @@ finishFrame how = do
       assign result . Just $
         case how of
           FrameReturned output -> VMSuccess output
-          FrameReverted output -> VMFailure (Revert (forceLitBytes output))
+          FrameReverted (ConcreteBuffer output) -> VMFailure (Revert output)
+          FrameReverted (SymbolicBuffer output) -> VMFailure (Revert (forceLitBytes output))
           FrameErrored e       -> VMFailure e
       finalize
 
@@ -2015,7 +2022,9 @@ finishFrame how = do
         case how of
           FrameErrored e ->
             ErrorTrace e
-          FrameReverted output ->
+          FrameReverted (ConcreteBuffer output) ->
+            ErrorTrace (Revert output)
+          FrameReverted (SymbolicBuffer output) ->
             ErrorTrace (Revert (forceLitBytes output))
           FrameReturned output ->
             ReturnTrace output (view frameContext nextFrame)
@@ -2080,11 +2089,12 @@ finishFrame how = do
 
           case how of
             -- Case 4: Returning during a creation?
-            FrameReturned output -> do
-              replaceCode createe (RuntimeCode (forceLitBytes output))
-              assign (state . returndata) mempty
-              reclaimRemainingGasAllowance
-              push (num createe)
+            FrameReturned output ->
+              forceConcreteBuffer output $ \output' -> do
+                replaceCode createe (RuntimeCode output')
+                assign (state . returndata) mempty
+                reclaimRemainingGasAllowance
+                push (num createe)
 
             -- Case 5: Reverting during a creation?
             FrameReverted output -> do
@@ -2136,7 +2146,7 @@ accessMemoryWord
 accessMemoryWord fees x = accessMemoryRange fees x 32
 
 copyBytesToMemory
-  :: [SWord 8] -> Word -> Word -> Word -> EVM ()
+  :: Buffer -> Word -> Word -> Word -> EVM ()
 copyBytesToMemory bs size xOffset yOffset =
   if size == 0 then noop
   else do
@@ -2145,21 +2155,21 @@ copyBytesToMemory bs size xOffset yOffset =
       writeMemory bs size xOffset yOffset mem
 
 copyCallBytesToMemory
-  :: [SWord 8] -> Word -> Word -> Word -> EVM ()
+  :: Buffer -> Word -> Word -> Word -> EVM ()
 copyCallBytesToMemory bs size xOffset yOffset =
   if size == 0 then noop
   else do
     mem <- use (state . memory)
     assign (state . memory) $
-      writeMemory bs (min size (num (length bs))) xOffset yOffset mem
+      writeMemory bs (min size (num (len bs))) xOffset yOffset mem
 
-readMemory :: Word -> Word -> VM -> [SWord 8]
+readMemory :: Word -> Word -> VM -> Buffer
 readMemory offset size vm = sliceWithZero (num offset) (num size) (view (state . memory) vm)
 
 word256At
   :: Functor f
   => Word -> (SymWord -> f (SymWord))
-  -> [SWord 8] -> f [SWord 8]
+  -> Buffer -> f Buffer
 word256At i = lens getter setter where
   getter = readMemoryWord i
   setter m x = setMemoryWord i x m
@@ -2478,20 +2488,22 @@ costOfCreate (FeeSchedule {..}) availableGas hashSize =
     initGas    = allButOne64th (availableGas - createCost)
 
 -- Gas cost of precompiles
-costOfPrecompile :: FeeSchedule Word -> Addr -> [SWord 8] -> Word
+costOfPrecompile :: FeeSchedule Word -> Addr -> Buffer -> Word
 costOfPrecompile (FeeSchedule {..}) precompileAddr input =
   case precompileAddr of
     -- ECRECOVER
     0x1 -> 3000
     -- SHA2-256
-    0x2 -> num $ (((length input + 31) `div` 32) * 12) + 60
+    0x2 -> num $ (((len input + 31) `div` 32) * 12) + 60
     -- RIPEMD-160
-    0x3 -> num $ (((length input + 31) `div` 32) * 120) + 600
+    0x3 -> num $ (((len input + 31) `div` 32) * 120) + 600
     -- IDENTITY
-    0x4 -> num $ (((length input + 31) `div` 32) * 3) + 15
+    0x4 -> num $ (((len input + 31) `div` 32) * 3) + 15
     -- MODEXP
     0x5 -> num $ (f (num (max lenm lenb)) * num (max lene' 1)) `div` (num g_quaddivisor)
-      where input' = forceLitBytes input
+      where input' = case input of
+              SymbolicBuffer _ -> error "unsupported: symbolic MODEXP gas cost calc"
+              ConcreteBuffer b -> b
             (lenb, lene, lenm) = parseModexpLength input'
             lene' | lene <= 32 && ez = 0
                   | lene <= 32 = num (log2 e')
@@ -2511,9 +2523,12 @@ costOfPrecompile (FeeSchedule {..}) precompileAddr input =
     -- ECMUL
     0x7 -> g_ecmul
     -- ECPAIRING
-    0x8 -> num $ ((length input) `div` 192) * (num g_pairing_point) + (num g_pairing_base)
+    0x8 -> num $ ((len input) `div` 192) * (num g_pairing_point) + (num g_pairing_base)
     -- BLAKE2
-    0x9 -> g_fround * (num $ asInteger $ lazySlice 0 4 (forceLitBytes input))
+    0x9 -> let input' = case input of
+                         SymbolicBuffer _ -> error "unsupported: symbolic BLAKE2B gas cost calc"
+                         ConcreteBuffer b -> b
+           in g_fround * (num $ asInteger $ lazySlice 0 4 input')
     _ -> error ("unimplemented precompiled contract " ++ show precompileAddr)
 
 -- Gas cost of memory expansion
