@@ -157,6 +157,7 @@ data VMOpts = VMOpts
   , vmoptBlockGaslimit :: W256
   , vmoptGasprice :: W256
   , vmoptSchedule :: FeeSchedule Word
+  , vmoptChainId :: W256
   , vmoptCreate :: Bool
   } deriving Show
 
@@ -362,7 +363,7 @@ makeVm o = VM
     }
   , _env = Env
     { _sha3Crack = mempty
-    , _chainId = 1
+    , _chainId = w256 $ vmoptChainId o
     , _contracts = Map.fromList
       [(vmoptAddress o, vmoptContract o)]
     }

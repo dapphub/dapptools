@@ -607,6 +607,7 @@ initialUnitTestVm (UnitTestOptions {..}) theContract _ =
            , vmoptMaxCodeSize = testMaxCodeSize
            , vmoptDifficulty = testDifficulty
            , vmoptSchedule = FeeSchedule.istanbul
+           , vmoptChainId = testChainId
            , vmoptCreate = False
            }
     creator =
@@ -615,7 +616,6 @@ initialUnitTestVm (UnitTestOptions {..}) theContract _ =
         & set balance (w256 testBalanceCreate)
   in vm
     & set (env . contracts . at ethrunAddress) (Just creator)
-    & set (env . chainId) (w256 testChainId)
 
 getParametersFromEnvironmentVariables :: IO TestVMParams
 getParametersFromEnvironmentVariables = do

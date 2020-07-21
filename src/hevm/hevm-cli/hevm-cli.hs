@@ -98,6 +98,7 @@ data Command w
       , create      :: w ::: Bool             <?> "Tx: creation"
       , maxcodesize :: w ::: Maybe W256       <?> "Block: max code size"
       , difficulty  :: w ::: Maybe W256       <?> "Block: difficulty"
+      , chainid     :: w ::: Maybe W256       <?> "Env: chainId"
       , debug       :: w ::: Bool             <?> "Run interactively"
       , state       :: w ::: Maybe String     <?> "Path to state repository"
       , rpc         :: w ::: Maybe URL        <?> "Fetch state from a remote node"
@@ -486,6 +487,7 @@ vmFromCommand cmd = do
           , EVM.vmoptMaxCodeSize   = word maxcodesize 0xffffffff
           , EVM.vmoptDifficulty    = word difficulty 0
           , EVM.vmoptSchedule      = FeeSchedule.istanbul
+          , EVM.vmoptChainId       = word chainid 1
           , EVM.vmoptCreate        = create cmd
           }
         word f def = fromMaybe def (f cmd)
