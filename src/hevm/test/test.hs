@@ -433,6 +433,25 @@ main = defaultMain $ testGroup "hevm"
           Left (_, res) <- runSMTWith z3 $ query $ checkAssert (RuntimeCode c) Nothing Nothing []
           putStrLn $ "successfully explored: " <> show (length res) <> " paths"
     ]
+  , testGroup "Equivalence checking"
+    [
+      testCase "yul optimized" $ do
+        -- These yul programs are not equivalent: (try --calldata $(seth --to-uint256 2) for example)
+        --  A:                               B:
+        --  {                                {
+        --     calldatacopy(0, 0, 32)           calldatacopy(0, 0, 32)
+        --     switch mload(0)                  switch mload(0)
+        --     case 0 { }                       case 0 { }
+        --     case 1 { }                       case 2 { }
+        --     default { invalid() }            default { invalid() }
+        -- }                                 }
+        let aPrgm = hex "602060006000376000805160008114601d5760018114602457fe6029565b8191506029565b600191505b50600160015250"
+            bPrgm = hex "6020600060003760005160008114601c5760028114602057fe6021565b6021565b5b506001600152"
+        runSMTWith z3 $ query $ do
+          Right counterexample <- equivalenceCheck aPrgm bPrgm Nothing Nothing
+          return ()
+
+    ]
   ]
   where
     (===>) = assertSolidityComputation
