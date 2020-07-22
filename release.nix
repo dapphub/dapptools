@@ -31,11 +31,9 @@ let
 
   # These packages should always work and be available in the binary cache.
   stable = dist: with dist.pkgs; {
-    inherit dapp-which;
     inherit dapp;
     inherit dapp-tests;
     inherit ethsign;
-    inherit evmdis;
     inherit go-ethereum-unlimited;
     inherit go-ethereum;
     inherit hevm;

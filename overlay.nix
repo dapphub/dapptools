@@ -13,17 +13,6 @@ in rec {
     );
   });
 
-  profilingHaskellPackages = self.haskellPackages.extend (
-    self: super-hs: {
-      mkDerivation = args: super-hs.mkDerivation
-        (args // { enableLibraryProfiling = true; });
-    }
-  );
-
-  callSolidityPackage = self.lib.callPackageWith {
-    inherit (self) solidityPackage dappsys;
-  };
-
   solidityPackage = import ./nix/solidity-package.nix {
     inherit (self) pkgs;
   };
@@ -34,18 +23,6 @@ in rec {
   # Here we can make e.g. integration tests for Dappsys,
   # or tests that verify Hevm correctness, etc.
   dapp-tests = import ./src/dapp-tests { inherit (self) pkgs; };
-
-  dapps = {
-    maker-otc = import (self.pkgs.fetchFromGitHub {
-      owner = "makerdao";
-      repo = "maker-otc";
-      rev = "513f102ad20129ea76e5c9b79afaa18693f63b88";
-      sha256 = "0jpdanhihv94yw3ay8dfcbv7l1dg30rfbdxq9lshm0hg94mblb6l";
-    }) self.pkgs;
-  };
-
-  known-contracts = import ./nix/known-contracts.nix;
-  dapp-which = self.callPackage ./nix/dapp-which.nix {};
 
   bashScript = { name, version ? "0", deps ? [], text, check ? true } :
     self.pkgs.writeTextFile {
@@ -106,8 +83,6 @@ in rec {
 
   ethsign = (self.callPackage (import ./src/ethsign) {});
 
-  evmdis = self.callPackage ./nix/evmdis.nix {};
-
   token = self.callPackage (import ./src/token) {};
 
   # We use this to run private testnets without
@@ -153,39 +128,4 @@ in rec {
   secp256k1 = super.secp256k1.overrideDerivation (_: {
     dontDisableStatic = true;
   });
-
-  celf = self.callPackage ./nix/celf.nix {};
-
-  myetherwallet = stdenv.mkDerivation rec {
-    name = "myetherwallet-${version}";
-    version = "3.11.3.1";
-    src = self.fetchFromGitHub {
-      owner = "kvhnuke";
-      repo = "etherwallet";
-      rev = "v${version}";
-      sha256 = "1985zhy8lwnyg5hc436gcma0z9azm1qzsl3rj2vqq080s5czm4d2";
-    };
-    installPhase = ''
-      mkdir -p $out/myetherwallet
-      cp -R dist/* $out/myetherwallet
-    '';
-  };
-
-  dafny = super.dafny.overrideAttrs (_: rec {
-    name = "Dafny-${version}";
-    version = "2.1.0";
-
-    src = self.fetchurl {
-      url = "https://github.com/Microsoft/dafny/archive/v${version}.tar.gz";
-      sha256 = "1iyhy0zpi6wvqif7826anzgdipgsy5bk775ds9qqwfw27j7x6fy5";
-    };
-
-    postPatch = ''
-      sed -i \
-        -e 's/ Visible="False"//' \
-        -e "s/Exists(\$(CodeContractsInstallDir))/Exists('\$(CodeContractsInstallDir)')/" \
-        Source/*/*.csproj
-    '';
-  });
-
 }
