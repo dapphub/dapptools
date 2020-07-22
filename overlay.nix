@@ -72,19 +72,31 @@ in rec {
 
   solc-versions =
     let
-      fetchSolcVersions = { owner, attr }:
+      # some solc versions do not build on macOS
+      ignore = {
+        x86_64-linux = [];
+        x86_64-darwin = [
+          "solc_0_4_6" "solc_0_4_8" "solc_0_4_11" "solc_0_4_12" "solc_0_4_18" "solc_0_4_24"
+        ];
+      };
+
+      fetchSolcVersions = { owner, system }:
         super.lib.mapAttrs
           (_: nixpkgs: (importNixpkgs { inherit owner; inherit (nixpkgs) rev sha256; }).solc)
-          (builtins.getAttr attr (import ./nix/solc-versions.nix));
+          (removeAttrs
+            (builtins.getAttr owner (import ./nix/solc-versions.nix))
+            (builtins.getAttr system ignore));
+
       importNixpkgs = { owner, rev, sha256 }:
         import (self.pkgs.fetchFromGitHub {
           inherit owner rev sha256;
           repo = "nixpkgs";
         }) {};
+
       in
-        fetchSolcVersions { owner = "NixOS";   attr = super.system; }
+        fetchSolcVersions { owner = "NixOS"; system = super.system; }
         //
-        fetchSolcVersions { owner = "dapphub"; attr = "unreleased"; };
+        fetchSolcVersions { owner = "dapphub"; system = super.system; };
   solc = solc-versions.solc_0_6_7;
 
   hevm = self.pkgs.haskell.lib.justStaticExecutables self.haskellPackages.hevm;

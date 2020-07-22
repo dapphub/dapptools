@@ -2,8 +2,8 @@
 # separated by platform.
 # the commit can either be on NixOS/nixpkgs or on dapphub/dapptools, depending
 # on whether the change has already been upstream or not.
-rec {
-  x86_64-linux  = {
+{
+  NixOS  = {
     # broken on nixpkgs: https://github.com/NixOS/nixpkgs/pull/20098
     # solc_0_4_4 = { rev = "9e150c92d4de210f84bb5bd80630cc07a12f40be"; sha256 = "10kh3q0qzw4bckz84zn2c85d815dnxig5yx0nrr4f8jicbk8sn1a"; };
     solc_0_4_6  = { rev = "c25fc0f1736165617fde07bb447955e4fa2b5beb"; sha256 = "0cxfvmpgqx0xamw6gmg17vliwb3zkkr93pgwnfjx2akm86h2m244"; };
@@ -35,11 +35,8 @@ rec {
     solc_0_5_15 = { rev = "1101ef4daeff8a3df3c479bb170cef97f839371a"; sha256 = "18ycihiy1jk81np8h2z50xbsqgja7s21w74pnmgfk8bav6p2fflb"; };
   };
 
-  # some versions do not compile on macOS
-  x86_64-darwin = removeAttrs x86_64-linux [ "solc_0_4_6" "solc_0_4_8" "solc_0_4_11" "solc_0_4_12" "solc_0_4_18" "solc_0_4_24" ];
-
   # these versions have not been upstreamed on NixOS/nixpkgs yet, and come from our fork at dapptools/nixpkgs
-  unreleased = {
+  dapphub = {
     solc_0_4_18 = { rev = "f2e0cb5d72b70f3a874b133332fc92e7c170c710"; sha256 = "09f3mpa1f9gldxfrc96b2pqhrmq4disbi5bxqgmr4ag0mwn7qrnj"; };
     solc_0_5_16 = { rev = "725f92e016497dc351f84ff3d2c0c0538676f287"; sha256 = "1qwh0246piiwxxd80dzhya6x1fd2w2kj2rf80y83qa2v03zczqd1"; };
     solc_0_6_0  = { rev = "2342685388c0bad7163483c0b96c64f2dae817a3"; sha256 = "0ahqhw47y9xd3gwcxiazxj5ijiahgb4b69bvxja227rfpi9yvx60"; };
