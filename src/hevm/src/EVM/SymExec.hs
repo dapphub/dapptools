@@ -123,6 +123,7 @@ loadSymVM x initStore addr callvalue' calldata' =
     , vmoptGaslimit = 0xffffffffffffffff
     , vmoptMaxCodeSize = 0xffffffff
     , vmoptSchedule = FeeSchedule.istanbul
+    , vmoptChainId = 1
     , vmoptCreate = False
     }) & set (env . contracts . at (createAddress ethrunAddress 1))
              (Just (contractWithStore x initStore))
