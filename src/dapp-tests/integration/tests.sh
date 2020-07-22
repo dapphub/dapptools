@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 
-set -e
+set -ex
 
 # clean up
 trap 'killall geth && rm -rf "$TMPDIR"' EXIT
-trap "echo boo && exit 1" SIGINT SIGTERM
+trap "exit 1" SIGINT SIGTERM
 
 error() {
     printf 1>&2 "fail: function '%s' at line %d.\n" "${FUNCNAME[1]}"  "${BASH_LINENO[0]}"
@@ -23,7 +23,7 @@ dapp_testnet() {
 
   dapp testnet --dir "$TMPDIR" &
   # give it a few secs to start up
-  sleep 20
+  sleep 30
   read -r ACC BAL <<< "$(seth ls --keystore "$TMPDIR/8545/keystore")"
   # The account has maximum balance
   [[ $(seth --to-hex "$BAL") = $(seth --to-int256 -1) ]] || error
