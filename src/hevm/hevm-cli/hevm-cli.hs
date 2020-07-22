@@ -33,6 +33,7 @@ import EVM.UnitTest (UnitTestOptions, coverageReport, coverageForUnitTestContrac
 import EVM.UnitTest (runUnitTestContract)
 import EVM.UnitTest (getParametersFromEnvironmentVariables, testNumber)
 import EVM.Dapp (findUnitTests, dappInfo)
+import EVM.Format (showTraceTree)
 import EVM.RLP (rlpdecode)
 import qualified EVM.Patricia as Patricia
 import Data.Map (Map)
@@ -49,11 +50,12 @@ import Data.ByteString            (ByteString)
 import Data.List                  (intercalate, isSuffixOf)
 import Data.Text                  (Text, unpack, pack)
 import Data.Text.Encoding         (encodeUtf8)
+import Data.Text.IO               (hPutStr)
 import Data.Maybe                 (fromMaybe, fromJust)
 import Data.Version               (showVersion)
 import Data.SBV hiding (Word, solver, verbose, name)
 import Data.SBV.Control hiding (Version, timeout, create)
-import System.IO                  (hFlush, stdout)
+import System.IO                  (hFlush, hPrint, stdout, stderr)
 import System.Directory           (withCurrentDirectory, listDirectory)
 import System.Exit                (die, exitFailure, exitWith, ExitCode(..))
 import System.Environment         (setEnv)
@@ -142,11 +144,12 @@ data Command w
       , difficulty  :: w ::: Maybe W256       <?> "Block: difficulty"
       , chainid     :: w ::: Maybe W256       <?> "Env: chainId"
       , debug       :: w ::: Bool             <?> "Run interactively"
+      , trace       :: w ::: Bool             <?> "Dump trace"
       , state       :: w ::: Maybe String     <?> "Path to state repository"
       , rpc         :: w ::: Maybe URL        <?> "Fetch state from a remote node"
       , block       :: w ::: Maybe W256       <?> "Block state is be fetched from"
       , jsonFile    :: w ::: Maybe String     <?> "Filename or path to dapp build output (default: out/*.solc.json)"
-      , dappRoot    :: w ::: Maybe String             <?> "Path to dapp project root directory (default: . )"
+      , dappRoot    :: w ::: Maybe String     <?> "Path to dapp project root directory (default: . )"
       }
   | DappTest -- Run DSTest unit tests
       { jsonFile    :: w ::: Maybe String             <?> "Filename or path to dapp build output (default: out/*.solc.json)"
@@ -501,6 +504,14 @@ launchExec :: Command Options.Unwrapped -> IO ()
 launchExec cmd = do
   let root = fromMaybe "." (dappRoot cmd)
       srcinfo = ((,) root) <$> (jsonFile cmd)
+  dapp <- case (jsonFile cmd) of
+    Nothing ->
+      pure $ dappInfo "" mempty (SourceCache mempty mempty mempty mempty)
+    Just json -> readSolc json >>= \case
+      Nothing ->
+        pure $ dappInfo "" mempty (SourceCache mempty mempty mempty mempty)
+      Just (contractMap, sourceCache) ->
+        pure $ dappInfo root contractMap sourceCache
 
   vm <- vmFromCommand cmd
   vm1 <- case state cmd of
@@ -514,6 +525,7 @@ launchExec cmd = do
   case optsMode cmd of
     Run -> do
       vm' <- execStateT (interpret fetcher Nothing . void $ EVM.Stepper.execFully) vm1
+      when (trace cmd) $ hPutStr stderr (showTraceTree dapp vm')
       case view EVM.result vm' of
         Nothing ->
           error "internal error; no EVM result"
