@@ -725,7 +725,6 @@ symvmFromCommand cmd = do
       }
     word f def = fromMaybe def (f cmd)
     addr f def = fromMaybe def (f cmd)
->>>>>>> 9c392c9a... move equivalence checking out to symbolic, more customization options for symexec cli endpoint
 
 launchTest :: Command Options.Unwrapped ->  IO ()
 launchTest cmd = do
