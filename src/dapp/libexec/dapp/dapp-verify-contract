@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+set -e
 
 [[ $ETHERSCAN_API_KEY ]] || {
   cat >&2 <<.
