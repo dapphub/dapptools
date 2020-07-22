@@ -70,6 +70,7 @@ else
   opts+=(--block     "${ETH_BLOCK:-$(seth --field number <<< "$block")}")
   opts+=(--number    "${ETH_NUMBER:-$(seth --field number <<< "$block")}")
   opts+=(--timestamp "${HEVM_TIMESTAMP:-$(seth --field timestamp <<< "$block")}")
+  opts+=(--chainid   "${ETH_CHAINID:-$(seth rpc eth_chainId | seth --to-dec)}")
 
   if [[ "$SETH_CREATE" ]]; then
     opts+=(--create)
