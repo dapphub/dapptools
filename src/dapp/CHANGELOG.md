@@ -20,6 +20,7 @@ DAPP_BUILD_EXTRACT=1 dapp test
 
 ### Changed
 - Default to solc 0.6.7
+- Updated hevm to 0.40
 
 ### Removed
 - Support for git submodules (setzer, dai-cli, chief, terra)
