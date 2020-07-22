@@ -7,6 +7,10 @@
 
 - z3 updated to 4.8.7
 
+### Added
+
+- `hevm exec --trace` flag to dump a trace
+
 
 ## 0.40 - 2020-07-22
 
