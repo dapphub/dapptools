@@ -36,7 +36,6 @@ info() {
   echo >&2 "$FLAGS" "${0##*/}: $ARGS"
 }
 
-IFS=" " read -r -a opts <<<"$SOLC_FLAGS"
 json_opts=--combined-json=abi,bin,bin-runtime,srcmap,srcmap-runtime,ast,metadata
 solc --help | grep -q -- --storage-layout && json_opts+=,storage-layout
 solc --help | grep -q -- --overwrite && opts+=(--overwrite)
@@ -67,7 +66,17 @@ fi
 
 mkdir -p "$DAPP_OUT"
 mapfile -t files < <(find "${DAPP_SRC}" -name '*.sol')
-(set -x; solc "${opts[@]}" "${json_opts[@]}" /=/ "${files[@]}" > "${DAPP_JSON}")
+
+solcExp="( set -x; solc "
+solcExp+="$SOLC_FLAGS "
+solcExp+="${opts[*]} "
+solcExp+="${json_opts[*]} "
+solcExp+=" /=/ "
+solcExp+="${files[*]}"
+solcExp+=" > "
+solcExp+="${DAPP_JSON})"
+
+eval "$solcExp"
 
 if [ "$DAPP_BUILD_EXTRACT" ]; then
   mapfile -t contracts < <(<"$DAPP_JSON" jq '.contracts|keys[]' -r | sort -u -t: -k2 | sort)
