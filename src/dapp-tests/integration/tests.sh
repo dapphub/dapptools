@@ -42,6 +42,8 @@ dapp_testnet() {
 
   [[ $(seth code "$A_ADDR") = "$HEVM_RET" ]] || error
 
+  [[ $(seth call "$A_ADDR" "off()" --gas 0xffff --hevm) = 0x ]] || error
+
   TX=$(seth send "$A_ADDR" "off()" --gas 0xffff --password /dev/null --from "$ACC" --keystore "$TMPDIR"/8545/keystore --async)
 
   # since we have one tx per block, seth run-tx and seth debug are equivalent

@@ -35,7 +35,7 @@ opts+=(--nonce  "$(<<< "$tx" seth --field nonce)")
 opts+=(--number "$(<<< "$tx" seth --field blockNumber | seth --to-dec)")
 opts+=(--block  "$(("$(<<< "$tx" seth --field blockNumber | seth --to-dec)" - 1))")
 opts+=(--rpc    "${ETH_RPC_URL}")
-opts+=(--timestamp "${HEVM_TIMESTAMP:-$(seth block "$(<<< "$tx" seth --field blockNumber --seth-to-dec)" timestamp)}")
+opts+=(--timestamp "${HEVM_TIMESTAMP:-$(seth block "$(<<< "$tx" seth --field blockNumber | seth-to-dec)" timestamp)}")
 opts+=(--chainid   "${ETH_CHAINID:-$(seth rpc eth_chainId | seth --to-dec)}")
 
 [[ "$HEVM_STATE" ]] && opts+=(--state "$HEVM_STATE")
