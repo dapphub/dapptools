@@ -459,8 +459,10 @@ assert cmd = do
                           Just (EVM.VMFailure (EVM.Revert "")) -> io . putStrLn $ "Reverted"
                           Just (EVM.VMFailure (EVM.Revert msg)) -> io . putStrLn $ "Reverted: " <> show (ByteStringS msg)
                           Just (EVM.VMFailure err) -> io . putStrLn $ "Failed: " <> show err
-                          Just (EVM.VMSuccess mempty) -> io $ putStrLn "Stopped"
-                          Just (EVM.VMSuccess (ConcreteBuffer msg)) -> io $ print (ByteStringS msg)
+                          Just (EVM.VMSuccess (ConcreteBuffer msg)) ->
+                            if ByteString.null msg
+                            then io $ putStrLn "Stopped"
+                            else io $ putStrLn $ "Returned: " <> show (ByteStringS msg)
                           Just (EVM.VMSuccess (SymbolicBuffer msg)) -> do
                             out <- mapM (getValue.fromSized) msg
                             io . putStrLn $ "Returned: " <> show (ByteStringS (ByteString.pack out))
