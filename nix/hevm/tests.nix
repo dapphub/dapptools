@@ -26,6 +26,21 @@ let
     exit $status
   '';
 
+  primeMemory = pkgs.writeShellScript "primeMemory" ''
+    in=$(${cat} /dev/stdin)
+    if [ "$in" == "{ }" ]; then
+      echo "$in"
+      exit 0
+    fi
+
+    if [ "$(${echo} $in | head -n 1 | ${awk} '{print $1;}')" == "object" ]; then
+      ${echo} "$in" | ${sed} '/code\ {/ a calldatacopy(0,0,1024)'
+      exit 0
+    fi
+
+    ${echo} "$in" | ${sed} '0,/{/a calldatacopy(0,0,1024)'
+  '';
+
   run-yul-equivalence = pkgs.writeShellScript "run-yul-equivalence" ''
     # Takes two Yul files, compiles them to EVM bytecode and checks equivalence.
 
@@ -41,7 +56,7 @@ let
     if [ $? -eq 1 ]
     then
         ${echo} "Could not compile second Yul source."
-        ${cat} $1
+        ${cat} $2
         exit 1
     fi
 
@@ -53,10 +68,20 @@ let
 
     ${echo} "Checking bytecode equivalence: $a_bin vs $b_bin"
     ${pkgs.coreutils}/bin/timeout 10s ${pkgs.hevm}/bin/hevm equivalence --code-a "$a_bin" --code-b "$b_bin" --smttimeout 1000
-    if [[ $? == 124 ]]
+    status=$?
+    if [[ $status == 1 ]]
     then
-        ${echo} "HEVM timeout."
+        ${echo} hevm execution failed
+        exit 1
+    fi
+    if [[ $status == 124 ]]
+    then
+        ${echo} "hevm timeout."
+        ${echo} "file1:"
         ${cat} $1
+        ${echo} "-------------"
+        ${echo} "file2:"
+        ${cat} $2
         exit 1
     fi
 
@@ -72,8 +97,12 @@ let
       # unbounded loop
       "commonSubexpressionEliminator/branches_for.yul"
       "commonSubexpressionEliminator/loop.yul"
-      "conditionalSimplifier/no_opt_if_break_is_not_last.yul"
-      "conditionalUnsimplifier/no_opt_if_break_is_not_last.yul"
+      #"conditionalSimplifier/no_opt_if_break_is_not_last.yul"
+      #"conditionalUnsimplifier/no_opt_if_break_is_not_last.yul"
+
+      # unexpected symbolic arg
+      "commonSubexpressionEliminator/function_scopes.yul" #OpMstore
+      "commonSubexpressionEliminator/variable_for_variable.yul" #OpMstore
 
       # cannot compile
       "commonSubexpressionEliminator/object_access.yul"
@@ -100,10 +129,23 @@ in
             return 0
         fi
 
-        nonopt_src=$(${mktemp})
-        ${sed} '0,/^\/\/ step:/d' $1 | ${sed} -e 's!\/\/!!' > $nonopt_src
-        ${run-yul-equivalence} $1 $nonopt_src
-        ${rm} $nonopt_src
+        file1=$(${mktemp})
+        ${cat} $1           \
+        | ${sed} '/^\/\//d' \
+        | ${sed} -e '/^$/d' \
+        | ${primeMemory}    \
+        > $file1
+
+        file2=$(${mktemp})
+        ${sed} '0,/^\/\/ step:/d' $1 \
+        | ${sed} -e 's!\/\/!!'       \
+        | ${sed} -e '/^$/d'          \
+        | ${sed} 's/^.//'            \
+        | ${primeMemory}             \
+        > $file2
+
+        ${run-yul-equivalence} $file1 $file2
+        ${rm} $file1 $file2
     }
 
     for filename in ${prefixes.yulOptimizerTests}/**/*.yul; do
