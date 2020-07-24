@@ -25,8 +25,6 @@ import Control.Arrow ((***), (&&&))
 import Control.Lens
 import Control.Monad
 
-import IPPrint.Colored (cpprint)
-
 import Data.ByteString (ByteString)
 import Data.Aeson ((.:), (.:?), FromJSON (..))
 import Data.Bifunctor (bimap)
@@ -163,7 +161,7 @@ checkExpectation diff x vm =
       return True
 
     (_, Nothing) -> do
-      cpprint (view EVM.result vm)
+      print (view EVM.result vm)
       error "internal error"
 
 -- quotient account state by nullness
