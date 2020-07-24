@@ -104,7 +104,7 @@ in rec {
   seth = self.callPackage (import ./src/seth) {};
   dapp = self.callPackage (import ./src/dapp) {};
 
-  ethsign = (self.callPackage (import ./src/ethsign) {}).bin;
+  ethsign = (self.callPackage (import ./src/ethsign) {});
 
   evmdis = self.callPackage ./nix/evmdis.nix {};
 
