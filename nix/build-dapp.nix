@@ -39,15 +39,4 @@
 
       builder = ./build-dapp.sh;
     } // attrs);
-
-  dappsysPackage = { name, deps ? [], rev, sha256 }:
-    dappPackage {
-      inherit name;
-      src = pkgs.fetchFromGitHub {
-        inherit rev sha256;
-        owner = "dapphub";
-        repo = name;
-      };
-      dependencies = deps;
-    };
 }
