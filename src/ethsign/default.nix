@@ -1,4 +1,4 @@
-{ stdenv, buildGoModule, fetchFromGitHub, go-ethereum, fetchgit }:
+{ stdenv, buildGoModule }:
 
 buildGoModule rec {
   name = "ethsign-${version}";
