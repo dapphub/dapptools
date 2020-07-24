@@ -41,6 +41,7 @@ let
     inherit qrtx;
     inherit seth;
     inherit token;
+    inherit hevm-tests;
 
     hevm-compliance = hevmCompliance dist;
   # the union is necessary because nix-build does not evaluate sets
