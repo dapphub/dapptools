@@ -1,7 +1,14 @@
 #!/usr/bin/env node
-/*
-### seth-keccak -- print the Keccak hash of an arbitrary piece of data
-*/
+/// seth-keccak -- print the Keccak hash of an arbitrary piece of data
+/// Usage: seth keccak [<data>]
+///
+/// Compute the keccak hash of <data>, or stdin if not given.
+///
+/// If <data> has a 0x prefix, read it as hexdata. Multiple hexstrings
+/// can be concatenated with `:`.
+///
+/// If <data> has no 0x prefix, read it as text.
+
 var keccak256 = require('./sha3.js').keccak256;
 
 var data;
@@ -10,14 +17,19 @@ if (process.argv.length < 3) {
 } else if (process.argv.length == 3) {
   data = process.argv[2];
 } else {
-  console.error("seth-keccak -- print the Keccak hash of an arbitrary piece of data")
+  console.error("Usage: seth keccak [<data>]")
   process.exit(1)
 }
 
 if (data.startsWith('0x')) {
-  data = data.replace('0x','')
-  var res = keccak256(Buffer.from(data, 'hex'))
-  console.log(`0x${res}`)
+  data = data.replace(/(^0x|:0x)/g,'')
+  if (/^[0-9a-fA-F]*$/.test(data)) {
+    var res = keccak256(Buffer.from(data, 'hex'))
+    console.log(`0x${res}`)
+  } else {
+    console.error("seth-keccak: error: invalid hexdata")
+    process.exit(1)
+  }
 } else {
   var res = keccak256(data)
   console.log(`0x${res}`)

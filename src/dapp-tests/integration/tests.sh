@@ -223,3 +223,27 @@ test_calldata_19() {
     [[ $output = "0xc2985578" ]] || error
 }
 test_calldata_19
+
+test_keccak_1() {
+  local output
+  output=$(seth keccak 0xcafe)
+
+  [[ $output = "0x72318c618151a897569554720f8f1717a3da723042fb73893c064da11b308ae9" ]] || error
+}
+test_keccak_1
+
+test_keccak_2() {
+  local output
+  output=$(seth keccak 0xca:0xfe)
+
+  [[ $output = "0x72318c618151a897569554720f8f1717a3da723042fb73893c064da11b308ae9" ]] || error
+}
+test_keccak_2
+
+test_keccak_3() {
+  local output
+  output=$(seth keccak cafe)
+
+  [[ $output = "0x4c84268b4bd90011342a28648371055c58267a2a8e93a7b0bc61fe93bf186974" ]] || error
+}
+test_keccak_3
