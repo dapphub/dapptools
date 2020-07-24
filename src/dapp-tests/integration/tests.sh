@@ -247,3 +247,23 @@ test_keccak_3() {
   [[ $output = "0x4c84268b4bd90011342a28648371055c58267a2a8e93a7b0bc61fe93bf186974" ]] || error
 }
 test_keccak_3
+
+test_hexdata_0() {
+  [[ $(seth --to-hexdata cafe) = "0xcafe" ]] || error
+}
+test_hexdata_0
+
+test_hexdata_1() {
+  [[ $(seth --to-hexdata 0xcafe) = "0xcafe" ]] || error
+}
+test_hexdata_1
+
+test_hexdata_2() {
+  [[ $(seth --to-hexdata 0xCA:0xfe) = "0xcafe" ]] || error
+}
+test_hexdata_2
+
+test_hexdata_3() {
+  [[ $(seth --to-hexdata 0xCA:0xfe:0x) = "0xcafe" ]] || error
+}
+test_hexdata_3

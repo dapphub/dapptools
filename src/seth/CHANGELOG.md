@@ -19,6 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `seth --verbose` prints some seth debugging information to stderr
 
 - `seth block` can now be passed the `--full` option, which returns the full block.
+- hexdata can be concatenated with `:`, e.g. '0xaa:0xbb' will be read as '0xaabb'.
 
 ### Changed
 - `seth --to-{hex,wei,word,address,dec,int256,ascii,fix,uint256}` and

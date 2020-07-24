@@ -4,6 +4,7 @@
 ### Output lowercase, 0x-prefixed hex, converting from the
 ### input provided as an argument or stdin, which can be:
 ###   - mixed case hex with or without 0x prefix
+###   - 0x prefixed hex, concatenated with a ':'
 ###   - absolute path to file
 ###   - @tag, where $TAG is defined in environment variables
 
@@ -24,6 +25,8 @@ elif [[ $1 =~ ^0x[[:xdigit:]]*$ ]]; then
   tr A-F a-f <<<"$1"
 elif [[ $1 =~ ^[[:xdigit:]]+$ ]]; then
   echo "0x$(tr A-F a-f <<<"$1")"
+elif [[ $1 =~ ^(0x[[:xdigit:]]*:)+0x[[:xdigit:]]*$ ]]; then
+  echo "0x$(sed -E -e 's/(^0x|:0x)//g' <<<"$1" | tr A-F a-f)"
 else
   seth --fail "${0##*/}: error: invalid hexdata: \`$1'"
 fi
