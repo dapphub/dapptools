@@ -84,6 +84,11 @@ let
     if [[ $status == 1 ]]
     then
         ${echo} hevm execution failed
+        ${echo} "file1:"
+        ${cat} $1
+        ${echo} "-------------"
+        ${echo} "file2:"
+        ${cat} $2
         exit 1
     fi
     if [[ $status == 124 ]]
@@ -106,17 +111,27 @@ let
 
   ignored-tests = {
     yulOptimizerTests = [
-      # unbounded loop
+      # --- timeout investigate ----
+      "controlFlowSimplifier/terminating_for_nested.yul"
+      "controlFlowSimplifier/terminating_for_nested_reversed.yul"
+
+      # --- unbounded loop ---
+
       "commonSubexpressionEliminator/branches_for.yul"
       "commonSubexpressionEliminator/loop.yul"
-      #"conditionalSimplifier/no_opt_if_break_is_not_last.yul"
-      #"conditionalUnsimplifier/no_opt_if_break_is_not_last.yul"
+      "conditionalSimplifier/clear_after_if_continue.yul"
+      "conditionalSimplifier/no_opt_if_break_is_not_last.yul"
+      "conditionalUnsimplifier/clear_after_if_continue.yul"
+      "conditionalUnsimplifier/no_opt_if_break_is_not_last.yul"
 
-      # unexpected symbolic arg
-      "commonSubexpressionEliminator/function_scopes.yul" #OpMstore
-      "commonSubexpressionEliminator/variable_for_variable.yul" #OpMstore
+      # --- unexpected symbolic arg ---
 
-      # cannot compile
+      # OpMstore
+      "commonSubexpressionEliminator/function_scopes.yul"
+      "commonSubexpressionEliminator/variable_for_variable.yul"
+
+      # --- cannot compile ---
+
       "commonSubexpressionEliminator/object_access.yul"
       "conditionalSimplifier/add_correct_type.yul"
       "conditionalSimplifier/add_correct_type_wasm.yul"
