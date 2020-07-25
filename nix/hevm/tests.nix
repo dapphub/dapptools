@@ -11,6 +11,7 @@ let
   rm = "${pkgs.coreutils}/bin/rm";
   sed = "${pkgs.gnused}/bin/sed";
   solc = "${pkgs.solc-versions.solc_0_6_7}/bin/solc";
+  tee = "${pkgs.coreutils}/bin/tee";
 
   solidity = pkgs.fetchFromGitHub {
     owner = "ethereum";
@@ -19,6 +20,8 @@ let
     sha256 = "1zqfcfgy70hmckxb3l59rabdpzj7gf1vzg6kkw4xz0c6lzy7mrpz";
   };
 
+  # Compiles a yul file to evm and prints the resulting bytecode to stdout
+  # Propogates the status code of the solc invocation
   compile = pkgs.writeShellScript "compile" ''
     out=$(${mktemp})
     ${solc} --yul --yul-dialect evm $1 > $out 2>&1
@@ -27,9 +30,9 @@ let
     exit $status
   '';
 
-  # ensures memory is symbolic by prepending `calldatacopy(0,0,1024)` to
-  # every program. (calldata is symbolic, but memory starts empty). This
-  # forces the exploration of more branches, and makes the test vectors a
+  # takes a yul program and ensures memory is symbolic by prepending
+  # `calldatacopy(0,0,1024)`. (calldata is symbolic, but memory starts empty).
+  # This forces the exploration of more branches, and makes the test vectors a
   # little more thorough.
   forceSymbolicMemory = pkgs.writeShellScript "forceSymbolicMemory" ''
     in=$(${cat} /dev/stdin)
@@ -49,38 +52,39 @@ let
     # simple notation
     ${echo} "$in"                            \
     | ${sed} 's/^{/{\n/'                     \
-    | ${sed} '0,/{/a calldatacopy(0,0,1024)' \
+    | ${sed} '0,/{/s//{\ncalldatacopy(0,0,1024)/' \
     | ${rev} | ${sed} -e 's/}$/\n}/' | ${rev}
   '';
 
-  run-yul-equivalence = pkgs.writeShellScript "run-yul-equivalence" ''
-    # Takes two Yul files, compiles them to EVM bytecode and checks equivalence.
-
+  # Takes two Yul files, compiles them to EVM bytecode and checks equivalence.
+  runSingleTest = pkgs.writeShellScript "runSingleTest" ''
     a_bin=$(${compile} $1)
     if [ $? -eq 1 ]
     then
-        ${echo} "Could not compile first Yul source."
+        ${echo} "Could not compile first Yul source. ($1)"
         ${cat} $1
-        exit 1
+        exit
     fi
 
     b_bin=$(${compile} $2)
     if [ $? -eq 1 ]
     then
-        ${echo} "Could not compile second Yul source."
+        ${echo} "Could not compile second Yul source. ($2)"
         ${cat} $2
-        exit 1
+        exit
     fi
 
     if [[ "$a_bin" == "$b_bin" ]]
     then
         ${echo} "Bytecodes are the same."
-        exit 0
+        exit
     fi
 
     ${echo} "Checking bytecode equivalence: $a_bin vs $b_bin"
-    ${pkgs.coreutils}/bin/timeout 10s ${pkgs.hevm}/bin/hevm equivalence --code-a "$a_bin" --code-b "$b_bin" --smttimeout 1000
+    ${pkgs.coreutils}/bin/timeout 10s \
+      ${pkgs.hevm}/bin/hevm equivalence --code-a "$a_bin" --code-b "$b_bin" --smttimeout 1000
     status=$?
+
     if [[ $status == 1 ]]
     then
         ${echo} hevm execution failed
@@ -89,8 +93,9 @@ let
         ${echo} "-------------"
         ${echo} "file2:"
         ${cat} $2
-        exit 1
+        exit
     fi
+
     if [[ $status == 124 ]]
     then
         ${echo} "hevm timeout."
@@ -99,57 +104,23 @@ let
         ${echo} "-------------"
         ${echo} "file2:"
         ${cat} $2
-        exit 1
+        exit
     fi
-
-    exit 0
   '';
 
-  prefixes = {
-    yulOptimizerTests = "${solidity}/test/libyul/yulOptimizerTests";
-  };
-
-  ignored-tests = {
-    yulOptimizerTests = [
-      # --- timeout investigate ----
-      "controlFlowSimplifier/terminating_for_nested.yul"
-      "controlFlowSimplifier/terminating_for_nested_reversed.yul"
-
-      # --- unbounded loop ---
-
-      "commonSubexpressionEliminator/branches_for.yul"
-      "commonSubexpressionEliminator/loop.yul"
-      "conditionalSimplifier/clear_after_if_continue.yul"
-      "conditionalSimplifier/no_opt_if_break_is_not_last.yul"
-      "conditionalUnsimplifier/clear_after_if_continue.yul"
-      "conditionalUnsimplifier/no_opt_if_break_is_not_last.yul"
-
-      # --- unexpected symbolic arg ---
-
-      # OpMstore
-      "commonSubexpressionEliminator/function_scopes.yul"
-      "commonSubexpressionEliminator/variable_for_variable.yul"
-
-      # --- cannot compile ---
-
-      "commonSubexpressionEliminator/object_access.yul"
-      "conditionalSimplifier/add_correct_type.yul"
-      "conditionalSimplifier/add_correct_type_wasm.yul"
-    ];
-  };
-in
-{
-  yulEquivalence = pkgs.runCommand "hevm-equivalence" {} ''
+  runAllTests = let
+    prefix = "${solidity}/test/libyul/yulOptimizerTests";
+  in pkgs.writeShellScript "runAllTests" ''
     check_equiv()
     {
         # Takes one file which follows the Solidity Yul optimizer unit tests format,
         # extracts both the nonoptimized and the optimized versions, and checks equivalence.
 
         ${echo} "---------------------------------------------"
-        ${echo} "checking $1"
+        ${echo} "executing test at: $1"
 
-        ignoredTests=(${toString ignored-tests.yulOptimizerTests})
-        testName=$(${echo} "$1" | ${grep} -oP "^${prefixes.yulOptimizerTests}/\K.*")
+        ignoredTests=(${toString ignored})
+        testName=$(${echo} "$1" | ${grep} -oP "^${prefix}/\K.*")
 
         if [[ " ''${ignoredTests[@]} " =~ " ''${testName} " ]]; then
             ${echo} "$testName is ignored, skipping"
@@ -172,12 +143,231 @@ in
         | ${forceSymbolicMemory}    \
         > $file2
 
-        ${run-yul-equivalence} $file1 $file2
+        ${runSingleTest} $file1 $file2
         ${rm} $file1 $file2
     }
 
-    for filename in ${prefixes.yulOptimizerTests}/**/*.yul; do
+    for filename in ${prefix}/**/*.yul; do
       check_equiv $filename
     done
+  '';
+
+  concreteMemory = [
+    "fullSuite/aztec.yul"
+  ];
+
+  ignored = [
+    # --- hevm bug ---
+
+    # https://github.com/dapphub/dapptools/issues/457
+    "controlFlowSimplifier/terminating_for_revert.yul"
+
+    # --- timeout investigate ----
+
+    "controlFlowSimplifier/terminating_for_nested.yul"
+    "controlFlowSimplifier/terminating_for_nested_reversed.yul"
+    "fullSuite/ssaReverseComplex.yul"
+
+    # --- unbounded loop ---
+
+    "commonSubexpressionEliminator/branches_for.yul"
+    "commonSubexpressionEliminator/loop.yul"
+    "conditionalSimplifier/clear_after_if_continue.yul"
+    "conditionalSimplifier/no_opt_if_break_is_not_last.yul"
+    "conditionalUnsimplifier/clear_after_if_continue.yul"
+    "conditionalUnsimplifier/no_opt_if_break_is_not_last.yul"
+    "expressionSimplifier/inside_for.yul"
+    "forLoopConditionIntoBody/cond_types.yul"
+    "forLoopConditionIntoBody/simple.yul"
+    "fullSimplify/inside_for.yul"
+    "fullSuite/devcon_example.yul"
+    "fullSuite/loopInvariantCodeMotion.yul"
+    "fullSuite/no_move_loop_orig.yul"
+    "loadResolver/loop.yul"
+    "loopInvariantCodeMotion/multi.yul"
+    "loopInvariantCodeMotion/recursive.yul"
+    "loopInvariantCodeMotion/simple.yul"
+    "redundantAssignEliminator/for_branch.yul"
+    "redundantAssignEliminator/for_break.yul"
+    "redundantAssignEliminator/for_continue.yul"
+    "redundantAssignEliminator/for_continue_3.yul"
+    "redundantAssignEliminator/for_decl_inside_break_continue.yul"
+    "redundantAssignEliminator/for_deep_noremove.yul"
+    "redundantAssignEliminator/for_deep_simple.yul"
+    "redundantAssignEliminator/for_multi_break.yul"
+    "redundantAssignEliminator/for_nested.yul"
+    "redundantAssignEliminator/for_rerun.yul"
+    "redundantAssignEliminator/for_stmnts_after_break_continue.yul"
+    "rematerialiser/branches_for1.yul"
+    "rematerialiser/branches_for2.yul"
+    "rematerialiser/for_break.yul"
+    "rematerialiser/for_continue.yul"
+    "rematerialiser/for_continue_2.yul"
+    "rematerialiser/for_continue_with_assignment_in_post.yul"
+    "rematerialiser/no_remat_in_loop.yul"
+    "ssaTransform/for_reassign_body.yul"
+    "ssaTransform/for_reassign_init.yul"
+    "ssaTransform/for_reassign_post.yul"
+    "ssaTransform/for_simple.yul"
+
+    # --- unexpected symbolic arg ---
+
+    # OpCreate2
+    "expressionSimplifier/create2_and_mask.yul"
+
+    # OpCreate
+    "expressionSimplifier/create_and_mask.yul"
+    "expressionSimplifier/large_byte_access.yul"
+
+    # OpMload
+    "yulOptimizerTests/expressionSplitter/inside_function.yul"
+    "fullInliner/double_inline.yul"
+    "fullInliner/inside_condition.yul"
+    "fullInliner/large_function_multi_use.yul"
+    "fullInliner/large_function_single_use.yul"
+    "fullInliner/no_inline_into_big_global_context.yul"
+    "fullSimplify/invariant.yul"
+    "fullSuite/abi_example1.yul"
+    "ssaAndBack/for_loop.yul"
+    "ssaAndBack/multi_assign_multi_var_if.yul"
+    "ssaAndBack/multi_assign_multi_var_switch.yul"
+    "ssaAndBack/two_vars.yul"
+    "ssaTransform/multi_assign.yul"
+    "ssaTransform/multi_decl.yul"
+    "expressionSplitter/inside_function.yul"
+
+    # OpMstore
+    "commonSubexpressionEliminator/function_scopes.yul"
+    "commonSubexpressionEliminator/variable_for_variable.yul"
+    "expressionSplitter/trivial.yul"
+    "fullInliner/multi_return.yul"
+    "fullSimplify/constant_propagation.yul"
+    "fullSimplify/identity_rules_complex.yul"
+    "fullSuite/medium.yul"
+    "loadResolver/memory_with_msize.yul"
+    "loadResolver/merge_known_write.yul"
+    "loadResolver/merge_known_write_with_distance.yul"
+    "loadResolver/merge_unknown_write.yul"
+    "loadResolver/reassign_value_expression.yul"
+    "loadResolver/second_mstore_with_delta.yul"
+    "loadResolver/second_store_with_delta.yul"
+    "loadResolver/simple.yul"
+    "loadResolver/simple_memory.yul"
+    "fullSuite/ssaReverse.yul"
+    "rematerialiser/cheap_caller.yul"
+    "rematerialiser/non_movable_instruction.yul"
+    "ssaAndBack/multi_assign.yul"
+    "ssaAndBack/multi_assign_if.yul"
+    "ssaAndBack/multi_assign_switch.yul"
+    "ssaAndBack/simple.yul"
+    "ssaReverser/simple.yul"
+
+    # OpMstore8
+    "loadResolver/memory_with_different_kinds_of_invalidation.yul"
+
+    # OpRevert
+    "ssaAndBack/ssaReverse.yul"
+
+    # --- invalid test ---
+    # https://github.com/ethereum/solidity/issues/9500
+
+    "commonSubexpressionEliminator/object_access.yul"
+    "expressionSplitter/object_access.yul"
+    "fullSuite/stack_compressor_msize.yul"
+    "varNameCleaner/function_names.yul"
+
+    # --- stack too deep ---
+
+    "fullSuite/abi2.yul"
+    "fullSuite/aztec.yul"
+    "stackCompressor/inlineInBlock.yul"
+    "stackCompressor/inlineInFunction.yul"
+    "stackCompressor/unusedPrunerWithMSize.yul"
+    "wordSizeTransform/function_call.yul"
+    "fullInliner/no_inline_into_big_function.yul"
+
+    # --- wrong number of args ---
+
+    "wordSizeTransform/functional_instruction.yul"
+    "wordSizeTransform/if.yul"
+    "wordSizeTransform/or_bool_renamed.yul"
+    "wordSizeTransform/switch_1.yul"
+    "wordSizeTransform/switch_2.yul"
+    "wordSizeTransform/switch_3.yul"
+    "wordSizeTransform/switch_4.yul"
+    "wordSizeTransform/switch_5.yul"
+
+    # --- typed yul ---
+
+    "expressionSplitter/typed.yul"
+    "expressionInliner/simple.yul"
+    "expressionInliner/with_args.yul"
+    "disambiguator/variables_inside_functions.yul"
+    "disambiguator/switch_statement.yul"
+    "disambiguator/if_statement.yul"
+    "disambiguator/for_statement.yul"
+    "disambiguator/funtion_call.yul"
+    "disambiguator/long_names.yul"
+    "disambiguator/variables.yul"
+    "disambiguator/variables_clash.yul"
+    "conditionalSimplifier/add_correct_type.yul"
+    "conditionalSimplifier/add_correct_type_wasm.yul"
+    "fullInliner/multi_return_typed.yul"
+    "functionGrouper/empty_block.yul"
+    "functionGrouper/multi_fun_mixed.yul"
+    "functionGrouper/nested_fun.yul"
+    "functionGrouper/single_fun.yul"
+    "functionHoister/empty_block.yul"
+    "functionHoister/multi_mixed.yul"
+    "functionHoister/nested.yul"
+    "functionHoister/single.yul"
+    "mainFunction/empty_block.yul"
+    "mainFunction/multi_fun_mixed.yul"
+    "mainFunction/nested_fun.yul"
+    "mainFunction/single_fun.yul"
+    "ssaTransform/typed.yul"
+    "ssaTransform/typed_for.yul"
+    "ssaTransform/typed_switch.yul"
+    "varDeclInitializer/typed.yul"
+  ];
+in
+{
+  yulEquivalence = pkgs.runCommand "hevm-equivalence" {} ''
+    results=$(${mktemp})
+    ${runAllTests} | ${tee} $results
+
+    set +e
+    total="$(grep -c 'executing test at' $results)"
+    passed="$(grep -c 'No discrepancies found' $results)"
+    ignored="$(grep -c 'is ignored, skipping' $results)"
+    same_bytecode="$(grep -c 'Bytecodes are the same' $results)"
+    no_compile_first="$(grep -c 'Could not compile first Yul source' $results)"
+    no_compile_second="$(grep -c 'Could not compile second Yul source' $results)"
+    hevm_timeout="$(grep -c 'hevm timeout' $results)"
+    hevm_failed="$(grep -c 'hevm execution failed' $results)"
+    set -e
+
+    echo
+    echo Summary:
+    echo -------------------------------------------
+    echo ran: $total
+    echo passed: $passed
+    echo ignored: $ignored
+    echo same bytecode: $same_bytecode
+    echo could not compile first program: $no_compile_first
+    echo could not compile second program: $no_compile_second
+    echo hevm timeout: $hevm_timeout
+    echo hevm execution failed: $hevm_failed
+    echo
+
+    if [ $no_compile_first != 0 ]  || \
+       [ $no_compile_second != 0 ] || \
+       [ $hevm_timeout != 0 ]      || \
+       [ $hevm_failed != 0 ]
+    then
+      exit 1
+    else
+      exit 0
+    fi
   '';
 }
