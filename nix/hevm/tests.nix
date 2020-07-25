@@ -7,6 +7,7 @@ let
   hevm = "${pkgs.hevm}/bin/hevm";
   mktemp = "${pkgs.coreutils}/bin/mktemp";
   timeout = "${pkgs.timeout}/bin/timeout";
+  rev = "${pkgs.utillinux}/bin/rev";
   rm = "${pkgs.coreutils}/bin/rm";
   sed = "${pkgs.gnused}/bin/sed";
   solc = "${pkgs.solc-versions.solc_0_6_7}/bin/solc";
@@ -26,19 +27,30 @@ let
     exit $status
   '';
 
-  primeMemory = pkgs.writeShellScript "primeMemory" ''
+  # ensures memory is symbolic by prepending `calldatacopy(0,0,1024)` to
+  # every program. (calldata is symbolic, but memory starts empty). This
+  # forces the exploration of more branches, and makes the test vectors a
+  # little more thorough.
+  forceSymbolicMemory = pkgs.writeShellScript "forceSymbolicMemory" ''
     in=$(${cat} /dev/stdin)
+
+    # empty programs
     if [ "$in" == "{ }" ]; then
       echo "$in"
       exit 0
     fi
 
+    # object notation
     if [ "$(${echo} $in | head -n 1 | ${awk} '{print $1;}')" == "object" ]; then
       ${echo} "$in" | ${sed} '/code\ {/ a calldatacopy(0,0,1024)'
       exit 0
     fi
 
-    ${echo} "$in" | ${sed} '0,/{/a calldatacopy(0,0,1024)'
+    # simple notation
+    ${echo} "$in"                            \
+    | ${sed} 's/^{/{\n/'                     \
+    | ${sed} '0,/{/a calldatacopy(0,0,1024)' \
+    | ${rev} | ${sed} -e 's/}$/\n}/' | ${rev}
   '';
 
   run-yul-equivalence = pkgs.writeShellScript "run-yul-equivalence" ''
@@ -130,18 +142,19 @@ in
         fi
 
         file1=$(${mktemp})
-        ${cat} $1           \
-        | ${sed} '/^\/\//d' \
-        | ${sed} -e '/^$/d' \
-        | ${primeMemory}    \
+        ${cat} $1                \
+        | ${sed} '/^\/\//d'      \
+        | ${sed} -e '/^$/d'      \
+        | ${forceSymbolicMemory} \
         > $file1
 
         file2=$(${mktemp})
-        ${sed} '0,/^\/\/ step:/d' $1 \
-        | ${sed} -e 's!\/\/!!'       \
-        | ${sed} -e '/^$/d'          \
-        | ${sed} 's/^.//'            \
-        | ${primeMemory}             \
+        cat $1                      \
+        | ${sed} '0,/^\/\/ step:/d' \
+        | ${sed} -e 's!\/\/!!'      \
+        | ${sed} -e '/^$/d'         \
+        | ${sed} 's/^.//'           \
+        | ${forceSymbolicMemory}    \
         > $file2
 
         ${run-yul-equivalence} $file1 $file2
