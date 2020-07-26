@@ -1,5 +1,13 @@
 # hevm changelog
 
+## Unreleased
+
+
+### Changed
+
+- z3 updated to 4.8.7
+
+
 ## 0.40 - 2020-07-22
 
 - hevm is now capable of symbolic execution!
