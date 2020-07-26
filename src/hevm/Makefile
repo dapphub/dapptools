@@ -1,8 +1,6 @@
 all: build
 
-default.nix: hevm.cabal
-	nix-shell --command 'cabal2nix . > default.nix' --pure
-.configured: default.nix shell.nix
+.configured: shell.nix
 	nix-shell --command 'cabal new-configure --enable-tests' --pure
 	touch .configured
 build: .configured
