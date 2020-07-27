@@ -40,6 +40,7 @@ opts+=(--chainid   "${ETH_CHAINID:-$(seth rpc eth_chainId | seth --to-dec)}")
 
 [[ "$HEVM_STATE" ]] && opts+=(--state "$HEVM_STATE")
 [[ "$HEVM_DEBUG" ]] && opts+=(--debug)
+[[ "$HEVM_TRACE" ]] && opts+=(--trace)
 [[ "$DAPP_JSON" ]]  && opts+=(--json-file "$DAPP_JSON")
 
 ([[ $SETH_VERBOSE ]] && set -x; hevm exec "${opts[@]}")
