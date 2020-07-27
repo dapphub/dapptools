@@ -12,6 +12,15 @@ let
     sha256 = "1c76xri5qhbqmd088k3s1wldkys5qrsqyx2a2m1903an41w5bz5f";
   };
 
+  static-haskell-nix =
+    let
+      rev = "dbce18f4808d27f6a51ce31585078b49c86bd2b5";
+    in
+    builtins.fetchTarball {
+      url = "https://github.com/nh2/static-haskell-nix/archive/${rev}.tar.gz";
+      sha256 = "084hxnrywsgb73zr41argdkbhkxzm1rqn058pv1l4cp9g1gjr2rr";
+    };
+
   # run all General State Tests, skipping tests that deal with "anomalies on the main network"
   # (see section K.1 of https://ethereum.github.io/yellowpaper/paper.pdf), and some performance
   # heavy ones.
@@ -29,6 +38,11 @@ let
   #    --group "VM"
   '';
 
+  staticHaskell = dist : import "${static-haskell-nix}/survey/default.nix" {
+    compiler = "ghc865";
+    normalPkgs = dist.pkgs;
+  };
+
   # These packages should always work and be available in the binary cache.
   stable = dist: with dist.pkgs; {
     inherit dapp;
@@ -36,11 +50,12 @@ let
     inherit ethsign;
     inherit go-ethereum-unlimited;
     inherit go-ethereum;
-    inherit hevm;
+    hevm = (staticHaskell dist).hevm;
     inherit qrtx-term;
     inherit qrtx;
     inherit seth;
     inherit token;
+    staticHaskell = staticHaskell dist;
 
     hevm-compliance = hevmCompliance dist;
   # the union is necessary because nix-build does not evaluate sets
