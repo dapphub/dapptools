@@ -111,7 +111,7 @@ data Command w
       , arg           :: w ::: [String]           <?> "Values to encode"
       , debug         :: w ::: Bool               <?> "Run interactively"
       , getModels     :: w ::: Bool               <?> "Print example testcase for each execution path"
-      , smttimeout    :: w ::: Maybe Integer      <?> "Timeout given to SMT solver in milliseconds"
+      , smttimeout    :: w ::: Maybe Integer      <?> "Timeout given to SMT solver in milliseconds (default: 20000)"
       , maxIterations :: w ::: Maybe Integer      <?> "Number of times we may revisit a particular branching point"
       , solver        :: w ::: Maybe Text         <?> "Used SMT solver: z3 (default) or cvc4"
       }
@@ -119,7 +119,7 @@ data Command w
       { codeA         :: w ::: ByteString    <?> "Bytecode of the first program"
       , codeB         :: w ::: ByteString    <?> "Bytecode of the second program"
       , sig           :: w ::: Maybe Text    <?> "Signature of types to decode / encode"
-      , smttimeout    :: w ::: Maybe Integer <?> "Timeout given to SMT solver in milliseconds"
+      , smttimeout    :: w ::: Maybe Integer <?> "Timeout given to SMT solver in milliseconds (default: 20000)"
       , maxIterations :: w ::: Maybe Integer <?> "Number of times we may revisit a particular branching point"
       , solver        :: w ::: Maybe Text    <?> "Used SMT solver: z3 (default) or cvc4"
       }
@@ -388,18 +388,17 @@ equivalence cmd =
 
 -- cvc4 sets timeout via a commandline option instead of smtlib `(set-option)`
 runSMTWithTimeOut :: Maybe Text -> Maybe Integer -> Symbolic a -> IO a
-runSMTWithTimeOut (Just "cvc4") Nothing sym  = runSMTWith cvc4 sym
-runSMTWithTimeOut (Just "cvc4") (Just n) sym = do
-  setEnv "SBV_CVC4_OPTIONS" ("--lang=smt --incremental --interactive --no-interactive-prompt --model-witness-value --tlimit-per=" <> show n)
-  a <- runSMTWith cvc4 sym
-  setEnv "SBV_CVC4_OPTIONS" ""
-  return a
-runSMTWithTimeOut smtsolver t sym =
-  let runwithz3 = runSMTWith z3 $ maybe (return ()) setTimeOut t >> sym
-  in case smtsolver of
-    Just "z3" -> runwithz3
-    Nothing   -> runwithz3
-    Just _ -> error "Unknown solver. Currently supported solvers; z3, cvc4"
+runSMTWithTimeOut solver maybeTimeout sym
+  | solver == Just "cvc4" = do
+      setEnv "SBV_CVC4_OPTIONS" ("--lang=smt --incremental --interactive --no-interactive-prompt --model-witness-value --tlimit-per=" <> show timeout)
+      a <- runSMTWith cvc4 sym
+      setEnv "SBV_CVC4_OPTIONS" ""
+      return a
+  | solver == Just "z3" = runwithz3
+  | solver == Nothing = runwithz3
+  | otherwise = error "Unknown solver. Currently supported solvers; z3, cvc4"
+ where timeout = fromMaybe 20000 maybeTimeout
+       runwithz3 = runSMTWith z3 $ (setTimeOut timeout) >> sym
 
 
 checkForVMErrors :: [EVM.VM] -> [String]
@@ -506,7 +505,7 @@ launchExec cmd = do
   vm <- vmFromCommand cmd
   vm1 <- case state cmd of
     Nothing -> pure vm
-    Just path -> 
+    Just path ->
       -- Note: this will load the code, so if you've specified a state
       -- repository, then you effectively can't change `--code' after
       -- the first run.
@@ -783,7 +782,7 @@ parseAbi abijson = (signature abijson, snd <$> parseMethodInput <$> V.toList (fr
 
 abiencode :: (AsValue s) => Maybe s -> [String] -> ByteString
 abiencode Nothing _ = error "missing required argument: abi"
-abiencode (Just abijson) args = 
+abiencode (Just abijson) args =
   let (sig', declarations) = parseAbi abijson
   in if length declarations == length args
      then abiMethod sig' $ AbiTuple . V.fromList $ zipWith makeAbiValue declarations args
