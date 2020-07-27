@@ -9,16 +9,16 @@ let
 
 in self-hs: super-hs:
   let
-    dontCheck = x:
+    dontCheck = x: y:
       pkgs.haskell.lib.dontCheck
-        (self-hs.callPackage x {});
-    sbv_prepatch = self-hs.callCabal2nix "sbv" (builtins.fetchGit {
-        url = "https://github.com/LeventErkok/sbv/";
-        rev = "80883626faaf3f9cf541ba9b98775d0afd00c07a";
-    }) {inherit (pkgs) z3;};
+        (self-hs.callCabal2nix x y {});
+
+    sbv_prepatch = self-hs.callCabal2nix "sbv"
+    (~/sbv)
+    {inherit (pkgs) z3;};
 
   in {
-    restless-git = dontCheck (import ./src/restless-git);
+    restless-git = dontCheck "restless-git" (./src/restless-git);
     wreq = pkgs.haskell.lib.doJailbreak super-hs.wreq;
 
     # we use a pretty bleeding edge sbv version
@@ -26,6 +26,10 @@ in self-hs: super-hs:
       postPatch = ''
       sed -i -e 's|"z3"|"${pkgs.z3}/bin/z3"|' Data/SBV/Provers/Z3.hs
       sed -i -e 's|"cvc4"|"${pkgs.cvc4}/bin/cvc4"|' Data/SBV/Provers/CVC4.hs'';
+      # configureFlags = attrs.configureFlags ++ [
+      #   "--ghc-option= -O2"
+      # ];
+
     });
 
 
@@ -59,5 +63,8 @@ in self-hs: super-hs:
       enableSeparateDataOutput = true;
       buildInputs = attrs.buildInputs ++ [pkgs.solc];
       nativeBuildInputs = attrs.nativeBuildInputs ++ [pkgs.makeWrapper];
+      configureFlags = attrs.configureFlags ++ [
+          "--ghc-option= -O2"
+          ];
     }));
   }
