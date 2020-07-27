@@ -15,7 +15,7 @@ in self-hs: super-hs:
 
     sbv_prepatch = self-hs.callCabal2nix "sbv" (builtins.fetchGit {
         url = "https://github.com/LeventErkok/sbv/";
-        rev = "80883626faaf3f9cf541ba9b98775d0afd00c07a";
+        rev = "99454d9a1a433554db4e631c89adddac651e4e07";
     })    {inherit (pkgs) z3;};
 
   in {
@@ -27,9 +27,9 @@ in self-hs: super-hs:
       postPatch = ''
       sed -i -e 's|"z3"|"${pkgs.z3}/bin/z3"|' Data/SBV/Provers/Z3.hs
       sed -i -e 's|"cvc4"|"${pkgs.cvc4}/bin/cvc4"|' Data/SBV/Provers/CVC4.hs'';
-      # configureFlags = attrs.configureFlags ++ [
-      #   "--ghc-option= -O2"
-      # ];
+      configureFlags = attrs.configureFlags ++ [
+        "--ghc-option=-O2"
+      ];
 
     });
 
@@ -64,5 +64,8 @@ in self-hs: super-hs:
       enableSeparateDataOutput = true;
       buildInputs = attrs.buildInputs ++ [pkgs.solc];
       nativeBuildInputs = attrs.nativeBuildInputs ++ [pkgs.makeWrapper];
+      configureFlags = attrs.configureFlags ++ [
+          "--ghc-option=-O2"
+          ];
     }));
   }
