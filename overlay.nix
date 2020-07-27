@@ -72,7 +72,7 @@ in rec {
 
   jays = (
     self.pkgs.haskell.lib.justStaticExecutables
-      (self.haskellPackages.callPackage (import ./src/jays) {})
+      (self.haskellPackages.callCabal2nix "jays" (./src/jays) {})
   ).overrideAttrs (_: { postInstall = "cp $out/bin/{jays,jshon}"; });
 
   # Override buggy jshon program with Haskell-based replacement.
