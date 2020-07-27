@@ -64,8 +64,5 @@ in self-hs: super-hs:
       enableSeparateDataOutput = true;
       buildInputs = attrs.buildInputs ++ [pkgs.solc];
       nativeBuildInputs = attrs.nativeBuildInputs ++ [pkgs.makeWrapper];
-      configureFlags = attrs.configureFlags ++ [
-          "--ghc-option= -O2"
-          ];
     }));
   }
