@@ -53,6 +53,7 @@ if [[ -z "$HEVM_DEBUG" && -z "$HEVM_EXEC" ]]; then
 else
   opts=()
   [[ "$HEVM_DEBUG" ]] && opts+=(--debug)
+  [[ "$HEVM_TRACE" ]] && opts+=(--trace)
   [[ "$HEVM_STATE" ]] && opts+=(--state "$HEVM_STATE")
 
   opts+=(--rpc "$ETH_RPC_URL")
