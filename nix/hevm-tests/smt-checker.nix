@@ -77,52 +77,49 @@ let
     smtchecker_violation=$?
 
     if [ $hevm_violation -ne 0 ] && [ $smtchecker_violation -eq 0 ]; then
-      ${echo} "SMTChecker reports assertion violation whereas HEVM reports safe."
+      ${echo} "FAIL: SMTChecker reports assertion violation whereas HEVM reports safe."
       exit
     elif [ $hevm_violation -eq 0 ] && [ $smtchecker_violation -ne 0 ]; then
-      ${echo} "SMTChecker reports safe whereas HEVM reports assertion violation."
+      ${echo} "FAIL: SMTChecker reports safe whereas HEVM reports assertion violation."
       exit
     fi
 
-    ${echo} hevm and SMTChecker agree!
+    ${echo} PASS: hevm and SMTChecker agree!
   '';
 in
 pkgs.runCommand "smtCheckerTests" {} ''
   ${mkdir} $out
+  results=$out/cvc4
 
-  for filename in ${smtCheckerTests}/control_flow/*.sol; do
-    ${runSingleTest} $filename z3 | ${tee} $out/z3
+  for filename in ${smtCheckerTests}/**/*.sol; do
+    ${runSingleTest} $filename cvc4 | ${tee} -a $results
   done
 
   set +e
-  total="$(${grep} -c 'executing test:' $results)"
-  passed="$(${grep} -c 'No discrepancies found' $results)"
-  ignored="$(${grep} -c 'is ignored, skipping' $results)"
-  same_bytecode="$(${grep} -c 'Bytecodes are the same' $results)"
-  no_compile_first="$(${grep} -c 'Could not compile first Yul source' $results)"
-  no_compile_second="$(${grep} -c 'Could not compile second Yul source' $results)"
-  hevm_timeout="$(${grep} -c 'hevm timeout' $results)"
-  hevm_failed="$(${grep} -c 'hevm execution failed' $results)"
+  total="$(${grep} -c 'Executing test at:' $results)"
+  passed="$(${grep} -c 'PASS: hevm and SMTChecker agree!' $results)"
+  smt_reports="$(${grep} -c 'FAIL: SMTChecker reports assertion violation whereas HEVM reports safe.' $results)"
+  hevm_reports="$(${grep} -c 'FAIL: SMTChecker reports safe whereas HEVM reports assertion violation.' $results)"
+  hevm_timeout="$(${grep} -c 'FAIL: hevm timeout' $results)"
   set -e
 
+  ${echo}
+  ${echo} Summary:
+  ${echo} ---------------------------------
   ${echo} ran: $total
-  ${echo} same bytecode: $same_bytecode
-  ${echo} ignored: $ignored
   ${echo} passed: $passed
-  ${echo} could not compile first program: $no_compile_first
-  ${echo} could not compile second program: $no_compile_second
+  ${echo} 'failed (smt reports safe, hevm reports assertion):' $smt_reports
+  ${echo} 'failed (hevm reports safe, smt reports assertion):' $hevm_reports
   ${echo} hevm timeout: $hevm_timeout
-  ${echo} hevm execution failed: $hevm_failed
   ${echo}
 
-  if [ $no_compile_first != 0 ]  || \
-     [ $no_compile_second != 0 ] || \
-     [ $hevm_timeout != 0 ]      || \
-     [ $hevm_failed != 0 ]
+  if [ $hevm_timeout != 0 ] || \
+     [ $smt_reports != 0 ]  || \
+     [ $hevm_reports != 0 ]
   then
-    return 1
+    exit 1
   else
-    return 0
+    exit 0
   fi
 ''
 
