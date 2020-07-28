@@ -21,7 +21,7 @@ import EVM.ABI
 import EVM.Types
 import EVM.Solidity
 import EVM.Keccak
-import EVM.Concrete (Word(..), Whiff(..), w256, sliceMemory, createAddress, wordValue, keccakBlob, create2Address)
+import EVM.Concrete (Word(..), w256, createAddress, wordValue, keccakBlob, create2Address)
 import EVM.Symbolic
 import EVM.Op
 import EVM.FeeSchedule (FeeSchedule (..))
@@ -623,7 +623,6 @@ exec1 = do
             (xOffset' : xSize' : xs) ->
               forceConcrete xOffset' $
                 \xOffset -> forceConcrete xSize' $ \xSize -> do
-                  let bytes = readMemory xOffset xSize vm
                   (hash, invMap) <- case readMemory xOffset xSize vm of
                                      ConcreteBuffer bs -> pure (litWord $ keccakBlob bs, Map.singleton (keccakBlob bs) bs)
 
@@ -1611,9 +1610,7 @@ finalize = do
       createe  <- use (state . contract)
       createeExists <- (Map.member createe) <$> use (env . contracts)
 
-      if creation && createeExists
-      then forceConcreteBuffer output $ \code' -> replaceCode createe (RuntimeCode code')
-      else noop
+      when (creation && createeExists) $ forceConcreteBuffer output $ \code' -> replaceCode createe (RuntimeCode code')
 
   -- compute and pay the refund to the caller and the
   -- corresponding payment to the miner
@@ -1975,9 +1972,9 @@ replaceCodeOfSelf newCode = do
 
 resetState :: EVM ()
 resetState = do
-  assign result     Nothing
-  assign frames     []
-  assign state      blankState
+  assign result Nothing
+  assign frames []
+  assign state  blankState
 
 
 -- * VM error implementation

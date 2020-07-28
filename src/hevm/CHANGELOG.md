@@ -18,7 +18,7 @@
 ### Added
 
 - `hevm exec --trace` flag to dump a trace
-
+- Faster backstepping in interactive mode by saving multiple snapshot states.
 
 ## 0.40 - 2020-07-22
 

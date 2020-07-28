@@ -109,6 +109,7 @@ type ABIMethod = Text
 initializeUnitTest :: UnitTestOptions -> Stepper ()
 initializeUnitTest UnitTestOptions { .. } = do
 
+  let addr = testAddress testParams
   -- Maybe modify the initial VM, e.g. to load library code
   Stepper.evm (modify vmModifier)
 
@@ -116,31 +117,24 @@ initializeUnitTest UnitTestOptions { .. } = do
   Stepper.evm (pushTrace (EntryTrace "constructor"))
 
   -- Constructor is loaded; run until it returns code
-  bytes <- Stepper.execFullyOrFail
-  case bytes of
-    SymbolicBuffer bs -> error "unexpected symbolic contract bytecode"
-    ConcreteBuffer bs -> do
-      addr <- Stepper.evm (use (state . contract))
+  void Stepper.execFullyOrFail
 
-      -- Mutate the current contract to use the new code
-      Stepper.evm $ replaceCodeOfSelf (RuntimeCode bs)
+  -- Give a balance to the test target
+  Stepper.evm $
+    env . contracts . ix addr . balance += w256 (testBalanceCreate testParams)
 
-      -- Give a balance to the test target
-      Stepper.evm $
-        env . contracts . ix addr . balance += w256 (testBalanceCreate testParams)
+  -- Initialize the test contract
+  Stepper.evm $
+    setupCall testParams addr "setUp()" emptyAbi
+  Stepper.evm (popTrace >> pushTrace (EntryTrace "initialize test"))
 
-      -- Initialize the test contract
-      Stepper.evm $
-        setupCall testParams addr "setUp()" emptyAbi
-      Stepper.evm (popTrace >> pushTrace (EntryTrace "initialize test"))
+  Stepper.note "Running `setUp()'"
 
-      Stepper.note "Running `setUp()'"
-
-      -- Let `setUp()' run to completion
-      void Stepper.execFullyOrFail
-      Stepper.evm (use result) >>= \case
-        Just (VMFailure e) -> Stepper.evm (pushTrace (ErrorTrace e))
-        _ -> Stepper.evm popTrace
+  -- Let `setUp()' run to completion
+  void Stepper.execFullyOrFail
+  Stepper.evm (use result) >>= \case
+    Just (VMFailure e) -> Stepper.evm (pushTrace (ErrorTrace e))
+    _ -> Stepper.evm popTrace
 
 
 -- | Assuming a test contract is loaded and initialized, this stepper
@@ -235,8 +229,7 @@ currentOpLocation vm =
 
 execWithCoverage :: StateT CoverageState IO VMResult
 execWithCoverage = do _ <- runWithCoverage
-                      Just res <- use (_1 . result)
-                      pure res
+                      fromJust <$> use (_1 . result)
 
 runWithCoverage :: StateT CoverageState IO VM
 runWithCoverage = do
@@ -249,7 +242,7 @@ runWithCoverage = do
       zoom _2 (modify (MultiSet.insert (currentOpLocation vm1)))
       runWithCoverage
     Just _ -> pure vm0
-      
+
 
 interpretWithCoverage
   :: UnitTestOptions
@@ -558,30 +551,30 @@ formatTestLog :: Map W256 Event -> Log -> Maybe Text
 formatTestLog _ (Log _ _ []) = Nothing
 formatTestLog events (Log _ args (topic:_)) =
   case maybeLitWord topic of
-    Nothing -> Nothing 
+    Nothing -> Nothing
     Just t -> case (Map.lookup (wordValue t) events) of
                    Nothing -> Nothing
                    Just (Event name _ _) -> case name of
                      "log_bytes32" ->
                        Just $ formatSBytes args
-               
+
                      "log_named_bytes32" ->
                        let key = grab 32 args
                            val = ditch 32 args
                        in Just $ formatSString key <> ": " <> formatSBytes val
-               
+
                      "log_named_address" ->
                        let key = grab 32 args
                            val = ditch 44 args
                        in Just $ formatSString key <> ": " <> formatSBinary val
-               
+
                      "log_named_int" ->
                        let key = grab 32 args
                            val = case maybeLitWord (readMemoryWord 32 args) of
                              Just c -> showDec Signed (wordValue c)
                              Nothing -> "<symbolic int>"
                       in Just $ formatSString key <> ": " <> val
-               
+
                      "log_named_uint" ->
                        let key = grab 32 args
                            val = case maybeLitWord (readMemoryWord 32 args) of
@@ -599,9 +592,9 @@ word32Bytes :: Word32 -> ByteString
 word32Bytes x = BS.pack [byteAt x (3 - i) | i <- [0..3]]
 
 setupCall :: TestVMParams -> Addr -> Text -> AbiValue -> EVM ()
-setupCall params target sig args  = do
-  let TestVMParams {..} = params
+setupCall TestVMParams{..} target sig args  = do
   resetState
+  assign (tx . isCreate) False
   loadContract target
   assign (state . calldata) $ (ConcreteBuffer $ abiMethod sig args, literal . num . BS.length $ abiMethod sig args)
   assign (state . caller) (litAddr testCaller)
@@ -629,7 +622,7 @@ initialUnitTestVm (UnitTestOptions {..}) theContract _ =
            , vmoptDifficulty = testDifficulty
            , vmoptSchedule = FeeSchedule.istanbul
            , vmoptChainId = testChainId
-           , vmoptCreate = False
+           , vmoptCreate = True
            }
     creator =
       initialContract (RuntimeCode mempty)
