@@ -1,5 +1,6 @@
 { pkgs, lib }:
 rec {
+  solc = "${pkgs.solc-versions.solc_0_6_7}/bin/solc";
   solidity = pkgs.fetchFromGitHub {
     owner = "ethereum";
     repo = "solidity";
@@ -7,5 +8,6 @@ rec {
     sha256 = "1zqfcfgy70hmckxb3l59rabdpzj7gf1vzg6kkw4xz0c6lzy7mrpz";
   };
 
-  yulEquivalence = (import ./yul-equivalence.nix) { inherit pkgs lib solidity; };
+  yulEquivalence = (import ./yul-equivalence.nix) { inherit pkgs solc solidity; };
+  smtChecker = (import ./smt-checker.nix) { inherit pkgs solc solidity; };
 }

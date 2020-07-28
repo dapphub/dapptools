@@ -3,7 +3,7 @@
   This is a corpus of ~400 tests used to ensure that the yul optimizer produces equivalent code.
 */
 
-{ pkgs, lib, solidity }:
+{ pkgs, solidity, solc }:
 
 let
 
@@ -16,12 +16,11 @@ let
   hevm = "${pkgs.hevm}/bin/hevm";
   mkdir = "${pkgs.coreutils}/bin/mkdir";
   mktemp = "${pkgs.coreutils}/bin/mktemp";
-  timeout = "${pkgs.timeout}/bin/timeout";
   rev = "${pkgs.utillinux}/bin/rev";
   rm = "${pkgs.coreutils}/bin/rm";
   sed = "${pkgs.gnused}/bin/sed";
-  solc = "${pkgs.solc-versions.solc_0_6_7}/bin/solc";
   tee = "${pkgs.coreutils}/bin/tee";
+  timeout = "${pkgs.coreutils}/bin/timeout";
 
   # --- test scripts ---
 
@@ -86,11 +85,10 @@ let
     fi
 
     ${echo} "Checking bytecode equivalence: $a_bin vs $b_bin"
-    ${pkgs.coreutils}/bin/timeout 20s \
-      ${pkgs.hevm}/bin/hevm equivalence --solver $3       \
-                                        --code-a "$a_bin" \
-                                        --code-b "$b_bin" \
-                                        --smttimeout 20000
+    ${timeout} 30s ${hevm} equivalence --solver $3       \
+                                       --code-a "$a_bin" \
+                                       --code-b "$b_bin" \
+                                       --smttimeout 20000
     status=$?
 
     if [[ $status == 1 ]]
