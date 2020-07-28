@@ -406,69 +406,91 @@ runSMTWithTimeOut solver maybeTimeout sym
 
 checkForVMErrors :: [EVM.VM] -> [String]
 checkForVMErrors [] = []
-checkForVMErrors (vm:vms) = case view EVM.result vm of
-  Just (EVM.VMFailure EVM.UnexpectedSymbolicArg) -> ("Unexpected symbolic argument at opcode: " <>
-                                             maybe "??" show (EVM.vmOp vm) <> ". Not supported (yet!)"):checkForVMErrors vms
-  _ -> checkForVMErrors vms
+checkForVMErrors (vm:vms) =
+  case view EVM.result vm of
+    Just (EVM.VMFailure EVM.UnexpectedSymbolicArg) ->
+      ("Unexpected symbolic argument at opcode: "
+      <> maybe "??" show (EVM.vmOp vm)
+      <> ". Not supported (yet!)"
+      ) : checkForVMErrors vms
+    _ ->
+      checkForVMErrors vms
 
--- Although it is tempting to fully abstract calldata and give any hints about the nature of the signature
--- doing so results in significant time spent in consulting z3 about rather trivial matters. But with cvc4 it is quite pleasant!
+-- Although it is tempting to fully abstract calldata and give any hints about
+-- the nature of the signature doing so results in significant time spent in
+-- consulting z3 about rather trivial matters. But with cvc4 it is quite
+-- pleasant!
 
 -- If function signatures are known, they should always be given for best results.
 assert :: Command Options.Unwrapped -> IO ()
 assert cmd = do
-
   let root = fromMaybe "." (dappRoot cmd)
       srcinfo = ((,) root) <$> (jsonFile cmd)
       block'  = maybe EVM.Fetch.Latest EVM.Fetch.BlockNumber (block cmd)
       rpcinfo = (,) block' <$> rpc cmd
   maybesig <- case sig cmd of
-        Nothing -> return Nothing
-        Just sig' -> do method' <- functionAbi sig'
-                        let typ = snd <$> view methodInputs method'
-                            name = view methodSignature method'
-                        return $ Just (name,typ)
-  if debug cmd
-  then runSMTWithTimeOut (solver cmd) (smttimeout cmd) $ query $ do
-         preState <- symvmFromCommand cmd
-         smtState <- queryState
-         io $ void $ EVM.TTY.runFromVM srcinfo (EVM.Fetch.oracle smtState rpcinfo) preState
+    Nothing ->
+      return Nothing
+    Just sig' -> do
+      method' <- functionAbi sig'
+      let typ = snd <$> view methodInputs method'
+          name = view methodSignature method'
+      return $ Just (name,typ)
+  if debug cmd then
+    runSMTWithTimeOut (solver cmd) (smttimeout cmd) $ query $ do
+      preState <- symvmFromCommand cmd
+      smtState <- queryState
+      io $ void $ EVM.TTY.runFromVM srcinfo (EVM.Fetch.oracle smtState rpcinfo) preState
 
-  else runSMTWithTimeOut (solver cmd) (smttimeout cmd) $ query $ do
-         preState <- symvmFromCommand cmd
-         verify preState (maxIterations cmd) rpcinfo (Just checkAssertions) >>= \case
-           Right _ -> do io $ putStrLn "Assertion violation found."
-                         showCounterexample preState maybesig
-                         io $ exitWith (ExitFailure 1)
-           Left (pre, posts) ->
-             do io $ putStrLn $ "Explored: " <> show (length posts) <> " branches without assertion violations"
-                let vmErrs = checkForVMErrors posts
-                unless (null vmErrs) $ io $ do putStrLn $ "However, " <> show (length vmErrs) <> " branch(es) errored while exploring:"
-                                               print vmErrs
-                -- When `--get-model` is passed, we print example vm info for each path
-                when (getModels cmd) $
-                  forM_ (zip [1..] posts) $ \(i, postVM) -> do
-                    resetAssertions
-                    constrain (sAnd (view EVM.pathConditions postVM))
-                    io $ putStrLn $ "-- Branch (" <> show i <> "/" <> show (length posts) <> ") --"
-                    checkSat >>= \case
-                      Unk -> io $ putStrLn "Timed out"
-                      Unsat -> io $ putStrLn "Inconsistent path conditions: dead path"
-                      Sat -> do
-                        showCounterexample pre maybesig
-                        case view EVM.result postVM of
-                          Nothing -> error "internal error; no EVM result"
-                          Just (EVM.VMFailure (EVM.Revert "")) -> io . putStrLn $ "Reverted"
-                          Just (EVM.VMFailure (EVM.Revert msg)) -> io . putStrLn $ "Reverted: " <> show (ByteStringS msg)
-                          Just (EVM.VMFailure err) -> io . putStrLn $ "Failed: " <> show err
-                          Just (EVM.VMSuccess (ConcreteBuffer msg)) ->
-                            if ByteString.null msg
-                            then io $ putStrLn "Stopped"
-                            else io $ putStrLn $ "Returned: " <> show (ByteStringS msg)
-                          Just (EVM.VMSuccess (SymbolicBuffer msg)) -> do
-                            out <- mapM (getValue.fromSized) msg
-                            io . putStrLn $ "Returned: " <> show (ByteStringS (ByteString.pack out))
-
+  else
+    runSMTWithTimeOut (solver cmd) (smttimeout cmd) $ query $ do
+      preState <- symvmFromCommand cmd
+      verify preState (maxIterations cmd) rpcinfo (Just checkAssertions) >>= \case
+        Right _ -> do
+          io $ putStrLn "Assertion violation found."
+          showCounterexample preState maybesig
+          io $ exitWith (ExitFailure 1)
+        Left (pre, posts) -> do
+          io $ putStrLn $ "Explored: " <> show (length posts)
+                       <> " branches without assertion violations"
+          let vmErrs = checkForVMErrors posts
+          unless (null vmErrs) $ io $ do
+            putStrLn $
+              "However, "
+              <> show (length vmErrs)
+              <> " branch(es) errored while exploring:"
+            print vmErrs
+          -- When `--get-model` is passed, we print example vm info for each path
+          when (getModels cmd) $
+            forM_ (zip [1..] posts) $ \(i, postVM) -> do
+              resetAssertions
+              constrain (sAnd (view EVM.pathConditions postVM))
+              io $ putStrLn $
+                "-- Branch (" <> show i <> "/" <> show (length posts) <> ") --"
+              checkSat >>= \case
+                Unk -> io $ putStrLn "Timed out"
+                Unsat -> io $ putStrLn "Inconsistent path conditions: dead path"
+                Sat -> do
+                  showCounterexample pre maybesig
+                  case view EVM.result postVM of
+                    Nothing ->
+                      error "internal error; no EVM result"
+                    Just (EVM.VMFailure (EVM.Revert "")) -> io . putStrLn $
+                      "Reverted"
+                    Just (EVM.VMFailure (EVM.Revert msg)) -> io . putStrLn $
+                      "Reverted: " <> show (ByteStringS msg)
+                    Just (EVM.VMFailure err) -> io . putStrLn $
+                      "Failed: " <> show err
+                    Just (EVM.VMSuccess (ConcreteBuffer msg)) ->
+                      if ByteString.null msg
+                      then io $ putStrLn
+                        "Stopped"
+                      else io $ putStrLn $
+                        "Returned: " <> show (ByteStringS msg)
+                    Just (EVM.VMSuccess (SymbolicBuffer msg)) -> do
+                      out <- mapM (getValue.fromSized) msg
+                      io . putStrLn $
+                        "Returned: " <> show (ByteStringS (ByteString.pack out))
 
 dappCoverage :: UnitTestOptions -> Mode -> String -> IO ()
 dappCoverage opts _ solcFile =
@@ -586,12 +608,17 @@ merkleTest cmd = do
     Right testcases -> mapM_ runMerkleTest testcases
 
 runMerkleTest :: Testcase -> IO ()
-runMerkleTest (Testcase entries root) = case Patricia.calcRoot entries' of
-                                          Nothing -> error "Test case failed"
-                                          Just n -> case n == strip0x (hexText root) of
-                                            True -> putStrLn "Test case success"
-                                            False -> error ("Test case failure; expected "
-                                                            <> show root <> " but got " <> show (ByteStringS n))
+runMerkleTest (Testcase entries root) =
+  case Patricia.calcRoot entries' of
+    Nothing ->
+      error "Test case failed"
+    Just n ->
+      case n == strip0x (hexText root) of
+        True ->
+          putStrLn "Test case success"
+        False ->
+          error ("Test case failure; expected " <> show root
+                 <> " but got " <> show (ByteStringS n))
   where entries' = fmap (\(k, v) ->
                            (tohexOrText k,
                             tohexOrText (fromMaybe mempty v)))
@@ -606,20 +633,21 @@ tohexOrText s = case "0x" `Char8.isPrefixOf` encodeUtf8 s of
 vmFromCommand :: Command Options.Unwrapped -> IO EVM.VM
 vmFromCommand cmd = do
   vm <- case (rpc cmd, address cmd) of
-     (Just url, Just addr') -> do EVM.Fetch.fetchContractFrom block' url addr' >>= \case
-                                    Nothing -> error $ "contract not found: " <> show address'
-                                    Just contract' -> case code cmd of
-                                      Nothing -> return (vm1 contract')
-                                      -- if both code and url is given,
-                                      -- fetch the contract and overwrite the code
-                                      Just c -> return . vm1 $
-                                                   EVM.initialContract (codeType $ hexByteString "--code" $ strip0x c)
-                                                     & set EVM.storage     (view EVM.storage contract')
-                                                     & set EVM.balance     (view EVM.balance contract')
-                                                     & set EVM.nonce       (view EVM.nonce contract')
-                                                     & set EVM.external    (view EVM.external contract')
+    (Just url, Just addr') -> do
+      EVM.Fetch.fetchContractFrom block' url addr' >>= \case
+        Nothing -> error $ "contract not found: " <> show address'
+        Just contract' -> case code cmd of
+          Nothing -> return (vm1 contract')
+          -- if both code and url is given,
+          -- fetch the contract and overwrite the code
+          Just c -> return . vm1 $
+            EVM.initialContract  (codeType $ hexByteString "--code" $ strip0x c)
+              & set EVM.storage  (view EVM.storage  contract')
+              & set EVM.balance  (view EVM.balance  contract')
+              & set EVM.nonce    (view EVM.nonce    contract')
+              & set EVM.external (view EVM.external contract')
 
-     _ -> return . vm1 . EVM.initialContract . codeType $ bytes code ""
+    _ -> return . vm1 . EVM.initialContract . codeType $ bytes code ""
 
   return $ vm & EVM.env . EVM.contracts . ix address' . EVM.balance +~ (w256 value')
       where
@@ -664,17 +692,20 @@ symvmFromCommand cmd = do
   callvalue' <- maybe (sw256 <$> freshVar_) (return . w256lit) (value cmd)
   (calldata', cdlen, pathCond) <- case (calldata cmd, sig cmd) of
     -- fully abstract calldata (up to 1024 bytes)
-    (Nothing, Nothing) -> do cd <- sbytes256
-                             len <- freshVar_
-                             return (SymbolicBuffer cd, len, len .<= 1024)
+    (Nothing, Nothing) -> do
+      cd <- sbytes256
+      len <- freshVar_
+      return (SymbolicBuffer cd, len, len .<= 1024)
     -- fully concrete calldata
-    (Just c, Nothing) -> let cd = ConcreteBuffer $ decipher c
-                         in return (cd, num (len cd), sTrue)
+    (Just c, Nothing) ->
+      let cd = ConcreteBuffer $ decipher c
+      in return (cd, num (len cd), sTrue)
     -- calldata according to given abi with possible specializations from the `arg` list
-    (Nothing, Just sig') -> do method' <- io $ functionAbi sig'
-                               let typs = snd <$> view methodInputs method'
-                               (cd, cdlen) <- symCalldata (view methodSignature method') typs (arg cmd)
-                               return (SymbolicBuffer cd, cdlen, sTrue)
+    (Nothing, Just sig') -> do
+      method' <- io $ functionAbi sig'
+      let typs = snd <$> view methodInputs method'
+      (cd, cdlen) <- symCalldata (view methodSignature method') typs (arg cmd)
+      return (SymbolicBuffer cd, cdlen, sTrue)
 
     _ -> error "incompatible options: calldata and abi"
 
@@ -689,22 +720,31 @@ symvmFromCommand cmd = do
     Nothing -> EVM.Symbolic <$> freshArray_ (if create cmd then (Just 0) else Nothing)
 
   vm <- case (rpc cmd, address cmd, code cmd) of
-    (Just url, Just addr', _) -> io (EVM.Fetch.fetchContractFrom block' url addr') >>= \case
-      Nothing -> error $ "contract not found."
-      Just contract' -> let contract'' = case code cmd of
-                              Nothing -> contract'
-                              -- if both code and url is given,
-                              -- fetch the contract and overwrite the code
-                              Just c -> EVM.initialContract (codeType $ decipher c)
-                                        & set EVM.storage     (view EVM.storage contract')
-                                        & set EVM.origStorage (view EVM.origStorage contract')
-                                        & set EVM.balance     (view EVM.balance contract')
-                                        & set EVM.nonce       (view EVM.nonce contract')
-                                        & set EVM.external    (view EVM.external contract')
-                        in return $ vm1 cdlen calldata' callvalue' caller' (contract'' & set EVM.storage store)
+    (Just url, Just addr', _) ->
+      io (EVM.Fetch.fetchContractFrom block' url addr') >>= \case
+        Nothing ->
+          error $ "contract not found."
+        Just contract' ->
+          return $
+            vm1 cdlen calldata' callvalue' caller' (contract'' & set EVM.storage store)
+          where
+            contract'' = case code cmd of
+              Nothing -> contract'
+              -- if both code and url is given,
+              -- fetch the contract and overwrite the code
+              Just c -> EVM.initialContract (codeType $ decipher c)
+                        & set EVM.storage     (view EVM.storage contract')
+                        & set EVM.origStorage (view EVM.origStorage contract')
+                        & set EVM.balance     (view EVM.balance contract')
+                        & set EVM.nonce       (view EVM.nonce contract')
+                        & set EVM.external    (view EVM.external contract')
 
-    (_, _, Just c)  -> return $ vm1 cdlen calldata' callvalue' caller' $ (EVM.initialContract . codeType $ decipher c) & set EVM.storage store
-    (_, _, Nothing) -> error $ "must provide at least (rpc + address) or code"
+    (_, _, Just c)  ->
+      return $
+        vm1 cdlen calldata' callvalue' caller' $
+          (EVM.initialContract . codeType $ decipher c) & set EVM.storage store
+    (_, _, Nothing) ->
+      error $ "must provide at least (rpc + address) or code"
 
   return $ vm & over EVM.pathConditions (<> [pathCond])
 
@@ -790,7 +830,11 @@ runVMTest diffmode mode timelimit (name, x) = do
 #endif
 
 parseAbi :: (AsValue s) => s -> (Text, [AbiType])
-parseAbi abijson = (signature abijson, snd <$> parseMethodInput <$> V.toList (fromMaybe (error "Malformed function abi") (abijson ^? key "inputs" . _Array)))
+parseAbi abijson =
+  (signature abijson, snd
+    <$> parseMethodInput
+    <$> V.toList
+      (fromMaybe (error "Malformed function abi") (abijson ^? key "inputs" . _Array)))
 
 abiencode :: (AsValue s) => Maybe s -> [String] -> ByteString
 abiencode Nothing _ = error "missing required argument: abi"
