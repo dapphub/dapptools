@@ -1,4 +1,10 @@
+/*
+  This file runs `hevm equivalence` against the yul optimizer test suite from the solidity repo.
+  This is a corpus of ~400 tests used to ensure that the yul optimizer produces equivalent code.
+*/
+
 { pkgs, lib, solidity }:
+
 let
 
   # --- binaries ---
@@ -8,6 +14,7 @@ let
   echo = "${pkgs.coreutils}/bin/echo";
   grep = "${pkgs.gnugrep}/bin/grep";
   hevm = "${pkgs.hevm}/bin/hevm";
+  mkdir = "${pkgs.coreutils}/bin/mkdir";
   mktemp = "${pkgs.coreutils}/bin/mktemp";
   timeout = "${pkgs.timeout}/bin/timeout";
   rev = "${pkgs.utillinux}/bin/rev";
@@ -79,8 +86,11 @@ let
     fi
 
     ${echo} "Checking bytecode equivalence: $a_bin vs $b_bin"
-    ${pkgs.coreutils}/bin/timeout 10s \
-      ${pkgs.hevm}/bin/hevm equivalence --code-a "$a_bin" --code-b "$b_bin" --smttimeout 1000
+    ${pkgs.coreutils}/bin/timeout 20s \
+      ${pkgs.hevm}/bin/hevm equivalence --solver $3       \
+                                        --code-a "$a_bin" \
+                                        --code-b "$b_bin" \
+                                        --smttimeout 20000
     status=$?
 
     if [[ $status == 1 ]]
@@ -109,16 +119,18 @@ let
   runAllTests = let
     prefix = "${solidity}/test/libyul/yulOptimizerTests";
   in pkgs.writeShellScript "runAllTests" ''
+    solver=$1
+
     check_equiv()
     {
         # Takes one file which follows the Solidity Yul optimizer unit tests format,
         # extracts both the nonoptimized and the optimized versions, and checks equivalence.
 
-        ${echo} "---------------------------------------------"
-        ${echo} "executing test at: $1"
-
         ignoredTests=(${toString ignored})
         testName=$(${echo} "$1" | ${grep} -oP "^${prefix}/\K.*")
+
+        ${echo} "---------------------------------------------"
+        ${echo} "executing test: $testName with $2"
 
         if [[ " ''${ignoredTests[@]} " =~ " ''${testName} " ]]; then
             ${echo} "$testName is ignored, skipping"
@@ -141,12 +153,12 @@ let
         | ${forceSymbolicMemory}    \
         > $file2
 
-        ${compareTwoFiles} $file1 $file2
+        ${compareTwoFiles} $file1 $file2 $2
         ${rm} $file1 $file2
     }
 
     for filename in ${prefix}/**/*.yul; do
-      check_equiv $filename
+      check_equiv $filename $solver
     done
   '';
 
@@ -328,38 +340,59 @@ let
   ];
 in
 pkgs.runCommand "yulEquivalence" {} ''
-  results=$out
-  ${runAllTests} | ${tee} $results
+  parse_results() {
+    local results=$1
 
-  set +e
-  total="$(${grep} -c 'executing test at' $results)"
-  passed="$(${grep} -c 'No discrepancies found' $results)"
-  ignored="$(${grep} -c 'is ignored, skipping' $results)"
-  same_bytecode="$(${grep} -c 'Bytecodes are the same' $results)"
-  no_compile_first="$(${grep} -c 'Could not compile first Yul source' $results)"
-  no_compile_second="$(${grep} -c 'Could not compile second Yul source' $results)"
-  hevm_timeout="$(${grep} -c 'hevm timeout' $results)"
-  hevm_failed="$(${grep} -c 'hevm execution failed' $results)"
-  set -e
+    set +e
+    total="$(${grep} -c 'executing test:' $results)"
+    passed="$(${grep} -c 'No discrepancies found' $results)"
+    ignored="$(${grep} -c 'is ignored, skipping' $results)"
+    same_bytecode="$(${grep} -c 'Bytecodes are the same' $results)"
+    no_compile_first="$(${grep} -c 'Could not compile first Yul source' $results)"
+    no_compile_second="$(${grep} -c 'Could not compile second Yul source' $results)"
+    hevm_timeout="$(${grep} -c 'hevm timeout' $results)"
+    hevm_failed="$(${grep} -c 'hevm execution failed' $results)"
+    set -e
+
+    ${echo} ran: $total
+    ${echo} same bytecode: $same_bytecode
+    ${echo} ignored: $ignored
+    ${echo} passed: $passed
+    ${echo} could not compile first program: $no_compile_first
+    ${echo} could not compile second program: $no_compile_second
+    ${echo} hevm timeout: $hevm_timeout
+    ${echo} hevm execution failed: $hevm_failed
+    ${echo}
+
+    if [ $no_compile_first != 0 ]  || \
+       [ $no_compile_second != 0 ] || \
+       [ $hevm_timeout != 0 ]      || \
+       [ $hevm_failed != 0 ]
+    then
+      return 1
+    else
+      return 0
+    fi
+  }
+
+  ${mkdir} $out
+
+  ${runAllTests} z3 | ${tee} $out/z3
+  ${runAllTests} cvc4 | ${tee} $out/cvc4
 
   ${echo}
-  ${echo} Summary:
+  ${echo} "Summary (z3):"
   ${echo} -------------------------------------------
-  ${echo} ran: $total
-  ${echo} same bytecode: $same_bytecode
-  ${echo} ignored: $ignored
-  ${echo} passed: $passed
-  ${echo} could not compile first program: $no_compile_first
-  ${echo} could not compile second program: $no_compile_second
-  ${echo} hevm timeout: $hevm_timeout
-  ${echo} hevm execution failed: $hevm_failed
-  ${echo}
+  parse_results $out/z3
+  z3_status=$?
 
-  if [ $no_compile_first != 0 ]  || \
-     [ $no_compile_second != 0 ] || \
-     [ $hevm_timeout != 0 ]      || \
-     [ $hevm_failed != 0 ]
-  then
+  ${echo}
+  ${echo} "Summary (cvc4):"
+  ${echo} -------------------------------------------
+  parse_results $out/cvc4
+  cvc4_status=$?
+
+  if [ $z3_status!= 0 ] || [ $cvc4_status != 0 ]; then
     exit 1
   else
     exit 0
