@@ -1,6 +1,6 @@
 # Ethsign
 
-Sign Ethereum transactions using a JSON keyfile.
+Sign Ethereum transactions using a JSON keyfile or hardware wallet.
 
 ## Usage
 
@@ -12,7 +12,7 @@ USAGE:
  ethsign [global options] command [command options] [arguments...]
 
 VERSION:
- 0.10
+ 0.15
 
 COMMANDS:
   list-accounts, ls  List accounts in keystore and USB wallets

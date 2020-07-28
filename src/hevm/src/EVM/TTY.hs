@@ -12,7 +12,7 @@ import Brick.Widgets.List
 
 import EVM
 import EVM.ABI (abiTypeSolidity, decodeAbiValue, AbiType(..), emptyAbi)
-import EVM.Symbolic (SymWord(..), maybeLitBytes, Buffer(..))
+import EVM.Symbolic (SymWord(..), Buffer(..))
 import EVM.Dapp (DappInfo, dappInfo)
 import EVM.Dapp (dappUnitTests, unitTestMethods, dappSolcByName, dappSolcByHash, dappSources)
 import EVM.Dapp (dappAstSrcMap)
@@ -39,11 +39,11 @@ import Control.Monad.State.Strict hiding (state)
 import Data.Aeson.Lens
 import Data.ByteString (ByteString)
 import Data.Maybe (isJust, fromJust, fromMaybe)
-import Data.Map (Map, insert, lookup, lookupLT, singleton)
+import Data.Map (Map, insert, lookupLT, singleton)
 import Data.Monoid ((<>))
 import Data.Text (Text, unpack, pack)
 import Data.Text.Encoding (decodeUtf8)
-import Data.List (sort)
+import Data.List (sort, lookup)
 import Data.Version (showVersion)
 import Data.SBV hiding (solver)
 
@@ -74,7 +74,7 @@ type UiWidget = Widget Name
 
 data UiVmState = UiVmState
   { _uiVm             :: VM
-  , _uiVmNextStep     :: Stepper ()
+  , _uiVmStepper      :: Stepper ()
   , _uiVmStackList    :: List Name (Int, (SymWord))
   , _uiVmBytecodeList :: List Name (Int, Op)
   , _uiVmTraceList    :: List Name Text
@@ -198,7 +198,7 @@ interpret mode =
                   Stepped stepper ->
                     interpret (StepMany (i - 1)) stepper
 
-                  -- This shouldn't happen, because re-stepping needs
+                  -- This shouldn't happen (but occassionally does?), because re-stepping needs
                   -- to avoid blocking and halting.
                   r -> pure r
 
@@ -224,9 +224,9 @@ interpret mode =
                       r -> pure r
 
         -- Stepper is waiting for user input from a query
-        Stepper.Option _ -> do
-                  -- pause & await user.
-                  pure (Stepped (Operational.singleton action >>= k))
+        Stepper.Option _ ->
+          -- pause & await user.
+          pure (Stepped (Operational.singleton action >>= k))
 
         -- Stepper wants to make a query and wait for the results?
         Stepper.Wait q ->
@@ -258,9 +258,8 @@ maybeSaveSnapshot :: State UiVmState ()
 maybeSaveSnapshot = do
   ui <- get
   let n = view uiVmStepCount ui
-  if n > 0 && n `mod` snapshotInterval == 0
-    then modifying uiVmSnapshots (insert n ui)
-    else pure ()
+  when (n > 0 && n `mod` snapshotInterval == 0) $ do
+    modifying uiVmSnapshots (insert n ui)
 
 isUnitTestContract :: Text -> DappInfo -> Bool
 isUnitTestContract name dapp =
@@ -296,7 +295,7 @@ runFromVM maybesrcinfo oracle' vm = do
       }
     ui0 = UiVmState
            { _uiVm = vm
-           , _uiVmNextStep = void Stepper.execFully
+           , _uiVmStepper = void Stepper.execFully
            , _uiVmStackList = undefined
            , _uiVmBytecodeList = undefined
            , _uiVmTraceList = undefined
@@ -369,16 +368,16 @@ takeStep ui policy mode =
   case nxt of
     (Stepped stepper, ui') ->
       if vmResult (view (uiVm . result) ui)
-        then continue (ViewVm ui)
+        then continue (ViewVm ui')
       else
-        continue (ViewVm (ui' & set uiVmNextStep stepper))
+        continue (ViewVm (ui' & set uiVmStepper stepper))
 
     (Blocked blocker, ui') ->
       case policy of
         StepNormally -> do
           stepper <- liftIO blocker
           takeStep
-            (execState (assign uiVmNextStep stepper) ui')
+            (execState (assign uiVmStepper stepper) ui')
             StepNormally StepNone
 
         StepTimidly ->
@@ -394,7 +393,8 @@ takeStep ui policy mode =
     vmResult Nothing = False
     vmResult (Just (VMFailure (Query _))) = False
     vmResult (Just _) = True
-    m = interpret mode (view uiVmNextStep ui)
+    m = interpret mode (view uiVmStepper ui)
+    nxt :: (StepOutcome (), UiVmState)
     nxt = runState (m <* modify renderVm) ui
 
 appEvent
@@ -503,12 +503,13 @@ appEvent (ViewVm s) (VtyEvent (V.EvKey (V.KChar 'a') [])) =
       -- We keep the current cache so we don't have to redo
       -- any blocking queries, and also the memory view.
       let
-        s0 = view uiVmFirstState s
-        s1 = set (uiVm . cache)   (view (uiVm . cache) s) s0
-        s2 = set uiVmShowMemory (view uiVmShowMemory s) s1
-        s3 = set uiVmTestOpts   (view uiVmTestOpts s) s2
+        s0 = fromJust (Map.lookup 0 (view uiVmSnapshots s))
+          & set (uiVm . cache) (view (uiVm . cache) s)
+          & set uiVmShowMemory (view uiVmShowMemory s)
+          & set uiVmTestOpts   (view uiVmTestOpts s)
+          & set uiVmSnapshots  (view uiVmSnapshots s)
 
-      in takeStep (fromJust (lookup 0 (view uiVmSnapshots s))) StepTimidly StepNone
+      in takeStep s0 StepTimidly StepNone
 
 -- Vm Overview: p - step
 appEvent st@(ViewVm s) (VtyEvent (V.EvKey (V.KChar 'p') [])) =
@@ -525,14 +526,14 @@ appEvent st@(ViewVm s) (VtyEvent (V.EvKey (V.KChar 'p') [])) =
       let
         -- snapshots = view uiVmSnapshots s
         (snapshotStep, s0) = fromJust $ lookupLT n (view uiVmSnapshots s)
-        s1 = set (uiVm . cache)   (view (uiVm . cache) s) s0
-        s2 = set (uiVmShowMemory) (view uiVmShowMemory s) s1
-        s3 = set (uiVmTestOpts)   (view uiVmTestOpts s) s2
+        s1 = s0
+          & set (uiVm . cache) (view (uiVm . cache) s)
+          & set uiVmShowMemory (view uiVmShowMemory s)
+          & set uiVmTestOpts   (view uiVmTestOpts s)
+          & set uiVmSnapshots  (view uiVmSnapshots s)
         stepsToTake = n - snapshotStep - 1
 
-      -- Take the steps; "timidly," because all queries
-      -- ought to be cached.
-      takeStep s3 StepTimidly (StepMany stepsToTake)
+      takeStep s1 StepNormally (StepMany stepsToTake)
 
 -- Vm Overview: 0 - choose no jump
 appEvent (ViewVm s) (VtyEvent (V.EvKey (V.KChar '0') [])) =
@@ -632,7 +633,7 @@ initialUiVmStateForTest opts@UnitTestOptions{..} dapp (theContractName, theTestN
     ui0 =
       UiVmState
         { _uiVm             = vm0
-        , _uiVmNextStep     = script
+        , _uiVmStepper      = script
         , _uiVmStackList    = undefined
         , _uiVmBytecodeList = undefined
         , _uiVmTraceList    = undefined
