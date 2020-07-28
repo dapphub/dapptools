@@ -7,12 +7,11 @@ import Prelude hiding (Word)
 
 import EVM.Keccak (keccak)
 import EVM.RLP
-import EVM.Types (Addr, W256 (..), num, word, padRight, word160Bytes, word256Bytes, toWord512, fromWord512)
+import EVM.Types (Addr, W256 (..), num, word, padRight, word160Bytes, word256Bytes)
 
 import Control.Lens    ((^?), ix)
 import Data.Bits       (Bits (..), FiniteBits (..), shiftL, shiftR)
 import Data.ByteString (ByteString)
-import Data.DoubleWord (signedWord, unsignedWord)
 import Data.Maybe      (fromMaybe)
 import Data.Semigroup  ((<>))
 import Data.Word       (Word8)
