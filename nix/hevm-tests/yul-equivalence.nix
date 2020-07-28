@@ -1,5 +1,8 @@
-{ pkgs, lib }:
+{ pkgs, lib, solidity }:
 let
+
+  # --- binaries ---
+
   awk = "${pkgs.gawk}/bin/awk";
   cat = "${pkgs.coreutils}/bin/cat";
   echo = "${pkgs.coreutils}/bin/echo";
@@ -13,12 +16,7 @@ let
   solc = "${pkgs.solc-versions.solc_0_6_7}/bin/solc";
   tee = "${pkgs.coreutils}/bin/tee";
 
-  solidity = pkgs.fetchFromGitHub {
-    owner = "ethereum";
-    repo = "solidity";
-    rev = "b8d736ae0c506b1b3cf5d2456af67e8dc2c0ca8e"; # v0.6.7
-    sha256 = "1zqfcfgy70hmckxb3l59rabdpzj7gf1vzg6kkw4xz0c6lzy7mrpz";
-  };
+  # --- test scripts ---
 
   # Compiles a yul file to evm and prints the resulting bytecode to stdout
   # Propogates the status code of the solc invocation
@@ -26,7 +24,7 @@ let
     out=$(${mktemp})
     ${solc} --yul --yul-dialect evm $1 > $out 2>&1
     status=$?
-    cat $out | ${awk} 'f{print;f=0} /Binary representation:/{f=1}'
+    ${cat} $out | ${awk} 'f{print;f=0} /Binary representation:/{f=1}'
     exit $status
   '';
 
@@ -39,7 +37,7 @@ let
 
     # empty programs
     if [ "$in" == "{ }" ]; then
-      echo "$in"
+      ${echo} "$in"
       exit 0
     fi
 
@@ -57,7 +55,7 @@ let
   '';
 
   # Takes two Yul files, compiles them to EVM bytecode and checks equivalence.
-  runSingleTest = pkgs.writeShellScript "runSingleTest" ''
+  compareTwoFiles = pkgs.writeShellScript "runSingleTest" ''
     a_bin=$(${compile} $1)
     if [ $? -eq 1 ]
     then
@@ -143,7 +141,7 @@ let
         | ${forceSymbolicMemory}    \
         > $file2
 
-        ${runSingleTest} $file1 $file2
+        ${compareTwoFiles} $file1 $file2
         ${rm} $file1 $file2
     }
 
@@ -152,9 +150,7 @@ let
     done
   '';
 
-  concreteMemory = [
-    "fullSuite/aztec.yul"
-  ];
+  # --- ignored tests ----
 
   ignored = [
     # --- hevm bug ---
@@ -162,11 +158,10 @@ let
     # https://github.com/dapphub/dapptools/issues/457
     "controlFlowSimplifier/terminating_for_revert.yul"
 
-    # --- timeout investigate ----
+    # --- timeout (investigate) ----
 
     "controlFlowSimplifier/terminating_for_nested.yul"
     "controlFlowSimplifier/terminating_for_nested_reversed.yul"
-    "fullSuite/ssaReverseComplex.yul"
 
     # --- unbounded loop ---
 
@@ -235,6 +230,7 @@ let
     "ssaTransform/multi_assign.yul"
     "ssaTransform/multi_decl.yul"
     "expressionSplitter/inside_function.yul"
+    "fullSuite/ssaReverseComplex.yul"
 
     # OpMstore
     "commonSubexpressionEliminator/function_scopes.yul"
@@ -331,43 +327,41 @@ let
     "varDeclInitializer/typed.yul"
   ];
 in
-{
-  yulEquivalence = pkgs.runCommand "hevm-equivalence" {} ''
-    results=$(${mktemp})
-    ${runAllTests} | ${tee} $results
+pkgs.runCommand "yulEquivalence" {} ''
+  results=$out
+  ${runAllTests} | ${tee} $results
 
-    set +e
-    total="$(grep -c 'executing test at' $results)"
-    passed="$(grep -c 'No discrepancies found' $results)"
-    ignored="$(grep -c 'is ignored, skipping' $results)"
-    same_bytecode="$(grep -c 'Bytecodes are the same' $results)"
-    no_compile_first="$(grep -c 'Could not compile first Yul source' $results)"
-    no_compile_second="$(grep -c 'Could not compile second Yul source' $results)"
-    hevm_timeout="$(grep -c 'hevm timeout' $results)"
-    hevm_failed="$(grep -c 'hevm execution failed' $results)"
-    set -e
+  set +e
+  total="$(${grep} -c 'executing test at' $results)"
+  passed="$(${grep} -c 'No discrepancies found' $results)"
+  ignored="$(${grep} -c 'is ignored, skipping' $results)"
+  same_bytecode="$(${grep} -c 'Bytecodes are the same' $results)"
+  no_compile_first="$(${grep} -c 'Could not compile first Yul source' $results)"
+  no_compile_second="$(${grep} -c 'Could not compile second Yul source' $results)"
+  hevm_timeout="$(${grep} -c 'hevm timeout' $results)"
+  hevm_failed="$(${grep} -c 'hevm execution failed' $results)"
+  set -e
 
-    echo
-    echo Summary:
-    echo -------------------------------------------
-    echo ran: $total
-    echo passed: $passed
-    echo ignored: $ignored
-    echo same bytecode: $same_bytecode
-    echo could not compile first program: $no_compile_first
-    echo could not compile second program: $no_compile_second
-    echo hevm timeout: $hevm_timeout
-    echo hevm execution failed: $hevm_failed
-    echo
+  ${echo}
+  ${echo} Summary:
+  ${echo} -------------------------------------------
+  ${echo} ran: $total
+  ${echo} same bytecode: $same_bytecode
+  ${echo} ignored: $ignored
+  ${echo} passed: $passed
+  ${echo} could not compile first program: $no_compile_first
+  ${echo} could not compile second program: $no_compile_second
+  ${echo} hevm timeout: $hevm_timeout
+  ${echo} hevm execution failed: $hevm_failed
+  ${echo}
 
-    if [ $no_compile_first != 0 ]  || \
-       [ $no_compile_second != 0 ] || \
-       [ $hevm_timeout != 0 ]      || \
-       [ $hevm_failed != 0 ]
-    then
-      exit 1
-    else
-      exit 0
-    fi
-  '';
-}
+  if [ $no_compile_first != 0 ]  || \
+     [ $no_compile_second != 0 ] || \
+     [ $hevm_timeout != 0 ]      || \
+     [ $hevm_failed != 0 ]
+  then
+    exit 1
+  else
+    exit 0
+  fi
+''
