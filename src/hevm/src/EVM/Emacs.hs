@@ -529,6 +529,7 @@ defaultUnitTestOptions = do
   pure UnitTestOptions
     { oracle            = Fetch.zero
     , verbose           = Nothing
+    , maxIter           = Nothing
     , match             = ""
     , fuzzRuns          = 100
     , replay            = Nothing

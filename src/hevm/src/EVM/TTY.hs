@@ -12,7 +12,7 @@ import Brick.Widgets.List
 
 import EVM
 import EVM.ABI (abiTypeSolidity, decodeAbiValue, AbiType(..), emptyAbi)
-import EVM.Symbolic (SymWord(..), maybeLitBytes, Buffer(..))
+import EVM.Symbolic (SymWord(..), Buffer(..))
 import EVM.Dapp (DappInfo, dappInfo)
 import EVM.Dapp (dappUnitTests, unitTestMethods, dappSolcByName, dappSolcByHash, dappSources)
 import EVM.Dapp (dappAstSrcMap)
@@ -128,7 +128,8 @@ data StepOutcome a
 -- | This turns a @Stepper@ into a state action usable
 -- from within the TTY loop, yielding a @StepOutcome@ depending on the @StepMode@.
 interpret
-  :: (?fetcher :: Fetcher)
+  :: (?fetcher :: Fetcher
+  ,   ?maxIter :: Maybe Integer)
   => StepMode
   -> Stepper a
   -> State UiVmState (StepOutcome a)
@@ -215,9 +216,26 @@ interpret mode =
                       r -> pure r
 
         -- Stepper is waiting for user input from a query
-        Stepper.Option _ -> do
-                  -- pause & await user.
-                  pure (Stepped (Operational.singleton action >>= k))
+        Stepper.Option (EVM.PleaseChoosePath cont) -> do
+          -- ensure we aren't stepping past max iterations
+          case ?maxIter of
+            Just maxiter -> do
+              vm <- use uiVm
+              let codelocation = getCodeLocation vm
+                  iters = view (iterations . at codelocation . non 0) vm
+              if num maxiter <= iters then
+                case view (cache . path . at (codelocation, iters - 1)) vm of
+                  -- When we have reached maxIterations, we take the choice that will hopefully
+                  -- lead us out of here.
+                  Just (Known 0) -> pure . Stepped $ Stepper.evm (cont 1) >> k ()
+                  Just (Known 1) -> pure . Stepped $ Stepper.evm (cont 0) >> k ()
+                  n -> error ("I don't see how this could have happened: " <> show n)
+              else
+                pure (Stepped (Operational.singleton action >>= k))
+
+            Nothing ->
+              -- pause & await user.
+              pure (Stepped (Operational.singleton action >>= k))
 
         -- Stepper wants to make a query and wait for the results?
         Stepper.Wait q ->
@@ -255,8 +273,8 @@ mkVty = do
   V.setMode (V.outputIface vty) V.BracketedPaste True
   return vty
 
-runFromVM :: Maybe (FilePath, FilePath) -> (Query -> IO (EVM ())) -> VM -> IO VM
-runFromVM maybesrcinfo oracle' vm = do
+runFromVM :: Maybe Integer -> Maybe (FilePath, FilePath) -> (Query -> IO (EVM ())) -> VM -> IO VM
+runFromVM maxIter' maybesrcinfo oracle' vm = do
   uiDappSolc <- case maybesrcinfo of
                    Nothing -> return Nothing
                    Just (root,json) -> readSolc json >>= \case
@@ -271,6 +289,7 @@ runFromVM maybesrcinfo oracle' vm = do
     opts = UnitTestOptions
       { oracle            = oracle'
       , verbose           = Nothing
+      , maxIter           = maxIter'
       , match             = ""
       , fuzzRuns          = 1
       , replay            = error "irrelevant"
@@ -343,7 +362,8 @@ data StepPolicy
   | StepTimidly     -- ^ Forbid blocking and returning
 
 takeStep
-  :: (?fetcher :: Fetcher)
+  :: (?fetcher :: Fetcher
+     ,?maxIter :: Maybe Integer)
   => UiVmState
   -> StepPolicy
   -> StepMode
@@ -381,7 +401,7 @@ takeStep ui policy mode =
     nxt = runState (m <* modify renderVm) ui
 
 appEvent
-  :: (?fetcher::Fetcher) =>
+  :: (?fetcher::Fetcher, ?maxIter :: Maybe Integer) =>
   UiState ->
   BrickEvent Name e ->
   EventM Name (Next UiState)
@@ -582,6 +602,7 @@ appEvent s _ = continue s
 app :: UnitTestOptions -> App UiState () Name
 app opts =
   let ?fetcher = oracle opts
+      ?maxIter = maxIter opts
   in App
   { appDraw = drawUi
   , appChooseCursor = neverShowCursor

@@ -128,9 +128,9 @@ loadSymVM x initStore addr callvalue' calldata' =
     }) & set (env . contracts . at (createAddress ethrunAddress 1))
              (Just (contractWithStore x initStore))
 
--- Interpreter which explores all paths at
--- branching points.
--- returns a list of possible final evm states
+-- | Interpreter which explores all paths at
+-- | branching points.
+-- | returns a list of possible final evm states
 interpret
   :: Fetch.Fetcher
   -> Maybe Integer --max iterations
@@ -157,11 +157,10 @@ interpret fetcher maxIter =
           do vm <- get
              case maxIter of
                Just maxiter ->
-                 let pc' = view (state . pc) vm
-                     addr = view (state . contract) vm
-                     iters = view (iterations . at (addr, pc') . non 0) vm
+                 let codelocation = getCodeLocation vm
+                     iters = view (iterations . at codelocation . non 0) vm
                  in if num maxiter <= iters then
-                      vm ^?! (cache . path . ix ((addr, pc'), iters - 1)) & \case
+                      vm ^?! (cache . path . ix (codelocation, iters - 1)) & \case
                         -- When we have reached maxIterations, we take the choice that will hopefully
                         -- lead us out of here.
                         Known 0 -> State.state (runState (continue 1)) >> interpret fetcher maxIter (k ())

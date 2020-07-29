@@ -45,6 +45,7 @@ ghciTest root path state =
       opts = UnitTestOptions
         { oracle = EVM.Fetch.zero
         , verbose = Nothing
+        , maxIter = Nothing
         , match = ""
         , fuzzRuns = 100
         , replay = Nothing
