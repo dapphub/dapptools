@@ -38,7 +38,7 @@ let
     "functions/constructor_hierarchy_empty_middle.sol"
     "functions/constructor_hierarchy_mixed_chain_empty_base.sol"
     "functions/constructor_hierarchy_mixed_chain.sol"
-    "constructor_hierarchy_mixed_chain_local_vars.sol"
+    "functions/constructor_hierarchy_mixed_chain_local_vars.sol"
     "functions/constructor_hierarchy_mixed_chain_with_params.sol"
     "functions/constructor_hierarchy_mixed_chain_with_params_2.sol"
     "functions/constructor_simple.sol"
@@ -54,6 +54,21 @@ let
     "functions/functions_trivial_condition_for_only_call.sol"
     "functions/functions_trivial_condition_while.sol"
     "functions/functions_trivial_condition_while_only_call.sol"
+
+    # --- unsupported opcodes ---
+
+    # OpExtcodesize
+
+    "functions/this_fake.sol"
+    "functions/functions_external_1.sol"
+    "functions/functions_external_2.sol"
+    "functions/functions_external_3.sol"
+    "functions/functions_external_4.sol"
+
+    # --- contract level knowledge required ---
+
+    "functions/internal_call_with_assertion_1.sol"
+    "functions/internal_multiple_calls_with_assertion_1.sol"
 
   ];
 
