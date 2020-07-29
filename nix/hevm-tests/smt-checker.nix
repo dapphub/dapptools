@@ -21,13 +21,62 @@ let
   tr = "${pkgs.coreutils}/bin/tr";
   timeout = "${pkgs.coreutils}/bin/timeout";
 
+  # --- test classification ---
+
+  ignored = [
+
+    # constructor arguments
+
+    "functions/constructor_hierarchy_3.sol"
+    "functions/constructor_hierarchy_4.sol"
+    "functions/constructor_hierarchy_diamond_2.sol"
+    "functions/constructor_hierarchy_diamond_3.sol"
+    "functions/constructor_hierarchy_diamond_empty_middle.sol"
+    "functions/constructor_hierarchy_diamond.sol"
+    "functions/constructor_hierarchy_empty_chain.sol"
+    "functions/constructor_hierarchy_empty_middle_no_invocation.sol"
+    "functions/constructor_hierarchy_empty_middle.sol"
+    "functions/constructor_hierarchy_mixed_chain_empty_base.sol"
+    "functions/constructor_hierarchy_mixed_chain.sol"
+    "constructor_hierarchy_mixed_chain_local_vars.sol"
+    "functions/constructor_hierarchy_mixed_chain_with_params.sol"
+    "functions/constructor_hierarchy_mixed_chain_with_params_2.sol"
+    "functions/constructor_simple.sol"
+    "functions/constructor_state_value_inherited.sol"
+    "functions/constructor_state_value.sol"
+
+    # unbounded looping
+
+    "functions/functions_recursive.sol"
+    "functions/functions_recursive_indirect.sol"
+    "functions/recursive_multi_return.sol"
+    "functions/functions_trivial_condition_for.sol"
+    "functions/functions_trivial_condition_for_only_call.sol"
+    "functions/functions_trivial_condition_while.sol"
+    "functions/functions_trivial_condition_while_only_call.sol"
+
+  ];
+
   # --- test scripts ---
+
+  strings = {
+    exeucting = "Executing test:";
+    pass = "PASS: hevm and SMTChecker agree!";
+    ignore = "SKIP: test ignored";
+    smtReports = "FAIL: SMTChecker reports assertion violation whereas HEVM reports safe.";
+    hevmReports = "FAIL: SMTChecker reports safe whereas HEVM reports assertion violation.";
+    timeout = "FAIL: hevm timeout";
+  };
 
   smtCheckerTests = "${solidity}/test/libsolidity/smtCheckerTests";
 
+  testName = pkgs.writeShellScript "testName" ''
+    ${echo} "$1" | ${grep} -oP "^${smtCheckerTests}/\K.*"
+  '';
+
   divider = pkgs.writeShellScript "divider" ''
     ${echo}
-    ${echo} ------------------------------------------------------------------------------------------------------------------------------------------
+    ${echo} --------------------------------------------------------------------------------------------
     ${echo}
   '';
 
@@ -36,9 +85,9 @@ let
   # $1 == input file
   # $2 == hevm smt backend
   checkWithHevm = pkgs.writeShellScript "checkWithHevm" ''
+
     # write json file to store for later debugging
-    testName=$(${echo} "$1" | ${grep} -oP "^${smtCheckerTests}/\K.*")
-    json=$out/jsonFiles/$testName.json
+    json=$out/jsonFiles/$(${testName} $1).json
     ${mkdir} -p $(${echo} "''${json%/*}/")
 
     ${solc} --combined-json=srcmap,srcmap-runtime,bin,bin-runtime,ast,metadata,storage-layout,abi $1 2> /dev/null > $json
@@ -47,10 +96,10 @@ let
 
     explore() {
       set -x
-      ${timeout} 10s ${hevm} symbolic --code $1 --solver $2 --json-file $
+      ${timeout} 10s ${hevm} symbolic --code "$1" --solver "$2" --json-file "$3" $4
       status=$?
       set +x
-      if [[ $status == 124 ]]; then echo "FAIL: hevm timeout"; fi
+      if [[ $status == 124 ]]; then ${echo} "${strings.timeout}"; fi
     }
 
     for contract in "''${contracts[@]}"; do
@@ -60,12 +109,12 @@ let
       ${echo}
       ${echo} exploring init bytecode:
       bin=$(${jq} -r --arg c $contract -c '.contracts[$c]."bin"' $json)
-      explore $bin $2 $json
+      explore "$bin" "$2" "$json" "--create"
 
       ${echo}
       ${echo} exploring runtime bytecode:
       bin_runtime=$(${jq} -r --arg c $contract -c '.contracts[$c]."bin-runtime"' $json)
-      explore $bin_runtime $2 $json
+      explore "$bin_runtime" "$2" "$json"
     done
 
     exit 0
@@ -78,15 +127,22 @@ let
   runSingleTest = pkgs.writeShellScript "runSingleTest" ''
     #!/usr/bin/sh
 
+    testName=$(${testName} $1)
+
     ${divider}
-    ${echo} "Executing test at: $1"
+    ${echo} "${strings.exeucting} $(${testName} $1)"
+
+    ignoredTests=(${toString ignored})
+    if [[ " ''${ignoredTests[@]} " =~ " ''${testName} " ]]; then
+        ${echo} "${strings.ignore}"
+        exit 0
+    fi
 
     hevm_output=$(${checkWithHevm} $1 $2 2>&1)
     echo "$hevm_output"
 
-    ${grep} -q 'FAIL:' <<< "$hevm_output"
-    hevm_failure=$?
-    if [ $hevm_failure == 0 ]; then exit; fi
+    ${grep} -q '${strings.timeout}' <<< "$hevm_output"
+    if [ $? == 0 ]; then exit; fi
 
     ${grep} -q 'Assertion violation found' <<< "$hevm_output"
     hevm_violation=$?
@@ -95,32 +151,33 @@ let
 
     if [ $hevm_violation -ne 0 ] && [ $smtchecker_violation -eq 0 ]; then
       ${echo}
-      ${echo} "FAIL: SMTChecker reports assertion violation whereas HEVM reports safe."
+      ${echo} "${strings.smtReports}"
       exit
     elif [ $hevm_violation -eq 0 ] && [ $smtchecker_violation -ne 0 ]; then
       ${echo}
-      ${echo} "FAIL: SMTChecker reports safe whereas HEVM reports assertion violation."
+      ${echo} "${strings.hevmReports}"
       exit
     fi
 
     ${echo}
-    ${echo} PASS: hevm and SMTChecker agree!
+    ${echo} ${strings.pass}
   '';
 in
 pkgs.runCommand "smtCheckerTests" {} ''
   ${mkdir} $out
   results=$out/cvc4
 
-  for filename in ${smtCheckerTests}/**/*.sol; do
+  for filename in ${smtCheckerTests}/functions/*.sol; do
     ${runSingleTest} $filename cvc4 | ${tee} -a $results
   done
 
   set +e
-  total="$(${grep} -c 'Executing test at:' $results)"
-  passed="$(${grep} -c 'PASS: hevm and SMTChecker agree!' $results)"
-  smt_reports="$(${grep} -c 'FAIL: SMTChecker reports assertion violation whereas HEVM reports safe.' $results)"
-  hevm_reports="$(${grep} -c 'FAIL: SMTChecker reports safe whereas HEVM reports assertion violation.' $results)"
-  hevm_timeout="$(${grep} -c 'FAIL: hevm timeout' $results)"
+  total="$(${grep} -c '${strings.exeucting}' $results)"
+  passed="$(${grep} -c '${strings.pass}' $results)"
+  ignored="$(${grep} -c '${strings.ignore}' $results)"
+  smt_reports="$(${grep} -c '${strings.smtReports}' $results)"
+  hevm_reports="$(${grep} -c '${strings.hevmReports}' $results)"
+  hevm_timeout="$(${grep} -c '${strings.timeout}' $results)"
   set -e
 
 
@@ -130,6 +187,7 @@ pkgs.runCommand "smtCheckerTests" {} ''
   ${echo}
   ${echo} ran: $total
   ${echo} passed: $passed
+  ${echo} ignored: $ignored
   ${echo} 'failed (smt reports assertion, hevm reports safe):' $smt_reports
   ${echo} 'failed (hevm reports assertion, smt reports safe):' $hevm_reports
   ${echo} hevm timeout: $hevm_timeout
