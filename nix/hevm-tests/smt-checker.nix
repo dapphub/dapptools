@@ -81,6 +81,9 @@ let
     smtReports = "FAIL: SMTChecker reports assertion violation whereas HEVM reports safe.";
     hevmReports = "FAIL: SMTChecker reports safe whereas HEVM reports assertion violation.";
     timeout = "FAIL: hevm timeout";
+    hevmAssertionViolation = "Assertion violation found";
+    hevmErrorInBranch = "branch(es) errored while exploring";
+    hevmCouldNotExplore = "FAIL: hevm was unable to explore the contract";
   };
 
   smtCheckerTests = "${solidity}/test/libsolidity/smtCheckerTests";
@@ -111,10 +114,26 @@ let
 
     explore() {
       set -x
-      ${timeout} 10s ${hevm} symbolic --code "$1" --solver "$2" --json-file "$3" $4
+      hevm_output=$(${timeout} 10s ${hevm} symbolic --code "$1" --solver "$2" --json-file "$3" $4 2>&1)
       status=$?
       set +x
+
+      # handle timeouts
       if [[ $status == 124 ]]; then ${echo} "${strings.timeout}"; fi
+
+      # handle non assertion related hevm failures
+      if [[ $status == 1 ]]; then
+        ${grep} -q '${strings.hevmAssertionViolation}' <<< "$hevm_output"
+        if [ $? == 0 ]; then return; fi
+        ${echo} "${strings.hevmCouldNotExplore}"
+      fi
+
+      # handle errors in branches
+      if [[ $status == 0 ]]; then
+        ${grep} -q '${strings.hevmErrorInBranch}' <<< "$hevm_output"
+        if [ $? == 1 ]; then return; fi
+        ${echo} "${strings.hevmCouldNotExplore}"
+      fi
     }
 
     for contract in "''${contracts[@]}"; do
@@ -158,8 +177,10 @@ let
 
     ${grep} -q '${strings.timeout}' <<< "$hevm_output"
     if [ $? == 0 ]; then exit; fi
+    ${grep} -q '${strings.hevmCouldNotExplore}' <<< "$hevm_output"
+    if [ $? == 0 ]; then exit; fi
 
-    ${grep} -q 'Assertion violation found' <<< "$hevm_output"
+    ${grep} -q '${strings.hevmAssertionViolation}' <<< "$hevm_output"
     hevm_violation=$?
     ${grep} -q 'Assertion violation happens' $1
     smtchecker_violation=$?
@@ -190,6 +211,7 @@ pkgs.runCommand "smtCheckerTests" {} ''
   total="$(${grep} -c '${strings.exeucting}' $results)"
   passed="$(${grep} -c '${strings.pass}' $results)"
   ignored="$(${grep} -c '${strings.ignore}' $results)"
+  hevm_failed="$(${grep} -c '${strings.hevmCouldNotExplore}' $results)"
   smt_reports="$(${grep} -c '${strings.smtReports}' $results)"
   hevm_reports="$(${grep} -c '${strings.hevmReports}' $results)"
   hevm_timeout="$(${grep} -c '${strings.timeout}' $results)"
