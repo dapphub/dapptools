@@ -442,7 +442,7 @@ assert cmd = do
     runSMTWithTimeOut (solver cmd) (smttimeout cmd) $ query $ do
       preState <- symvmFromCommand cmd
       smtState <- queryState
-      io $ void $ EVM.TTY.runFromVM srcinfo (EVM.Fetch.oracle smtState rpcinfo) preState
+      io $ void $ EVM.TTY.runFromVM (maxIterations cmd) srcinfo (EVM.Fetch.oracle smtState rpcinfo) preState
 
   else
     runSMTWithTimeOut (solver cmd) (smttimeout cmd) $ query $ do
@@ -462,7 +462,7 @@ assert cmd = do
               <> show (length vmErrs)
               <> " branch(es) errored while exploring:"
             print vmErrs
-          -- When `--get-model` is passed, we print example vm info for each path
+          -- When `--get-models` is passed, we print example vm info for each path
           when (getModels cmd) $
             forM_ (zip [1..] posts) $ \(i, postVM) -> do
               resetAssertions
@@ -470,8 +470,10 @@ assert cmd = do
               io $ putStrLn $
                 "-- Branch (" <> show i <> "/" <> show (length posts) <> ") --"
               checkSat >>= \case
-                Unk -> io $ putStrLn "Timed out"
-                Unsat -> io $ putStrLn "Inconsistent path conditions: dead path"
+                Unk -> io $ do putStrLn "Timed out"
+                               print $ view EVM.result postVM
+                Unsat -> io $ do putStrLn "Inconsistent path conditions: dead path"
+                                 print $ view EVM.result postVM
                 Sat -> do
                   showCounterexample pre maybesig
                   case view EVM.result postVM of
@@ -568,7 +570,7 @@ launchExec cmd = do
             Nothing -> pure ()
             Just path ->
               Git.saveFacts (Git.RepoAt path) (Facts.vmFacts vm')
-    Debug -> void $ EVM.TTY.runFromVM srcinfo fetcher vm1
+    Debug -> void $ EVM.TTY.runFromVM Nothing srcinfo fetcher vm1
    where fetcher = maybe EVM.Fetch.zero (EVM.Fetch.http block') (rpc cmd)
          block'  = maybe EVM.Fetch.Latest EVM.Fetch.BlockNumber (block cmd)
 
@@ -813,7 +815,7 @@ runVMTest diffmode mode timelimit (name, x) = do
           Timeout.timeout (1e6 * (fromMaybe 10 timelimit)) $
             execStateT (EVM.Stepper.interpret EVM.Fetch.zero . void $ EVM.Stepper.execFully) vm0
         Debug ->
-          Just <$> EVM.TTY.runFromVM Nothing EVM.Fetch.zero vm0
+          Just <$> EVM.TTY.runFromVM Nothing Nothing EVM.Fetch.zero vm0
     waitCatch action
   case result of
     Right (Just vm1) -> do

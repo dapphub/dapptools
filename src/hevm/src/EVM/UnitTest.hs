@@ -61,6 +61,7 @@ data UnitTestOptions = UnitTestOptions
   {
     oracle     :: Query -> IO (EVM ())
   , verbose    :: Maybe Int
+  , maxIter    :: Maybe Integer
   , match      :: Text
   , fuzzRuns   :: Int
   , replay     :: Maybe (Text, BSLazy.ByteString)
