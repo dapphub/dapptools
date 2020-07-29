@@ -81,6 +81,10 @@ let
     "loops/while_loop_simple_5.sol"
     "loops/do_while_1_false_positives.sol"
     "loops/while_loop_array_assignment_storage_storage.sol"
+    "operators/delete_array.sol"
+    "operators/delete_array_2d.sol"
+    "operators/delete_array_index_2d.sol"
+    "operators/delete_function.sol"
 
     # --- unsupported opcodes ---
 
@@ -91,6 +95,7 @@ let
     "functions/functions_external_2.sol"
     "functions/functions_external_3.sol"
     "functions/functions_external_4.sol"
+    "typecast/function_type_to_function_type_external.sol"
 
     # OpJump
 
@@ -103,6 +108,10 @@ let
     "loops/while_loop_array_assignment_memory_memory.sol"
     "loops/while_loop_array_assignment_memory_storage.sol"
 
+    # Blockhash
+
+    "special/blockhash.sol"
+
     # --- contract level knowledge required ---
 
     "functions/internal_call_with_assertion_1.sol"
@@ -111,6 +120,21 @@ let
     "inheritance/implicit_only_constructor_hierarchy.sol"
     "inheritance/implicit_constructor_hierarchy.sol"
     "invariants/state_machine_1.sol"
+
+    # --- missing smt checker coverage ---
+
+    # potential out of bounds array access
+    "operators/delete_array_index.sol"
+
+    # bounds checking on enum args during abi decoding
+    "typecast/enum_to_uint_max_value.sol"
+
+    # --- smt checker false positives ---
+
+    "typecast/cast_different_size_1.sol"
+    "typecast/cast_larger_3.sol"
+    "typecast/cast_smaller_2.sol"
+    "typecast/cast_smaller_3.sol"
 
   ];
 
@@ -126,7 +150,7 @@ let
     hevmAssertionViolation = "Assertion violation found";
     hevmErrorInBranch = "branch(es) errored while exploring";
     hevmCouldNotExplore = "FAIL: hevm was unable to explore the contract";
-    smtCheckerFailed = "SKIP: smtChecker could not be invoked on this file";
+    smtCheckerFailed = "SKIP: smtChecker failed";
   };
 
   smtCheckerTests = "${solidity}/test/libsolidity/smtCheckerTests";
@@ -157,7 +181,7 @@ let
 
     explore() {
       set -x
-      hevm_output=$(${timeout} 60s ${hevm} symbolic --code "$1" --solver "$2" --json-file "$3" $4 2>&1)
+      hevm_output=$(${timeout} 10s ${hevm} symbolic --code "$1" --solver "$2" --json-file "$3" $4 2>&1)
       status=$?
       set +x
 
@@ -222,6 +246,10 @@ let
 
     ${grep} -q 'Error trying to invoke SMT solver.' $1
     if [ $? == 0 ]; then ${echo} ${strings.smtCheckerFailed} && exit; fi
+    ${grep} -q 'Assertion checker does not yet implement' $1
+    if [ $? == 0 ]; then ${echo} ${strings.smtCheckerFailed} && exit; fi
+    ${grep} -q 'Assertion checker does not yet support' $1
+    if [ $? == 0 ]; then ${echo} ${strings.smtCheckerFailed} && exit; fi
 
     hevm_output=$(${checkWithHevm} $1 $2 2>&1)
     echo "$hevm_output"
@@ -233,8 +261,19 @@ let
 
     ${grep} -q '${strings.hevmAssertionViolation}' <<< "$hevm_output"
     hevm_violation=$?
+
     ${grep} -q 'Assertion violation happens' $1
-    smtchecker_violation=$?
+    smtchecker_assertion_violation=$?
+    ${grep} -q 'Division by zero happens here' $1
+    smtchecker_division_by_zero=$?
+
+    smtchecker_violation=1
+    if [ $smtchecker_assertion_violation -eq 0 ] || [ $smtchecker_division_by_zero -eq 0 ]; then
+      smtchecker_violation=0
+    fi
+
+    echo $smtchecker_violation
+    echo $hevm_violation
 
     if [ $hevm_violation -ne 0 ] && [ $smtchecker_violation -eq 0 ]; then
       ${echo}
@@ -256,7 +295,7 @@ pkgs.runCommand "smtCheckerTests" {} ''
   ${mkdir} $out
   results=$out/cvc4
 
-  for filename in ${smtCheckerTests}/functions/*.sol; do
+  for filename in ${smtCheckerTests}/types/*.sol; do
     ${runSingleTest} $filename cvc4 | ${tee} -a $results
   done
 
