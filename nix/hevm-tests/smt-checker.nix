@@ -45,6 +45,9 @@ let
     "functions/constructor_simple.sol"
     "functions/constructor_state_value_inherited.sol"
     "functions/constructor_state_value.sol"
+    "inheritance/constructor_hierarchy_mixed_chain_with_params.sol"
+    "inheritance/constructor_state_variable_init_chain_run_all.sol"
+    "inheritance/constructor_state_variable_init_chain_run_all_2.sol"
 
     # unbounded looping
 
@@ -55,6 +58,29 @@ let
     "functions/functions_trivial_condition_for_only_call.sol"
     "functions/functions_trivial_condition_while.sol"
     "functions/functions_trivial_condition_while_only_call.sol"
+    "invariants/loop_basic.sol"
+    "invariants/loop_basic_for.sol"
+    "loops/do_while_1_fail.sol"
+    "loops/do_while_continue.sol"
+    "loops/for_loop_1.sol"
+    "loops/for_loop_2.sol"
+    "loops/for_loop_3.sol"
+    "loops/for_loop_5.sol"
+    "loops/for_loop_6.sol"
+    "loops/for_loop_trivial_condition_1.sol"
+    "loops/for_loop_trivial_condition_2.sol"
+    "loops/for_loop_trivial_condition_3.sol"
+    "loops/for_loop_array_assignment_storage_memory.sol"
+    "loops/for_loop_array_assignment_storage_storage.sol"
+    "loops/while_1_infinite.sol"
+    "loops/while_2_fail.sol"
+    "loops/while_1.sol"
+    "loops/while_loop_simple_2.sol"
+    "loops/while_loop_simple_3.sol"
+    "loops/while_loop_simple_4.sol"
+    "loops/while_loop_simple_5.sol"
+    "loops/do_while_1_false_positives.sol"
+    "loops/while_loop_array_assignment_storage_storage.sol"
 
     # --- unsupported opcodes ---
 
@@ -66,10 +92,25 @@ let
     "functions/functions_external_3.sol"
     "functions/functions_external_4.sol"
 
+    # OpJump
+
+    "complex/slither/external_function.sol"
+
+    # OpCalldatacopy
+
+    "loops/for_loop_array_assignment_memory_memory.sol"
+    "loops/for_loop_array_assignment_memory_storage.sol"
+    "loops/while_loop_array_assignment_memory_memory.sol"
+    "loops/while_loop_array_assignment_memory_storage.sol"
+
     # --- contract level knowledge required ---
 
     "functions/internal_call_with_assertion_1.sol"
     "functions/internal_multiple_calls_with_assertion_1.sol"
+    "inheritance/constructor_state_variable_init_chain_run_all.sol"
+    "inheritance/implicit_only_constructor_hierarchy.sol"
+    "inheritance/implicit_constructor_hierarchy.sol"
+    "invariants/state_machine_1.sol"
 
   ];
 
@@ -237,10 +278,11 @@ pkgs.runCommand "smtCheckerTests" {} ''
   ${echo}
   ${echo} ran: $total
   ${echo} passed: $passed
-  ${echo} ignored: $ignored
+  ${echo} skipped: $(${bc} <<< "$ignored + $smt_failed")
   ${echo} 'failed (smt reports assertion, hevm reports safe):' $smt_reports
   ${echo} 'failed (hevm reports assertion, smt reports safe):' $hevm_reports
   ${echo} hevm timeout: $hevm_timeout
+  ${echo} hevm failure: $hevm_failed
   ${echo}
 
   if [ $hevm_timeout != 0 ] || \
