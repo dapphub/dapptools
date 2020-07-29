@@ -2007,12 +2007,10 @@ finishFrame how = do
   case view frames oldVm of
     -- Is the current frame the only one?
     [] -> do
-      assign result . Just $
-        case how of
-          FrameReturned output -> VMSuccess output
-          FrameReverted (ConcreteBuffer output) -> VMFailure (Revert output)
-          FrameReverted (SymbolicBuffer output) -> VMFailure (Revert (forceLitBytes output))
-          FrameErrored e       -> VMFailure e
+      case how of
+          FrameReturned output -> assign result . Just $ VMSuccess output
+          FrameReverted buffer -> forceConcreteBuffer buffer $ \out -> assign result . Just $ VMFailure (Revert out)
+          FrameErrored e       -> assign result . Just $ VMFailure e
       finalize
 
     -- Are there some remaining frames?
