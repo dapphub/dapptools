@@ -5,6 +5,7 @@ let
   # --- binaries ---
 
   awk = "${pkgs.gawk}/bin/awk";
+  bc = "${pkgs.bc}/bin/bc";
   basename = "${pkgs.coreutils}/bin/basename";
   cat = "${pkgs.coreutils}/bin/cat";
   echo = "${pkgs.coreutils}/bin/echo";
@@ -84,6 +85,7 @@ let
     hevmAssertionViolation = "Assertion violation found";
     hevmErrorInBranch = "branch(es) errored while exploring";
     hevmCouldNotExplore = "FAIL: hevm was unable to explore the contract";
+    smtCheckerFailed = "SKIP: smtChecker could not be invoked on this file";
   };
 
   smtCheckerTests = "${solidity}/test/libsolidity/smtCheckerTests";
@@ -94,7 +96,7 @@ let
 
   divider = pkgs.writeShellScript "divider" ''
     ${echo}
-    ${echo} --------------------------------------------------------------------------------------------
+    ${echo} ============================================================================================
     ${echo}
   '';
 
@@ -114,12 +116,12 @@ let
 
     explore() {
       set -x
-      hevm_output=$(${timeout} 10s ${hevm} symbolic --code "$1" --solver "$2" --json-file "$3" $4 2>&1)
+      hevm_output=$(${timeout} 60s ${hevm} symbolic --code "$1" --solver "$2" --json-file "$3" $4 2>&1)
       status=$?
       set +x
 
       # handle timeouts
-      if [[ $status == 124 ]]; then ${echo} "${strings.timeout}"; fi
+      if [[ $status == 124 ]]; then ${echo} && ${echo} "${strings.timeout}"; fi
 
       # handle non assertion related hevm failures
       if [[ $status == 1 ]]; then
@@ -159,7 +161,12 @@ let
   # $1 == input file
   # $2 == hevm smt backend
   runSingleTest = pkgs.writeShellScript "runSingleTest" ''
-    #!/usr/bin/sh
+    print_test() {
+      ${echo}
+      ${echo} "*** Input File: $(${testName} $1) ***"
+      ${echo}
+      ${cat} "$1"
+    }
 
     testName=$(${testName} $1)
 
@@ -172,13 +179,16 @@ let
         exit 0
     fi
 
+    ${grep} -q 'Error trying to invoke SMT solver.' $1
+    if [ $? == 0 ]; then ${echo} ${strings.smtCheckerFailed} && exit; fi
+
     hevm_output=$(${checkWithHevm} $1 $2 2>&1)
     echo "$hevm_output"
 
     ${grep} -q '${strings.timeout}' <<< "$hevm_output"
-    if [ $? == 0 ]; then exit; fi
+    if [ $? == 0 ]; then print_test "$1" && exit; fi
     ${grep} -q '${strings.hevmCouldNotExplore}' <<< "$hevm_output"
-    if [ $? == 0 ]; then exit; fi
+    if [ $? == 0 ]; then print_test "$1" && exit; fi
 
     ${grep} -q '${strings.hevmAssertionViolation}' <<< "$hevm_output"
     hevm_violation=$?
@@ -188,10 +198,12 @@ let
     if [ $hevm_violation -ne 0 ] && [ $smtchecker_violation -eq 0 ]; then
       ${echo}
       ${echo} "${strings.smtReports}"
+      print_test "$1"
       exit
     elif [ $hevm_violation -eq 0 ] && [ $smtchecker_violation -ne 0 ]; then
       ${echo}
       ${echo} "${strings.hevmReports}"
+      print_test "$1"
       exit
     fi
 
@@ -211,6 +223,7 @@ pkgs.runCommand "smtCheckerTests" {} ''
   total="$(${grep} -c '${strings.exeucting}' $results)"
   passed="$(${grep} -c '${strings.pass}' $results)"
   ignored="$(${grep} -c '${strings.ignore}' $results)"
+  smt_failed="$(${grep} -c '${strings.smtCheckerFailed}' $results)"
   hevm_failed="$(${grep} -c '${strings.hevmCouldNotExplore}' $results)"
   smt_reports="$(${grep} -c '${strings.smtReports}' $results)"
   hevm_reports="$(${grep} -c '${strings.hevmReports}' $results)"
