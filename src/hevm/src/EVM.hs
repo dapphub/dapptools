@@ -966,7 +966,7 @@ exec1 = do
                   in case maybeLitWord y of
                       Just y' -> jump (0 == y')
                       -- if the jump condition is symbolic, an smt query has to be made.
-                      Nothing -> askSMT self (the state pc) y jump
+                      Nothing -> askSMT (self, the state pc) y jump
             _ -> underrun
 
         -- op: PC
@@ -1475,15 +1475,18 @@ pushTo f x = f %= (x :)
 pushToSequence :: MonadState s m => ASetter s s (Seq a) (Seq a) -> a -> m ()
 pushToSequence f x = f %= (Seq.|> x)
 
-askSMT :: Addr -> Int -> SymWord -> (Bool -> EVM ()) -> EVM ()
-askSMT addr pcval jumpcondition continue = do
+getCodeLocation :: VM -> CodeLocation
+getCodeLocation vm = (view (state . contract) vm, view (state . pc) vm)
+
+askSMT :: CodeLocation -> SymWord -> (Bool -> EVM ()) -> EVM ()
+askSMT codeloc jumpcondition continue = do
   -- We keep track of how many times we have come across this particular
   -- (contract, pc) combination in the `iteration` mapping.
-  iteration <- use (iterations . at (addr, pcval) . non 0)
+  iteration <- use (iterations . at codeloc . non 0)
 
   -- If we are backstepping, the result of this query should be cached
   -- already. So we first check the cache to see if the result is known
-  use (cache . path . at ((addr, pcval), iteration)) >>= \case
+  use (cache . path . at (codeloc, iteration)) >>= \case
      -- If the query has been done already, select path or select the only available
      Just w -> choosePath (Iszero w)
      -- If this is a new query, run the query, cache the result
@@ -1496,9 +1499,9 @@ askSMT addr pcval jumpcondition continue = do
          choosePath :: JumpCondition -> EVM ()
          choosePath (Iszero v) = do assign result Nothing
                                     pathConditions <>= if v then [litWord 0 .== jumpcondition] else [litWord 0 ./= jumpcondition]
-                                    iteration <- use (iterations . at (addr, pcval) . non 0)
-                                    assign (cache . path . at ((addr, pcval), iteration)) (Just v)
-                                    assign (iterations . at (addr, pcval)) (Just (iteration + 1))
+                                    iteration <- use (iterations . at codeloc . non 0)
+                                    assign (cache . path . at (codeloc, iteration)) (Just v)
+                                    assign (iterations . at codeloc) (Just (iteration + 1))
                                     continue v
          -- Both paths are possible; we ask for more input
          choosePath Unknown = assign result . Just . VMFailure . Choose . PleaseChoosePath $ choosePath . Iszero
