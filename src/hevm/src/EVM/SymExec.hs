@@ -270,7 +270,7 @@ equivalenceCheck bytecodeA bytecodeB maxiter signature' = do
                              differingResults = case (aResult, bResult) of
                                (Just (VMSuccess aOut), Just (VMSuccess bOut)) -> aOut ./= bOut .|| aStorage ./= bStorage .|| fromBool (aSelf /= bSelf)
                                (Just (VMFailure UnexpectedSymbolicArg), _) -> error $ "Unexpected symbolic argument at opcode: " <> maybe "??" show (vmOp a) <> ". Not supported (yet!)"
-                               (_, Just (VMFailure UnexpectedSymbolicArg)) -> error $ "Unexpected symbolic argument at opcode: " <> maybe "??" show (vmOp a) <> ". Not supported (yet!)"
+                               (_, Just (VMFailure UnexpectedSymbolicArg)) -> error $ "Unexpected symbolic argument at opcode: " <> maybe "??" show (vmOp b) <> ". Not supported (yet!)"
                                (Just (VMFailure _), Just (VMFailure _)) -> sFalse
                                (Just _, Just _) -> sTrue
                                _ -> error "Internal error during symbolic execution (should not be possible)"
