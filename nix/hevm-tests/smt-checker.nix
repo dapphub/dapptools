@@ -26,7 +26,7 @@ let
 
   ignored = [
 
-    # constructor arguments
+    # --- constructor arguments ---
 
     "functions/constructor_hierarchy_3.sol"
     "functions/constructor_hierarchy_4.sol"
@@ -49,7 +49,7 @@ let
     "inheritance/constructor_state_variable_init_chain_run_all.sol"
     "inheritance/constructor_state_variable_init_chain_run_all_2.sol"
 
-    # unbounded looping
+    # --- unbounded looping ---
 
     "functions/functions_recursive.sol"
     "functions/functions_recursive_indirect.sol"
@@ -86,10 +86,15 @@ let
     "operators/delete_array_index_2d.sol"
     "operators/delete_function.sol"
 
+    # --- hevm timeout ---
+
+    "types/array_aliasing_memory_1.sol"
+    "types/array_aliasing_memory_2.sol"
+    "types/array_aliasing_memory_3.sol"
+
     # --- unsupported opcodes ---
 
     # OpExtcodesize
-
     "functions/this_fake.sol"
     "functions/functions_external_1.sol"
     "functions/functions_external_2.sol"
@@ -98,36 +103,70 @@ let
     "typecast/function_type_to_function_type_external.sol"
 
     # OpJump
-
     "complex/slither/external_function.sol"
 
     # OpCalldatacopy
-
     "loops/for_loop_array_assignment_memory_memory.sol"
     "loops/for_loop_array_assignment_memory_storage.sol"
     "loops/while_loop_array_assignment_memory_memory.sol"
     "loops/while_loop_array_assignment_memory_storage.sol"
+    "types/address_call.sol"
+    "types/address_delegatecall.sol"
+    "types/address_staticcall.sol"
+    "types/array_aliasing_storage_2.sol"
+    "types/array_aliasing_storage_3.sol"
+    "types/array_aliasing_storage_5.sol"
+    "types/array_branch_1d.sol"
+    "types/array_branches_1d.sol"
+    "types/array_dynamic_parameter_1.sol"
+    "types/array_dynamic_parameter_1_fail.sol"
+    "types/bytes_1.sol"
+    "types/bytes_2.sol"
+    "types/bytes_2_fail.sol"
+    "types/mapping_unsupported_key_type_1.sol"
+    "types/function_type_array_as_reference_type.sol"
 
-    # Blockhash
-
+    # OpBlockhash
     "special/blockhash.sol"
 
-    # --- contract level knowledge required ---
+    # OpBalance
+    "types/address_balance.sol"
+    "types/address_transfer.sol"
+    "types/address_transfer_2.sol"
+    "types/address_transfer_insufficient.sol"
 
+    # --- missing hevm coverage ---
+
+    # contract level knowledge required
     "functions/internal_call_with_assertion_1.sol"
     "functions/internal_multiple_calls_with_assertion_1.sol"
     "inheritance/constructor_state_variable_init_chain_run_all.sol"
     "inheritance/implicit_only_constructor_hierarchy.sol"
     "inheritance/implicit_constructor_hierarchy.sol"
     "invariants/state_machine_1.sol"
+    "types/mapping_4.sol"
+
+    # knowledge of the solidity memory model required
+    "types/array_static_aliasing_memory_5.sol"
 
     # --- missing smt checker coverage ---
 
     # potential out of bounds array access
     "operators/delete_array_index.sol"
+    "types/array_branches_2d.sol"
+    "types/array_branches_3d.sol"
+    "types/array_dynamic_1.sol"
+    "types/array_dynamic_2.sol"
+    "types/array_static_2.sol"
+    "types/array_static_3.sol"
+    "types/tuple_assignment_array.sol"
+    "types/array_dynamic_3.sol"
+    "types/array_static_1.sol"
 
     # bounds checking on enum args during abi decoding
     "typecast/enum_to_uint_max_value.sol"
+    "types/enum_explicit_values.sol"
+    "types/enum_transitivity.sol"
 
     # --- smt checker false positives ---
 
@@ -135,6 +174,7 @@ let
     "typecast/cast_larger_3.sol"
     "typecast/cast_smaller_2.sol"
     "typecast/cast_smaller_3.sol"
+    "types/mapping_as_parameter_1.sol"
 
   ];
 
@@ -181,7 +221,7 @@ let
 
     explore() {
       set -x
-      hevm_output=$(${timeout} 10s ${hevm} symbolic --code "$1" --solver "$2" --json-file "$3" $4 2>&1)
+      hevm_output=$(${timeout} 60s ${hevm} symbolic --code "$1" --solver "$2" --json-file "$3" $4 2>&1)
       status=$?
       set +x
 
@@ -250,6 +290,8 @@ let
     if [ $? == 0 ]; then ${echo} ${strings.smtCheckerFailed} && exit; fi
     ${grep} -q 'Assertion checker does not yet support' $1
     if [ $? == 0 ]; then ${echo} ${strings.smtCheckerFailed} && exit; fi
+    ${grep} -q 'Internal error: Expression undefined for SMT solver.' $1
+    if [ $? == 0 ]; then ${echo} ${strings.smtCheckerFailed} && exit; fi
 
     hevm_output=$(${checkWithHevm} $1 $2 2>&1)
     echo "$hevm_output"
@@ -272,9 +314,6 @@ let
       smtchecker_violation=0
     fi
 
-    echo $smtchecker_violation
-    echo $hevm_violation
-
     if [ $hevm_violation -ne 0 ] && [ $smtchecker_violation -eq 0 ]; then
       ${echo}
       ${echo} "${strings.smtReports}"
@@ -295,7 +334,7 @@ pkgs.runCommand "smtCheckerTests" {} ''
   ${mkdir} $out
   results=$out/cvc4
 
-  for filename in ${smtCheckerTests}/types/*.sol; do
+  for filename in ${smtCheckerTests}/**/*.sol; do
     ${runSingleTest} $filename cvc4 | ${tee} -a $results
   done
 
