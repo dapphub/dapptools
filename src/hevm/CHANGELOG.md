@@ -6,6 +6,9 @@
 ### Changed
 
 - z3 updated to 4.8.7
+- default `--smttimeout` changed from unlimited to 20 seconds
+- `hevm symbolic --debug` now respects `--max-iterations`
+
 
 ### Added
 
