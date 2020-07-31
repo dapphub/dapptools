@@ -463,7 +463,7 @@ appEvent st@(ViewVm s) (VtyEvent (V.EvKey V.KEsc [])) =
     Nothing ->
       halt st
 
--- Vm Overview: C - open contracts view
+-- Vm Overview: Enter - open contracts view
 appEvent (ViewVm s) (VtyEvent (V.EvKey V.KEnter [])) =
   continue . ViewContracts $ UiBrowserState
     { _browserContractList =
@@ -761,8 +761,6 @@ drawVmBrowser ui =
                   , txt ("Storage: "  <> storageDisplay (view storage c))
                   ]
                 ]
-             where storageDisplay (Concrete s) = pack ( show ( Map.toList s))
-                   storageDisplay (Symbolic _) = pack "<symbolic>"
           Just solc ->
             hBox
               [ borderWithLabel (txt "Contract information") . padBottom Max . padRight (Pad 2) $ vBox
@@ -775,12 +773,15 @@ drawVmBrowser ui =
                   , txt "Public methods:"
                   , vBox . flip map (sort (Map.elems (view abiMap solc))) $
                       \method -> txt ("  " <> view methodSignature method)
+                  , txt ("Storage:" <> storageDisplay (view storage c))
                   ]
               , borderWithLabel (txt "Storage slots") . padBottom Max . padRight Max $ vBox
                   (map txt (storageLayout dapp solc))
               ]
       ]
   ]
+  where storageDisplay (Concrete s) = pack ( show ( Map.toList s))
+        storageDisplay (Symbolic _) = pack "<symbolic>"
 
 drawVm :: UiVmState -> [UiWidget]
 drawVm ui =
@@ -861,7 +862,7 @@ isNextSourcePositionWithoutEntering ui vm =
       in
         case currentSrcMap dapp vm of
           Nothing ->
-            True
+            False
           Just here ->
             let
               moved = Just here /= initialPosition
