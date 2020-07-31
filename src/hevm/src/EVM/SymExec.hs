@@ -19,7 +19,7 @@ import EVM.Concrete (createAddress)
 import qualified EVM.FeeSchedule as FeeSchedule
 import Data.SBV.Trans.Control
 import Data.SBV.Trans hiding (distinct)
-import Data.SBV hiding (runSMT, newArray_, addAxiom, distinct)
+import Data.SBV hiding (runSMT, newArray_, addAxiom, distinct, sWord8s)
 import Data.Vector (toList, fromList)
 
 import Control.Monad.IO.Class
@@ -32,34 +32,30 @@ import Control.Monad.State.Strict (runStateT, runState, StateT, get, put, zipWit
 import Control.Applicative
 
 -- | Convenience functions for generating large symbolic byte strings
-sbytes32, sbytes64, sbytes128, sbytes256, sbytes512, sbytes1024 :: Query ([SWord 8])
-sbytes32 =  toBytes <$> freshVar_ @ (WordN 256)
-sbytes64 = liftA2 (<>) sbytes32 sbytes32
-sbytes128 = liftA2 (<>) sbytes64 sbytes64
-sbytes256 = liftA2 (<>) sbytes128 sbytes128
-sbytes512 = liftA2 (<>) sbytes256 sbytes256
-sbytes1024 = liftA2 (<>) sbytes512 sbytes512
+sbytes32, sbytes1024 :: Query ([SWord 8])
+sbytes32 = toBytes <$> freshVar_ @ (WordN 256)
+sbytes1024 = toBytes <$> freshVar_ @ (WordN 1024)
 
 -- | Abstract calldata argument generation
 -- We don't assume input types are restricted to their proper range here;
 -- such assumptions should instead be given as preconditions.
 -- This could catch some interesting calldata mismanagement errors.
 symAbiArg :: AbiType -> Query ([SWord 8], SWord 32)
-symAbiArg (AbiUIntType n) | n `mod` 8 == 0 && n <= 256 = do x <- freshVar_ @ (WordN 256)
-                                                            return (toBytes x, 32)
+symAbiArg (AbiUIntType n) | n `mod` 8 == 0 && n <= 256 = do x <- sbytes32
+                                                            return (x, 32)
                           | otherwise = error "bad type"
 
-symAbiArg (AbiIntType n)  | n `mod` 8 == 0 && n <= 256 = do x <- freshVar_ @ (WordN 256)
-                                                            return (toBytes x, 32)
+symAbiArg (AbiIntType n)  | n `mod` 8 == 0 && n <= 256 = do x <- sbytes32
+                                                            return (x, 32)
                           | otherwise = error "bad type"
-symAbiArg AbiBoolType = do x <- freshVar_ @ (WordN 256)
-                           return (toBytes x, 32)
+symAbiArg AbiBoolType = do x <- sbytes32
+                           return (x, 32)
 
-symAbiArg AbiAddressType = do x <- freshVar_ @ (WordN 256)
-                              return (toBytes x, 32)
+symAbiArg AbiAddressType = do x <- sbytes32
+                              return (x, 32)
 
-symAbiArg (AbiBytesType n) | n <= 32 = do x <- freshVar_ @ (WordN 256)
-                                          return (toBytes x, 32)
+symAbiArg (AbiBytesType n) | n <= 32 = do x <- sbytes32
+                                          return (x, 32)
                            | otherwise = error "bad type"
 
 -- TODO: is this encoding correct?
@@ -91,7 +87,7 @@ abstractVM :: Maybe (Text, [AbiType]) -> [String] -> ByteString -> StorageModel 
 abstractVM typesignature concreteArgs x storagemodel = do
   (cd', cdlen, cdconstraint) <-
     case typesignature of
-      Nothing -> do cd <- sbytes256
+      Nothing -> do cd <- sbytes1024
                     len <- freshVar_
                     return (cd, len, len .<= 1024)
       Just (name, typs) -> do (cd, cdlen) <- symCalldata name typs concreteArgs
