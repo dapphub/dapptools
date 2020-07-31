@@ -1,4 +1,8 @@
-{ pkgs, solidity, solc }:
+/*
+  This file explores the contracts in the test suite for the solc SMTChecker module
+  with hevm and compares the results with those found by the SMTChecker
+*/
+{ pkgs, solidity, solc, solver }:
 
 let
 
@@ -329,14 +333,18 @@ let
     ${echo}
     ${echo} ${strings.pass}
   '';
-in
-pkgs.runCommand "smtCheckerTests" {} ''
-  ${mkdir} $out
-  results=$out/cvc4
 
-  for filename in ${smtCheckerTests}/**/*.sol; do
-    ${runSingleTest} $filename cvc4 | ${tee} -a $results
-  done
+  runAllTests = pkgs.runCommand "runAllSmtCheckerTests-${solver}" {} ''
+    mkdir $out
+    results=$out/results
+
+    for filename in ${smtCheckerTests}/**/*.sol; do
+      ${runSingleTest} $filename ${solver} | ${tee} -a $results
+    done
+  '';
+in
+pkgs.runCommand "smtCheckerTests-${solver}" {} ''
+  results=${runAllTests}/results
 
   set +e
   total="$(${grep} -c '${strings.exeucting}' $results)"
@@ -351,7 +359,7 @@ pkgs.runCommand "smtCheckerTests" {} ''
 
 
   ${divider}
-  ${echo} Summary:
+  ${echo} "Summary (${solver}):"
   ${echo} ---------------------------------
   ${echo}
   ${echo} ran: $total
