@@ -12,6 +12,8 @@
 - Fixed an issue in debug mode where backstepping could cause path information to be forgotten
 - Ensure that pathconditions are consistent when branching, and end the execution with VMFailure: DeadPath if this is not the case
 - Fixed a soundness bug where nonzero jumpconditions  were assumed to equal one.
+- default `--smttimeout` changed from unlimited to 20 seconds
+- `hevm symbolic --debug` now respects `--max-iterations`
 
 ### Added
 
