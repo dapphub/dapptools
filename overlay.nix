@@ -20,7 +20,7 @@ in rec {
   # experimental dapp builder, allows for easy overriding of phases
   buildDappPackage = import ./nix/build-dapp-package.nix { inherit (self) pkgs; };
 
-  # Here we can make e.g. integration tests for Dappsys,
+  # Here we can make e.g. integration tests for Dappsys.
   dapp-tests = import ./src/dapp-tests { inherit (self) pkgs; };
 
   # These are tests that verify the correctness of hevm symbolic using various
