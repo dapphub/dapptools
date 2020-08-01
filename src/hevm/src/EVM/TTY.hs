@@ -396,6 +396,7 @@ takeStep ui policy mode =
   where
     vmResult Nothing = False
     vmResult (Just (VMFailure (Query _))) = False
+    vmResult (Just (VMFailure (Choose _))) = False
     vmResult (Just _) = True
     m = interpret mode (view uiVmNextStep ui)
     nxt = runState (m <* modify renderVm) ui
