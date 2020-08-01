@@ -179,6 +179,7 @@ let
     "typecast/cast_smaller_2.sol"
     "typecast/cast_smaller_3.sol"
     "types/mapping_as_parameter_1.sol"
+    "types/mapping_as_local_var_1.sol"
 
   ];
 
@@ -293,8 +294,6 @@ let
     ${grep} -q 'Assertion checker does not yet implement' $1
     if [ $? == 0 ]; then ${echo} ${strings.smtCheckerFailed} && exit; fi
     ${grep} -q 'Assertion checker does not yet support' $1
-    if [ $? == 0 ]; then ${echo} ${strings.smtCheckerFailed} && exit; fi
-    ${grep} -q 'Internal error: Expression undefined for SMT solver.' $1
     if [ $? == 0 ]; then ${echo} ${strings.smtCheckerFailed} && exit; fi
 
     hevm_output=$(${checkWithHevm} $1 $2 2>&1)
