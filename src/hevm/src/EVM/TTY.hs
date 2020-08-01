@@ -392,7 +392,7 @@ takeStep
   -> EventM n (Next UiState)
 takeStep ui policy mode = do
   case nxt of
-    (Stepped stepper, ui') -> do
+    (Stepped stepper, ui') ->
       continue (ViewVm (ui' & set uiVmNextStep stepper))
 
     (Blocked blocker, ui') ->
