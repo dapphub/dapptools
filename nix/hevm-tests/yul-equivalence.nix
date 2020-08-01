@@ -332,12 +332,16 @@ let
     for filename in ${prefix}/**/*.yul; do
       check_equiv $filename $solver
     done
+
+    ${echo}
+    ${echo} "Time taken (${solver}):"
+    ${echo} -------------------------------------------
   '';
 
 in
 pkgs.runCommand "yulEquivalence-${solver}" {} ''
   results=$out
-  ${runAllTests} ${solver} | ${tee} $out
+  time ${runAllTests} ${solver} | ${tee} $out
 
   ${echo}
   ${echo} "Summary (${solver}):"
@@ -355,9 +359,9 @@ pkgs.runCommand "yulEquivalence-${solver}" {} ''
   set -e
 
   ${echo} ran: $total
-  ${echo} same bytecode: $same_bytecode
-  ${echo} ignored: $ignored
   ${echo} passed: $passed
+  ${echo} ignored: $ignored
+  ${echo} same bytecode: $same_bytecode
   ${echo} could not compile first program: $no_compile_first
   ${echo} could not compile second program: $no_compile_second
   ${echo} hevm timeout: $hevm_timeout

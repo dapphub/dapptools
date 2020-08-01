@@ -334,17 +334,24 @@ let
     ${echo} ${strings.pass}
   '';
 
-  runAllTests = pkgs.runCommand "runAllSmtCheckerTests-${solver}" {} ''
-    mkdir $out
-    results=$out/results
-
+  runAllTests = pkgs.writeShellScript "runAllTests-${solver}" ''
     for filename in ${smtCheckerTests}/**/*.sol; do
-      ${runSingleTest} $filename ${solver} | ${tee} -a $results
+      ${runSingleTest} $filename ${solver}
     done
+
+    ${divider}
+    ${echo} "Time Taken (${solver}):"
+    ${echo} ---------------------------------
+    ${echo}
+
+    exit 0
   '';
 in
 pkgs.runCommand "smtCheckerTests-${solver}" {} ''
-  results=${runAllTests}/results
+  mkdir $out
+  results=$out/results
+
+  time ${runAllTests} | ${tee} $results
 
   set +e
   total="$(${grep} -c '${strings.exeucting}' $results)"
@@ -357,8 +364,7 @@ pkgs.runCommand "smtCheckerTests-${solver}" {} ''
   hevm_timeout="$(${grep} -c '${strings.timeout}' $results)"
   set -e
 
-
-  ${divider}
+  ${echo}
   ${echo} "Summary (${solver}):"
   ${echo} ---------------------------------
   ${echo}
