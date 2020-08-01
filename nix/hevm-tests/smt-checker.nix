@@ -186,7 +186,7 @@ let
   # --- test scripts ---
 
   strings = {
-    exeucting = "Executing test:";
+    executing = "Executing test:";
     pass = "PASS: hevm and SMTChecker agree!";
     ignore = "SKIP: test ignored";
     smtReports = "FAIL: SMTChecker reports assertion violation whereas HEVM reports safe.";
@@ -281,7 +281,7 @@ let
     testName=$(${testName} $1)
 
     ${divider}
-    ${echo} "${strings.exeucting} $(${testName} $1)"
+    ${echo} "${strings.executing} $(${testName} $1)"
 
     ignoredTests=(${toString ignored})
     if [[ " ''${ignoredTests[@]} " =~ " ''${testName} " ]]; then
@@ -353,7 +353,7 @@ pkgs.runCommand "smtCheckerTests-${solver}" {} ''
   time ${runAllTests} | ${tee} $results
 
   set +e
-  total="$(${grep} -c '${strings.exeucting}' $results)"
+  total="$(${grep} -c '${strings.executing}' $results)"
   passed="$(${grep} -c '${strings.pass}' $results)"
   ignored="$(${grep} -c '${strings.ignore}' $results)"
   smt_failed="$(${grep} -c '${strings.smtCheckerFailed}' $results)"
