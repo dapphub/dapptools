@@ -28,6 +28,24 @@ let
 
   # --- test classification ---
 
+  bounded = [
+
+    "functions/functions_recursive.sol"
+    "functions/functions_recursive_indirect.sol"
+    "functions/recursive_multi_return.sol"
+    "invariants/loop_basic.sol"
+    "invariants/loop_basic_for.sol"
+    "loops/do_while_1_fail.sol"
+    "loops/for_loop_array_assignment_storage_memory.sol"
+    "loops/for_loop_array_assignment_storage_storage.sol"
+    "loops/while_1_infinite.sol"
+    "loops/while_1.sol"
+    "loops/while_loop_simple_5.sol"
+    "loops/do_while_1_false_positives.sol"
+    "loops/while_loop_array_assignment_storage_storage.sol"
+    "operators/delete_array_index_2d.sol"
+  ];
+
   ignored = [
 
     # --- constructor arguments ---
@@ -53,18 +71,12 @@ let
     "inheritance/constructor_state_variable_init_chain_run_all.sol"
     "inheritance/constructor_state_variable_init_chain_run_all_2.sol"
 
-    # --- unbounded looping ---
+    # --- infinite loops ---
 
-    "functions/functions_recursive.sol"
-    "functions/functions_recursive_indirect.sol"
-    "functions/recursive_multi_return.sol"
     "functions/functions_trivial_condition_for.sol"
     "functions/functions_trivial_condition_for_only_call.sol"
     "functions/functions_trivial_condition_while.sol"
     "functions/functions_trivial_condition_while_only_call.sol"
-    "invariants/loop_basic.sol"
-    "invariants/loop_basic_for.sol"
-    "loops/do_while_1_fail.sol"
     "loops/do_while_continue.sol"
     "loops/for_loop_1.sol"
     "loops/for_loop_2.sol"
@@ -74,27 +86,25 @@ let
     "loops/for_loop_trivial_condition_1.sol"
     "loops/for_loop_trivial_condition_2.sol"
     "loops/for_loop_trivial_condition_3.sol"
-    "loops/for_loop_array_assignment_storage_memory.sol"
-    "loops/for_loop_array_assignment_storage_storage.sol"
-    "loops/while_1_infinite.sol"
     "loops/while_2_fail.sol"
-    "loops/while_1.sol"
     "loops/while_loop_simple_2.sol"
     "loops/while_loop_simple_3.sol"
     "loops/while_loop_simple_4.sol"
-    "loops/while_loop_simple_5.sol"
-    "loops/do_while_1_false_positives.sol"
-    "loops/while_loop_array_assignment_storage_storage.sol"
+    "loops/while_1.sol"
+    "loops/while_1_infinite.sol"
+
+    # these can pass with high enough timeout and --max-iterations
+    # but we keep them disabled for now to speed up the tests
     "operators/delete_array.sol"
     "operators/delete_array_2d.sol"
     "operators/delete_array_index_2d.sol"
-    "operators/delete_function.sol"
 
     # --- hevm timeout ---
 
     "types/array_aliasing_memory_1.sol"
     "types/array_aliasing_memory_2.sol"
     "types/array_aliasing_memory_3.sol"
+    "loops/do_while_1_false_positives.sol"
 
     # --- unsupported opcodes ---
 
@@ -166,6 +176,7 @@ let
     "types/tuple_assignment_array.sol"
     "types/array_dynamic_3.sol"
     "types/array_static_1.sol"
+    "operators/delete_function.sol"
 
     # bounds checking on enum args during abi decoding
     "typecast/enum_to_uint_max_value.sol"
@@ -217,7 +228,8 @@ let
   checkWithHevm = pkgs.writeShellScript "checkWithHevm" ''
 
     # write json file to store for later debugging
-    json=$out/jsonFiles/$(${testName} $1).json
+    testName=$(${testName} $1)
+    json=$out/jsonFiles/$testName.json
     ${mkdir} -p $(${echo} "''${json%/*}/")
 
     ${solc} --combined-json=srcmap,srcmap-runtime,bin,bin-runtime,ast,metadata,storage-layout,abi $1 2> /dev/null > $json
@@ -257,10 +269,16 @@ let
       bin=$(${jq} -r --arg c $contract -c '.contracts[$c]."bin"' $json)
       explore "$bin" "$2" "$json" "--create"
 
+      iterations=""
+      boundedTests=(${toString bounded})
+      if [[ " ''${boundedTests[@]} " =~ " ''${testName} " ]]; then
+        iterations="--max-iterations 5"
+      fi
+
       ${echo}
       ${echo} exploring runtime bytecode:
       bin_runtime=$(${jq} -r --arg c $contract -c '.contracts[$c]."bin-runtime"' $json)
-      explore "$bin_runtime" "$2" "$json"
+      explore "$bin_runtime" "$2" "$json" "$iterations"
     done
 
     exit 0
@@ -380,9 +398,9 @@ pkgs.runCommand "smtCheckerTests-${solver}" {} ''
      [ $smt_reports != 0 ]  || \
      [ $hevm_reports != 0 ]
   then
-    exit 1
-  else
     exit 0
+  else
+    exit 1
   fi
 ''
 
