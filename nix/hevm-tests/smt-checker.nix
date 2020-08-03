@@ -48,6 +48,10 @@ let
 
   ignored = [
 
+    # --- hevm soundness bug ---
+    # TODO: enable me once https://github.com/dapphub/dapptools/issues/466 is fixed
+    "types/mapping_aliasing_2.sol"
+
     # --- constructor arguments ---
 
     "functions/constructor_hierarchy_3.sol"
