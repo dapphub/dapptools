@@ -32,6 +32,7 @@ import qualified EVM.Stepper as Stepper
 import qualified Control.Monad.Operational as Operational
 
 import EVM.Fetch (Fetcher)
+import Debug.Trace
 
 import Control.Lens
 import Control.Monad.State.Strict hiding (state)
@@ -121,9 +122,10 @@ data StepMode
 -- | Each step command in the terminal should finish immediately
 -- with one of these outcomes.
 data StepOutcome a
-  = Returned a                -- ^ Program finished
-  | Stepped  (Stepper a)      -- ^ Took one step; more steps to go
-  | Blocked  (IO (Stepper a)) -- ^ Came across blocking request
+  = Returned a                    -- ^ Program finished
+  | Stepped      (Stepper a)      -- ^ Took one step; more steps to go
+  | Blocked      (IO (Stepper a)) -- ^ Came across blocking request
+  | AwaitingUser (Stepper a)      -- ^ Waiting for user input
 
 -- | This turns a @Stepper@ into a state action usable
 -- from within the TTY loop, yielding a @StepOutcome@ depending on the @StepMode@.
@@ -144,7 +146,8 @@ interpret mode =
       :: Operational.ProgramView Stepper.Action a
       -> State UiVmState (StepOutcome a)
 
-    eval (Operational.Return x) =
+    eval (Operational.Return x) = do
+      traceM $ "returning"
       pure (Returned x)
 
     eval (action Operational.:>>= k) =
@@ -152,20 +155,26 @@ interpret mode =
 
         -- Stepper wants to keep executing?
         Stepper.Exec -> do
-
+          traceM $ "executing"
           let
             -- When pausing during exec, we should later restart
             -- the exec with the same continuation.
             restart = Stepper.exec >>= k
 
           case mode of
-            StepNone ->
+            StepNone -> do
+              traceM $ "stepNone"
               -- We come here when we've continued while stepping,
               -- either from a query or from a return;
               -- we should pause here and wait for the user.
-              pure (Stepped (Operational.singleton action >>= k))
+              use (uiVm . result) >>= \case
+                Nothing ->
+                  pure (Stepped restart)
+                Just r -> 
+                  pure (Stepped (k r))
 
             StepOne -> do
+              traceM $ "stepOne"
               -- Run an instruction
               modify stepOneOpcode
 
@@ -218,11 +227,14 @@ interpret mode =
         -- Stepper is waiting for user input from a query
         Stepper.Option (EVM.PleaseChoosePath cont) -> do
           -- ensure we aren't stepping past max iterations
+          traceM $ "choosing"
+          traceM $ show ?maxIter
           case ?maxIter of
             Just maxiter -> do
               vm <- use uiVm
               let codelocation = getCodeLocation vm
                   iters = view (iterations . at codelocation . non 0) vm
+              traceM $ show iters
               if num maxiter <= iters then
                 case view (cache . path . at (codelocation, iters - 1)) vm of
                   -- When we have reached maxIterations, we take the choice that will hopefully
@@ -231,30 +243,36 @@ interpret mode =
                   Just (Known 1) -> pure . Stepped $ Stepper.evm (cont 0) >> k ()
                   n -> error ("I don't see how this could have happened: " <> show n)
               else
-                pure (Stepped (Operational.singleton action >>= k))
+                pure (AwaitingUser (k ()))--(Operational.singleton action >>= k))
 
             Nothing ->
               -- pause & await user.
-              pure (Stepped (Operational.singleton action >>= k))
+              pure (AwaitingUser (k ()))--(Operational.singleton action >>= k))
 
         -- Stepper wants to make a query and wait for the results?
-        Stepper.Wait q ->
+        Stepper.Wait q -> do
+          traceM $ "waiting"
           -- Tell the TTY to run an I/O action to produce the next stepper.
           pure . Blocked $ do
             -- First run the fetcher, getting a VM state transition back.
             m <- ?fetcher q
             -- Join that transition with the stepper script's continuation.
-            pure (Stepper.evm m >> k ())
+            pure (Stepper.evm m >>= k)
+--            interpret mode (Stepper.evm m >>= k)
 
         -- Stepper wants to modify the VM.
         Stepper.EVM m -> do
+          traceM $ "modifying"
           vm0 <- use uiVm
           let (r, vm1) = runState m vm0
+          
           modify (flip updateUiVmState vm1)
-          interpret mode (k r)
+
+          interpret mode (Stepper.exec >> k r)
 
         -- Stepper wants to emit a message.
         Stepper.Note s -> do
+          traceM $ "noting"
           assign uiVmMessage (Just (unpack s))
           modifying uiVmNotes (unpack s :)
           interpret mode (k ())
@@ -370,18 +388,28 @@ takeStep
   -> EventM n (Next UiState)
 takeStep ui policy mode =
   case nxt of
-    (Stepped stepper, ui') ->
-      if vmResult (view (uiVm . result) ui)
-        then continue (ViewVm ui)
-      else
-        continue (ViewVm (ui' & set uiVmNextStep stepper))
+    (Stepped stepper, ui') -> do
+      traceM $ "stepped"
+      case view (uiVm . result) ui of
+        Nothing -> (traceM $ "no result") >>
+          continue (ViewVm (ui' & set uiVmNextStep stepper))
+        Just (VMFailure (Choose _)) -> (traceM $ "choose") >> takeStep (ui' & set uiVmNextStep stepper) StepNormally StepNone
+        Just (VMFailure (Query _)) -> (traceM $ "query") >> takeStep (ui' & set uiVmNextStep stepper) StepNormally StepNone --continue (ViewVm (ui' & set uiVmNextStep stepper))
+        Just _ -> (traceM $ "actual result") >> continue (ViewVm ui)
+        
+    (AwaitingUser stepper, ui') ->
+      continue (ViewVm (ui' & set uiVmNextStep stepper))
+      -- if vmResult (view (uiVm . result) ui)
+      --   then continue (ViewVm ui)
+      -- else
+      --   continue (ViewVm (ui' & set uiVmNextStep stepper))
 
     (Blocked blocker, ui') ->
       case policy of
         StepNormally -> do
           stepper <- liftIO blocker
-          takeStep
-            (execState (assign uiVmNextStep stepper) ui')
+          traceM $ "blocked"
+          takeStep (ui' & set uiVmNextStep stepper)
             StepNormally StepNone
 
         StepTimidly ->
@@ -897,7 +925,8 @@ updateUiVmState ui vm =
           Just ("VMFailure: " <> show err)
         Nothing ->
           Just ("Executing EVM code in " <> show address)
-    ui' = ui
+  in
+    ui
       & set uiVm vm
       & set uiVmStackList
           (list StackPane (Vec.fromList $ zip [1..] (view (state . stack) vm)) 2)
@@ -906,8 +935,6 @@ updateUiVmState ui vm =
              (view codeOps (fromJust (currentContract vm)))
              1)
       & set uiVmMessage message
-  in
-    ui'
       & set uiVmTraceList
           (list
             TracePane
