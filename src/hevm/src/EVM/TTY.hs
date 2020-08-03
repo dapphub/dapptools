@@ -155,7 +155,7 @@ interpret mode =
 
         -- Stepper wants to keep executing?
         Stepper.Exec -> do
-          traceM $ "executing"
+--          traceM $ "executing"
           let
             -- When pausing during exec, we should later restart
             -- the exec with the same continuation.
@@ -163,7 +163,7 @@ interpret mode =
 
           case mode of
             StepNone -> do
-              traceM $ "stepNone"
+--              traceM $ "stepNone"
               -- We come here when we've continued while stepping,
               -- either from a query or from a return;
               -- we should pause here and wait for the user.
@@ -173,8 +173,9 @@ interpret mode =
                 Just r -> 
                   pure (Stepped (k r))
 
+
             StepOne -> do
-              traceM $ "stepOne"
+--              traceM $ "stepOne"
               -- Run an instruction
               modify stepOneOpcode
 
@@ -227,14 +228,14 @@ interpret mode =
         -- Stepper is waiting for user input from a query
         Stepper.Option (EVM.PleaseChoosePath cont) -> do
           -- ensure we aren't stepping past max iterations
-          traceM $ "choosing"
-          traceM $ show ?maxIter
+          -- traceM $ "choosing"
+          -- traceM $ show ?maxIter
           case ?maxIter of
             Just maxiter -> do
               vm <- use uiVm
               let codelocation = getCodeLocation vm
                   iters = view (iterations . at codelocation . non 0) vm
-              traceM $ show iters
+--              traceM $ show iters
               if num maxiter <= iters then
                 case view (cache . path . at (codelocation, iters - 1)) vm of
                   -- When we have reached maxIterations, we take the choice that will hopefully
@@ -251,7 +252,7 @@ interpret mode =
 
         -- Stepper wants to make a query and wait for the results?
         Stepper.Wait q -> do
-          traceM $ "waiting"
+--          traceM $ "waiting"
           -- Tell the TTY to run an I/O action to produce the next stepper.
           pure . Blocked $ do
             -- First run the fetcher, getting a VM state transition back.
@@ -262,7 +263,7 @@ interpret mode =
 
         -- Stepper wants to modify the VM.
         Stepper.EVM m -> do
-          traceM $ "modifying"
+--          traceM $ "modifying"
           vm0 <- use uiVm
           let (r, vm1) = runState m vm0
           
@@ -272,7 +273,7 @@ interpret mode =
 
         -- Stepper wants to emit a message.
         Stepper.Note s -> do
-          traceM $ "noting"
+--          traceM $ "noting"
           assign uiVmMessage (Just (unpack s))
           modifying uiVmNotes (unpack s :)
           interpret mode (k ())
@@ -389,26 +390,21 @@ takeStep
 takeStep ui policy mode =
   case nxt of
     (Stepped stepper, ui') -> do
-      traceM $ "stepped"
+--      traceM $ "stepped"
       case view (uiVm . result) ui of
-        Nothing -> (traceM $ "no result") >>
-          continue (ViewVm (ui' & set uiVmNextStep stepper))
-        Just (VMFailure (Choose _)) -> (traceM $ "choose") >> takeStep (ui' & set uiVmNextStep stepper) StepNormally StepNone
-        Just (VMFailure (Query _)) -> (traceM $ "query") >> takeStep (ui' & set uiVmNextStep stepper) StepNormally StepNone --continue (ViewVm (ui' & set uiVmNextStep stepper))
-        Just _ -> (traceM $ "actual result") >> continue (ViewVm ui)
+        Nothing -> continue (ViewVm (ui' & set uiVmNextStep stepper))
+        Just (VMFailure (Choose _)) -> takeStep (ui' & set uiVmNextStep stepper) StepNormally StepNone
+        Just (VMFailure (Query _)) -> takeStep (ui' & set uiVmNextStep stepper) StepNormally StepNone --continue (ViewVm (ui' & set uiVmNextStep stepper))
+        Just _ -> continue (ViewVm ui)
         
     (AwaitingUser stepper, ui') ->
       continue (ViewVm (ui' & set uiVmNextStep stepper))
-      -- if vmResult (view (uiVm . result) ui)
-      --   then continue (ViewVm ui)
-      -- else
-      --   continue (ViewVm (ui' & set uiVmNextStep stepper))
 
     (Blocked blocker, ui') ->
       case policy of
         StepNormally -> do
           stepper <- liftIO blocker
-          traceM $ "blocked"
+--          traceM $ "blocked"
           takeStep (ui' & set uiVmNextStep stepper)
             StepNormally StepNone
 
