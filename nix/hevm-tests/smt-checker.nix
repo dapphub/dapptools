@@ -398,9 +398,9 @@ pkgs.runCommand "smtCheckerTests-${solver}" {} ''
      [ $smt_reports != 0 ]  || \
      [ $hevm_reports != 0 ]
   then
-    exit 0
-  else
     exit 1
+  else
+    exit 0
   fi
 ''
 
