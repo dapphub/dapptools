@@ -16,7 +16,7 @@ let
   hevm = "${pkgs.hevm}/bin/hevm";
   mkdir = "${pkgs.coreutils}/bin/mkdir";
   mktemp = "${pkgs.coreutils}/bin/mktemp";
-  rev = "${pkgs.busybox}/bin/rev";
+  rev = if pkgs.system == "x86_64-darwin" then "rev" else "${pkgs.busybox}/bin/rev";
   rm = "${pkgs.coreutils}/bin/rm";
   sed = "${pkgs.gnused}/bin/sed";
   tee = "${pkgs.coreutils}/bin/tee";
