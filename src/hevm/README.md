@@ -190,7 +190,7 @@ Usage: hevm equivalence --code-a TEXT --code-b TEXT [--sig TEXT]
 Symbolically execute both the code given in `--code-a` and `--code-b` and try to prove equivalence between their outputs and storages.
 
 If `--sig` is given, calldata is assumed to take the form of the function given.
-If left out, calldata is a fully abstract buffer of at most 1024 bytes.
+If left out, calldata is a fully abstract buffer of at most 256 bytes.
 
 ### `hevm dapp-test`
 
