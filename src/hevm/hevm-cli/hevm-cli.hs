@@ -697,9 +697,9 @@ symvmFromCommand cmd = do
   (calldata', cdlen, pathCond) <- case (calldata cmd, sig cmd) of
     -- fully abstract calldata (up to 1024 bytes)
     (Nothing, Nothing) -> do
-      cd <- sbytes1024
+      cd <- sbytes256
       len <- freshVar_
-      return (SymbolicBuffer cd, len, len .<= 1024)
+      return (SymbolicBuffer cd, len, len .<= 256)
     -- fully concrete calldata
     (Just c, Nothing) ->
       let cd = ConcreteBuffer $ decipher c

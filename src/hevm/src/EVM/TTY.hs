@@ -144,8 +144,7 @@ interpret mode =
       :: Operational.ProgramView Stepper.Action a
       -> State UiVmState (StepOutcome a)
 
-    eval (Operational.Return x) = do
-      traceM $ "returning"
+    eval (Operational.Return x) =
       pure (Returned x)
 
     eval (action Operational.:>>= k) =
