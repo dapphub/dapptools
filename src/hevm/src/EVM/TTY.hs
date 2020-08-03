@@ -80,7 +80,6 @@ data UiVmState = UiVmState
   , _uiVmTraceList    :: List Name Text
   , _uiVmSolidityList :: List Name (Int, ByteString)
   , _uiVmSolc         :: Maybe SolcContract
-  , _uiVmDapp         :: Maybe DappInfo
   , _uiVmStepCount    :: Int
   , _uiVmSnapshots    :: Map Int UiVmState
   , _uiVmMessage      :: Maybe String
@@ -268,16 +267,6 @@ interpret mode =
 
           interpret mode (Stepper.exec >> k r)
 
-        -- Stepper wants to emit a message.
-        Stepper.Note s -> do
-          assign uiVmMessage (Just (unpack s))
-          modifying uiVmNotes (unpack s :)
-          interpret mode (k ())
-
-        -- Stepper wants to exit because of a failure.
-        Stepper.Fail e ->
-          error ("VM error: " ++ show e)
-
 maybeSaveSnapshot :: State UiVmState ()
 maybeSaveSnapshot = do
   ui <- get
@@ -295,17 +284,8 @@ mkVty = do
   V.setMode (V.outputIface vty) V.BracketedPaste True
   return vty
 
-runFromVM :: Maybe Integer -> Maybe (FilePath, FilePath) -> (Query -> IO (EVM ())) -> VM -> IO VM
-runFromVM maxIter' maybesrcinfo oracle' vm = do
-  uiDappSolc <- case maybesrcinfo of
-                   Nothing -> return Nothing
-                   Just (root,json) -> readSolc json >>= \case
-                     Nothing -> return Nothing
-                     Just (contractMap, sourceCache) ->
-                       let dapp = dappInfo root contractMap sourceCache
-                       in return $ ((,) dapp) <$> (currentSolc dapp vm)
-                           
-                         
+runFromVM :: Maybe Integer -> DappInfo -> (Query -> IO (EVM ())) -> VM -> IO VM
+runFromVM maxIter' dappinfo oracle' vm = do
 
   let
     opts = UnitTestOptions
@@ -317,6 +297,7 @@ runFromVM maxIter' maybesrcinfo oracle' vm = do
       , replay            = error "irrelevant"
       , vmModifier        = id
       , testParams        = error "irrelevant"
+      , dapp = dappinfo
       }
     ui0 = UiVmState
            { _uiVm = vm
@@ -325,8 +306,7 @@ runFromVM maxIter' maybesrcinfo oracle' vm = do
            , _uiVmBytecodeList = undefined
            , _uiVmTraceList = undefined
            , _uiVmSolidityList = undefined
-           , _uiVmSolc = snd <$> uiDappSolc
-           , _uiVmDapp = fst <$> uiDappSolc
+           , _uiVmSolc = currentSolc dappinfo vm
            , _uiVmStepCount = 0
            , _uiVmSnapshots = undefined
            , _uiVmMessage = Just $ "Executing EVM code in " <> show (view (state . contract) vm)
@@ -393,13 +373,13 @@ takeStep
 takeStep ui policy mode = do
   case nxt of
     (Stepped stepper, ui') ->
-      continue (ViewVm (ui' & set uiVmNextStep stepper))
+      continue (ViewVm (ui' & set uiVmStepper stepper))
 
     (Blocked blocker, ui') ->
       case policy of
         StepNormally -> do
           stepper <- liftIO blocker
-          takeStep (ui' & set uiVmNextStep stepper)
+          takeStep (ui' & set uiVmStepper stepper)
             StepNormally StepNone
 
         StepTimidly ->
@@ -444,24 +424,25 @@ appEvent (ViewContracts s) (VtyEvent e@(V.EvKey V.KUp [])) = do
 
 -- Vm Overview: Esc - return to test picker or exit
 appEvent st@(ViewVm s) (VtyEvent (V.EvKey V.KEsc [])) =
-  let opts = view uiVmTestOpts s in
-  case view uiVmDapp s of
-    Just dapp ->
+  let opts = view uiVmTestOpts s
+      dapp' = dapp (view uiVmTestOpts s)
+      tests = concatMap
+                (concreteTests opts)
+                (view dappUnitTests dapp')
+  in case tests of
+    [] -> halt st
+    ts -> 
       continue . ViewPicker $
       UiTestPickerState
         { _testPickerList =
             list
               TestPickerPane
               (Vec.fromList
-               (concatMap
-                (concreteTests opts)
-                (view dappUnitTests dapp)))
+              ts)
               1
-        , _testPickerDapp = dapp
+        , _testPickerDapp = dapp'
         , _testOpts = opts
         }
-    Nothing ->
-      halt st
 
 -- Vm Overview: Enter - open contracts view
 appEvent (ViewVm s) (VtyEvent (V.EvKey V.KEnter [])) =
@@ -592,8 +573,8 @@ appEvent (ViewPicker s) (VtyEvent (V.EvKey V.KEnter [])) =
     Nothing -> error "nothing selected"
     Just (_, x) ->
       continue . ViewVm $
-        initialUiVmStateForTest (view testOpts s)
-          (view testPickerDapp s) x
+        initialUiVmStateForTest (view testOpts s) x
+--          (view testPickerDapp s) x
 
 -- UnitTest Picker: (main) - render list
 appEvent (ViewPicker s) (VtyEvent e) = do
@@ -636,10 +617,9 @@ app opts =
 
 initialUiVmStateForTest
   :: UnitTestOptions
-  -> DappInfo
   -> (Text, Text)
   -> UiVmState
-initialUiVmStateForTest opts@UnitTestOptions{..} dapp (theContractName, theTestName) =
+initialUiVmStateForTest opts@UnitTestOptions{..} (theContractName, theTestName) =
   ui1
   where
     Just typesig = lookup theTestName (unitTestMethods testContract)
@@ -663,7 +643,6 @@ initialUiVmStateForTest opts@UnitTestOptions{..} dapp (theContractName, theTestN
         , _uiVmTraceList    = undefined
         , _uiVmSolidityList = undefined
         , _uiVmSolc         = Just testContract
-        , _uiVmDapp         = Just dapp
         , _uiVmStepCount    = 0
         , _uiVmSnapshots    = undefined
         , _uiVmMessage      = Just "Creating unit test contract"
@@ -740,18 +719,15 @@ drawVmBrowser ui =
             renderList
               (\selected (k, c) ->
                  withHighlight selected . txt . mconcat $
-                   [ fromMaybe "<unknown contract>" . flip preview ui $
-                       ( browserVm . uiVmDapp . _Just . dappSolcByHash . ix (view codehash c)
+                   [ fromMaybe "<unknown contract>" . flip preview dapp' $
+                       ( dappSolcByHash . ix (view codehash c)
                        . _2 . contractName )
                    , "\n"
                    , "  ", pack (show k)
                    ])
               True
               (view browserContractList ui)
-      , let
-          Just (_, (_, c)) = listSelectedElement (view browserContractList ui)
-          Just dapp = view (browserVm . uiVmDapp) ui
-        in case flip preview ui (browserVm . uiVmDapp . _Just . dappSolcByHash . ix (view codehash c) . _2) of
+      , case flip preview dapp' (dappSolcByHash . ix (view codehash c) . _2) of
           Nothing ->
             hBox
               [ borderWithLabel (txt "Contract information") . padBottom Max . padRight Max $ vBox
@@ -776,12 +752,15 @@ drawVmBrowser ui =
                   , txt ("Storage:" <> storageDisplay (view storage c))
                   ]
               , borderWithLabel (txt "Storage slots") . padBottom Max . padRight Max $ vBox
-                  (map txt (storageLayout dapp solc))
+                  (map txt (storageLayout dapp' solc))
               ]
       ]
   ]
   where storageDisplay (Concrete s) = pack ( show ( Map.toList s))
         storageDisplay (Symbolic _) = pack "<symbolic>"
+        dapp' = dapp (view (browserVm . uiVmTestOpts) ui)
+        Just (_, (_, c)) = listSelectedElement (view browserContractList ui)
+--        currentContract  = view (dappSolcByHash . ix ) dapp
 
 drawVm :: UiVmState -> [UiWidget]
 drawVm ui =
@@ -843,38 +822,34 @@ stepOneOpcode ui =
 isNextSourcePosition
   :: UiVmState -> Pred VM
 isNextSourcePosition ui vm =
-  case view uiVmDapp ui of
-     Just dapp ->
-       let initialPosition = currentSrcMap dapp (view uiVm ui)
-       in currentSrcMap dapp vm /= initialPosition
-     Nothing -> True
+  let dapp' = dapp (view uiVmTestOpts ui)
+      initialPosition = currentSrcMap dapp' (view uiVm ui)
+  in currentSrcMap dapp' vm /= initialPosition
 
 isNextSourcePositionWithoutEntering
   :: UiVmState -> Pred VM
 isNextSourcePositionWithoutEntering ui vm =
-  case view uiVmDapp ui of
-    Nothing -> True
-    Just dapp ->
-      let
-        vm0             = view uiVm ui
-        initialPosition = currentSrcMap dapp vm0
-        initialHeight   = length (view frames vm0)
-      in
-        case currentSrcMap dapp vm of
-          Nothing ->
-            False
-          Just here ->
-            let
-              moved = Just here /= initialPosition
-              deeper = length (view frames vm) > initialHeight
-              boring =
-                case srcMapCode (view dappSources dapp) here of
-                  Just bs ->
-                    BS.isPrefixOf "contract " bs
-                  Nothing ->
-                    True
-            in
-               moved && not deeper && not boring
+  let
+    dapp'           = dapp (view uiVmTestOpts ui)
+    vm0             = view uiVm ui
+    initialPosition = currentSrcMap dapp' vm0
+    initialHeight   = length (view frames vm0)
+  in
+    case currentSrcMap dapp' vm of
+      Nothing ->
+        False
+      Just here ->
+        let
+          moved = Just here /= initialPosition
+          deeper = length (view frames vm) > initialHeight
+          boring =
+            case srcMapCode (view dappSources dapp') here of
+              Just bs ->
+                BS.isPrefixOf "contract " bs
+              Nothing ->
+                True
+        in
+           moved && not deeper && not boring
 
 isExecutionHalted :: UiVmState -> Pred VM
 isExecutionHalted _ vm = isJust (view result vm)
@@ -935,25 +910,22 @@ updateUiVmState ui vm =
             TracePane
             (Vec.fromList
               . Text.lines
-              . showTraceTree dapp
+              . showTraceTree dapp'
               $ vm)
             1)
       & set uiVmSolidityList
           (list SolidityPane
-              (case currentSrcMap dapp vm of
+              (case currentSrcMap dapp' vm of
                 Nothing -> mempty
                 Just x ->
                   view (dappSources
                         . sourceLines
                         . ix (srcMapFile x)
                         . to (Vec.imap (,)))
-                    dapp)
+                    dapp')
               1)
       where
-        dapp =
-          fromMaybe
-            (dappInfo "" mempty (SourceCache mempty mempty mempty mempty))
-            (view uiVmDapp ui)
+        dapp' = dapp (view uiVmTestOpts ui)
 
 drawStackPane :: UiVmState -> UiWidget
 drawStackPane ui =
@@ -968,15 +940,14 @@ drawStackPane ui =
                <+> str (show x)
            , dim (txt ("   " <> case unliteral w of
                        Nothing -> ""
-                       Just u -> showWordExplanation (fromSizzle u) (view uiVmDapp ui)))
+                       Just u -> showWordExplanation (fromSizzle u) $ dapp (view uiVmTestOpts ui)))
            ])
       False
       (view uiVmStackList ui)
 
-showWordExplanation :: W256 -> Maybe DappInfo -> Text
-showWordExplanation w Nothing = showDec Unsigned w
+showWordExplanation :: W256 -> DappInfo -> Text
 showWordExplanation w _ | w > 0xffffffff = showDec Unsigned w
-showWordExplanation w (Just dapp) =
+showWordExplanation w dapp =
   let
     fullAbiMap =
       mconcat (map (view abiMap) (Map.elems (view dappSolcByName dapp)))
@@ -1029,11 +1000,12 @@ drawTracePane s =
             (view uiVmTraceList s)
 
 drawSolidityPane :: UiVmState -> UiWidget
-drawSolidityPane ui@(view uiVmDapp -> Just dapp) =
-  case currentSrcMap dapp (view uiVm ui) of
+drawSolidityPane ui =
+  let dapp' = dapp (view uiVmTestOpts ui)
+  in case currentSrcMap dapp' (view uiVm ui) of
     Nothing -> padBottom Max (hBorderWithLabel (txt "<no source map>"))
     Just sm ->
-      case view (dappSources . sourceLines . at (srcMapFile sm)) dapp of
+      case view (dappSources . sourceLines . at (srcMapFile sm)) dapp' of
         Nothing -> padBottom Max (hBorderWithLabel (txt "<source not found>"))
         Just rows ->
           let
@@ -1041,7 +1013,7 @@ drawSolidityPane ui@(view uiVmDapp -> Just dapp) =
             lineNo =
               (snd . fromJust $
                 (srcMapCodePos
-                 (view dappSources dapp)
+                 (view dappSources dapp')
                  sm)) - 1
           in vBox
             [ hBorderWithLabel $
@@ -1051,7 +1023,7 @@ drawSolidityPane ui@(view uiVmDapp -> Just dapp) =
 
                   -- Show the AST node type if present
                   <+> txt (" (" <> fromMaybe "?"
-                                    ((view dappAstSrcMap dapp) sm
+                                    ((view dappAstSrcMap dapp') sm
                                        >>= preview (key "name" . _String)) <> ")")
             , Centered.renderList
                 (\_ (i, line) ->

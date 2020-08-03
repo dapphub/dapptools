@@ -134,17 +134,17 @@ interpret
   :: Fetch.Fetcher
   -> Maybe Integer --max iterations
   -> Stepper a
-  -> StateT VM IO (Either Stepper.Failure [a])
+  -> StateT VM IO [a]
 interpret fetcher maxIter =
   eval . Operational.view
 
   where
     eval
       :: Operational.ProgramView Stepper.Action a
-      -> StateT VM IO (Either Stepper.Failure [a])
+      -> StateT VM IO [a]
 
     eval (Operational.Return x) =
-      pure (Right [x])
+      pure [x]
 
     eval (action Operational.:>>= k) =
       case action of
@@ -166,19 +166,14 @@ interpret fetcher maxIter =
                     else do a <- State.state (runState (continue True)) >> interpret fetcher maxIter (k ())
                             put vm
                             b <- State.state (runState (continue False)) >> interpret fetcher maxIter (k ())
-                            return $ liftA2 (<>) a b
+                            return $ a <> b
                Nothing -> do a <- State.state (runState (continue True)) >> interpret fetcher maxIter (k ())
                              put vm
                              b <- State.state (runState (continue False)) >> interpret fetcher maxIter (k ())
-                             return $ liftA2 (<>) a b
+                             return $ a <> b
         Stepper.Wait q ->
           do m <- liftIO (fetcher q)
              State.state (runState m) >> interpret fetcher maxIter (k ())
-        Stepper.Note _ ->
-          -- simply ignore the note here
-          interpret fetcher maxIter (k ())
-        Stepper.Fail e ->
-          pure (Left e)
         Stepper.EVM m ->
           State.state (runState m) >>= interpret fetcher maxIter . k
 
@@ -221,10 +216,12 @@ verify :: VM -> Maybe Integer -> Maybe (Fetch.BlockNumber, Text) -> Maybe Postco
 verify preState maxIter rpcinfo maybepost = do
   smtState <- queryState
   results <- io $ fst <$> runStateT (interpret (Fetch.oracle smtState rpcinfo) maxIter Stepper.runFully) preState
-  case (maybepost, results) of
-    (Just post, Right res) -> do
+  case maybepost of
+    (Just post) -> do
       let livePaths = pruneDeadPaths res
           postC = sOr $ fmap (\postState -> (sAnd (view pathConditions postState)) .&& sNot (post (preState, postState))) livePaths
+      -- is there any path which can possibly violate
+      -- the postcondition?
       resetAssertions
       constrain postC
       io $ putStrLn "checking postcondition..."
@@ -235,10 +232,8 @@ verify preState maxIter rpcinfo maybepost = do
                     return $ Left (preState, livePaths)
         Sat -> return $ Right preState
 
-    (Nothing, Right res) -> do io $ putStrLn "Q.E.D."
-                               return $ Left (preState, pruneDeadPaths res)
-
-    (_, Left _) -> error "unexpected error during symbolic execution"
+    Nothing -> do io $ putStrLn "Q.E.D."
+                  return $ Left (preState, pruneDeadPaths results)
 
 equivalenceCheck :: ByteString -> ByteString -> Maybe Integer -> Maybe (Text, [AbiType]) -> Query (Either ([VM], [VM]) VM)
 equivalenceCheck bytecodeA bytecodeB maxiter signature' = do
@@ -253,36 +248,31 @@ equivalenceCheck bytecodeA bytecodeB maxiter signature' = do
       preStateB = loadSymVM (RuntimeCode bytecodeB) prestorage precaller callvalue' (calldata', cdlen) & set pathConditions pathconds
 
   smtState <- queryState
-  (aRes, bRes) <- both (\x -> io $ fst <$> runStateT (interpret (Fetch.oracle smtState Nothing) maxiter Stepper.runFully) x)
+  (aVMs, bVMs) <- both (\x -> io $ fst <$> runStateT (interpret (Fetch.oracle smtState Nothing) maxiter Stepper.runFully) x)
     (preStateA, preStateB)
-  case (aRes, bRes) of
-    (Left errA, Right _) -> error $ "A Failed: " <> show errA
-    (Right _, Left errB) -> error $ "B Failed: " <> show errB
-    (Left errA, Left errB) -> error $ "A Failed: " <> show errA <> "\nand B Failed:" <> show errB
-    (Right aVMs, Right bVMs) -> do
-      let differingEndStates = uncurry distinct <$> [(a,b) | a <- pruneDeadPaths aVMs, b <- pruneDeadPaths bVMs]
-          distinct a b = let (aPath, bPath) = both' (view pathConditions) (a, b)
-                             (aSelf, bSelf) = both' (view (state . contract)) (a, b)
-                             (aEnv, bEnv) = both' (view (env . contracts)) (a, b)
-                             (aResult, bResult) = both' (view result) (a, b)
-                             (Symbolic aStorage, Symbolic bStorage) = (view storage (aEnv ^?! ix aSelf), view storage (bEnv ^?! ix bSelf))
-                             differingResults = case (aResult, bResult) of
-                               (Just (VMSuccess aOut), Just (VMSuccess bOut)) -> aOut ./= bOut .|| aStorage ./= bStorage .|| fromBool (aSelf /= bSelf)
-                               (Just (VMFailure UnexpectedSymbolicArg), _) -> error $ "Unexpected symbolic argument at opcode: " <> maybe "??" show (vmOp a) <> ". Not supported (yet!)"
-                               (_, Just (VMFailure UnexpectedSymbolicArg)) -> error $ "Unexpected symbolic argument at opcode: " <> maybe "??" show (vmOp b) <> ". Not supported (yet!)"
-                               (Just (VMFailure _), Just (VMFailure _)) -> sFalse
-                               (Just _, Just _) -> sTrue
-                               _ -> error "Internal error during symbolic execution (should not be possible)"
-                         in sAnd aPath .&& sAnd bPath .&& differingResults
-      -- If there exists a pair of endstates where this is not the case,
-      -- the following constraint is satisfiable
-      resetAssertions
-      constrain $ sOr differingEndStates
+  let differingEndStates = uncurry distinct <$> [(a,b) | a <- pruneDeadPaths aVMs, b <- pruneDeadPaths bVMs]
+      distinct a b = let (aPath, bPath) = both' (view pathConditions) (a, b)
+                         (aSelf, bSelf) = both' (view (state . contract)) (a, b)
+                         (aEnv, bEnv) = both' (view (env . contracts)) (a, b)
+                         (aResult, bResult) = both' (view result) (a, b)
+                         (Symbolic aStorage, Symbolic bStorage) = (view storage (aEnv ^?! ix aSelf), view storage (bEnv ^?! ix bSelf))
+                         differingResults = case (aResult, bResult) of
+                           (Just (VMSuccess aOut), Just (VMSuccess bOut)) -> aOut ./= bOut .|| aStorage ./= bStorage .|| fromBool (aSelf /= bSelf)
+                           (Just (VMFailure UnexpectedSymbolicArg), _) -> error $ "Unexpected symbolic argument at opcode: " <> maybe "??" show (vmOp a) <> ". Not supported (yet!)"
+                           (_, Just (VMFailure UnexpectedSymbolicArg)) -> error $ "Unexpected symbolic argument at opcode: " <> maybe "??" show (vmOp b) <> ". Not supported (yet!)"
+                           (Just (VMFailure _), Just (VMFailure _)) -> sFalse
+                           (Just _, Just _) -> sTrue
+                           _ -> error "Internal error during symbolic execution (should not be possible)"
+                     in sAnd aPath .&& sAnd bPath .&& differingResults
+  -- If there exists a pair of endstates where this is not the case,
+  -- the following constraint is satisfiable
+  resetAssertions
+  constrain $ sOr differingEndStates
 
-      checkSat >>= \case
-         Unk -> error "solver said unknown!"
-         Sat -> return $ Right preStateA
-         Unsat -> return $ Left (pruneDeadPaths aVMs, pruneDeadPaths bVMs)
+  checkSat >>= \case
+     Unk -> error "solver said unknown!"
+     Sat -> return $ Right preStateA
+     Unsat -> return $ Left (pruneDeadPaths aVMs, pruneDeadPaths bVMs)
 
 both' :: (a -> b) -> (a, a) -> (b, b)
 both' f (x, y) = (f x, f y)

@@ -168,15 +168,6 @@ interpret mode =
           modify updateSentHashes
           interpret mode (k r)
 
-        -- Stepper wants to emit a message.
-        Stepper.Note s -> do
-          assign uiVmMessage (Just s)
-          interpret mode (k ())
-
-        -- Stepper wants to exit because of a failure.
-        Stepper.Fail e ->
-          error ("VM error: " ++ show e)
-
 stepOneOpcode :: UiVmState -> UiVmState
 stepOneOpcode ui =
   let
@@ -267,11 +258,11 @@ handleCmd UiStarted = \case
   _ ->
     output (L [A ("unrecognized-command" :: Text)])
 
-handleCmd (UiDappLoaded dapp) = \case
+handleCmd (UiDappLoaded _) = \case
   ("run-test", [WFSAtom (HSString contractPath),
                 WFSAtom (HSString testName)]) -> do
     opts <- defaultUnitTestOptions
-    put (UiVm (initialStateForTest opts dapp (contractPath, testName)))
+    put (UiVm (initialStateForTest opts (contractPath, testName)))
     outputVm
   _ ->
     output (L [A ("unrecognized-command" :: Text)])
@@ -539,10 +530,9 @@ defaultUnitTestOptions = do
 
 initialStateForTest
   :: UnitTestOptions
-  -> DappInfo
   -> (Text, Text)
   -> UiVmState
-initialStateForTest opts@(UnitTestOptions {..}) dapp (contractPath, testName) =
+initialStateForTest opts@(UnitTestOptions {..}) (contractPath, testName) =
   ui1
   where
     script = do
@@ -555,7 +545,6 @@ initialStateForTest opts@(UnitTestOptions {..}) dapp (contractPath, testName) =
         { _uiVm             = vm0
         , _uiVmNextStep     = script
         , _uiVmSolc         = Just testContract
-        , _uiVmDapp         = Just dapp
         , _uiVmStepCount    = 0
         , _uiVmFirstState   = undefined
         , _uiVmFetcher      = oracle
