@@ -16,7 +16,6 @@ let
   hevm = "${pkgs.hevm}/bin/hevm";
   mkdir = "${pkgs.coreutils}/bin/mkdir";
   mktemp = "${pkgs.coreutils}/bin/mktemp";
-  rev = if pkgs.system == "x86_64-darwin" then "rev" else "${pkgs.busybox}/bin/rev";
   rm = "${pkgs.coreutils}/bin/rm";
   sed = "${pkgs.gnused}/bin/sed";
   tee = "${pkgs.coreutils}/bin/tee";
@@ -222,16 +221,15 @@ let
     fi
 
     # object notation
+    # add a calldatacopy after all 'code {'
     if [ "$(${echo} $in | head -n 1 | ${awk} '{print $1;}')" == "object" ]; then
       ${echo} "$in" | ${sed} '/code\ {/ a calldatacopy(0,0,1024)'
       exit 0
     fi
 
     # simple notation
-    ${echo} "$in"                            \
-    | ${sed} 's/^{/{\n/'                     \
-    | ${sed} '0,/{/s//{\ncalldatacopy(0,0,1024)/' \
-    | ${rev} | ${sed} -e 's/}$/\n}/' | ${rev}
+    # add a calldatacopy after the first {
+    ${echo} "$in" | ${sed} -z '0,/^\s*{/s//{\ncalldatacopy(0,0,1024)/'
   '';
 
   # Takes two Yul files, compiles them to EVM bytecode and checks equivalence.
