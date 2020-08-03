@@ -231,8 +231,8 @@ interpret mode =
                 case view (cache . path . at (codelocation, iters - 1)) vm of
                   -- When we have reached maxIterations, we take the choice that will hopefully
                   -- lead us out of here.
-                  Just (Known 0) -> pure . Stepped $ Stepper.evm (cont 1) >>= k
-                  Just (Known 1) -> pure . Stepped $ Stepper.evm (cont 0) >>= k
+                  Just (Known 0) -> interpret mode (Stepper.evm (cont 1) >>= k)
+                  Just (Known 1) -> interpret mode (Stepper.evm (cont 1) >>= k)
                   n -> error ("I don't see how this could have happened: " <> show n)
               else
                 pure $ Stepped (k ())
