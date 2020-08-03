@@ -34,7 +34,7 @@ import EVM.Types hiding (word)
 import EVM.UnitTest (UnitTestOptions, coverageReport, coverageForUnitTestContract)
 import EVM.UnitTest (runUnitTestContract)
 import EVM.UnitTest (getParametersFromEnvironmentVariables, testNumber)
-import EVM.Dapp (findUnitTests, dappInfo)
+import EVM.Dapp (findUnitTests, dappInfo, DappInfo)
 import EVM.Format (showTraceTree)
 import EVM.RLP (rlpdecode)
 import qualified EVM.Patricia as Patricia
@@ -226,6 +226,7 @@ optsMode x = if debug x then Debug else Run
 
 unitTestOptions :: Command Options.Unwrapped -> IO UnitTestOptions
 unitTestOptions cmd = do
+  srcInfo <- getSrcInfo cmd
   vmModifier <-
     case state cmd of
       Nothing ->
@@ -255,6 +256,7 @@ unitTestOptions cmd = do
         return (fst arg', LazyByteString.fromStrict (hexByteString "--replay" $ strip0x $ snd arg'))
     , EVM.UnitTest.vmModifier = vmModifier
     , EVM.UnitTest.testParams = params
+    , EVM.UnitTest.dapp = srcInfo
     }
 
 main :: IO ()
@@ -352,7 +354,7 @@ dappTest opts _ solcFile =
     \case
       Just (contractMap, cache) -> do
         let matcher = regexMatches (EVM.UnitTest.match opts)
-        let unitTests = (findUnitTests matcher) (Map.elems contractMap)
+            unitTests = (findUnitTests matcher) (Map.elems contractMap)
         results <- mapM (runUnitTestContract opts contractMap cache) unitTests
         when (any (== False) results) exitFailure
       Nothing ->
@@ -418,6 +420,21 @@ checkForVMErrors (vm:vms) =
     _ ->
       checkForVMErrors vms
 
+emptyDapp :: DappInfo
+emptyDapp = dappInfo "" mempty (SourceCache mempty mempty mempty mempty)
+
+getSrcInfo :: Command Options.Unwrapped -> IO DappInfo
+getSrcInfo cmd =
+  let root = fromMaybe "." (dappRoot cmd)
+  in case (jsonFile cmd) of
+    Nothing ->
+      pure $ emptyDapp
+    Just json -> readSolc json >>= \case
+      Nothing ->
+        pure $ emptyDapp
+      Just (contractMap, sourceCache) ->
+        pure $ dappInfo root contractMap sourceCache
+
 -- Although it is tempting to fully abstract calldata and give any hints about
 -- the nature of the signature doing so results in significant time spent in
 -- consulting z3 about rather trivial matters. But with cvc4 it is quite
@@ -426,10 +443,9 @@ checkForVMErrors (vm:vms) =
 -- If function signatures are known, they should always be given for best results.
 assert :: Command Options.Unwrapped -> IO ()
 assert cmd = do
-  let root = fromMaybe "." (dappRoot cmd)
-      srcinfo = ((,) root) <$> (jsonFile cmd)
-      block'  = maybe EVM.Fetch.Latest EVM.Fetch.BlockNumber (block cmd)
+  let block'  = maybe EVM.Fetch.Latest EVM.Fetch.BlockNumber (block cmd)
       rpcinfo = (,) block' <$> rpc cmd
+  srcInfo <- getSrcInfo cmd
   maybesig <- case sig cmd of
     Nothing ->
       return Nothing
@@ -442,7 +458,7 @@ assert cmd = do
     runSMTWithTimeOut (solver cmd) (smttimeout cmd) $ query $ do
       preState <- symvmFromCommand cmd
       smtState <- queryState
-      io $ void $ EVM.TTY.runFromVM (maxIterations cmd) srcinfo (EVM.Fetch.oracle smtState rpcinfo) preState
+      io $ void $ EVM.TTY.runFromVM (maxIterations cmd) srcInfo (EVM.Fetch.oracle smtState rpcinfo) preState
 
   else
     runSMTWithTimeOut (solver cmd) (smttimeout cmd) $ query $ do
@@ -528,16 +544,7 @@ dappCoverage opts _ solcFile =
 
 launchExec :: Command Options.Unwrapped -> IO ()
 launchExec cmd = do
-  let root = fromMaybe "." (dappRoot cmd)
-      srcinfo = ((,) root) <$> (jsonFile cmd)
-  dapp <- case (jsonFile cmd) of
-    Nothing ->
-      pure $ dappInfo "" mempty (SourceCache mempty mempty mempty mempty)
-    Just json -> readSolc json >>= \case
-      Nothing ->
-        pure $ dappInfo "" mempty (SourceCache mempty mempty mempty mempty)
-      Just (contractMap, sourceCache) ->
-        pure $ dappInfo root contractMap sourceCache
+  dapp <- getSrcInfo cmd
 
   vm <- vmFromCommand cmd
   vm1 <- case state cmd of
@@ -570,7 +577,7 @@ launchExec cmd = do
             Nothing -> pure ()
             Just path ->
               Git.saveFacts (Git.RepoAt path) (Facts.vmFacts vm')
-    Debug -> void $ EVM.TTY.runFromVM Nothing srcinfo fetcher vm1
+    Debug -> void $ EVM.TTY.runFromVM Nothing dapp fetcher vm1
    where fetcher = maybe EVM.Fetch.zero (EVM.Fetch.http block') (rpc cmd)
          block'  = maybe EVM.Fetch.Latest EVM.Fetch.BlockNumber (block cmd)
 
@@ -804,7 +811,8 @@ launchTest cmd = do
 
 #if MIN_VERSION_aeson(1, 0, 0)
 runVMTest :: Bool -> Mode -> Maybe Int -> (String, VMTest.Case) -> IO Bool
-runVMTest diffmode mode timelimit (name, x) = do
+runVMTest diffmode mode timelimit (name, x) =
+ do
   let vm0 = VMTest.vmForCase x
   putStr (name ++ " ")
   hFlush stdout
@@ -815,7 +823,7 @@ runVMTest diffmode mode timelimit (name, x) = do
           Timeout.timeout (1e6 * (fromMaybe 10 timelimit)) $
             execStateT (EVM.Stepper.interpret EVM.Fetch.zero . void $ EVM.Stepper.execFully) vm0
         Debug ->
-          Just <$> EVM.TTY.runFromVM Nothing Nothing EVM.Fetch.zero vm0
+          Just <$> EVM.TTY.runFromVM Nothing emptyDapp EVM.Fetch.zero vm0
     waitCatch action
   case result of
     Right (Just vm1) -> do

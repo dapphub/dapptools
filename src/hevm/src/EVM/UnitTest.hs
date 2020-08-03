@@ -66,6 +66,7 @@ data UnitTestOptions = UnitTestOptions
   , fuzzRuns   :: Int
   , replay     :: Maybe (Text, BSLazy.ByteString)
   , vmModifier :: VM -> VM
+  , dapp       :: DappInfo
   , testParams :: TestVMParams
   }
 
@@ -110,31 +111,30 @@ initializeUnitTest :: UnitTestOptions -> Stepper ()
 initializeUnitTest UnitTestOptions { .. } = do
 
   let addr = testAddress testParams
-  -- Maybe modify the initial VM, e.g. to load library code
-  Stepper.evm (modify vmModifier)
 
-  -- Make a trace entry for running the constructor
-  Stepper.evm (pushTrace (EntryTrace "constructor"))
+  Stepper.evm $ do
+    -- Maybe modify the initial VM, e.g. to load library code
+    modify vmModifier
+    -- Make a trace entry for running the constructor
+    pushTrace (EntryTrace "constructor")
 
   -- Constructor is loaded; run until it returns code
-  void Stepper.execFullyOrFail
+  void Stepper.execFully
 
   -- Give a balance to the test target
-  Stepper.evm $
+  Stepper.evm $ do
     env . contracts . ix addr . balance += w256 (testBalanceCreate testParams)
 
-  -- Initialize the test contract
-  Stepper.evm $
-    setupCall testParams addr "setUp()" emptyAbi
-  Stepper.evm (popTrace >> pushTrace (EntryTrace "initialize test"))
-
-  Stepper.note "Running `setUp()'"
+    -- Initialize the test contract
+    setupCall testParams "setUp()" emptyAbi
+    popTrace
+    pushTrace (EntryTrace "initialize test")
 
   -- Let `setUp()' run to completion
-  void Stepper.execFullyOrFail
-  Stepper.evm (use result) >>= \case
-    Just (VMFailure e) -> Stepper.evm (pushTrace (ErrorTrace e))
-    _ -> Stepper.evm popTrace
+  res <- Stepper.execFully
+  Stepper.evm $ case res of
+    Left e -> pushTrace (ErrorTrace e)
+    _ -> popTrace
 
 
 -- | Assuming a test contract is loaded and initialized, this stepper
@@ -146,24 +146,15 @@ runUnitTest a method args = do
 
 execTest :: UnitTestOptions -> ABIMethod -> AbiValue -> Stepper Bool
 execTest UnitTestOptions { .. } method args = do
-  -- The test subject should be loaded and initialized already
-  addr <- Stepper.evm $ use (state . contract)
   -- Set up the call to the test method
-  Stepper.evm $
-    setupCall testParams addr method args
-  Stepper.evm (pushTrace (EntryTrace method))
-  Stepper.note "Running unit test"
+  Stepper.evm $ do
+    setupCall testParams method args
+    pushTrace (EntryTrace method)
   -- Try running the test method
-  bailed <-
-    Stepper.execFully >>=
-      either (const (pure True)) (const (pure False))
-  -- If we failed, put the error in the trace.
-  -- It's not clear to me right now why this doesn't happen somewhere else.
-  Stepper.evm (use result) >>= \case
-    Just (VMFailure e) ->
-        Stepper.evm (pushTrace (ErrorTrace e))
-    _ -> pure ()
-  pure bailed
+  Stepper.execFully >>= \case
+     -- If we failed, put the error in the trace.
+    Left e -> Stepper.evm (pushTrace (ErrorTrace e)) >> pure True
+    _ -> pure False
 
 checkFailures :: UnitTestOptions -> ABIMethod -> AbiValue -> Bool -> Stepper Bool
 checkFailures UnitTestOptions { .. } method args bailed = do
@@ -172,26 +163,25 @@ checkFailures UnitTestOptions { .. } method args bailed = do
   if bailed then
     pure shouldFail
   else do
-
-    -- The test subject should be loaded and initialized already
-    addr <- Stepper.evm $ use (state . contract)
-
     -- Ask whether any assertions failed
-    Stepper.evm popTrace
-    Stepper.evm $ setupCall testParams addr "failed()" args
-    Stepper.note "Checking whether assertions failed"
-    res <- Stepper.execFullyOrFail >>= \(ConcreteBuffer bs) -> (Stepper.decode AbiBoolType bs)
-    let AbiBool failed = res
-    -- Return true if the test was successful
-    pure (shouldFail == failed)
+    Stepper.evm $ do
+      popTrace
+      setupCall testParams "failed()" args
+    res <- Stepper.execFully -- >>= \(ConcreteBuffer bs) -> (Stepper.decode AbiBoolType bs)
+    case res of
+      Right (ConcreteBuffer r) ->
+        let AbiBool failed = decodeAbiValue AbiBoolType (BSLazy.fromStrict r)
+        in pure (shouldFail == failed)
+      _ -> error "internal error: unexpected failure code" 
 
 -- | Randomly generates the calldata arguments and runs the test
 fuzzTest :: UnitTestOptions -> Text -> [AbiType] -> VM -> Property
 fuzzTest opts sig types vm = forAllShow (genAbiValue (AbiTupleType $ Vector.fromList types)) (show . ByteStringS . encodeAbiValue)
   $ \args -> ioProperty $
-    (runStateT (interpret (oracle opts) (runUnitTest opts sig args)) vm) >>= \case
-      (Left _, _) -> return False
-      (Right b, _) -> return b
+    fst <$> (runStateT (interpret (oracle opts) (runUnitTest opts sig args)) vm)
+    -- >>= \case
+    --   (Left _, _) -> return False
+    --   (Right b, _) -> return b
 
 tick :: Text -> IO ()
 tick x = Text.putStr x >> hFlush stdout
@@ -247,17 +237,17 @@ runWithCoverage = do
 interpretWithCoverage
   :: UnitTestOptions
   -> Stepper a
-  -> StateT CoverageState IO (Either Stepper.Failure a)
+  -> StateT CoverageState IO a
 interpretWithCoverage opts =
   eval . Operational.view
 
   where
     eval
       :: Operational.ProgramView Stepper.Action a
-      -> StateT CoverageState IO (Either Stepper.Failure a)
+      -> StateT CoverageState IO a
 
     eval (Operational.Return x) =
-      pure (Right x)
+      pure x
 
     eval (action Operational.:>>= k) =
       case action of
@@ -268,12 +258,8 @@ interpretWithCoverage opts =
         Stepper.Wait q ->
           do m <- liftIO (oracle opts q)
              zoom _1 (State.state (runState m)) >> interpretWithCoverage opts (k ())
-        Stepper.Note _ ->
-          interpretWithCoverage opts (k ())
         Stepper.Option _ ->
           error "cannot make choice in this interpreter"
-        Stepper.Fail e ->
-          pure (Left e)
         Stepper.EVM m ->
           zoom _1 (State.state (runState m)) >>= interpretWithCoverage opts . k
 
@@ -355,19 +341,13 @@ coverageForUnitTestContract
             runStateT
               (interpretWithCoverage opts (runUnitTest opts testName emptyAbi))
               (vm1, mempty)
-          case x of
-            Right True -> pure cov
-            _ -> error "test failure during coverage analysis; fix it!"
-
+          pure cov
       -- Run all the test cases in parallel and gather their coverages
       covs <-
         runParIO (mapM runOne testNames >>= mapM Par.get)
 
       -- Sum up all the coverage counts
       let cov2 = MultiSet.unions (cov1 : covs)
-
-      -- Gather the dapp-related metadata
-      let dapp = dappInfo "." contractMap sources
 
       pure (MultiSet.mapMaybe (srcMapForOpLocation dapp) cov2)
 
@@ -399,15 +379,12 @@ runUnitTestContract
             (Stepper.enter name >> initializeUnitTest opts))
           vm0
 
-      -- Gather the dapp-related metadata
-      let dapp = dappInfo "." contractMap sources
-
       case view result vm1 of
         Nothing -> error "internal error: setUp() did not end with a result"
         Just (VMFailure _) -> do
           Text.putStrLn "\x1b[31m[FAIL]\x1b[0m setUp()"
           tick "\n"
-          tick $ failOutput vm1 dapp opts "setUp()"
+          tick $ failOutput vm1 opts "setUp()"
           pure False
         Just (VMSuccess _) -> do
 
@@ -415,34 +392,28 @@ runUnitTestContract
           let
             runOne testName args = do
               let argInfo = pack (if args == emptyAbi then "" else " with arguments: " <> show args)
-              x <-
+              (bailed, vm2) <-
                 runStateT
                   (interpret oracle (execTest opts testName args))
                   vm1
-              case x of
-                (Right b, vm2) -> do
-                  y <- runStateT
-                    (interpret oracle (checkFailures opts testName args b))
-                    vm2
-                  case y of
-                    (Right True,  vm) ->
-                      let gasSpent = num (testGasCall testParams) - view (state . gas) vm2
-                          gasText = pack . show $ (fromIntegral gasSpent :: Integer)
-                      in
-                        pure
-                        ("\x1b[32m[PASS]\x1b[0m "
-                         <> testName <> argInfo <> " (gas: " <> gasText <> ")"
-                        , Right (passOutput vm dapp opts testName))
-                    (Right False, vm) ->
-                             pure ("\x1b[31m[FAIL]\x1b[0m "
-                             <> testName <> argInfo, Left (failOutput vm dapp opts testName))
-                    (Left e, vm)       ->
-                             pure ("\x1b[33m[OOPS]\x1b[0m "
-                             <> testName <> argInfo, Left (bailOutput e vm dapp opts testName))
-                (Left e, vm)       ->
-                  pure ("\x1b[33m[OOPS]\x1b[0m "
-                        <> testName <> argInfo, Left (bailOutput e vm dapp opts testName))
-
+              (success, vm) <- runStateT (interpret oracle (checkFailures opts testName args bailed)) vm2
+              if success
+              then 
+                 let gasSpent = num (testGasCall testParams) - view (state . gas) vm2
+                     gasText = pack . show $ (fromIntegral gasSpent :: Integer)
+                 in
+                    pure
+                      ("\x1b[32m[PASS]\x1b[0m "
+                       <> testName <> argInfo <> " (gas: " <> gasText <> ")"
+                       , Right (passOutput vm opts testName)
+                      )
+              else 
+                    pure
+                      ("\x1b[31m[FAIL]\x1b[0m "
+                       <> testName <> argInfo
+                       , Left (failOutput vm opts testName)
+                      )
+ 
           -- Define the thread spawner for property based tests
           let fuzzRun (testName, types) = do
                 let args = Args{ replay          = Nothing
@@ -459,7 +430,7 @@ runUnitTestContract
                            <> testName <> " (runs: " <> (pack $ show numTests) <> ")",
                            -- vm1 isn't quite the post vm we want...
                            -- but the vm we want is not accessible here anyway...
-                           Right (passOutput vm1 dapp opts testName))
+                           Right (passOutput vm1 opts testName))
                   Failure _ _ _ _ _ _ _ _ _ _ failCase _ _ ->
                     let abiValue = decodeAbiValue (AbiTupleType (Vector.fromList types)) $ BSLazy.fromStrict $ hexText (pack $ concat failCase)
                         ppOutput = pack $ show abiValue
@@ -471,9 +442,9 @@ runUnitTestContract
                              <> "\nRun:\n dapp test --replay '(\"" <> testName <> "\",\""
                              <> (pack (concat failCase)) <> "\")'\nto test this case again, or \n dapp debug --replay '(\""
                              <> testName <> "\",\"" <> (pack (concat failCase)) <> "\")'\nto debug it.",
-                             Left (failOutput vm2 dapp opts testName))
+                             Left (failOutput vm2 opts testName))
                   _ -> pure ("\x1b[31m[OOPS]\x1b[0m "
-                              <> testName, Left (failOutput vm1 dapp opts testName))
+                              <> testName, Left (failOutput vm1 opts testName))
 
           let runTest (testName, []) = runOne testName emptyAbi
               runTest (testName, types) = case replay of
@@ -503,8 +474,8 @@ indentLines n s =
   let p = Text.replicate n " "
   in Text.unlines (map (p <>) (Text.lines s))
 
-passOutput :: VM -> DappInfo -> UnitTestOptions -> Text -> Text
-passOutput vm dapp UnitTestOptions { .. } testName =
+passOutput :: VM -> UnitTestOptions -> Text -> Text
+passOutput vm UnitTestOptions { .. } testName =
   case verbose of
     Just 2 ->
       mconcat
@@ -518,27 +489,16 @@ passOutput vm dapp UnitTestOptions { .. } testName =
     _ ->
       ""
 
-failOutput :: VM -> DappInfo -> UnitTestOptions -> Text -> Text
-failOutput vm dapp UnitTestOptions { .. } testName = mconcat
+failOutput :: VM -> UnitTestOptions -> Text -> Text
+failOutput vm UnitTestOptions { .. } testName = mconcat
   [ "Failure: "
   , fromMaybe "" (stripSuffix "()" testName)
   , "\n"
   , indentLines 2 (formatTestLogs (view dappEventMap dapp) (view logs vm))
   , case verbose of
-      Nothing -> ""
-      _       -> indentLines 2 (showTraceTree dapp vm)
-  ]
+      Just _ -> indentLines 2 (showTraceTree dapp vm)
+      _ -> ""
 
-bailOutput :: Stepper.Failure -> VM -> DappInfo -> UnitTestOptions -> Text -> Text
-bailOutput e vm dapp UnitTestOptions { .. } testName = mconcat
-  [ "VMError: "
-  , fromMaybe "" (stripSuffix "()" testName)
-  , " [" <> pack (show e) <> "]"
-  , "\n"
-  , indentLines 2 (formatTestLogs (view dappEventMap dapp) (view logs vm))
-  , case verbose of
-      Nothing -> ""
-      _       -> indentLines 2 (showTraceTree dapp vm)
   ]
 
 formatTestLogs :: Map W256 Event -> Seq.Seq Log -> Text
@@ -591,11 +551,11 @@ formatTestLog events (Log _ args (topic:_)) =
 word32Bytes :: Word32 -> ByteString
 word32Bytes x = BS.pack [byteAt x (3 - i) | i <- [0..3]]
 
-setupCall :: TestVMParams -> Addr -> Text -> AbiValue -> EVM ()
-setupCall TestVMParams{..} target sig args  = do
+setupCall :: TestVMParams -> Text -> AbiValue -> EVM ()
+setupCall TestVMParams{..} sig args  = do
   resetState
   assign (tx . isCreate) False
-  loadContract target
+  loadContract testAddress
   assign (state . calldata) $ (ConcreteBuffer $ abiMethod sig args, literal . num . BS.length $ abiMethod sig args)
   assign (state . caller) (litAddr testCaller)
   assign (state . gas) (w256 testGasCall)

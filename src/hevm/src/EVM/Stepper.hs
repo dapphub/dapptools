@@ -3,17 +3,12 @@
 
 module EVM.Stepper
   ( Action (..)
-  , Failure (..)
   , Stepper
   , exec
   , execFully
-  , execFullyOrFail
   , runFully
-  , decode
-  , fail
   , wait
   , evm
-  , note
   , entering
   , enter
   , interpret
@@ -34,6 +29,7 @@ import Control.Monad.Operational (Program, singleton, view, ProgramViewT(..), Pr
 import Control.Monad.State.Strict (runState, liftIO, StateT)
 import qualified Control.Monad.State.Class as State
 import qualified EVM.Exec
+import Control.Lens (use)
 import Data.Binary.Get (runGetOrFail)
 import Data.Text (Text)
 import EVM.Symbolic (Buffer)
@@ -53,11 +49,8 @@ data Action a where
   -- | Keep executing until an intermediate result is reached
   Exec ::           Action VMResult
 
-  -- | Keep executing until the final state is reached
+  -- | Keep executing until an intermediate state is reached
   Run ::             Action VM
-
-  -- | Short-circuit with a failure
-  Fail :: Failure -> Action a
 
   -- | Wait for a query to be resolved
   Wait :: Query   -> Action ()
@@ -67,16 +60,6 @@ data Action a where
 
   -- | Embed a VM state transformation
   EVM  :: EVM a   -> Action a
-
-  -- | Write something to the log or terminal
-  Note :: Text    -> Action ()
-
--- | Some failure raised by a stepper
-data Failure
-  = ContractNotFound
-  | DecodingError
-  | VMFailed Error
-  deriving Show
 
 -- | Type alias for an operational monad of @Action@
 type Stepper a = Program Action a
@@ -89,9 +72,6 @@ exec = singleton Exec
 run :: Stepper VM
 run = singleton Run
 
-fail :: Failure -> Stepper a
-fail = singleton . Fail
-
 wait :: Query -> Stepper ()
 wait = singleton . Wait
 
@@ -100,9 +80,6 @@ option = singleton . Option
 
 evm :: EVM a -> Stepper a
 evm = singleton . EVM
-
-note :: Text -> Stepper ()
-note = singleton . Note
 
 -- | Run the VM until final result, resolving all queries
 execFully :: Stepper (Either Error Buffer)
@@ -130,20 +107,6 @@ runFully = do
     Just _ -> 
       pure vm
 
-execFullyOrFail :: Stepper Buffer
-execFullyOrFail = execFully >>= either (fail . VMFailed) pure
-
--- | Decode a blob as an ABI value, failing if ABI encoding wrong
-decode :: AbiType -> ByteString -> Stepper AbiValue
-decode abiType bytes =
-  case runGetOrFail (getAbi abiType) (LazyByteString.fromStrict bytes) of
-    Right ("", _, x) ->
-      pure x
-    Right _ ->
-      fail DecodingError
-    Left _ ->
-      fail DecodingError
-
 entering :: Text -> Stepper a -> Stepper a
 entering t stepper = do
   evm (EVM.pushTrace (EVM.EntryTrace t))
@@ -154,17 +117,17 @@ entering t stepper = do
 enter :: Text -> Stepper ()
 enter t = evm (EVM.pushTrace (EVM.EntryTrace t))
 
-interpret :: Fetch.Fetcher -> Stepper a -> StateT VM IO (Either Failure a)
+interpret :: Fetch.Fetcher -> Stepper a -> StateT VM IO a
 interpret fetcher =
   eval . view
 
   where
     eval
       :: ProgramView Action a
-      -> StateT VM IO (Either Failure a)
+      -> StateT VM IO a
 
     eval (Return x) =
-      pure (Right x)
+      pure x
 
     eval (action :>>= k) =
       case action of
@@ -175,11 +138,8 @@ interpret fetcher =
         Wait q ->
           do m <- liftIO (fetcher q)
              State.state (runState m) >> interpret fetcher (k ())
-        Note _ ->
-          interpret fetcher (k ())
         Option _ ->
           error "cannot make choices with this interpreter"
-        Fail e ->
-          pure (Left e)
-        EVM m ->
-          State.state (runState m) >>= interpret fetcher . k
+        EVM m -> do
+          r <- State.state (runState m)
+          interpret fetcher (k r)
