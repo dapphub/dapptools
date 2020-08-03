@@ -32,9 +32,12 @@ import Control.Monad.State.Strict (runStateT, runState, StateT, get, put, zipWit
 import Control.Applicative
 
 -- | Convenience functions for generating large symbolic byte strings
-sbytes32, sbytes1024 :: Query ([SWord 8])
+sbytes32, sbytes256, sbytes512, sbytes1024 :: Query ([SWord 8])
 sbytes32 = toBytes <$> freshVar_ @ (WordN 256)
-sbytes1024 = toBytes <$> freshVar_ @ (WordN 1024)
+sbytes128 = toBytes <$> freshVar_ @ (WordN 1024)
+sbytes256 = liftA2 (++) sbytes128 sbytes128
+sbytes512 = liftA2 (++) sbytes256 sbytes256
+sbytes1024 = liftA2 (++) sbytes512 sbytes512
 
 -- | Abstract calldata argument generation
 -- We don't assume input types are restricted to their proper range here;
@@ -87,9 +90,9 @@ abstractVM :: Maybe (Text, [AbiType]) -> [String] -> ByteString -> StorageModel 
 abstractVM typesignature concreteArgs x storagemodel = do
   (cd', cdlen, cdconstraint) <-
     case typesignature of
-      Nothing -> do cd <- sbytes1024
+      Nothing -> do cd <- sbytes256
                     len <- freshVar_
-                    return (cd, len, len .<= 1024)
+                    return (cd, len, len .<= 256)
       Just (name, typs) -> do (cd, cdlen) <- symCalldata name typs concreteArgs
                               return (cd, cdlen, sTrue)
   symstore <- case storagemodel of
