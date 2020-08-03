@@ -8,7 +8,6 @@ let
 
   # --- binaries ---
 
-  awk = "${pkgs.gawk}/bin/awk";
   bc = "${pkgs.bc}/bin/bc";
   basename = "${pkgs.coreutils}/bin/basename";
   cat = "${pkgs.coreutils}/bin/cat";
@@ -18,9 +17,6 @@ let
   jq = "${pkgs.jq}/bin/jq";
   mkdir = "${pkgs.coreutils}/bin/mkdir";
   mktemp = "${pkgs.coreutils}/bin/mktemp";
-  nix = "${pkgs.nix}/bin/nix";
-  rev = "${pkgs.utillinux}/bin/rev";
-  rm = "${pkgs.coreutils}/bin/rm";
   sed = "${pkgs.gnused}/bin/sed";
   tee = "${pkgs.coreutils}/bin/tee";
   tr = "${pkgs.coreutils}/bin/tr";
