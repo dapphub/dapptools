@@ -13,6 +13,7 @@ import Brick.Widgets.List
 import EVM
 import EVM.ABI (abiTypeSolidity, decodeAbiValue, AbiType(..), emptyAbi)
 import EVM.Symbolic (SymWord(..), Buffer(..))
+import EVM.SymExec (maxIterationsReached)
 import EVM.Dapp (DappInfo, dappInfo)
 import EVM.Dapp (dappUnitTests, unitTestMethods, dappSolcByName, dappSolcByHash, dappSources)
 import EVM.Dapp (dappAstSrcMap)
@@ -153,14 +154,15 @@ interpret mode =
 
         -- Stepper wants to keep executing?
         Stepper.Exec -> do
-          -- When pausing during exec, we should later restart
-          -- the exec with the same continuation.
-          let restart = Stepper.exec >>= k
 
+          -- Have we reached the final result of this action?
           use (uiVm . result) >>= \case
             Just r ->
+              -- Yes, proceed with the next action.
               interpret mode (k r)
-            Nothing ->
+            Nothing -> do
+              -- No, keep performing the current action
+              let restart = Stepper.exec >>= k
 
               case mode of
                 Step 0 -> do
@@ -170,7 +172,7 @@ interpret mode =
                   pure (Continue restart)
 
                 Step i -> do
-                  -- Run one instruction
+                  -- Run one instruction and recurse
                   stepOneOpcode restart
                   interpret (Step (i - 1)) restart
 
@@ -180,7 +182,7 @@ interpret mode =
                     True ->
                       interpret (Step 0) restart
                     False -> do
-                      -- Run one instruction
+                      -- Run one instruction and recurse
                       stepOneOpcode restart
                       interpret (StepUntil p) restart
 
@@ -188,23 +190,9 @@ interpret mode =
         Stepper.Ask (EVM.PleaseChoosePath cont) -> do
           -- ensure we aren't stepping past max iterations
           vm <- use uiVm
-          case ?maxIter of
-            Just maxiter -> do
-              let codelocation = getCodeLocation vm
-                  iters = view (iterations . at codelocation . non 0) vm
-              if num maxiter <= iters then
-                case view (cache . path . at (codelocation, iters - 1)) vm of
-                  -- When we have reached maxIterations, we take the choice that will hopefully
-                  -- lead us out of here.
-                  Just (Known 0) -> interpret mode (Stepper.evm (cont 1) >>= k)
-                  Just (Known 1) -> interpret mode (Stepper.evm (cont 1) >>= k)
-                  n -> error ("I don't see how this could have happened: " <> show n)
-              else
-                pure $ Continue (k ())
-
-            Nothing ->
-              -- pause & await user.
-              pure $ Continue (k ())
+          case maxIterationsReached vm ?maxIter of
+            Nothing -> pure $ Continue (k ())
+            Just n -> interpret mode (Stepper.evm (cont n) >>= k)
 
         -- Stepper wants to make a query and wait for the results?
         Stepper.Wait q -> do

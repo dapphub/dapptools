@@ -4,6 +4,9 @@
 
 module EVM.SymExec where
 
+
+import Prelude hiding (Word)
+
 import Control.Lens hiding (pre)
 import EVM hiding (Query, push)
 import EVM.Exec
@@ -13,13 +16,13 @@ import EVM.ABI
 import EVM.Stepper (Stepper)
 import qualified EVM.Stepper as Stepper
 import qualified Control.Monad.Operational as Operational
-import EVM.Types
+import EVM.Types hiding (Word)
 import EVM.Symbolic (litBytes, SymWord(..), sw256, Buffer(..))
-import EVM.Concrete (createAddress)
+import EVM.Concrete (createAddress, Word)
 import qualified EVM.FeeSchedule as FeeSchedule
 import Data.SBV.Trans.Control
-import Data.SBV.Trans hiding (distinct)
-import Data.SBV hiding (runSMT, newArray_, addAxiom, distinct, sWord8s)
+import Data.SBV.Trans hiding (distinct, Word)
+import Data.SBV hiding (runSMT, newArray_, addAxiom, distinct, sWord8s, Word)
 import Data.Vector (toList, fromList)
 
 import Control.Monad.IO.Class
@@ -152,30 +155,31 @@ interpret fetcher maxIter =
           exec >>= interpret fetcher maxIter . k
         Stepper.Run ->
           run >>= interpret fetcher maxIter . k
-        Stepper.Ask (EVM.PleaseChoosePath continue) ->
-          do vm <- get
-             case maxIter of
-               Just maxiter ->
-                 let codelocation = getCodeLocation vm
-                     iters = view (iterations . at codelocation . non 0) vm
-                 in if num maxiter <= iters then
-                      let lastChoice = vm ^?! (cache . path . ix (codelocation, iters - 1))
-                        -- When we have reached maxIterations, we take the choice that will hopefully
-                        -- lead us out of here.
-                      in interpret fetcher maxIter (Stepper.evm (continue (not lastChoice)) >>= k)
-                    else do a <- interpret fetcher maxIter (Stepper.evm (continue True) >>= k)
-                            put vm
-                            b <- interpret fetcher maxIter (Stepper.evm (continue False) >>= k)
-                            return $ a <> b
-               Nothing -> do a <- interpret fetcher maxIter (Stepper.evm (continue True) >>= k)
-                             put vm
-                             b <- interpret fetcher maxIter (Stepper.evm (continue False) >>= k)
-                             return $ a <> b
+        Stepper.Ask (EVM.PleaseChoosePath continue) -> do
+          vm <- get
+          case maxIterationsReached vm maxIter of
+            Nothing -> do a <- interpret fetcher maxIter (Stepper.evm (continue True) >>= k)
+                          put vm
+                          b <- interpret fetcher maxIter (Stepper.evm (continue False) >>= k)
+                          return $ a <> b
+            Just n -> interpret fetcher maxIter (Stepper.evm (continue (not n)) >>= k)
         Stepper.Wait q ->
           do m <- liftIO (fetcher q)
              interpret fetcher maxIter (Stepper.evm m >>= k)
         Stepper.EVM m ->
           State.state (runState m) >>= interpret fetcher maxIter . k
+
+maxIterationsReached :: VM -> Maybe Integer -> Maybe Bool
+maxIterationsReached _ Nothing = Nothing
+maxIterationsReached vm (Just maxIter) =
+  let codelocation = getCodeLocation vm
+      iters = view (iterations . at codelocation . non 0) vm
+  in if num maxIter <= iters
+     then
+       case view (cache . path . at (codelocation, iters - 1)) vm of
+         Just (IsZero b) -> Just b
+         n -> error ("I don't see how this could have happened: " <> show n)
+     else Nothing
 
 type Precondition = VM -> SBool
 type Postcondition = (VM, VM) -> SBool
