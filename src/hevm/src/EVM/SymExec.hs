@@ -152,7 +152,7 @@ interpret fetcher maxIter =
           exec >>= interpret fetcher maxIter . k
         Stepper.Run ->
           run >>= interpret fetcher maxIter . k
-        Stepper.Option (EVM.PleaseChoosePath continue) ->
+        Stepper.Ask (EVM.PleaseChoosePath continue) ->
           do vm <- get
              case maxIter of
                Just maxiter ->
@@ -162,18 +162,18 @@ interpret fetcher maxIter =
                       let lastChoice = vm ^?! (cache . path . ix (codelocation, iters - 1))
                         -- When we have reached maxIterations, we take the choice that will hopefully
                         -- lead us out of here.
-                      in State.state (runState (continue (not lastChoice))) >> interpret fetcher maxIter (k ())
-                    else do a <- State.state (runState (continue True)) >> interpret fetcher maxIter (k ())
+                      in interpret fetcher maxIter (Stepper.evm (continue (not lastChoice)) >>= k)
+                    else do a <- interpret fetcher maxIter (Stepper.evm (continue True) >>= k)
                             put vm
-                            b <- State.state (runState (continue False)) >> interpret fetcher maxIter (k ())
+                            b <- interpret fetcher maxIter (Stepper.evm (continue False) >>= k)
                             return $ a <> b
-               Nothing -> do a <- State.state (runState (continue True)) >> interpret fetcher maxIter (k ())
+               Nothing -> do a <- interpret fetcher maxIter (Stepper.evm (continue True) >>= k)
                              put vm
-                             b <- State.state (runState (continue False)) >> interpret fetcher maxIter (k ())
+                             b <- interpret fetcher maxIter (Stepper.evm (continue False) >>= k)
                              return $ a <> b
         Stepper.Wait q ->
           do m <- liftIO (fetcher q)
-             State.state (runState m) >> interpret fetcher maxIter (k ())
+             interpret fetcher maxIter (Stepper.evm m >>= k)
         Stepper.EVM m ->
           State.state (runState m) >>= interpret fetcher maxIter . k
 

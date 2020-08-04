@@ -224,9 +224,14 @@ instance Options.ParseRecord (Command Options.Wrapped) where
 optsMode :: Command Options.Unwrapped -> Mode
 optsMode x = if debug x then Debug else Run
 
-unitTestOptions :: Command Options.Unwrapped -> IO UnitTestOptions
-unitTestOptions cmd = do
-  srcInfo <- getSrcInfo cmd
+unitTestOptions :: Command Options.Unwrapped -> String -> IO UnitTestOptions
+unitTestOptions cmd testFile = do
+  let root = fromMaybe "." (dappRoot cmd)
+  srcInfo <- readSolc testFile >>= \case
+    Nothing -> error "Could not find read .sol.json file"
+    Just (contractMap, sourceCache) ->
+      pure $ dappInfo root contractMap sourceCache
+
   vmModifier <-
     case state cmd of
       Nothing ->
@@ -277,7 +282,7 @@ main = do
     DappTest {} ->
       withCurrentDirectory root $ do
         testFile <- findJsonFile (jsonFile cmd)
-        testOpts <- unitTestOptions cmd
+        testOpts <- unitTestOptions cmd testFile
         case (coverage cmd, optsMode cmd) of
           (False, Run) ->
             dappTest testOpts (optsMode cmd) testFile
@@ -288,7 +293,7 @@ main = do
     Interactive {} ->
       withCurrentDirectory root $ do
         testFile <- findJsonFile (jsonFile cmd)
-        testOpts <- unitTestOptions cmd
+        testOpts <- unitTestOptions cmd testFile
         EVM.TTY.main testOpts root testFile
     Compliance {} ->
       case (group cmd) of

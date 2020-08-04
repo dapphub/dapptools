@@ -8,6 +8,7 @@ module EVM.Stepper
   , execFully
   , runFully
   , wait
+  , ask
   , evm
   , entering
   , enter
@@ -25,7 +26,7 @@ where
 
 import Prelude hiding (fail)
 
-import Control.Monad.Operational (Program, singleton, view, ProgramViewT(..), ProgramView)
+import Control.Monad.Operational (Program(..), singleton, view, ProgramViewT(..), ProgramView)
 import Control.Monad.State.Strict (runState, liftIO, StateT)
 import qualified Control.Monad.State.Class as State
 import qualified EVM.Exec
@@ -56,7 +57,7 @@ data Action a where
   Wait :: Query   -> Action ()
 
   -- | Multiple things can happen
-  Option :: Choose -> Action ()
+  Ask :: Choose -> Action ()
 
   -- | Embed a VM state transformation
   EVM  :: EVM a   -> Action a
@@ -75,8 +76,8 @@ run = singleton Run
 wait :: Query -> Stepper ()
 wait = singleton . Wait
 
-option :: Choose -> Stepper ()
-option = singleton . Option
+ask :: Choose -> Stepper ()
+ask = singleton . Ask
 
 evm :: EVM a -> Stepper a
 evm = singleton . EVM
@@ -88,7 +89,7 @@ execFully =
     VMFailure (Query q) ->
       wait q >> execFully
     VMFailure (Choose q) ->
-      option q >> execFully
+      ask q >> execFully
     VMFailure x ->
       pure (Left x)
     VMSuccess x ->
@@ -103,7 +104,7 @@ runFully = do
     Just (VMFailure (Query q)) ->
       wait q >> runFully
     Just (VMFailure (Choose q)) ->
-      option q >> runFully
+      ask q >> runFully
     Just _ -> 
       pure vm
 
@@ -138,7 +139,7 @@ interpret fetcher =
         Wait q ->
           do m <- liftIO (fetcher q)
              State.state (runState m) >> interpret fetcher (k ())
-        Option _ ->
+        Ask _ ->
           error "cannot make choices with this interpreter"
         EVM m -> do
           r <- State.state (runState m)
