@@ -152,40 +152,37 @@ interpret mode =
       case action of
 
         -- Stepper wants to keep executing?
-        Stepper.Exec ->
-          let
-            -- When pausing during exec, we should later restart
-            -- the exec with the same continuation.
-            restart = Stepper.exec >>= k
+        Stepper.Exec -> do
+          -- When pausing during exec, we should later restart
+          -- the exec with the same continuation.
+          let restart = Stepper.exec >>= k
 
-          in case mode of
-            Step 0 -> do
-              -- We come here when we've continued while stepping,
-              -- either from a query or from a return;
-              -- we should pause here and wait for the user.
-              use (uiVm . result) >>= \case
-                Nothing ->
+          use (uiVm . result) >>= \case
+            Just r ->
+              interpret mode (k r)
+            Nothing ->
+
+              case mode of
+                Step 0 -> do
+                  -- We come here when we've continued while stepping,
+                  -- either from a query or from a return;
+                  -- we should pause here and wait for the user.
                   pure (Continue restart)
-                Just (VMFailure (Query q)) ->
-                  interpret mode (Stepper.wait q >> restart)
-                Just (VMFailure (Choose q)) ->
-                  interpret mode (Stepper.ask q >> restart)
-                Just r ->
-                  interpret mode (k r)
 
-            Step i -> do
-              -- Run one instruction.
-              stepOneOpcode restart--(execState exec1)
-              interpret (Step (i - 1)) restart
+                Step i -> do
+                  -- Run one instruction
+                  stepOneOpcode restart
+                  interpret (Step (i - 1)) restart
 
-            StepUntil p -> do
-              vm <- use uiVm
-              case p vm of
-                True ->
-                  interpret (Step 0) restart
-                False -> do
-                  stepOneOpcode restart --(execState exec1)
-                  interpret (StepUntil p) restart
+                StepUntil p -> do
+                  vm <- use uiVm
+                  case p vm of
+                    True ->
+                      interpret (Step 0) restart
+                    False -> do
+                      -- Run one instruction
+                      stepOneOpcode restart
+                      interpret (StepUntil p) restart
 
         -- Stepper is waiting for user input from a query
         Stepper.Ask (EVM.PleaseChoosePath cont) -> do
@@ -355,7 +352,7 @@ appEvent st@(ViewVm s) (VtyEvent (V.EvKey V.KEsc [])) =
                 (view dappUnitTests dapp')
   in case tests of
     [] -> halt st
-    ts -> 
+    ts ->
       continue . ViewPicker $
       UiTestPickerState
         { _testPickerList =
@@ -450,22 +447,14 @@ appEvent st@(ViewVm s) (VtyEvent (V.EvKey (V.KChar 'p') [])) =
       -- We keep the current cache so we don't have to redo
       -- any blocking queries, and also the memory view.
       let
-        -- snapshots = view uiVmSnapshots s
         (step, (vm, stepper)) = fromJust $ lookupLT n (view uiSnapshots s)
         s1 = s
           & set uiVm vm
---          & set (uiVm . cache) (view (uiVm . cache) s)
+          & set (uiVm . cache) (view (uiVm . cache) s)
           & set uiStep step
           & set uiStepper stepper
-
-          -- & set (uiVm . cache) (view (uiVm . cache) s)
-          -- & set uiShowMemory (view uiShowMemory s)
-          -- & set uiTestOpts   (view uiTestOpts s)
-          -- & set uiSnapshots  (view uiSnapshots s)
         stepsToTake = n - step - 1
 
-      traceM $ "taking: " <> (show stepsToTake)
-      traceM $ "from: " <> (show step)
       takeStep s1 (Step stepsToTake)
 
 -- Vm Overview: 0 - choose no jump
@@ -801,8 +790,10 @@ updateUiVmState ui vm =
     address = view (state . contract) vm
     message =
       case view result vm of
-        Just (VMSuccess msg) ->
-          Just ("VMSuccess: " <> (show msg))
+        Just (VMSuccess (ConcreteBuffer msg)) ->
+          Just ("VMSuccess: " <> (show $ ByteStringS msg))
+        Just (VMSuccess (SymbolicBuffer msg)) ->
+          Just ("VMSuccess: <symbolicbuffer> " <> (show msg))
         Just (VMFailure (Revert msg)) ->
           Just ("VMFailure: " <> (show . ByteStringS $ msg))
         Just (VMFailure err) ->

@@ -105,7 +105,7 @@ runFully = do
       wait q >> runFully
     Just (VMFailure (Choose q)) ->
       ask q >> runFully
-    Just _ -> 
+    Just _ ->
       pure vm
 
 entering :: Text -> Stepper a -> Stepper a
