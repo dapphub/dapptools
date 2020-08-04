@@ -171,7 +171,7 @@ checkFailures UnitTestOptions { .. } method args bailed = do
       Right (ConcreteBuffer r) ->
         let AbiBool failed = decodeAbiValue AbiBoolType (BSLazy.fromStrict r)
         in pure (shouldFail == failed)
-      _ -> error "internal error: unexpected failure code" 
+      _ -> error "internal error: unexpected failure code"
 
 -- | Randomly generates the calldata arguments and runs the test
 fuzzTest :: UnitTestOptions -> Text -> [AbiType] -> VM -> Property
@@ -397,7 +397,7 @@ runUnitTestContract
                   vm1
               (success, vm) <- runStateT (interpret oracle (checkFailures opts testName args bailed)) vm2
               if success
-              then 
+              then
                  let gasSpent = num (testGasCall testParams) - view (state . gas) vm2
                      gasText = pack . show $ (fromIntegral gasSpent :: Integer)
                  in
@@ -406,13 +406,13 @@ runUnitTestContract
                        <> testName <> argInfo <> " (gas: " <> gasText <> ")"
                        , Right (passOutput vm opts testName)
                       )
-              else 
+              else
                     pure
                       ("\x1b[31m[FAIL]\x1b[0m "
                        <> testName <> argInfo
                        , Left (failOutput vm opts testName)
                       )
- 
+
           -- Define the thread spawner for property based tests
           let fuzzRun (testName, types) = do
                 let args = Args{ replay          = Nothing
