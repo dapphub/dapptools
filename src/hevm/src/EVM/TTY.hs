@@ -73,19 +73,18 @@ data Name
 type UiWidget = Widget Name
 
 data UiVmState = UiVmState
-  { _uiVm             :: VM
-  , _uiVmStepper      :: Stepper ()
-  , _uiVmStackList    :: List Name (Int, (SymWord))
-  , _uiVmBytecodeList :: List Name (Int, Op)
-  , _uiVmTraceList    :: List Name Text
-  , _uiVmSolidityList :: List Name (Int, ByteString)
-  , _uiVmSolc         :: Maybe SolcContract
-  , _uiVmStepCount    :: Int
-  , _uiVmSnapshots    :: Map Int UiVmState
-  , _uiVmMessage      :: Maybe String
-  , _uiVmNotes        :: [String]
-  , _uiVmShowMemory   :: Bool
-  , _uiVmTestOpts     :: UnitTestOptions
+  { _uiVm           :: VM
+  , _uiStep         :: Int
+  , _uiSnapshots    :: Map Int (VM, Stepper ())
+  , _uiStepper      :: Stepper ()
+  , _uiStackList    :: List Name (Int, (SymWord))
+  , _uiBytecodeList :: List Name (Int, Op)
+  , _uiTraceList    :: List Name Text
+  , _uiSolidityList :: List Name (Int, ByteString)
+  , _uiMessage      :: Maybe String
+  , _uiShowMemory   :: Bool
+  , _uiSolc         :: Maybe SolcContract
+  , _uiTestOpts     :: UnitTestOptions
   }
 
 data UiTestPickerState = UiTestPickerState
@@ -117,17 +116,15 @@ snapshotInterval = 50
 type Pred a = a -> Bool
 
 data StepMode
-  = StepOne                        -- ^ Finish after one opcode step
-  | StepMany !Int                  -- ^ Run a specific number of steps
-  | StepNone                       -- ^ Finish before the next opcode
-  | StepUntil (Pred VM)            -- ^ Finish when a VM predicate holds
+  = Step !Int                  -- ^ Run a specific number of steps
+  | StepUntil (Pred VM)        -- ^ Finish when a VM predicate holds
 
 -- | Each step command in the terminal should finish immediately
 -- with one of these outcomes.
-data StepOutcome a
-  = Returned a                    -- ^ Program finished
-  | Stepped      (Stepper a)      -- ^ Took one step; more steps to go
-  | Blocked      (IO (Stepper a)) -- ^ Came across blocking request
+data Continuation a
+     = Stopped a              -- ^ Program finished
+     | Continue (Stepper a)   -- ^ Took one step; more steps to go
+
 
 -- | This turns a @Stepper@ into a state action usable
 -- from within the TTY loop, yielding a @StepOutcome@ depending on the @StepMode@.
@@ -136,7 +133,7 @@ interpret
   ,   ?maxIter :: Maybe Integer)
   => StepMode
   -> Stepper a
-  -> State UiVmState (StepOutcome a)
+  -> StateT UiVmState IO (Continuation a)
 interpret mode =
 
   -- Like the similar interpreters in @EVM.UnitTest@ and @EVM.VMTest@,
@@ -146,10 +143,10 @@ interpret mode =
   where
     eval
       :: Operational.ProgramView Stepper.Action a
-      -> State UiVmState (StepOutcome a)
+      -> StateT UiVmState IO (Continuation a)
 
     eval (Operational.Return x) =
-      pure (Returned x)
+      pure (Stopped x)
 
     eval (action Operational.:>>= k) =
       case action of
@@ -162,77 +159,40 @@ interpret mode =
             restart = Stepper.exec >>= k
 
           in case mode of
-            StepNone -> do
+            Step 0 -> do
               -- We come here when we've continued while stepping,
               -- either from a query or from a return;
               -- we should pause here and wait for the user.
               use (uiVm . result) >>= \case
                 Nothing ->
-                  pure (Stepped restart)
-                Just r -> 
+                  pure (Continue restart)
+                Just (VMFailure (Query q)) ->
+                  interpret mode (Stepper.wait q >> restart)
+                Just (VMFailure (Choose q)) ->
+                  interpret mode (Stepper.ask q >> restart)
+                Just r ->
                   interpret mode (k r)
 
-
-            StepOne -> do
-              modify stepOneOpcode
-
-              let
-                finishUp =
-                  use (uiVm . result) >>= \case
-                    Nothing ->
-                      -- If instructions remain, then pause & await user.
-                      pure (Stepped restart)
-                    Just r ->
-                      -- If returning, proceed directly the continuation,
-                      -- but stopping before the next instruction.
-                      interpret StepNone (k r)
-
-              -- After finishing up, we're ready to save a snapshot.
-              finishUp <* maybeSaveSnapshot
-
-            StepMany 0 ->
-              -- Finish the continuation until the next instruction;
-              -- then, pause & await user.
-              interpret StepNone restart
-
-            StepMany i ->
+            Step i -> do
               -- Run one instruction.
-              interpret StepOne restart >>=
-                \case
-                  Stepped stepper ->
-                    interpret (StepMany (i - 1)) stepper
-
-                  -- This shouldn't happen (but occassionally does?), because re-stepping needs
-                  -- to avoid blocking and halting.
-                  r -> pure r
+              stepOneOpcode restart--(execState exec1)
+              interpret (Step (i - 1)) restart
 
             StepUntil p -> do
               vm <- use uiVm
               case p vm of
                 True ->
-                  interpret StepNone restart
-                False ->
-                  interpret StepOne restart >>=
-                    \case
-                      Stepped stepper ->
-                        interpret (StepUntil p) stepper
-                      Returned _ ->
-                        interpret StepNone restart
-
-                      -- This means that if we hit a blocking query
-                      -- or a return, we pause despite the predicate.
-                      --
-                      -- This could be fixed if we allowed query I/O
-                      -- here, instead of only in the TTY event loop;
-                      -- let's do it later.
-                      r -> pure r
+                  interpret (Step 0) restart
+                False -> do
+                  stepOneOpcode restart --(execState exec1)
+                  interpret (StepUntil p) restart
 
         -- Stepper is waiting for user input from a query
-        Stepper.Option (EVM.PleaseChoosePath cont) -> do
+        Stepper.Ask (EVM.PleaseChoosePath cont) -> do
           -- ensure we aren't stepping past max iterations
+          vm <- use uiVm
           case ?maxIter of
             Just maxiter -> do
-              vm <- use uiVm
               let codelocation = getCodeLocation vm
                   iters = view (iterations . at codelocation . non 0) vm
               if num maxiter <= iters then
@@ -243,36 +203,23 @@ interpret mode =
                   Just (Known 1) -> interpret mode (Stepper.evm (cont 1) >>= k)
                   n -> error ("I don't see how this could have happened: " <> show n)
               else
-                pure $ Stepped (k ())
+                pure $ Continue (k ())
 
             Nothing ->
               -- pause & await user.
-              pure $ Stepped (k ())
+              pure $ Continue (k ())
 
         -- Stepper wants to make a query and wait for the results?
         Stepper.Wait q -> do
-          -- Tell the TTY to run an I/O action to produce the next stepper.
-          pure . Blocked $ do
-            -- First run the fetcher, getting a VM state transition back.
-            m <- ?fetcher q
-            -- Join that transition with the stepper script's continuation.
-            pure (Stepper.evm m >>= k)
+          do m <- liftIO (?fetcher q)
+             interpret mode (Stepper.evm m >>= k)
 
         -- Stepper wants to modify the VM.
         Stepper.EVM m -> do
-          vm0 <- use uiVm
-          let (r, vm1) = runState m vm0
-          
-          modify (flip updateUiVmState vm1)
-
-          interpret mode (Stepper.exec >> k r)
-
-maybeSaveSnapshot :: State UiVmState ()
-maybeSaveSnapshot = do
-  ui <- get
-  let n = view uiVmStepCount ui
-  when (n > 0 && n `mod` snapshotInterval == 0) $ do
-    modifying uiVmSnapshots (insert n ui)
+          vm <- use uiVm
+          let (r, vm1) = runState m vm
+          assign uiVm vm1
+          interpret mode (Stepper.exec >> (k r))
 
 isUnitTestContract :: Text -> DappInfo -> Bool
 isUnitTestContract name dapp =
@@ -297,30 +244,34 @@ runFromVM maxIter' dappinfo oracle' vm = do
       , replay            = error "irrelevant"
       , vmModifier        = id
       , testParams        = error "irrelevant"
-      , dapp = dappinfo
+      , dapp              = dappinfo
       }
-    ui0 = UiVmState
-           { _uiVm = vm
-           , _uiVmStepper = void Stepper.execFully
-           , _uiVmStackList = undefined
-           , _uiVmBytecodeList = undefined
-           , _uiVmTraceList = undefined
-           , _uiVmSolidityList = undefined
-           , _uiVmSolc = currentSolc dappinfo vm
-           , _uiVmStepCount = 0
-           , _uiVmSnapshots = undefined
-           , _uiVmMessage = Just $ "Executing EVM code in " <> show (view (state . contract) vm)
-           , _uiVmNotes = []
-           , _uiVmShowMemory = False
-           , _uiVmTestOpts = opts
-           }
-    ui1 = updateUiVmState ui0 vm & set uiVmSnapshots (singleton 0 ui1)
+    ui0 = initUiVmState vm opts (void Stepper.execFully)
 
   v <- mkVty
-  ui2 <- customMain v mkVty Nothing (app opts) (ViewVm ui1)
+  ui2 <- customMain v mkVty Nothing (app opts) (ViewVm ui0)
   case ui2 of
     ViewVm ui -> return (view uiVm ui)
     _ -> error "internal error: customMain returned prematurely"
+
+
+initUiVmState :: VM -> UnitTestOptions -> Stepper () -> UiVmState
+initUiVmState vm0 opts script =
+  renderVm $
+  UiVmState
+    { _uiVm           = vm0
+    , _uiStepper      = script
+    , _uiStackList    = undefined
+    , _uiBytecodeList = undefined
+    , _uiTraceList    = undefined
+    , _uiSolidityList = undefined
+    , _uiSolc         = currentSolc (dapp opts) vm0
+    , _uiStep         = 0
+    , _uiSnapshots    = singleton 0 (vm0, script)
+    , _uiMessage      = Just "Creating unit test contract"
+    , _uiShowMemory   = False
+    , _uiTestOpts     = opts
+    }
 
 
 -- filters out fuzztests, unless they have
@@ -357,48 +308,21 @@ main opts root jsonFilePath =
         _ <- customMain v mkVty Nothing (app opts) (ui :: UiState)
         return ()
 
--- ^ Specifies whether to do I/O blocking or VM halting while stepping.
--- When we step backwards, we don't want to allow those things.
-data StepPolicy
-  = StepNormally    -- ^ Allow blocking and returning
-  | StepTimidly     -- ^ Forbid blocking and returning
-
 takeStep
   :: (?fetcher :: Fetcher
      ,?maxIter :: Maybe Integer)
   => UiVmState
-  -> StepPolicy
   -> StepMode
   -> EventM n (Next UiState)
-takeStep ui policy mode = do
-  case nxt of
-    (Stepped stepper, ui') ->
-      continue (ViewVm (ui' & set uiVmStepper stepper))
-
-    (Blocked blocker, ui') ->
-      case policy of
-        StepNormally -> do
-          stepper <- liftIO blocker
-          takeStep (ui' & set uiVmStepper stepper)
-            StepNormally StepNone
-
-        StepTimidly ->
-          error "step blocked unexpectedly"
-
-    (Returned (), ui') ->
-      case policy of
-        StepNormally ->
-          continue (ViewVm ui')
-        StepTimidly ->
-          error "step halted unexpectedly"
+takeStep ui mode =
+  liftIO nxt >>= \case
+    (Stopped (), ui') ->
+      continue (ViewVm ui')
+    (Continue steps, ui') -> do
+      continue (ViewVm (ui' & set uiStepper steps))
   where
-    vmResult Nothing = False
-    vmResult (Just (VMFailure (Query _))) = False
-    vmResult (Just (VMFailure (Choose _))) = False
-    vmResult (Just _) = True
-    m = interpret mode (view uiVmStepper ui)
-    nxt :: (StepOutcome (), UiVmState)
-    nxt = runState (m <* modify renderVm) ui
+    m = interpret mode (view uiStepper ui)
+    nxt = runStateT (m <* modify renderVm) ui
 
 appEvent
   :: (?fetcher::Fetcher, ?maxIter :: Maybe Integer) =>
@@ -424,8 +348,8 @@ appEvent (ViewContracts s) (VtyEvent e@(V.EvKey V.KUp [])) = do
 
 -- Vm Overview: Esc - return to test picker or exit
 appEvent st@(ViewVm s) (VtyEvent (V.EvKey V.KEsc [])) =
-  let opts = view uiVmTestOpts s
-      dapp' = dapp (view uiVmTestOpts s)
+  let opts = view uiTestOpts s
+      dapp' = dapp (view uiTestOpts s)
       tests = concatMap
                 (concreteTests opts)
                 (view dappUnitTests dapp')
@@ -457,7 +381,7 @@ appEvent (ViewVm s) (VtyEvent (V.EvKey V.KEnter [])) =
 
 -- Vm Overview: m - toggle memory pane
 appEvent (ViewVm s) (VtyEvent (V.EvKey (V.KChar 'm') [])) =
-  continue (ViewVm (over uiVmShowMemory not s))
+  continue (ViewVm (over uiShowMemory not s))
 
 -- Vm Overview: h - open help view
 appEvent (ViewVm s) (VtyEvent (V.EvKey (V.KChar 'h') []))
@@ -482,42 +406,40 @@ appEvent (ViewVm s) (VtyEvent (V.EvKey (V.KChar ' ') [])) =
 appEvent (ViewVm s) (VtyEvent (V.EvKey (V.KChar 'n') [])) =
   case view (uiVm . result) s of
     Just _ -> continue (ViewVm s)
-    _ -> takeStep s StepNormally StepOne
+    _ -> takeStep s (Step 1)
 
 -- Vm Overview: N - step
 appEvent (ViewVm s) (VtyEvent (V.EvKey (V.KChar 'N') [])) =
   takeStep s
-    StepNormally
     (StepUntil (isNextSourcePosition s))
 
 -- Vm Overview: C-n - step
 appEvent (ViewVm s) (VtyEvent (V.EvKey (V.KChar 'n') [V.MCtrl])) =
   takeStep s
-    StepNormally
     (StepUntil (isNextSourcePositionWithoutEntering s))
 
 -- Vm Overview: e - step
 appEvent (ViewVm s) (VtyEvent (V.EvKey (V.KChar 'e') [])) =
   takeStep s
-    StepNormally
     (StepUntil (isExecutionHalted s))
 
 -- Vm Overview: a - step
 appEvent (ViewVm s) (VtyEvent (V.EvKey (V.KChar 'a') [])) =
       -- We keep the current cache so we don't have to redo
-      -- any blocking queries, and also the memory view.
+      -- any blocking queries.
       let
-        s0 = fromJust (Map.lookup 0 (view uiVmSnapshots s))
+        (vm, stepper) = fromJust (Map.lookup 0 (view uiSnapshots s))
+        s' = s
+          & set uiVm vm
           & set (uiVm . cache) (view (uiVm . cache) s)
-          & set uiVmShowMemory (view uiVmShowMemory s)
-          & set uiVmTestOpts   (view uiVmTestOpts s)
-          & set uiVmSnapshots  (view uiVmSnapshots s)
+          & set uiStep 0
+          & set uiStepper stepper
 
-      in takeStep s0 StepTimidly StepNone
+      in takeStep s' (Step 0)
 
 -- Vm Overview: p - step
 appEvent st@(ViewVm s) (VtyEvent (V.EvKey (V.KChar 'p') [])) =
-  case view uiVmStepCount s of
+  case view uiStep s of
     0 ->
       -- We're already at the first step; ignore command.
       continue st
@@ -529,21 +451,28 @@ appEvent st@(ViewVm s) (VtyEvent (V.EvKey (V.KChar 'p') [])) =
       -- any blocking queries, and also the memory view.
       let
         -- snapshots = view uiVmSnapshots s
-        (snapshotStep, s0) = fromJust $ lookupLT n (view uiVmSnapshots s)
-        s1 = s0
-          & set (uiVm . cache) (view (uiVm . cache) s)
-          & set uiVmShowMemory (view uiVmShowMemory s)
-          & set uiVmTestOpts   (view uiVmTestOpts s)
-          & set uiVmSnapshots  (view uiVmSnapshots s)
-        stepsToTake = n - snapshotStep - 1
+        (step, (vm, stepper)) = fromJust $ lookupLT n (view uiSnapshots s)
+        s1 = s
+          & set uiVm vm
+--          & set (uiVm . cache) (view (uiVm . cache) s)
+          & set uiStep step
+          & set uiStepper stepper
 
-      takeStep s1 StepNormally (StepMany stepsToTake)
+          -- & set (uiVm . cache) (view (uiVm . cache) s)
+          -- & set uiShowMemory (view uiShowMemory s)
+          -- & set uiTestOpts   (view uiTestOpts s)
+          -- & set uiSnapshots  (view uiSnapshots s)
+        stepsToTake = n - step - 1
+
+      traceM $ "taking: " <> (show stepsToTake)
+      traceM $ "from: " <> (show step)
+      takeStep s1 (Step stepsToTake)
 
 -- Vm Overview: 0 - choose no jump
 appEvent (ViewVm s) (VtyEvent (V.EvKey (V.KChar '0') [])) =
   case view (uiVm . result) s of
     Just (VMFailure (Choose (PleaseChoosePath contin))) ->
-      takeStep (s & set uiVm (execState (contin True) (view uiVm s)))
+      takeStep (s & set uiStepper (Stepper.evm (contin True) >> (view uiStepper s)))
         StepNormally
         StepOne
     _ -> continue (ViewVm s)
@@ -552,7 +481,7 @@ appEvent (ViewVm s) (VtyEvent (V.EvKey (V.KChar '0') [])) =
 appEvent (ViewVm s) (VtyEvent (V.EvKey (V.KChar '1') [])) =
   case view (uiVm . result) s of
     Just (VMFailure (Choose (PleaseChoosePath contin))) ->
-      takeStep (s & set uiVm (execState (contin False) (view uiVm s)))
+      takeStep (s & set uiStepper (Stepper.evm (contin False) >> (view uiStepper s)))
         StepNormally
         StepOne
     _ -> continue (ViewVm s)
@@ -620,7 +549,7 @@ initialUiVmStateForTest
   -> (Text, Text)
   -> UiVmState
 initialUiVmStateForTest opts@UnitTestOptions{..} (theContractName, theTestName) =
-  ui1
+  ui
   where
     Just typesig = lookup theTestName (unitTestMethods testContract)
     args = case replay of
@@ -634,28 +563,11 @@ initialUiVmStateForTest opts@UnitTestOptions{..} (theContractName, theTestName) 
         "test " <> theTestName <> " (" <> theContractName <> ")"
       initializeUnitTest opts
       void (runUnitTest opts theTestName args)
-    ui0 =
-      UiVmState
-        { _uiVm             = vm0
-        , _uiVmStepper      = script
-        , _uiVmStackList    = undefined
-        , _uiVmBytecodeList = undefined
-        , _uiVmTraceList    = undefined
-        , _uiVmSolidityList = undefined
-        , _uiVmSolc         = Just testContract
-        , _uiVmStepCount    = 0
-        , _uiVmSnapshots    = undefined
-        , _uiVmMessage      = Just "Creating unit test contract"
-        , _uiVmNotes        = []
-        , _uiVmShowMemory   = False
-        , _uiVmTestOpts     = opts
-        }
+    ui = initUiVmState vm0 opts script
     Just testContract =
       view (dappSolcByName . at theContractName) dapp
     vm0 =
-      initialUnitTestVm opts testContract (Map.elems (view dappSolcByName dapp))
-    ui1 =
-      updateUiVmState ui0 vm0 & set uiVmSnapshots (singleton 0 ui1)
+      initialUnitTestVm opts testContract
 
 myTheme :: [(AttrName, V.Attr)]
 myTheme =
@@ -717,10 +629,10 @@ drawVmBrowser ui =
       [ borderWithLabel (txt "Contracts") .
           hLimit 60 $
             renderList
-              (\selected (k, c) ->
+              (\selected (k, c') ->
                  withHighlight selected . txt . mconcat $
                    [ fromMaybe "<unknown contract>" . flip preview dapp' $
-                       ( dappSolcByHash . ix (view codehash c)
+                       ( dappSolcByHash . ix (view codehash c')
                        . _2 . contractName )
                    , "\n"
                    , "  ", pack (show k)
@@ -758,7 +670,7 @@ drawVmBrowser ui =
   ]
   where storageDisplay (Concrete s) = pack ( show ( Map.toList s))
         storageDisplay (Symbolic _) = pack "<symbolic>"
-        dapp' = dapp (view (browserVm . uiVmTestOpts) ui)
+        dapp' = dapp (view (browserVm . uiTestOpts) ui)
         Just (_, (_, c)) = listSelectedElement (view browserContractList ui)
 --        currentContract  = view (dappSolcByHash . ix ) dapp
 
@@ -811,18 +723,20 @@ drawHelpBar = hBorder <=> hCenter help
       , ("h", "more help")
       ]
 
-stepOneOpcode :: UiVmState -> UiVmState
-stepOneOpcode ui =
-  let
-    nextVm = execState exec1 (view uiVm ui)
-  in
-    ui & over uiVmStepCount (+ 1)
-       & set uiVm nextVm
+stepOneOpcode :: Stepper a -> StateT UiVmState IO ()
+stepOneOpcode restart = do
+  n <- use uiStep
+  when (n > 0 && n `mod` snapshotInterval == 0) $ do
+    vm <- use uiVm
+    modifying uiSnapshots (insert n (vm, void restart))
+  modifying uiVm (execState exec1)
+  modifying uiStep (+ 1)
+
 
 isNextSourcePosition
   :: UiVmState -> Pred VM
 isNextSourcePosition ui vm =
-  let dapp' = dapp (view uiVmTestOpts ui)
+  let dapp' = dapp (view uiTestOpts ui)
       initialPosition = currentSrcMap dapp' (view uiVm ui)
   in currentSrcMap dapp' vm /= initialPosition
 
@@ -830,7 +744,7 @@ isNextSourcePositionWithoutEntering
   :: UiVmState -> Pred VM
 isNextSourcePositionWithoutEntering ui vm =
   let
-    dapp'           = dapp (view uiVmTestOpts ui)
+    dapp'           = dapp (view uiTestOpts ui)
     vm0             = view uiVm ui
     initialPosition = currentSrcMap dapp' vm0
     initialHeight   = length (view frames vm0)
@@ -895,17 +809,16 @@ updateUiVmState ui vm =
           Just ("VMFailure: " <> show err)
         Nothing ->
           Just ("Executing EVM code in " <> show address)
-  in
-    ui
+    in ui
       & set uiVm vm
-      & set uiVmStackList
+      & set uiStackList
           (list StackPane (Vec.fromList $ zip [1..] (view (state . stack) vm)) 2)
-      & set uiVmBytecodeList
+      & set uiBytecodeList
           (move $ list BytecodePane
              (view codeOps (fromJust (currentContract vm)))
              1)
-      & set uiVmMessage message
-      & set uiVmTraceList
+      & set uiMessage message
+      & set uiTraceList
           (list
             TracePane
             (Vec.fromList
@@ -913,7 +826,7 @@ updateUiVmState ui vm =
               . showTraceTree dapp'
               $ vm)
             1)
-      & set uiVmSolidityList
+      & set uiSolidityList
           (list SolidityPane
               (case currentSrcMap dapp' vm of
                 Nothing -> mempty
@@ -925,7 +838,7 @@ updateUiVmState ui vm =
                     dapp')
               1)
       where
-        dapp' = dapp (view uiVmTestOpts ui)
+        dapp' = dapp (view uiTestOpts ui)
 
 drawStackPane :: UiVmState -> UiWidget
 drawStackPane ui =
@@ -940,10 +853,10 @@ drawStackPane ui =
                <+> str (show x)
            , dim (txt ("   " <> case unliteral w of
                        Nothing -> ""
-                       Just u -> showWordExplanation (fromSizzle u) $ dapp (view uiVmTestOpts ui)))
+                       Just u -> showWordExplanation (fromSizzle u) $ dapp (view uiTestOpts ui)))
            ])
       False
-      (view uiVmStackList ui)
+      (view uiStackList ui)
 
 showWordExplanation :: W256 -> DappInfo -> Text
 showWordExplanation w _ | w > 0xffffffff = showDec Unsigned w
@@ -958,13 +871,13 @@ showWordExplanation w dapp =
 
 drawBytecodePane :: UiVmState -> UiWidget
 drawBytecodePane ui =
-  hBorderWithLabel (case view uiVmMessage ui of { Nothing -> str ""; Just s -> str s }) <=>
+  hBorderWithLabel (case view uiMessage ui of { Nothing -> str ""; Just s -> str s }) <=>
     Centered.renderList
       (\active x -> if not active
                     then withDefAttr dimAttr (opWidget x)
                     else withDefAttr boldAttr (opWidget x))
       False
-      (view uiVmBytecodeList ui)
+      (view uiBytecodeList ui)
 
 dim :: Widget n -> Widget n
 dim = withDefAttr dimAttr
@@ -979,7 +892,7 @@ prettyIfConcrete (ConcreteBuffer x) = prettyHex 40 x
 
 drawTracePane :: UiVmState -> UiWidget
 drawTracePane s =
-  case view uiVmShowMemory s of
+  case view uiShowMemory s of
     True ->
       hBorderWithLabel (txt "Calldata")
       <=> str (prettyIfConcrete $ fst (view (uiVm . state . calldata) s))
@@ -997,11 +910,11 @@ drawTracePane s =
       <=> renderList
             (\_ x -> txt x)
             False
-            (view uiVmTraceList s)
+            (view uiTraceList s)
 
 drawSolidityPane :: UiVmState -> UiWidget
 drawSolidityPane ui =
-  let dapp' = dapp (view uiVmTestOpts ui)
+  let dapp' = dapp (view uiTestOpts ui)
   in case currentSrcMap dapp' (view uiVm ui) of
     Nothing -> padBottom Max (hBorderWithLabel (txt "<no source map>"))
     Just sm ->
@@ -1018,7 +931,7 @@ drawSolidityPane ui =
           in vBox
             [ hBorderWithLabel $
                 txt (maybe "<unknown>" contractPathPart
-                      (preview (uiVmSolc . _Just . contractName) ui))
+                      (preview (uiSolc . _Just . contractName) ui))
                   <+> str (":" ++ show lineNo)
 
                   -- Show the AST node type if present
@@ -1041,12 +954,8 @@ drawSolidityPane ui =
                                   ])
                 False
                 (listMoveTo lineNo
-                  (view uiVmSolidityList ui))
+                  (view uiSolidityList ui))
             ]
-drawSolidityPane _ =
-  -- When e.g. debugging raw EVM code without dapp info,
-  -- don't show a Solidity pane.
-  vBox []
 
 ifTallEnough :: Int -> Widget n -> Widget n -> Widget n
 ifTallEnough need w1 w2 =

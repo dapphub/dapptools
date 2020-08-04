@@ -58,8 +58,7 @@ import qualified Data.Vector as Vector
 import Test.QuickCheck hiding (verbose)
 
 data UnitTestOptions = UnitTestOptions
-  {
-    oracle     :: Query -> IO (EVM ())
+  { oracle     :: Query -> IO (EVM ())
   , verbose    :: Maybe Int
   , maxIter    :: Maybe Integer
   , match      :: Text
@@ -258,7 +257,7 @@ interpretWithCoverage opts =
         Stepper.Wait q ->
           do m <- liftIO (oracle opts q)
              zoom _1 (State.state (runState m)) >> interpretWithCoverage opts (k ())
-        Stepper.Option _ ->
+        Stepper.Ask _ ->
           error "cannot make choice in this interpreter"
         Stepper.EVM m ->
           zoom _1 (State.state (runState m)) >>= interpretWithCoverage opts . k
@@ -327,7 +326,7 @@ coverageForUnitTestContract
 
     Just theContract -> do
       -- Construct the initial VM and begin the contract's constructor
-      let vm0 = initialUnitTestVm opts theContract (Map.elems contractMap)
+      let vm0 = initialUnitTestVm opts theContract
       (vm1, cov1) <-
         execStateT
           (interpretWithCoverage opts
@@ -372,7 +371,7 @@ runUnitTestContract
 
     Just theContract -> do
       -- Construct the initial VM and begin the contract's constructor
-      let vm0 = initialUnitTestVm opts theContract (Map.elems contractMap)
+      let vm0 = initialUnitTestVm opts theContract
       vm1 <-
         execStateT
           (interpret oracle
@@ -560,8 +559,8 @@ setupCall TestVMParams{..} sig args  = do
   assign (state . caller) (litAddr testCaller)
   assign (state . gas) (w256 testGasCall)
 
-initialUnitTestVm :: UnitTestOptions -> SolcContract -> [SolcContract] -> VM
-initialUnitTestVm (UnitTestOptions {..}) theContract _ =
+initialUnitTestVm :: UnitTestOptions -> SolcContract -> VM
+initialUnitTestVm (UnitTestOptions {..}) theContract =
   let
     TestVMParams {..} = testParams
     vm = makeVm $ VMOpts

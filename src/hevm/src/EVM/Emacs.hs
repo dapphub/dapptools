@@ -554,6 +554,6 @@ initialStateForTest opts@(UnitTestOptions {..}) (contractPath, testName) =
     Just testContract =
       view (dappSolcByName . at contractPath) dapp
     vm0 =
-      initialUnitTestVm opts testContract (Map.elems (view dappSolcByName dapp))
+      initialUnitTestVm opts testContract
     ui1 =
       updateUiVmState ui0 vm0 & set uiVmFirstState ui1
