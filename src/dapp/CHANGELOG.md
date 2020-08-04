@@ -14,12 +14,13 @@ DAPP_BUILD_EXTRACT=1 dapp test
 
 ## [0.28.0] - 2020-07-13
 ### Added
+- Support for solc 0.6.12
 - Support for solc 0.6.7
 - The json outputted by `dapp build` will now contain `storage-layout`, if the chosen solidity version allows.
 
 
 ### Changed
-- Default to solc 0.6.7
+- Default to solc 0.6.12
 - Updated hevm to 0.40
 - Updated `geth` to 1.9.10
 
