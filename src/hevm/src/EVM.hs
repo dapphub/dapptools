@@ -1490,6 +1490,7 @@ askSMT addr pcval jumpcondition continue = do
 
    where -- Only one path is possible
          choosePath (Known w) = do assign result Nothing
+                                   pathConditions <>= [litWord w .== jumpcondition]
                                    iteration <- use (iterations . at (addr, pcval) . non 0)
                                    assign (cache . path . at ((addr, pcval), iteration)) (Just (Known w))
                                    assign (iterations . at (addr, pcval)) (Just (iteration + 1))
