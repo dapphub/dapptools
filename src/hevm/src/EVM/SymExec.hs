@@ -65,12 +65,18 @@ symAbiArg (AbiBytesType n) | n <= 32 = do x <- sbytes32
                            | otherwise = error "bad type"
 
 -- TODO: is this encoding correct?
-symAbiArg (AbiArrayType len typ) = do args <- mapM symAbiArg (replicate len typ)
-                                      return (litBytes (encodeAbiValue (AbiUInt 256 (fromIntegral len))) <> (concat $ fst <$> args), 32 + (sum $ snd <$> args))
+symAbiArg (AbiArrayType len typ) =
+  do args <- mapM symAbiArg (replicate len typ)
+     return (litBytes (encodeAbiValue (AbiUInt 256 (fromIntegral len))) <> (concat $ fst <$> args),
+             32 + (sum $ snd <$> args))
 
-symAbiArg (AbiTupleType tuple) = do args <- mapM symAbiArg (toList tuple)
-                                    return (concat $ fst <$> args, sum $ snd <$> args)
-symAbiArg n = error $ "Unsupported symbolic abiencoding for" <> show n <> ". Please file an issue at https://github.com/dapphub/dapptools if you really need this."
+symAbiArg (AbiTupleType tuple) =
+  do args <- mapM symAbiArg (toList tuple)
+     return (concat $ fst <$> args, sum $ snd <$> args)
+symAbiArg n =
+  error $ "Unsupported symbolic abiencoding for"
+    <> show n
+    <> ". Please file an issue at https://github.com/dapphub/dapptools if you really need this."
 
 contractWithStore :: ContractCode -> Storage -> Contract
 contractWithStore theContractCode store = initialContract theContractCode & set storage store
@@ -239,10 +245,11 @@ verify preState maxIter rpcinfo maybepost = do
     Nothing -> do io $ putStrLn "Q.E.D."
                   return $ Left (preState, pruneDeadPaths results)
 
+-- | Compares two contract runtimes for trace equivalence by running two VMs and comparing the end states.
 equivalenceCheck :: ByteString -> ByteString -> Maybe Integer -> Maybe (Text, [AbiType]) -> Query (Either ([VM], [VM]) VM)
 equivalenceCheck bytecodeA bytecodeB maxiter signature' = do
   preStateA <- abstractVM signature' [] bytecodeA SymbolicS
-           
+
   let preself = preStateA ^. state . contract
       precaller = preStateA ^. state . caller
       callvalue' = preStateA ^. state . callvalue
@@ -254,20 +261,32 @@ equivalenceCheck bytecodeA bytecodeB maxiter signature' = do
   smtState <- queryState
   (aVMs, bVMs) <- both (\x -> io $ fst <$> runStateT (interpret (Fetch.oracle smtState Nothing) maxiter Stepper.runFully) x)
     (preStateA, preStateB)
+  -- Check each pair of endstates for equality:
   let differingEndStates = uncurry distinct <$> [(a,b) | a <- pruneDeadPaths aVMs, b <- pruneDeadPaths bVMs]
-      distinct a b = let (aPath, bPath) = both' (view pathConditions) (a, b)
-                         (aSelf, bSelf) = both' (view (state . contract)) (a, b)
-                         (aEnv, bEnv) = both' (view (env . contracts)) (a, b)
-                         (aResult, bResult) = both' (view result) (a, b)
-                         (Symbolic aStorage, Symbolic bStorage) = (view storage (aEnv ^?! ix aSelf), view storage (bEnv ^?! ix bSelf))
-                         differingResults = case (aResult, bResult) of
-                           (Just (VMSuccess aOut), Just (VMSuccess bOut)) -> aOut ./= bOut .|| aStorage ./= bStorage .|| fromBool (aSelf /= bSelf)
-                           (Just (VMFailure UnexpectedSymbolicArg), _) -> error $ "Unexpected symbolic argument at opcode: " <> maybe "??" show (vmOp a) <> ". Not supported (yet!)"
-                           (_, Just (VMFailure UnexpectedSymbolicArg)) -> error $ "Unexpected symbolic argument at opcode: " <> maybe "??" show (vmOp b) <> ". Not supported (yet!)"
-                           (Just (VMFailure _), Just (VMFailure _)) -> sFalse
-                           (Just _, Just _) -> sTrue
-                           _ -> error "Internal error during symbolic execution (should not be possible)"
-                     in sAnd aPath .&& sAnd bPath .&& differingResults
+      distinct a b =
+        let (aPath, bPath) = both' (view pathConditions) (a, b)
+            (aSelf, bSelf) = both' (view (state . contract)) (a, b)
+            (aEnv, bEnv) = both' (view (env . contracts)) (a, b)
+            (aResult, bResult) = both' (view result) (a, b)
+            (Symbolic aStorage, Symbolic bStorage) = (view storage (aEnv ^?! ix aSelf), view storage (bEnv ^?! ix bSelf))
+            differingResults = case (aResult, bResult) of
+
+              (Just (VMSuccess aOut), Just (VMSuccess bOut)) ->
+                aOut ./= bOut .|| aStorage ./= bStorage .|| fromBool (aSelf /= bSelf)
+
+              (Just (VMFailure UnexpectedSymbolicArg), _) ->
+                error $ "Unexpected symbolic argument at opcode: " <> maybe "??" show (vmOp a) <> ". Not supported (yet!)"
+
+              (_, Just (VMFailure UnexpectedSymbolicArg)) ->
+                error $ "Unexpected symbolic argument at opcode: " <> maybe "??" show (vmOp a) <> ". Not supported (yet!)"
+
+              (Just (VMFailure _), Just (VMFailure _)) -> sFalse
+
+              (Just _, Just _) -> sTrue
+
+              _ -> error "Internal error during symbolic execution (should not be possible)"
+
+        in sAnd aPath .&& sAnd bPath .&& differingResults
   -- If there exists a pair of endstates where this is not the case,
   -- the following constraint is satisfiable
   resetAssertions
@@ -306,5 +325,3 @@ showCounterexample vm maybesig = do
     print (Addr caller'')
     putStrLn "Callvalue:"
     print callvalue'
-
-
