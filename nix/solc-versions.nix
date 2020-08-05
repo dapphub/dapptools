@@ -48,5 +48,5 @@ rec {
     solc_0_6_12  ={ rev = "d8136afba5e0442b5bd5f4c83a670e6696f6f350"; sha256 = "01v6vzq57c5l8i79cmhxvf50hi9r75mbqggd0wand9sjzz9q72fi"; };
   };
 
-  unreleased_x86_64-darwin = removeAttrs unreleased_x86_64-linux [ "solc_0_4_18" ];
+  unreleased_x86_64-darwin = removeAttrs unreleased_x86_64-linux [ "solc_0_4_18" "solc_0_6_12" ];
 }
