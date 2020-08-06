@@ -8,6 +8,8 @@
 - z3 updated to 4.8.7
 - Generate more interesting values in property based testing, 
  and implement proper shrinking for all abi values.
+- Fixed soundness bug when using KECCAK or SHA256 opcode/precompile
+- Fixed an issue in debug mode where backstepping could cause path information to be forgotten
 
 ### Added
 
