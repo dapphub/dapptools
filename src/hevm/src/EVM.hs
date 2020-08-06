@@ -128,7 +128,7 @@ data Query where
   PleaseAskSMT        :: SymWord -> [SBool] -> (JumpCondition -> EVM ()) -> Query
 
 data Choose where
-  PleaseChoosePath    :: (Word -> EVM ()) -> Choose
+  PleaseChoosePath    :: (Bool -> EVM ()) -> Choose
 
 instance Show Query where
   showsPrec _ = \case
@@ -152,14 +152,16 @@ instance Show Choose where
 type EVM a = State VM a
 
 type CodeLocation = (Addr, Int)
-data JumpCondition = Known Word | Unknown | Inconsistent
+
+-- | The possible return values of a SMT query regarding JUMPI
+data JumpCondition = Iszero Bool | Unknown | Inconsistent
   deriving (Show)
 
 -- | The cache is data that can be persisted for efficiency:
 -- any expensive query that is constant at least within a block.
 data Cache = Cache
   { _fetched :: Map Addr Contract,
-    _path :: Map (CodeLocation, Int) JumpCondition
+    _path :: Map (CodeLocation, Int) Bool
   } deriving Show
 
 -- | A way to specify an initial VM state
@@ -958,10 +960,11 @@ exec1 = do
           case stk of
             (x:y:xs) -> forceConcrete x $ \x' ->
                 burn g_high $
-                  let jump 0 = assign (state . stack) xs >> next
-                      jump _ = checkJump x' xs
+                  let jump :: Bool -> EVM ()
+                      jump True = assign (state . stack) xs >> next
+                      jump _    = checkJump x' xs
                   in case maybeLitWord y of
-                      Just y' -> jump y'
+                      Just y' -> jump (0 == y')
                       -- if the jump condition is symbolic, an smt query has to be made.
                       Nothing -> askSMT self (the state pc) y jump
             _ -> underrun
@@ -1472,7 +1475,7 @@ pushTo f x = f %= (x :)
 pushToSequence :: MonadState s m => ASetter s s (Seq a) (Seq a) -> a -> m ()
 pushToSequence f x = f %= (Seq.|> x)
 
-askSMT :: Addr -> Int -> SymWord -> (Word -> EVM ()) -> EVM ()
+askSMT :: Addr -> Int -> SymWord -> (Bool -> EVM ()) -> EVM ()
 askSMT addr pcval jumpcondition continue = do
   -- We keep track of how many times we have come across this particular
   -- (contract, pc) combination in the `iteration` mapping.
@@ -1482,7 +1485,7 @@ askSMT addr pcval jumpcondition continue = do
   -- already. So we first check the cache to see if the result is known
   use (cache . path . at ((addr, pcval), iteration)) >>= \case
      -- If the query has been done already, select path or select the only available
-     Just w -> choosePath w
+     Just w -> choosePath (Iszero w)
      -- If this is a new query, run the query, cache the result
      -- increment the iterations and select appropriate path
      Nothing -> do pathconds <- use pathConditions
@@ -1491,14 +1494,14 @@ askSMT addr pcval jumpcondition continue = do
 
    where -- Only one path is possible
          choosePath :: JumpCondition -> EVM ()
-         choosePath (Known w) = do assign result Nothing
-                                   pathConditions <>= [litWord w .== jumpcondition]
-                                   iteration <- use (iterations . at (addr, pcval) . non 0)
-                                   assign (cache . path . at ((addr, pcval), iteration)) (Just (Known w))
-                                   assign (iterations . at (addr, pcval)) (Just (iteration + 1))
-                                   continue w
+         choosePath (Iszero v) = do assign result Nothing
+                                    pathConditions <>= if v then [litWord 0 .== jumpcondition] else [litWord 0 ./= jumpcondition]
+                                    iteration <- use (iterations . at (addr, pcval) . non 0)
+                                    assign (cache . path . at ((addr, pcval), iteration)) (Just v)
+                                    assign (iterations . at (addr, pcval)) (Just (iteration + 1))
+                                    continue v
          -- Both paths are possible; we ask for more input
-         choosePath Unknown = assign result . Just . VMFailure . Choose . PleaseChoosePath $ choosePath . Known
+         choosePath Unknown = assign result . Just . VMFailure . Choose . PleaseChoosePath $ choosePath . Iszero
          -- None of the paths are possible; fail this branch
          choosePath Inconsistent = vmError DeadPath
 

@@ -161,19 +161,17 @@ interpret fetcher maxIter =
                      addr = view (state . contract) vm
                      iters = view (iterations . at (addr, pc') . non 0) vm
                  in if num maxiter <= iters then
-                      vm ^?! (cache . path . ix ((addr, pc'), iters - 1)) & \case
+                      let lastChoice = vm ^?! (cache . path . ix ((addr, pc'), iters - 1))
                         -- When we have reached maxIterations, we take the choice that will hopefully
                         -- lead us out of here.
-                        Known 0 -> State.state (runState (continue 1)) >> interpret fetcher maxIter (k ())
-                        Known 1 -> State.state (runState (continue 0)) >> interpret fetcher maxIter (k ())
-                        n -> error ("I don't see how this could have happened: " <> show n)
-                    else do a <- State.state (runState (continue 0)) >> interpret fetcher maxIter (k ())
+                      in State.state (runState (continue (not lastChoice))) >> interpret fetcher maxIter (k ())
+                    else do a <- State.state (runState (continue True)) >> interpret fetcher maxIter (k ())
                             put vm
-                            b <- State.state (runState (continue 1)) >> interpret fetcher maxIter (k ())
+                            b <- State.state (runState (continue False)) >> interpret fetcher maxIter (k ())
                             return $ liftA2 (<>) a b
-               Nothing -> do a <- State.state (runState (continue 0)) >> interpret fetcher maxIter (k ())
+               Nothing -> do a <- State.state (runState (continue True)) >> interpret fetcher maxIter (k ())
                              put vm
-                             b <- State.state (runState (continue 1)) >> interpret fetcher maxIter (k ())
+                             b <- State.state (runState (continue False)) >> interpret fetcher maxIter (k ())
                              return $ liftA2 (<>) a b
         Stepper.Wait q ->
           do m <- liftIO (fetcher q)

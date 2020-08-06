@@ -519,7 +519,7 @@ appEvent st@(ViewVm s) (VtyEvent (V.EvKey (V.KChar 'p') [])) =
 appEvent (ViewVm s) (VtyEvent (V.EvKey (V.KChar '0') [])) =
   case view (uiVm . result) s of
     Just (VMFailure (Choose (PleaseChoosePath contin))) ->
-      takeStep (s & set uiVm (execState (contin 0) (view uiVm s)))
+      takeStep (s & set uiVm (execState (contin True) (view uiVm s)))
         StepNormally
         StepOne
     _ -> continue (ViewVm s)
@@ -528,7 +528,7 @@ appEvent (ViewVm s) (VtyEvent (V.EvKey (V.KChar '0') [])) =
 appEvent (ViewVm s) (VtyEvent (V.EvKey (V.KChar '1') [])) =
   case view (uiVm . result) s of
     Just (VMFailure (Choose (PleaseChoosePath contin))) ->
-      takeStep (s & set uiVm (execState (contin 1) (view uiVm s)))
+      takeStep (s & set uiVm (execState (contin False) (view uiVm s)))
         StepNormally
         StepOne
     _ -> continue (ViewVm s)
