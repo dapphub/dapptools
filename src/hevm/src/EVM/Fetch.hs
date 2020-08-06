@@ -173,16 +173,16 @@ oracle state info q = do
                           -- No. We are on an inconsistent path.
                           Unsat -> return $ continue EVM.Inconsistent
                           -- Yes. It must be 0.
-                          Sat -> return $ continue (EVM.Known 0)
+                          Sat -> return $ continue (EVM.Iszero True)
                           -- Assume 0 is still possible.
-                          Unk -> return $ continue (EVM.Known 0)
+                          Unk -> return $ continue (EVM.Iszero True)
             -- Sat means its possible for condition
             -- to be nonzero.
             Sat -> do jump <- checksat $ pathconds .&& jumpcondition .== 0
                       -- can it also be zero?
                       case jump of
                         -- No. It must be nonzero
-                        Unsat -> return $ continue (EVM.Known 1)
+                        Unsat -> return $ continue (EVM.Iszero False)
                         -- Yes. Both branches possible
                         Sat -> return $ continue EVM.Unknown
                         -- Explore both branches in case of timeout
