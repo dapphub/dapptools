@@ -212,27 +212,35 @@ verifyContract code' maxIter signature' concreteArgs storagemodel pre maybepost 
           InitCode b    -> b
           RuntimeCode b -> b
 
+pruneDeadPaths :: [VM] -> [VM]
+pruneDeadPaths =
+  filter $ \vm -> case view result vm of
+    Just (VMFailure DeadPath) -> False
+    _ -> True
+
+-- | Symbolically execute the VM and check all endstates against the postcondition, if available.
+-- Returns `Right VM` if the postcondition can be violated, where `VM` is a prestate counterexample,
+-- or `Left (VM, [VM])`, a pair of `prestate` and post vm states.
 verify :: VM -> Maybe Integer -> Maybe (Fetch.BlockNumber, Text) -> Maybe Postcondition -> Query (Either (VM, [VM]) VM)
 verify preState maxIter rpcinfo maybepost = do
   smtState <- queryState
   results <- io $ fst <$> runStateT (interpret (Fetch.oracle smtState rpcinfo) maxIter Stepper.runFully) preState
   case (maybepost, results) of
     (Just post, Right res) -> do
-      let postC = sOr $ fmap (\postState -> (sAnd (view pathConditions postState)) .&& sNot (post (preState, postState))) res
-                  -- is there any path which can possibly violate
-                  -- the postcondition?
+      let livePaths = pruneDeadPaths res
+          postC = sOr $ fmap (\postState -> (sAnd (view pathConditions postState)) .&& sNot (post (preState, postState))) livePaths
       resetAssertions
       constrain postC
       io $ putStrLn "checking postcondition..."
       checkSat >>= \case
         Unk -> do io $ putStrLn "postcondition query timed out"
-                  return $ Left (preState, res)
+                  return $ Left (preState, livePaths)
         Unsat -> do io $ putStrLn "Q.E.D."
-                    return $ Left (preState, res)
+                    return $ Left (preState, livePaths)
         Sat -> return $ Right preState
 
     (Nothing, Right res) -> do io $ putStrLn "Q.E.D."
-                               return $ Left (preState, res)
+                               return $ Left (preState, pruneDeadPaths res)
 
     (_, Left _) -> error "unexpected error during symbolic execution"
 
@@ -256,7 +264,7 @@ equivalenceCheck bytecodeA bytecodeB maxiter signature' = do
     (Right _, Left errB) -> error $ "B Failed: " <> show errB
     (Left errA, Left errB) -> error $ "A Failed: " <> show errA <> "\nand B Failed:" <> show errB
     (Right aVMs, Right bVMs) -> do
-      let differingEndStates = uncurry distinct <$> [(a,b) | a <- aVMs, b <- bVMs]
+      let differingEndStates = uncurry distinct <$> [(a,b) | a <- pruneDeadPaths aVMs, b <- pruneDeadPaths bVMs]
           distinct a b = let (aPath, bPath) = both' (view pathConditions) (a, b)
                              (aSelf, bSelf) = both' (view (state . contract)) (a, b)
                              (aEnv, bEnv) = both' (view (env . contracts)) (a, b)
@@ -278,7 +286,7 @@ equivalenceCheck bytecodeA bytecodeB maxiter signature' = do
       checkSat >>= \case
          Unk -> error "solver said unknown!"
          Sat -> return $ Right preStateA
-         Unsat -> return $ Left (aVMs, bVMs)
+         Unsat -> return $ Left (pruneDeadPaths aVMs, pruneDeadPaths bVMs)
 
 both' :: (a -> b) -> (a, a) -> (b, b)
 both' f (x, y) = (f x, f y)
