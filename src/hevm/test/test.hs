@@ -432,6 +432,24 @@ main = defaultMain $ testGroup "hevm"
             |]
           Left (_, res) <- runSMTWith z3 $ query $ checkAssert (RuntimeCode c) Nothing Nothing []
           putStrLn $ "successfully explored: " <> show (length res) <> " paths"
+
+       ,
+
+        testCase "keccak soundness" $ do
+          Just c <- solcRuntime "C"
+            [i|
+              contract C {
+                mapping (uint => mapping (uint => uint)) maps;
+
+                  function f(uint x, uint y) public view {
+                  assert(maps[y][0] == maps[x][0]);
+                }
+              }
+            |]
+          -- should find a counterexample
+          Right counterexample <- runSMTWith cvc4 $ query $ checkAssert (RuntimeCode c) Nothing Nothing []
+          putStrLn $ "found counterexample:"
+
     ]
   , testGroup "Equivalence checking"
     [
