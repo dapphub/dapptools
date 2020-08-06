@@ -167,16 +167,15 @@ oracle state info q = do
          case noJump of
             -- Unsat means condition
             -- cannot be nonzero
-            -- We assume it to be zero in this case.
-            -- Theoretically, it is possible that our pathconditions
-            -- are inconsistent, either due to:
-            -- a) a false assumption
-            -- b) a previous timeout
-            -- We allow ourselves to ignore these cases with the motivation that
-            -- a) should be checked elsewhere and,
-            -- if b) occurs, we are in a unreachable path, and its better
-            -- to not keep on branching anyway.
-            Unsat -> return $ continue (EVM.Known 0)
+            Unsat -> do jump <- checksat $ pathconds .&& jumpcondition .== 0
+                        -- can it be zero?
+                        case jump of
+                          -- No. We are on an inconsistent path.
+                          Unsat -> return $ continue EVM.Inconsistent
+                          -- Yes. It must be 0.
+                          Sat -> return $ continue (EVM.Known 0)
+                          -- Assume 0 is still possible.
+                          Unk -> return $ continue (EVM.Known 0)
             -- Sat means its possible for condition
             -- to be nonzero.
             Sat -> do jump <- checksat $ pathconds .&& jumpcondition .== 0

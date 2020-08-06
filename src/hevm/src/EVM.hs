@@ -82,6 +82,7 @@ data Error
   | MaxCodeSizeExceeded Word Word
   | PrecompileFailure
   | UnexpectedSymbolicArg
+  | DeadPath
 deriving instance Show Error
 
 -- | The possible result states of a VM
@@ -151,7 +152,7 @@ instance Show Choose where
 type EVM a = State VM a
 
 type CodeLocation = (Addr, Int)
-data JumpCondition = Known Word | Unknown
+data JumpCondition = Known Word | Unknown | Inconsistent
   deriving (Show)
 
 -- | The cache is data that can be persisted for efficiency:
@@ -1489,6 +1490,7 @@ askSMT addr pcval jumpcondition continue = do
                      jumpcondition pathconds choosePath
 
    where -- Only one path is possible
+         choosePath :: JumpCondition -> EVM ()
          choosePath (Known w) = do assign result Nothing
                                    pathConditions <>= [litWord w .== jumpcondition]
                                    iteration <- use (iterations . at (addr, pcval) . non 0)
@@ -1496,14 +1498,9 @@ askSMT addr pcval jumpcondition continue = do
                                    assign (iterations . at (addr, pcval)) (Just (iteration + 1))
                                    continue w
          -- Both paths are possible; we ask for more input
-         choosePath Unknown = assign result . Just . VMFailure . Choose $ PleaseChoosePath
-           (\selected -> do
-               pathConditions <>= [litWord selected .== jumpcondition]
-               iteration <- use (iterations . at (addr, pcval) . non 0)
-               assign (cache . path . at ((addr, pcval), iteration)) (Just (Known selected))
-               assign result Nothing
-               assign (iterations . at (addr, pcval)) (Just (iteration + 1))
-               continue selected)
+         choosePath Unknown = assign result . Just . VMFailure . Choose . PleaseChoosePath $ choosePath . Known
+         -- None of the paths are possible; fail this branch
+         choosePath Inconsistent = vmError DeadPath
 
 
 fetchAccount :: Addr -> (Contract -> EVM ()) -> EVM ()
