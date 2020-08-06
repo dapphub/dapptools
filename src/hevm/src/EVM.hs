@@ -2549,8 +2549,7 @@ symkeccakN :: SInteger -> SInteger -> SWord 256
 symkeccakN = uninterpret "keccak"
 
 toSInt :: [SWord 8] -> SInteger
-toSInt bs = sum $ zipWith (\a i -> sFromIntegral $ a * 256 ^ i) bs [0..]
-
+toSInt bs = sum $ zipWith (\a i -> sFromIntegral a * 256 ^ i) bs [0..]
 
 -- | Although we'd like to define this directly as an uninterpreted function,
 -- we cannot because [a] is not a symbolic type. We must convert the list into a suitable
