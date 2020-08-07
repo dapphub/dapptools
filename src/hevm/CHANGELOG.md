@@ -10,6 +10,7 @@
  and implement proper shrinking for all abi values.
 - Fixed soundness bug when using KECCAK or SHA256 opcode/precompile
 - Fixed an issue in debug mode where backstepping could cause path information to be forgotten
+- Ensure that pathconditions are consistent when branching, and end the execution with VMFailure: DeadPath if this is not the case
 
 ### Added
 
