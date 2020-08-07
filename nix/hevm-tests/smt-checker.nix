@@ -93,6 +93,8 @@ let
 
     # these can pass with high enough timeout and --max-iterations
     # but we keep them disabled for now to speed up the tests
+    "loops/for_loop_array_assignment_storage_memory.sol"
+    "loops/while_nested_break.sol"
     "operators/delete_array.sol"
     "operators/delete_array_2d.sol"
     "operators/delete_array_index_2d.sol"
