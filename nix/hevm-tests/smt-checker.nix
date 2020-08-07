@@ -39,7 +39,9 @@ let
     "loops/while_loop_simple_5.sol"
     "loops/do_while_1_false_positives.sol"
     "loops/while_loop_array_assignment_storage_storage.sol"
+    "loops/while_nested_break_fail.sol"
     "operators/delete_array_index_2d.sol"
+
   ];
 
   ignored = [
@@ -94,9 +96,11 @@ let
     "operators/delete_array.sol"
     "operators/delete_array_2d.sol"
     "operators/delete_array_index_2d.sol"
+    "types/array_dynamic_3_fail.sol"
+    "types/array_mapping_aliasing_2.sol"
 
     # --- hevm timeout ---
-
+    "types/array_aliasing_storage_1.sol"
     "types/array_aliasing_memory_1.sol"
     "types/array_aliasing_memory_2.sol"
     "types/array_aliasing_memory_3.sol"
@@ -268,7 +272,7 @@ let
       iterations=""
       boundedTests=(${toString bounded})
       if [[ " ''${boundedTests[@]} " =~ " ''${testName} " ]]; then
-        iterations="--max-iterations 5"
+        iterations="--max-iterations 3"
       fi
 
       ${echo}
