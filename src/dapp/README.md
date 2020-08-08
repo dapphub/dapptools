@@ -52,6 +52,63 @@ A local `.dapprc` can also be defined in your project's root, which overrides va
 
 `dapp` is distrubuted as part of the [Dapp tools suite](../../README.md).
 
+## Using dapp test
+
+dapp tests are written in Solidity using the `ds-test` module. To install it, run
+```sh
+dapp install ds-test
+```
+
+Every contract which inherits from `DSTest` will be treated as a test contract, and will be assumed to have a public `setUp()` function, which will be run before every test.
+
+To write a test function, simply prefix the function name by `test`.
+
+Example:
+```sol
+import "ds-test/test.sol";
+
+contract A {
+  function isEven(uint x) returns (bool) {
+    return x % 2 == 0;
+  }
+}
+
+contract C is DSTest {
+  A a;
+  function setUp() public {
+    a = new A();
+  }
+  function test_isEven() external {
+    assertTrue(a.isEven(4);
+  }
+}
+```
+
+Run `dapp test` to run the test suite.
+
+
+### `dapp test` flags:
+
+If you provide `--rpc-url`, state will be fetched via rpc. Local changes take priority.
+
+You can configure the testing environment using [hevm specific environment variables](https://github.com/dapphub/dapptools/tree/master/src/hevm#environment-variables).
+
+To modify local state even more, you can use [hevm cheat codes](https://github.com/dapphub/dapptools/tree/master/src/hevm#cheat-codes).
+
+If your test function takes arguments, they will be randomly instantiated and the function will be run multiple times.
+
+The number of times run is configurable using `--fuzz-runs`.
+
+To step through a test in `hevm` interactive debugger, use `dapp debug`.
+
+`dapp --use` allows for configuration of the solidity version.
+```
+dapp --use solc:0.5.12 test
+```
+
+By default, `dapp test` also recompiles your contracts. 
+To skip this, you can set the environment variable `DAPP_SKIP_BUILD=1`.
+
 ### Alternative install
 If you don't want to use Nix, we provide an alternative installation mechanism using `make` below.
 
