@@ -6,6 +6,8 @@
 ### Changed
 
 - z3 updated to 4.8.7
+- Generate more interesting values in property based testing, 
+ and implement proper shrinking for all abi values.
 
 ### Added
 
