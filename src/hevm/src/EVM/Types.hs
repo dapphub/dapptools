@@ -219,17 +219,19 @@ truncpad n xs = if m > n then take n xs
                 else mappend xs (replicate (n - m) 0)
   where m = length xs
 
-
-word :: ByteString -> W256
-word xs = case Cereal.runGet m (padLeft 32 xs) of
-            Left _ -> error "internal error"
-            Right x -> W256 x
+word256 :: ByteString -> Word256
+word256 xs = case Cereal.runGet m (padLeft 32 xs) of
+               Left _ -> error "internal error"
+               Right x -> x
   where
     m = do a <- Cereal.getWord64be
            b <- Cereal.getWord64be
            c <- Cereal.getWord64be
            d <- Cereal.getWord64be
            return $ fromHiAndLo (fromHiAndLo a b) (fromHiAndLo c d)
+
+word :: ByteString -> W256
+word = W256 . word256
 
 byteAt :: (Bits a, Bits b, Integral a, Num b) => a -> Int -> b
 byteAt x j = num (x `shiftR` (j * 8)) .&. 0xff
