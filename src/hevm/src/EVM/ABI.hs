@@ -64,7 +64,7 @@ import Data.Monoid        ((<>))
 import Data.Text          (Text, pack)
 import Data.Text.Encoding (encodeUtf8)
 import Data.Vector        (Vector)
-import Data.Word          (Word32, Word8)
+import Data.Word          (Word32)
 import Data.List          (intercalate)
 import GHC.Generics
 
@@ -390,11 +390,6 @@ pack32 n xs =
   sum [ shiftL x ((n - i) * 32)
       | (x, i) <- zip (map fromIntegral xs) [1..] ]
 
-pack8 :: Int -> [Word8] -> Word256
-pack8 n xs =
-  sum [ shiftL x ((n - i) * 8)
-      | (x, i) <- zip (map fromIntegral xs) [1..] ]
-
 asUInt :: Integral i => Int -> (i -> a) -> Get a
 asUInt n f = (\(AbiUInt _ x) -> f (fromIntegral x)) <$> getAbi (AbiUIntType n)
 
@@ -443,10 +438,7 @@ genAbiValue = \case
    AbiTupleType ts ->
      AbiTuple <$> mapM genAbiValue ts
   where
-    genUInt n =
-       do x <- pack8 (div n 8) <$> replicateM n arbitrary
-          pure . AbiUInt n $
-            if n == 256 then x else mod x (2 ^ n)
+    genUInt n = AbiUInt n <$> arbitraryIntegralWithMax n
 
 instance Arbitrary AbiType where
   arbitrary = sized $ \n -> oneof $ -- prevent empty tuples
@@ -473,12 +465,20 @@ instance Arbitrary AbiValue where
       Vector.toList v ++
         map (AbiArrayDynamic t . Vector.fromList)
             (shrinkList shrink (Vector.toList v))
+    AbiBytesDynamic b -> AbiBytesDynamic . BS.pack <$> shrinkList shrinkIntegral (BS.unpack b)
+    AbiString b -> AbiString . BS.pack <$> shrinkList shrinkIntegral (BS.unpack b)
+    AbiBytes n a | n <= 32 -> shrink $ AbiUInt (n * 8) (word256 a)
+    --bytesN for N > 32 don't really exist right now anyway..
+    AbiBytes _ _ | otherwise -> []
     AbiArray _ t v ->
       Vector.toList v ++
         map (\x -> AbiArray (length x) t (Vector.fromList x))
             (shrinkList shrink (Vector.toList v))
     AbiTuple v -> Vector.toList $ AbiTuple . Vector.fromList . shrink <$> v
-    _ -> []
+    AbiUInt n a -> AbiUInt n <$> (shrinkIntegral a)
+    AbiInt n a -> AbiInt n <$> (shrinkIntegral a)
+    AbiBool b -> AbiBool <$> shrink b
+    AbiAddress a -> AbiAddress <$> shrinkIntegral a
 
 
 -- Bool synonym with custom read instance
@@ -528,4 +528,15 @@ listP parser = between (char '[') (char ']') ((do skipSpaces
                                                   return a) `sepBy` (char ','))
 
 
-
+-- A modification of 'arbitrarySizedBoundedIntegral' quickcheck library
+-- which takes the maxbound explicitly rather than relying on a Bounded instance.
+arbitraryIntegralWithMax :: (Integral a) => Int -> Gen a
+arbitraryIntegralWithMax maxbound =
+  sized $ \s ->
+    do let mn = 0
+           mx = maxbound
+           bits n | n `quot` 2 == 0 = 0
+                  | otherwise = 1 + bits (n `quot` 2)
+           k  = 2^(s*(bits mn `max` bits mx `max` 40) `div` 100)
+       n <- choose (toInteger mn `max` (-k), toInteger mx `min` k)
+       return (fromInteger n `asTypeOf` mn)
