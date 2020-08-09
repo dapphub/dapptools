@@ -478,7 +478,8 @@ instance Arbitrary AbiValue where
     AbiUInt n a -> AbiUInt n <$> (shrinkIntegral a)
     AbiInt n a -> AbiInt n <$> (shrinkIntegral a)
     AbiBool b -> AbiBool <$> shrink b
-    AbiAddress a -> AbiAddress <$> shrinkIntegral a
+    AbiAddress a -> [AbiAddress 0xacab, AbiAddress 0xdeadbeef, AbiAddress 0xbabeface]
+      <> (AbiAddress <$> shrinkIntegral a)
 
 
 -- Bool synonym with custom read instance
