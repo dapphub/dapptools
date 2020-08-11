@@ -181,10 +181,7 @@ maxIterationsReached vm (Just maxIter) =
   let codelocation = getCodeLocation vm
       iters = view (iterations . at codelocation . non 0) vm
   in if num maxIter <= iters
-     then
-       case view (cache . path . at (codelocation, iters - 1)) vm of
-         Just (IsZero b) -> Just b
-         n -> error ("I don't see how this could have happened: " <> show n)
+     then view (cache . path . at (codelocation, iters - 1)) vm
      else Nothing
 
 type Precondition = VM -> SBool
@@ -228,7 +225,7 @@ verify preState maxIter rpcinfo maybepost = do
   results <- io $ fst <$> runStateT (interpret (Fetch.oracle smtState rpcinfo) maxIter Stepper.runFully) preState
   case maybepost of
     (Just post) -> do
-      let livePaths = pruneDeadPaths res
+      let livePaths = pruneDeadPaths results
           postC = sOr $ fmap (\postState -> (sAnd (view pathConditions postState)) .&& sNot (post (preState, postState))) livePaths
       -- is there any path which can possibly violate
       -- the postcondition?

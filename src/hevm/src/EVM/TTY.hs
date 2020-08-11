@@ -450,8 +450,7 @@ appEvent (ViewVm s) (VtyEvent (V.EvKey (V.KChar '0') [])) =
   case view (uiVm . result) s of
     Just (VMFailure (Choose (PleaseChoosePath contin))) ->
       takeStep (s & set uiStepper (Stepper.evm (contin True) >> (view uiStepper s)))
-        StepNormally
-        StepOne
+        (Step 1)
     _ -> continue (ViewVm s)
 
 -- Vm Overview: 1 - choose jump
@@ -459,8 +458,7 @@ appEvent (ViewVm s) (VtyEvent (V.EvKey (V.KChar '1') [])) =
   case view (uiVm . result) s of
     Just (VMFailure (Choose (PleaseChoosePath contin))) ->
       takeStep (s & set uiStepper (Stepper.evm (contin False) >> (view uiStepper s)))
-        StepNormally
-        StepOne
+        (Step 1)
     _ -> continue (ViewVm s)
 
 
