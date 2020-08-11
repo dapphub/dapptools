@@ -553,6 +553,7 @@ word32Bytes x = BS.pack [byteAt x (3 - i) | i <- [0..3]]
 setupCall :: TestVMParams -> Text -> AbiValue -> EVM ()
 setupCall TestVMParams{..} sig args  = do
   resetState
+  use (env . contracts) >>= assign (tx . txReversion)
   assign (tx . isCreate) False
   loadContract testAddress
   assign (state . calldata) $ (ConcreteBuffer $ abiMethod sig args, literal . num . BS.length $ abiMethod sig args)
