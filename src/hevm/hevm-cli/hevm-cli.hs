@@ -228,7 +228,7 @@ unitTestOptions :: Command Options.Unwrapped -> String -> IO UnitTestOptions
 unitTestOptions cmd testFile = do
   let root = fromMaybe "." (dappRoot cmd)
   srcInfo <- readSolc testFile >>= \case
-    Nothing -> error "Could not find read .sol.json file"
+    Nothing -> error "Could not read .sol.json file"
     Just (contractMap, sourceCache) ->
       pure $ dappInfo root contractMap sourceCache
 
