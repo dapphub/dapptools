@@ -665,7 +665,7 @@ exec1 = do
                                      -- (similarly to sha3Crack), and simply assert that injectivity holds for these
                                      -- particular invocations.
 
-                                     SymbolicBuffer bs -> do
+                                     StaticSymBuffer bs -> do
                                                    let hash' = symkeccak' bs
                                                        previousUsed = view (env . keccakUsed) vm
                                                    env . keccakUsed <>= [(bs, hash')]
@@ -714,9 +714,9 @@ exec1 = do
           limitStack 1 . burn g_base $
             next >> pushSym (the state callvalue)
 
-        -- op: CALLDATALOAD
-        0x35 -> stackOp1 (const g_verylow) $
-          \(S _ x) -> uncurry (readSWordWithBound (sFromIntegral x)) (the state calldata)
+        -- -- op: CALLDATALOAD
+        -- 0x35 -> stackOp1 (const g_verylow) $
+        --   \(S _ x) -> uncurry (readSWordWithBound (sFromIntegral x)) (the state calldata)
 
         -- op: CALLDATASIZE
         0x36 ->
@@ -732,7 +732,7 @@ exec1 = do
                   next
                   assign (state . stack) xs
                   case the state calldata of
-                    (SymbolicBuffer cd, cdlen) -> copyBytesToMemory (SymbolicBuffer [ite (i .<= cdlen) x 0 | (x, i) <- zip cd [1..]]) xSize xFrom xTo
+                    (StaticSymBuffer cd, cdlen) -> copyBytesToMemory (StaticSymBuffer [ite (i .<= cdlen) x 0 | (x, i) <- zip cd [1..]]) xSize xFrom xTo
                     -- when calldata is concrete,
                     -- the bound should always be equal to the bytestring length
                     (cd, _) -> copyBytesToMemory cd xSize xFrom xTo
@@ -1351,7 +1351,7 @@ executePrecompile preCompileAddr gasCap inOffset inSize outOffset outSize xs  = 
           let
             hash = case input of
                      ConcreteBuffer input' -> ConcreteBuffer $ BS.pack $ BA.unpack $ (Crypto.hash input' :: Digest SHA256)
-                     SymbolicBuffer input' -> SymbolicBuffer $ symSHA256 input'
+                     StaticSymBuffer input' -> StaticSymBuffer $ symSHA256 input'
           in do
             assign (state . stack) (1 : xs)
             assign (state . returndata) hash
@@ -1769,7 +1769,7 @@ forceConcrete6 (k,l,m,n,o,p) continue = case (maybeLitWord k, maybeLitWord l, ma
   _ -> vmError UnexpectedSymbolicArg
 
 forceConcreteBuffer :: Buffer -> (ByteString -> EVM ()) -> EVM ()
-forceConcreteBuffer (SymbolicBuffer b) continue = case maybeLitBytes b of
+forceConcreteBuffer (StaticSymBuffer b) continue = case maybeLitBytes b of
   Nothing -> vmError UnexpectedSymbolicArg
   Just bs -> continue bs
 forceConcreteBuffer (ConcreteBuffer b) continue = continue b
@@ -1820,7 +1820,7 @@ cheat (inOffset, inSize) (outOffset, outSize) = do
                   vmError (BadCheatCode (Just abi))
                 Just (argTypes, action) ->
                   case input of
-                    SymbolicBuffer _ -> vmError UnexpectedSymbolicArg
+                    StaticSymBuffer _ -> vmError UnexpectedSymbolicArg
                     ConcreteBuffer input' ->
                       case runGetOrFail
                              (getAbiSeq (length argTypes) argTypes)
@@ -2062,7 +2062,7 @@ finishFrame how = do
             ErrorTrace e
           FrameReverted (ConcreteBuffer output) ->
             ErrorTrace (Revert output)
-          FrameReverted (SymbolicBuffer output) ->
+          FrameReverted (StaticSymBuffer output) ->
             ErrorTrace (Revert (forceLitBytes output))
           FrameReturned output ->
             ReturnTrace output (view frameContext nextFrame)
@@ -2184,13 +2184,17 @@ accessMemoryWord
 accessMemoryWord fees x = accessMemoryRange fees x 32
 
 copyBytesToMemory
-  :: Buffer -> Word -> Word -> Word -> EVM ()
+  :: Buffer -> SymWord -> SymWord -> SymWord -> EVM ()
 copyBytesToMemory bs size xOffset yOffset =
-  if size == 0 then noop
-  else do
-    mem <- use (state . memory)
-    assign (state . memory) $
-      writeMemory bs size xOffset yOffset mem
+  case maybeLitWord size of
+    Just size' -> 
+      if size' == 0 then noop
+      else copyBytes
+    Nothing -> copyBytes
+  where copyBytes = do
+          mem <- use (state . memory)
+          assign (state . memory) $
+            writeMemory bs size xOffset yOffset mem
 
 copyCallBytesToMemory
   :: Buffer -> Word -> Word -> Word -> EVM ()
@@ -2540,7 +2544,7 @@ costOfPrecompile (FeeSchedule {..}) precompileAddr input =
     -- MODEXP
     0x5 -> num $ (f (num (max lenm lenb)) * num (max lene' 1)) `div` (num g_quaddivisor)
       where input' = case input of
-              SymbolicBuffer _ -> error "unsupported: symbolic MODEXP gas cost calc"
+              StaticSymBuffer _ -> error "unsupported: symbolic MODEXP gas cost calc"
               ConcreteBuffer b -> b
             (lenb, lene, lenm) = parseModexpLength input'
             lene' | lene <= 32 && ez = 0
@@ -2564,7 +2568,7 @@ costOfPrecompile (FeeSchedule {..}) precompileAddr input =
     0x8 -> num $ ((len input) `div` 192) * (num g_pairing_point) + (num g_pairing_base)
     -- BLAKE2
     0x9 -> let input' = case input of
-                         SymbolicBuffer _ -> error "unsupported: symbolic BLAKE2B gas cost calc"
+                         StaticSymBuffer _ -> error "unsupported: symbolic BLAKE2B gas cost calc"
                          ConcreteBuffer b -> b
            in g_fround * (num $ asInteger $ lazySlice 0 4 input')
     _ -> error ("unimplemented precompiled contract " ++ show precompileAddr)
