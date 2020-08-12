@@ -177,10 +177,7 @@ checkFailures UnitTestOptions { .. } method args bailed = do
 fuzzTest :: UnitTestOptions -> Text -> [AbiType] -> VM -> Property
 fuzzTest opts sig types vm = forAllShow (genAbiValue (AbiTupleType $ Vector.fromList types)) (show . ByteStringS . encodeAbiValue)
   $ \args -> ioProperty $
-    fst <$> (runStateT (interpret (oracle opts) (runUnitTest opts sig args)) vm)
-    -- >>= \case
-    --   (Left _, _) -> return False
-    --   (Right b, _) -> return b
+    fst <$> runStateT (interpret (oracle opts) (runUnitTest opts sig args)) vm
 
 tick :: Text -> IO ()
 tick x = Text.putStr x >> hFlush stdout
