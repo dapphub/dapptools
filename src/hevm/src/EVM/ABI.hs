@@ -536,11 +536,11 @@ listP parser = between (char '[') (char ']') ((do skipSpaces
 arbitraryIntegralWithMax :: (Integral a) => Int -> Gen a
 arbitraryIntegralWithMax maxbound =
   sized $ \s ->
-    do let mn = 0
+    do let mn = 0 :: Int
            mx = maxbound
            bits n | n `quot` 2 == 0 = 0
                   | otherwise = 1 + bits (n `quot` 2)
            k  = 2^(s*(bits mn `max` bits mx `max` 40) `div` 100)
        smol <- choose (toInteger mn `max` (-k), toInteger mx `min` k)
        mid <- choose (0, maxbound)
-       elements [fromIntegral smol, fromIntegral mid, fromIntegral (0 - smol)]
+       elements [fromIntegral smol, fromIntegral mid, fromIntegral (maxbound - (fromIntegral smol))]
