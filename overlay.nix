@@ -79,7 +79,7 @@ in rec {
   ).overrideAttrs (_: { postInstall = "cp $out/bin/{jays,jshon}"; });
 
   # Override buggy jshon program with Haskell-based replacement.
-  jshon = self.jays;
+  #jshon = self.jays;
 
   seth = self.callPackage (import ./src/seth) {};
   dapp = self.callPackage (import ./src/dapp) {};
