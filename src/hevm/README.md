@@ -24,7 +24,7 @@ Note: some `hevm` commands (`dapp-test`, `interactive`) assume the use of the `d
       bc-test         Run an Ethereum Blockchain/GeneralState test
       merkle-test     Run a merkle test file and ensure the root matches
       compliance      Run Blockchain compliance report
-  
+
       emacs           Emacs console
       version         Show hevm version
       flatten         Concat all dependencies for a given source file
@@ -103,7 +103,7 @@ If an `assert` is reachable, a counterexample will be returned.
 The default value for `calldata` and `caller` are symbolic values, but can be specialized to concrete functions with their corresponding flags.
 
 One can also specialize specific arguments to a function signature, while leaving others abstract.
-If `--sig` is given, calldata is assumed to be of the form suggested by the function signature. With this flag, specific arguments can be instantiated to concrete values via the `--arg` flag. 
+If `--sig` is given, calldata is assumed to be of the form suggested by the function signature. With this flag, specific arguments can be instantiated to concrete values via the `--arg` flag.
 
 This is best illustrated through a few examples:
 
@@ -122,10 +122,10 @@ Calldata specialized to the bytestring `0xa9059cbb` followed by 32 symbolic byte
 hevm symbolic --sig "transfer(address,uint256)" --arg "<symbolic>" --arg 0 --code $(<dstoken.bin-runtime)
 ```
 
-If the `--get-models` flag is given, example input values will be returned for each possible execution path. 
+If the `--get-models` flag is given, example input values will be returned for each possible execution path.
 This can be useful for automatic test case generation.
 
-The default timeout for SMT queries is no timeout. If your program is taking longer than a couple of minutes to run, 
+The default timeout for SMT queries is no timeout. If your program is taking longer than a couple of minutes to run,
 you can experiment with configuring the timeout to somewhere around 10s by doing `--smttimeout 10000`
 
 Storage can take one of three forms, defaulting to `SymbolicS` unless `--create` is provided, in which case it defaults to `InitialS`:
@@ -143,7 +143,7 @@ Minimum required flags:
 Run an EVM computation using specified parameters, using an interactive debugger when `--debug` flag is given.
 
 ```sh
-Usage: hevm exec [--code TEXT] [--calldata TEXT] [--address ADDR] 
+Usage: hevm exec [--code TEXT] [--calldata TEXT] [--address ADDR]
                  [--caller ADDR] [--origin ADDR] [--coinbase ADDR]
                  [--value W256] [--nonce W256] [--gas W256]
                  [--number W256] [--timestamp W256] [--gaslimit W256]
@@ -190,7 +190,7 @@ Usage: hevm equivalence --code-a TEXT --code-b TEXT [--sig TEXT]
 Symbolically execute both the code given in `--code-a` and `--code-b` and try to prove equivalence between their outputs and storages.
 
 If `--sig` is given, calldata is assumed to take the form of the function given.
-If left out, calldata is a fully abstract buffer of at most 1024 bytes.
+If left out, calldata is a fully abstract buffer of at most 256 bytes.
 
 ### `hevm dapp-test`
 
@@ -207,7 +207,7 @@ Run any ds-test testing functions. Run under the hood whenever `dapp test` or `d
 
 Equivalent to `hevm dapp-test [options] --debug`
 
-### Environment Variables 
+### Environment Variables
 
 These environment variables can be used to control block parameters
 
@@ -289,7 +289,7 @@ sets the TIMESTAMP to `x`.
 - `function store(address c, bytes32 loc, bytes32 val) public`
 sets the slot `loc` to `val` of contract `c`.
 
-    
+
 ## Contact
 
 You can find us in the DappHub chat at https://dapphub.chat/, especially the `#dev` channel.
