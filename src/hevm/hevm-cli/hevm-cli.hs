@@ -10,6 +10,8 @@
 {-# Language OverloadedStrings #-}
 {-# Language TypeOperators #-}
 
+module Main where
+
 import qualified EVM
 import EVM.Concrete (createAddress, w256)
 import EVM.Symbolic (forceLitBytes, litBytes, litAddr, w256lit, sw256, SymWord(..), Buffer(..), len)
