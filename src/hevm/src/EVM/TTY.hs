@@ -192,7 +192,7 @@ interpret mode =
           vm <- use uiVm
           case maxIterationsReached vm ?maxIter of
             Nothing -> pure $ Continue (k ())
-            Just n -> interpret mode (Stepper.evm (cont n) >>= k)
+            Just n -> interpret mode (Stepper.evm (cont (not n)) >>= k)
 
         -- Stepper wants to make a query and wait for the results?
         Stepper.Wait q -> do
