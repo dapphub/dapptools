@@ -91,26 +91,30 @@ litBytes bs = fmap (toSized . literal) (BS.unpack bs)
 -- | Operations over buffers (concrete or symbolic)
 
 -- | A buffer is a list of bytes. For concrete execution, this is simply `ByteString`.
--- In symbolic settings, it is a list of symbolic bitvectors of size 8.
+-- In symbolic settings, its structure is sometimes known statically,
+-- and sometimes only determined dynamically.
+-- In the static case, it's a simple list of symbolic bitvectors of size 8.
+-- In the dynamic case, it's a pair of an SMT array and a symbolic word representing
+-- the buffer length.
 data Buffer
   = ConcreteBuffer ByteString
-  | SymbolicBuffer [SWord 8]
+  | StaticSymBuffer [SWord 8]
+  | DynamicSymBuffer (SArray (WordN 32) (WordN 8), SWord 32)
   deriving (Show)
 
-instance Semigroup Buffer where
-  ConcreteBuffer a <> ConcreteBuffer b = ConcreteBuffer (a <> b)
-  ConcreteBuffer a <> SymbolicBuffer b = SymbolicBuffer (litBytes a <> b)
-  SymbolicBuffer a <> ConcreteBuffer b = SymbolicBuffer (a <> litBytes b)
-  SymbolicBuffer a <> SymbolicBuffer b = SymbolicBuffer (a <> b)
-
-instance Monoid Buffer where
-  mempty = ConcreteBuffer mempty
+dynamize :: Buffer -> Buffer
+dynamize (ConcreteBuffer a)  = dynamize $ StaticSymBuffer (litBytes a)
+dynamize (DynamicSymBuffer a) = DynamicSymBuffer a
+dynamize (StaticSymBuffer a) =
+  DynamicSymBuffer (sListArray (Just 0) $ zip [0..] a, literal . num $ length a)
 
 instance EqSymbolic Buffer where
   ConcreteBuffer a .== ConcreteBuffer b = literal (a == b)
-  ConcreteBuffer a .== SymbolicBuffer b = litBytes a .== b
-  SymbolicBuffer a .== ConcreteBuffer b = a .== litBytes b
-  SymbolicBuffer a .== SymbolicBuffer b = a .== b
+  ConcreteBuffer a .== StaticSymBuffer b = litBytes a .== b
+  StaticSymBuffer a .== ConcreteBuffer b = a .== litBytes b
+  StaticSymBuffer a .== StaticSymBuffer b = a .== b
+  DynamicSymBuffer a .== DynamicSymBuffer b = a .== b
+  a .== b = dynamize a .== dynamize b
 
 newtype Addr = Addr { addressWord160 :: Word160 }
   deriving (Num, Integral, Real, Ord, Enum, Eq, Bits, Generic)
