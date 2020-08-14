@@ -446,8 +446,7 @@ makeVm o = VM
             RuntimeCode b -> b
 
 initialContract :: ContractCode -> Contract
-initialContract theContractCode =
- Contract
+initialContract theContractCode = Contract
   { _contractcode = theContractCode
   , _codehash =
     if BS.null theCode then 0 else
@@ -466,7 +465,6 @@ initialContract theContractCode =
 contractWithStore :: ContractCode -> Storage -> Contract
 contractWithStore theContractCode store =
   initialContract theContractCode & set storage store
-
 
 -- * Opcode dispatch (exec1)
 
