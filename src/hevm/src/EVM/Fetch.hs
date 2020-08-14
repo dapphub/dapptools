@@ -202,7 +202,7 @@ oracle state info model q = do
           EVM.InitialS  -> return (continue (x & set EVM.storage (EVM.Symbolic $ SBV.sListArray (Just 0) [])))
           EVM.SymbolicS -> 
             flip runReaderT state $ SBV.runQueryT $ do
-              store <- freshArray (show addr) Nothing
+              store <- freshArray_ Nothing
               return (continue (x & set EVM.storage (EVM.Symbolic store)))
         Nothing -> error ("oracle error: " ++ show q)
 
