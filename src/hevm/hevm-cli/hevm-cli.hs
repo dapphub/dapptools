@@ -589,7 +589,7 @@ launchExec cmd = do
             Just path ->
               Git.saveFacts (Git.RepoAt path) (Facts.vmFacts vm')
     Debug -> void $ EVM.TTY.runFromVM Nothing dapp fetcher vm1
-   where fetcher = maybe (EVM.Fetch.zero) (EVM.Fetch.http block') (rpc cmd)
+   where fetcher = maybe EVM.Fetch.zero (EVM.Fetch.http block') (rpc cmd)
          block'  = maybe EVM.Fetch.Latest EVM.Fetch.BlockNumber (block cmd)
 
 data Testcase = Testcase {
@@ -669,7 +669,7 @@ vmFromCommand cmd = do
               & set EVM.nonce    (view EVM.nonce    contract')
               & set EVM.external (view EVM.external contract')
 
-    _ -> return $ vm1 $ EVM.initialContract (codeType (bytes code ""))
+    _ -> return . vm1 . EVM.initialContract . codeType $ bytes code ""
 
   return $ vm & EVM.env . EVM.contracts . ix address' . EVM.balance +~ (w256 value')
       where
@@ -751,14 +751,14 @@ symvmFromCommand cmd = do
           error $ "contract not found."
         Just contract' ->
           return $
-            vm1 cdlen calldata' callvalue' caller' contract''
+            vm1 cdlen calldata' callvalue' caller' (contract'' & set EVM.storage store)
           where
             contract'' = case code cmd of
-              Nothing -> contract' & set EVM.storage store
+              Nothing -> contract'
               -- if both code and url is given,
               -- fetch the contract and overwrite the code
               Just c -> EVM.initialContract (codeType $ decipher c)
-                        & set EVM.storage     store
+                        & set EVM.storage     (view EVM.storage contract')
                         & set EVM.origStorage (view EVM.origStorage contract')
                         & set EVM.balance     (view EVM.balance contract')
                         & set EVM.nonce       (view EVM.nonce contract')

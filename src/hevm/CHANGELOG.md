@@ -19,6 +19,7 @@
 
 - `hevm exec --trace` flag to dump a trace
 - Faster backstepping in interactive mode by saving multiple snapshot states.
+- Support for symbolic storage for multiple contracts
 
 ## 0.40 - 2020-07-22
 
