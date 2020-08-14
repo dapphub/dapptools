@@ -29,6 +29,7 @@ import Control.Monad.Fail
 import Data.Binary.Put (runPut)
 import Data.SBV hiding ((===), forAll)
 import Data.SBV.Control
+import qualified Data.Map as Map
 import Data.Binary.Get (runGetOrFail)
 
 import EVM hiding (Query)
@@ -448,6 +449,38 @@ main = defaultMain $ testGroup "hevm"
             |]
           -- should find a counterexample
           Right counterexample <- runSMTWith cvc4 $ query $ checkAssert (RuntimeCode c) Nothing Nothing []
+          putStrLn $ "found counterexample:"
+
+
+      ,
+         testCase "multiple contracts" $ do
+          let code =
+                [i|
+                  contract C {
+                    uint x;
+                    A constant a = A(0x35D1b3F3D7966A1DFe207aa4514C12a259A0492B);
+    
+                    function call_A() public view {
+                      // should fail since a.x() can be anything
+                      assert(a.x() == x);
+                    }
+                  }
+                  contract A {
+                    uint public x;
+                  }
+                |]
+              aAddr = Addr 0x35D1b3F3D7966A1DFe207aa4514C12a259A0492B
+          Just c <- solcRuntime "C" code
+          Just a <- solcRuntime "A" code
+          Right cex <- runSMT $ query $ do
+            vm0 <- abstractVM (Just ("call_A()", [])) [] c SymbolicS
+            store <- freshArray (show aAddr) Nothing
+            let vm = vm0
+                  & set (state . callvalue) 0
+                  & over (env . contracts)
+                       (Map.insert aAddr (initialContract (RuntimeCode a) &
+                                           set EVM.storage (Symbolic store)))
+            verify vm Nothing Nothing (Just checkAssertions)
           putStrLn $ "found counterexample:"
 
     ]

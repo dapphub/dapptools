@@ -272,6 +272,7 @@ parseVmOpts v =
            <*> pure (EVM.FeeSchedule.istanbul)
            <*> pure 1
            <*> pure False
+           <*> pure EVM.ConcreteS
        _ ->
          JSON.typeMismatch "VM test case" (JSON.Object v)
 
@@ -396,6 +397,7 @@ fromCreateBlockchainCase block tx preState postState =
           , vmoptSchedule      = feeSchedule
           , vmoptChainId       = 1
           , vmoptCreate        = True
+          , vmoptStorageModel  = EVM.ConcreteS
           })
         checkState
         (Just $ Expectation Nothing postState Nothing)
@@ -434,6 +436,7 @@ fromNormalBlockchainCase block tx preState postState =
          , vmoptSchedule      = feeSchedule
          , vmoptChainId       = 1
          , vmoptCreate        = False
+         , vmoptStorageModel  = EVM.ConcreteS
          })
         checkState
         (Just $ Expectation Nothing postState Nothing)

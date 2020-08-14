@@ -580,6 +580,7 @@ initialUnitTestVm (UnitTestOptions {..}) theContract =
            , vmoptSchedule = FeeSchedule.istanbul
            , vmoptChainId = testChainId
            , vmoptCreate = True
+           , vmoptStorageModel = ConcreteS
            }
     creator =
       initialContract (RuntimeCode mempty)

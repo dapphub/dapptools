@@ -7,7 +7,7 @@ import Prelude hiding (Word)
 
 import EVM.Types    (Addr, W256, hexText)
 import EVM.Concrete (Word, w256)
-import EVM          (EVM, Contract, initialContract, nonce, balance, external)
+import EVM          (EVM, Contract, StorageModel, initialContract, nonce, balance, external)
 
 import qualified EVM
 
@@ -96,8 +96,8 @@ fetchWithSession url sess x = do
   return (r ^? responseBody . key "result" . _String)
 
 fetchContractWithSession
-  :: BlockNumber -> Text -> Session -> Addr -> IO (Maybe Contract)
-fetchContractWithSession n url sess addr = runMaybeT $ do
+  :: BlockNumber -> Text -> Addr -> Session -> IO (Maybe Contract)
+fetchContractWithSession n url addr sess = runMaybeT $ do
   let
     fetch :: Show a => RpcQuery a -> IO (Maybe a)
     fetch = fetchQuery n (fetchWithSession url sess)
@@ -121,14 +121,14 @@ fetchSlotWithSession n url sess addr slot =
 fetchContractFrom :: BlockNumber -> Text -> Addr -> IO (Maybe Contract)
 fetchContractFrom n url addr =
   Session.withAPISession
-    (flip (fetchContractWithSession n url) addr)
+    (fetchContractWithSession n url addr)
 
 fetchSlotFrom :: BlockNumber -> Text -> Addr -> W256 -> IO (Maybe Word)
 fetchSlotFrom n url addr slot =
   Session.withAPISession
     (\s -> fetchSlotWithSession n url s addr slot)
 
-http :: BlockNumber -> Text -> EVM.Query -> IO (EVM ())
+http :: BlockNumber -> Text -> Fetcher
 http n url q =
   case q of
     EVM.PleaseFetchContract addr continue ->
@@ -142,7 +142,7 @@ http n url q =
         Nothing -> error ("oracle error: " ++ show q)
     EVM.PleaseAskSMT _ _ _ -> error "smt calls not available for this oracle"
 
-zero :: Monad m => EVM.Query -> m (EVM ())
+zero :: Fetcher
 zero q =
   case q of
     EVM.PleaseFetchContract _ continue ->
@@ -157,10 +157,10 @@ zero q =
 type Fetcher = EVM.Query -> IO (EVM ())
 
 -- smtsolving + (http or zero)
-oracle :: SBV.State -> Maybe (BlockNumber, Text) -> Fetcher
-oracle state info q = do
+oracle :: SBV.State -> Maybe (BlockNumber, Text) -> StorageModel -> Fetcher
+oracle state info model q = do
   case q of
-    EVM.PleaseAskSMT jumpcondition pathconditions continue -> do
+    EVM.PleaseAskSMT jumpcondition pathconditions continue ->
       flip runReaderT state $ SBV.runQueryT $ do
          let pathconds = sAnd pathconditions
          noJump <- checksat $ pathconds .&& jumpcondition ./= 0
@@ -190,7 +190,23 @@ oracle state info q = do
 
             -- If the query times out, we simply explore both paths
             Unk -> return $ continue EVM.Unknown
+    -- if we are using a symbolic storage model,
+    -- we generate a new array to the fetched contract here
+    EVM.PleaseFetchContract addr continue -> do
+      contract <- case info of
+                    Nothing -> return $ Just (initialContract (EVM.RuntimeCode mempty))
+                    Just (n, url) -> fetchContractFrom n url addr
+      case contract of
+        Just x  -> case model of
+          EVM.ConcreteS -> return (continue x)
+          EVM.InitialS  -> return (continue (x & set EVM.storage (EVM.Symbolic $ SBV.sListArray (Just 0) [])))
+          EVM.SymbolicS -> 
+            flip runReaderT state $ SBV.runQueryT $ do
+              store <- freshArray (show addr) Nothing
+              return (continue (x & set EVM.storage (EVM.Symbolic store)))
+        Nothing -> error ("oracle error: " ++ show q)
 
+    --- for other queries (there's only slot left right now) we default to zero or http
     _ -> case info of
       Nothing -> zero q
       Just (n, url) -> http n url q
