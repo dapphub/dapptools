@@ -10,7 +10,6 @@ import Prelude hiding (Word)
 import Control.Lens hiding (pre)
 import EVM hiding (Query, push)
 import EVM.Exec
-import Options.Generic as Options
 import qualified EVM.Fetch as Fetch
 import EVM.ABI
 import EVM.Stepper (Stepper)
@@ -78,9 +77,6 @@ symAbiArg n =
     <> show n
     <> ". Please file an issue at https://github.com/dapphub/dapptools if you really need this."
 
-contractWithStore :: ContractCode -> Storage -> Contract
-contractWithStore theContractCode store = initialContract theContractCode & set storage store
-
 -- | Generates calldata matching given type signature, optionally specialized
 -- with concrete arguments.
 -- Any argument given as "<symbolic>" or omitted at the tail of the list are
@@ -110,10 +106,10 @@ abstractVM typesignature concreteArgs x storagemodel = do
     ConcreteS -> return $ Concrete mempty
   c <- SAddr <$> freshVar_
   value' <- sw256 <$> freshVar_
-  return $ loadSymVM (RuntimeCode x) symstore c value' (SymbolicBuffer cd', cdlen) & over pathConditions ((<>) [cdconstraint])
+  return $ loadSymVM (RuntimeCode x) symstore storagemodel c value' (SymbolicBuffer cd', cdlen) & over pathConditions ((<>) [cdconstraint])
 
-loadSymVM :: ContractCode -> Storage -> SAddr -> SymWord -> (Buffer, SWord 32) -> VM
-loadSymVM x initStore addr callvalue' calldata' =
+loadSymVM :: ContractCode -> Storage -> StorageModel -> SAddr -> SymWord -> (Buffer, SWord 32) -> VM
+loadSymVM x initStore model addr callvalue' calldata' =
     (makeVm $ VMOpts
     { vmoptContract = contractWithStore x initStore
     , vmoptCalldata = calldata'
@@ -133,6 +129,7 @@ loadSymVM x initStore addr callvalue' calldata' =
     , vmoptSchedule = FeeSchedule.istanbul
     , vmoptChainId = 1
     , vmoptCreate = False
+    , vmoptStorageModel = model
     }) & set (env . contracts . at (createAddress ethrunAddress 1))
              (Just (contractWithStore x initStore))
 
@@ -195,11 +192,6 @@ checkAssertions (_, out) = case view result out of
   Just (EVM.VMFailure (EVM.UnrecognizedOpcode 254)) -> sFalse
   _ -> sTrue
 
-data StorageModel = ConcreteS | SymbolicS | InitialS
-  deriving (Read, Show)
-
-instance ParseField StorageModel
-
 verifyContract :: ContractCode -> Maybe Integer -> Maybe (Text, [AbiType]) -> [String] -> StorageModel -> Precondition -> Maybe Postcondition -> Query (Either (VM, [VM]) VM)
 verifyContract code' maxIter signature' concreteArgs storagemodel pre maybepost = do
     preStateRaw <- abstractVM signature' concreteArgs theCode  storagemodel
@@ -221,8 +213,9 @@ pruneDeadPaths =
 -- or `Left (VM, [VM])`, a pair of `prestate` and post vm states.
 verify :: VM -> Maybe Integer -> Maybe (Fetch.BlockNumber, Text) -> Maybe Postcondition -> Query (Either (VM, [VM]) VM)
 verify preState maxIter rpcinfo maybepost = do
+  let model = view (env . storageModel) preState
   smtState <- queryState
-  results <- io $ fst <$> runStateT (interpret (Fetch.oracle smtState rpcinfo) maxIter Stepper.runFully) preState
+  results <- io $ fst <$> runStateT (interpret (Fetch.oracle smtState rpcinfo model) maxIter Stepper.runFully) preState
   case maybepost of
     (Just post) -> do
       let livePaths = pruneDeadPaths results
@@ -253,10 +246,10 @@ equivalenceCheck bytecodeA bytecodeB maxiter signature' = do
       prestorage = preStateA ^?! env . contracts . ix preself . storage
       (calldata', cdlen) = view (state . calldata) preStateA
       pathconds = view pathConditions preStateA
-      preStateB = loadSymVM (RuntimeCode bytecodeB) prestorage precaller callvalue' (calldata', cdlen) & set pathConditions pathconds
+      preStateB = loadSymVM (RuntimeCode bytecodeB) prestorage SymbolicS precaller callvalue' (calldata', cdlen) & set pathConditions pathconds
 
   smtState <- queryState
-  (aVMs, bVMs) <- both (\x -> io $ fst <$> runStateT (interpret (Fetch.oracle smtState Nothing) maxiter Stepper.runFully) x)
+  (aVMs, bVMs) <- both (\x -> io $ fst <$> runStateT (interpret (Fetch.oracle smtState Nothing SymbolicS) maxiter Stepper.runFully) x)
     (preStateA, preStateB)
   -- Check each pair of endstates for equality:
   let differingEndStates = uncurry distinct <$> [(a,b) | a <- pruneDeadPaths aVMs, b <- pruneDeadPaths bVMs]

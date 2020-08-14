@@ -13,10 +13,10 @@ in self-hs: super-hs:
       pkgs.haskell.lib.dontCheck
         (self-hs.callCabal2nix x y {});
 
-    sbv_prepatch = self-hs.callCabal2nix "sbv" (builtins.fetchGit {
+    sbv_prepatch = pkgs.haskell.lib.dontCheck (self-hs.callCabal2nix "sbv" (builtins.fetchGit {
         url = "https://github.com/LeventErkok/sbv/";
-        rev = "99454d9a1a433554db4e631c89adddac651e4e07";
-    })    {inherit (pkgs) z3;};
+        rev = "9256c5e092be8fbe6f66a9f83c3dcf816b0ca3f1";
+    })    {inherit (pkgs) z3;});
 
   in {
     restless-git = dontCheck "restless-git" (./src/restless-git);

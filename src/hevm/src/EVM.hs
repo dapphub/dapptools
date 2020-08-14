@@ -25,6 +25,7 @@ import EVM.Concrete (Word(..), w256, createAddress, wordValue, keccakBlob, creat
 import EVM.Symbolic
 import EVM.Op
 import EVM.FeeSchedule (FeeSchedule (..))
+import Options.Generic as Options
 import qualified EVM.Precompiled
 
 import Data.Binary.Get (runGetOrFail)
@@ -184,6 +185,7 @@ data VMOpts = VMOpts
   , vmoptSchedule :: FeeSchedule Word
   , vmoptChainId :: W256
   , vmoptCreate :: Bool
+  , vmoptStorageModel :: StorageModel
   } deriving Show
 
 -- | A log entry
@@ -290,12 +292,32 @@ data Contract = Contract
 deriving instance Show Contract
 deriving instance Eq Contract
 
+-- | When doing symbolic execution, we have three different
+-- ways to model the storage of contracts. This determines
+-- not only the initial contract storage model but also how
+-- new contracts will be modeled.
+--
+-- ConcreteS: Uses `Concrete` Storage. Reading / Writing from abstract
+-- locations causes a runtime failure. Can be nicely combined with RPC.
+--
+-- SymbolicS: Uses `Symbolic` Storage. Reading / Writing never reaches RPC,
+-- but always done using an SMT array with no default value.
+--
+-- InitialS: Uses `Symbolic` Storage. Reading / Writing never reaches RPC,
+-- but always done using an SMT array with 0 as the default value.
+--
+data StorageModel = ConcreteS | SymbolicS | InitialS
+  deriving (Read, Show)
+
+instance ParseField StorageModel
+
 -- | Various environmental data
 data Env = Env
-  { _contracts  :: Map Addr Contract
-  , _chainId    :: Word
-  , _sha3Crack  :: Map Word ByteString
-  , _keccakUsed :: [([SWord 8], SWord 256)]
+  { _contracts    :: Map Addr Contract
+  , _chainId      :: Word
+  , _storageModel :: StorageModel
+  , _sha3Crack    :: Map Word ByteString
+  , _keccakUsed   :: [([SWord 8], SWord 256)]
   }
 
 
@@ -411,6 +433,7 @@ makeVm o = VM
     , _contracts = Map.fromList
       [(vmoptAddress o, vmoptContract o)]
     , _keccakUsed = mempty
+    , _storageModel = vmoptStorageModel o
     }
   , _cache = Cache (Map.fromList
     [(vmoptAddress o, vmoptContract o)])
@@ -423,7 +446,8 @@ makeVm o = VM
             RuntimeCode b -> b
 
 initialContract :: ContractCode -> Contract
-initialContract theContractCode = Contract
+initialContract theContractCode =
+ Contract
   { _contractcode = theContractCode
   , _codehash =
     if BS.null theCode then 0 else
@@ -438,6 +462,11 @@ initialContract theContractCode = Contract
   } where theCode = case theContractCode of
             InitCode b    -> b
             RuntimeCode b -> b
+
+contractWithStore :: ContractCode -> Storage -> Contract
+contractWithStore theContractCode store =
+  initialContract theContractCode & set storage store
+
 
 -- * Opcode dispatch (exec1)
 
@@ -704,7 +733,7 @@ exec1 = do
                     (SymbolicBuffer cd, cdlen) -> copyBytesToMemory (SymbolicBuffer [ite (i .<= cdlen) x 0 | (x, i) <- zip cd [1..]]) xSize xFrom xTo
                     -- when calldata is concrete,
                     -- the bound should always be equal to the bytestring length
-                    (cd, _) -> copyBytesToMemory cd xSize xFrom xTo 
+                    (cd, _) -> copyBytesToMemory cd xSize xFrom xTo
             _ -> underrun
 
         -- op: CODESIZE
@@ -1780,7 +1809,7 @@ cheat (inOffset, inSize) (outOffset, outSize) = do
     input = readMemory (inOffset + 4) (inSize - 4) vm
   case fromSized <$> unliteral abi of
     Nothing -> vmError UnexpectedSymbolicArg
-    Just abi -> 
+    Just abi ->
               case Map.lookup abi cheatActions of
                 Nothing ->
                   vmError (BadCheatCode (Just abi))
@@ -1854,16 +1883,16 @@ delegateCall this gasGiven xTo xContext xValue xInOffset xInSize xOutOffset xOut
                       else Nothing
                   , callContextData = (readMemory (num xInOffset) (num xInSize) vm0)
                   }
-  
+
             pushTrace (FrameTrace newContext)
             next
             vm1 <- get
-  
+
             pushTo frames $ Frame
               { _frameState = (set stack xs) (view state vm1)
               , _frameContext = newContext
               }
-  
+
             zoom state $ do
               assign gas xGas
               assign pc 0
@@ -1874,7 +1903,7 @@ delegateCall this gasGiven xTo xContext xValue xInOffset xInSize xOutOffset xOut
               assign memorySize 0
               assign returndata mempty
               assign calldata (readMemory (num xInOffset) (num xInSize) vm0, literal (num xInSize))
-  
+
             continue
 
 -- -- * Contract creation
@@ -1911,8 +1940,12 @@ create self this xGas xValue xs newAddr initCode = do
         touchAccount self
         touchAccount newAddr
         let
+          store = case view (env . storageModel) vm0 of
+            ConcreteS -> Concrete mempty
+            SymbolicS -> Symbolic $ sListArray (Just 0) []
+            InitialS -> Symbolic $ sListArray (Just 0) []
           newContract =
-            initialContract (InitCode initCode)
+            initialContract (InitCode initCode) & set storage store
           newContext  =
             CreationContext { creationContextCodehash  = view codehash newContract
                             , creationContextReversion = view (env . contracts) vm0

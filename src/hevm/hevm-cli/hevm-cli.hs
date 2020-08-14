@@ -12,6 +12,7 @@
 
 module Main where
 
+import EVM (StorageModel(..))
 import qualified EVM
 import EVM.Concrete (createAddress, w256)
 import EVM.Symbolic (forceLitBytes, litBytes, litAddr, w256lit, sw256, SymWord(..), Buffer(..), len)
@@ -450,6 +451,7 @@ assert :: Command Options.Unwrapped -> IO ()
 assert cmd = do
   let block'  = maybe EVM.Fetch.Latest EVM.Fetch.BlockNumber (block cmd)
       rpcinfo = (,) block' <$> rpc cmd
+      model = fromMaybe (if create cmd then InitialS else SymbolicS) (storageModel cmd)
   srcInfo <- getSrcInfo cmd
   maybesig <- case sig cmd of
     Nothing ->
@@ -463,7 +465,11 @@ assert cmd = do
     runSMTWithTimeOut (solver cmd) (smttimeout cmd) $ query $ do
       preState <- symvmFromCommand cmd
       smtState <- queryState
-      io $ void $ EVM.TTY.runFromVM (maxIterations cmd) srcInfo (EVM.Fetch.oracle smtState rpcinfo) preState
+      io $ void $ EVM.TTY.runFromVM
+        (maxIterations cmd)
+        srcInfo
+        (EVM.Fetch.oracle smtState rpcinfo model)
+        preState
 
   else
     runSMTWithTimeOut (solver cmd) (smttimeout cmd) $ query $ do
@@ -583,7 +589,7 @@ launchExec cmd = do
             Just path ->
               Git.saveFacts (Git.RepoAt path) (Facts.vmFacts vm')
     Debug -> void $ EVM.TTY.runFromVM Nothing dapp fetcher vm1
-   where fetcher = maybe EVM.Fetch.zero (EVM.Fetch.http block') (rpc cmd)
+   where fetcher = maybe (EVM.Fetch.zero) (EVM.Fetch.http block') (rpc cmd)
          block'  = maybe EVM.Fetch.Latest EVM.Fetch.BlockNumber (block cmd)
 
 data Testcase = Testcase {
@@ -645,7 +651,7 @@ tohexOrText s = case "0x" `Char8.isPrefixOf` encodeUtf8 s of
                   True -> hexText s
                   False -> encodeUtf8 s
 
-
+-- | Creates a (concrete) VM from command line options
 vmFromCommand :: Command Options.Unwrapped -> IO EVM.VM
 vmFromCommand cmd = do
   vm <- case (rpc cmd, address cmd) of
@@ -663,7 +669,7 @@ vmFromCommand cmd = do
               & set EVM.nonce    (view EVM.nonce    contract')
               & set EVM.external (view EVM.external contract')
 
-    _ -> return . vm1 . EVM.initialContract . codeType $ bytes code ""
+    _ -> return $ vm1 $ EVM.initialContract (codeType (bytes code ""))
 
   return $ vm & EVM.env . EVM.contracts . ix address' . EVM.balance +~ (w256 value')
       where
@@ -697,6 +703,7 @@ vmFromCommand cmd = do
           , EVM.vmoptSchedule      = FeeSchedule.istanbul
           , EVM.vmoptChainId       = word chainid 1
           , EVM.vmoptCreate        = create cmd
+          , EVM.vmoptStorageModel  = ConcreteS
           }
         word f def = fromMaybe def (f cmd)
         addr f def = fromMaybe def (f cmd)
@@ -725,6 +732,8 @@ symvmFromCommand cmd = do
 
     _ -> error "incompatible options: calldata and abi"
 
+  let model = fromMaybe SymbolicS (storageModel cmd)
+
   store <- case storageModel cmd of
     -- InitialS and SymbolicS can read and write to symbolic locations
     -- ConcreteS cannot (instead values can be fetched from rpc!)
@@ -742,14 +751,14 @@ symvmFromCommand cmd = do
           error $ "contract not found."
         Just contract' ->
           return $
-            vm1 cdlen calldata' callvalue' caller' (contract'' & set EVM.storage store)
+            vm1 cdlen calldata' callvalue' caller' contract''
           where
             contract'' = case code cmd of
-              Nothing -> contract'
+              Nothing -> contract' & set EVM.storage store
               -- if both code and url is given,
               -- fetch the contract and overwrite the code
               Just c -> EVM.initialContract (codeType $ decipher c)
-                        & set EVM.storage     (view EVM.storage contract')
+                        & set EVM.storage     store
                         & set EVM.origStorage (view EVM.origStorage contract')
                         & set EVM.balance     (view EVM.balance contract')
                         & set EVM.nonce       (view EVM.nonce contract')
@@ -791,6 +800,7 @@ symvmFromCommand cmd = do
       , EVM.vmoptSchedule      = FeeSchedule.istanbul
       , EVM.vmoptChainId       = word chainid 1
       , EVM.vmoptCreate        = create cmd
+      , EVM.vmoptStorageModel  = ConcreteS
       }
     word f def = fromMaybe def (f cmd)
     addr f def = fromMaybe def (f cmd)

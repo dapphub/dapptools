@@ -39,6 +39,7 @@ vmForEthrunCreation creationCode =
     , vmoptSchedule = FeeSchedule.istanbul
     , vmoptChainId = 1
     , vmoptCreate = False
+    , vmoptStorageModel = ConcreteS
     }) & set (env . contracts . at ethrunAddress)
              (Just (initialContract (RuntimeCode mempty)))
 
