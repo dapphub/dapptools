@@ -246,11 +246,6 @@ padLeft n xs = BS.replicate (n - BS.length xs) 0 <> xs
 padRight :: Int -> ByteString -> ByteString
 padRight n xs = xs <> BS.replicate (n - BS.length xs) 0
 
-truncpad :: Int -> [SWord 8] -> [SWord 8]
-truncpad n xs = if m > n then take n xs
-                else mappend xs (replicate (n - m) 0)
-  where m = length xs
-
 word256 :: ByteString -> Word256
 word256 xs = case Cereal.runGet m (padLeft 32 xs) of
                Left _ -> error "internal error"
