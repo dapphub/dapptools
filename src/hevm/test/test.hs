@@ -142,6 +142,23 @@ main = defaultMain $ testGroup "hevm"
        === (Just $ Literal Patricia.Empty)
     ]
 
+  , testGroup "Symbolic buffers"
+    [  testProperty "dynWriteMemory works like writeMemory" $ \(src, offset, dst) ->
+        runSMT $ query $ do
+          cd  <- sbytes128
+          mem <- sbytes128
+          let staticWriting = writeMemory' cd src offset dst mem
+          let dynamicWriting =
+                dynWriteMemory
+                 (implode cd)
+                 (literal src)
+                 (literal offset)
+                 (literal dst)
+                 (implode mem)
+          implode staticWriting
+                            
+    ]
+
   , testGroup "Symbolic execution"
       [
       -- Somewhat tautological since we are asserting the precondition

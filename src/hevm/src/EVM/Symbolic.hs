@@ -14,7 +14,8 @@ import EVM.Types
 import EVM.Concrete (Word (..), Whiff(..))
 import qualified EVM.Concrete as Concrete
 import Data.SBV hiding (runSMT, newArray_, addAxiom, Word)
-
+import qualified Data.SBV.List as SL
+import Data.SBV.List ((.++), (.!!))
 
 -- | Symbolic words of 256 bits, possibly annotated with additional
 --   "insightful" information
@@ -92,6 +93,25 @@ sgt (S _ x) (S _ y) =
   sw256 $ ite (sFromIntegral x .> (sFromIntegral y :: (SInt 256))) 1 0
 
 -- | Operations over static symbolic memory (list of symbolic bytes)
+truncpad :: Int -> [SWord 8] -> [SWord 8]
+truncpad n xs = if m > n then take n xs
+                else mappend xs (replicate (n - m) 0)
+  where m = length xs
+
+-- returns undefined stuff when you try to take too much
+takeStatic :: (SymVal a) => Int -> SList a -> [SBV a]
+takeStatic n ls =
+  let (x, xs) = SL.uncons ls
+  in x:(takeStatic (n - 1) xs)
+
+truncpad' :: Int -> SList (WordN 8) -> [SWord 8]
+truncpad' n xs =
+  ite
+    (m .> (literal (num n)))
+    (takeStatic n xs)
+    (takeStatic n (xs .++ SL.implode (replicate n 0)))
+  where m = SL.length xs
+
 swordAt :: Int -> [SWord 8] -> SymWord
 swordAt i bs = sw256 . fromBytes $ truncpad 32 $ drop i bs
 
@@ -130,50 +150,60 @@ setMemoryByte' (C _ i) x =
 readSWord' :: Word -> [SWord 8] -> SymWord
 readSWord' (C _ i) x =
   if i > num (length x)
-  then 0
+  then sw256 $ 0
   else swordAt (num i) x
 
--- | Operations over dynamic symbolic memory (smt array of symbolic bytes)
-swordAt'' :: SWord 32 -> SArray (WordN 32) (WordN 8) -> SymWord
-swordAt'' i bs = sw256 . fromBytes $ zipWith readArray bs [i + b | b <- [0..31]]
+-- | Operations over dynamic symbolic memory (smt list of bytes)
+swordAt'' :: SWord 32 -> SList (WordN 8) -> SymWord
+swordAt'' i bs = sw256 . fromBytes $ truncpad' 32 $ SL.drop (sFromIntegral i) bs
 
-readByteOrZero'' :: SWord 32 -> [SWord 8] -> SWord 8
-readByteOrZero'' i bs = readArray bs i
+readByteOrZero'' :: SWord 32 -> SList (WordN 8) -> SWord 8
+readByteOrZero'' i bs =
+  ite (SL.length bs .> (sFromIntegral i + 1))
+  (bs .!! (sFromIntegral i))
+  (literal 0)
 
--- sliceWithZero'' :: Int -> Int -> [SWord 8] -> [SWord 8]
--- sliceWithZero'' o s m = truncpad s $ drop o m
-
-dynWriteMemory :: SArray (WordN 32) (WordN 8) -> SymWord -> SymWord -> Word -> [SWord 8] -> [SWord 8]
-dynWriteMemory bs1 (C _ n) (C _ src) (C _ dst) bs0 =
+-- Warning: if (length bs0) < dst or (length bs1) < src + n we can get `havoc` garbage in the resulting
+-- list. It should really be 0. If we could write the following function, we could pad appropriately:
+-- replicate :: (SymVal a) => SInteger -> SBV a -> SList a
+-- but I can't really write this...
+-- 
+-- TODO: make sure we enforce this condition before calling this
+dynWriteMemory :: SList (WordN 8) -> SymWord -> SymWord -> SymWord -> SList (WordN 8) -> SList (WordN 8)
+dynWriteMemory bs1 (S _ n) (S _ src) (S _ dst) bs0 =
   let
-    (a, b) = splitAt (num dst) bs0
-    a'     = replicate (num dst - length a) 0
-    c      = if src > num (length bs1)
-             then replicate (num n) 0
-             else sliceWithZero' (num src) (num n) bs1
-    b'     = drop (num (n)) b
+    n'      = sFromIntegral n
+    src'    = sFromIntegral src
+    dst'    = sFromIntegral dst
+
+    a       = SL.take dst' bs0
+    b       = SL.subList bs1 src' n'
+    c       = ite (dst' + n' .> SL.length bs0)
+              (SL.nil)
+              (SL.drop (dst' + n') bs0)
   in
-    a <> a' <> c <> b'
+    a .++ b .++ c
 
-readMemoryWord' :: Word -> [SWord 8] -> SymWord
-readMemoryWord' (C _ i) m = sw256 $ fromBytes $ truncpad 32 (drop (num i) m)
 
-readMemoryWord32' :: Word -> [SWord 8] -> SWord 32
-readMemoryWord32' (C _ i) m = fromBytes $ truncpad 4 (drop (num i) m)
+-- readMemoryWord' :: Word -> [SWord 8] -> SymWord
+-- readMemoryWord' (C _ i) m = sw256 $ fromBytes $ truncpad 32 (drop (num i) m)
 
-setMemoryWord' :: Word -> SymWord -> [SWord 8] -> [SWord 8]
-setMemoryWord' (C _ i) (S _ x) =
-  writeMemory' (toBytes x) 32 0 (num i)
+-- readMemoryWord32' :: Word -> [SWord 8] -> SWord 32
+-- readMemoryWord32' (C _ i) m = fromBytes $ truncpad 4 (drop (num i) m)
 
-setMemoryByte' :: Word -> SWord 8 -> [SWord 8] -> [SWord 8]
-setMemoryByte' (C _ i) x =
-  writeMemory' [x] 1 0 (num i)
+-- setMemoryWord' :: Word -> SymWord -> [SWord 8] -> [SWord 8]
+-- setMemoryWord' (C _ i) (S _ x) =
+--   writeMemory' (toBytes x) 32 0 (num i)
 
-readSWord' :: Word -> [SWord 8] -> SymWord
-readSWord' (C _ i) x =
-  if i > num (length x)
-  then 0
-  else swordAt (num i) x
+-- setMemoryByte' :: Word -> SWord 8 -> [SWord 8] -> [SWord 8]
+-- setMemoryByte' (C _ i) x =
+--   writeMemory' [x] 1 0 (num i)
+
+-- readSWord' :: Word -> [SWord 8] -> SymWord
+-- readSWord' (C _ i) x =
+--   if i > num (length x)
+--   then 0
+--   else swordAt (num i) x
 
 -- * Operations over buffers (concrete or symbolic)
 
@@ -183,32 +213,17 @@ readSWord' (C _ i) x =
 -- in which case simply use a list of symbolic bytes.
 -- When we are dealing with dynamically determined calldata or memory (such as if
 -- we are interpreting a function which a `memory bytes` argument),
--- we need a more sophisticated approach.
+-- we use smt lists. Note that smt lists are not yet supported by cvc4!
 data Buffer
   = ConcreteBuffer ByteString
   | StaticSymBuffer [SWord 8]
-  | DynamicSymBuffer [MemStore]
+  | DynamicSymBuffer (SList (WordN 8))
   deriving (Show)
-
--- | We keep track fo the writes to the buffer, as a list of `MemStore`s.
--- Each write contains its offset, size and content.
-data MemStore =
-  StoreArrayAt (SWord 32, SWord 32, SArray (SWord 32) (SWord 8))
-
-
--- | If the length of bytes we are reading from a dynamic buffer is known,
--- we can get a static bufer out of it.
-readNBytes :: Word -> [MemStore] -> [SWord 8]
-readNBytes [] = []
-readNBytes [StoreArrayAt offset length
-
-
 
 dynamize :: Buffer -> Buffer
 dynamize (ConcreteBuffer a)  = dynamize $ StaticSymBuffer (litBytes a)
 dynamize (DynamicSymBuffer a) = DynamicSymBuffer a
-dynamize (StaticSymBuffer a) =
-  DynamicSymBuffer (sListArray (Just 0) $ zip [0..] a, literal . num $ length a)
+dynamize (StaticSymBuffer a) = DynamicSymBuffer (SL.implode a)
 
 instance EqSymbolic Buffer where
   ConcreteBuffer a .== ConcreteBuffer b = literal (a == b)
@@ -219,26 +234,43 @@ instance EqSymbolic Buffer where
   a .== b = dynamize a .== dynamize b
 
 
+instance Semigroup Buffer where
+  ConcreteBuffer a  <> ConcreteBuffer b  = ConcreteBuffer (a <> b)
+  ConcreteBuffer a  <> StaticSymBuffer b = StaticSymBuffer (litBytes a <> b)
+  c@(ConcreteBuffer a) <> DynamicSymBuffer b = dynamize c <> DynamicSymBuffer b
+
+  StaticSymBuffer a <> ConcreteBuffer b  = StaticSymBuffer (a <> litBytes b)
+  StaticSymBuffer a <> StaticSymBuffer b = StaticSymBuffer (a <> b)
+  c@(StaticSymBuffer a) <> DynamicSymBuffer b = dynamize c <> DynamicSymBuffer b
+
+  DynamicSymBuffer a  <> DynamicSymBuffer b = DynamicSymBuffer (a .++ b)
+  a <> b = dynamize a <> dynamize b
+
+
+instance Monoid Buffer where
+  mempty = ConcreteBuffer mempty
+
+
 -- a whole foldable instance seems overkill, but length is always good to have!
 len :: Buffer -> SWord 32
-len (DynamicSymBuffer (a, b)) = b
+len (DynamicSymBuffer a) = sFromIntegral $ SL.length a
 len (StaticSymBuffer bs) = literal . num $ length bs
 len (ConcreteBuffer bs) = literal . num $ BS.length bs
 
 grab :: Int -> Buffer -> Buffer
 grab n (StaticSymBuffer bs) = StaticSymBuffer $ take n bs
 grab n (ConcreteBuffer bs) = ConcreteBuffer $ BS.take n bs
-grab _ = error "oops: tried to grab dynamic buffer"
+grab n (DynamicSymBuffer bs) = DynamicSymBuffer $ SL.take (literal $ num n) bs
 
 ditch :: Int -> Buffer -> Buffer
 ditch n (StaticSymBuffer bs) = StaticSymBuffer $ drop n bs
 ditch n (ConcreteBuffer bs) = ConcreteBuffer $ BS.drop n bs
-ditch _ = error "oops: tried to ditch dynamic buffer"
+ditch n (DynamicSymBuffer bs) = DynamicSymBuffer $ SL.drop (literal $ num n) bs
 
 readByteOrZero :: Int -> Buffer -> SWord 8
 readByteOrZero i (StaticSymBuffer bs) = readByteOrZero' i bs
 readByteOrZero i (ConcreteBuffer bs) = num $ Concrete.readByteOrZero i bs
-readByteOrZero i (DynamicSymBuffer (a, b)) = ite (i < b) (readArray a i) 0
+readByteOrZero i (DynamicSymBuffer bs) = readByteOrZero'' (literal $ num i) bs
 
 sliceWithZero :: Int -> Int -> Buffer -> Buffer
 sliceWithZero o s (StaticSymBuffer m) = StaticSymBuffer (sliceWithZero' o s m)
