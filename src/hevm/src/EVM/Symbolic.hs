@@ -175,19 +175,34 @@ readSWord' (C _ i) x =
   then 0
   else swordAt (num i) x
 
--- | Operations over buffers (concrete or symbolic)
+-- * Operations over buffers (concrete or symbolic)
 
--- | A buffer is a list of bytes. For concrete execution, this is simply `ByteString`.
--- In symbolic settings, its structure is sometimes known statically,
--- and sometimes only determined dynamically.
--- In the static case, it's a simple list of symbolic bitvectors of size 8.
--- In the dynamic case, it's a pair of an SMT array and a symbolic word representing
--- the buffer length.
+-- | A buffer is a list of bytes, and is used to model EVM memory or calldata.
+-- During concrete execution, this is simply `ByteString`.
+-- In symbolic settings, the structure of a buffer is sometimes known statically,
+-- in which case simply use a list of symbolic bytes.
+-- When we are dealing with dynamically determined calldata or memory (such as if
+-- we are interpreting a function which a `memory bytes` argument),
+-- we need a more sophisticated approach.
 data Buffer
   = ConcreteBuffer ByteString
   | StaticSymBuffer [SWord 8]
-  | DynamicSymBuffer (SArray (WordN 32) (WordN 8), SWord 32)
+  | DynamicSymBuffer [MemStore]
   deriving (Show)
+
+-- | We keep track fo the writes to the buffer, as a list of `MemStore`s.
+-- Each write contains its offset, size and content.
+data MemStore =
+  StoreArrayAt (SWord 32, SWord 32, SArray (SWord 32) (SWord 8))
+
+
+-- | If the length of bytes we are reading from a dynamic buffer is known,
+-- we can get a static bufer out of it.
+readNBytes :: Word -> [MemStore] -> [SWord 8]
+readNBytes [] = []
+readNBytes [StoreArrayAt offset length
+
+
 
 dynamize :: Buffer -> Buffer
 dynamize (ConcreteBuffer a)  = dynamize $ StaticSymBuffer (litBytes a)
