@@ -800,7 +800,7 @@ symvmFromCommand cmd = do
       , EVM.vmoptSchedule      = FeeSchedule.istanbul
       , EVM.vmoptChainId       = word chainid 1
       , EVM.vmoptCreate        = create cmd
-      , EVM.vmoptStorageModel  = ConcreteS
+      , EVM.vmoptStorageModel  = model
       }
     word f def = fromMaybe def (f cmd)
     addr f def = fromMaybe def (f cmd)
