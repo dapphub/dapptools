@@ -732,8 +732,6 @@ symvmFromCommand cmd = do
 
     _ -> error "incompatible options: calldata and abi"
 
-  let model = fromMaybe SymbolicS (storageModel cmd)
-
   store <- case storageModel cmd of
     -- InitialS and SymbolicS can read and write to symbolic locations
     -- ConcreteS cannot (instead values can be fetched from rpc!)
@@ -800,7 +798,7 @@ symvmFromCommand cmd = do
       , EVM.vmoptSchedule      = FeeSchedule.istanbul
       , EVM.vmoptChainId       = word chainid 1
       , EVM.vmoptCreate        = create cmd
-      , EVM.vmoptStorageModel  = model
+      , EVM.vmoptStorageModel  = fromMaybe SymbolicS (storageModel cmd)
       }
     word f def = fromMaybe def (f cmd)
     addr f def = fromMaybe def (f cmd)
