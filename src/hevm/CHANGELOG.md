@@ -1,10 +1,10 @@
 # hevm changelog
 
-## Unreleased
-
+## 0.41.0 - 2020-08-19
 
 ### Changed
 
+- Switched to [PVP](https://github.com/haskell/pvp/blob/master/pvp-faq.md) for version control, starting now at `0.41.0` (MAJOR.MAJOR.MINOR).
 - z3 updated to 4.8.7
 - Generate more interesting values in property based testing, 
  and implement proper shrinking for all abi values.
