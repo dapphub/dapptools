@@ -198,12 +198,12 @@ oracle state info model q = do
                     Just (n, url) -> fetchContractFrom n url addr
       case contract of
         Just x  -> case model of
-          EVM.ConcreteS -> return (continue x)
-          EVM.InitialS  -> return (continue (x & set EVM.storage (EVM.Symbolic $ SBV.sListArray (Just 0) [])))
+          EVM.ConcreteS -> return $ continue x
+          EVM.InitialS  -> return $ continue $ x & set EVM.storage (EVM.Symbolic $ SBV.sListArray 0 [])
           EVM.SymbolicS -> 
             flip runReaderT state $ SBV.runQueryT $ do
               store <- freshArray_ Nothing
-              return (continue (x & set EVM.storage (EVM.Symbolic store)))
+              return $ continue $ x & set EVM.storage (EVM.Symbolic store)
         Nothing -> error ("oracle error: " ++ show q)
 
     --- for other queries (there's only slot left right now) we default to zero or http
