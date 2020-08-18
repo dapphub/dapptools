@@ -1940,8 +1940,8 @@ create self this xGas xValue xs newAddr initCode = do
         let
           store = case view (env . storageModel) vm0 of
             ConcreteS -> Concrete mempty
-            SymbolicS -> Symbolic $ sListArray (Just 0) []
-            InitialS -> Symbolic $ sListArray (Just 0) []
+            SymbolicS -> Symbolic $ sListArray 0 []
+            InitialS -> Symbolic $ sListArray 0 []
           newContract =
             initialContract (InitCode initCode) & set storage store
           newContext  =
