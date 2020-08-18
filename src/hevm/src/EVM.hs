@@ -63,6 +63,7 @@ import qualified Crypto.Hash as Crypto
 
 -- * Data types
 
+-- | EVM failure modes
 data Error
   = BalanceTooLow Word Word
   | UnrecognizedOpcode Word8
@@ -123,6 +124,7 @@ data TraceData
   | EntryTrace Text
   | ReturnTrace Buffer FrameContext
 
+-- | Queries halt execution until resolved through RPC calls or SMT queries
 data Query where
   PleaseFetchContract :: Addr         -> (Contract   -> EVM ()) -> Query
   PleaseFetchSlot     :: Addr -> Word -> (Word       -> EVM ()) -> Query
@@ -295,18 +297,17 @@ deriving instance Eq Contract
 -- | When doing symbolic execution, we have three different
 -- ways to model the storage of contracts. This determines
 -- not only the initial contract storage model but also how
--- new contracts will be modeled.
---
--- ConcreteS: Uses `Concrete` Storage. Reading / Writing from abstract
--- locations causes a runtime failure. Can be nicely combined with RPC.
---
--- SymbolicS: Uses `Symbolic` Storage. Reading / Writing never reaches RPC,
--- but always done using an SMT array with no default value.
---
--- InitialS: Uses `Symbolic` Storage. Reading / Writing never reaches RPC,
--- but always done using an SMT array with 0 as the default value.
---
-data StorageModel = ConcreteS | SymbolicS | InitialS
+-- RPC or state fetched contracts will be modeled.
+data StorageModel
+  = ConcreteS    -- ^ Uses `Concrete` Storage. Reading / Writing from abstract
+                 -- locations causes a runtime failure. Can be nicely combined with RPC.
+
+  | SymbolicS    -- ^ Uses `Symbolic` Storage. Reading / Writing never reaches RPC,
+                 -- but always done using an SMT array with no default value.
+
+  | InitialS     -- ^ Uses `Symbolic` Storage. Reading / Writing never reaches RPC,
+                 -- but always done using an SMT array with 0 as the default value.
+
   deriving (Read, Show)
 
 instance ParseField StorageModel
@@ -445,6 +446,7 @@ makeVm o = VM
             InitCode b    -> b
             RuntimeCode b -> b
 
+-- | Initialize empty contract with given code
 initialContract :: ContractCode -> Contract
 initialContract theContractCode = Contract
   { _contractcode = theContractCode
@@ -468,9 +470,11 @@ contractWithStore theContractCode store =
 
 -- * Opcode dispatch (exec1)
 
+-- | Update program counter
 next :: (?op :: Word8) => EVM ()
 next = modifying (state . pc) (+ (opSize ?op))
 
+-- | Executes the EVM one step
 exec1 :: EVM ()
 exec1 = do
   vm <- get
@@ -1242,7 +1246,7 @@ exec1 = do
         xxx ->
           vmError (UnrecognizedOpcode xxx)
 
-
+-- | Checks a *CALL for failure; OOG, too many callframes, memory access etc.
 callChecks
   :: (?op :: Word8)
   => Contract -> Word -> Addr -> Word -> Word -> Word -> Word -> Word -> [SymWord]
@@ -1504,6 +1508,7 @@ pushToSequence f x = f %= (Seq.|> x)
 getCodeLocation :: VM -> CodeLocation
 getCodeLocation vm = (view (state . contract) vm, view (state . pc) vm)
 
+-- | Construct SMT Query and halt execution until resolved
 askSMT :: CodeLocation -> SymWord -> (Bool -> EVM ()) -> EVM ()
 askSMT codeloc jumpcondition continue = do
   -- We keep track of how many times we have come across this particular
@@ -1534,7 +1539,7 @@ askSMT codeloc jumpcondition continue = do
          -- None of the paths are possible; fail this branch
          choosePath Inconsistent = vmError DeadPath
 
-
+-- | Construct RPC Query and halt execution until resolved
 fetchAccount :: Addr -> (Contract -> EVM ()) -> EVM ()
 fetchAccount addr continue =
   use (env . contracts . at addr) >>= \case
@@ -1686,6 +1691,7 @@ finalize = do
     (Map.filterWithKey
       (\k a -> not ((elem k touchedAddresses) && accountEmpty a)))
 
+-- | Loads the selected contract as the current contract to execute
 loadContract :: Addr -> EVM ()
 loadContract target =
   preuse (env . contracts . ix target . contractcode) >>=
@@ -1715,6 +1721,7 @@ notStatic continue = do
     then vmError StateChangeWhileStatic
     else continue
 
+-- | Burn gas, failing if insufficient gas is available
 burn :: Word -> EVM () -> EVM ()
 burn n continue = do
   available <- use (state . gas)

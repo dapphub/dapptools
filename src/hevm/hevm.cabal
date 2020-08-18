@@ -17,9 +17,9 @@ license:
 license-file:
   COPYING
 author:
-  Mikael Brockman
+  Mikael Brockman, Martin Lundfall
 maintainer:
-  mikael@brockman.se
+  mikael@brockman.se, martin.lundfall@gmail.com
 category:
   Ethereum
 build-type:
@@ -65,6 +65,8 @@ library
     EVM.UnitTest,
     EVM.VMTest
   other-modules:
+    Paths_hevm
+  autogen-modules:
     Paths_hevm
   ghc-options:
     -Wall -Wno-deprecations
