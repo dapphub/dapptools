@@ -11,5 +11,5 @@ nix-shell --command "cabal haddock --builddir=dist/docs --haddock-for-hackage \
   --haddock-option=--hyperlinked-source"
 cabal sdist
 cabal upload $FLAGS dist-newstyle/sdist/*.tar.gz
-cabal upload $FLAGS -d dist-newstyle/docs/*-docs.tar.gz
+cabal upload $FLAGS -d dist/docs/*-docs.tar.gz
 

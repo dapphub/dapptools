@@ -23,7 +23,6 @@ wordAt i bs =
   word (padRight 32 (BS.drop i bs))
 
 readByteOrZero :: Int -> ByteString -> Word8
--- This type can give insight into the provenance of a term
 readByteOrZero i bs = fromMaybe 0 (bs ^? ix i)
 
 byteStringSliceWithDefaultZeroes :: Int -> Int -> ByteString -> ByteString
@@ -37,7 +36,7 @@ byteStringSliceWithDefaultZeroes offset size bs =
     let bs' = BS.take size (BS.drop offset bs)
     in bs' <> BS.replicate (size - BS.length bs') 0
 
--- This type can give insight into the provenance of a term
+-- | This type can give insight into the provenance of a term
 data Whiff = Dull
            | FromKeccak ByteString
            | Var String

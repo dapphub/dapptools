@@ -38,9 +38,6 @@ data BlockNumber = Latest | BlockNumber W256
 
 deriving instance Show (RpcQuery a)
 
-mkr :: Addr
-mkr = 0xc66ea802717bfb9833400264dd12c2bceaa34a6d
-
 rpc :: String -> [String] -> Value
 rpc method args = object
   [ "jsonrpc" .= ("2.0" :: String)
