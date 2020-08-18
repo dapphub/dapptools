@@ -259,15 +259,20 @@ sliceWithZero :: Int -> Int -> Buffer -> Buffer
 sliceWithZero o s (StaticSymBuffer m) = StaticSymBuffer (sliceWithZero' o s m)
 sliceWithZero o s (ConcreteBuffer m) = ConcreteBuffer (Concrete.byteStringSliceWithDefaultZeroes o s m)
 
-writeMemory :: Buffer -> Word -> Word -> Word -> Buffer -> Buffer
-writeMemory (ConcreteBuffer bs1) n src dst (ConcreteBuffer bs0) =
-  ConcreteBuffer (Concrete.writeMemory bs1 n src dst bs0)
-writeMemory (ConcreteBuffer bs1) n src dst (StaticSymBuffer bs0) =
-  StaticSymBuffer (writeMemory' (litBytes bs1) n src dst bs0)
-writeMemory (StaticSymBuffer bs1) n src dst (ConcreteBuffer bs0) =
-  StaticSymBuffer (writeMemory' bs1 n src dst (litBytes bs0))
-writeMemory (StaticSymBuffer bs1) n src dst (StaticSymBuffer bs0) =
-  StaticSymBuffer (writeMemory' bs1 n src dst bs0)
+writeMemory :: Buffer -> SymWord -> SymWord -> SymWord -> Buffer -> Buffer
+writeMemory bs1 n src dst bs0 =
+  case (maybeLitWord n, maybeLitWord src, maybeLitWord dst, bs0, bs1) of
+    (Just n', Just src', Just dst', ConcreteBuffer bs0', ConcreteBuffer bs1') ->
+      ConcreteBuffer $ Concrete.writeMemory bs0' n' src' dst' bs1'
+    (Just n', Just src', Just dst', StaticSymBuffer bs0', ConcreteBuffer bs1') ->
+      StaticSymBuffer $ writeMemory' bs0' n' src' dst' (litBytes bs1')
+    (Just n', Just src', Just dst', ConcreteBuffer bs0', StaticSymBuffer bs1') ->
+      StaticSymBuffer $ writeMemory' (litBytes bs0') n' src' dst' bs1'
+    (Just n', Just src', Just dst', StaticSymBuffer bs0', StaticSymBuffer bs1') ->
+      StaticSymBuffer $ writeMemory' bs0' n' src' dst' bs1'
+    _ -> let DynamicSymBuffer bs0' = dynamize bs0
+             DynamicSymBuffer bs1' = dynamize bs1
+         in DynamicSymBuffer $ dynWriteMemory bs0' n src dst bs1'
 
 readMemoryWord :: Word -> Buffer -> SymWord
 readMemoryWord i (StaticSymBuffer m) = readMemoryWord' i m
