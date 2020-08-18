@@ -240,7 +240,7 @@ let
 
     explore() {
       set -x
-      hevm_output=$(${timeout} 60s ${hevm} symbolic --code "$1" --solver "$2" --json-file "$3" $4 2>&1)
+      hevm_output=$(${timeout} 90s ${hevm} symbolic --code "$1" --solver "$2" --json-file "$3" $4 2>&1)
       status=$?
       set +x
 
