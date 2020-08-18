@@ -128,7 +128,7 @@ data TraceData
 data Query where
   PleaseFetchContract :: Addr         -> (Contract   -> EVM ()) -> Query
   PleaseFetchSlot     :: Addr -> Word -> (Word       -> EVM ()) -> Query
-  PleaseAskSMT        :: SymWord -> [SBool] -> (JumpCondition -> EVM ()) -> Query
+  PleaseAskSMT        :: SymWord -> [SBool] -> (SBool -> EVM ()) -> Query
 
 data Choose where
   PleaseChoosePath    :: (Bool -> EVM ()) -> Choose
@@ -156,9 +156,9 @@ type EVM a = State VM a
 
 type CodeLocation = (Addr, Int)
 
--- | The possible return values of a SMT query regarding JUMPI
-data JumpCondition = Iszero Bool | Unknown | Inconsistent
-  deriving (Show)
+-- | The possible return values of a SMT query
+data BranchCondition = Case Bool | Unknown | Inconsistent
+  deriving Show
 
 -- | The cache is data that can be persisted for efficiency:
 -- any expensive query that is constant at least within a block.
@@ -170,7 +170,7 @@ data Cache = Cache
 -- | A way to specify an initial VM state
 data VMOpts = VMOpts
   { vmoptContract :: Contract
-  , vmoptCalldata :: (Buffer, (SWord 32)) -- maximum size of uint32 as per eip 1985
+  , vmoptCalldata :: Buffer -- maximum size of uint32 as per eip 1985
   , vmoptValue :: SymWord
   , vmoptAddress :: Addr
   , vmoptCaller :: SAddr
@@ -225,7 +225,7 @@ data FrameState = FrameState
   , _stack        :: [SymWord]
   , _memory       :: Buffer
   , _memorySize   :: Int
-  , _calldata     :: (Buffer, (SWord 32))
+  , _calldata     :: Buffer
   , _callvalue    :: SymWord
   , _caller       :: SAddr
   , _gas          :: Word
@@ -342,7 +342,7 @@ blankState = FrameState
   , _stack        = mempty
   , _memory       = mempty
   , _memorySize   = 0
-  , _calldata     = (mempty, 0)
+  , _calldata     = mempty
   , _callvalue    = 0
   , _caller       = 0
   , _gas          = 0
@@ -498,28 +498,23 @@ exec1 = do
   if self > 0x0 && self <= 0x9 then do
     -- call to precompile
     let ?op = 0x00 -- dummy value
-    let
-      calldatasize = snd (the state calldata)
-    case unliteral calldatasize of
+    copyBytesToMemory (the state calldata) (num len (the state calldata)) 0 0
+    executePrecompile self (the state gas) 0 (num (len (the state calldata))) 0 0 []
+    vmx <- get
+    case view (state.stack) vmx of
+      (x:_) -> case maybeLitWord x of
+        Just 0 -> do
+          fetchAccount self $ \_ -> do
+            touchAccount self
+            vmError PrecompileFailure
+        Just _ ->
+          fetchAccount self $ \_ -> do
+            touchAccount self
+            out <- use (state . returndata)
+            finishFrame (FrameReturned out)
         Nothing -> vmError UnexpectedSymbolicArg
-        Just calldatasize' -> do
-          copyBytesToMemory (fst $ the state calldata) (num calldatasize') 0 0
-          executePrecompile self (the state gas) 0 (num calldatasize') 0 0 []
-          vmx <- get
-          case view (state.stack) vmx of
-            (x:_) -> case maybeLitWord x of
-              Just 0 -> do
-                fetchAccount self $ \_ -> do
-                  touchAccount self
-                  vmError PrecompileFailure
-              Just _ ->
-                fetchAccount self $ \_ -> do
-                  touchAccount self
-                  out <- use (state . returndata)
-                  finishFrame (FrameReturned out)
-              Nothing -> vmError UnexpectedSymbolicArg
-            _ ->
-              underrun
+      _ ->
+        underrun
 
   else if the state pc >= num (BS.length (the state code))
     then doStop
@@ -721,12 +716,12 @@ exec1 = do
         -- op: CALLDATASIZE
         0x36 ->
           limitStack 1 . burn g_base $
-            next >> pushSym (sw256 . zeroExtend . snd $ (the state calldata))
+            next >> pushSym (sw256 . sFromIntegral . len $ the state calldata)
 
         -- op: CALLDATACOPY
         0x37 ->
           case stk of
-            (xTo' : xFrom' : xSize' : xs) -> forceConcrete3 (xTo',xFrom',xSize') $ \(xTo,xFrom,xSize) ->
+            (xTo : xFrom : xSize : xs) ->
               burn (g_verylow + g_copy * ceilDiv xSize 32) $
                 accessUnboundedMemoryRange fees xTo xSize $ do
                   next
@@ -1519,7 +1514,7 @@ askSMT codeloc jumpcondition continue = do
   -- already. So we first check the cache to see if the result is known
   use (cache . path . at (codeloc, iteration)) >>= \case
      -- If the query has been done already, select path or select the only available
-     Just w -> choosePath (Iszero w)
+     Just w -> choosePath (Case w)
      -- If this is a new query, run the query, cache the result
      -- increment the iterations and select appropriate path
      Nothing -> do pathconds <- use pathConditions
@@ -1527,15 +1522,15 @@ askSMT codeloc jumpcondition continue = do
                      jumpcondition pathconds choosePath
 
    where -- Only one path is possible
-         choosePath :: JumpCondition -> EVM ()
-         choosePath (Iszero v) = do assign result Nothing
-                                    pathConditions <>= if v then [litWord 0 .== jumpcondition] else [litWord 0 ./= jumpcondition]
-                                    iteration <- use (iterations . at codeloc . non 0)
-                                    assign (cache . path . at (codeloc, iteration)) (Just v)
-                                    assign (iterations . at codeloc) (Just (iteration + 1))
-                                    continue v
+         choosePath :: BranchCondition -> EVM ()
+         choosePath (Case v) = do assign result Nothing
+                                  pushTo pathConditions v
+                                  iteration <- use (iterations . at codeloc . non 0)
+                                  assign (cache . path . at (codeloc, iteration)) (Just v)
+                                  assign (iterations . at codeloc) (Just (iteration + 1))
+                                  continue v
          -- Both paths are possible; we ask for more input
-         choosePath Unknown = assign result . Just . VMFailure . Choose . PleaseChoosePath $ choosePath . Iszero
+         choosePath Unknown = assign result . Just . VMFailure . Choose . PleaseChoosePath $ choosePath . Known
          -- None of the paths are possible; fail this branch
          choosePath Inconsistent = vmError DeadPath
 
@@ -2154,30 +2149,37 @@ finishFrame how = do
 
 accessUnboundedMemoryRange
   :: FeeSchedule Word
-  -> Word
-  -> Word
+  -> SymWord
+  -> SymWord
   -> EVM ()
   -> EVM ()
 accessUnboundedMemoryRange _ _ 0 continue = continue
-accessUnboundedMemoryRange fees f l continue = do
-  m0 <- num <$> use (state . memorySize)
-  do
-    let m1 = 32 * ceilDiv (max m0 (num f + num l)) 32
-    burn (memoryCost fees m1 - memoryCost fees m0) $ do
+accessUnboundedMemoryRange fees f l continue =
+  
+  case (maybeLitWord f, maybeLitWord l) of
+    (Just f', Just l') -> do
+      let m1 = 32 * ceilDiv (max m0 (num f + num l)) 32
+      burn (memoryCost fees m1 - memoryCost fees m0) $ do
       assign (state . memorySize) (num m1)
       continue
 
 accessMemoryRange
   :: FeeSchedule Word
-  -> Word
-  -> Word
+  -> SymWord
+  -> SymWord
   -> EVM ()
   -> EVM ()
 accessMemoryRange _ _ 0 continue = continue
 accessMemoryRange fees f l continue =
-  if f + l < l
-    then vmError IllegalOverflow
-    else accessUnboundedMemoryRange fees f l continue
+  case (maybeLitWord f, maybeLitWord l) of
+    (Just f', Just l') ->
+      if f' + l' < l'
+      then vmError IllegalOverflow
+      else accessUnboundedMemoryRange fees f l continue
+
+  -- we optimistically neglect the check for overflow here as we'd
+  -- have to branch on basically every memory access otherwise
+    _ -> accessUnboundedMemoryRange fees f l continue
 
 accessMemoryWord
   :: FeeSchedule Word -> Word -> EVM () -> EVM ()
