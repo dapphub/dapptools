@@ -128,7 +128,7 @@ data TraceData
 data Query where
   PleaseFetchContract :: Addr         -> (Contract   -> EVM ()) -> Query
   PleaseFetchSlot     :: Addr -> Word -> (Word       -> EVM ()) -> Query
-  PleaseAskSMT        :: SymWord -> [SBool] -> (SBool -> EVM ()) -> Query
+  PleaseAskSMT        :: SBool -> [SBool] -> (BranchCondition -> EVM ()) -> Query
 
 data Choose where
   PleaseChoosePath    :: (Bool -> EVM ()) -> Choose
@@ -224,7 +224,7 @@ data FrameState = FrameState
   , _pc           :: Int
   , _stack        :: [SymWord]
   , _memory       :: Buffer
-  , _memorySize   :: Int
+  , _memorySize   :: SWord 32
   , _calldata     :: Buffer
   , _callvalue    :: SymWord
   , _caller       :: SAddr
@@ -557,28 +557,28 @@ exec1 = do
                   assign (ix 0) (stk ^?! ix i)
                   assign (ix i) (stk ^?! ix 0)
 
-        -- op: LOG
-        x | x >= 0xa0 && x <= 0xa4 ->
-          notStatic $
-          let n = (num x - 0xa0) in
-          case stk of
-            (xOffset':xSize':xs) ->
-              if length xs < n
-              then underrun
-              else
-                forceConcrete2 (xOffset', xSize') $ \(xOffset, xSize) -> do
-                    let (topics, xs') = splitAt n xs
-                        bytes         = readMemory (num xOffset) (num xSize) vm
-                        log           = Log self bytes topics
+        -- -- op: LOG
+        -- x | x >= 0xa0 && x <= 0xa4 ->
+        --   notStatic $
+        --   let n = (num x - 0xa0) in
+        --   case stk of
+        --     (xOffset':xSize':xs) ->
+        --       if length xs < n
+        --       then underrun
+        --       else
+        --         forceConcrete2 (xOffset', xSize') $ \(xOffset, xSize) -> do
+        --             let (topics, xs') = splitAt n xs
+        --                 bytes         = readMemory (num xOffset) (num xSize) vm
+        --                 log           = Log self bytes topics
 
-                    burn (g_log + g_logdata * xSize + num n * g_logtopic) $
-                      accessMemoryRange fees xOffset xSize $ do
-                        traceLog log
-                        next
-                        assign (state . stack) xs'
-                        pushToSequence logs log
-            _ ->
-              underrun
+        --             burn (g_log + g_logdata * xSize + num n * g_logtopic) $
+        --               accessMemoryRange fees xOffset xSize $ do
+        --                 traceLog log
+        --                 next
+        --                 assign (state . stack) xs'
+        --                 pushToSequence logs log
+        --     _ ->
+        --       underrun
 
         -- op: STOP
         0x00 -> doStop
@@ -642,601 +642,601 @@ exec1 = do
         -- op: SAR
         0x1d -> stackOp2 (const g_verylow) $ \((S _ n), (S _ x)) -> sw256 $ sSignedShiftArithRight x n
 
-        -- op: SHA3
-        -- more accurately refered to as KECCAK
-        0x20 ->
-          case stk of
-            (xOffset' : xSize' : xs) ->
-              forceConcrete xOffset' $
-                \xOffset -> forceConcrete xSize' $ \xSize -> do
-                  (hash, invMap) <- case readMemory xOffset xSize vm of
-                                     ConcreteBuffer bs -> pure (litWord $ keccakBlob bs, Map.singleton (keccakBlob bs) bs)
+        -- -- op: SHA3
+        -- -- more accurately refered to as KECCAK
+        -- 0x20 ->
+        --   case stk of
+        --     (xOffset' : xSize' : xs) ->
+        --       forceConcrete xOffset' $
+        --         \xOffset -> forceConcrete xSize' $ \xSize -> do
+        --           (hash, invMap) <- case readMemory xOffset xSize vm of
+        --                              ConcreteBuffer bs -> pure (litWord $ keccakBlob bs, Map.singleton (keccakBlob bs) bs)
 
-                                     -- Although we would like to simply assert that the uninterpreted function symkeccak'
-                                     -- is injective, this proves to cause a lot of concern for our smt solvers, probably
-                                     -- due to the introduction of universal quantifiers into the queries.
+        --                              -- Although we would like to simply assert that the uninterpreted function symkeccak'
+        --                              -- is injective, this proves to cause a lot of concern for our smt solvers, probably
+        --                              -- due to the introduction of universal quantifiers into the queries.
 
-                                     -- Instead, we keep track of all of the particular invocations of symkeccak' we see
-                                     -- (similarly to sha3Crack), and simply assert that injectivity holds for these
-                                     -- particular invocations.
+        --                              -- Instead, we keep track of all of the particular invocations of symkeccak' we see
+        --                              -- (similarly to sha3Crack), and simply assert that injectivity holds for these
+        --                              -- particular invocations.
 
-                                     StaticSymBuffer bs -> do
-                                                   let hash' = symkeccak' bs
-                                                       previousUsed = view (env . keccakUsed) vm
-                                                   env . keccakUsed <>= [(bs, hash')]
-                                                   pathConditions <>= fmap (\(preimage, image) ->
-                                                                               image .== hash' .=> preimage .== bs)
-                                                                           previousUsed
-                                                   return (sw256 hash', mempty)
+        --                              StaticSymBuffer bs -> do
+        --                                            let hash' = symkeccak' bs
+        --                                                previousUsed = view (env . keccakUsed) vm
+        --                                            env . keccakUsed <>= [(bs, hash')]
+        --                                            pathConditions <>= fmap (\(preimage, image) ->
+        --                                                                        image .== hash' .=> preimage .== bs)
+        --                                                                    previousUsed
+        --                                            return (sw256 hash', mempty)
 
-                  burn (g_sha3 + g_sha3word * ceilDiv (num xSize) 32) $
-                    accessMemoryRange fees xOffset xSize $ do
-                      next
-                      assign (state . stack) (hash : xs)
-                      (env . sha3Crack) <>= invMap
-            _ -> underrun
+        --           burn (g_sha3 + g_sha3word * ceilDiv (num xSize) 32) $
+        --             accessMemoryRange fees xOffset xSize $ do
+        --               next
+        --               assign (state . stack) (hash : xs)
+        --               (env . sha3Crack) <>= invMap
+        --     _ -> underrun
 
-        -- op: ADDRESS
-        0x30 ->
-          limitStack 1 $
-            burn g_base (next >> push (num self))
+        -- -- op: ADDRESS
+        -- 0x30 ->
+        --   limitStack 1 $
+        --     burn g_base (next >> push (num self))
 
-        -- op: BALANCE
-        0x31 ->
-          case stk of
-            (x':xs) -> forceConcrete x' $ \x ->
-              burn g_balance $
-                fetchAccount (num x) $ \c -> do
-                  next
-                  assign (state . stack) xs
-                  push (view balance c)
-            [] ->
-              underrun
+        -- -- op: BALANCE
+        -- 0x31 ->
+        --   case stk of
+        --     (x':xs) -> forceConcrete x' $ \x ->
+        --       burn g_balance $
+        --         fetchAccount (num x) $ \c -> do
+        --           next
+        --           assign (state . stack) xs
+        --           push (view balance c)
+        --     [] ->
+        --       underrun
 
-        -- op: ORIGIN
-        0x32 ->
-          limitStack 1 . burn g_base $
-            next >> push (num (the tx origin))
+        -- -- op: ORIGIN
+        -- 0x32 ->
+        --   limitStack 1 . burn g_base $
+        --     next >> push (num (the tx origin))
 
-        -- op: CALLER
-        0x33 ->
-          limitStack 1 . burn g_base $
-            let toSymWord = sw256 . sFromIntegral . saddressWord160
-            in next >> pushSym (toSymWord (the state caller))
+        -- -- op: CALLER
+        -- 0x33 ->
+        --   limitStack 1 . burn g_base $
+        --     let toSymWord = sw256 . sFromIntegral . saddressWord160
+        --     in next >> pushSym (toSymWord (the state caller))
 
-        -- op: CALLVALUE
-        0x34 ->
-          limitStack 1 . burn g_base $
-            next >> pushSym (the state callvalue)
+        -- -- op: CALLVALUE
+        -- 0x34 ->
+        --   limitStack 1 . burn g_base $
+        --     next >> pushSym (the state callvalue)
 
         -- -- op: CALLDATALOAD
         -- 0x35 -> stackOp1 (const g_verylow) $
-        --   \(S _ x) -> uncurry (readSWordWithBound (sFromIntegral x)) (the state calldata)
+        --   \(S _ x) -> uncurry (readSWord' (sFromIntegral x)) (the state calldata)
 
-        -- op: CALLDATASIZE
-        0x36 ->
-          limitStack 1 . burn g_base $
-            next >> pushSym (sw256 . sFromIntegral . len $ the state calldata)
+        -- -- op: CALLDATASIZE
+        -- 0x36 ->
+        --   limitStack 1 . burn g_base $
+        --     next >> pushSym (sw256 . sFromIntegral . len $ the state calldata)
 
-        -- op: CALLDATACOPY
-        0x37 ->
-          case stk of
-            (xTo : xFrom : xSize : xs) ->
-              burn (g_verylow + g_copy * ceilDiv xSize 32) $
-                accessUnboundedMemoryRange fees xTo xSize $ do
-                  next
-                  assign (state . stack) xs
-                  case the state calldata of
-                    (StaticSymBuffer cd, cdlen) -> copyBytesToMemory (StaticSymBuffer [ite (i .<= cdlen) x 0 | (x, i) <- zip cd [1..]]) xSize xFrom xTo
-                    -- when calldata is concrete,
-                    -- the bound should always be equal to the bytestring length
-                    (cd, _) -> copyBytesToMemory cd xSize xFrom xTo
-            _ -> underrun
+        -- -- op: CALLDATACOPY
+        -- 0x37 ->
+        --   case stk of
+        --     (xTo : xFrom : xSize : xs) ->
+        --       burn (g_verylow + g_copy * ceilDiv xSize 32) $
+        --         accessUnboundedMemoryRange fees xTo xSize $ do
+        --           next
+        --           assign (state . stack) xs
+        --           case the state calldata of
+        --             (StaticSymBuffer cd, cdlen) -> copyBytesToMemory (StaticSymBuffer [ite (i .<= cdlen) x 0 | (x, i) <- zip cd [1..]]) xSize xFrom xTo
+        --             -- when calldata is concrete,
+        --             -- the bound should always be equal to the bytestring length
+        --             (cd, _) -> copyBytesToMemory cd xSize xFrom xTo
+        --     _ -> underrun
 
-        -- op: CODESIZE
-        0x38 ->
-          limitStack 1 . burn g_base $
-            next >> push (num (BS.length (the state code)))
+        -- -- op: CODESIZE
+        -- 0x38 ->
+        --   limitStack 1 . burn g_base $
+        --     next >> push (num (BS.length (the state code)))
 
-        -- op: CODECOPY
-        0x39 ->
-          case stk of
-            (memOffset' : codeOffset' : n' : xs) -> forceConcrete3 (memOffset',codeOffset',n') $ \(memOffset,codeOffset,n) -> do
-              burn (g_verylow + g_copy * ceilDiv (num n) 32) $
-                accessUnboundedMemoryRange fees memOffset n $ do
-                  next
-                  assign (state . stack) xs
-                  copyBytesToMemory (ConcreteBuffer (the state code))
-                    n codeOffset memOffset
-            _ -> underrun
+        -- -- op: CODECOPY
+        -- 0x39 ->
+        --   case stk of
+        --     (memOffset' : codeOffset' : n' : xs) -> forceConcrete3 (memOffset',codeOffset',n') $ \(memOffset,codeOffset,n) -> do
+        --       burn (g_verylow + g_copy * ceilDiv (num n) 32) $
+        --         accessUnboundedMemoryRange fees memOffset n $ do
+        --           next
+        --           assign (state . stack) xs
+        --           copyBytesToMemory (ConcreteBuffer (the state code))
+        --             n codeOffset memOffset
+        --     _ -> underrun
 
-        -- op: GASPRICE
-        0x3a ->
-          limitStack 1 . burn g_base $
-            next >> push (the tx gasprice)
+        -- -- op: GASPRICE
+        -- 0x3a ->
+        --   limitStack 1 . burn g_base $
+        --     next >> push (the tx gasprice)
 
-        -- op: EXTCODESIZE
-        0x3b ->
-          case stk of
-            (x':xs) -> forceConcrete x' $ \x ->
-              if x == num cheatCode
-                then do
-                  next
-                  assign (state . stack) xs
-                  push (w256 1)
-                else
-                  burn g_extcode $
-                    fetchAccount (num x) $ \c -> do
-                      next
-                      assign (state . stack) xs
-                      push (num (BS.length (view bytecode c)))
-            [] ->
-              underrun
+        -- -- op: EXTCODESIZE
+        -- 0x3b ->
+        --   case stk of
+        --     (x':xs) -> forceConcrete x' $ \x ->
+        --       if x == num cheatCode
+        --         then do
+        --           next
+        --           assign (state . stack) xs
+        --           push (w256 1)
+        --         else
+        --           burn g_extcode $
+        --             fetchAccount (num x) $ \c -> do
+        --               next
+        --               assign (state . stack) xs
+        --               push (num (BS.length (view bytecode c)))
+        --     [] ->
+        --       underrun
 
-        -- op: EXTCODECOPY
-        0x3c ->
-          case stk of
-            ( extAccount'
-              : memOffset'
-              : codeOffset'
-              : codeSize'
-              : xs ) ->
-              forceConcrete4 (extAccount', memOffset', codeOffset', codeSize') $
-                \(extAccount, memOffset, codeOffset, codeSize) ->
-                  burn (g_extcode + g_copy * ceilDiv (num codeSize) 32) $
-                    accessUnboundedMemoryRange fees memOffset codeSize $
-                      fetchAccount (num extAccount) $ \c -> do
-                        next
-                        assign (state . stack) xs
-                        copyBytesToMemory (ConcreteBuffer (view bytecode c))
-                          codeSize codeOffset memOffset
-            _ -> underrun
+        -- -- op: EXTCODECOPY
+        -- 0x3c ->
+        --   case stk of
+        --     ( extAccount'
+        --       : memOffset'
+        --       : codeOffset'
+        --       : codeSize'
+        --       : xs ) ->
+        --       forceConcrete4 (extAccount', memOffset', codeOffset', codeSize') $
+        --         \(extAccount, memOffset, codeOffset, codeSize) ->
+        --           burn (g_extcode + g_copy * ceilDiv (num codeSize) 32) $
+        --             accessUnboundedMemoryRange fees memOffset codeSize $
+        --               fetchAccount (num extAccount) $ \c -> do
+        --                 next
+        --                 assign (state . stack) xs
+        --                 copyBytesToMemory (ConcreteBuffer (view bytecode c))
+        --                   codeSize codeOffset memOffset
+        --     _ -> underrun
 
-        -- op: RETURNDATASIZE
-        0x3d ->
-          limitStack 1 . burn g_base $
-            next >> push (num $ len (the state returndata))
+        -- -- op: RETURNDATASIZE
+        -- 0x3d ->
+        --   limitStack 1 . burn g_base $
+        --     next >> push (num $ len (the state returndata))
 
-        -- op: RETURNDATACOPY
-        0x3e ->
-          case stk of
-            (xTo' : xFrom' : xSize' :xs) -> forceConcrete3 (xTo', xFrom', xSize') $
-              \(xTo, xFrom, xSize) ->
-                burn (g_verylow + g_copy * ceilDiv xSize 32) $
-                  accessUnboundedMemoryRange fees xTo xSize $ do
-                    next
-                    assign (state . stack) xs
-                    if len (the state returndata) < num xFrom + num xSize
-                    then vmError InvalidMemoryAccess
-                    else copyBytesToMemory (the state returndata) xSize xFrom xTo
-            _ -> underrun
+        -- -- op: RETURNDATACOPY
+        -- 0x3e ->
+        --   case stk of
+        --     (xTo' : xFrom' : xSize' :xs) -> forceConcrete3 (xTo', xFrom', xSize') $
+        --       \(xTo, xFrom, xSize) ->
+        --         burn (g_verylow + g_copy * ceilDiv xSize 32) $
+        --           accessUnboundedMemoryRange fees xTo xSize $ do
+        --             next
+        --             assign (state . stack) xs
+        --             if len (the state returndata) < num xFrom + num xSize
+        --             then vmError InvalidMemoryAccess
+        --             else copyBytesToMemory (the state returndata) xSize xFrom xTo
+        --     _ -> underrun
 
-        -- op: EXTCODEHASH
-        0x3f ->
-          case stk of
-            (x':xs) -> forceConcrete x' $ \x ->
-              burn g_extcodehash $ do
-                next
-                assign (state . stack) xs
-                fetchAccount (num x) $ \c ->
-                   if accountEmpty c
-                     then push (num (0 :: Int))
-                     else push (num (keccak (view bytecode c)))
-            [] ->
-              underrun
+        -- -- op: EXTCODEHASH
+        -- 0x3f ->
+        --   case stk of
+        --     (x':xs) -> forceConcrete x' $ \x ->
+        --       burn g_extcodehash $ do
+        --         next
+        --         assign (state . stack) xs
+        --         fetchAccount (num x) $ \c ->
+        --            if accountEmpty c
+        --              then push (num (0 :: Int))
+        --              else push (num (keccak (view bytecode c)))
+        --     [] ->
+        --       underrun
 
-        -- op: BLOCKHASH
-        0x40 -> do
-          -- We adopt the fake block hash scheme of the VMTests,
-          -- so that blockhash(i) is the hash of i as decimal ASCII.
-          stackOp1 (const g_blockhash) $
-            \(forceLit -> i) ->
-              if i + 256 < the block number || i >= the block number
-              then 0
-              else
-                (num i :: Integer)
-                  & show & Char8.pack & keccak & num
+        -- -- op: BLOCKHASH
+        -- 0x40 -> do
+        --   -- We adopt the fake block hash scheme of the VMTests,
+        --   -- so that blockhash(i) is the hash of i as decimal ASCII.
+        --   stackOp1 (const g_blockhash) $
+        --     \(forceLit -> i) ->
+        --       if i + 256 < the block number || i >= the block number
+        --       then 0
+        --       else
+        --         (num i :: Integer)
+        --           & show & Char8.pack & keccak & num
 
-        -- op: COINBASE
-        0x41 ->
-          limitStack 1 . burn g_base $
-            next >> push (num (the block coinbase))
+        -- -- op: COINBASE
+        -- 0x41 ->
+        --   limitStack 1 . burn g_base $
+        --     next >> push (num (the block coinbase))
 
-        -- op: TIMESTAMP
-        0x42 ->
-          limitStack 1 . burn g_base $
-            next >> push (the block timestamp)
+        -- -- op: TIMESTAMP
+        -- 0x42 ->
+        --   limitStack 1 . burn g_base $
+        --     next >> push (the block timestamp)
 
-        -- op: NUMBER
-        0x43 ->
-          limitStack 1 . burn g_base $
-            next >> push (the block number)
+        -- -- op: NUMBER
+        -- 0x43 ->
+        --   limitStack 1 . burn g_base $
+        --     next >> push (the block number)
 
-        -- op: DIFFICULTY
-        0x44 ->
-          limitStack 1 . burn g_base $
-            next >> push (the block difficulty)
+        -- -- op: DIFFICULTY
+        -- 0x44 ->
+        --   limitStack 1 . burn g_base $
+        --     next >> push (the block difficulty)
 
-        -- op: GASLIMIT
-        0x45 ->
-          limitStack 1 . burn g_base $
-            next >> push (the block gaslimit)
+        -- -- op: GASLIMIT
+        -- 0x45 ->
+        --   limitStack 1 . burn g_base $
+        --     next >> push (the block gaslimit)
 
-        -- op: CHAINID
-        0x46 ->
-          limitStack 1 . burn g_base $
-            next >> push (the env chainId)
+        -- -- op: CHAINID
+        -- 0x46 ->
+        --   limitStack 1 . burn g_base $
+        --     next >> push (the env chainId)
 
-        -- op: SELFBALANCE
-        0x47 ->
-          limitStack 1 . burn g_low $
-            next >> push (view balance this)
+        -- -- op: SELFBALANCE
+        -- 0x47 ->
+        --   limitStack 1 . burn g_low $
+        --     next >> push (view balance this)
 
-        -- op: POP
-        0x50 ->
-          case stk of
-            (_:xs) -> burn g_base (next >> assign (state . stack) xs)
-            _      -> underrun
+        -- -- op: POP
+        -- 0x50 ->
+        --   case stk of
+        --     (_:xs) -> burn g_base (next >> assign (state . stack) xs)
+        --     _      -> underrun
 
-        -- op: MLOAD
-        0x51 ->
-          case stk of
-            (x':xs) -> forceConcrete x' $ \x ->
-              burn g_verylow $
-                accessMemoryWord fees x $ do
-                  next
-                  assign (state . stack) (view (word256At (num x)) mem : xs)
-            _ -> underrun
+        -- -- op: MLOAD
+        -- 0x51 ->
+        --   case stk of
+        --     (x':xs) -> forceConcrete x' $ \x ->
+        --       burn g_verylow $
+        --         accessMemoryWord fees x $ do
+        --           next
+        --           assign (state . stack) (view (word256At (num x)) mem : xs)
+        --     _ -> underrun
 
-        -- op: MSTORE
-        0x52 ->
-          case stk of
-            (x':y:xs) -> forceConcrete x' $ \x ->
-              burn g_verylow $
-                accessMemoryWord fees x $ do
-                  next
-                  assign (state . memory . word256At (num x)) y
-                  assign (state . stack) xs
-            _ -> underrun
+        -- -- op: MSTORE
+        -- 0x52 ->
+        --   case stk of
+        --     (x':y:xs) -> forceConcrete x' $ \x ->
+        --       burn g_verylow $
+        --         accessMemoryWord fees x $ do
+        --           next
+        --           assign (state . memory . word256At (num x)) y
+        --           assign (state . stack) xs
+        --     _ -> underrun
 
-        -- op: MSTORE8
-        0x53 ->
-          case stk of
-            (x':(S _ y):xs) -> forceConcrete x' $ \x ->
-              burn g_verylow $
-                accessMemoryRange fees x 1 $ do
-                  let yByte = bvExtract (Proxy :: Proxy 7) (Proxy :: Proxy 0) y
-                  next
-                  modifying (state . memory) (setMemoryByte x yByte)
-                  assign (state . stack) xs
-            _ -> underrun
+        -- -- op: MSTORE8
+        -- 0x53 ->
+        --   case stk of
+        --     (x':(S _ y):xs) -> forceConcrete x' $ \x ->
+        --       burn g_verylow $
+        --         accessMemoryRange fees x 1 $ do
+        --           let yByte = bvExtract (Proxy :: Proxy 7) (Proxy :: Proxy 0) y
+        --           next
+        --           modifying (state . memory) (setMemoryByte x yByte)
+        --           assign (state . stack) xs
+        --     _ -> underrun
 
-        -- op: SLOAD
-        0x54 ->
-          case stk of
-            (x:xs) ->
-              burn g_sload $
-                accessStorage self x $ \y -> do
-                  next
-                  assign (state . stack) (y:xs)
-            _ -> underrun
+        -- -- op: SLOAD
+        -- 0x54 ->
+        --   case stk of
+        --     (x:xs) ->
+        --       burn g_sload $
+        --         accessStorage self x $ \y -> do
+        --           next
+        --           assign (state . stack) (y:xs)
+        --     _ -> underrun
 
-        -- op: SSTORE
-        0x55 ->
-          notStatic $
-          case stk of
-            (x:new:xs) ->
-              accessStorage self x $ \current -> do
-                availableGas <- use (state . gas)
+        -- -- op: SSTORE
+        -- 0x55 ->
+        --   notStatic $
+        --   case stk of
+        --     (x:new:xs) ->
+        --       accessStorage self x $ \current -> do
+        --         availableGas <- use (state . gas)
 
-                if availableGas <= g_callstipend
-                  then finishFrame (FrameErrored (OutOfGas availableGas g_callstipend))
-                  else do
-                    let original = case view storage this of
-                                  Concrete _ -> fromMaybe 0 (Map.lookup (forceLit x) (view origStorage this))
-                                  Symbolic _ -> 0 -- we don't use this value anywhere anyway
-                        cost = case (maybeLitWord current, maybeLitWord new) of
-                                 (Just current', Just new') ->
-                                    if (current' == new') then g_sload
-                                    else if (current' == original) && (original == 0) then g_sset
-                                    else if (current' == original) then g_sreset
-                                    else g_sload
+        --         if availableGas <= g_callstipend
+        --           then finishFrame (FrameErrored (OutOfGas availableGas g_callstipend))
+        --           else do
+        --             let original = case view storage this of
+        --                           Concrete _ -> fromMaybe 0 (Map.lookup (forceLit x) (view origStorage this))
+        --                           Symbolic _ -> 0 -- we don't use this value anywhere anyway
+        --                 cost = case (maybeLitWord current, maybeLitWord new) of
+        --                          (Just current', Just new') ->
+        --                             if (current' == new') then g_sload
+        --                             else if (current' == original) && (original == 0) then g_sset
+        --                             else if (current' == original) then g_sreset
+        --                             else g_sload
 
-                                 -- if any of the arguments are symbolic,
-                                 -- assume worst case scenario
-                                 _ -> g_sset
+        --                          -- if any of the arguments are symbolic,
+        --                          -- assume worst case scenario
+        --                          _ -> g_sset
 
-                    burn cost $ do
-                      next
-                      assign (state . stack) xs
-                      modifying (env . contracts . ix self . storage)
-                        (writeStorage x new)
+        --             burn cost $ do
+        --               next
+        --               assign (state . stack) xs
+        --               modifying (env . contracts . ix self . storage)
+        --                 (writeStorage x new)
 
-                      case (maybeLitWord current, maybeLitWord new) of
-                         (Just current', Just new') ->
-                            unless (current' == new') $
-                              if current' == original
-                              then when (original /= 0 && new' == 0) $
-                                      refund r_sclear
-                              else do
-                                      when (original /= 0) $
-                                        if new' == 0
-                                        then refund r_sclear
-                                        else unRefund r_sclear
-                                      when (original == new') $
-                                        if original == 0
-                                        then refund (g_sset - g_sload)
-                                        else refund (g_sreset - g_sload)
-                         -- if any of the arguments are symbolic,
-                         -- don't change the refund counter
-                         _ -> noop
-            _ -> underrun
+        --               case (maybeLitWord current, maybeLitWord new) of
+        --                  (Just current', Just new') ->
+        --                     unless (current' == new') $
+        --                       if current' == original
+        --                       then when (original /= 0 && new' == 0) $
+        --                               refund r_sclear
+        --                       else do
+        --                               when (original /= 0) $
+        --                                 if new' == 0
+        --                                 then refund r_sclear
+        --                                 else unRefund r_sclear
+        --                               when (original == new') $
+        --                                 if original == 0
+        --                                 then refund (g_sset - g_sload)
+        --                                 else refund (g_sreset - g_sload)
+        --                  -- if any of the arguments are symbolic,
+        --                  -- don't change the refund counter
+        --                  _ -> noop
+        --     _ -> underrun
 
-        -- op: JUMP
-        0x56 ->
-          case stk of
-            (x:xs) ->
-              burn g_mid $ forceConcrete x $ \x' ->
-                checkJump x' xs
-            _ -> underrun
+        -- -- op: JUMP
+        -- 0x56 ->
+        --   case stk of
+        --     (x:xs) ->
+        --       burn g_mid $ forceConcrete x $ \x' ->
+        --         checkJump x' xs
+        --     _ -> underrun
 
-        -- op: JUMPI
-        0x57 -> do
-          case stk of
-            (x:y:xs) -> forceConcrete x $ \x' ->
-                burn g_high $
-                  let jump :: Bool -> EVM ()
-                      jump True = assign (state . stack) xs >> next
-                      jump _    = checkJump x' xs
-                  in case maybeLitWord y of
-                      Just y' -> jump (0 == y')
-                      -- if the jump condition is symbolic, an smt query has to be made.
-                      Nothing -> askSMT (self, the state pc) y jump
-            _ -> underrun
+        -- -- op: JUMPI
+        -- 0x57 -> do
+        --   case stk of
+        --     (x:y:xs) -> forceConcrete x $ \x' ->
+        --         burn g_high $
+        --           let jump :: Bool -> EVM ()
+        --               jump True = assign (state . stack) xs >> next
+        --               jump _    = checkJump x' xs
+        --           in case maybeLitWord y of
+        --               Just y' -> jump (0 == y')
+        --               -- if the jump condition is symbolic, an smt query has to be made.
+        --               Nothing -> askSMT (self, the state pc) y jump
+        --     _ -> underrun
 
-        -- op: PC
-        0x58 ->
-          limitStack 1 . burn g_base $
-            next >> push (num (the state pc))
+        -- -- op: PC
+        -- 0x58 ->
+        --   limitStack 1 . burn g_base $
+        --     next >> push (num (the state pc))
 
-        -- op: MSIZE
-        0x59 ->
-          limitStack 1 . burn g_base $
-            next >> push (num (the state memorySize))
+        -- -- op: MSIZE
+        -- 0x59 ->
+        --   limitStack 1 . burn g_base $
+        --     next >> push (num (the state memorySize))
 
-        -- op: GAS
-        0x5a ->
-          limitStack 1 . burn g_base $
-            next >> push (the state gas - g_base)
+        -- -- op: GAS
+        -- 0x5a ->
+        --   limitStack 1 . burn g_base $
+        --     next >> push (the state gas - g_base)
 
-        -- op: JUMPDEST
-        0x5b -> burn g_jumpdest next
+        -- -- op: JUMPDEST
+        -- 0x5b -> burn g_jumpdest next
 
-        -- op: EXP
-        0x0a ->
-          let cost (_ ,(forceLit -> exponent)) =
-                if exponent == 0
-                then g_exp
-                else g_exp + g_expbyte * num (ceilDiv (1 + log2 exponent) 8)
-          in stackOp2 cost $ \((S _ x),(S _ y)) -> sw256 $ x .^ y
+        -- -- op: EXP
+        -- 0x0a ->
+        --   let cost (_ ,(forceLit -> exponent)) =
+        --         if exponent == 0
+        --         then g_exp
+        --         else g_exp + g_expbyte * num (ceilDiv (1 + log2 exponent) 8)
+        --   in stackOp2 cost $ \((S _ x),(S _ y)) -> sw256 $ x .^ y
 
-        -- op: SIGNEXTEND
-        0x0b ->
-          stackOp2 (const g_low) $ \((forceLit -> bytes), w@(S _ x)) ->
-            if bytes >= 32 then w
-            else let n = num bytes * 8 + 7 in
-              sw256 $ ite (sTestBit x n)
-                      (x .|. complement (bit n - 1))
-                      (x .&. (bit n - 1))
+        -- -- op: SIGNEXTEND
+        -- 0x0b ->
+        --   stackOp2 (const g_low) $ \((forceLit -> bytes), w@(S _ x)) ->
+        --     if bytes >= 32 then w
+        --     else let n = num bytes * 8 + 7 in
+        --       sw256 $ ite (sTestBit x n)
+        --               (x .|. complement (bit n - 1))
+        --               (x .&. (bit n - 1))
 
-        -- op: CREATE
-        0xf0 ->
-          notStatic $
-          case stk of
-            (xValue' : xOffset' : xSize' : xs) -> forceConcrete3 (xValue', xOffset', xSize') $
-              \(xValue, xOffset, xSize) -> do
-                accessMemoryRange fees xOffset xSize $ do
-                  availableGas <- use (state . gas)
-                  let
-                    newAddr = createAddress self (wordValue (view nonce this))
-                    (cost, gas') = costOfCreate fees availableGas 0
-                  burn (cost - gas') $ forceConcreteBuffer (readMemory (num xOffset) (num xSize) vm) $ \initCode ->
-                    create self this gas' xValue xs newAddr initCode
-            _ -> underrun
+        -- -- op: CREATE
+        -- 0xf0 ->
+        --   notStatic $
+        --   case stk of
+        --     (xValue' : xOffset' : xSize' : xs) -> forceConcrete3 (xValue', xOffset', xSize') $
+        --       \(xValue, xOffset, xSize) -> do
+        --         accessMemoryRange fees xOffset xSize $ do
+        --           availableGas <- use (state . gas)
+        --           let
+        --             newAddr = createAddress self (wordValue (view nonce this))
+        --             (cost, gas') = costOfCreate fees availableGas 0
+        --           burn (cost - gas') $ forceConcreteBuffer (readMemory (num xOffset) (num xSize) vm) $ \initCode ->
+        --             create self this gas' xValue xs newAddr initCode
+        --     _ -> underrun
 
-        -- op: CALL
-        0xf1 ->
-          case stk of
-            ( xGas'
-              : xTo'
-              : (forceLit -> xValue)
-              : xInOffset'
-              : xInSize'
-              : xOutOffset'
-              : xOutSize'
-              : xs
-             ) -> forceConcrete6 (xGas', xTo', xInOffset', xInSize', xOutOffset', xOutSize') $
-              \(xGas, (num -> xTo), xInOffset, xInSize, xOutOffset, xOutSize) ->
-              (if xValue > 0 then notStatic else id) $
-                case xTo of
-                  n | n > 0 && n <= 9 ->
-                    precompiledContract this xGas xTo xTo xValue xInOffset xInSize xOutOffset xOutSize xs
-                  n | num n == cheatCode ->
-                    do
-                      assign (state . stack) xs
-                      cheat (xInOffset, xInSize) (xOutOffset, xOutSize)
-                  _ -> delegateCall this xGas xTo xTo xValue xInOffset xInSize xOutOffset xOutSize xs $ do
-                            zoom state $ do
-                              assign callvalue (litWord xValue)
-                              assign caller (litAddr self)
-                              assign contract xTo
-                            zoom (env . contracts) $ do
-                              ix self . balance -= xValue
-                              ix xTo  . balance += xValue
-                            touchAccount self
-                            touchAccount xTo
-            _ ->
-              underrun
+        -- -- op: CALL
+        -- 0xf1 ->
+        --   case stk of
+        --     ( xGas'
+        --       : xTo'
+        --       : (forceLit -> xValue)
+        --       : xInOffset'
+        --       : xInSize'
+        --       : xOutOffset'
+        --       : xOutSize'
+        --       : xs
+        --      ) -> forceConcrete6 (xGas', xTo', xInOffset', xInSize', xOutOffset', xOutSize') $
+        --       \(xGas, (num -> xTo), xInOffset, xInSize, xOutOffset, xOutSize) ->
+        --       (if xValue > 0 then notStatic else id) $
+        --         case xTo of
+        --           n | n > 0 && n <= 9 ->
+        --             precompiledContract this xGas xTo xTo xValue xInOffset xInSize xOutOffset xOutSize xs
+        --           n | num n == cheatCode ->
+        --             do
+        --               assign (state . stack) xs
+        --               cheat (xInOffset, xInSize) (xOutOffset, xOutSize)
+        --           _ -> delegateCall this xGas xTo xTo xValue xInOffset xInSize xOutOffset xOutSize xs $ do
+        --                     zoom state $ do
+        --                       assign callvalue (litWord xValue)
+        --                       assign caller (litAddr self)
+        --                       assign contract xTo
+        --                     zoom (env . contracts) $ do
+        --                       ix self . balance -= xValue
+        --                       ix xTo  . balance += xValue
+        --                     touchAccount self
+        --                     touchAccount xTo
+        --     _ ->
+        --       underrun
 
-        -- op: CALLCODE
-        0xf2 ->
-          case stk of
-            ( xGas'
-              : xTo'
-              : (forceLit -> xValue)
-              : xInOffset'
-              : xInSize'
-              : xOutOffset'
-              : xOutSize'
-              : xs
-              ) -> forceConcrete6 (xGas', xTo', xInOffset', xInSize', xOutOffset', xOutSize') $
-              \(xGas, (num -> xTo), xInOffset, xInSize, xOutOffset, xOutSize) ->
-                case xTo of
-                  n | n > 0 && n <= 9 ->
-                    precompiledContract this xGas xTo self xValue xInOffset xInSize xOutOffset xOutSize xs
-                  _ -> delegateCall this xGas xTo self xValue xInOffset xInSize xOutOffset xOutSize xs $ do
-                         zoom state $ do
-                           assign callvalue (litWord xValue)
-                           assign caller (litAddr self)
-                         touchAccount self
-            _ ->
-              underrun
+        -- -- op: CALLCODE
+        -- 0xf2 ->
+        --   case stk of
+        --     ( xGas'
+        --       : xTo'
+        --       : (forceLit -> xValue)
+        --       : xInOffset'
+        --       : xInSize'
+        --       : xOutOffset'
+        --       : xOutSize'
+        --       : xs
+        --       ) -> forceConcrete6 (xGas', xTo', xInOffset', xInSize', xOutOffset', xOutSize') $
+        --       \(xGas, (num -> xTo), xInOffset, xInSize, xOutOffset, xOutSize) ->
+        --         case xTo of
+        --           n | n > 0 && n <= 9 ->
+        --             precompiledContract this xGas xTo self xValue xInOffset xInSize xOutOffset xOutSize xs
+        --           _ -> delegateCall this xGas xTo self xValue xInOffset xInSize xOutOffset xOutSize xs $ do
+        --                  zoom state $ do
+        --                    assign callvalue (litWord xValue)
+        --                    assign caller (litAddr self)
+        --                  touchAccount self
+        --     _ ->
+        --       underrun
 
-        -- op: RETURN
-        0xf3 ->
-          case stk of
-            (xOffset' : xSize' :_) -> forceConcrete2 (xOffset', xSize') $ \(xOffset, xSize) ->
-              accessMemoryRange fees xOffset xSize $ do
-                let
-                  output = readMemory xOffset xSize vm
-                  codesize = num (len output)
-                  maxsize = the block maxCodeSize
-                case view frames vm of
-                  [] ->
-                    case (the tx isCreate) of
-                      True ->
-                        if codesize > maxsize
-                        then
-                          finishFrame (FrameErrored (MaxCodeSizeExceeded maxsize codesize))
-                        else
-                          burn (g_codedeposit * codesize) $
-                            finishFrame (FrameReturned output)
-                      False ->
-                        finishFrame (FrameReturned output)
-                  (frame: _) -> do
-                    let
-                      context = view frameContext frame
-                    case context of
-                      CreationContext {} ->
-                        if codesize > maxsize
-                        then
-                          finishFrame (FrameErrored (MaxCodeSizeExceeded maxsize codesize))
-                        else
-                          burn (g_codedeposit * codesize) $
-                            finishFrame (FrameReturned output)
-                      CallContext {} ->
-                          finishFrame (FrameReturned output)
-            _ -> underrun
+        -- -- op: RETURN
+        -- 0xf3 ->
+        --   case stk of
+        --     (xOffset' : xSize' :_) -> forceConcrete2 (xOffset', xSize') $ \(xOffset, xSize) ->
+        --       accessMemoryRange fees xOffset xSize $ do
+        --         let
+        --           output = readMemory xOffset xSize vm
+        --           codesize = num (len output)
+        --           maxsize = the block maxCodeSize
+        --         case view frames vm of
+        --           [] ->
+        --             case (the tx isCreate) of
+        --               True ->
+        --                 if codesize > maxsize
+        --                 then
+        --                   finishFrame (FrameErrored (MaxCodeSizeExceeded maxsize codesize))
+        --                 else
+        --                   burn (g_codedeposit * codesize) $
+        --                     finishFrame (FrameReturned output)
+        --               False ->
+        --                 finishFrame (FrameReturned output)
+        --           (frame: _) -> do
+        --             let
+        --               context = view frameContext frame
+        --             case context of
+        --               CreationContext {} ->
+        --                 if codesize > maxsize
+        --                 then
+        --                   finishFrame (FrameErrored (MaxCodeSizeExceeded maxsize codesize))
+        --                 else
+        --                   burn (g_codedeposit * codesize) $
+        --                     finishFrame (FrameReturned output)
+        --               CallContext {} ->
+        --                   finishFrame (FrameReturned output)
+        --     _ -> underrun
 
-        -- op: DELEGATECALL
-        0xf4 ->
-          case stk of
-            (xGas'
-             :xTo'
-             :xInOffset'
-             :xInSize'
-             :xOutOffset'
-             :xOutSize'
-             :xs) -> forceConcrete6 (xGas', xTo', xInOffset', xInSize', xOutOffset', xOutSize') $
-              \(xGas, (num -> xTo), xInOffset, xInSize, xOutOffset, xOutSize) ->
-                case xTo of
-                  n | n > 0 && n <= 9 ->
-                    precompiledContract this xGas xTo self 0 xInOffset xInSize xOutOffset xOutSize xs
-                  n | num n == cheatCode -> do
-                        assign (state . stack) xs
-                        cheat (xInOffset, xInSize) (xOutOffset, xOutSize)
-                  _ -> do
-                        delegateCall this xGas xTo self 0 xInOffset xInSize xOutOffset xOutSize xs $ do
-                          touchAccount self
-            _ -> underrun
+        -- -- op: DELEGATECALL
+        -- 0xf4 ->
+        --   case stk of
+        --     (xGas'
+        --      :xTo'
+        --      :xInOffset'
+        --      :xInSize'
+        --      :xOutOffset'
+        --      :xOutSize'
+        --      :xs) -> forceConcrete6 (xGas', xTo', xInOffset', xInSize', xOutOffset', xOutSize') $
+        --       \(xGas, (num -> xTo), xInOffset, xInSize, xOutOffset, xOutSize) ->
+        --         case xTo of
+        --           n | n > 0 && n <= 9 ->
+        --             precompiledContract this xGas xTo self 0 xInOffset xInSize xOutOffset xOutSize xs
+        --           n | num n == cheatCode -> do
+        --                 assign (state . stack) xs
+        --                 cheat (xInOffset, xInSize) (xOutOffset, xOutSize)
+        --           _ -> do
+        --                 delegateCall this xGas xTo self 0 xInOffset xInSize xOutOffset xOutSize xs $ do
+        --                   touchAccount self
+        --     _ -> underrun
 
-        -- op: CREATE2
-        0xf5 -> notStatic $
-          case stk of
-            (xValue'
-             :xOffset'
-             :xSize'
-             :xSalt'
-             :xs) -> forceConcrete4 (xValue', xOffset', xSize', xSalt') $
-              \(xValue, xOffset, xSize, xSalt) ->
-                accessMemoryRange fees xOffset xSize $ do
-                  availableGas <- use (state . gas)
-                  forceConcreteBuffer (readMemory (num xOffset) (num xSize) vm) $ \initCode ->
-                   let
-                    newAddr  = create2Address self (num xSalt) initCode
-                    (cost, gas') = costOfCreate fees availableGas xSize
-                   in burn (cost - gas') $
-                    create self this gas' xValue xs newAddr initCode
-            _ -> underrun
+        -- -- op: CREATE2
+        -- 0xf5 -> notStatic $
+        --   case stk of
+        --     (xValue'
+        --      :xOffset'
+        --      :xSize'
+        --      :xSalt'
+        --      :xs) -> forceConcrete4 (xValue', xOffset', xSize', xSalt') $
+        --       \(xValue, xOffset, xSize, xSalt) ->
+        --         accessMemoryRange fees xOffset xSize $ do
+        --           availableGas <- use (state . gas)
+        --           forceConcreteBuffer (readMemory (num xOffset) (num xSize) vm) $ \initCode ->
+        --            let
+        --             newAddr  = create2Address self (num xSalt) initCode
+        --             (cost, gas') = costOfCreate fees availableGas xSize
+        --            in burn (cost - gas') $
+        --             create self this gas' xValue xs newAddr initCode
+        --     _ -> underrun
 
-        -- op: STATICCALL
-        0xfa ->
-          case stk of
-            (xGas'
-             :xTo'
-             :xInOffset'
-             :xInSize'
-             :xOutOffset'
-             :xOutSize'
-             :xs) -> forceConcrete6 (xGas', xTo', xInOffset', xInSize', xOutOffset', xOutSize') $
-              \(xGas, (num -> xTo), xInOffset, xInSize, xOutOffset, xOutSize) ->
-                case xTo of
-                  n | n > 0 && n <= 9 ->
-                    precompiledContract this xGas xTo xTo 0 xInOffset xInSize xOutOffset xOutSize xs
-                  _ -> delegateCall this xGas xTo xTo 0 xInOffset xInSize xOutOffset xOutSize xs $ do
-                            zoom state $ do
-                              assign callvalue 0
-                              assign caller (litAddr self)
-                              assign contract xTo
-                              assign static True
-                            touchAccount self
-                            touchAccount xTo
-            _ ->
-              underrun
+        -- -- op: STATICCALL
+        -- 0xfa ->
+        --   case stk of
+        --     (xGas'
+        --      :xTo'
+        --      :xInOffset'
+        --      :xInSize'
+        --      :xOutOffset'
+        --      :xOutSize'
+        --      :xs) -> forceConcrete6 (xGas', xTo', xInOffset', xInSize', xOutOffset', xOutSize') $
+        --       \(xGas, (num -> xTo), xInOffset, xInSize, xOutOffset, xOutSize) ->
+        --         case xTo of
+        --           n | n > 0 && n <= 9 ->
+        --             precompiledContract this xGas xTo xTo 0 xInOffset xInSize xOutOffset xOutSize xs
+        --           _ -> delegateCall this xGas xTo xTo 0 xInOffset xInSize xOutOffset xOutSize xs $ do
+        --                     zoom state $ do
+        --                       assign callvalue 0
+        --                       assign caller (litAddr self)
+        --                       assign contract xTo
+        --                       assign static True
+        --                     touchAccount self
+        --                     touchAccount xTo
+        --     _ ->
+        --       underrun
 
-        -- op: SELFDESTRUCT
-        0xff ->
-          notStatic $
-          case stk of
-            [] -> underrun
-            (xTo':_) -> forceConcrete xTo' $ \(num -> xTo) ->
-              let
-                funds = view balance this
-                recipientExists = accountExists xTo vm
-                c_new = if not recipientExists && funds /= 0
-                        then num g_selfdestruct_newaccount
-                        else 0
-              in burn (g_selfdestruct + c_new) $ do
-                   destructs <- use (tx . substate . selfdestructs)
-                   unless (elem self destructs) $ refund r_selfdestruct
-                   selfdestruct self
-                   touchAccount xTo
+        -- -- op: SELFDESTRUCT
+        -- 0xff ->
+        --   notStatic $
+        --   case stk of
+        --     [] -> underrun
+        --     (xTo':_) -> forceConcrete xTo' $ \(num -> xTo) ->
+        --       let
+        --         funds = view balance this
+        --         recipientExists = accountExists xTo vm
+        --         c_new = if not recipientExists && funds /= 0
+        --                 then num g_selfdestruct_newaccount
+        --                 else 0
+        --       in burn (g_selfdestruct + c_new) $ do
+        --            destructs <- use (tx . substate . selfdestructs)
+        --            unless (elem self destructs) $ refund r_selfdestruct
+        --            selfdestruct self
+        --            touchAccount xTo
 
-                   if funds /= 0
-                   then fetchAccount xTo $ \_ -> do
-                          env . contracts . ix xTo . balance += funds
-                          assign (env . contracts . ix self . balance) 0
-                          doStop
-                   else doStop
+        --            if funds /= 0
+        --            then fetchAccount xTo $ \_ -> do
+        --                   env . contracts . ix xTo . balance += funds
+        --                   assign (env . contracts . ix self . balance) 0
+        --                   doStop
+        --            else doStop
 
-        -- op: REVERT
-        0xfd ->
-          case stk of
-            (xOffset':xSize':_) -> forceConcrete2 (xOffset', xSize') $ \(xOffset, xSize) ->
-              accessMemoryRange fees xOffset xSize $ do
-                let output = readMemory xOffset xSize vm
-                finishFrame (FrameReverted output)
-            _ -> underrun
+        -- -- op: REVERT
+        -- 0xfd ->
+        --   case stk of
+        --     (xOffset':xSize':_) -> forceConcrete2 (xOffset', xSize') $ \(xOffset, xSize) ->
+        --       accessMemoryRange fees xOffset xSize $ do
+        --         let output = readMemory xOffset xSize vm
+        --         finishFrame (FrameReverted output)
+        --     _ -> underrun
 
         xxx ->
           vmError (UnrecognizedOpcode xxx)
@@ -1504,8 +1504,8 @@ getCodeLocation :: VM -> CodeLocation
 getCodeLocation vm = (view (state . contract) vm, view (state . pc) vm)
 
 -- | Construct SMT Query and halt execution until resolved
-askSMT :: CodeLocation -> SymWord -> (Bool -> EVM ()) -> EVM ()
-askSMT codeloc jumpcondition continue = do
+askSMT :: CodeLocation -> SBool -> (Bool -> EVM ()) -> EVM ()
+askSMT codeloc condition continue = do
   -- We keep track of how many times we have come across this particular
   -- (contract, pc) combination in the `iteration` mapping.
   iteration <- use (iterations . at codeloc . non 0)
@@ -1519,18 +1519,18 @@ askSMT codeloc jumpcondition continue = do
      -- increment the iterations and select appropriate path
      Nothing -> do pathconds <- use pathConditions
                    assign result . Just . VMFailure . Query $ PleaseAskSMT
-                     jumpcondition pathconds choosePath
+                     condition pathconds choosePath
 
    where -- Only one path is possible
          choosePath :: BranchCondition -> EVM ()
          choosePath (Case v) = do assign result Nothing
-                                  pushTo pathConditions v
+                                  pushTo pathConditions (if v then condition else sNot condition)
                                   iteration <- use (iterations . at codeloc . non 0)
                                   assign (cache . path . at (codeloc, iteration)) (Just v)
                                   assign (iterations . at codeloc) (Just (iteration + 1))
                                   continue v
          -- Both paths are possible; we ask for more input
-         choosePath Unknown = assign result . Just . VMFailure . Choose . PleaseChoosePath $ choosePath . Known
+         choosePath Unknown = assign result . Just . VMFailure . Choose . PleaseChoosePath $ choosePath . Case
          -- None of the paths are possible; fail this branch
          choosePath Inconsistent = vmError DeadPath
 
@@ -1716,8 +1716,13 @@ notStatic continue = do
     then vmError StateChangeWhileStatic
     else continue
 
+burnSym :: SymWord -> EVM () -> EVM ()
+burnSym n continue = case maybeLitWord n of
+  Nothing -> _ -- smt query (TODO: no gas mode)
+  Just n' -> burn n' continue
+
 -- | Burn gas, failing if insufficient gas is available
-burn :: Word -> EVM () -> EVM ()
+burn :: Word -> EVM () -> EVM()
 burn n continue = do
   available <- use (state . gas)
   if n <= available
@@ -1797,41 +1802,41 @@ selfdestruct = pushTo ((tx . substate) . selfdestructs)
 cheatCode :: Addr
 cheatCode = num (keccak "hevm cheat code")
 
-cheat
-  :: (?op :: Word8)
-  => (Word, Word) -> (Word, Word)
-  -> EVM ()
-cheat (inOffset, inSize) (outOffset, outSize) = do
-  mem <- use (state . memory)
-  vm <- get
-  let
-    abi = readMemoryWord32 inOffset mem
-    input = readMemory (inOffset + 4) (inSize - 4) vm
-  case fromSized <$> unliteral abi of
-    Nothing -> vmError UnexpectedSymbolicArg
-    Just abi ->
-              case Map.lookup abi cheatActions of
-                Nothing ->
-                  vmError (BadCheatCode (Just abi))
-                Just (argTypes, action) ->
-                  case input of
-                    StaticSymBuffer _ -> vmError UnexpectedSymbolicArg
-                    ConcreteBuffer input' ->
-                      case runGetOrFail
-                             (getAbiSeq (length argTypes) argTypes)
-                             (LS.fromStrict input') of
-                        Right ("", _, args) ->
-                          action (toList args) >>= \case
-                            Nothing -> do
-                              next
-                              push 1
-                            Just (encodeAbiValue -> bs) -> do
-                              next
-                              modifying (state . memory)
-                                (writeMemory (ConcreteBuffer bs) outSize 0 outOffset)
-                              push 1
-                        _ ->
-                          vmError (BadCheatCode (Just abi))
+-- cheat
+--   :: (?op :: Word8)
+--   => (Word, Word) -> (Word, Word)
+--   -> EVM ()
+-- cheat (inOffset, inSize) (outOffset, outSize) = do
+--   mem <- use (state . memory)
+--   vm <- get
+--   let
+--     abi = readMemoryWord32 inOffset mem
+--     input = readMemory (inOffset + 4) (inSize - 4) vm
+--   case fromSized <$> unliteral abi of
+--     Nothing -> vmError UnexpectedSymbolicArg
+--     Just abi ->
+--               case Map.lookup abi cheatActions of
+--                 Nothing ->
+--                   vmError (BadCheatCode (Just abi))
+--                 Just (argTypes, action) ->
+--                   case input of
+--                     StaticSymBuffer _ -> vmError UnexpectedSymbolicArg
+--                     ConcreteBuffer input' ->
+--                       case runGetOrFail
+--                              (getAbiSeq (length argTypes) argTypes)
+--                              (LS.fromStrict input') of
+--                         Right ("", _, args) ->
+--                           action (toList args) >>= \case
+--                             Nothing -> do
+--                               next
+--                               push 1
+--                             Just (encodeAbiValue -> bs) -> do
+--                               next
+--                               modifying (state . memory)
+--                                 (writeMemory (ConcreteBuffer bs) outSize 0 outOffset)
+--                               push 1
+--                         _ ->
+--                           vmError (BadCheatCode (Just abi))
 
 type CheatAction = ([AbiType], [AbiValue] -> EVM (Maybe AbiValue))
 
@@ -1853,58 +1858,58 @@ cheatActions =
   where
     action s ts f = (abiKeccak s, (ts, f))
 
--- * General call implementation ("delegateCall")
-delegateCall
-  :: (?op :: Word8)
-  => Contract -> Word -> Addr -> Addr -> Word -> Word -> Word -> Word -> Word -> [SymWord]
-  -> EVM ()
-  -> EVM ()
-delegateCall this gasGiven xTo xContext xValue xInOffset xInSize xOutOffset xOutSize xs continue =
-  callChecks this gasGiven xContext xValue xInOffset xInSize xOutOffset xOutSize xs $
-  \xGas -> do
-    vm0 <- get
-    fetchAccount xTo . const $
-      preuse (env . contracts . ix xTo) >>= \case
-        Nothing ->
-          vmError (NoSuchContract xTo)
-        Just target ->
-          burn xGas $ do
-            let newContext = CallContext
-                  { callContextOffset = xOutOffset
-                  , callContextSize = xOutSize
-                  , callContextCodehash = view codehash target
-                  , callContextReversion = view (env . contracts) vm0
-                  , callContextSubState = view (tx . substate) vm0
-                  , callContextAbi =
-                      if xInSize >= 4
-                      then case unliteral $ readMemoryWord32 xInOffset (view (state . memory) vm0)
-                           of Nothing -> Nothing
-                              Just abi -> Just . w256 $ num abi
-                      else Nothing
-                  , callContextData = (readMemory (num xInOffset) (num xInSize) vm0)
-                  }
+-- -- * General call implementation ("delegateCall")
+-- delegateCall
+--   :: (?op :: Word8)
+--   => Contract -> Word -> Addr -> Addr -> Word -> Word -> Word -> Word -> Word -> [SymWord]
+--   -> EVM ()
+--   -> EVM ()
+-- delegateCall this gasGiven xTo xContext xValue xInOffset xInSize xOutOffset xOutSize xs continue =
+--   callChecks this gasGiven xContext xValue xInOffset xInSize xOutOffset xOutSize xs $
+--   \xGas -> do
+--     vm0 <- get
+--     fetchAccount xTo . const $
+--       preuse (env . contracts . ix xTo) >>= \case
+--         Nothing ->
+--           vmError (NoSuchContract xTo)
+--         Just target ->
+--           burn xGas $ do
+--             let newContext = CallContext
+--                   { callContextOffset = xOutOffset
+--                   , callContextSize = xOutSize
+--                   , callContextCodehash = view codehash target
+--                   , callContextReversion = view (env . contracts) vm0
+--                   , callContextSubState = view (tx . substate) vm0
+--                   , callContextAbi =
+--                       if xInSize >= 4
+--                       then case unliteral $ readMemoryWord32 xInOffset (view (state . memory) vm0)
+--                            of Nothing -> Nothing
+--                               Just abi -> Just . w256 $ num abi
+--                       else Nothing
+--                   , callContextData = (readMemory (num xInOffset) (num xInSize) vm0)
+--                   }
 
-            pushTrace (FrameTrace newContext)
-            next
-            vm1 <- get
+--             pushTrace (FrameTrace newContext)
+--             next
+--             vm1 <- get
 
-            pushTo frames $ Frame
-              { _frameState = (set stack xs) (view state vm1)
-              , _frameContext = newContext
-              }
+--             pushTo frames $ Frame
+--               { _frameState = (set stack xs) (view state vm1)
+--               , _frameContext = newContext
+--               }
 
-            zoom state $ do
-              assign gas xGas
-              assign pc 0
-              assign code (view bytecode target)
-              assign codeContract xTo
-              assign stack mempty
-              assign memory mempty
-              assign memorySize 0
-              assign returndata mempty
-              assign calldata (readMemory (num xInOffset) (num xInSize) vm0, literal (num xInSize))
+--             zoom state $ do
+--               assign gas xGas
+--               assign pc 0
+--               assign code (view bytecode target)
+--               assign codeContract xTo
+--               assign stack mempty
+--               assign memory mempty
+--               assign memorySize 0
+--               assign returndata mempty
+--               assign calldata (readMemory (num xInOffset) (num xInSize) vm0, literal (num xInSize))
 
-            continue
+--             continue
 
 -- -- * Contract creation
 
@@ -2154,14 +2159,20 @@ accessUnboundedMemoryRange
   -> EVM ()
   -> EVM ()
 accessUnboundedMemoryRange _ _ 0 continue = continue
-accessUnboundedMemoryRange fees f l continue =
-  
+accessUnboundedMemoryRange fees f l continue = do
+  m0 <- num <$> use (state . memorySize)
   case (maybeLitWord f, maybeLitWord l) of
     (Just f', Just l') -> do
-      let m1 = 32 * ceilDiv (max m0 (num f + num l)) 32
-      burn (memoryCost fees m1 - memoryCost fees m0) $ do
-      assign (state . memorySize) (num m1)
-      continue
+       let m1 = 32 * ceilDiv (smax m0 (f + l)) 32
+       burn (memoryCost fees m1 - memoryCost fees m0) $ do
+         assign (state . memorySize) (num m1)
+         continue
+    _ -> do
+       let m1 = 32 * ceilDiv (max m0 (num f + num l)) 32
+     -- todo: consult smt here
+       assign (state . memorySize) (num m1)
+       continue
+
 
 accessMemoryRange
   :: FeeSchedule Word
@@ -2177,12 +2188,11 @@ accessMemoryRange fees f l continue =
       then vmError IllegalOverflow
       else accessUnboundedMemoryRange fees f l continue
 
-  -- we optimistically neglect the check for overflow here as we'd
-  -- have to branch on basically every memory access otherwise
+  -- todo: consult smt here
     _ -> accessUnboundedMemoryRange fees f l continue
 
 accessMemoryWord
-  :: FeeSchedule Word -> Word -> EVM () -> EVM ()
+  :: FeeSchedule Word -> SymWord -> EVM () -> EVM ()
 accessMemoryWord fees x = accessMemoryRange fees x 32
 
 copyBytesToMemory
@@ -2205,10 +2215,10 @@ copyCallBytesToMemory bs size xOffset yOffset =
   else do
     mem <- use (state . memory)
     assign (state . memory) $
-      writeMemory bs (min size (num (len bs))) xOffset yOffset mem
+      writeMemory bs (sw256 $ smin (literal (num size)) (sFromIntegral (len bs))) (litWord xOffset) (litWord yOffset) mem
 
-readMemory :: Word -> Word -> VM -> Buffer
-readMemory offset size vm = sliceWithZero (num offset) (num size) (view (state . memory) vm)
+readMemory :: SymWord -> SymWord -> VM -> Buffer
+readMemory offset size vm = sliceWithZero offset size (view (state . memory) vm)
 
 word256At
   :: Functor f
@@ -2533,47 +2543,47 @@ costOfCreate (FeeSchedule {..}) availableGas hashSize =
 
 -- Gas cost of precompiles
 costOfPrecompile :: FeeSchedule Word -> Addr -> Buffer -> Word
-costOfPrecompile (FeeSchedule {..}) precompileAddr input =
-  case precompileAddr of
-    -- ECRECOVER
-    0x1 -> 3000
-    -- SHA2-256
-    0x2 -> num $ (((len input + 31) `div` 32) * 12) + 60
-    -- RIPEMD-160
-    0x3 -> num $ (((len input + 31) `div` 32) * 120) + 600
-    -- IDENTITY
-    0x4 -> num $ (((len input + 31) `div` 32) * 3) + 15
-    -- MODEXP
-    0x5 -> num $ (f (num (max lenm lenb)) * num (max lene' 1)) `div` (num g_quaddivisor)
-      where input' = case input of
-              StaticSymBuffer _ -> error "unsupported: symbolic MODEXP gas cost calc"
-              ConcreteBuffer b -> b
-            (lenb, lene, lenm) = parseModexpLength input'
-            lene' | lene <= 32 && ez = 0
-                  | lene <= 32 = num (log2 e')
-                  | e' == 0 = 8 * (lene - 32)
-                  | otherwise = num (log2 e') + 8 * (lene - 32)
+costOfPrecompile (FeeSchedule {..}) precompileAddr input = _
+  -- case precompileAddr of
+  --   -- ECRECOVER
+  --   0x1 -> 3000
+  --   -- SHA2-256
+  --   0x2 -> num $ (((len input + 31) `div` 32) * 12) + 60
+  --   -- RIPEMD-160
+  --   0x3 -> num $ (((len input + 31) `div` 32) * 120) + 600
+  --   -- IDENTITY
+  --   0x4 -> num $ (((len input + 31) `div` 32) * 3) + 15
+  --   -- MODEXP
+  --   0x5 -> num $ (f (num (max lenm lenb)) * num (max lene' 1)) `div` (num g_quaddivisor)
+  --     where input' = case input of
+  --             StaticSymBuffer _ -> error "unsupported: symbolic MODEXP gas cost calc"
+  --             ConcreteBuffer b -> b
+  --           (lenb, lene, lenm) = parseModexpLength input'
+  --           lene' | lene <= 32 && ez = 0
+  --                 | lene <= 32 = num (log2 e')
+  --                 | e' == 0 = 8 * (lene - 32)
+  --                 | otherwise = num (log2 e') + 8 * (lene - 32)
 
-            ez = isZero (96 + lenb) lene input'
-            e' = w256 $ word $ LS.toStrict $
-                   lazySlice (96 + lenb) (min 32 lene) input'
+  --           ez = isZero (96 + lenb) lene input'
+  --           e' = w256 $ word $ LS.toStrict $
+  --                  lazySlice (96 + lenb) (min 32 lene) input'
 
-            f :: Integer -> Integer
-            f x | x <= 64 = x * x
-                | x <= 1024 = (x * x) `div` 4 + 96 * x - 3072
-                | otherwise = (x * x) `div` 16 + 480 * x - 199680
-    -- ECADD
-    0x6 -> g_ecadd
-    -- ECMUL
-    0x7 -> g_ecmul
-    -- ECPAIRING
-    0x8 -> num $ ((len input) `div` 192) * (num g_pairing_point) + (num g_pairing_base)
-    -- BLAKE2
-    0x9 -> let input' = case input of
-                         StaticSymBuffer _ -> error "unsupported: symbolic BLAKE2B gas cost calc"
-                         ConcreteBuffer b -> b
-           in g_fround * (num $ asInteger $ lazySlice 0 4 input')
-    _ -> error ("unimplemented precompiled contract " ++ show precompileAddr)
+  --           f :: Integer -> Integer
+  --           f x | x <= 64 = x * x
+  --               | x <= 1024 = (x * x) `div` 4 + 96 * x - 3072
+  --               | otherwise = (x * x) `div` 16 + 480 * x - 199680
+  --   -- ECADD
+  --   0x6 -> g_ecadd
+  --   -- ECMUL
+  --   0x7 -> g_ecmul
+  --   -- ECPAIRING
+  --   0x8 -> num $ ((len input) `div` 192) * (num g_pairing_point) + (num g_pairing_base)
+  --   -- BLAKE2
+  --   0x9 -> let input' = case input of
+  --                        StaticSymBuffer _ -> error "unsupported: symbolic BLAKE2B gas cost calc"
+  --                        ConcreteBuffer b -> b
+  --          in g_fround * (num $ asInteger $ lazySlice 0 4 input')
+  --   _ -> error ("unimplemented precompiled contract " ++ show precompileAddr)
 
 -- Gas cost of memory expansion
 memoryCost :: FeeSchedule Word -> Word -> Word
@@ -2615,6 +2625,9 @@ symSHA256 bytes = case length bytes of
 
 ceilDiv :: (Num a, Integral a) => a -> a -> a
 ceilDiv m n = div (m + n - 1) n
+
+-- ceilSDiv :: (Num a, Integral a) => a -> a -> a
+-- ceilSDiv m n = (m + n - 1) `sDiv` n
 
 allButOne64th :: (Num a, Integral a) => a -> a
 allButOne64th n = n - div n 64
