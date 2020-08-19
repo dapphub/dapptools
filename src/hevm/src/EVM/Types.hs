@@ -88,33 +88,48 @@ instance (FromSizzleBV (WordN 160))
 litBytes :: ByteString -> [SWord 8]
 litBytes bs = fmap (toSized . literal) (BS.unpack bs)
 
--- | Operations over buffers (concrete or symbolic)
+-- * Operations over buffers (concrete or symbolic)
 
--- | A buffer is a list of bytes. For concrete execution, this is simply `ByteString`.
--- In symbolic settings, its structure is sometimes known statically,
--- and sometimes only determined dynamically.
--- In the static case, it's a simple list of symbolic bitvectors of size 8.
--- In the dynamic case, it's a pair of an SMT array and a symbolic word representing
--- the buffer length.
+-- | A buffer is a list of bytes, and is used to model EVM memory or calldata.
+-- During concrete execution, this is simply `ByteString`.
+-- In symbolic settings, the structure of a buffer is sometimes known statically,
+-- in which case simply use a list of symbolic bytes.
+-- When we are dealing with dynamically determined calldata or memory (such as if
+-- we are interpreting a function which a `memory bytes` argument),
+-- we use smt lists. Note that smt lists are not yet supported by cvc4!
 data Buffer
   = ConcreteBuffer ByteString
   | StaticSymBuffer [SWord 8]
-  | DynamicSymBuffer (SArray (WordN 32) (WordN 8), SWord 32)
+  | DynamicSymBuffer (SList (WordN 8))
   deriving (Show)
 
-dynamize :: Buffer -> Buffer
-dynamize (ConcreteBuffer a)  = dynamize $ StaticSymBuffer (litBytes a)
-dynamize (DynamicSymBuffer a) = DynamicSymBuffer a
-dynamize (StaticSymBuffer a) =
-  DynamicSymBuffer (sListArray (Just 0) $ zip [0..] a, literal . num $ length a)
+dynamize :: Buffer -> SList (WordN 8)
+dynamize (ConcreteBuffer a)  = SL.implode $ litBytes a
+dynamize (StaticSymBuffer a) = SL.implode a
+dynamize (DynamicSymBuffer a) = a
 
 instance EqSymbolic Buffer where
   ConcreteBuffer a .== ConcreteBuffer b = literal (a == b)
   ConcreteBuffer a .== StaticSymBuffer b = litBytes a .== b
   StaticSymBuffer a .== ConcreteBuffer b = a .== litBytes b
   StaticSymBuffer a .== StaticSymBuffer b = a .== b
-  DynamicSymBuffer a .== DynamicSymBuffer b = a .== b
   a .== b = dynamize a .== dynamize b
+
+
+instance Semigroup Buffer where
+  ConcreteBuffer a     <> ConcreteBuffer b   = ConcreteBuffer (a <> b)
+  ConcreteBuffer a     <> StaticSymBuffer b  = StaticSymBuffer (litBytes a <> b)
+  c@(ConcreteBuffer a) <> DynamicSymBuffer b = DynamicSymBuffer (dynamize c .++ b)
+
+  StaticSymBuffer a     <> ConcreteBuffer b   = StaticSymBuffer (a <> litBytes b)
+  StaticSymBuffer a     <> StaticSymBuffer b  = StaticSymBuffer (a <> b)
+  c@(StaticSymBuffer a) <> DynamicSymBuffer b = DynamicSymBuffer (dynamize c .++ b)
+
+  a <> b = DynamicSymBuffer (dynamize a .++ dynamize b)
+
+instance Monoid Buffer where
+  mempty = ConcreteBuffer mempty
+
 
 newtype Addr = Addr { addressWord160 :: Word160 }
   deriving (Num, Integral, Real, Ord, Enum, Eq, Bits, Generic)
