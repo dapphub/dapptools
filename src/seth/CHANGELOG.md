@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## Unreleased
+## [0.9.1] - 2020-08-19
 
 ### Added
 - New commands: 
@@ -27,7 +27,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `seth call` now accepts empty calldata and also create transactions
   via `--create`.
 - `seth --abi-function-json` no longer returns a singleton list, but rather the JSON object it contained.
-- Updated hevm to 0.40
+- Updated hevm to 0.41.0
 
 ## [0.9.0] - 2020-05-25
 
