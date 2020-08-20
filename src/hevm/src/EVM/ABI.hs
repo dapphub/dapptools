@@ -437,7 +437,7 @@ genAbiValue = \case
    AbiTupleType ts ->
      AbiTuple <$> mapM genAbiValue ts
   where
-    genUInt n = AbiUInt n <$> arbitraryIntegralWithMax n
+    genUInt n = AbiUInt n <$> arbitraryIntegralWithMax (2^n-1)
 
 instance Arbitrary AbiType where
   arbitrary = sized $ \n -> oneof $ -- prevent empty tuples
@@ -533,7 +533,7 @@ listP parser = between (char '[') (char ']') ((do skipSpaces
 -- Essentially a mix between three types of generators:
 -- one that strongly prefers values close to 0, one that prefers values close to max
 -- and one that chooses uniformly.
-arbitraryIntegralWithMax :: (Integral a) => Int -> Gen a
+arbitraryIntegralWithMax :: (Integral a) => Integer -> Gen a
 arbitraryIntegralWithMax maxbound =
   sized $ \s ->
     do let mn = 0 :: Int
