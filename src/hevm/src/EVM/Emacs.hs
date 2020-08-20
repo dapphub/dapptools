@@ -42,6 +42,7 @@ import qualified Data.Set as Set
 import qualified Data.Vector as Vector
 import qualified EVM.Fetch as Fetch
 import qualified EVM.Stepper as Stepper
+import qualified Data.ByteString as BS
 
 data UiVmState = UiVmState
   { _uiVm             :: VM
@@ -462,7 +463,7 @@ instance SDisplay (SWord 8) where
 
 -- no idea what's going on here
 instance SDisplay Buffer where
-  sexp (SymbolicBuffer x) = sexp x
+  sexp (StaticSymBuffer x) = sexp x
   sexp (ConcreteBuffer x) = sexp x
 
 instance (SDisplay k, SDisplay v) => SDisplay (Map k v) where
@@ -509,10 +510,11 @@ instance SDisplay ByteString where
   sexp = A . txt . pack . show . ByteStringS
 
 sexpMemory :: Buffer -> SExpr Text
-sexpMemory bs =
-  if len bs > 1024
-  then L [A "large-memory", A (txt (len bs))]
-  else sexp bs
+sexpMemory (ConcreteBuffer bs) =
+  if BS.length bs > 1024
+  then L [A "large-memory", A (txt (BS.length bs))]
+  else sexp (ConcreteBuffer bs)
+sexpMemory bs = sexp bs
 
 defaultUnitTestOptions :: MonadIO m => m UnitTestOptions
 defaultUnitTestOptions = do

@@ -45,33 +45,31 @@ sbytes1024 = liftA2 (++) sbytes512 sbytes512
 -- We don't assume input types are restricted to their proper range here;
 -- such assumptions should instead be given as preconditions.
 -- This could catch some interesting calldata mismanagement errors.
-symAbiArg :: AbiType -> Query ([SWord 8], SWord 32)
-symAbiArg (AbiUIntType n) | n `mod` 8 == 0 && n <= 256 = do x <- sbytes32
-                                                            return (x, 32)
-                          | otherwise = error "bad type"
+staticAbiArg :: AbiType -> Query [SWord 8]
+staticAbiArg (AbiUIntType n)
+  | n `mod` 8 == 0 && n <= 256 = sbytes32
+  | otherwise = error "bad type"
 
-symAbiArg (AbiIntType n)  | n `mod` 8 == 0 && n <= 256 = do x <- sbytes32
-                                                            return (x, 32)
-                          | otherwise = error "bad type"
-symAbiArg AbiBoolType = do x <- sbytes32
-                           return (x, 32)
+staticAbiArg (AbiIntType n)
+  | n `mod` 8 == 0 && n <= 256 = sbytes32
+  | otherwise = error "bad type"
 
-symAbiArg AbiAddressType = do x <- sbytes32
-                              return (x, 32)
+staticAbiArg AbiBoolType = sbytes32
 
-symAbiArg (AbiBytesType n) | n <= 32 = do x <- sbytes32
-                                          return (x, 32)
-                           | otherwise = error "bad type"
+staticAbiArg AbiAddressType = sbytes32
+
+staticAbiArg (AbiBytesType n)
+  | n <= 32 = sbytes32
+  | otherwise = error "bad type"
 
 -- TODO: is this encoding correct?
 symAbiArg (AbiArrayType len typ) =
-  do args <- mapM symAbiArg (replicate len typ)
-     return (litBytes (encodeAbiValue (AbiUInt 256 (fromIntegral len))) <> (concat $ fst <$> args),
-             32 + (sum $ snd <$> args))
+  do args <- mconcat <$> mapM symAbiArg (replicate len typ)
+     return $ litBytes (encodeAbiValue (AbiUInt 256 (fromIntegral len))) <> args
 
 symAbiArg (AbiTupleType tuple) =
-  do args <- mapM symAbiArg (toList tuple)
-     return (concat $ fst <$> args, sum $ snd <$> args)
+  mconcat <$> mapM symAbiArg (toList tuple)
+
 symAbiArg n =
   error $ "Unsupported symbolic abiencoding for"
     <> show n
@@ -81,34 +79,34 @@ symAbiArg n =
 -- with concrete arguments.
 -- Any argument given as "<symbolic>" or omitted at the tail of the list are
 -- kept symbolic.
-symCalldata :: Text -> [AbiType] -> [String] -> Query ([SWord 8], SWord 32)
-symCalldata sig typesignature concreteArgs =
-  let args = concreteArgs <> replicate (length typesignature - length concreteArgs)  "<symbolic>"
-      mkArg typ "<symbolic>" = symAbiArg typ
-      mkArg typ arg = let n = litBytes . encodeAbiValue $ makeAbiValue typ arg
-                      in return (n, num (length n))
-      sig' = litBytes $ selector sig
-  in do calldatas <- zipWithM mkArg typesignature args
-        return (sig' <> concat (fst <$> calldatas), 4 + (sum $ snd <$> calldatas))
+staticCalldata :: Text -> [AbiType] -> [String] -> Query [SWord 8]
+staticCalldata sig typesignature concreteArgs =
+  concat <$> zipWithM mkArg typesignature args
+  where
+    -- ensure arg length is long enough
+    args = concreteArgs <> replicate (length typesignature - length concreteArgs)  "<symbolic>"
+
+    mkArg :: AbiType -> String -> Query [SWord 8]
+    mkArg typ "<symbolic>" = symAbiArg typ
+    mkArg typ arg = return $ litBytes . encodeAbiValue $ makeAbiValue typ arg
+
+    sig' = litBytes $ selector sig
 
 abstractVM :: Maybe (Text, [AbiType]) -> [String] -> ByteString -> StorageModel -> Query VM
 abstractVM typesignature concreteArgs x storagemodel = do
-  (cd', cdlen, cdconstraint) <-
-    case typesignature of
-      Nothing -> do cd <- sbytes256
-                    len <- freshVar_
-                    return (cd, len, len .<= 256)
-      Just (name, typs) -> do (cd, cdlen) <- symCalldata name typs concreteArgs
-                              return (cd, cdlen, sTrue)
+  cd' <- case typesignature of
+           Nothing -> sbytes256
+           Just (name, typs) -> staticCalldata name typs concreteArgs
+
   symstore <- case storagemodel of
     SymbolicS -> Symbolic <$> freshArray_ Nothing
     InitialS -> Symbolic <$> freshArray_ (Just 0)
     ConcreteS -> return $ Concrete mempty
   c <- SAddr <$> freshVar_
   value' <- sw256 <$> freshVar_
-  return $ loadSymVM (RuntimeCode x) symstore storagemodel c value' (SymbolicBuffer cd', cdlen) & over pathConditions ((<>) [cdconstraint])
+  return $ loadSymVM (RuntimeCode x) symstore storagemodel c value' (StaticSymBuffer cd')
 
-loadSymVM :: ContractCode -> Storage -> StorageModel -> SAddr -> SymWord -> (Buffer, SWord 32) -> VM
+loadSymVM :: ContractCode -> Storage -> StorageModel -> SAddr -> SymWord -> Buffer -> VM
 loadSymVM x initStore model addr callvalue' calldata' =
     (makeVm $ VMOpts
     { vmoptContract = contractWithStore x initStore
@@ -262,9 +260,9 @@ equivalenceCheck bytecodeA bytecodeB maxiter signature' = do
       precaller = preStateA ^. state . caller
       callvalue' = preStateA ^. state . callvalue
       prestorage = preStateA ^?! env . contracts . ix preself . storage
-      (calldata', cdlen) = view (state . calldata) preStateA
+      calldata' = view (state . calldata) preStateA
       pathconds = view pathConditions preStateA
-      preStateB = loadSymVM (RuntimeCode bytecodeB) prestorage SymbolicS precaller callvalue' (calldata', cdlen) & set pathConditions pathconds
+      preStateB = loadSymVM (RuntimeCode bytecodeB) prestorage SymbolicS precaller callvalue' calldata' & set pathConditions pathconds
 
   smtState <- queryState
   push 1
@@ -313,13 +311,13 @@ both' f (x, y) = (f x, f y)
 
 showCounterexample :: VM -> Maybe (Text, [AbiType]) -> Query ()
 showCounterexample vm maybesig = do
-  let (calldata', cdlen) = view (EVM.state . EVM.calldata) vm
+  let calldata' = view (EVM.state . EVM.calldata) vm
       S _ cvalue = view (EVM.state . EVM.callvalue) vm
       SAddr caller' = view (EVM.state . EVM.caller) vm
-  cdlen' <- num <$> getValue cdlen
+--  cdlen' <- num <$> getValue cdlen
   calldatainput <- case calldata' of
-    SymbolicBuffer cd -> mapM (getValue.fromSized) (take cdlen' cd) >>= return . pack
-    ConcreteBuffer cd -> return $ BS.take cdlen' cd
+    StaticSymBuffer cd -> mapM (getValue.fromSized) cd >>= return . pack
+    ConcreteBuffer cd  -> return $ cd
   callvalue' <- num <$> getValue cvalue
   caller'' <- num <$> getValue caller'
   io $ do

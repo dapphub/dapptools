@@ -778,7 +778,7 @@ updateUiVmState ui vm =
       case view result vm of
         Just (VMSuccess (ConcreteBuffer msg)) ->
           Just ("VMSuccess: " <> (show $ ByteStringS msg))
-        Just (VMSuccess (SymbolicBuffer msg)) ->
+        Just (VMSuccess (StaticSymBuffer msg)) ->
           Just ("VMSuccess: <symbolicbuffer> " <> (show msg))
         Just (VMFailure (Revert msg)) ->
           Just ("VMFailure: " <> (show . ByteStringS $ msg))
@@ -864,7 +864,7 @@ withHighlight False = withDefAttr dimAttr
 withHighlight True  = withDefAttr boldAttr
 
 prettyIfConcrete :: Buffer -> String
-prettyIfConcrete (SymbolicBuffer x) = show x
+prettyIfConcrete (StaticSymBuffer x) = show x
 prettyIfConcrete (ConcreteBuffer x) = prettyHex 40 x
 
 drawTracePane :: UiVmState -> UiWidget
@@ -872,7 +872,7 @@ drawTracePane s =
   case view uiShowMemory s of
     True ->
       hBorderWithLabel (txt "Calldata")
-      <=> str (prettyIfConcrete $ fst (view (uiVm . state . calldata) s))
+      <=> str (prettyIfConcrete $ view (uiVm . state . calldata) s)
       <=> hBorderWithLabel (txt "Returndata")
       <=> str (prettyIfConcrete (view (uiVm . state . returndata) s))
       <=> hBorderWithLabel (txt "Output")
