@@ -19,6 +19,10 @@ case $1 in
     version=${version//./_}
     override+=" solc = solc-versions.solc_$version;"
     ;;
+  # if there's a '/', interpret as a path
+  */*)
+    export DAPP_SOLC="$1"
+    ;;
   *)
     echo >&2 "${0##*/}: unrecognized package spec: $1"
     exit 1
@@ -27,4 +31,12 @@ shift
 
 [[ "$#" -gt 0 ]] || usage
 
+if [ -z "$override" ]; then
+
+seth "$@"
+
+else
+
 seth --nix-run "seth.override {$override}" seth "$@"
+
+fi

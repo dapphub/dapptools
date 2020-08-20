@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
 echo dapp 0.28.0
-solc --version
+# use a custom path is DAPP_SOLC is set
+SOLC=${DAPP_SOLC:-solc}
+$SOLC --version
 echo "hevm $(hevm version)"

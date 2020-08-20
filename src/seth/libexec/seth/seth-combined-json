@@ -21,7 +21,11 @@ info() {
 
 IFS=" " read -r -a opts <<<"$SOLC_FLAGS"
 json_opts=--combined-json=abi,bin,bin-runtime,srcmap,srcmap-runtime,ast,metadata
-solc --help | grep -q -- --storage-layout && json_opts+=,storage-layout
-solc --help | grep -q -- --overwrite && opts+=(--overwrite)
 
-([[ $SETH_VERBOSE ]] && set -x; solc "${opts[@]}" "${json_opts[@]}" "$@")
+# use a custom path is DAPP_SOLC is set
+SOLC=${DAPP_SOLC:-solc}
+
+$SOLC --help | grep -q -- --storage-layout && json_opts+=,storage-layout
+$SOLC --help | grep -q -- --overwrite && opts+=(--overwrite)
+
+([[ $SETH_VERBOSE ]] && set -x; $SOLC "${opts[@]}" "${json_opts[@]}" "$@")
