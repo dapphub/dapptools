@@ -228,7 +228,9 @@ dynWriteMemoryPadding zeroList bs1 (S _ n) (S _ src) (S _ dst) bs0 =
 
     a       = SL.take dst' bs0'
     b       = SL.subList bs1' src' n'
-    c       = SL.drop (dst' + n') bs0'
+    c       = ite (dst' + n' .> SL.length bs0)
+                  (SL.nil)
+                  (SL.subList bs0 (dst' + n') (dst' + n' - SL.length bs0))
   in
     a .++ b .++ c
 
