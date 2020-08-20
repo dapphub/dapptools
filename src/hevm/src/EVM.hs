@@ -497,24 +497,25 @@ exec1 = do
 
   if self > 0x0 && self <= 0x9 then do
     -- call to precompile
-    let ?op = 0x00 -- dummy value
-    copyBytesToMemory (the state calldata) (num len (the state calldata)) 0 0
-    executePrecompile self (the state gas) 0 (num (len (the state calldata))) 0 0 []
-    vmx <- get
-    case view (state.stack) vmx of
-      (x:_) -> case maybeLitWord x of
-        Just 0 -> do
-          fetchAccount self $ \_ -> do
-            touchAccount self
-            vmError PrecompileFailure
-        Just _ ->
-          fetchAccount self $ \_ -> do
-            touchAccount self
-            out <- use (state . returndata)
-            finishFrame (FrameReturned out)
-        Nothing -> vmError UnexpectedSymbolicArg
-      _ ->
-        underrun
+    error "hold off precompile for now"
+    -- let ?op = 0x00 -- dummy value
+    -- copyBytesToMemory (the state calldata) (num len (the state calldata)) 0 0
+    -- executePrecompile self (the state gas) 0 (num (len (the state calldata))) 0 0 []
+    -- vmx <- get
+    -- case view (state.stack) vmx of
+    --   (x:_) -> case maybeLitWord x of
+    --     Just 0 -> do
+    --       fetchAccount self $ \_ -> do
+    --         touchAccount self
+    --         vmError PrecompileFailure
+    --     Just _ ->
+    --       fetchAccount self $ \_ -> do
+    --         touchAccount self
+    --         out <- use (state . returndata)
+    --         finishFrame (FrameReturned out)
+    --     Nothing -> vmError UnexpectedSymbolicArg
+    --   _ ->
+    --     underrun
 
   else if the state pc >= num (BS.length (the state code))
     then doStop
@@ -1249,27 +1250,28 @@ callChecks
   -> (Word -> EVM ())
   -> EVM ()
 callChecks this xGas xContext xValue xInOffset xInSize xOutOffset xOutSize xs continue = do
-  vm <- get
-  let fees = view (block . schedule) vm
-  accessMemoryRange fees xInOffset xInSize $
-    accessMemoryRange fees xOutOffset xOutSize $ do
-      availableGas <- use (state . gas)
-      let recipientExists = accountExists xContext vm
-          (cost, gas') = costOfCall fees recipientExists xValue availableGas xGas
-      burn (cost - gas') $ do
-        if xValue > view balance this
-        then do
-          assign (state . stack) (0 : xs)
-          assign (state . returndata) mempty
-          pushTrace $ ErrorTrace $ BalanceTooLow xValue (view balance this)
-          next
-        else if length (view frames vm) >= 1024
-             then do
-               assign (state . stack) (0 : xs)
-               assign (state . returndata) mempty
-               pushTrace $ ErrorTrace $ CallDepthLimitReached
-               next
-             else continue gas'
+  error "no calls for now"
+  -- vm <- get
+  -- let fees = view (block . schedule) vm
+  -- accessMemoryRange fees xInOffset xInSize $
+  --   accessMemoryRange fees xOutOffset xOutSize $ do
+  --     availableGas <- use (state . gas)
+  --     let recipientExists = accountExists xContext vm
+  --         (cost, gas') = costOfCall fees recipientExists xValue availableGas xGas
+  --     burn (cost - gas') $ do
+  --       if xValue > view balance this
+  --       then do
+  --         assign (state . stack) (0 : xs)
+  --         assign (state . returndata) mempty
+  --         pushTrace $ ErrorTrace $ BalanceTooLow xValue (view balance this)
+  --         next
+  --       else if length (view frames vm) >= 1024
+  --            then do
+  --              assign (state . stack) (0 : xs)
+  --              assign (state . returndata) mempty
+  --              pushTrace $ ErrorTrace $ CallDepthLimitReached
+  --              next
+  --            else continue gas'
 
 precompiledContract
   :: (?op :: Word8)
@@ -1308,157 +1310,157 @@ executePrecompile
   => Addr
   -> Word -> Word -> Word -> Word -> Word -> [SymWord]
   -> EVM ()
-executePrecompile preCompileAddr gasCap inOffset inSize outOffset outSize xs  = do
-  vm <- get
-  let input = readMemory (num inOffset) (num inSize) vm
-      fees = view (block . schedule) vm
-      cost = costOfPrecompile fees preCompileAddr input
-      notImplemented = error $ "precompile at address " <> show preCompileAddr <> " not yet implemented"
-      precompileFail = burn (gasCap - cost) $ do
-                         assign (state . stack) (0 : xs)
-                         pushTrace $ ErrorTrace $ PrecompileFailure
-                         next
-  if cost > gasCap then
-    burn gasCap $ do
-      assign (state . stack) (0 : xs)
-      next
-  else
-    burn cost $
-      case preCompileAddr of
-        -- ECRECOVER
-        0x1 ->
-         -- TODO: support symbolic variant
-         forceConcreteBuffer input $ \input' ->
-          case EVM.Precompiled.execute 0x1 (truncpadlit 128 input') 32 of
-            Nothing -> do
-              -- return no output for invalid signature
-              assign (state . stack) (1 : xs)
-              assign (state . returndata) mempty
-              next
-            Just output -> do
-              assign (state . stack) (1 : xs)
-              assign (state . returndata) (ConcreteBuffer output)
-              copyBytesToMemory (ConcreteBuffer output) outSize 0 outOffset
-              next
+executePrecompile preCompileAddr gasCap inOffset inSize outOffset outSize xs = error "no precompile rn" --do _ 
+  -- vm <- get
+  -- let input = readMemory (num inOffset) (num inSize) vm
+  --     fees = view (block . schedule) vm
+  --     cost = costOfPrecompile fees preCompileAddr input
+  --     notImplemented = error $ "precompile at address " <> show preCompileAddr <> " not yet implemented"
+  --     precompileFail = burn (gasCap - cost) $ do
+  --                        assign (state . stack) (0 : xs)
+  --                        pushTrace $ ErrorTrace $ PrecompileFailure
+  --                        next
+  -- if cost > gasCap then
+  --   burn gasCap $ do
+  --     assign (state . stack) (0 : xs)
+  --     next
+  -- else
+  --   burn cost $
+  --     case preCompileAddr of
+  --       -- ECRECOVER
+  --       0x1 ->
+  --        -- TODO: support symbolic variant
+  --        forceConcreteBuffer input $ \input' ->
+  --         case EVM.Precompiled.execute 0x1 (truncpadlit 128 input') 32 of
+  --           Nothing -> do
+  --             -- return no output for invalid signature
+  --             assign (state . stack) (1 : xs)
+  --             assign (state . returndata) mempty
+  --             next
+  --           Just output -> do
+  --             assign (state . stack) (1 : xs)
+  --             assign (state . returndata) (ConcreteBuffer output)
+  --             copyBytesToMemory (ConcreteBuffer output) outSize 0 outOffset
+  --             next
 
-        -- SHA2-256
-        0x2 ->
-          let
-            hash = case input of
-                     ConcreteBuffer input' -> ConcreteBuffer $ BS.pack $ BA.unpack $ (Crypto.hash input' :: Digest SHA256)
-                     StaticSymBuffer input' -> StaticSymBuffer $ symSHA256 input'
-          in do
-            assign (state . stack) (1 : xs)
-            assign (state . returndata) hash
-            copyBytesToMemory hash outSize 0 outOffset
-            next
+  --       -- SHA2-256
+  --       0x2 ->
+  --         let
+  --           hash = case input of
+  --                    ConcreteBuffer input' -> ConcreteBuffer $ BS.pack $ BA.unpack $ (Crypto.hash input' :: Digest SHA256)
+  --                    StaticSymBuffer input' -> StaticSymBuffer $ symSHA256 input'
+  --         in do
+  --           assign (state . stack) (1 : xs)
+  --           assign (state . returndata) hash
+  --           copyBytesToMemory hash outSize 0 outOffset
+  --           next
 
-        -- RIPEMD-160
-        0x3 ->
-         -- TODO: support symbolic variant
-         forceConcreteBuffer input $ \input' ->
+  --       -- RIPEMD-160
+  --       0x3 ->
+  --        -- TODO: support symbolic variant
+  --        forceConcreteBuffer input $ \input' ->
 
-          let
-            padding = BS.pack $ replicate 12 0
-            hash' = BS.pack $ BA.unpack (Crypto.hash input' :: Digest RIPEMD160)
-            hash  = ConcreteBuffer $ padding <> hash'
-          in do
-            assign (state . stack) (1 : xs)
-            assign (state . returndata) hash
-            copyBytesToMemory hash outSize 0 outOffset
-            next
+  --         let
+  --           padding = BS.pack $ replicate 12 0
+  --           hash' = BS.pack $ BA.unpack (Crypto.hash input' :: Digest RIPEMD160)
+  --           hash  = ConcreteBuffer $ padding <> hash'
+  --         in do
+  --           assign (state . stack) (1 : xs)
+  --           assign (state . returndata) hash
+  --           copyBytesToMemory hash outSize 0 outOffset
+  --           next
 
-        -- IDENTITY
-        0x4 -> do
-            assign (state . stack) (1 : xs)
-            assign (state . returndata) input
-            copyCallBytesToMemory input outSize 0 outOffset
-            next
+  --       -- IDENTITY
+  --       0x4 -> do
+  --           assign (state . stack) (1 : xs)
+  --           assign (state . returndata) input
+  --           copyCallBytesToMemory input outSize 0 outOffset
+  --           next
 
-        -- MODEXP
-        0x5 ->
-         -- TODO: support symbolic variant
-         forceConcreteBuffer input $ \input' ->
+  --       -- MODEXP
+  --       0x5 ->
+  --        -- TODO: support symbolic variant
+  --        forceConcreteBuffer input $ \input' ->
 
-          let
-            (lenb, lene, lenm) = parseModexpLength input'
+  --         let
+  --           (lenb, lene, lenm) = parseModexpLength input'
 
-            output = ConcreteBuffer $
-              case (isZero (96 + lenb + lene) lenm input') of
-                 True ->
-                   truncpadlit (num lenm) (asBE (0 :: Int))
-                 False ->
-                   let
-                     b = asInteger $ lazySlice 96 lenb $ input'
-                     e = asInteger $ lazySlice (96 + lenb) lene $ input'
-                     m = asInteger $ lazySlice (96 + lenb + lene) lenm $ input'
-                   in
-                     padLeft (num lenm) (asBE (expFast b e m))
-          in do
-            assign (state . stack) (1 : xs)
-            assign (state . returndata) output
-            copyBytesToMemory output outSize 0 outOffset
-            next
+  --           output = ConcreteBuffer $
+  --             case (isZero (96 + lenb + lene) lenm input') of
+  --                True ->
+  --                  truncpadlit (num lenm) (asBE (0 :: Int))
+  --                False ->
+  --                  let
+  --                    b = asInteger $ lazySlice 96 lenb $ input'
+  --                    e = asInteger $ lazySlice (96 + lenb) lene $ input'
+  --                    m = asInteger $ lazySlice (96 + lenb + lene) lenm $ input'
+  --                  in
+  --                    padLeft (num lenm) (asBE (expFast b e m))
+  --         in do
+  --           assign (state . stack) (1 : xs)
+  --           assign (state . returndata) output
+  --           copyBytesToMemory output outSize 0 outOffset
+  --           next
 
-        -- ECADD
-        0x6 ->
-         -- TODO: support symbolic variant
-         forceConcreteBuffer input $ \input' ->
-           case EVM.Precompiled.execute 0x6 (truncpadlit 128 input') 64 of
-          Nothing -> precompileFail
-          Just output -> do
-            let truncpaddedOutput = ConcreteBuffer $ truncpadlit 64 output
-            assign (state . stack) (1 : xs)
-            assign (state . returndata) truncpaddedOutput
-            copyBytesToMemory truncpaddedOutput outSize 0 outOffset
-            next
+  --       -- ECADD
+  --       0x6 ->
+  --        -- TODO: support symbolic variant
+  --        forceConcreteBuffer input $ \input' ->
+  --          case EVM.Precompiled.execute 0x6 (truncpadlit 128 input') 64 of
+  --         Nothing -> precompileFail
+  --         Just output -> do
+  --           let truncpaddedOutput = ConcreteBuffer $ truncpadlit 64 output
+  --           assign (state . stack) (1 : xs)
+  --           assign (state . returndata) truncpaddedOutput
+  --           copyBytesToMemory truncpaddedOutput outSize 0 outOffset
+  --           next
 
-        -- ECMUL
-        0x7 ->
-         -- TODO: support symbolic variant
-         forceConcreteBuffer input $ \input' ->
+  --       -- ECMUL
+  --       0x7 ->
+  --        -- TODO: support symbolic variant
+  --        forceConcreteBuffer input $ \input' ->
 
-          case EVM.Precompiled.execute 0x7 (truncpadlit 96 input') 64 of
-          Nothing -> precompileFail
-          Just output -> do
-            let truncpaddedOutput = ConcreteBuffer $ truncpadlit 64 output
-            assign (state . stack) (1 : xs)
-            assign (state . returndata) truncpaddedOutput
-            copyBytesToMemory truncpaddedOutput outSize 0 outOffset
-            next
+  --         case EVM.Precompiled.execute 0x7 (truncpadlit 96 input') 64 of
+  --         Nothing -> precompileFail
+  --         Just output -> do
+  --           let truncpaddedOutput = ConcreteBuffer $ truncpadlit 64 output
+  --           assign (state . stack) (1 : xs)
+  --           assign (state . returndata) truncpaddedOutput
+  --           copyBytesToMemory truncpaddedOutput outSize 0 outOffset
+  --           next
 
-        -- ECPAIRING
-        0x8 ->
-         -- TODO: support symbolic variant
-         forceConcreteBuffer input $ \input' ->
+  --       -- ECPAIRING
+  --       0x8 ->
+  --        -- TODO: support symbolic variant
+  --        forceConcreteBuffer input $ \input' ->
 
-          case EVM.Precompiled.execute 0x8 input' 32 of
-          Nothing -> precompileFail
-          Just output -> do
-            let truncpaddedOutput = ConcreteBuffer $ truncpadlit 32 output
-            assign (state . stack) (1 : xs)
-            assign (state . returndata) truncpaddedOutput
-            copyBytesToMemory truncpaddedOutput outSize 0 outOffset
-            next
+  --         case EVM.Precompiled.execute 0x8 input' 32 of
+  --         Nothing -> precompileFail
+  --         Just output -> do
+  --           let truncpaddedOutput = ConcreteBuffer $ truncpadlit 32 output
+  --           assign (state . stack) (1 : xs)
+  --           assign (state . returndata) truncpaddedOutput
+  --           copyBytesToMemory truncpaddedOutput outSize 0 outOffset
+  --           next
 
-        -- BLAKE2
-        0x9 ->
-         -- TODO: support symbolic variant
-         forceConcreteBuffer input $ \input' -> do
+  --       -- BLAKE2
+  --       0x9 ->
+  --        -- TODO: support symbolic variant
+  --        forceConcreteBuffer input $ \input' -> do
 
-          case (BS.length input', 1 >= BS.last input') of
-            (213, True) -> case EVM.Precompiled.execute 0x9 input' 64 of
-              Just output -> do
-                let truncpaddedOutput = ConcreteBuffer $ truncpadlit 64 output
-                assign (state . stack) (1 : xs)
-                assign (state . returndata) truncpaddedOutput
-                copyBytesToMemory truncpaddedOutput outSize 0 outOffset
-                next
-              Nothing -> precompileFail
-            _ -> precompileFail
+  --         case (BS.length input', 1 >= BS.last input') of
+  --           (213, True) -> case EVM.Precompiled.execute 0x9 input' 64 of
+  --             Just output -> do
+  --               let truncpaddedOutput = ConcreteBuffer $ truncpadlit 64 output
+  --               assign (state . stack) (1 : xs)
+  --               assign (state . returndata) truncpaddedOutput
+  --               copyBytesToMemory truncpaddedOutput outSize 0 outOffset
+  --               next
+  --             Nothing -> precompileFail
+  --           _ -> precompileFail
 
 
-        _   -> notImplemented
+  --       _   -> notImplemented
 
 truncpadlit :: Int -> ByteString -> ByteString
 truncpadlit n xs = if m > n then BS.take n xs
@@ -1718,7 +1720,7 @@ notStatic continue = do
 
 burnSym :: SymWord -> EVM () -> EVM ()
 burnSym n continue = case maybeLitWord n of
-  Nothing -> _ -- smt query (TODO: no gas mode)
+  Nothing -> continue -- smt query (TODO: no gas mode)
   Just n' -> burn n' continue
 
 -- | Burn gas, failing if insufficient gas is available
@@ -2160,17 +2162,17 @@ accessUnboundedMemoryRange
   -> EVM ()
 accessUnboundedMemoryRange _ _ 0 continue = continue
 accessUnboundedMemoryRange fees f l continue = do
-  m0 <- num <$> use (state . memorySize)
-  case (maybeLitWord f, maybeLitWord l) of
-    (Just f', Just l') -> do
-       let m1 = 32 * ceilDiv (smax m0 (f + l)) 32
-       burn (memoryCost fees m1 - memoryCost fees m0) $ do
+  m0 <- use (state . memorySize)
+  case (maybeLitWord f, maybeLitWord l, unliteral m0) of
+    (Just f', Just l', Just (num -> m0')) -> do
+       let m1 = 32 * ceilDiv (max m0' (f' + l')) 32
+       burn (memoryCost fees m1 - memoryCost fees m0') $ do
          assign (state . memorySize) (num m1)
          continue
     _ -> do
-       let m1 = 32 * ceilDiv (max m0 (num f + num l)) 32
+     --  let m1 = 32 * ceilDiv (max m0 (num f + num l)) 32
      -- todo: consult smt here
-       assign (state . memorySize) (num m1)
+     --  assign (state . memorySize) (num m1)
        continue
 
 
@@ -2543,7 +2545,7 @@ costOfCreate (FeeSchedule {..}) availableGas hashSize =
 
 -- Gas cost of precompiles
 costOfPrecompile :: FeeSchedule Word -> Addr -> Buffer -> Word
-costOfPrecompile (FeeSchedule {..}) precompileAddr input = _
+costOfPrecompile (FeeSchedule {..}) precompileAddr input = error "wait"
   -- case precompileAddr of
   --   -- ECRECOVER
   --   0x1 -> 3000

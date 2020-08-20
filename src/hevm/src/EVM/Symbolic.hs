@@ -187,6 +187,23 @@ dynWriteMemory bs1 (S _ n) (S _ src) (S _ dst) bs0 =
   in
     a .++ b .++ c
 
+dynWriteMemoryPadding :: SList (WordN 8) -> SList (WordN 8) -> SymWord -> SymWord -> SymWord -> SList (WordN 8) -> SList (WordN 8)
+dynWriteMemoryPadding zeroList bs1 (S _ n) (S _ src) (S _ dst) bs0 =
+  let
+    bs0'    = bs0 .++ zeroList
+    bs1'    = bs1 .++ zeroList
+    n'      = sFromIntegral n
+    src'    = sFromIntegral src
+    dst'    = sFromIntegral dst
+
+    a       = SL.take dst' bs0'
+    b       = SL.subList bs1' src' n'
+    c       = SL.drop (dst' + n') bs0'
+  in
+    a .++ b .++ c
+
+
+
 -- TODO: ensure we actually pad with zeros
 sliceWithZero'' :: SymWord -> SymWord -> SList (WordN 8) -> SList (WordN 8)
 sliceWithZero'' (S _ o) (S _ s) m = SL.subList m (sFromIntegral s) (sFromIntegral o)
