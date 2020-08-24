@@ -38,8 +38,12 @@ info() {
 
 IFS=" " read -r -a opts <<<"$SOLC_FLAGS"
 json_opts=--combined-json=abi,bin,bin-runtime,srcmap,srcmap-runtime,ast,metadata
-solc --help | grep -q -- --storage-layout && json_opts+=,storage-layout
-solc --help | grep -q -- --overwrite && opts+=(--overwrite)
+
+# use a custom path is DAPP_SOLC is set
+SOLC=${DAPP_SOLC:-solc}
+
+$SOLC --help | grep -q -- --storage-layout && json_opts+=,storage-layout
+$SOLC --help | grep -q -- --overwrite && opts+=(--overwrite)
 
 remappings=$(dapp remappings)
 if [[ $remappings ]]; then
@@ -67,7 +71,7 @@ fi
 
 mkdir -p "$DAPP_OUT"
 mapfile -t files < <(find "${DAPP_SRC}" -name '*.sol')
-(set -x; solc "${opts[@]}" "${json_opts[@]}" /=/ "${files[@]}" > "${DAPP_JSON}")
+(set -x; $SOLC "${opts[@]}" "${json_opts[@]}" /=/ "${files[@]}" > "${DAPP_JSON}")
 
 if [ "$DAPP_BUILD_EXTRACT" ]; then
   mapfile -t contracts < <(<"$DAPP_JSON" jq '.contracts|keys[]' -r | sort -u -t: -k2 | sort)
