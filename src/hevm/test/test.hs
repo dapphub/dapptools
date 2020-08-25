@@ -149,28 +149,20 @@ main = defaultMain $ testGroup "hevm"
     ]
 
   , testGroup "Symbolic buffers"
-    [  testProperty "dynWriteMemory works like writeMemory" $ forAll (genAbiValue (AbiTupleType $ Vector.fromList [AbiUIntType 16, AbiUIntType 16, AbiUIntType 16])) $ \(AbiTuple args) ->
-        let [AbiUInt 16 src', AbiUInt 16 dst', AbiUInt 16 len'] = Vector.toList args
-        in ioProperty $ runSMTWith z3 $ query $ do
+
+      [  testCase "dynWriteMemory works" $ runSMTWith z3{verbose=True} $ query $ do
                cd  <- sbytes32
                mem <- sbytes32
 
                let
-                   zeroList = literal (replicate 1000 0)
-                   src = w256 $ W256 src'
-                   dst = w256 $ W256 dst'
-                   len = w256 $ W256 len'
-                   -- getAt :: SList (WordN 8) -> SInt8
-                   -- getAt = uninterpret "zerolistisZero"
-                   staticWriting = writeMemory' cd src len dst mem
+                   staticWriting = writeMemory' cd 2 2 2 mem
                    dynamicWriting =
-                     dynWriteMemoryPadding
-                      zeroList
-                      (implode' cd)
-                      (litWord src)
-                      (litWord len)
-                      (litWord dst)
-                      (implode' mem)
+                     dynWriteMemory
+                      (implode cd)
+                      (litWord 2)
+                      (litWord 2)
+                      (litWord 2)
+                      (implode mem)
                -- constrain (SL.length zeroList .== 2^32-1)
                -- addAxiom "zero list is all zeros"
                --   [ "(assert (forall ((i Int)) (= (seq.nth s2 i) #x00)))"
@@ -179,10 +171,38 @@ main = defaultMain $ testGroup "hevm"
                io $ print $ length staticWriting
                when ((length staticWriting) < 10000) $
                  let staticVer = implode staticWriting
-                 in checkSatAssuming [staticVer ./= dynamicWriting] >>= \case
+                 in io (putStrLn "solving") >> checkSatAssuming [staticVer ./= dynamicWriting] >>= \case
                    Unsat -> return ()
                    Sat -> do getValue dynamicWriting >>= io . print
-                             getValue dynamicWriting >>= io . print
+                             getValue staticVer >>= io . print
+                             error "oh no!"
+
+      ,  testProperty "dynWriteMemory works like writeMemory" $ forAll (genAbiValue (AbiTupleType $ Vector.fromList [AbiUIntType 16, AbiUIntType 16, AbiUIntType 16])) $ \(AbiTuple args) ->
+        let [AbiUInt 16 src', AbiUInt 16 dst', AbiUInt 16 len'] = Vector.toList args
+        in ioProperty $ runSMTWith z3 $ query $ do
+               cd  <- sbytes32
+               mem <- sbytes32
+
+               let
+                   src = w256 $ W256 src'
+                   dst = w256 $ W256 dst'
+                   len = w256 $ W256 len'
+
+                   staticWriting = writeMemory' cd src len dst mem
+                   dynamicWriting =
+                     dynWriteMemory
+                      (implode cd)
+                      (litWord src)
+                      (litWord len)
+                      (litWord dst)
+                      (implode mem)
+
+               when ((length staticWriting) < 10000 && len' < 10000) $
+                 let staticVer = implode staticWriting
+                 in checkSatAssuming [staticVer ./= dynamicWriting] >>= \case
+                   Unsat -> io $ putStrLn "Success!"
+                   Sat -> do getValue dynamicWriting >>= io . print
+                             getValue staticVer >>= io . print
                              error "oh no!"
                              
 
@@ -682,12 +702,3 @@ assertSolidityComputation (SolidityCall s args) x =
      assertEqual (Text.unpack s)
        (fmap Bytes (Just (encodeAbiValue x)))
        (fmap Bytes y)
-
-
--- implode :: SymVal a => [SBV a] -> SList a
--- implode = foldr ((.++) . singleton) (literal [])
-
-implode' :: [SWord 8] -> SList (WordN 8)
-implode' xs = case mapM unliteral xs of
-  Just xs -> literal xs
-  Nothing -> implode xs

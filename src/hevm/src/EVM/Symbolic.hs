@@ -105,25 +105,33 @@ truncpad n xs = if m > n then take n xs
                 else mappend xs (replicate (n - m) 0)
   where m = length xs
 
--- returns undefined stuff when you try to take too much
 takeStatic :: (SymVal a) => Int -> SList a -> [SBV a]
 takeStatic n ls =
   let (x, xs) = SL.uncons ls
   in x:(takeStatic (n - 1) xs)
 
+dropStatic :: (SymVal a) => Int -> SList a -> [SBV a]
+dropStatic n ls =
+  let (x, xs) = SL.uncons ls
+  in x:(takeStatic (n - 1) xs)
+
+-- special case of sliceWithZero when size is known
 truncpad' :: Int -> SList (WordN 8) -> [SWord 8]
-truncpad' n xs =
-  ite
-    (m .> (literal (num n)))
-    (takeStatic n xs)
-    (takeStatic n (xs .++ SL.implode (replicate n 0)))
-  where m = SL.length xs
+truncpad' n xs = case unliteral $ SL.length xs of
+  Just (num -> l) -> if l > n
+                     then takeStatic n xs
+                     else takeStatic n (xs .++ literal (replicate (n - l) 0))
+
+  Nothing -> ite
+               (SL.length xs .> (literal (num n)))
+               (takeStatic n xs)
+               (takeStatic n (xs .++ literal (replicate n 0)))
 
 swordAt :: Int -> [SWord 8] -> SymWord
 swordAt i bs = sw256 . fromBytes $ truncpad 32 $ drop i bs
 
-swordAt' :: SInteger -> SList (WordN 8) -> SymWord
-swordAt' i bs = sw256 . fromBytes $ truncpad' 32 $ SL.drop i bs
+swordAt' :: SWord 32 -> SList (WordN 8) -> SymWord
+swordAt' i bs = sw256 . fromBytes $ truncpad' 32 $ SL.drop (sFromIntegral i) bs
 
 readByteOrZero' :: Int -> [SWord 8] -> SWord 8
 readByteOrZero' i bs = fromMaybe 0 (bs ^? ix i)
@@ -139,7 +147,7 @@ writeMemory' bs1 (C _ n) (C _ src) (C _ dst) bs0 =
     c      = if src > num (length bs1)
              then replicate (num n) 0
              else sliceWithZero' (num src) (num n) bs1
-    b'     = drop (num (n)) b
+    b'     = drop (num n) b
   in
     a <> a' <> c <> b'
 
@@ -173,26 +181,6 @@ readByteOrZero'' i bs =
   (bs .!! (sFromIntegral i))
   (literal 0)
 
--- Warning: if (length bs0) < dst or (length bs1) < src + n we can get `havoc` garbage in the resulting
--- list. It should really be 0. If we could write the following function, we could pad appropriately:
--- replicate :: (SymVal a) => SInteger -> SBV a -> SList a
--- but I can't really write this...
--- 
--- TODO: make sure we enforce this condition before calling this
-dynWriteMemory :: SList (WordN 8) -> SymWord -> SymWord -> SymWord -> SList (WordN 8) -> SList (WordN 8)
-dynWriteMemory bs1 (S _ n) (S _ src) (S _ dst) bs0 =
-  let
-    n'      = sFromIntegral n
-    src'    = sFromIntegral src
-    dst'    = sFromIntegral dst
-
-    a       = SL.take dst' bs0
-    b       = SL.subList bs1 src' n'
-    c       = ite (dst' + n' .> SL.length bs0)
-              (SL.nil)
-              (SL.drop (dst' + n') bs0)
-  in
-    a .++ b .++ c
 
 -- Generates a ridiculously large set of constraints (roughly 25k) when
 -- the index is symbolic, but it still seems (kind of) manageable
@@ -217,27 +205,20 @@ readSWordWithBound ind (ConcreteBuffer xs) bound =
 readMemoryWord' :: Word -> [SWord 8] -> SymWord
 readMemoryWord' (C _ i) m = sw256 $ fromBytes $ truncpad 32 (drop (num i) m)
 
-dynWriteMemoryPadding :: SList (WordN 8) -> SList (WordN 8) -> SymWord -> SymWord -> SymWord -> SList (WordN 8) -> SList (WordN 8)
-dynWriteMemoryPadding zeroList bs1 (S _ n) (S _ src) (S _ dst) bs0 =
+dynWriteMemory :: Buffer -> SymWord -> SymWord -> SymWord -> Buffer -> Buffer
+dynWriteMemory bs1 n@(S _ n') src@(S _ src') dst@(S _ dst') bs0 =
   let
-    bs0'    = bs0 .++ zeroList
-    bs1'    = bs1 .++ zeroList
-    n'      = sFromIntegral n
-    src'    = sFromIntegral src
-    dst'    = sFromIntegral dst
-
-    a       = SL.take dst' bs0'
-    b       = SL.subList bs1' src' n'
-    c       = ite (dst' + n' .> SL.length bs0)
-                  (SL.nil)
-                  (SL.subList bs0 (dst' + n') (dst' + n' - SL.length bs0))
+    a       = sliceWithZero 0 dst bs0
+    b       = sliceWithZero src n bs1
+    c       = sliceWithZero (dst + n)
+                (sw256 (sFromIntegral (len bs0)) - (dst + n))
+                bs0
   in
-    a .++ b .++ c
+    a <> b <> c
 
 -- TODO: ensure we actually pad with zeros
 sliceWithZero'' :: SymWord -> SymWord -> SList (WordN 8) -> SList (WordN 8)
 sliceWithZero'' (S _ o) (S _ s) m = SL.subList m (sFromIntegral s) (sFromIntegral o)
-
 
 -- readMemoryWord' :: Word -> [SWord 8] -> SymWord
 -- readMemoryWord' (C _ i) m = sw256 $ fromBytes $ truncpad 32 (drop (num i) m)
@@ -245,9 +226,9 @@ sliceWithZero'' (S _ o) (S _ s) m = SL.subList m (sFromIntegral s) (sFromIntegra
 -- readMemoryWord32' :: Word -> [SWord 8] -> SWord 32
 -- readMemoryWord32' (C _ i) m = fromBytes $ truncpad 4 (drop (num i) m)
 
--- setMemoryWord' :: Word -> SymWord -> [SWord 8] -> [SWord 8]
--- setMemoryWord' (C _ i) (S _ x) =
---   writeMemory' (toBytes x) 32 0 (num i)
+setMemoryWord'' :: SWord 32 -> SymWord -> Buffer -> Buffer
+setMemoryWord'' i (S _ x) =
+  dynWriteMemory (StaticSymBuffer $ toBytes x) 32 0 (sw256 (sFromIntegral i))
 
 -- setMemoryByte' :: Word -> SWord 8 -> [SWord 8] -> [SWord 8]
 -- setMemoryByte' (C _ i) x =
@@ -280,13 +261,13 @@ readByteOrZero i (StaticSymBuffer bs) = readByteOrZero' i bs
 readByteOrZero i (ConcreteBuffer bs) = num $ Concrete.readByteOrZero i bs
 readByteOrZero i (DynamicSymBuffer bs) = readByteOrZero'' (literal $ num i) bs
 
+-- pad up to 10000 bytes in the dynamic case
 sliceWithZero :: SymWord -> SymWord -> Buffer -> Buffer
-sliceWithZero o s bf = case (maybeLitWord o, maybeLitWord s, bf) of
-  (Just o', Just s', StaticSymBuffer m) -> StaticSymBuffer (sliceWithZero' (num o') (num s') m)
-  (Just o', Just s', ConcreteBuffer m) -> ConcreteBuffer (Concrete.byteStringSliceWithDefaultZeroes (num o') (num s') m)
-sliceWithZero o s (StaticSymBuffer bf) = DynamicSymBuffer $ sliceWithZero'' o s (SL.implode bf)
-sliceWithZero o s (ConcreteBuffer bf) = DynamicSymBuffer $ sliceWithZero'' o s (SL.implode (litBytes bf))
-sliceWithZero o s (DynamicSymBuffer bf) = DynamicSymBuffer $ sliceWithZero'' o s bf
+sliceWithZero (S _ o) (S _ s) bf = case (unliteral o, unliteral s, bf) of
+  (Just o', Just s', StaticSymBuffer m)  -> StaticSymBuffer (sliceWithZero' (num o') (num s') m)
+  (Just o', Just s', ConcreteBuffer m)   -> ConcreteBuffer (Concrete.byteStringSliceWithDefaultZeroes (num o') (num s') m)
+  (_,       Just s', m)                  -> StaticSymBuffer $ truncpad' (num s') $ SL.drop (sFromIntegral o) (dynamize m)
+  _ -> DynamicSymBuffer $ SL.subList (dynamize bf .++ literal (replicate 10000 0)) (sFromIntegral o) (sFromIntegral s)
 
 writeMemory :: Buffer -> SymWord -> SymWord -> SymWord -> Buffer -> Buffer
 writeMemory bs1 n src dst bs0 =
@@ -299,23 +280,24 @@ writeMemory bs1 n src dst bs0 =
       StaticSymBuffer $ writeMemory' (litBytes bs0') n' src' dst' bs1'
     (Just n', Just src', Just dst', StaticSymBuffer bs0', StaticSymBuffer bs1') ->
       StaticSymBuffer $ writeMemory' bs0' n' src' dst' bs1'
-    _ -> let bs0' = dynamize bs0
-             bs1' = dynamize bs1
-         in DynamicSymBuffer $ dynWriteMemory bs0' n src dst bs1'
+    _ -> dynWriteMemory bs0 n src dst bs1
 
-readMemoryWord :: Word -> Buffer -> SymWord
-readMemoryWord i (StaticSymBuffer m) = readMemoryWord' i m
-readMemoryWord i (ConcreteBuffer m) = litWord $ Concrete.readMemoryWord i m
+readMemoryWord :: SWord 32 -> Buffer -> SymWord
+readMemoryWord i bf = case (unliteral i, bf) of
+  (Just i', StaticSymBuffer m) -> readMemoryWord' (num i') m
+  (Just i',  ConcreteBuffer m) -> litWord $ Concrete.readMemoryWord (num i') m
+  _ -> swordAt' i (dynamize bf)
 
 readMemoryWord32 :: Word -> Buffer -> SWord 32
 readMemoryWord32 i (StaticSymBuffer m) = readMemoryWord32' i m
 readMemoryWord32 i (ConcreteBuffer m) = num $ Concrete.readMemoryWord32 i m
 
-setMemoryWord :: Word -> SymWord -> Buffer -> Buffer
-setMemoryWord i x (StaticSymBuffer z) = StaticSymBuffer $ setMemoryWord' i x z
-setMemoryWord i x (ConcreteBuffer z) = case maybeLitWord x of
-  Just x' -> ConcreteBuffer $ Concrete.setMemoryWord i x' z
-  Nothing -> StaticSymBuffer $ setMemoryWord' i x (litBytes z)
+setMemoryWord :: SWord 32 -> SymWord -> Buffer -> Buffer
+setMemoryWord i x bf = case (unliteral i, maybeLitWord x, bf) of
+  (Just i', Just x', ConcreteBuffer z) -> ConcreteBuffer $ Concrete.setMemoryWord (num i') x' z
+  (Just i', _, ConcreteBuffer z) -> StaticSymBuffer $ setMemoryWord' (num i') x (litBytes z)
+  (Just i', _, StaticSymBuffer z) -> StaticSymBuffer $ setMemoryWord' (num i') x z
+  _ -> setMemoryWord'' i x bf
 
 setMemoryByte :: Word -> SWord 8 -> Buffer -> Buffer
 setMemoryByte i x (StaticSymBuffer m) = StaticSymBuffer $ setMemoryByte' i x m
