@@ -518,7 +518,7 @@ assert cmd = do
                         "Stopped"
                       else io $ putStrLn $
                         "Returned: " <> show (ByteStringS msg)
-                    Just (EVM.VMSuccess (SymbolicBuffer msg)) -> do
+                    Just (EVM.VMSuccess (StaticSymBuffer msg)) -> do
                       out <- mapM (getValue.fromSized) msg
                       io . putStrLn $
                         "Returned: " <> show (ByteStringS (ByteString.pack out))
@@ -581,7 +581,7 @@ launchExec cmd = do
           exitWith (ExitFailure 2)
         Just (EVM.VMSuccess buf) -> do
           let msg = case buf of
-                SymbolicBuffer msg' -> forceLitBytes msg'
+                StaticSymBuffer msg' -> forceLitBytes msg'
                 ConcreteBuffer msg' -> msg'
           print $ ByteStringS msg
           case state cmd of
@@ -686,7 +686,7 @@ vmFromCommand cmd = do
 
         vm1 c = EVM.makeVm $ EVM.VMOpts
           { EVM.vmoptContract      = c
-          , EVM.vmoptCalldata      = (calldata', literal . num $ len calldata')
+          , EVM.vmoptCalldata      = calldata'
           , EVM.vmoptValue         = w256lit value'
           , EVM.vmoptAddress       = address'
           , EVM.vmoptCaller        = litAddr caller'
@@ -713,22 +713,18 @@ symvmFromCommand :: Command Options.Unwrapped -> Query EVM.VM
 symvmFromCommand cmd = do
   caller' <- maybe (SAddr <$> freshVar_) (return . litAddr) (caller cmd)
   callvalue' <- maybe (sw256 <$> freshVar_) (return . w256lit) (value cmd)
-  (calldata', cdlen, pathCond) <- case (calldata cmd, sig cmd) of
-    -- fully abstract calldata (up to 1024 bytes)
+  calldata' <- case (calldata cmd, sig cmd) of
+    -- static calldata (up to 256 bytes)
     (Nothing, Nothing) -> do
-      cd <- sbytes256
-      len <- freshVar_
-      return (SymbolicBuffer cd, len, len .<= 256)
+      StaticSymBuffer <$> sbytes256
     -- fully concrete calldata
     (Just c, Nothing) ->
-      let cd = ConcreteBuffer $ decipher c
-      in return (cd, num (len cd), sTrue)
+      return $ ConcreteBuffer $ decipher c
     -- calldata according to given abi with possible specializations from the `arg` list
     (Nothing, Just sig') -> do
       method' <- io $ functionAbi sig'
       let typs = snd <$> view methodInputs method'
-      (cd, cdlen) <- symCalldata (view methodSignature method') typs (arg cmd)
-      return (SymbolicBuffer cd, cdlen, sTrue)
+      StaticSymBuffer <$> staticCalldata (view methodSignature method') typs (arg cmd)
 
     _ -> error "incompatible options: calldata and abi"
 
@@ -749,7 +745,7 @@ symvmFromCommand cmd = do
           error $ "contract not found."
         Just contract' ->
           return $
-            vm1 cdlen calldata' callvalue' caller' (contract'' & set EVM.storage store)
+            vm1 calldata' callvalue' caller' (contract'' & set EVM.storage store)
           where
             contract'' = case code cmd of
               Nothing -> contract'
@@ -764,12 +760,12 @@ symvmFromCommand cmd = do
 
     (_, _, Just c)  ->
       return $
-        vm1 cdlen calldata' callvalue' caller' $
+        vm1 calldata' callvalue' caller' $
           (EVM.initialContract . codeType $ decipher c) & set EVM.storage store
     (_, _, Nothing) ->
       error $ "must provide at least (rpc + address) or code"
 
-  return $ vm & over EVM.pathConditions (<> [pathCond])
+  return vm
 
   where
     decipher = hexByteString "bytes" . strip0x
@@ -779,9 +775,9 @@ symvmFromCommand cmd = do
     address' = if create cmd
           then createAddress origin' (word nonce 0)
           else addr address 0xacab
-    vm1 cdlen calldata' callvalue' caller' c = EVM.makeVm $ EVM.VMOpts
+    vm1 calldata' callvalue' caller' c = EVM.makeVm $ EVM.VMOpts
       { EVM.vmoptContract      = c
-      , EVM.vmoptCalldata      = (calldata', cdlen)
+      , EVM.vmoptCalldata      = calldata'
       , EVM.vmoptValue         = callvalue'
       , EVM.vmoptAddress       = address'
       , EVM.vmoptCaller        = caller'
