@@ -59,21 +59,21 @@ main = defaultMain $ testGroup "hevm"
           Right ("", _, x') -> x' == x
           _ -> False
     ]
-  , testGroup "Solidity expressions"
-    [ testCase "Trivial" $
-        SolidityCall "x = 3;" []
-          ===> AbiUInt 256 3
+  -- , testGroup "Solidity expressions"
+  --   [ testCase "Trivial" $
+  --       SolidityCall "x = 3;" []
+  --         ===> AbiUInt 256 3
 
-    , testCase "Arithmetic" $ do
-        SolidityCall "x = a + 1;"
-          [AbiUInt 256 1] ===> AbiUInt 256 2
-        SolidityCall "x = a - 1;"
-          [AbiUInt 8 0] ===> AbiUInt 8 255
+  --   , testCase "Arithmetic" $ do
+  --       SolidityCall "x = a + 1;"
+  --         [AbiUInt 256 1] ===> AbiUInt 256 2
+  --       SolidityCall "x = a - 1;"
+  --         [AbiUInt 8 0] ===> AbiUInt 8 255
 
-    , testCase "keccak256()" $
-        SolidityCall "x = uint(keccak256(abi.encodePacked(a)));"
-          [AbiString ""] ===> AbiUInt 256 0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470
-    ]
+  --   , testCase "keccak256()" $
+  --       SolidityCall "x = uint(keccak256(abi.encodePacked(a)));"
+  --         [AbiString ""] ===> AbiUInt 256 0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470
+  --   ]
 
   , testGroup "Precompiled contracts"
       [ testGroup "Example (reverse)"
@@ -154,29 +154,27 @@ main = defaultMain $ testGroup "hevm"
                mem <- sbytes32
 
                let
-                   staticWriting = writeMemory' cd 2 2 2 mem
+                   staticWriting = writeMemory' cd 18 111 63 mempty
                    dynamicWriting =
                      dynWriteMemory
-                      (implode cd)
-                      (litWord 2)
-                      (litWord 2)
-                      (litWord 2)
-                      (implode mem)
-               -- constrain (SL.length zeroList .== 2^32-1)
-               -- addAxiom "zero list is all zeros"
-               --   [ "(assert (forall ((i Int)) (= (seq.nth s2 i) #x00)))"
-               --   ]
-               --   -- (SL.length zeroList .== 2^32-1)
-               io $ print $ length staticWriting
-               when ((length staticWriting) < 10000) $
-                 let staticVer = implode staticWriting
-                 in io (putStrLn "solving") >> checkSatAssuming [staticVer ./= dynamicWriting] >>= \case
-                   Unsat -> return ()
-                   Sat -> do getValue dynamicWriting >>= io . print
-                             getValue staticVer >>= io . print
-                             error "oh no!"
+                      (DynamicSymBuffer (implode cd))
+                      (litWord 18)
+                      (litWord 111)
+                      (litWord 63)
+                      mempty
+               io $ print dynamicWriting
+               io (putStrLn "solving") >> checkSatAssuming [StaticSymBuffer staticWriting ./= dynamicWriting] >>= \case
+                 Unsat -> return ()
+                 Sat -> do getList dynamicWriting >>= io . print
+                           getList (StaticSymBuffer staticWriting) >>= io . print
+                           error "oh no!"
+                             where getList :: Buffer -> Query [WordN 8]
+                                   getList (StaticSymBuffer bf) = mapM getValue bf
+                                   getList (DynamicSymBuffer bf) = getValue bf
 
-      ,  testProperty "dynWriteMemory works like writeMemory" $ forAll (genAbiValue (AbiTupleType $ Vector.fromList [AbiUIntType 16, AbiUIntType 16, AbiUIntType 16])) $ \(AbiTuple args) ->
+      ,  testProperty "dynWriteMemory works like writeMemory" $
+          withMaxSuccess 10000 $
+          forAll (genAbiValue (AbiTupleType $ Vector.fromList [AbiUIntType 16, AbiUIntType 16, AbiUIntType 16])) $ \(AbiTuple args) ->
         let [AbiUInt 16 src', AbiUInt 16 dst', AbiUInt 16 len'] = Vector.toList args
         in ioProperty $ runSMTWith z3 $ query $ do
                cd  <- sbytes32
@@ -190,18 +188,17 @@ main = defaultMain $ testGroup "hevm"
                    staticWriting = writeMemory' cd src len dst mem
                    dynamicWriting =
                      dynWriteMemory
-                      (implode cd)
+                      (DynamicSymBuffer (implode cd))
                       (litWord src)
                       (litWord len)
                       (litWord dst)
-                      (implode mem)
+                      (DynamicSymBuffer (implode mem))
 
                when ((length staticWriting) < 10000 && len' < 10000) $
-                 let staticVer = implode staticWriting
-                 in checkSatAssuming [staticVer ./= dynamicWriting] >>= \case
+                 checkSatAssuming [StaticSymBuffer staticWriting ./= dynamicWriting] >>= \case
                    Unsat -> io $ putStrLn "Success!"
-                   Sat -> do getValue dynamicWriting >>= io . print
-                             getValue staticVer >>= io . print
+                   Sat -> do -- getValue dynamicWriting >>= io . print
+                             -- getValue staticVer >>= io . print
                              error "oh no!"
                              
 

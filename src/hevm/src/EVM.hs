@@ -2179,7 +2179,6 @@ accessMemoryRange
   -> SymWord
   -> EVM ()
   -> EVM ()
-accessMemoryRange _ _ 0 continue = continue
 accessMemoryRange fees f l continue =
   case (maybeLitWord f, maybeLitWord l) of
     (Just f', Just l') ->
