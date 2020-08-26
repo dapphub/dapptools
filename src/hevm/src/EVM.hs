@@ -738,13 +738,13 @@ exec1 = do
         -- op: CODECOPY
         0x39 ->
           case stk of
-            (memOffset : codeOffset' : n' : xs) -> forceConcrete2 (codeOffset',n') $ \(codeOffset,n) -> do
-              burn (g_verylow + g_copy * ceilDiv (num n) 32) $
-                accessUnboundedMemoryRange fees memOffset (litWord n) $ do
+            (memOffset : codeOffset : n : xs) ->
+              burnSym (litWord g_verylow + litWord g_copy * ceilSDiv n 32) $
+                accessUnboundedMemoryRange fees memOffset n $ do
                   next
                   assign (state . stack) xs
                   copyBytesToMemory (ConcreteBuffer (the state code))
-                    (litWord n) (litWord codeOffset) memOffset
+                    n codeOffset memOffset
             _ -> underrun
 
         -- op: GASPRICE
@@ -896,17 +896,17 @@ exec1 = do
                   assign (state . stack) xs
             _ -> underrun
 
-        -- -- op: MSTORE8
-        -- 0x53 ->
-        --   case stk of
-        --     (x':(S _ y):xs) -> forceConcrete x' $ \x ->
-        --       burn g_verylow $
-        --         accessMemoryRange fees x 1 $ do
-        --           let yByte = bvExtract (Proxy :: Proxy 7) (Proxy :: Proxy 0) y
-        --           next
-        --           modifying (state . memory) (setMemoryByte x yByte)
-        --           assign (state . stack) xs
-        --     _ -> underrun
+        -- op: MSTORE8
+        0x53 ->
+          case stk of
+            (x:(S _ y):xs) ->
+              burn g_verylow $
+                accessMemoryRange fees x 1 $ do
+                  let yByte = bvExtract (Proxy :: Proxy 7) (Proxy :: Proxy 0) y
+                  next
+                  modifying (state . memory) (setMemoryByte x yByte)
+                  assign (state . stack) xs
+            _ -> underrun
 
         -- op: SLOAD
         0x54 ->
@@ -1109,7 +1109,7 @@ exec1 = do
                 case view frames vm of
                   [] ->
                     case (the tx isCreate) of
-                      True ->  forceConcreteBuffer output $ \output' -> do
+                      True -> forceConcreteBuffer output $ \output' -> do
                         let codesize = num $ BS.length output'
                             maxsize = the block maxCodeSize
                         if codesize > maxsize
@@ -1237,8 +1237,8 @@ exec1 = do
                 finishFrame (FrameReverted output)
             _ -> underrun
 
-        xxx ->
-          vmError (UnrecognizedOpcode xxx)
+        xxx -> error $ "unimplemented opcode: " <> show xxx
+--          vmError (UnrecognizedOpcode xxx)
 
 -- | Checks a *CALL for failure; OOG, too many callframes, memory access etc.
 callChecks
