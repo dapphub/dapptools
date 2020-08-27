@@ -424,7 +424,6 @@ main = defaultMain $ testGroup "hevm"
           let deposit = decodeAbiValue (AbiUIntType 8) (BS.fromStrict (BS.drop 4 bs))
           assertEqual "overflowing uint8" deposit (AbiUInt 8 255)
      ,
-        -- This test uses cvc4 instead of z3
         testCase "explore function dispatch" $ do
         Just c <- solcRuntime "A"
           [i|
@@ -434,7 +433,9 @@ main = defaultMain $ testGroup "hevm"
             }
           }
           |]
-        Left (_, res) <- runSMTWith cvc4 $ query $ checkAssert (RuntimeCode c) Nothing Nothing []
+        Left (_, res) <- runSMTWith z3 $ do
+          setTimeOut 5000
+          query $ checkAssert (RuntimeCode c) Nothing Nothing []
         putStrLn $ "successfully explored: " <> show (length res) <> " paths"
         ,
 
@@ -447,7 +448,7 @@ main = defaultMain $ testGroup "hevm"
               }
             }
             |]
-          Left (_, res) <- runSMTWith cvc4 $ query $ checkAssert (RuntimeCode c) Nothing Nothing []
+          Left (_, res) <- runSMTWith cvc4 $ query $ checkAssert (RuntimeCode c) Nothing (Just ("f(uint256,uint256)", [AbiUIntType 256, AbiUIntType 256])) []
           putStrLn $ "successfully explored: " <> show (length res) <> " paths"
         ,
         testCase "injectivity of keccak (32 bytes)" $ do
@@ -459,7 +460,7 @@ main = defaultMain $ testGroup "hevm"
               }
             }
             |]
-          Left (_, res) <- runSMTWith cvc4 $ query $ checkAssert (RuntimeCode c) Nothing Nothing []
+          Left (_, res) <- runSMTWith z3 $ query $ checkAssert (RuntimeCode c) Nothing (Just ("f(uint256,uint256)", [AbiUIntType 256, AbiUIntType 256])) []
           putStrLn $ "successfully explored: " <> show (length res) <> " paths"
        ,
 
@@ -500,7 +501,9 @@ main = defaultMain $ testGroup "hevm"
               }
             }
             |]
-          Left (_, res) <- runSMTWith z3 $ query $ checkAssert (RuntimeCode c) Nothing Nothing []
+          Left (_, res) <- runSMTWith z3 $ do
+            setTimeOut 5000
+            query $ checkAssert (RuntimeCode c) Nothing Nothing []
           putStrLn $ "successfully explored: " <> show (length res) <> " paths"
 
        ,
@@ -517,7 +520,7 @@ main = defaultMain $ testGroup "hevm"
               }
             |]
           -- should find a counterexample
-          Right counterexample <- runSMTWith cvc4 $ query $ checkAssert (RuntimeCode c) Nothing Nothing []
+          Right counterexample <- runSMTWith cvc4 $ query $ checkAssert (RuntimeCode c) Nothing (Just ("f(uint256,uint256)", [AbiUIntType 256, AbiUIntType 256])) []
           putStrLn $ "found counterexample:"
 
 

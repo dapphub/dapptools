@@ -95,8 +95,8 @@ staticCalldata sig typesignature concreteArgs =
 abstractVM :: Maybe (Text, [AbiType]) -> [String] -> ByteString -> StorageModel -> Query VM
 abstractVM typesignature concreteArgs x storagemodel = do
   cd' <- case typesignature of
-           Nothing -> sbytes256
-           Just (name, typs) -> staticCalldata name typs concreteArgs
+           Nothing -> DynamicSymBuffer <$> freshVar_
+           Just (name, typs) -> StaticSymBuffer <$> staticCalldata name typs concreteArgs
 
   symstore <- case storagemodel of
     SymbolicS -> Symbolic <$> freshArray_ Nothing
@@ -104,7 +104,7 @@ abstractVM typesignature concreteArgs x storagemodel = do
     ConcreteS -> return $ Concrete mempty
   c <- SAddr <$> freshVar_
   value' <- sw256 <$> freshVar_
-  return $ loadSymVM (RuntimeCode x) symstore storagemodel c value' (StaticSymBuffer cd')
+  return $ loadSymVM (RuntimeCode x) symstore storagemodel c value' cd'
 
 loadSymVM :: ContractCode -> Storage -> StorageModel -> SAddr -> SymWord -> Buffer -> VM
 loadSymVM x initStore model addr callvalue' calldata' =
