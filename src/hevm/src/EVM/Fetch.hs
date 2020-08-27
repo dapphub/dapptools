@@ -152,15 +152,13 @@ oracle smtstate info model ensureConsistency q = do
           EVM.ConcreteS -> return $ continue x
           EVM.InitialS  -> return $ continue $ x
              & set EVM.storage (EVM.Symbolic $ SBV.sListArray 0 [])
-          EVM.SymbolicS -> case smtstate of
-            Nothing -> return (continue $ x
-                               & set EVM.storage (EVM.Symbolic $ SBV.sListArray 0 []))
-
-            Just state ->
-              flip runReaderT state $ SBV.runQueryT $ do
-                store <- freshArray_ Nothing
-                return $ continue $ x
-                  & set EVM.storage (EVM.Symbolic store)
+             & set EVM.origStorage (EVM.Symbolic $ SBV.sListArray 0 [])
+          EVM.SymbolicS -> 
+            flip runReaderT state $ SBV.runQueryT $ do
+              store <- freshArray_ Nothing
+              return $ continue $ x
+                & set EVM.storage (EVM.Symbolic store)
+                & set EVM.origStorage (EVM.Symbolic store)
         Nothing -> error ("oracle error: " ++ show q)
 
     --- for other queries (there's only slot left right now) we default to zero or http

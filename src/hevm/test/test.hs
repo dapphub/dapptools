@@ -173,58 +173,41 @@ main = defaultMain $ testGroup "hevm"
                                    getList (StaticSymBuffer bf) = mapM getValue bf
                                    getList (DynamicSymBuffer bf) = getValue bf
 
-      ,  testProperty "dynWriteMemory works like writeMemory" $
---          withMaxSuccess 10000 $
-          forAll (genAbiValue (AbiTupleType $ Vector.fromList [AbiUIntType 16, AbiUIntType 16, AbiUIntType 16])) $ \(AbiTuple args) ->
-        let [AbiUInt 16 src', AbiUInt 16 dst', AbiUInt 16 len'] = Vector.toList args
-        in ioProperty $ runSMTWith z3 $ query $ do
-               cd  <- sbytes32
-               mem <- sbytes32
+--       ,  testProperty "dynWriteMemory works like writeMemory" $
+-- --          withMaxSuccess 10000 $
+--           forAll (genAbiValue (AbiTupleType $ Vector.fromList [AbiUIntType 16, AbiUIntType 16, AbiUIntType 16])) $ \(AbiTuple args) ->
+--         let [AbiUInt 16 src', AbiUInt 16 dst', AbiUInt 16 len'] = Vector.toList args
+--         in ioProperty $ runSMTWith z3 $ do
+--           setTimeOut 5000
+--           query $ do
+--                cd  <- sbytes32
+--                mem <- sbytes32
 
-               let
-                   src = w256 $ W256 src'
-                   dst = w256 $ W256 dst'
-                   len = w256 $ W256 len'
+--                let
+--                    src = w256 $ W256 src'
+--                    dst = w256 $ W256 dst'
+--                    len = w256 $ W256 len'
 
-                   staticWriting = writeMemory' cd src len dst mem
-                   dynamicWriting =
-                     dynWriteMemory
-                      (DynamicSymBuffer (implode cd))
-                      (litWord src)
-                      (litWord len)
-                      (litWord dst)
-                      (DynamicSymBuffer (implode mem))
+--                    staticWriting = writeMemory' cd src len dst mem
+--                    dynamicWriting =
+--                      dynWriteMemory
+--                       (DynamicSymBuffer (implode cd))
+--                       (litWord src)
+--                       (litWord len)
+--                       (litWord dst)
+--                       (DynamicSymBuffer (implode mem))
 
-               when ((length staticWriting) < 10000 && len' < 10000) $
-                 checkSatAssuming [StaticSymBuffer staticWriting ./= dynamicWriting] >>= \case
-                   Unsat -> io $ putStrLn "Success!"
-                   Sat -> do getList dynamicWriting >>= io . print
-                             getList (StaticSymBuffer staticWriting) >>= io . print
-                             error "oh no!"
-                                where getList :: Buffer -> Query [WordN 8]
-                                      getList (StaticSymBuffer bf) = mapM getValue bf
-                                      getList (DynamicSymBuffer bf) = getValue bf
-
-
-    -- ,  testCase "dynWriteMemory pads with zeros appropriately" $
-    --       ioProperty $ runSMT $ query $ do
-    --            cd  <- sbytes128
-    --            mem <- sbytes128
-    --            let src = w256 $ W256 src'
-    --                dst = w256 $ W256 dst'
-    --                offset = w256 $ W256 offset'
-    --                staticWriting = writeMemory' cd src offset dst mem
-    --                dynamicWriting =
-    --                  dynWriteMemory
-    --                   (implode cd)
-    --                   (litWord src)
-    --                   (litWord offset)
-    --                   (litWord dst)
-    --                   (implode mem)
-    --            checkSatAssuming [implode staticWriting ./= dynamicWriting] >>= \case
-    --              Unsat -> return ()
-    --              _ -> error "fail!"
-                            
+--                when ((length staticWriting) < 10000 && len' < 10000) $
+--                  checkSatAssuming [StaticSymBuffer staticWriting ./= dynamicWriting] >>= \case
+--                    Unk -> io $ putStrLn "timeout"
+--                    Unsat -> io $ putStrLn "Success!"
+--                    Sat -> do getList dynamicWriting >>= io . print
+--                              getList (StaticSymBuffer staticWriting) >>= io . print
+--                              error "oh no!"
+--                                 where getList :: Buffer -> Query [WordN 8]
+--                                       getList (StaticSymBuffer bf) = mapM getValue bf
+--                                       getList (DynamicSymBuffer bf) = getValue bf                 
+               
    ]
 
   , testGroup "Symbolic execution"
@@ -246,7 +229,7 @@ main = defaultMain $ testGroup "hevm"
             post = Just $ \(prestate, poststate) ->
               let [x, y] = getStaticAbiArgs prestate
               in case view result poststate of
-                Just (VMSuccess (SymbolicBuffer out)) -> (fromBytes out) .== x + y
+                Just (VMSuccess (StaticSymBuffer out)) -> (fromBytes out) .== x + y
                 _ -> sFalse
         Left (_, res) <- runSMT $ query $ verifyContract safeAdd (Just ("add(uint256,uint256)", [AbiUIntType 256, AbiUIntType 256])) [] SymbolicS pre post
         putStrLn $ "successfully explored: " <> show (length res) <> " paths"
@@ -268,7 +251,7 @@ main = defaultMain $ testGroup "hevm"
             post (prestate, poststate) =
               let [_, y] = getStaticAbiArgs prestate
               in case view result poststate of
-                      Just (VMSuccess (SymbolicBuffer out)) -> fromBytes out .== 2 * y
+                      Just (VMSuccess (StaticSymBuffer out)) -> fromBytes out .== 2 * y
                       _ -> sFalse
         Left (_, res) <- runSMTWith z3 $ query $
           verifyContract safeAdd (Just ("add(uint256,uint256)", [AbiUIntType 256, AbiUIntType 256])) [] SymbolicS pre (Just post)
@@ -287,8 +270,8 @@ main = defaultMain $ testGroup "hevm"
         bs <- runSMTWith cvc4 $ query $ do
           Right vm <- checkAssert factor (Just ("factor(uint256,uint256)", [AbiUIntType 256, AbiUIntType 256])) []
           case view (state . calldata . _1) vm of
-            SymbolicBuffer bs -> BS.pack <$> mapM (getValue.fromSized) bs
-            ConcreteBuffer _ -> error "unexpected"
+            StaticSymBuffer bs -> BS.pack <$> mapM (getValue.fromSized) bs
+            _ -> error "unexpected"
 
         let [AbiUInt 256 x, AbiUInt 256 y] = decodeAbiValues [AbiUIntType 256, AbiUIntType 256] bs
         assertEqual "" True (x == 953 && y == 1021 || x == 1021 && y == 953)
@@ -352,8 +335,8 @@ main = defaultMain $ testGroup "hevm"
         bs <- runSMT $ query $ do
           Right vm <- verifyContract c (Just ("f(uint256,uint256)", [AbiUIntType 256, AbiUIntType 256])) [] SymbolicS pre (Just post)
           case view (state . calldata . _1) vm of
-            SymbolicBuffer bs -> BS.pack <$> mapM (getValue.fromSized) bs
-            ConcreteBuffer bs -> error "unexpected"
+            StaticSymBuffer bs -> BS.pack <$> mapM (getValue.fromSized) bs
+            _ -> error "unexpected"
 
         let [AbiUInt 256 x, AbiUInt 256 y] = decodeAbiValues [AbiUIntType 256, AbiUIntType 256] bs
         assertEqual "Catch storage collisions" x y
@@ -424,8 +407,8 @@ main = defaultMain $ testGroup "hevm"
           bs <- runSMT $ query $ do
             Right vm <- checkAssert c (Just ("deposit(uint8)", [AbiUIntType 8])) []
             case view (state . calldata . _1) vm of
-              SymbolicBuffer bs -> BS.pack <$> mapM (getValue.fromSized) bs
-              ConcreteBuffer _ -> error "unexpected"
+              StaticSymBuffer bs -> BS.pack <$> mapM (getValue.fromSized) bs
+              _ -> error "unexpected"
 
           let [deposit] = decodeAbiValues [AbiUIntType 8] bs
           assertEqual "overflowing uint8" deposit (AbiUInt 8 255)
@@ -482,8 +465,8 @@ main = defaultMain $ testGroup "hevm"
           bs <- runSMTWith z3 $ query $ do
             Right vm <- checkAssert c (Just ("f(uint256,uint256,uint256,uint256)", replicate 4 (AbiUIntType 256))) []
             case view (state . calldata . _1) vm of
-              SymbolicBuffer bs -> BS.pack <$> mapM (getValue.fromSized) bs
-              ConcreteBuffer _ -> error "unexpected"
+              StaticSymBuffer bs -> BS.pack <$> mapM (getValue.fromSized) bs
+              _ -> error "unexpected"
               
           let [AbiUInt 256 x,
                AbiUInt 256 y,
@@ -510,9 +493,7 @@ main = defaultMain $ testGroup "hevm"
               }
             }
             |]
-          Left (_, res) <- runSMTWith z3 $ do
-            setTimeOut 5000
-            query $ checkAssert c Nothing []
+          Left (_, res) <- runSMTWith z3 $ query $ checkAssert c Nothing []
           putStrLn $ "successfully explored: " <> show (length res) <> " paths"
 
        ,

@@ -45,20 +45,20 @@ sbytes1024 = liftA2 (++) sbytes512 sbytes512
 -- We don't assume input types are restricted to their proper range here;
 -- such assumptions should instead be given as preconditions.
 -- This could catch some interesting calldata mismanagement errors.
-staticAbiArg :: AbiType -> Query [SWord 8]
-staticAbiArg (AbiUIntType n)
+symAbiArg :: AbiType -> Query [SWord 8]
+symAbiArg (AbiUIntType n)
   | n `mod` 8 == 0 && n <= 256 = sbytes32
   | otherwise = error "bad type"
 
-staticAbiArg (AbiIntType n)
+symAbiArg (AbiIntType n)
   | n `mod` 8 == 0 && n <= 256 = sbytes32
   | otherwise = error "bad type"
 
-staticAbiArg AbiBoolType = sbytes32
+symAbiArg AbiBoolType = sbytes32
 
-staticAbiArg AbiAddressType = sbytes32
+symAbiArg AbiAddressType = sbytes32
 
-staticAbiArg (AbiBytesType n)
+symAbiArg (AbiBytesType n)
   | n <= 32 = sbytes32
   | otherwise = error "bad type"
 
@@ -81,7 +81,7 @@ symAbiArg n =
 -- kept symbolic.
 staticCalldata :: Text -> [AbiType] -> [String] -> Query [SWord 8]
 staticCalldata sig typesignature concreteArgs =
-  concat <$> zipWithM mkArg typesignature args
+  fmap (sig' <>) $ concat <$> zipWithM mkArg typesignature args
   where
     -- ensure arg length is long enough
     args = concreteArgs <> replicate (length typesignature - length concreteArgs)  "<symbolic>"

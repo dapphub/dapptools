@@ -185,7 +185,7 @@ checkExpectedContracts vm expected =
      )
 
 clearOrigStorage :: EVM.Contract -> EVM.Contract
-clearOrigStorage = set EVM.origStorage mempty
+clearOrigStorage = set EVM.origStorage (EVM.Concrete mempty)
 
 clearZeroStorage :: EVM.Contract -> EVM.Contract
 clearZeroStorage c = case EVM._storage c of
@@ -325,16 +325,12 @@ realizeContract x =
   EVM.initialContract (x ^. code)
     & EVM.balance .~ EVM.w256 (x ^. balance)
     & EVM.nonce   .~ EVM.w256 (x ^. nonce)
-    & EVM.storage .~ EVM.Concrete (
-        Map.fromList .
-        map (bimap EVM.w256 (litWord . EVM.w256)) .
-        Map.toList $ x ^. storage
-        )
-    & EVM.origStorage .~ (
-        Map.fromList .
-        map (bimap EVM.w256 EVM.w256) .
-        Map.toList $ x ^. storage
-        )
+    & EVM.storage .~ store
+    & EVM.origStorage .~ store
+  where store = EVM.Concrete $
+          Map.fromList .
+          map (bimap EVM.w256 (litWord . EVM.w256)) .
+          Map.toList $ x ^. storage
 
 data BlockchainError
   = TooManyBlocks
