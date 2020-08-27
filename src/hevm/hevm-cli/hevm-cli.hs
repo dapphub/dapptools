@@ -745,7 +745,10 @@ symvmFromCommand cmd = do
           error $ "contract not found."
         Just contract' ->
           return $
-            vm1 calldata' callvalue' caller' (contract'' & set EVM.storage store)
+            vm1 calldata' callvalue' caller'
+                (contract''
+                   & set EVM.storage store
+                   & set EVM.origStorage store)
           where
             contract'' = case code cmd of
               Nothing -> contract'
@@ -761,7 +764,9 @@ symvmFromCommand cmd = do
     (_, _, Just c)  ->
       return $
         vm1 calldata' callvalue' caller' $
-          (EVM.initialContract . codeType $ decipher c) & set EVM.storage store
+          (EVM.initialContract . codeType $ decipher c)
+             & set EVM.storage store
+             & set EVM.origStorage store
     (_, _, Nothing) ->
       error $ "must provide at least (rpc + address) or code"
 
