@@ -3,8 +3,8 @@
 let
   nixpkgs = builtins.fetchGit {
     url = "https://github.com/nixos/nixpkgs";
-    ref = "release-20.03";
-    rev = "5272327b81ed355bbed5659b8d303cf2979b6953";
+#    ref = "release-20.03";
+    rev = "6eae50cca8014a2eb773d73bbe10552c60841217";
   };
 in
   # Now return the Nixpkgs configured to use our overlay.
