@@ -155,14 +155,14 @@ main = defaultMain $ testGroup "hevm"
                mem <- sbytes32
 
                let
-                   staticWriting = writeMemory' cd 18 111 63 mempty
+                   staticWriting = writeMemory' cd 18 111 63 mem --mempty
                    dynamicWriting =
                      dynWriteMemory
                       (DynamicSymBuffer (implode cd))
                       (litWord 18)
                       (litWord 111)
                       (litWord 63)
-                      mempty
+                      (DynamicSymBuffer (implode mem))
                io $ print dynamicWriting
                io (putStrLn "solving") >> checkSatAssuming [StaticSymBuffer staticWriting ./= dynamicWriting] >>= \case
                  Unsat -> return ()
@@ -173,40 +173,41 @@ main = defaultMain $ testGroup "hevm"
                                    getList (StaticSymBuffer bf) = mapM getValue bf
                                    getList (DynamicSymBuffer bf) = getValue bf
 
---       ,  testProperty "dynWriteMemory works like writeMemory" $
--- --          withMaxSuccess 10000 $
---           forAll (genAbiValue (AbiTupleType $ Vector.fromList [AbiUIntType 16, AbiUIntType 16, AbiUIntType 16])) $ \(AbiTuple args) ->
---         let [AbiUInt 16 src', AbiUInt 16 dst', AbiUInt 16 len'] = Vector.toList args
---         in ioProperty $ runSMTWith z3 $ do
---           setTimeOut 5000
---           query $ do
---                cd  <- sbytes32
---                mem <- sbytes32
+      ,  testProperty "dynWriteMemory works like writeMemory" $
+--          withMaxSuccess 10000 $
+          forAll (genAbiValue (AbiTupleType $ Vector.fromList [AbiUIntType 16, AbiUIntType 16, AbiUIntType 16])) $ \(AbiTuple args) ->
+        let [AbiUInt 16 src', AbiUInt 16 dst', AbiUInt 16 len'] = Vector.toList args
+        in ioProperty $ when (len' < 1000) $ runSMTWith z3 $ do
+          setTimeOut 5000
+          query $ do
+               cd  <- sbytes32
+               mem <- sbytes32
 
---                let
---                    src = w256 $ W256 src'
---                    dst = w256 $ W256 dst'
---                    len = w256 $ W256 len'
+               let
+                   src = w256 $ W256 src'
+                   dst = w256 $ W256 dst'
+                   len = w256 $ W256 len'
 
---                    staticWriting = writeMemory' cd src len dst mem
---                    dynamicWriting =
---                      dynWriteMemory
---                       (DynamicSymBuffer (implode cd))
---                       (litWord src)
---                       (litWord len)
---                       (litWord dst)
---                       (DynamicSymBuffer (implode mem))
+                   staticWriting = writeMemory' cd src len dst mem
+                   dynamicWriting =
+                     dynWriteMemory
+                      (DynamicSymBuffer (implode cd))
+                      (litWord src)
+                      (litWord len)
+                      (litWord dst)
+                      (DynamicSymBuffer (implode mem))
 
---                when ((length staticWriting) < 10000 && len' < 10000) $
---                  checkSatAssuming [StaticSymBuffer staticWriting ./= dynamicWriting] >>= \case
---                    Unk -> io $ putStrLn "timeout"
---                    Unsat -> io $ putStrLn "Success!"
---                    Sat -> do getList dynamicWriting >>= io . print
---                              getList (StaticSymBuffer staticWriting) >>= io . print
---                              error "oh no!"
---                                 where getList :: Buffer -> Query [WordN 8]
---                                       getList (StaticSymBuffer bf) = mapM getValue bf
---                                       getList (DynamicSymBuffer bf) = getValue bf                 
+               when (length staticWriting < 1000) $ do
+                 io $ putStrLn "solving..."
+                 checkSatAssuming [StaticSymBuffer staticWriting ./= dynamicWriting] >>= \case
+                   Unk -> io $ putStrLn "timeout"
+                   Unsat -> io $ putStrLn "Success!"
+                   Sat -> do getList dynamicWriting >>= io . print
+                             getList (StaticSymBuffer staticWriting) >>= io . print
+                             error "oh no!"
+                                where getList :: Buffer -> Query [WordN 8]
+                                      getList (StaticSymBuffer bf) = mapM getValue bf
+                                      getList (DynamicSymBuffer bf) = getValue bf                 
                
    ]
 

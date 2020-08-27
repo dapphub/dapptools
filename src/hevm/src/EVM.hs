@@ -466,7 +466,9 @@ initialContract theContractCode = Contract
 
 contractWithStore :: ContractCode -> Storage -> Contract
 contractWithStore theContractCode store =
-  initialContract theContractCode & set storage store
+  initialContract theContractCode
+    & set storage store
+    & set origStorage store
 
 -- * Opcode dispatch (exec1)
 
