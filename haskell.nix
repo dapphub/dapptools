@@ -16,7 +16,7 @@ in self-hs: super-hs:
     sbv_prepatch = pkgs.haskell.lib.dontCheck (self-hs.callCabal2nix "sbv" (builtins.fetchGit {
         url = "https://github.com/LeventErkok/sbv/";
         rev = "91637c043d206530bc64d7eac88d2f80e8db0b85";
-    })    {inherit (pkgs) z3;});
+    })    {inherit (pkgs) z3 cvc4;});
 
   in {
     restless-git = dontCheck "restless-git" (./src/restless-git);
