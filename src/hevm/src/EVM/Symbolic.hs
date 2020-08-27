@@ -150,10 +150,13 @@ swordAt :: Int -> [SWord 8] -> SymWord
 swordAt i bs = sw256 . fromBytes $ truncpad 32 $ drop i bs
 
 swordAt' :: SWord 32 -> SList (WordN 8) -> SymWord
-swordAt' i bs = case truncpad' 32 $ dropS (sw256 $ sFromIntegral i) bs of
-  ConcreteBuffer s -> litWord $ Concrete.w256 $ Concrete.wordAt 0 s
-  StaticSymBuffer s -> sw256 $ fromBytes s
-  DynamicSymBuffer s -> sw256 $ fromBytes [s .!! literal i | i <- [0..31]]
+swordAt' i bs =
+ ite (SL.length bs .<= sFromIntegral i)
+ (sw256 0)
+ (case truncpad' 32 $ dropS (sw256 $ sFromIntegral i) bs of
+   ConcreteBuffer s -> litWord $ Concrete.w256 $ Concrete.wordAt 0 s
+   StaticSymBuffer s -> sw256 $ fromBytes s
+   DynamicSymBuffer s -> sw256 $ fromBytes [s .!! literal i | i <- [0..31]])
 
 readByteOrZero' :: Int -> [SWord 8] -> SWord 8
 readByteOrZero' i bs = fromMaybe 0 (bs ^? ix i)
