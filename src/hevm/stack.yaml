@@ -17,7 +17,7 @@ extra-deps:
 - github: dmjio/semver-range
   commit: d8d9db892ddb6ae267c9bcbc4f6602668433f12a
 - github: leventerkok/sbv # 8.7.5
-  commit: a33239a8bc494282b10426ccf717a8ca635add60
+  commit: 91637c043d206530bc64d7eac88d2f80e8db0b85
 flags: {}
 extra-package-dbs: []
 image:
