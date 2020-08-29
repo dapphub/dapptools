@@ -1847,6 +1847,10 @@ cheatActions =
         \[AbiUInt 256 x] -> do
           assign (block . timestamp) (w256 (W256 x))
           return Nothing,
+      action "roll(uint256)" [AbiUIntType 256] $
+        \[AbiUInt 256 x] -> do
+          assign (block . number) (w256 (W256 x))
+          return Nothing,
       action "store(address,bytes32,bytes32)" [AbiAddressType, AbiBytesType 32, AbiBytesType 32] $
         \[AbiAddress a, AbiBytes 32 x, AbiBytes 32 y] -> do
           let slot = w256lit $ word x
