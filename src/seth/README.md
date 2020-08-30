@@ -121,6 +121,14 @@ options by exporting environment variables.
     # Look for my key files in a custom directory
     export ETH_KEYSTORE=~/secrets/ethereum
 
+### Example `.sethrc` file that uses infura Kovan testnet
+
+    # Use Infura's Kovan testnet node for all RPC calls
+    export ETH_RPC_URL=https://kovan.infura.io/v3/<API-KEY>
+
+    # Set an address as the default sender
+    export ETH_FROM=0xd08f67044c53d723686e002c5b880f73674e164c
+
 Note that flags given to the `seth` command will override
 these settings.
 
