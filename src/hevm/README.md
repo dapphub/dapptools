@@ -286,6 +286,9 @@ These can be accessed by calling into a contract (typically called `Hevm`) at ad
 - `function warp(uint x) public`
 sets the TIMESTAMP to `x`.
 
+- `function roll(uint x) public`
+sets the block number to `x`.
+
 - `function store(address c, bytes32 loc, bytes32 val) public`
 sets the slot `loc` to `val` of contract `c`.
 
