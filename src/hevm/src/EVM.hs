@@ -586,63 +586,63 @@ exec1 = do
         0x00 -> doStop
 
         -- op: ADD
-        0x01 -> stackOp2 (const g_verylow) (uncurry (+))
+        0x01 -> stackOp2 (const (litWord g_verylow)) (uncurry (+))
         -- op: MUL
-        0x02 -> stackOp2 (const g_low) (uncurry (*))
+        0x02 -> stackOp2 (const (litWord g_low)) (uncurry (*))
         -- op: SUB
-        0x03 -> stackOp2 (const g_verylow) (uncurry (-))
+        0x03 -> stackOp2 (const (litWord g_verylow)) (uncurry (-))
 
         -- op: DIV
-        0x04 -> stackOp2 (const g_low) (uncurry (sDiv))
+        0x04 -> stackOp2 (const (litWord g_low)) (uncurry (sDiv))
 
         -- op: SDIV
         0x05 ->
-          stackOp2 (const g_low) (uncurry sdiv)
+          stackOp2 (const (litWord g_low)) (uncurry sdiv)
 
         -- op: MOD
-        0x06 -> stackOp2 (const g_low) $ \(x, y) -> ite (y .== 0) 0 (x `sMod` y)
+        0x06 -> stackOp2 (const (litWord g_low)) $ \(x, y) -> ite (y .== 0) 0 (x `sMod` y)
 
         -- op: SMOD
-        0x07 -> stackOp2 (const g_low) $ uncurry smod
+        0x07 -> stackOp2 (const (litWord g_low)) $ uncurry smod
         -- op: ADDMOD
         0x08 -> stackOp3 (const g_mid) (\(x, y, z) -> addmod x y z)
         -- op: MULMOD
         0x09 -> stackOp3 (const g_mid) (\(x, y, z) -> mulmod x y z)
 
         -- op: LT
-        0x10 -> stackOp2 (const g_verylow) $ \(x, y) -> ite (x .< y) 1 0
+        0x10 -> stackOp2 (const (litWord g_verylow)) $ \(x, y) -> ite (x .< y) 1 0
         -- op: GT
-        0x11 -> stackOp2 (const g_verylow) $ \(x, y) -> ite (x .> y) 1 0
+        0x11 -> stackOp2 (const (litWord g_verylow)) $ \(x, y) -> ite (x .> y) 1 0
         -- op: SLT
-        0x12 -> stackOp2 (const g_verylow) $ uncurry slt
+        0x12 -> stackOp2 (const (litWord g_verylow)) $ uncurry slt
         -- op: SGT
-        0x13 -> stackOp2 (const g_verylow) $ uncurry sgt
+        0x13 -> stackOp2 (const (litWord g_verylow)) $ uncurry sgt
 
         -- op: EQ
-        0x14 -> stackOp2 (const g_verylow) $ \(x, y) -> ite (x .== y) 1 0
+        0x14 -> stackOp2 (const (litWord g_verylow)) $ \(x, y) -> ite (x .== y) 1 0
         -- op: ISZERO
         0x15 -> stackOp1 (const g_verylow) $ \x -> ite (x .== 0) 1 0
 
         -- op: AND
-        0x16 -> stackOp2 (const g_verylow) $ uncurry (.&.)
+        0x16 -> stackOp2 (const (litWord g_verylow)) $ uncurry (.&.)
         -- op: OR
-        0x17 -> stackOp2 (const g_verylow) $ uncurry (.|.)
+        0x17 -> stackOp2 (const (litWord g_verylow)) $ uncurry (.|.)
         -- op: XOR
-        0x18 -> stackOp2 (const g_verylow) $ uncurry xor
+        0x18 -> stackOp2 (const (litWord g_verylow)) $ uncurry xor
         -- op: NOT
         0x19 -> stackOp1 (const g_verylow) complement
 
         -- op: BYTE
-        0x1a -> stackOp2 (const g_verylow) $ \case
+        0x1a -> stackOp2 (const (litWord g_verylow)) $ \case
           (n, _) | (forceLit n) >= 32 -> 0
           (n, x) | otherwise          -> 0xff .&. shiftR x (8 * (31 - num (forceLit n)))
 
         -- op: SHL
-        0x1b -> stackOp2 (const g_verylow) $ \((S _ n), (S _ x)) -> sw256 $ sShiftLeft x n
+        0x1b -> stackOp2 (const (litWord g_verylow)) $ \((S _ n), (S _ x)) -> sw256 $ sShiftLeft x n
         -- op: SHR
-        0x1c -> stackOp2 (const g_verylow) $ uncurry shiftRight'
+        0x1c -> stackOp2 (const (litWord g_verylow)) $ uncurry shiftRight'
         -- op: SAR
-        0x1d -> stackOp2 (const g_verylow) $ \((S _ n), (S _ x)) -> sw256 $ sSignedShiftArithRight x n
+        0x1d -> stackOp2 (const (litWord g_verylow)) $ \((S _ n), (S _ x)) -> sw256 $ sSignedShiftArithRight x n
 
         -- op: SHA3
         -- more accurately refered to as KECCAK
@@ -1005,15 +1005,15 @@ exec1 = do
 
         -- op: EXP
         0x0a ->
-          let cost (_ ,(forceLit -> exponent)) =
-                if exponent == 0
-                then g_exp
-                else g_exp + g_expbyte * num (ceilDiv (1 + log2 exponent) 8)
+          let cost (_ ,exponent) =
+                ite (exponent .== 0)
+                    (litWord g_exp)
+                    (litWord g_exp + litWord g_expbyte * (ceilSDiv (litWord 1 + sw256 (sFromIntegral $ log2S exponent)) (litWord 8)))
           in stackOp2 cost $ \((S _ x),(S _ y)) -> sw256 $ x .^ y
 
         -- op: SIGNEXTEND
         0x0b ->
-          stackOp2 (const g_low) $ \((forceLit -> bytes), w@(S _ x)) ->
+          stackOp2 (const (litWord g_low)) $ \((forceLit -> bytes), w@(S _ x)) ->
             if bytes >= 32 then w
             else let n = num bytes * 8 + 7 in
               sw256 $ ite (sTestBit x n)
@@ -2301,13 +2301,13 @@ stackOp1 cost f =
 
 stackOp2
   :: (?op :: Word8)
-  => (((SymWord), (SymWord)) -> Word)
+  => (((SymWord), (SymWord)) -> SymWord)
   -> (((SymWord), (SymWord)) -> (SymWord))
   -> EVM ()
 stackOp2 cost f =
   use (state . stack) >>= \case
     (x:y:xs) ->
-      burn (cost (x, y)) $ do
+      burnSym (cost (x, y)) $ do
         next
         state . stack .= f (x, y) : xs
     _ ->
@@ -2637,6 +2637,9 @@ allButOne64th n = n - div n 64
 
 log2 :: FiniteBits b => b -> Int
 log2 x = finiteBitSize x - 1 - countLeadingZeros x
+
+log2S :: SymWord -> SWord8
+log2S (S _ x) = 255 - sCountLeadingZeros x
 
 
 -- * Emacs setup

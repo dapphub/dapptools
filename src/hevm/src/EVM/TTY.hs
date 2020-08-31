@@ -865,6 +865,7 @@ withHighlight True  = withDefAttr boldAttr
 
 prettyIfConcrete :: Buffer -> String
 prettyIfConcrete (StaticSymBuffer x) = show x
+prettyIfConcrete (DynamicSymBuffer x) = show x
 prettyIfConcrete (ConcreteBuffer x) = prettyHex 40 x
 
 drawTracePane :: UiVmState -> UiWidget
