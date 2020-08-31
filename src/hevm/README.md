@@ -284,13 +284,13 @@ Since Hevm is an EVM implementation mainly dedicated to testing and exploration,
 These can be accessed by calling into a contract (typically called `Hevm`) at address `0x7109709ECfa91a80626fF3989D68f67F5b1DD12D`, which implements the following methods:
 
 - `function warp(uint x) public`
-sets the TIMESTAMP to `x`.
+sets the block timestamp to `x`.
 
 - `function roll(uint x) public`
 sets the block number to `x`.
 
 - `function store(address c, bytes32 loc, bytes32 val) public`
-sets the slot `loc` to `val` of contract `c`.
+sets the slot `loc` of contract `c` to `val`.
 
 
 ## Contact
