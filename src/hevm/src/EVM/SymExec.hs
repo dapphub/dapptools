@@ -302,7 +302,8 @@ equivalenceCheck bytecodeA bytecodeB maxiter signature' = do
   constrain $ sOr differingEndStates
 
   checkSat >>= \case
-     Unk -> error "solver said unknown!"
+     Unk -> do io $ putStrLn "postcondition query timed out"
+               return $ Left (pruneDeadPaths aVMs, pruneDeadPaths bVMs)
      Sat -> return $ Right preStateA
      Unsat -> return $ Left (pruneDeadPaths aVMs, pruneDeadPaths bVMs)
 

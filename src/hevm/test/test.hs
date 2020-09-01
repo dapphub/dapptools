@@ -155,7 +155,7 @@ main = defaultMain $ testGroup "hevm"
                mem <- sbytes32
 
                let
-                   staticWriting = writeMemory' cd 18 111 63 mem --mempty
+                   staticWriting = writeMemory' cd 18 111 63 mem
                    dynamicWriting =
                      dynWriteMemory
                       (DynamicSymBuffer (implode cd))
