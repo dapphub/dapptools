@@ -25,6 +25,10 @@ data SymWord = S Whiff (SWord 256)
 sw256 :: SWord 256 -> SymWord
 sw256 = S Dull
 
+bv2int :: SymWord -> SInteger
+bv2int (S _ i) = sFromIntegral i
+--snum = sFromIntegral
+
 litWord :: Word -> (SymWord)
 litWord (C whiff a) = S whiff (literal $ toSizzle a)
 
@@ -119,7 +123,7 @@ takeStatic n ls =
 
 -- tries to create a static list whenever possible
 dropS :: SymWord -> SList (WordN 8) -> Buffer
-dropS n@(S _ i) ls =
+dropS n ls =
   if isConcretelyEmpty ls
   then mempty
   else case (maybeLitWord n, unliteral $ SL.length ls) of
@@ -128,7 +132,7 @@ dropS n@(S _ i) ls =
       then StaticSymBuffer $ takeStatic (num $ max n' (num l)) ls
       else let (_, xs) = SL.uncons ls
            in dropS (litWord $ n' - 1) xs
-    _ -> DynamicSymBuffer $ SL.drop (sFromIntegral i) ls
+    _ -> DynamicSymBuffer $ SL.drop (bv2int n) ls
 
 -- special case of sliceWithZero when size is known
 truncpad' :: Int -> Buffer -> Buffer
@@ -149,11 +153,11 @@ truncpad' n m = case m of
 swordAt :: Int -> [SWord 8] -> SymWord
 swordAt i bs = sw256 . fromBytes $ truncpad 32 $ drop i bs
 
-swordAt' :: SWord 32 -> SList (WordN 8) -> SymWord
+swordAt' :: SymWord -> SList (WordN 8) -> SymWord
 swordAt' i bs =
- ite (SL.length bs .<= sFromIntegral i)
+ ite (SL.length bs .<= bv2int i)
  (sw256 0)
- (case truncpad' 32 $ dropS (sw256 $ sFromIntegral i) bs of
+ (case truncpad' 32 $ dropS i bs of
    ConcreteBuffer s -> litWord $ Concrete.w256 $ Concrete.wordAt 0 s
    StaticSymBuffer s -> sw256 $ fromBytes s
    DynamicSymBuffer s -> sw256 $ fromBytes [s .!! literal i | i <- [0..31]])
@@ -230,6 +234,25 @@ readSWordWithBound ind (ConcreteBuffer xs) bound =
 readMemoryWord' :: Word -> [SWord 8] -> SymWord
 readMemoryWord' (C _ i) m = sw256 $ fromBytes $ truncpad 32 (drop (num i) m)
 
+-- pad up to 1000 bytes
+sslice :: SymWord -> SymWord -> SList (WordN 8) -> SList (WordN 8)
+sslice (S _ o) (S _ l) bs = case (unliteral $ SL.length bs, unliteral (o + l)) of
+  (Just le, Just (num -> max)) ->
+    SL.subList (if le < max then bs .++ literal (replicate (num (max - le)) 0) else bs) o' l'
+  _ -> SL.subList (bs .++ literal (replicate 10000 0)) o' l'
+ where o' = sFromIntegral o
+       l' = sFromIntegral l
+
+sdynWriteMemory :: SList (WordN 8) -> SymWord -> SymWord -> SymWord -> SList (WordN 8) -> SList (WordN 8)
+sdynWriteMemory bs1 n@(S _ n') src@(S _ src') dst@(S _ dst') bs0 =
+  let
+    a       = sslice 0 dst bs0
+    b       = sslice src n bs1
+    c       = SL.drop (sFromIntegral $ dst' + n') bs0
+
+  in
+    a .++ b .++ c
+
 dynWriteMemory :: Buffer -> SymWord -> SymWord -> SymWord -> Buffer -> Buffer
 dynWriteMemory bs1 n@(S _ n') src@(S _ src') dst@(S _ dst') bs0 =
   let
@@ -245,10 +268,10 @@ setMemoryWord'' i (S _ x) =
   dynWriteMemory (StaticSymBuffer $ toBytes x) 32 0 (sw256 (sFromIntegral i))
 
 readSWord'' :: SymWord -> SList (WordN 8) -> SymWord
-readSWord'' (S _ i) x =
-  ite (sFromIntegral i .> SL.length x)
+readSWord'' i x =
+  ite (bv2int i .> SL.length x)
   0
-  (swordAt' (sFromIntegral i) x)
+  (swordAt' i x)
 
 -- a whole foldable instance seems overkill, but length is always good to have!
 len :: Buffer -> SWord 32
@@ -303,12 +326,12 @@ writeMemory bs1 n src dst bs0 =
       StaticSymBuffer $ writeMemory' bs1' n' src' dst' (litBytes bs0')
     (Just n', Just src', Just dst', StaticSymBuffer bs0', StaticSymBuffer bs1') ->
       StaticSymBuffer $ writeMemory' bs1' n' src' dst' bs0'
-    _ -> dynWriteMemory bs1 n src dst bs0
+    _ -> DynamicSymBuffer $ sdynWriteMemory (dynamize bs1) n src dst (dynamize bs0)
 
-readMemoryWord :: SWord 32 -> Buffer -> SymWord
-readMemoryWord i bf = case (unliteral i, bf) of
-  (Just i', StaticSymBuffer m) -> readMemoryWord' (num i') m
-  (Just i',  ConcreteBuffer m) -> litWord $ Concrete.readMemoryWord (num i') m
+readMemoryWord :: SymWord -> Buffer -> SymWord
+readMemoryWord i bf = case (maybeLitWord i, bf) of
+  (Just i', StaticSymBuffer m) -> readMemoryWord' i' m
+  (Just i',  ConcreteBuffer m) -> litWord $ Concrete.readMemoryWord i' m
   _ -> swordAt' i (dynamize bf)
 
 readMemoryWord32 :: SymWord -> Buffer -> SWord 32
