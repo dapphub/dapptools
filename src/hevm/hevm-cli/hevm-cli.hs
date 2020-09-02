@@ -57,6 +57,7 @@ import Data.Text.IO               (hPutStr)
 import Data.Maybe                 (fromMaybe, fromJust)
 import Data.Version               (showVersion)
 import Data.SBV hiding (Word, solver, verbose, name)
+import qualified Data.SBV as SBV
 import Data.SBV.Control hiding (Version, timeout, create)
 import System.IO                  (hFlush, hPrint, stdout, stderr)
 import System.Directory           (withCurrentDirectory, listDirectory)
@@ -119,6 +120,7 @@ data Command w
       , smttimeout    :: w ::: Maybe Integer      <?> "Timeout given to SMT solver in milliseconds (default: 20000)"
       , maxIterations :: w ::: Maybe Integer      <?> "Number of times we may revisit a particular branching point"
       , solver        :: w ::: Maybe Text         <?> "Used SMT solver: z3 (default) or cvc4"
+      , smtoutput     :: w ::: Bool               <?> "Print verbose smt output"
       }
   | Equivalence -- prove equivalence between two programs
       { codeA         :: w ::: ByteString    <?> "Bytecode of the first program"
@@ -387,7 +389,7 @@ equivalence cmd =
        Just sig' -> do method' <- functionAbi sig'
                        return $ Just (view methodSignature method', snd <$> view methodInputs method')
 
-     void . runSMTWithTimeOut (solver cmd) (smttimeout cmd) . query $
+     void . runSMTWithTimeOut (solver cmd) (smttimeout cmd) (smtoutput cmd) . query $
        equivalenceCheck bytecodeA bytecodeB (maxIterations cmd) maybeSignature >>= \case
          Right vm -> do io $ putStrLn "Not equal!"
                         io $ putStrLn "Counterexample:"
@@ -401,18 +403,18 @@ equivalence cmd =
 
 
 -- cvc4 sets timeout via a commandline option instead of smtlib `(set-option)`
-runSMTWithTimeOut :: Maybe Text -> Maybe Integer -> Symbolic a -> IO a
-runSMTWithTimeOut solver maybeTimeout sym
+runSMTWithTimeOut :: Maybe Text -> Maybe Integer -> Bool -> Symbolic a -> IO a
+runSMTWithTimeOut solver maybeTimeout verbose' sym 
   | solver == Just "cvc4" = do
       setEnv "SBV_CVC4_OPTIONS" ("--lang=smt --incremental --interactive --no-interactive-prompt --model-witness-value --tlimit-per=" <> show timeout)
-      a <- runSMTWith cvc4 sym
+      a <- runSMTWith cvc4{SBV.verbose=verbose'} sym
       setEnv "SBV_CVC4_OPTIONS" ""
       return a
   | solver == Just "z3" = runwithz3
   | solver == Nothing = runwithz3
   | otherwise = error "Unknown solver. Currently supported solvers; z3, cvc4"
  where timeout = fromMaybe 20000 maybeTimeout
-       runwithz3 = runSMTWith z3 $ (setTimeOut timeout) >> sym
+       runwithz3 = runSMTWith z3{SBV.verbose=verbose'} $ (setTimeOut timeout) >> sym
 
 
 checkForVMErrors :: [EVM.VM] -> [String]
@@ -463,7 +465,7 @@ assert cmd = do
           name = view methodSignature method'
       return $ Just (name,typ)
   if debug cmd then
-    runSMTWithTimeOut (solver cmd) (smttimeout cmd) $ query $ do
+    runSMTWithTimeOut (solver cmd) (smttimeout cmd) (smtoutput cmd) $ query $ do
       preState <- symvmFromCommand cmd
       smtState <- queryState
       io $ void $ EVM.TTY.runFromVM
@@ -473,7 +475,7 @@ assert cmd = do
         preState
 
   else
-    runSMTWithTimeOut (solver cmd) (smttimeout cmd) $ query $ do
+    runSMTWithTimeOut (solver cmd) (smttimeout cmd) (smtoutput cmd) $ query $ do
       preState <- symvmFromCommand cmd
       verify preState (maxIterations cmd) rpcinfo (Just checkAssertions) >>= \case
         Right _ -> do
