@@ -5,6 +5,7 @@ OPTS="dapp testnet [<options>] <args>...
 dapp testnet --help
 --
 rpc-port=port      change RPC port (default: 8545)
+rpc-addr=address   change RPC address (default: 127.0.0.1)
 chain-id=number    change chain ID (default: 99)
 period=seconds     use a block time instead of instamine
 accounts=number    create multiple accounts (default: 1)
@@ -27,6 +28,7 @@ while [[ $1 ]]; do
   case $1 in
     --)          shift; break;;
     --rpc-port)  shift; RPC_PORT=$1;;
+    --rpc-addr)  shift; RPC_ADDRESS=$1;;
     --chain-id)  shift; CHAINID=$1;;
     --period)    shift; PERIOD=$1;;
     --accounts)  shift; ACCOUNTS=$(($1 - 1));;
@@ -85,7 +87,7 @@ else
   geth 2>/dev/null --datadir "$chaindir" init "$chaindir/config/genesis.json"
 fi
 
-export ETH_RPC_URL=http://127.0.0.1:$RPC_PORT
+export ETH_RPC_URL=http://$RPC_ADDRESS:$RPC_PORT
 
 port=$((RPC_PORT + 30000))
 
@@ -105,7 +107,7 @@ geth \
   --datadir "$chaindir" --networkid "$CHAINID" --port="$port" \
   --mine --minerthreads=1 --allow-insecure-unlock \
   --rpc --rpcapi "web3,eth,net,debug,personal" --rpccorsdomain '*' --nodiscover \
-  --rpcport="$RPC_PORT" --unlock="$(IFS=,; echo "${address[*]}")" --password=<(exit) &
+  --rpcaddr="$RPC_ADDRESS" --rpcport="$RPC_PORT" --unlock="$(IFS=,; echo "${address[*]}")" --password=<(exit) &
 
 gethpid=$!
 
