@@ -546,6 +546,24 @@ main = defaultMain $ testGroup "hevm"
             verify vm Nothing Nothing (Just checkAssertions)
           putStrLn $ "found counterexample:"
 
+     ,
+         testCase "dynamic bytes" $ do
+          Just c <- solcRuntime "C"
+            [i|
+              contract C
+              {
+               function f(bytes memory b1, bytes memory b2) public pure {
+                  b1 = b2;
+        	  assert(b1[1] == b2[1]);
+	        }
+              }
+            |]
+          -- should find a counterexample
+          Left (_, res) <- runSMTWith z3{verbose=True} $ do
+            setTimeOut 5000
+            query $ checkAssert c Nothing []
+          putStrLn $ "successfully explored: " <> show (length res) <> " paths"
+
     ]
   , testGroup "Equivalence checking"
     [
