@@ -73,6 +73,8 @@ in rec {
 
   cvc4 = self.callPackage (import ./nix/cvc4.nix) {};
 
+  z3 = self.callPackage (import ./nix/z3.nix) {};
+
   jays = (
     self.pkgs.haskell.lib.justStaticExecutables
       (self.haskellPackages.callCabal2nix "jays" (./src/jays) {})
