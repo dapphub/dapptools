@@ -20,6 +20,7 @@ import EVM.Symbolic (SymWord(..), sw256)
 import EVM.Concrete (createAddress, Word)
 import qualified EVM.FeeSchedule as FeeSchedule
 import Data.SBV.Trans.Control
+import qualified Data.SBV.List as SList
 import Data.SBV.Trans hiding (distinct, Word)
 import Data.SBV hiding (runSMT, newArray_, addAxiom, distinct, sWord8s, Word)
 import Data.Vector (toList, fromList)
@@ -94,9 +95,17 @@ staticCalldata sig typesignature concreteArgs =
 
 abstractVM :: Maybe (Text, [AbiType]) -> [String] -> ByteString -> StorageModel -> Query VM
 abstractVM typesignature concreteArgs x storagemodel = do
-  cd' <- case typesignature of
-           Nothing -> DynamicSymBuffer <$> freshVar_
-           Just (name, typs) -> StaticSymBuffer <$> staticCalldata name typs concreteArgs
+  (cd',pathCond) <- case typesignature of
+           Nothing -> do list <- freshVar_
+                         return (DynamicSymBuffer list,
+                                 -- due to some current z3 shenanegans (possibly related to: https://github.com/Z3Prover/z3/issues/4635)
+                                 -- we assume the list length to be shorter than max_length both as a bitvector and as an integer.
+                                 -- The latter implies the former as long as max_length fits in a bitvector, but assuming it explitly
+                                 -- improves z3 (4.8.8) performance.
+                                 SList.length list .< 1000 .&&
+                                  sw256 (sFromIntegral (SList.length list)) .< sw256 1000)
+           Just (name, typs) -> do symbytes <- staticCalldata name typs concreteArgs
+                                   return (StaticSymBuffer symbytes, sTrue)
 
   symstore <- case storagemodel of
     SymbolicS -> Symbolic <$> freshArray_ Nothing
@@ -105,6 +114,7 @@ abstractVM typesignature concreteArgs x storagemodel = do
   c <- SAddr <$> freshVar_
   value' <- sw256 <$> freshVar_
   return $ loadSymVM (RuntimeCode x) symstore storagemodel c value' cd'
+    & over pathConditions (<> [pathCond])
 
 loadSymVM :: ContractCode -> Storage -> StorageModel -> SAddr -> SymWord -> Buffer -> VM
 loadSymVM x initStore model addr callvalue' calldata' =

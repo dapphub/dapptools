@@ -263,15 +263,19 @@ dynWriteMemory bs1 n@(S _ n') src@(S _ src') dst@(S _ dst') bs0 =
   in
     a <> b <> c
 
-setMemoryWord'' :: SWord 32 -> SymWord -> Buffer -> Buffer
+setMemoryWord'' :: SymWord -> SymWord -> Buffer -> Buffer
 setMemoryWord'' i (S _ x) =
-  dynWriteMemory (StaticSymBuffer $ toBytes x) 32 0 (sw256 (sFromIntegral i))
+  dynWriteMemory (StaticSymBuffer $ toBytes x) 32 0 i
 
 readSWord'' :: SymWord -> SList (WordN 8) -> SymWord
-readSWord'' i x =
-  ite (bv2int i .> SL.length x)
-  0
-  (swordAt' i x)
+readSWord'' i x = altReadSWord i x -- swordAt' i x
+
+altReadSWord :: SymWord -> SList (WordN 8) -> SymWord
+altReadSWord (S _ i) x = aReadSWord (sFromIntegral i) x
+
+aReadSWord :: SInteger -> SList (WordN 8) -> SymWord
+aReadSWord i x = let ls = SL.drop i x .++ literal (replicate 32 0)
+                 in sw256 $ fromBytes $ [ls .!! literal i | i <- [0..31]]
 
 -- a whole foldable instance seems overkill, but length is always good to have!
 len :: Buffer -> SWord 32
@@ -326,7 +330,9 @@ writeMemory bs1 n src dst bs0 =
       StaticSymBuffer $ writeMemory' bs1' n' src' dst' (litBytes bs0')
     (Just n', Just src', Just dst', StaticSymBuffer bs0', StaticSymBuffer bs1') ->
       StaticSymBuffer $ writeMemory' bs1' n' src' dst' bs0'
-    _ -> DynamicSymBuffer $ sdynWriteMemory (dynamize bs1) n src dst (dynamize bs0)
+-- TODO: figure whether dynWriteMemory or sdynWriteMemory is better
+    _ -> dynWriteMemory bs1 n src dst bs0
+--    _ -> DynamicSymBuffer $ sdynWriteMemory (dynamize bs1) n src dst (dynamize bs0)
 
 readMemoryWord :: SymWord -> Buffer -> SymWord
 readMemoryWord i bf = case (maybeLitWord i, bf) of
@@ -344,11 +350,11 @@ readMemoryWord32 i m = case (maybeLitWord i, m) of
     DynamicSymBuffer s -> fromBytes [s .!! literal k | k <- [0..3]]
     
 
-setMemoryWord :: SWord 32 -> SymWord -> Buffer -> Buffer
-setMemoryWord i x bf = case (unliteral i, maybeLitWord x, bf) of
-  (Just i', Just x', ConcreteBuffer z)  -> ConcreteBuffer $ Concrete.setMemoryWord (num i') x' z
-  (Just i', _      , ConcreteBuffer z)  -> StaticSymBuffer $ setMemoryWord' (num i') x (litBytes z)
-  (Just i', _      , StaticSymBuffer z) -> StaticSymBuffer $ setMemoryWord' (num i') x z
+setMemoryWord :: SymWord -> SymWord -> Buffer -> Buffer
+setMemoryWord i x bf = case (maybeLitWord i, maybeLitWord x, bf) of
+  (Just i', Just x', ConcreteBuffer z)  -> ConcreteBuffer $ Concrete.setMemoryWord i' x' z
+  (Just i', _      , ConcreteBuffer z)  -> StaticSymBuffer $ setMemoryWord' i' x (litBytes z)
+  (Just i', _      , StaticSymBuffer z) -> StaticSymBuffer $ setMemoryWord' i' x z
   _ -> setMemoryWord'' i x bf
 
 setMemoryByte :: SymWord -> SWord 8 -> Buffer -> Buffer

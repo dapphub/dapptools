@@ -878,21 +878,21 @@ exec1 = do
         -- op: MLOAD
         0x51 ->
           case stk of
-            (x'@(S _ x):xs) ->
+            (x:xs) ->
               burn g_verylow $
-                accessMemoryWord fees x' $ do
+                accessMemoryWord fees x $ do
                   next
-                  assign (state . stack) (view (word256At (sFromIntegral x)) mem : xs)
+                  assign (state . stack) (view (word256At x) mem : xs)
             _ -> underrun
 
         -- op: MSTORE
         0x52 ->
           case stk of
-            (x'@(S _ x):y:xs) ->
+            (x:y:xs) ->
               burn g_verylow $
-                accessMemoryWord fees x' $ do
+                accessMemoryWord fees x $ do
                   next
-                  assign (state . memory . word256At (sFromIntegral x)) y
+                  assign (state . memory . word256At x) y
                   assign (state . stack) xs
             _ -> underrun
 
@@ -2220,7 +2220,7 @@ readMemory offset size vm = sliceWithZero offset size (view (state . memory) vm)
 
 word256At
   :: Functor f
-  => SWord 32 -> (SymWord -> f (SymWord))
+  => SymWord -> (SymWord -> f (SymWord))
   -> Buffer -> f Buffer
 word256At i = lens getter setter where
   getter = readMemoryWord i
