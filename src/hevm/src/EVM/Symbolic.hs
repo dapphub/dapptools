@@ -154,8 +154,8 @@ swordAt :: Int -> [SWord 8] -> SymWord
 swordAt i bs = sw256 . fromBytes $ truncpad 32 $ drop i bs
 
 swordAt' :: SymWord -> SList (WordN 8) -> SymWord
-swordAt' i bs =
- ite (SL.length bs .<= bv2int i)
+swordAt' i@(S _ i') bs =
+ ite (sFromIntegral (SL.length bs) .<= i')
  (sw256 0)
  (case truncpad' 32 $ dropS i bs of
    ConcreteBuffer s -> litWord $ Concrete.w256 $ Concrete.wordAt 0 s
@@ -206,7 +206,7 @@ readSWord' (C _ i) x =
 -- | Operations over dynamic symbolic memory (smt list of bytes)
 readByteOrZero'' :: SWord 32 -> SList (WordN 8) -> SWord 8
 readByteOrZero'' i bs =
-  ite (SL.length bs .> (sFromIntegral i + 1))
+  ite (sFromIntegral (SL.length bs) .> i + 1)
   (bs .!! (sFromIntegral i))
   (literal 0)
 
@@ -268,14 +268,21 @@ setMemoryWord'' i (S _ x) =
   dynWriteMemory (StaticSymBuffer $ toBytes x) 32 0 i
 
 readSWord'' :: SymWord -> SList (WordN 8) -> SymWord
-readSWord'' i x = altReadSWord i x -- swordAt' i x
+readSWord'' i x = case (maybeLitWord i, unliteral (SL.length x)) of
+  (Just i', Just l) ->
+    if num l <= i'
+    then 0
+    else read32At (literal $ num $ Concrete.wordValue i') (x .++ literal (replicate (num $ l + 32 - num i') 0))
+  _ -> altReadSWord i x
 
 altReadSWord :: SymWord -> SList (WordN 8) -> SymWord
-altReadSWord (S _ i) x = aReadSWord (sFromIntegral i) x
+altReadSWord (S _ i) x =
+  ite (i .< sFromIntegral (SL.length x))
+    (read32At (sFromIntegral i) (x .++ literal (replicate 32 0)))
+    (sw256 0)
 
-aReadSWord :: SInteger -> SList (WordN 8) -> SymWord
-aReadSWord i x = let ls = SL.drop i x .++ literal (replicate 32 0)
-                 in sw256 $ fromBytes $ [ls .!! literal i | i <- [0..31]]
+read32At :: SInteger -> SList (WordN 8) -> SymWord
+read32At i x = sw256 $ fromBytes $ [x .!! literal i | i <- [0..31]]
 
 -- a whole foldable instance seems overkill, but length is always good to have!
 len :: Buffer -> SWord 32
