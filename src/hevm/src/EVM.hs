@@ -501,8 +501,8 @@ exec1 = do
     -- call to precompile
 
     let ?op = 0x00 -- dummy value
-    copyBytesToMemory (the state calldata) (sw256 $ sFromIntegral $ len (the state calldata)) 0 0
-    executePrecompile self (the state gas) 0 (sw256 $ sFromIntegral $ len (the state calldata)) 0 0 []
+    copyBytesToMemory (the state calldata) (len $ the state calldata) 0 0
+    executePrecompile self (the state gas) 0 (len $ the state calldata) 0 0 []
     vmx <- get
     case view (state.stack) vmx of
       (x:_) -> case maybeLitWord x of
@@ -717,7 +717,7 @@ exec1 = do
         -- op: CALLDATASIZE
         0x36 ->
           limitStack 1 . burn g_base $
-            next >> pushSym (sw256 . sFromIntegral . len $ the state calldata)
+            next >> pushSym (len $ the state calldata)
 
         -- op: CALLDATACOPY
         0x37 ->
@@ -792,7 +792,7 @@ exec1 = do
         -- op: RETURNDATASIZE
         0x3d ->
           limitStack 1 . burn g_base $
-            next >> pushSym (sw256 $ sFromIntegral $ len (the state returndata))
+            next >> pushSym (len $ the state returndata)
 
         -- op: RETURNDATACOPY
         0x3e ->
@@ -2213,7 +2213,7 @@ copyCallBytesToMemory
 copyCallBytesToMemory bs size xOffset yOffset = do
   mem <- use (state . memory)
   assign (state . memory) $
-    writeMemory bs (smin size (sw256 $ sFromIntegral $ len bs)) xOffset yOffset mem
+    writeMemory bs (smin size (len bs)) xOffset yOffset mem
 
 readMemory :: SymWord -> SymWord -> VM -> Buffer
 readMemory offset size vm = sliceWithZero offset size (view (state . memory) vm)
@@ -2547,13 +2547,13 @@ costOfPrecompile (FeeSchedule {..}) precompileAddr input =
     0x1 -> 3000
     -- SHA2-256
     0x2 -> num $ (((l input + 31) `div` 32) * 12) + 60
-      where l i = fromMaybe (error "unsupported: dynamic data to SHA256") (unliteral $ len i)
+      where l i = fromMaybe (error "unsupported: dynamic data to SHA256") (maybeLitWord $ len i)
     -- RIPEMD-160
     0x3 -> num $ (((l input + 31) `div` 32) * 120) + 600
-      where l i = fromMaybe (error "unsupported: dynamic data to RIPEMD-160") (unliteral $ len i)
+      where l i = fromMaybe (error "unsupported: dynamic data to RIPEMD-160") (maybeLitWord $ len i)
     -- IDENTITY
     0x4 -> num $ (((l input + 31) `div` 32) * 3) + 15
-      where l i = fromMaybe (error "unsupported: dynamic data to IDENTITY") (unliteral $ len i)
+      where l i = fromMaybe (error "unsupported: dynamic data to IDENTITY") (maybeLitWord $ len i)
     -- MODEXP
     0x5 -> num $ (f (num (max lenm lenb)) * num (max lene' 1)) `div` (num g_quaddivisor)
       where input' = case input of
@@ -2579,7 +2579,7 @@ costOfPrecompile (FeeSchedule {..}) precompileAddr input =
     0x7 -> g_ecmul
     -- ECPAIRING
     0x8 -> num $ ((l input) `div` 192) * (num g_pairing_point) + (num g_pairing_base)
-      where l i = fromMaybe (error "unsupported: dynamic data to ECPAIRING") (unliteral $ len i)
+      where l i = fromMaybe (error "unsupported: dynamic data to ECPAIRING") (maybeLitWord $ len i)
     -- BLAKE2
     0x9 -> let input' = case input of
                          ConcreteBuffer b -> b

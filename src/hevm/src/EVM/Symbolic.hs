@@ -285,10 +285,10 @@ read32At :: SInteger -> SList (WordN 8) -> SymWord
 read32At i x = sw256 $ fromBytes $ [x .!! literal i | i <- [0..31]]
 
 -- a whole foldable instance seems overkill, but length is always good to have!
-len :: Buffer -> SWord 32
-len (DynamicSymBuffer a) = sFromIntegral $ SL.length a
-len (StaticSymBuffer bs) = literal . num $ length bs
-len (ConcreteBuffer bs) = literal . num $ BS.length bs
+len :: Buffer -> SymWord --SWord 32
+len (DynamicSymBuffer a) = sw256 $ sFromIntegral $ SL.length a
+len (StaticSymBuffer bs) = litWord . num $ length bs
+len (ConcreteBuffer bs) = litWord . num $ BS.length bs
 
 grab :: Int -> Buffer -> Buffer
 grab n (StaticSymBuffer bs) = StaticSymBuffer $ take n bs

@@ -143,8 +143,8 @@ loadSymVM x initStore model addr callvalue' calldata' =
 
 
 -- | Interpreter which explores all paths at
--- | branching points.
--- | returns a list of possible final evm states
+-- branching points.
+-- returns a list of possible final evm states
 interpret
   :: Fetch.Fetcher
   -> Maybe Integer --max iterations

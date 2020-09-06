@@ -147,7 +147,47 @@ main = defaultMain $ testGroup "hevm"
                               (r, mempty), (s, mempty), (t, mempty)]
        === (Just $ Literal Patricia.Empty)
     ]
+  , testGroup "symbolic properties" [
+      -- testCase "calldata beyond length must be 0" $ runSMTWith z3
+      --   $ query $ do calldatalist <- freshVar_
+      --                -- works with length .< 10, but not 100...
+      --                constrain $ SL.length calldatalist .< 10
+      --                let cd = DynamicSymBuffer calldatalist
+      --                constrain $ 0 ./= readSWord (sw256 $ sFromIntegral $ len cd) cd
+      --                checkSat >>= \case
+      --                  Sat -> error "should be false"
+      --                  Unsat -> return ()
+      --                  Unk -> error "timed out!"
 
+--      ,
+        testCase "calldata beyond length must be 0" $ runSMTWith z3
+        $ query $ do calldatalist <- freshVar_
+                     -- works with length .< 100
+                     constrain $ SL.length calldatalist .< 100
+                     constrain $ sw256 (sFromIntegral $ SL.length calldatalist) .< sw256 100
+                     let cd = DynamicSymBuffer calldatalist
+                     constrain $ 0 ./= readSWord (len cd) cd
+                     checkSat >>= \case
+                       Sat -> error "should be false"
+                       Unsat -> return ()
+                       Unk -> error "timed out!"
+
+      ,
+        testCase "comparing function selector" $ runSMTWith z3{transcript=Just "sameno.smt2"} $ do
+          setTimeOut 5000
+          query $ do calldatalist <- freshVar_
+                     -- works with length .< 100
+                     constrain $ SL.length calldatalist .< 100
+                     constrain $ sw256 (sFromIntegral $ SL.length calldatalist) .< sw256 100
+                     let cd = DynamicSymBuffer calldatalist
+                     let S _ v = readSWord (sw256 0) cd
+                     constrain $ 1337 .== (sShiftRight v (224 :: SWord 256))
+                     checkSat >>= \case
+                       Sat -> return ()
+                       Unsat -> error "should be sat"
+                       Unk -> error "timed out!"
+
+    ]
   , testGroup "Symbolic buffers"
 
       [  testCase "dynWriteMemory works" $ runSMTWith z3 $ query $ do
@@ -225,6 +265,7 @@ main = defaultMain $ testGroup "hevm"
           }
           |]
         let pre preVM = let [x, y] = getStaticAbiArgs preVM
+                            z = x + y
                         in x .<= x + y
                            .&& view (state . callvalue) preVM .== 0
             post = Just $ \(prestate, poststate) ->
@@ -234,30 +275,31 @@ main = defaultMain $ testGroup "hevm"
                 _ -> sFalse
         Left (_, res) <- runSMT $ query $ verifyContract safeAdd (Just ("add(uint256,uint256)", [AbiUIntType 256, AbiUIntType 256])) [] SymbolicS pre post
         putStrLn $ "successfully explored: " <> show (length res) <> " paths"
+ 
      ,
 
-      testCase "x == y => x + y == 2 * y" $ do
-        Just safeAdd <- solcRuntime "SafeAdd"
-          [i|
-          contract SafeAdd {
-            function add(uint x, uint y) public pure returns (uint z) {
-                 require((z = x + y) >= x);
-            }
-          }
-          |]
-        let pre preVM = let [x, y] = getStaticAbiArgs preVM
-                        in (x .<= x + y)
-                           .&& (x .== y)
-                           .&& view (state . callvalue) preVM .== 0
-            post (prestate, poststate) =
-              let [_, y] = getStaticAbiArgs prestate
-              in case view result poststate of
-                      Just (VMSuccess (StaticSymBuffer out)) -> fromBytes out .== 2 * y
-                      _ -> sFalse
-        Left (_, res) <- runSMTWith z3 $ query $
-          verifyContract safeAdd (Just ("add(uint256,uint256)", [AbiUIntType 256, AbiUIntType 256])) [] SymbolicS pre (Just post)
-        putStrLn $ "successfully explored: " <> show (length res) <> " paths"
-      ,
+    --   testCase "x == y => x + y == 2 * y" $ do
+    --     Just safeAdd <- solcRuntime "SafeAdd"
+    --       [i|
+    --       contract SafeAdd {
+    --         function add(uint x, uint y) public pure returns (uint z) {
+    --              require((z = x + y) >= x);
+    --         }
+    --       }
+    --       |]
+    --     let pre preVM = let [x, y] = getStaticAbiArgs preVM
+    --                     in (x .<= x + y)
+    --                        .&& (x .== y)
+    --                        .&& view (state . callvalue) preVM .== 0
+    --         post (prestate, poststate) =
+    --           let [_, y] = getStaticAbiArgs prestate
+    --           in case view result poststate of
+    --                   Just (VMSuccess (StaticSymBuffer out)) -> fromBytes out .== 2 * y
+    --                   _ -> sFalse
+    --     Left (_, res) <- runSMTWith z3 $ query $
+    --       verifyContract safeAdd (Just ("add(uint256,uint256)", [AbiUIntType 256, AbiUIntType 256])) [] SymbolicS pre (Just post)
+    --     putStrLn $ "successfully explored: " <> show (length res) <> " paths"
+      -- ,
         testCase "factorize 973013" $ do
         Just factor <- solcRuntime "PrimalityCheck"
           [i|
@@ -545,25 +587,46 @@ main = defaultMain $ testGroup "hevm"
                                            set EVM.storage (Symbolic store)))
             verify vm Nothing Nothing (Just checkAssertions)
           putStrLn $ "found counterexample:"
+    -- ,
+    --      testCase "dynamic bytes (calldataload)" $ do
+    --       Just c <- solcRuntime "C"
+    --         [i|
+    --           contract C
+    --           {
+    --           function f() public pure {
+    --             uint y;
+    --             uint z;
+    --             assembly {
+    --               y := calldataload(12)
+    --               z := calldataload(31)
+    --             }
+    --             assert(y == z);
+    --           }
+    --           }
+    --         |]
+    --       -- should find a counterexample
+    --       Right cex <- runSMTWith z3 $ do
+    --         query $ checkAssert c Nothing []
+    --       putStrLn $ "found counterexample"
 
-     ,
-         testCase "dynamic bytes" $ do
+
+    --  ,
+         testCase "dynamic bytes (abi decoding)" $ do
           Just c <- solcRuntime "C"
             [i|
               contract C
               {
                function f(bytes memory b1, bytes memory b2) public pure {
                   b1 = b2;
-        	  assert(b1[1] == b2[1]);
-	        }
+                  assert(b1[1] == b2[1]);
+                }
               }
             |]
           -- should find a counterexample
           Left (_, res) <- runSMTWith z3{verbose=True} $ do
-            setTimeOut 5000
+--            setTimeOut 20000
             query $ checkAssert c Nothing []
           putStrLn $ "successfully explored: " <> show (length res) <> " paths"
-
     ]
   , testGroup "Equivalence checking"
     [

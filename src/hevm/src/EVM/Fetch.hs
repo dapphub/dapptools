@@ -184,7 +184,11 @@ type Fetcher = EVM.Query -> IO (EVM ())
 checksat :: SBool -> Query CheckSatResult
 checksat b = do push 1
                 constrain b
-                m <- checkSat
+                b <- getInfo Name
+                m <- case b of
+                       -- some custom strategies for z3 which have proven to be quite useful (can still be tweaked)
+                       Resp_Name "Z3" -> checkSatUsing "(check-sat-using (then (using-params simplify :cache-all true) smt))"
+                       _ -> checkSat
                 pop 1
                 return m
 
