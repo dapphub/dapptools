@@ -128,7 +128,7 @@ data TraceData
 data Query where
   PleaseFetchContract :: Addr         -> (Contract   -> EVM ()) -> Query
   PleaseFetchSlot     :: Addr -> Word -> (Word       -> EVM ()) -> Query
-  PleaseAskSMT        :: SymWord -> [SBool] -> (JumpCondition -> EVM ()) -> Query
+  PleaseAskSMT        :: SBool -> [SBool] -> (BranchCondition -> EVM ()) -> Query
 
 data Choose where
   PleaseChoosePath    :: (Bool -> EVM ()) -> Choose
@@ -156,9 +156,9 @@ type EVM a = State VM a
 
 type CodeLocation = (Addr, Int)
 
--- | The possible return values of a SMT query regarding JUMPI
-data JumpCondition = Iszero Bool | Unknown | Inconsistent
-  deriving (Show)
+-- | The possible return values of a SMT query
+data BranchCondition = Case Bool | Unknown | Inconsistent
+  deriving Show
 
 -- | The cache is data that can be persisted for efficiency:
 -- any expensive query that is constant at least within a block.
@@ -996,7 +996,7 @@ exec1 = do
                   in case maybeLitWord y of
                       Just y' -> jump (0 == y')
                       -- if the jump condition is symbolic, an smt query has to be made.
-                      Nothing -> askSMT (self, the state pc) y jump
+                      Nothing -> askSMT (self, the state pc) (0 .== y) jump
             _ -> underrun
 
         -- op: PC
@@ -1509,8 +1509,8 @@ getCodeLocation :: VM -> CodeLocation
 getCodeLocation vm = (view (state . contract) vm, view (state . pc) vm)
 
 -- | Construct SMT Query and halt execution until resolved
-askSMT :: CodeLocation -> SymWord -> (Bool -> EVM ()) -> EVM ()
-askSMT codeloc jumpcondition continue = do
+askSMT :: CodeLocation -> SBool -> (Bool -> EVM ()) -> EVM ()
+askSMT codeloc condition continue = do
   -- We keep track of how many times we have come across this particular
   -- (contract, pc) combination in the `iteration` mapping.
   iteration <- use (iterations . at codeloc . non 0)
@@ -1519,23 +1519,23 @@ askSMT codeloc jumpcondition continue = do
   -- already. So we first check the cache to see if the result is known
   use (cache . path . at (codeloc, iteration)) >>= \case
      -- If the query has been done already, select path or select the only available
-     Just w -> choosePath (Iszero w)
+     Just w -> choosePath (Case w)
      -- If this is a new query, run the query, cache the result
      -- increment the iterations and select appropriate path
      Nothing -> do pathconds <- use pathConditions
                    assign result . Just . VMFailure . Query $ PleaseAskSMT
-                     jumpcondition pathconds choosePath
+                     condition pathconds choosePath
 
    where -- Only one path is possible
-         choosePath :: JumpCondition -> EVM ()
-         choosePath (Iszero v) = do assign result Nothing
-                                    pathConditions <>= if v then [litWord 0 .== jumpcondition] else [litWord 0 ./= jumpcondition]
-                                    iteration <- use (iterations . at codeloc . non 0)
-                                    assign (cache . path . at (codeloc, iteration)) (Just v)
-                                    assign (iterations . at codeloc) (Just (iteration + 1))
-                                    continue v
+         choosePath :: BranchCondition -> EVM ()
+         choosePath (Case v) = do assign result Nothing
+                                  pushTo pathConditions (if v then condition else sNot condition)
+                                  iteration <- use (iterations . at codeloc . non 0)
+                                  assign (cache . path . at (codeloc, iteration)) (Just v)
+                                  assign (iterations . at codeloc) (Just (iteration + 1))
+                                  continue v
          -- Both paths are possible; we ask for more input
-         choosePath Unknown = assign result . Just . VMFailure . Choose . PleaseChoosePath $ choosePath . Iszero
+         choosePath Unknown = assign result . Just . VMFailure . Choose . PleaseChoosePath $ choosePath . Case
          -- None of the paths are possible; fail this branch
          choosePath Inconsistent = vmError DeadPath
 

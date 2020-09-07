@@ -140,14 +140,14 @@ interpret
   :: Fetch.Fetcher
   -> Maybe Integer --max iterations
   -> Stepper a
-  -> StateT VM IO [a]
+  -> StateT VM Query [a]
 interpret fetcher maxIter =
   eval . Operational.view
 
   where
     eval
       :: Operational.ProgramView Stepper.Action a
-      -> StateT VM IO [a]
+      -> StateT VM Query [a]
 
     eval (Operational.Return x) =
       pure [x]
@@ -161,9 +161,13 @@ interpret fetcher maxIter =
         Stepper.Ask (EVM.PleaseChoosePath continue) -> do
           vm <- get
           case maxIterationsReached vm maxIter of
-            Nothing -> do a <- interpret fetcher maxIter (Stepper.evm (continue True) >>= k)
+            Nothing -> do push 1
+                          a <- interpret fetcher maxIter (Stepper.evm (continue True) >>= k)
                           put vm
+                          pop 1
+                          push 1
                           b <- interpret fetcher maxIter (Stepper.evm (continue False) >>= k)
+                          pop 1
                           return $ a <> b
             Just n -> interpret fetcher maxIter (Stepper.evm (continue (not n)) >>= k)
         Stepper.Wait q ->
@@ -184,23 +188,20 @@ maxIterationsReached vm (Just maxIter) =
 type Precondition = VM -> SBool
 type Postcondition = (VM, VM) -> SBool
 
-checkAssert :: ContractCode -> Maybe Integer -> Maybe (Text, [AbiType]) -> [String] -> Query (Either (VM, [VM]) VM)
-checkAssert c maxIter signature' concreteArgs = verifyContract c maxIter signature' concreteArgs SymbolicS (const sTrue) (Just checkAssertions)
+checkAssert :: ByteString -> Maybe (Text, [AbiType]) -> [String] -> Query (Either (VM, [VM]) VM)
+checkAssert c signature' concreteArgs = verifyContract c signature' concreteArgs SymbolicS (const sTrue) (Just checkAssertions)
 
 checkAssertions :: Postcondition
 checkAssertions (_, out) = case view result out of
   Just (EVM.VMFailure (EVM.UnrecognizedOpcode 254)) -> sFalse
   _ -> sTrue
 
-verifyContract :: ContractCode -> Maybe Integer -> Maybe (Text, [AbiType]) -> [String] -> StorageModel -> Precondition -> Maybe Postcondition -> Query (Either (VM, [VM]) VM)
-verifyContract code' maxIter signature' concreteArgs storagemodel pre maybepost = do
+verifyContract :: ByteString -> Maybe (Text, [AbiType]) -> [String] -> StorageModel -> Precondition -> Maybe Postcondition -> Query (Either (VM, [VM]) VM)
+verifyContract theCode signature' concreteArgs storagemodel pre maybepost = do
     preStateRaw <- abstractVM signature' concreteArgs theCode  storagemodel
     -- add the pre condition to the pathconditions to ensure that we are only exploring valid paths
     let preState = over pathConditions ((++) [pre preStateRaw]) preStateRaw
-    verify preState maxIter Nothing maybepost
-  where theCode = case code' of
-          InitCode b    -> b
-          RuntimeCode b -> b
+    verify preState Nothing Nothing maybepost
 
 pruneDeadPaths :: [VM] -> [VM]
 pruneDeadPaths =
@@ -215,7 +216,7 @@ verify :: VM -> Maybe Integer -> Maybe (Fetch.BlockNumber, Text) -> Maybe Postco
 verify preState maxIter rpcinfo maybepost = do
   let model = view (env . storageModel) preState
   smtState <- queryState
-  results <- io $ fst <$> runStateT (interpret (Fetch.oracle smtState rpcinfo model) maxIter Stepper.runFully) preState
+  results <- fst <$> runStateT (interpret (Fetch.oracle (Just smtState) rpcinfo model False) maxIter Stepper.runFully) preState
   case maybepost of
     (Just post) -> do
       let livePaths = pruneDeadPaths results
@@ -249,8 +250,12 @@ equivalenceCheck bytecodeA bytecodeB maxiter signature' = do
       preStateB = loadSymVM (RuntimeCode bytecodeB) prestorage SymbolicS precaller callvalue' (calldata', cdlen) & set pathConditions pathconds
 
   smtState <- queryState
-  (aVMs, bVMs) <- both (\x -> io $ fst <$> runStateT (interpret (Fetch.oracle smtState Nothing SymbolicS) maxiter Stepper.runFully) x)
-    (preStateA, preStateB)
+  push 1
+  aVMs <- fst <$> runStateT (interpret (Fetch.oracle (Just smtState) Nothing SymbolicS False) maxiter Stepper.runFully) preStateA
+  pop 1
+  push 1
+  bVMs <- fst <$> runStateT (interpret (Fetch.oracle (Just smtState) Nothing SymbolicS False) maxiter Stepper.runFully) preStateB
+  pop 1
   -- Check each pair of endstates for equality:
   let differingEndStates = uncurry distinct <$> [(a,b) | a <- pruneDeadPaths aVMs, b <- pruneDeadPaths bVMs]
       distinct a b =
@@ -279,7 +284,6 @@ equivalenceCheck bytecodeA bytecodeB maxiter signature' = do
         in sAnd aPath .&& sAnd bPath .&& differingResults
   -- If there exists a pair of endstates where this is not the case,
   -- the following constraint is satisfiable
-  resetAssertions
   constrain $ sOr differingEndStates
 
   checkSat >>= \case
