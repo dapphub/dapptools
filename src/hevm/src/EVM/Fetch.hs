@@ -1,5 +1,6 @@
 {-# Language GADTs #-}
 {-# Language StandaloneDeriving #-}
+{-# Language LambdaCase #-}
 
 module EVM.Fetch where
 
@@ -126,91 +127,109 @@ fetchSlotFrom n url addr slot =
     (\s -> fetchSlotWithSession n url s addr slot)
 
 http :: BlockNumber -> Text -> Fetcher
-http n url q =
-  case q of
-    EVM.PleaseFetchContract addr continue ->
-      fetchContractFrom n url addr >>= \case
-        Just x  ->
-          return (continue x)
-        Nothing -> error ("oracle error: " ++ show q)
-    EVM.PleaseFetchSlot addr slot continue ->
-      fetchSlotFrom n url addr (fromIntegral slot) >>= \case
-        Just x  -> return (continue x)
-        Nothing -> error ("oracle error: " ++ show q)
-    EVM.PleaseAskSMT _ _ _ -> error "smt calls not available for this oracle"
-
-zero :: Fetcher
-zero q =
-  case q of
-    EVM.PleaseFetchContract _ continue ->
-      return (continue (initialContract (EVM.RuntimeCode mempty)))
-    EVM.PleaseFetchSlot _ _ continue ->
-      return (continue 0)
-    EVM.PleaseAskSMT _ _ continue ->
-      return $ continue EVM.Unknown
-
-
-
-type Fetcher = EVM.Query -> IO (EVM ())
+http n url = oracle Nothing (Just (n, url)) EVM.ConcreteS True
 
 -- smtsolving + (http or zero)
-oracle :: SBV.State -> Maybe (BlockNumber, Text) -> StorageModel -> Fetcher
-oracle state info model q = do
+oracle :: Maybe SBV.State -> Maybe (BlockNumber, Text) -> StorageModel -> Bool -> Fetcher
+oracle smtstate info model ensureConsistency q = do
   case q of
-    EVM.PleaseAskSMT jumpcondition pathconditions continue ->
-      flip runReaderT state $ SBV.runQueryT $ do
+    EVM.PleaseAskSMT branchcondition pathconditions continue ->
+      case smtstate of
+        Nothing -> return $ continue EVM.Unknown
+        Just state -> flip runReaderT state $ SBV.runQueryT $ do
          let pathconds = sAnd pathconditions
-         noJump <- checksat $ pathconds .&& jumpcondition ./= 0
-         case noJump of
-            -- Unsat means condition
-            -- cannot be nonzero
-            Unsat -> do jump <- checksat $ pathconds .&& jumpcondition .== 0
-                        -- can it be zero?
-                        case jump of
-                          -- No. We are on an inconsistent path.
-                          Unsat -> return $ continue EVM.Inconsistent
-                          -- Yes. It must be 0.
-                          Sat -> return $ continue (EVM.Iszero True)
-                          -- Assume 0 is still possible.
-                          Unk -> return $ continue (EVM.Iszero True)
-            -- Sat means its possible for condition
-            -- to be nonzero.
-            Sat -> do jump <- checksat $ pathconds .&& jumpcondition .== 0
-                      -- can it also be zero?
-                      case jump of
-                        -- No. It must be nonzero
-                        Unsat -> return $ continue (EVM.Iszero False)
-                        -- Yes. Both branches possible
-                        Sat -> return $ continue EVM.Unknown
-                        -- Explore both branches in case of timeout
-                        Unk -> return $ continue EVM.Unknown
+         -- Is is possible to satisfy the condition?
+         continue <$> checkBranch pathconds branchcondition ensureConsistency
 
-            -- If the query times out, we simply explore both paths
-            Unk -> return $ continue EVM.Unknown
     -- if we are using a symbolic storage model,
     -- we generate a new array to the fetched contract here
     EVM.PleaseFetchContract addr continue -> do
       contract <- case info of
-                    Nothing -> return $ Just (initialContract (EVM.RuntimeCode mempty))
+                    Nothing -> return $ Just $ initialContract (EVM.RuntimeCode mempty)
                     Just (n, url) -> fetchContractFrom n url addr
       case contract of
-        Just x  -> case model of
+        Just x -> case model of
           EVM.ConcreteS -> return $ continue x
-          EVM.InitialS  -> return $ continue $ x & set EVM.storage (EVM.Symbolic $ SBV.sListArray 0 [])
-          EVM.SymbolicS -> 
-            flip runReaderT state $ SBV.runQueryT $ do
-              store <- freshArray_ Nothing
-              return $ continue $ x & set EVM.storage (EVM.Symbolic store)
+          EVM.InitialS  -> return $ continue $ x
+             & set EVM.storage (EVM.Symbolic $ SBV.sListArray 0 [])
+          EVM.SymbolicS -> case smtstate of
+            Nothing -> return (continue $ x
+                               & set EVM.storage (EVM.Symbolic $ SBV.sListArray 0 []))
+
+            Just state ->
+              flip runReaderT state $ SBV.runQueryT $ do
+                store <- freshArray_ Nothing
+                return $ continue $ x
+                  & set EVM.storage (EVM.Symbolic store)
         Nothing -> error ("oracle error: " ++ show q)
 
     --- for other queries (there's only slot left right now) we default to zero or http
-    _ -> case info of
-      Nothing -> zero q
-      Just (n, url) -> http n url q
+    EVM.PleaseFetchSlot addr slot continue ->
+      case info of
+        Nothing -> return (continue 0)
+        Just (n, url) ->
+         fetchSlotFrom n url addr (fromIntegral slot) >>= \case
+           Just x  -> return (continue x)
+           Nothing ->
+             error ("oracle error: " ++ show q)
+
+zero :: Fetcher
+zero = oracle Nothing Nothing EVM.ConcreteS True
+
+type Fetcher = EVM.Query -> IO (EVM ())
 
 checksat :: SBool -> Query CheckSatResult
-checksat b = do resetAssertions
+checksat b = do push 1
                 constrain b
                 m <- checkSat
-                resetAssertions
+                pop 1
                 return m
+
+-- | Checks which branches are satisfiable, checking the pathconditions for consistency
+-- if the third argument is true.
+-- When in debug mode, we do not want to be able to navigate to dead paths,
+-- but for normal execution paths with inconsistent pathconditions
+-- will be pruned anyway.
+checkBranch :: SBool -> SBool -> Bool -> Query EVM.BranchCondition
+checkBranch pathconds branchcondition False = do
+  constrain pathconds
+  checksat branchcondition >>= \case
+     -- the condition is unsatisfiable
+     Unsat -> -- if pathconditions are consistent then the condition must be false
+            return $ EVM.Case False
+     -- Sat means its possible for condition to hold
+     Sat -> -- is its negation also possible?
+            checksat (sNot branchcondition) >>= \case
+               -- No. The condition must hold
+               Unsat -> return $ EVM.Case True
+               -- Yes. Both branches possible
+               Sat -> return EVM.Unknown
+               -- Explore both branches in case of timeout
+               Unk -> return EVM.Unknown
+     -- If the query times out, we simply explore both paths
+     Unk -> return EVM.Unknown
+
+checkBranch pathconds branchcondition True = do
+  constrain pathconds
+  checksat branchcondition >>= \case
+     -- the condition is unsatisfiable
+     Unsat -> -- are the pathconditions even consistent?
+              checksat (sNot branchcondition) >>= \case
+                -- No. We are on an inconsistent path.
+                Unsat -> return EVM.Inconsistent
+                -- Yes. The condition must be false.
+                Sat -> return $ EVM.Case False
+                -- Assume the negated condition is still possible.
+                Unk -> return $ EVM.Case False
+     -- Sat means its possible for condition to hold
+     Sat -> -- is its negation also possible?
+            checksat (sNot branchcondition) >>= \case
+               -- No. The condition must hold
+               Unsat -> return $ EVM.Case True
+               -- Yes. Both branches possible
+               Sat -> return EVM.Unknown
+               -- Explore both branches in case of timeout
+               Unk -> return EVM.Unknown
+
+     -- If the query times out, we simply explore both paths
+     Unk -> return EVM.Unknown

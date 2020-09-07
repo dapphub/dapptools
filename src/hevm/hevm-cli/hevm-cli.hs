@@ -127,6 +127,7 @@ data Command w
       , smttimeout    :: w ::: Maybe Integer <?> "Timeout given to SMT solver in milliseconds (default: 20000)"
       , maxIterations :: w ::: Maybe Integer <?> "Number of times we may revisit a particular branching point"
       , solver        :: w ::: Maybe Text    <?> "Used SMT solver: z3 (default) or cvc4"
+      , smtoutput     :: w ::: Bool               <?> "Print verbose smt output"
       }
   | Exec -- Execute a given program with specified env & calldata
       { code        :: w ::: Maybe ByteString <?> "Program bytecode"
@@ -468,7 +469,7 @@ assert cmd = do
       io $ void $ EVM.TTY.runFromVM
         (maxIterations cmd)
         srcInfo
-        (EVM.Fetch.oracle smtState rpcinfo model)
+        (EVM.Fetch.oracle (Just smtState) rpcinfo model True)
         preState
 
   else
@@ -568,7 +569,7 @@ launchExec cmd = do
 
   case optsMode cmd of
     Run -> do
-      vm' <- execStateT (interpret fetcher Nothing . void $ EVM.Stepper.execFully) vm1
+      vm' <- execStateT (EVM.Stepper.interpret fetcher . void $ EVM.Stepper.execFully) vm1
       when (trace cmd) $ hPutStr stderr (showTraceTree dapp vm')
       case view EVM.result vm' of
         Nothing ->
