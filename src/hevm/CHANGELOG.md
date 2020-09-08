@@ -1,5 +1,10 @@
 # hevm changelog
 
+## Unreleased
+
+- z3 updated to 4.8.8
+- optimize SMT queries
+
 ## 0.41.0 - 2020-08-19
 
 ### Changed
