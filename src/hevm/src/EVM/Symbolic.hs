@@ -59,6 +59,9 @@ forceLit (S whiff a) = case unliteral a of
 forceLitBytes :: [SWord 8] -> ByteString
 forceLitBytes = BS.pack . fmap (fromSized . fromJust . unliteral)
 
+forceBuffer :: Buffer -> ByteString
+forceBuffer (ConcreteBuffer b) = b
+forceBuffer (SymbolicBuffer b) = forceLitBytes b
 
 -- | Arithmetic operations on SymWord
 
