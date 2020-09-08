@@ -16,7 +16,7 @@ import EVM.Stepper (Stepper)
 import qualified EVM.Stepper as Stepper
 import qualified Control.Monad.Operational as Operational
 import EVM.Types hiding (Word)
-import EVM.Symbolic (SymWord(..), sw256)
+import EVM.Symbolic (SymWord(..), sw256, Calldata(..))
 import EVM.Concrete (createAddress, Word)
 import qualified EVM.FeeSchedule as FeeSchedule
 import Data.SBV.Trans.Control
@@ -93,19 +93,28 @@ staticCalldata sig typesignature concreteArgs =
 
     sig' = litBytes $ selector sig
 
-abstractVM :: Maybe (Text, [AbiType]) -> [String] -> ByteString -> StorageModel -> Query VM
-abstractVM typesignature concreteArgs x storagemodel = do
+-- | Construct a VM out of a type signature, possibly with specialized concrete arguments
+-- ,bytecode, storagemodel and calldata structure.
+abstractVM :: Maybe (Text, [AbiType]) -> [String] -> ByteString -> StorageModel -> CalldataModel -> Query VM
+abstractVM typesignature concreteArgs x storagemodel calldatamodel = do
   (cd',pathCond) <- case typesignature of
-           Nothing -> do list <- freshVar_
-                         return (DynamicSymBuffer list,
-                                 -- due to some current z3 shenanegans (possibly related to: https://github.com/Z3Prover/z3/issues/4635)
-                                 -- we assume the list length to be shorter than max_length both as a bitvector and as an integer.
-                                 -- The latter implies the former as long as max_length fits in a bitvector, but assuming it explitly
-                                 -- improves z3 (4.8.8) performance.
-                                 SList.length list .< 1000 .&&
-                                  sw256 (sFromIntegral (SList.length list)) .< sw256 1000)
+           Nothing -> case calldatamodel of
+                        BufferCD -> do
+                          list <- freshVar_
+                          return (CalldataBuffer (DynamicSymBuffer list),
+                            -- due to some current z3 shenanegans (possibly related to: https://github.com/Z3Prover/z3/issues/4635)
+                            -- we assume the list length to be shorter than max_length both as a bitvector and as an integer.
+                            -- The latter implies the former as long as max_length fits in a bitvector, but assuming it explitly
+                            -- improves z3 (4.8.8) performance.
+                            SList.length list .< 1000 .&&
+                             sw256 (sFromIntegral (SList.length list)) .< sw256 1000)
+
+                        BoundedCD -> do
+                           cd <- sbytes256
+                           len <- freshVar_
+                           return (CalldataDynamic (cd, len), len .<= 256)
            Just (name, typs) -> do symbytes <- staticCalldata name typs concreteArgs
-                                   return (StaticSymBuffer symbytes, sTrue)
+                                   return (CalldataBuffer (StaticSymBuffer symbytes), sTrue)
 
   symstore <- case storagemodel of
     SymbolicS -> Symbolic <$> freshArray_ Nothing
@@ -116,7 +125,7 @@ abstractVM typesignature concreteArgs x storagemodel = do
   return $ loadSymVM (RuntimeCode x) symstore storagemodel c value' cd'
     & over pathConditions (<> [pathCond])
 
-loadSymVM :: ContractCode -> Storage -> StorageModel -> SAddr -> SymWord -> Buffer -> VM
+loadSymVM :: ContractCode -> Storage -> StorageModel -> SAddr -> SymWord -> Calldata -> VM
 loadSymVM x initStore model addr callvalue' calldata' =
     (makeVm $ VMOpts
     { vmoptContract = contractWithStore x initStore
@@ -212,17 +221,21 @@ maxIterationsReached vm (Just maxIter) =
 type Precondition = VM -> SBool
 type Postcondition = (VM, VM) -> SBool
 
+checkAssertBuffer :: ByteString -> Query (Either (VM, [VM]) VM)
+checkAssertBuffer c = verifyContract c Nothing [] SymbolicS BufferCD (const sTrue) (Just checkAssertions)
+
+
 checkAssert :: ByteString -> Maybe (Text, [AbiType]) -> [String] -> Query (Either (VM, [VM]) VM)
-checkAssert c signature' concreteArgs = verifyContract c signature' concreteArgs SymbolicS (const sTrue) (Just checkAssertions)
+checkAssert c signature' concreteArgs = verifyContract c signature' concreteArgs SymbolicS BoundedCD (const sTrue) (Just checkAssertions)
 
 checkAssertions :: Postcondition
 checkAssertions (_, out) = case view result out of
   Just (EVM.VMFailure (EVM.UnrecognizedOpcode 254)) -> sFalse
   _ -> sTrue
 
-verifyContract :: ByteString -> Maybe (Text, [AbiType]) -> [String] -> StorageModel -> Precondition -> Maybe Postcondition -> Query (Either (VM, [VM]) VM)
-verifyContract theCode signature' concreteArgs storagemodel pre maybepost = do
-    preStateRaw <- abstractVM signature' concreteArgs theCode  storagemodel
+verifyContract :: ByteString -> Maybe (Text, [AbiType]) -> [String] -> StorageModel -> CalldataModel -> Precondition -> Maybe Postcondition -> Query (Either (VM, [VM]) VM)
+verifyContract theCode signature' concreteArgs storagemodel calldatamodel pre maybepost = do
+    preStateRaw <- abstractVM signature' concreteArgs theCode  storagemodel calldatamodel
     -- add the pre condition to the pathconditions to ensure that we are only exploring valid paths
     let preState = over pathConditions ((++) [pre preStateRaw]) preStateRaw
     verify preState Nothing Nothing maybepost
@@ -264,7 +277,7 @@ verify preState maxIter rpcinfo maybepost = do
 -- | Compares two contract runtimes for trace equivalence by running two VMs and comparing the end states.
 equivalenceCheck :: ByteString -> ByteString -> Maybe Integer -> Maybe (Text, [AbiType]) -> Query (Either ([VM], [VM]) VM)
 equivalenceCheck bytecodeA bytecodeB maxiter signature' = do
-  preStateA <- abstractVM signature' [] bytecodeA SymbolicS
+  preStateA <- abstractVM signature' [] bytecodeA SymbolicS BoundedCD
 
   let preself = preStateA ^. state . contract
       precaller = preStateA ^. state . caller
@@ -327,8 +340,12 @@ showCounterexample vm maybesig = do
       SAddr caller' = view (EVM.state . EVM.caller) vm
 --  cdlen' <- num <$> getValue cdlen
   calldatainput <- case calldata' of
-    StaticSymBuffer cd -> mapM (getValue.fromSized) cd >>= return . pack
-    ConcreteBuffer cd  -> return $ cd
+    CalldataDynamic (cd, cdlen) -> do
+      cdlen' <- num <$> getValue cdlen
+      mapM (getValue.fromSized) (take cdlen' cd) >>= return . pack
+    CalldataBuffer (StaticSymBuffer cd) -> mapM (getValue.fromSized) cd >>= return . pack
+    CalldataBuffer (ConcreteBuffer cd)  -> return $ cd
+    CalldataBuffer (DynamicSymBuffer cd) -> (fmap fromSized) <$> getValue cd >>= return . pack
   callvalue' <- num <$> getValue cvalue
   caller'' <- num <$> getValue caller'
   io $ do

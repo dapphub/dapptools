@@ -16,6 +16,7 @@ module EVM where
 import Prelude hiding (log, Word, exponent)
 
 import Data.SBV hiding (Word, output, Unknown)
+import Data.SBV.List (implode, subList)
 import Data.Proxy (Proxy(..))
 import EVM.ABI
 import EVM.Types
@@ -170,7 +171,7 @@ data Cache = Cache
 -- | A way to specify an initial VM state
 data VMOpts = VMOpts
   { vmoptContract :: Contract
-  , vmoptCalldata :: Buffer -- maximum size of uint32 as per eip 1985
+  , vmoptCalldata :: Calldata
   , vmoptValue :: SymWord
   , vmoptAddress :: Addr
   , vmoptCaller :: SAddr
@@ -225,7 +226,7 @@ data FrameState = FrameState
   , _stack        :: [SymWord]
   , _memory       :: Buffer
   , _memorySize   :: SWord 32
-  , _calldata     :: Buffer
+  , _calldata     :: Calldata
   , _callvalue    :: SymWord
   , _caller       :: SAddr
   , _gas          :: Word
@@ -312,6 +313,14 @@ data StorageModel
 
 instance ParseField StorageModel
 
+-- | Calldata can either by a normal buffer, or a custom "pseudo dynamic" encoding. See EVM.Symbolic for details
+data CalldataModel
+  = BufferCD
+  | BoundedCD
+  deriving (Read, Show)
+
+instance ParseField CalldataModel
+
 -- | Various environmental data
 data Env = Env
   { _contracts    :: Map Addr Contract
@@ -342,7 +351,7 @@ blankState = FrameState
   , _stack        = mempty
   , _memory       = mempty
   , _memorySize   = 0
-  , _calldata     = mempty
+  , _calldata     = CalldataBuffer mempty
   , _callvalue    = 0
   , _caller       = 0
   , _gas          = 0
@@ -501,8 +510,8 @@ exec1 = do
     -- call to precompile
 
     let ?op = 0x00 -- dummy value
-    copyBytesToMemory (the state calldata) (len $ the state calldata) 0 0
-    executePrecompile self (the state gas) 0 (len $ the state calldata) 0 0 []
+    copyCalldataToMemory (the state calldata) (cdlen $ the state calldata) 0 0
+    executePrecompile self (the state gas) 0 (cdlen $ the state calldata) 0 0 []
     vmx <- get
     case view (state.stack) vmx of
       (x:_) -> case maybeLitWord x of
@@ -712,12 +721,14 @@ exec1 = do
 
         -- op: CALLDATALOAD
         0x35 -> stackOp1 (const g_verylow) $
-          flip readSWord (the state calldata)
+          case the state calldata of
+            CalldataBuffer bf -> flip readSWord bf
+            CalldataDynamic bf -> \(S _ i) -> readStaticWordWithBound (sFromIntegral i) bf
 
         -- op: CALLDATASIZE
         0x36 ->
           limitStack 1 . burn g_base $
-            next >> pushSym (len $ the state calldata)
+            next >> pushSym (cdlen $ the state calldata)
 
         -- op: CALLDATACOPY
         0x37 ->
@@ -727,7 +738,7 @@ exec1 = do
                 accessUnboundedMemoryRange fees xTo xSize $ do
                   next
                   assign (state . stack) xs
-                  copyBytesToMemory (the state calldata) xSize xFrom xTo
+                  copyCalldataToMemory (the state calldata) xSize xFrom xTo
             _ -> underrun
 
         -- op: CODESIZE
@@ -1909,7 +1920,7 @@ delegateCall this gasGiven xTo xContext xValue xInOffset xInSize xOutOffset xOut
               assign memory mempty
               assign memorySize 0
               assign returndata mempty
-              assign calldata (readMemory xInOffset xInSize vm0)
+              assign calldata (CalldataBuffer $ readMemory xInOffset xInSize vm0)
 
             continue
 
@@ -2194,6 +2205,17 @@ accessMemoryRange fees f l continue =
 accessMemoryWord
   :: FeeSchedule Word -> SymWord -> EVM () -> EVM ()
 accessMemoryWord fees x = accessMemoryRange fees x 32
+
+copyCalldataToMemory
+ :: Calldata -> SymWord -> SymWord -> SymWord -> EVM ()
+copyCalldataToMemory (CalldataBuffer bf) size xOffset yOffset =
+  copyBytesToMemory bf size xOffset yOffset
+copyCalldataToMemory (CalldataDynamic (b, l)) size xOffset yOffset =
+  case (maybeLitWord size, maybeLitWord xOffset, maybeLitWord yOffset) of
+    (Just size', Just xOffset', Just yOffset') ->
+      copyBytesToMemory (StaticSymBuffer [ite (i .<= l) x 0 | (x, i) <- zip b [1..]]) size' xOffset' yOffset'
+    _ ->
+      copyBytesToMemory (DynamicSymBuffer (subList (implode b) 0 (sFromIntegral l))) size xOffset yOffset
 
 copyBytesToMemory
   :: Buffer -> SymWord -> SymWord -> SymWord -> EVM ()

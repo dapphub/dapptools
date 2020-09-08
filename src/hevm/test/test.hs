@@ -273,33 +273,35 @@ main = defaultMain $ testGroup "hevm"
               in case view result poststate of
                 Just (VMSuccess (StaticSymBuffer out)) -> (fromBytes out) .== x + y
                 _ -> sFalse
-        Left (_, res) <- runSMT $ query $ verifyContract safeAdd (Just ("add(uint256,uint256)", [AbiUIntType 256, AbiUIntType 256])) [] SymbolicS pre post
+        Left (_, res) <- runSMT $ query $ verifyContract safeAdd (Just ("add(uint256,uint256)", [AbiUIntType 256, AbiUIntType 256])) [] SymbolicS BoundedCD pre post
         putStrLn $ "successfully explored: " <> show (length res) <> " paths"
  
      ,
 
-    --   testCase "x == y => x + y == 2 * y" $ do
-    --     Just safeAdd <- solcRuntime "SafeAdd"
-    --       [i|
-    --       contract SafeAdd {
-    --         function add(uint x, uint y) public pure returns (uint z) {
-    --              require((z = x + y) >= x);
-    --         }
-    --       }
-    --       |]
-    --     let pre preVM = let [x, y] = getStaticAbiArgs preVM
-    --                     in (x .<= x + y)
-    --                        .&& (x .== y)
-    --                        .&& view (state . callvalue) preVM .== 0
-    --         post (prestate, poststate) =
-    --           let [_, y] = getStaticAbiArgs prestate
-    --           in case view result poststate of
-    --                   Just (VMSuccess (StaticSymBuffer out)) -> fromBytes out .== 2 * y
-    --                   _ -> sFalse
-    --     Left (_, res) <- runSMTWith z3 $ query $
-    --       verifyContract safeAdd (Just ("add(uint256,uint256)", [AbiUIntType 256, AbiUIntType 256])) [] SymbolicS pre (Just post)
-    --     putStrLn $ "successfully explored: " <> show (length res) <> " paths"
-      -- ,
+      testCase "x == y => x + y == 2 * y" $ do
+        Just safeAdd <- solcRuntime "SafeAdd"
+          [i|
+          contract SafeAdd {
+            function add(uint x, uint y) public pure returns (uint z) {
+                 require((z = x + y) >= x);
+            }
+          }
+          |]
+        let pre preVM = let [x, y] = getStaticAbiArgs preVM
+                        in (x .<= x + y)
+                           .&& (x .== y)
+                           .&& view (state . callvalue) preVM .== 0
+            post (prestate, poststate) =
+              let [_, y] = getStaticAbiArgs prestate
+              in case view result poststate of
+                      Just (VMSuccess (StaticSymBuffer out)) -> fromBytes out .== 2 * y
+                      _ -> sFalse
+        Left (_, res) <- runSMTWith z3 $ query $
+          verifyContract safeAdd (Just ("add(uint256,uint256)", [AbiUIntType 256, AbiUIntType 256])) [] SymbolicS BoundedCD pre (Just post)
+        putStrLn $ "successfully explored: " <> show (length res) <> " paths"
+
+      ,
+
         testCase "factorize 973013" $ do
         Just factor <- solcRuntime "PrimalityCheck"
           [i|
@@ -312,8 +314,8 @@ main = defaultMain $ testGroup "hevm"
           |]
         bs <- runSMTWith cvc4 $ query $ do
           Right vm <- checkAssert factor (Just ("factor(uint256,uint256)", [AbiUIntType 256, AbiUIntType 256])) []
-          case view (state . calldata . _1) vm of
-            StaticSymBuffer bs -> BS.pack <$> mapM (getValue.fromSized) bs
+          case view (state . calldata) vm of
+            CalldataBuffer (StaticSymBuffer bs) -> BS.pack <$> mapM (getValue.fromSized) bs
             _ -> error "unexpected"
 
         let [AbiUInt 256 x, AbiUInt 256 y] = decodeAbiValues [AbiUIntType 256, AbiUIntType 256] bs
@@ -344,7 +346,7 @@ main = defaultMain $ testGroup "hevm"
               in case view result poststate of
                 Just (VMSuccess _) -> prex + 2 * y .== postx
                 _ -> sFalse
-        Left (_, res) <- runSMT $ query $ verifyContract c (Just ("f(uint256)", [AbiUIntType 256])) [] SymbolicS pre post
+        Left (_, res) <- runSMT $ query $ verifyContract c (Just ("f(uint256)", [AbiUIntType 256])) [] SymbolicS BoundedCD pre post
         putStrLn $ "successfully explored: " <> show (length res) <> " paths"
         ,
         -- Inspired by these `msg.sender == to` token bugs
@@ -376,9 +378,9 @@ main = defaultMain $ testGroup "hevm"
                 Just (VMSuccess _) -> prex + prey .== postx + (posty :: SWord 256)
                 _ -> sFalse
         bs <- runSMT $ query $ do
-          Right vm <- verifyContract c (Just ("f(uint256,uint256)", [AbiUIntType 256, AbiUIntType 256])) [] SymbolicS pre (Just post)
-          case view (state . calldata . _1) vm of
-            StaticSymBuffer bs -> BS.pack <$> mapM (getValue.fromSized) bs
+          Right vm <- verifyContract c (Just ("f(uint256,uint256)", [AbiUIntType 256, AbiUIntType 256])) [] SymbolicS BoundedCD pre (Just post)
+          case view (state . calldata) vm of
+            CalldataBuffer (StaticSymBuffer bs) -> BS.pack <$> mapM (getValue.fromSized) bs
             _ -> error "unexpected"
 
         let [AbiUInt 256 x, AbiUInt 256 y] = decodeAbiValues [AbiUIntType 256, AbiUIntType 256] bs
@@ -449,8 +451,8 @@ main = defaultMain $ testGroup "hevm"
             |]
           bs <- runSMT $ query $ do
             Right vm <- checkAssert c (Just ("deposit(uint8)", [AbiUIntType 8])) []
-            case view (state . calldata . _1) vm of
-              StaticSymBuffer bs -> BS.pack <$> mapM (getValue.fromSized) bs
+            case view (state . calldata) vm of
+              CalldataBuffer (StaticSymBuffer bs) -> BS.pack <$> mapM (getValue.fromSized) bs
               _ -> error "unexpected"
 
           let [deposit] = decodeAbiValues [AbiUIntType 8] bs
@@ -507,8 +509,8 @@ main = defaultMain $ testGroup "hevm"
             |]
           bs <- runSMTWith z3 $ query $ do
             Right vm <- checkAssert c (Just ("f(uint256,uint256,uint256,uint256)", replicate 4 (AbiUIntType 256))) []
-            case view (state . calldata . _1) vm of
-              StaticSymBuffer bs -> BS.pack <$> mapM (getValue.fromSized) bs
+            case view (state . calldata) vm of
+              CalldataBuffer (StaticSymBuffer bs) -> BS.pack <$> mapM (getValue.fromSized) bs
               _ -> error "unexpected"
               
           let [AbiUInt 256 x,
@@ -578,7 +580,7 @@ main = defaultMain $ testGroup "hevm"
           Just c <- solcRuntime "C" code
           Just a <- solcRuntime "A" code
           Right cex <- runSMT $ query $ do
-            vm0 <- abstractVM (Just ("call_A()", [])) [] c SymbolicS
+            vm0 <- abstractVM (Just ("call_A()", [])) [] c SymbolicS BoundedCD
             store <- freshArray (show aAddr) Nothing
             let vm = vm0
                   & set (state . callvalue) 0
@@ -625,7 +627,7 @@ main = defaultMain $ testGroup "hevm"
           -- should find a counterexample
           Left (_, res) <- runSMTWith z3{verbose=True} $ do
 --            setTimeOut 20000
-            query $ checkAssert c Nothing []
+            query $ checkAssertBuffer c
           putStrLn $ "successfully explored: " <> show (length res) <> " paths"
     ]
   , testGroup "Equivalence checking"
@@ -642,7 +644,7 @@ main = defaultMain $ testGroup "hevm"
         -- }                                 }
         let aPrgm = hex "602060006000376000805160008114601d5760018114602457fe6029565b8191506029565b600191505b50600160015250"
             bPrgm = hex "6020600060003760005160008114601c5760028114602057fe6021565b6021565b5b506001600152"
-        runSMTWith z3 $ query $ do
+        runSMTWith cvc4 $ query $ do
           Right counterexample <- equivalenceCheck aPrgm bPrgm Nothing Nothing
           return ()
 
@@ -656,7 +658,7 @@ runSimpleVM :: ByteString -> ByteString -> Maybe ByteString
 runSimpleVM x ins = case loadVM x of
   Nothing -> Nothing
   Just vm ->
-    case runState (assign (state.calldata) (ConcreteBuffer ins) >> exec) vm of
+    case runState (assign (state.calldata) (CalldataBuffer $ ConcreteBuffer ins) >> exec) vm of
       (VMSuccess (ConcreteBuffer bs), _) -> Just bs
       _ -> Nothing
 
@@ -722,8 +724,8 @@ runStatements stmts args t = do
 
 getStaticAbiArgs :: VM -> [SWord 256]
 getStaticAbiArgs vm =
-  let SymbolicBuffer bs = ditch 4 $ view (state . calldata . _1) vm
-  in fmap (\i -> fromBytes $ take 32 (drop (i*32) bs)) [0..((length bs) `div` 32 - 1)]
+  let CalldataBuffer (StaticSymBuffer bs) = view (state . calldata) vm
+  in fmap (\i -> fromBytes $ take 32 (drop (i*32) (drop 4 bs))) [0..((length (drop 4 bs)) `div` 32 - 1)]
 
 -- includes shaving off 4 byte function sig
 decodeAbiValues :: [AbiType] -> ByteString -> [AbiValue]

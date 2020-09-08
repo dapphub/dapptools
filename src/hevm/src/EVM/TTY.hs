@@ -12,7 +12,7 @@ import Brick.Widgets.List
 
 import EVM
 import EVM.ABI (abiTypeSolidity, decodeAbiValue, AbiType(..), emptyAbi)
-import EVM.Symbolic (SymWord(..))
+import EVM.Symbolic (SymWord(..), Calldata(..))
 import EVM.SymExec (maxIterationsReached)
 import EVM.Dapp (DappInfo, dappInfo)
 import EVM.Dapp (dappUnitTests, unitTestMethods, dappSolcByName, dappSolcByHash, dappSources)
@@ -868,12 +868,16 @@ prettyIfConcrete (StaticSymBuffer x) = show x
 prettyIfConcrete (DynamicSymBuffer x) = show x
 prettyIfConcrete (ConcreteBuffer x) = prettyHex 40 x
 
+prettyIfConcreteCd :: Calldata -> String
+prettyIfConcreteCd (CalldataBuffer bf) = prettyIfConcrete bf
+prettyIfConcreteCd (CalldataDynamic (x, l)) = show x
+
 drawTracePane :: UiVmState -> UiWidget
 drawTracePane s =
   case view uiShowMemory s of
     True ->
       hBorderWithLabel (txt "Calldata")
-      <=> str (prettyIfConcrete $ view (uiVm . state . calldata) s)
+      <=> str (prettyIfConcreteCd $ view (uiVm . state . calldata) s)
       <=> hBorderWithLabel (txt "Returndata")
       <=> str (prettyIfConcrete (view (uiVm . state . returndata) s))
       <=> hBorderWithLabel (txt "Output")

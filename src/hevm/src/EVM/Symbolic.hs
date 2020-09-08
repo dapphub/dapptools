@@ -210,7 +210,6 @@ readByteOrZero'' i bs =
   (bs .!! (sFromIntegral i))
   (literal 0)
 
-
 -- Generates a ridiculously large set of constraints (roughly 25k) when
 -- the index is symbolic, but it still seems (kind of) manageable
 -- for the solvers.
@@ -284,11 +283,25 @@ altReadSWord (S _ i) x =
 read32At :: SInteger -> SList (WordN 8) -> SymWord
 read32At i x = sw256 $ fromBytes $ [x .!! literal i | i <- [0..31]]
 
+-- | Although calldata can be modeled perfectly well directly as a Buffer,
+-- we allow for it to take on a special form; the pair ([SWord 8], SWord 32)
+-- where the second argument is understood as the length of the list.
+-- This allows us to 'fake' dynamically sized calldata arrays in a way
+-- that has proven more efficient than `SList`.
+data Calldata
+  = CalldataBuffer Buffer
+  | CalldataDynamic ([SWord 8], SWord 32)
+  deriving Show
+
 -- a whole foldable instance seems overkill, but length is always good to have!
 len :: Buffer -> SymWord --SWord 32
 len (DynamicSymBuffer a) = sw256 $ sFromIntegral $ SL.length a
 len (StaticSymBuffer bs) = litWord . num $ length bs
 len (ConcreteBuffer bs) = litWord . num $ BS.length bs
+
+cdlen :: Calldata -> SymWord
+cdlen (CalldataBuffer bf) = len bf
+cdlen (CalldataDynamic (_, a)) = sw256 $ sFromIntegral a
 
 grab :: Int -> Buffer -> Buffer
 grab n (StaticSymBuffer bs) = StaticSymBuffer $ take n bs
@@ -377,6 +390,20 @@ readSWord i bf = case (maybeLitWord i, bf) of
   (Just i', StaticSymBuffer x) -> readSWord' i' x
   (Just i', ConcreteBuffer x) -> num $ Concrete.readMemoryWord i' x
   _  -> readSWord'' i (dynamize bf)
+
+
+select' :: (Ord b, Num b, SymVal b, Mergeable a) => [a] -> a -> SBV b -> a
+select' xs err ind = walk xs ind err
+    where walk []     _ acc = acc
+          walk (e:es) i acc = walk es (i-1) (ite (i .== 0) e acc)
+
+-- Generates a ridiculously large set of constraints (roughly 25k) when
+-- the index is symbolic, but it still seems (kind of) manageable
+-- for the solvers.
+readStaticWordWithBound :: SWord 32 -> ([SWord 8], SWord 32) -> SymWord
+readStaticWordWithBound ind (xs, bound) =
+  let boundedList = [ite (i .<= bound) x 0 | (x, i) <- zip xs [1..]]
+  in sw256 . fromBytes $ [select' boundedList 0 (ind + j) | j <- [0..31]]
 
 -- | Custom instances for SymWord, many of which have direct
 -- analogues for concrete words defined in Concrete.hs
