@@ -95,6 +95,7 @@ let
     "loops/while_1_infinite.sol"
 
     # --- hevm timeout ---
+    "types/array_dynamic_3_fail.sol"
     "types/array_aliasing_storage_1.sol"
     "types/array_aliasing_memory_1.sol"
     "types/array_aliasing_memory_2.sol"
