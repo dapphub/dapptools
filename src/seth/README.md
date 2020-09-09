@@ -70,6 +70,7 @@ Contents
       * [`seth call`]
       * [`seth calldata`]
       * [`seth chain`]
+      * [`seth chain-id`]
       * [`seth code`]
       * [`seth estimate`]
       * [`seth events`]
@@ -460,6 +461,10 @@ genesis block hash.
 Outputs one of `ethlive`, `etclive`, `kovan`, `ropsten`, `goerli`, `morden`,
 `rinkeby`, or `unknown`.
 
+### `seth chain-id`
+
+Print the ethereum chain id. `1` for Mainnet, `42` for Kovan, etc.
+
 ### `seth code`
 
 Print the bytecode of a contract.
@@ -649,6 +654,7 @@ Show all fields unless `<field>` is given.
 [`seth call`]: #seth-call
 [`seth calldata`]: #seth-calldata
 [`seth chain`]: #seth-chain
+[`seth chain-id`]: #seth-chain-id
 [`seth code`]: #seth-code
 [`seth estimate`]: #seth-estimate
 [`seth events`]: #seth-events
