@@ -558,9 +558,9 @@ main = defaultMain $ testGroup "hevm"
           Right counterexample <- runSMTWith cvc4 $ query $ checkAssert c (Just ("f(uint256,uint256)", [AbiUIntType 256, AbiUIntType 256])) []
           putStrLn $ "found counterexample:"
 
+       ,
 
-      ,
-         testCase "multiple contracts" $ do
+        testCase "multiple contracts" $ do
           let code =
                 [i|
                   contract C {
@@ -589,46 +589,28 @@ main = defaultMain $ testGroup "hevm"
                                            set EVM.storage (Symbolic store)))
             verify vm Nothing Nothing (Just checkAssertions)
           putStrLn $ "found counterexample:"
-    -- ,
-    --      testCase "dynamic bytes (calldataload)" $ do
-    --       Just c <- solcRuntime "C"
-    --         [i|
-    --           contract C
-    --           {
-    --           function f() public pure {
-    --             uint y;
-    --             uint z;
-    --             assembly {
-    --               y := calldataload(12)
-    --               z := calldataload(31)
-    --             }
-    --             assert(y == z);
-    --           }
-    --           }
-    --         |]
-    --       -- should find a counterexample
-    --       Right cex <- runSMTWith z3 $ do
-    --         query $ checkAssert c Nothing []
-    --       putStrLn $ "found counterexample"
-
-
-    --  ,
-         testCase "dynamic bytes (abi decoding)" $ do
+    ,
+         testCase "dynamic bytes (calldataload)" $ do
           Just c <- solcRuntime "C"
             [i|
               contract C
               {
-               function f(bytes memory b1, bytes memory b2) public pure {
-                  b1 = b2;
-                  assert(b1[1] == b2[1]);
+              function f() public pure {
+                uint y;
+                uint z;
+                assembly {
+                  y := calldataload(12)
+                  z := calldataload(31)
                 }
+                assert(y == z);
+              }
               }
             |]
           -- should find a counterexample
-          Left (_, res) <- runSMTWith z3{verbose=True} $ do
---            setTimeOut 20000
-            query $ checkAssertBuffer c
-          putStrLn $ "successfully explored: " <> show (length res) <> " paths"
+          Right cex <- runSMTWith z3 $ do
+            query $ checkAssert c Nothing []
+          putStrLn $ "found counterexample"
+
     ]
   , testGroup "Equivalence checking"
     [

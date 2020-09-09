@@ -12,10 +12,10 @@
 
 module Main where
 
-import EVM (StorageModel(..))
+import EVM (StorageModel(..), CalldataModel(..))
 import qualified EVM
 import EVM.Concrete (createAddress, w256)
-import EVM.Symbolic (forceLitBytes, litAddr, w256lit, sw256, SymWord(..), len)
+import EVM.Symbolic (forceLitBytes, litAddr, w256lit, sw256, SymWord(..), len, Calldata(..))
 import qualified EVM.FeeSchedule as FeeSchedule
 import qualified EVM.Fetch
 import qualified EVM.Flatten
@@ -57,6 +57,7 @@ import Data.Text.IO               (hPutStr)
 import Data.Maybe                 (fromMaybe, fromJust)
 import Data.Version               (showVersion)
 import Data.SBV hiding (Word, solver, verbose, name)
+import qualified Data.SBV.List as SList
 import qualified Data.SBV as SBV
 import Data.SBV.Control hiding (Version, timeout, create)
 import System.IO                  (hFlush, hPrint, stdout, stderr)
@@ -110,17 +111,18 @@ data Command w
       , block       :: w ::: Maybe W256       <?> "Block state is be fetched from"
 
   -- symbolic execution opts
-      , jsonFile      :: w ::: Maybe String       <?> "Filename or path to dapp build output (default: out/*.solc.json)"
-      , dappRoot      :: w ::: Maybe String       <?> "Path to dapp project root directory (default: . )"
-      , storageModel  :: w ::: Maybe StorageModel <?> "Select storage model: ConcreteS, SymbolicS (default) or InitialS"
-      , sig           :: w ::: Maybe Text         <?> "Signature of types to decode / encode"
-      , arg           :: w ::: [String]           <?> "Values to encode"
-      , debug         :: w ::: Bool               <?> "Run interactively"
-      , getModels     :: w ::: Bool               <?> "Print example testcase for each execution path"
-      , smttimeout    :: w ::: Maybe Integer      <?> "Timeout given to SMT solver in milliseconds (default: 20000)"
-      , maxIterations :: w ::: Maybe Integer      <?> "Number of times we may revisit a particular branching point"
-      , solver        :: w ::: Maybe Text         <?> "Used SMT solver: z3 (default) or cvc4"
-      , smtoutput     :: w ::: Bool               <?> "Print verbose smt output"
+      , jsonFile      :: w ::: Maybe String        <?> "Filename or path to dapp build output (default: out/*.solc.json)"
+      , dappRoot      :: w ::: Maybe String        <?> "Path to dapp project root directory (default: . )"
+      , storageModel  :: w ::: Maybe StorageModel  <?> "Select storage model: ConcreteS, SymbolicS (default) or InitialS"
+      , calldataModel :: w ::: Maybe CalldataModel <?> "Select calldata model: BoundedCD (default), or DynamicCD"
+      , sig           :: w ::: Maybe Text          <?> "Signature of types to decode / encode"
+      , arg           :: w ::: [String]            <?> "Values to encode"
+      , debug         :: w ::: Bool                <?> "Run interactively"
+      , getModels     :: w ::: Bool                <?> "Print example testcase for each execution path"
+      , smttimeout    :: w ::: Maybe Integer       <?> "Timeout given to SMT solver in milliseconds (default: 20000)"
+      , maxIterations :: w ::: Maybe Integer       <?> "Number of times we may revisit a particular branching point"
+      , solver        :: w ::: Maybe Text          <?> "Used SMT solver: z3 (default) or cvc4"
+      , smtoutput     :: w ::: Bool                <?> "Print verbose smt output"
       }
   | Equivalence -- prove equivalence between two programs
       { codeA         :: w ::: ByteString    <?> "Bytecode of the first program"
@@ -681,7 +683,7 @@ vmFromCommand cmd = do
         value'   = word value 0
         caller'  = addr caller 0
         origin'  = addr origin 0
-        calldata' = ConcreteBuffer $ bytes calldata ""
+        calldata' = CalldataBuffer $ ConcreteBuffer $ bytes calldata ""
         codeType = if create cmd then EVM.InitCode else EVM.RuntimeCode
         address' = if create cmd
               then createAddress origin' (word nonce 0)
@@ -716,18 +718,29 @@ symvmFromCommand :: Command Options.Unwrapped -> Query EVM.VM
 symvmFromCommand cmd = do
   caller' <- maybe (SAddr <$> freshVar_) (return . litAddr) (caller cmd)
   callvalue' <- maybe (sw256 <$> freshVar_) (return . w256lit) (value cmd)
-  calldata' <- case (calldata cmd, sig cmd) of
-    -- static calldata (up to 256 bytes)
-    (Nothing, Nothing) -> do
-      StaticSymBuffer <$> sbytes256
+  (calldata', preCond) <- case (calldata cmd, sig cmd, calldataModel cmd) of
+    -- dynamic calldata via smt lists
+    (Nothing, Nothing, Just DynamicCD) -> do
+      cd <- freshVar_
+      return (CalldataBuffer (DynamicSymBuffer cd),
+              SList.length cd .< 1000 .&&
+               sw256 (sFromIntegral (SList.length cd)) .< sw256 1000)
+
+    -- dynamic calldata via (bounded) haskell list
+    (Nothing, Nothing, _) -> do
+      cd <- sbytes256
+      len <- freshVar_
+      return (CalldataDynamic (cd, len), len .<= 256)
+
     -- fully concrete calldata
-    (Just c, Nothing) ->
-      return $ ConcreteBuffer $ decipher c
+    (Just c, Nothing, _) ->
+      return (CalldataBuffer (ConcreteBuffer $ decipher c), sTrue)
     -- calldata according to given abi with possible specializations from the `arg` list
-    (Nothing, Just sig') -> do
+    (Nothing, Just sig', _) -> do
       method' <- io $ functionAbi sig'
       let typs = snd <$> view methodInputs method'
-      StaticSymBuffer <$> staticCalldata (view methodSignature method') typs (arg cmd)
+      cd <- staticCalldata (view methodSignature method') typs (arg cmd)
+      return (CalldataBuffer (StaticSymBuffer cd), sTrue)
 
     _ -> error "incompatible options: calldata and abi"
 
@@ -773,7 +786,7 @@ symvmFromCommand cmd = do
     (_, _, Nothing) ->
       error $ "must provide at least (rpc + address) or code"
 
-  return vm
+  return $ vm & over EVM.pathConditions (<> [preCond])
 
   where
     decipher = hexByteString "bytes" . strip0x

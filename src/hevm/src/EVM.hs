@@ -315,7 +315,7 @@ instance ParseField StorageModel
 
 -- | Calldata can either by a normal buffer, or a custom "pseudo dynamic" encoding. See EVM.Symbolic for details
 data CalldataModel
-  = BufferCD
+  = DynamicCD
   | BoundedCD
   deriving (Read, Show)
 
@@ -2213,7 +2213,7 @@ copyCalldataToMemory (CalldataBuffer bf) size xOffset yOffset =
 copyCalldataToMemory (CalldataDynamic (b, l)) size xOffset yOffset =
   case (maybeLitWord size, maybeLitWord xOffset, maybeLitWord yOffset) of
     (Just size', Just xOffset', Just yOffset') ->
-      copyBytesToMemory (StaticSymBuffer [ite (i .<= l) x 0 | (x, i) <- zip b [1..]]) size' xOffset' yOffset'
+      copyBytesToMemory (StaticSymBuffer [ite (i .<= l) x 0 | (x, i) <- zip b [1..]]) (litWord size') (litWord xOffset') (litWord yOffset')
     _ ->
       copyBytesToMemory (DynamicSymBuffer (subList (implode b) 0 (sFromIntegral l))) size xOffset yOffset
 

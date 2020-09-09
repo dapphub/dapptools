@@ -187,7 +187,7 @@ checksat b = do push 1
                 b <- getInfo Name
                 m <- case b of
                        -- some custom strategies for z3 which have proven to be quite useful (can still be tweaked)
-                       Resp_Name "Z3" -> checkSatUsing "(check-sat-using (then (using-params simplify :cache-all true) smt))"
+                       Resp_Name "Z3" -> checkSatUsing "(check-sat-using (then (using-params simplify :push_ite_bv true :ite_extra_rules true) smt))"
                        _ -> checkSat
                 pop 1
                 return m

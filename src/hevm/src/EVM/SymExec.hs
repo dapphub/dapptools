@@ -99,7 +99,7 @@ abstractVM :: Maybe (Text, [AbiType]) -> [String] -> ByteString -> StorageModel 
 abstractVM typesignature concreteArgs x storagemodel calldatamodel = do
   (cd',pathCond) <- case typesignature of
            Nothing -> case calldatamodel of
-                        BufferCD -> do
+                        DynamicCD -> do
                           list <- freshVar_
                           return (CalldataBuffer (DynamicSymBuffer list),
                             -- due to some current z3 shenanegans (possibly related to: https://github.com/Z3Prover/z3/issues/4635)
@@ -221,8 +221,8 @@ maxIterationsReached vm (Just maxIter) =
 type Precondition = VM -> SBool
 type Postcondition = (VM, VM) -> SBool
 
-checkAssertBuffer :: ByteString -> Query (Either (VM, [VM]) VM)
-checkAssertBuffer c = verifyContract c Nothing [] SymbolicS BufferCD (const sTrue) (Just checkAssertions)
+checkAssertDynamic :: ByteString -> Query (Either (VM, [VM]) VM)
+checkAssertDynamic c = verifyContract c Nothing [] SymbolicS DynamicCD (const sTrue) (Just checkAssertions)
 
 
 checkAssert :: ByteString -> Maybe (Text, [AbiType]) -> [String] -> Query (Either (VM, [VM]) VM)

@@ -62,7 +62,10 @@ forceLitBytes = BS.pack . fmap (fromSized . fromJust . unliteral)
 
 forceBuffer :: Buffer -> ByteString
 forceBuffer (ConcreteBuffer b) = b
-forceBuffer (SymbolicBuffer b) = forceLitBytes b
+forceBuffer (StaticSymBuffer b) = forceLitBytes b
+forceBuffer (DynamicSymBuffer b) = case unliteral b of
+  Just b' -> BS.pack $ fmap fromSized b'
+  Nothing -> error "unexpected symbolic argument"
 
 -- | Arithmetic operations on SymWord
 
@@ -331,13 +334,13 @@ readByteOrZero i (StaticSymBuffer bs) = readByteOrZero' i bs
 readByteOrZero i (ConcreteBuffer bs) = num $ Concrete.readByteOrZero i bs
 readByteOrZero i (DynamicSymBuffer bs) = readByteOrZero'' (literal $ num i) bs
 
--- pad up to 10000 bytes in the dynamic case
+-- pad up to 1000 bytes in the dynamic case
 sliceWithZero :: SymWord -> SymWord -> Buffer -> Buffer
 sliceWithZero (S _ o) (S _ s) bf = case (unliteral o, unliteral s, bf) of
   (Just o', Just s', StaticSymBuffer m) -> StaticSymBuffer (sliceWithZero' (num o') (num s') m)
   (Just o', Just s', ConcreteBuffer m)  -> ConcreteBuffer (Concrete.byteStringSliceWithDefaultZeroes (num o') (num s') m)
   (Just o', Just s', m)                 -> truncpad' (num s') (ditch (num o') m)
-  _                                     -> DynamicSymBuffer $ SL.subList (dynamize bf .++ literal (replicate 10000 0)) (sFromIntegral o) (sFromIntegral s)
+  _                                     -> DynamicSymBuffer $ SL.subList (dynamize bf .++ literal (replicate 1000 0)) (sFromIntegral o) (sFromIntegral s)
 
 writeMemory :: Buffer -> SymWord -> SymWord -> SymWord -> Buffer -> Buffer
 writeMemory bs1 n src dst bs0 =
