@@ -39,9 +39,12 @@ let
     "loops/while_loop_simple_5.sol"
     "loops/do_while_1_false_positives.sol"
     "loops/while_loop_array_assignment_storage_storage.sol"
+    "loops/while_nested_break.sol"
     "loops/while_nested_break_fail.sol"
+    "operators/delete_array.sol"
     "operators/delete_array_index_2d.sol"
-
+    "operators/delete_array_2d.sol"
+    "types/array_dynamic_3_fail.sol"
   ];
 
   ignored = [
@@ -90,16 +93,6 @@ let
     "loops/while_loop_simple_4.sol"
     "loops/while_1.sol"
     "loops/while_1_infinite.sol"
-
-    # these can pass with high enough timeout and --max-iterations
-    # but we keep them disabled for now to speed up the tests
-    "loops/for_loop_array_assignment_storage_memory.sol"
-    "loops/while_nested_break.sol"
-    "operators/delete_array.sol"
-    "operators/delete_array_2d.sol"
-    "operators/delete_array_index_2d.sol"
-    "types/array_dynamic_3_fail.sol"
-    "types/array_mapping_aliasing_2.sol"
 
     # --- hevm timeout ---
     "types/array_aliasing_storage_1.sol"
@@ -169,6 +162,9 @@ let
 
     # potential out of bounds array access
     "operators/delete_array_index.sol"
+    "operators/delete_array.sol"
+    "operators/delete_function.sol"
+    "operators/delete_array_2d.sol"
     "types/array_branches_2d.sol"
     "types/array_branches_3d.sol"
     "types/array_dynamic_1.sol"
@@ -178,7 +174,6 @@ let
     "types/tuple_assignment_array.sol"
     "types/array_dynamic_3.sol"
     "types/array_static_1.sol"
-    "operators/delete_function.sol"
 
     # bounds checking on enum args during abi decoding
     "typecast/enum_to_uint_max_value.sol"
