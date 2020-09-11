@@ -16,7 +16,7 @@ import EVM.Stepper (Stepper)
 import qualified EVM.Stepper as Stepper
 import qualified Control.Monad.Operational as Operational
 import EVM.Types hiding (Word)
-import EVM.Symbolic (litBytes, SymWord(..), sw256, Buffer(..))
+import EVM.Symbolic (SymWord(..), sw256)
 import EVM.Concrete (createAddress, Word)
 import qualified EVM.FeeSchedule as FeeSchedule
 import Data.SBV.Trans.Control

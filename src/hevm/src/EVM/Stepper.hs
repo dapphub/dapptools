@@ -33,7 +33,7 @@ import qualified EVM.Exec
 import Control.Lens (use)
 import Data.Binary.Get (runGetOrFail)
 import Data.Text (Text)
-import EVM.Symbolic (Buffer)
+import EVM.Types (Buffer)
 
 import EVM (EVM, VM, VMResult (VMFailure, VMSuccess), Error (Query, Choose), Query, Choose)
 import qualified EVM
