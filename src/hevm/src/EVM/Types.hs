@@ -84,6 +84,34 @@ instance (FromSizzleBV (WordN 256))
 instance (ToSizzleBV Addr)
 instance (FromSizzleBV (WordN 160))
 
+
+litBytes :: ByteString -> [SWord 8]
+litBytes bs = fmap (toSized . literal) (BS.unpack bs)
+
+-- | Operations over buffers (concrete or symbolic)
+
+-- | A buffer is a list of bytes. For concrete execution, this is simply `ByteString`.
+-- In symbolic settings, it is a list of symbolic bitvectors of size 8.
+data Buffer
+  = ConcreteBuffer ByteString
+  | SymbolicBuffer [SWord 8]
+  deriving (Show)
+
+instance Semigroup Buffer where
+  ConcreteBuffer a <> ConcreteBuffer b = ConcreteBuffer (a <> b)
+  ConcreteBuffer a <> SymbolicBuffer b = SymbolicBuffer (litBytes a <> b)
+  SymbolicBuffer a <> ConcreteBuffer b = SymbolicBuffer (a <> litBytes b)
+  SymbolicBuffer a <> SymbolicBuffer b = SymbolicBuffer (a <> b)
+
+instance Monoid Buffer where
+  mempty = ConcreteBuffer mempty
+
+instance EqSymbolic Buffer where
+  ConcreteBuffer a .== ConcreteBuffer b = literal (a == b)
+  ConcreteBuffer a .== SymbolicBuffer b = litBytes a .== b
+  SymbolicBuffer a .== ConcreteBuffer b = a .== litBytes b
+  SymbolicBuffer a .== SymbolicBuffer b = a .== b
+
 newtype Addr = Addr { addressWord160 :: Word160 }
   deriving (Num, Integral, Real, Ord, Enum, Eq, Bits, Generic)
 

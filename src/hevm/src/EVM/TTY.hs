@@ -12,7 +12,7 @@ import Brick.Widgets.List
 
 import EVM
 import EVM.ABI (abiTypeSolidity, decodeAbiValue, AbiType(..), emptyAbi)
-import EVM.Symbolic (SymWord(..), Buffer(..))
+import EVM.Symbolic (SymWord(..))
 import EVM.SymExec (maxIterationsReached)
 import EVM.Dapp (DappInfo, dappInfo)
 import EVM.Dapp (dappUnitTests, unitTestMethods, dappSolcByName, dappSolcByHash, dappSources)

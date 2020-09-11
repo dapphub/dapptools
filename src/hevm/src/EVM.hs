@@ -643,7 +643,7 @@ exec1 = do
         -- op: SHL
         0x1b -> stackOp2 (const g_verylow) $ \((S _ n), (S _ x)) -> sw256 $ sShiftLeft x n
         -- op: SHR
-        0x1c -> stackOp2 (const g_verylow) $ \((S _ n), (S _ x)) -> sw256 $ sShiftRight x n
+        0x1c -> stackOp2 (const g_verylow) $ uncurry shiftRight'
         -- op: SAR
         0x1d -> stackOp2 (const g_verylow) $ \((S _ n), (S _ x)) -> sw256 $ sSignedShiftArithRight x n
 

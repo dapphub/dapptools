@@ -34,9 +34,6 @@ w256lit = S Dull . literal . toSizzle
 litAddr :: Addr -> SAddr
 litAddr = SAddr . literal . toSizzle
 
-litBytes :: ByteString -> [SWord 8]
-litBytes bs = fmap (toSized . literal) (BS.unpack bs)
-
 maybeLitWord :: SymWord -> Maybe Word
 maybeLitWord (S whiff a) = fmap (C whiff . fromSizzle) (unliteral a)
 
@@ -95,6 +92,13 @@ sgt :: SymWord -> SymWord -> SymWord
 sgt (S _ x) (S _ y) =
   sw256 $ ite (sFromIntegral x .> (sFromIntegral y :: (SInt 256))) 1 0
 
+shiftRight' :: SymWord -> SymWord -> SymWord
+shiftRight' a@(S _ a') b@(S _ b') = case (num <$> unliteral a', b) of
+  (Just n, (S (FromBytes (SymbolicBuffer a)) i)) | n `mod` 8 == 0 && n <= 256 ->
+    let bs = replicate (n `div` 8) 0 <> (take ((256 - n) `div` 8) a)
+    in S (FromBytes (SymbolicBuffer bs)) (fromBytes bs)
+  _ -> sw256 $ sShiftRight b' a'
+
 -- | Operations over symbolic memory (list of symbolic bytes)
 swordAt :: Int -> [SWord 8] -> SymWord
 swordAt i bs = sw256 . fromBytes $ truncpad 32 $ drop i bs
@@ -147,9 +151,14 @@ select' xs err ind = walk xs ind err
 -- the index is symbolic, but it still seems (kind of) manageable
 -- for the solvers.
 readSWordWithBound :: SWord 32 -> Buffer -> SWord 32 -> SymWord
-readSWordWithBound ind (SymbolicBuffer xs) bound =
-  let boundedList = [ite (i .<= bound) x 0 | (x, i) <- zip xs [1..]]
-  in sw256 . fromBytes $ [select' boundedList 0 (ind + j) | j <- [0..31]]
+readSWordWithBound ind (SymbolicBuffer xs) bound = case (num <$> fromSized <$> unliteral ind, num <$> fromSized <$> unliteral bound) of
+  (Just i, Just b) ->
+    let bs = truncpad 32 $ drop i (take b xs)
+    in S (FromBytes (SymbolicBuffer bs)) (fromBytes bs)
+  _ -> 
+    let boundedList = [ite (i .<= bound) x 0 | (x, i) <- zip xs [1..]]
+    in sw256 . fromBytes $ [select' boundedList 0 (ind + j) | j <- [0..31]]
+
 readSWordWithBound ind (ConcreteBuffer xs) bound =
   case fromSized <$> unliteral ind of
     Nothing -> readSWordWithBound ind (SymbolicBuffer (litBytes xs)) bound
@@ -157,32 +166,6 @@ readSWordWithBound ind (ConcreteBuffer xs) bound =
        -- INVARIANT: bound should always be length xs for concrete bytes
        -- so we should be able to safely ignore it here
          litWord $ Concrete.readMemoryWord (num x') xs
-
-
--- | Operations over buffers (concrete or symbolic)
-
--- | A buffer is a list of bytes. For concrete execution, this is simply `ByteString`.
--- In symbolic settings, it is a list of symbolic bitvectors of size 8.
-data Buffer
-  = ConcreteBuffer ByteString
-  | SymbolicBuffer [SWord 8]
-  deriving (Show)
-
-instance Semigroup Buffer where
-  ConcreteBuffer a <> ConcreteBuffer b = ConcreteBuffer (a <> b)
-  ConcreteBuffer a <> SymbolicBuffer b = SymbolicBuffer (litBytes a <> b)
-  SymbolicBuffer a <> ConcreteBuffer b = SymbolicBuffer (a <> litBytes b)
-  SymbolicBuffer a <> SymbolicBuffer b = SymbolicBuffer (a <> b)
-
-instance Monoid Buffer where
-  mempty = ConcreteBuffer mempty
-
-instance EqSymbolic Buffer where
-  ConcreteBuffer a .== ConcreteBuffer b = literal (a == b)
-  ConcreteBuffer a .== SymbolicBuffer b = litBytes a .== b
-  SymbolicBuffer a .== ConcreteBuffer b = a .== litBytes b
-  SymbolicBuffer a .== SymbolicBuffer b = a .== b
-
 
 -- a whole foldable instance seems overkill, but length is always good to have!
 len :: Buffer -> Int
