@@ -133,6 +133,7 @@ loadSymVM x initStore model addr callvalue' calldata' =
     }) & set (env . contracts . at (createAddress ethrunAddress 1))
              (Just (contractWithStore x initStore))
 
+
 -- | Interpreter which explores all paths at
 -- | branching points.
 -- | returns a list of possible final evm states
@@ -170,9 +171,24 @@ interpret fetcher maxIter =
                           pop 1
                           return $ a <> b
             Just n -> interpret fetcher maxIter (Stepper.evm (continue (not n)) >>= k)
-        Stepper.Wait q ->
-          do m <- liftIO (fetcher q)
-             interpret fetcher maxIter (Stepper.evm m >>= k)
+        Stepper.Wait q -> do
+          let performQuery =
+                do m <- liftIO (fetcher q)
+                   interpret fetcher maxIter (Stepper.evm m >>= k)
+
+          case q of
+            PleaseAskSMT cond pathcond continue -> do
+              codelocation <- getCodeLocation <$> get
+              iters <- use (iterations . at codelocation)
+              case iters of
+                -- if this is the first time we are branching at this point,
+                -- explore both branches without consulting SMT.
+                -- Exploring too many branches is a lot cheaper than
+                -- consulting our SMT solver.
+                Nothing -> interpret fetcher maxIter (Stepper.evm (continue EVM.Unknown) >>= k)
+                _ -> performQuery
+            _ -> performQuery
+
         Stepper.EVM m ->
           State.state (runState m) >>= interpret fetcher maxIter . k
 
@@ -220,6 +236,7 @@ verify preState maxIter rpcinfo maybepost = do
   case maybepost of
     (Just post) -> do
       let livePaths = pruneDeadPaths results
+      -- can also do these queries individually (even concurrently!). Could save time and report multiple violations
           postC = sOr $ fmap (\postState -> (sAnd (view pathConditions postState)) .&& sNot (post (preState, postState))) livePaths
       -- is there any path which can possibly violate
       -- the postcondition?
@@ -233,7 +250,7 @@ verify preState maxIter rpcinfo maybepost = do
                     return $ Left (preState, livePaths)
         Sat -> return $ Right preState
 
-    Nothing -> do io $ putStrLn "Q.E.D."
+    Nothing -> do io $ putStrLn "Nothing to check"
                   return $ Left (preState, pruneDeadPaths results)
 
 -- | Compares two contract runtimes for trace equivalence by running two VMs and comparing the end states.
