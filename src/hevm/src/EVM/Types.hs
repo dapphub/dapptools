@@ -14,6 +14,8 @@ import Data.Aeson (FromJSONKey (..), FromJSONKeyFunction (..))
 #endif
 
 import Data.SBV
+import Data.SBV.List ((.++))
+import qualified Data.SBV.List as SL
 import Data.Kind
 import Data.Monoid ((<>))
 import Data.Bifunctor (first)
