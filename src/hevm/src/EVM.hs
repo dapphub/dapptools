@@ -250,7 +250,7 @@ data TxState = TxState
 data SubState = SubState
   { _selfdestructs   :: [Addr]
   , _touchedAccounts :: [Addr]
-  , _refunds         :: [(Addr, Word)] -- TODO: make symbolic as well
+  , _refunds         :: Word -- TODO: make symbolic as well
   -- in principle we should include logs here, but do not for now
   }
 
@@ -406,7 +406,7 @@ makeVm o = VM
     , _origin = vmoptOrigin o
     , _toAddr = vmoptAddress o
     , _value = vmoptValue o
-    , _substate = SubState mempty mempty mempty
+    , _substate = SubState mempty mempty 0
     , _isCreate = vmoptCreate o
     , _txReversion = Map.fromList
       [(vmoptAddress o, vmoptContract o)]
@@ -953,14 +953,17 @@ exec1 = do
                                                 (ite (current .== original) (litWord g_sreset)
                                                      (litWord g_sload)))
 
-                        anticost = ite (current .== new) 0
-                                               (ite (current .== original)
-                                                    (ite (original ./= 0 .&& new .== 0) (litWord r_sclear) 0)
-                                                    (ite (original ./= 0)
-                                                         (ite (new .== 0) (litWord r_sclear) 0)
-                                                         (ite (original .== 0)
-                                                              (litWord (g_sset   - g_sload))
-                                                              (litWord (g_sreset - g_sload)))))
+                        anticost = ite (current .== new)
+                                       0
+                                       (ite (current .== original)
+                                            (ite (original ./= 0 .&& new .== 0) (litWord r_sclear) 0)
+                                            ((ite (original ./= 0)
+                                                  (ite (new .== 0) (litWord r_sclear) 0)
+                                                  0)
+                                            +
+                                             (ite (original .== 0)
+                                                  (litWord (g_sset   - g_sload))
+                                                  (litWord (g_sreset - g_sload)))))
 
                         unrefund = ite (current ./= new .&&
                                         current ./= original .&&
@@ -1627,7 +1630,7 @@ finalize = do
   let
     burnRemainingGas = use (state . gas) >>= flip burn noop
     revertContracts  = use (tx . txReversion) >>= assign (env . contracts)
-    revertSubstate   = assign (tx . substate) (SubState mempty mempty mempty)
+    revertSubstate   = assign (tx . substate) (SubState mempty mempty 0)
 
   use result >>= \case
     Nothing ->
@@ -1650,7 +1653,7 @@ finalize = do
   -- compute and pay the refund to the caller and the
   -- corresponding payment to the miner
   txOrigin     <- use (tx . origin)
-  sumRefunds   <- (sum . (snd <$>)) <$> (use (tx . substate . refunds))
+  sumRefunds   <- use (tx . substate . refunds)
   miner        <- use (block . coinbase)
   blockReward  <- r_block <$> (use (block . schedule))
   gasPrice     <- use (tx . gasprice)
@@ -1791,7 +1794,7 @@ refundSym n = case maybeLitWord n of
 refund :: Word -> EVM ()
 refund n = do
   self <- use (state . contract)
-  pushTo (tx . substate . refunds) (self, n)
+  tx . substate . refunds += n
 
 unRefundSym :: SymWord -> EVM ()
 unRefundSym n = case maybeLitWord n of
@@ -1800,10 +1803,7 @@ unRefundSym n = case maybeLitWord n of
 
 unRefund :: Word -> EVM ()
 unRefund n = do
-  self <- use (state . contract)
-  refs <- use (tx . substate . refunds)
-  assign (tx . substate . refunds)
-    (filter (\(a,b) -> not (a == self && b == n)) refs)
+  tx . substate . refunds -= n
 
 touchAccount :: Addr -> EVM()
 touchAccount = pushTo ((tx . substate) . touchedAccounts)

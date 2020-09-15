@@ -884,6 +884,8 @@ drawTracePane s =
       <=> str (maybe "" show (view (uiVm . result) s))
       <=> hBorderWithLabel (txt "Cache")
       <=> str (show (view (uiVm . cache . path) s))
+      <=> hBorderWithLabel (txt "refund")
+      <=> str (show (view (uiVm . tx . substate . refunds) s))
       <=> hBorderWithLabel (txt "Memory")
       <=> viewport TracePane Vertical
             (str (prettyIfConcrete (view (uiVm . state . memory) s)))
