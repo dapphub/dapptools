@@ -2171,20 +2171,15 @@ accessUnboundedMemoryRange
   -> SymWord
   -> EVM ()
   -> EVM ()
-accessUnboundedMemoryRange fees f l continue = do
-  m0 <- use (state . memorySize)
-  case (maybeLitWord f, maybeLitWord l, unliteral m0) of
-    (Just f', Just l', Just (num -> m0')) -> do
-       let m1 = 32 * ceilDiv (max m0' (f' + l')) 32
-       burn (memoryCost fees m1 - memoryCost fees m0') $ do
-         assign (state . memorySize) (num m1)
-         continue
-    _ -> do
-     --  let m1 = 32 * ceilDiv (max m0 (num f + num l)) 32
-     -- todo: consult smt here
-     --  assign (state . memorySize) (num m1)
-       continue
-
+accessUnboundedMemoryRange fees f l continue =
+  if maybe False ((==) 0) (maybeLitWord l) then continue
+  -- TODO: check for l .== 0 in the symbolic case as well
+  else do
+    m0 <- sw256 <$> sFromIntegral <$> use (state . memorySize)
+    let m1@(S _ m1') = 32 * ceilSDiv (smax m0 (f + l)) 32
+    burnSym (memoryCost fees m1 - memoryCost fees m0) $ do
+      assign (state . memorySize) (sFromIntegral m1')
+      continue
 
 accessMemoryRange
   :: FeeSchedule Word
@@ -2611,12 +2606,12 @@ costOfPrecompile (FeeSchedule {..}) precompileAddr input =
     _ -> error ("unimplemented precompiled contract " ++ show precompileAddr)
 
 -- Gas cost of memory expansion
-memoryCost :: FeeSchedule Word -> Word -> Word
+memoryCost :: FeeSchedule Word -> SymWord -> SymWord
 memoryCost FeeSchedule{..} byteCount =
   let
-    wordCount = ceilDiv byteCount 32
-    linearCost = g_memory * wordCount
-    quadraticCost = div (wordCount * wordCount) 512
+    wordCount = ceilSDiv byteCount 32
+    linearCost = litWord g_memory * wordCount
+    quadraticCost = (wordCount * wordCount) `sDiv` 512
   in
     linearCost + quadraticCost
 
