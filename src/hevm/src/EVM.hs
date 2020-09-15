@@ -813,10 +813,16 @@ exec1 = do
                   accessUnboundedMemoryRange fees xTo xSize $ do
                     next
                     assign (state . stack) xs
-                    -- TODO: consult smt about possible failure here
-                    -- if len (the state returndata) < num xFrom + num xSize
-                    -- then vmError InvalidMemoryAccess
-                    copyBytesToMemory (the state returndata) xSize xFrom xTo
+                    case unliteral $ len (the state returndata) .< xFrom + xSize of
+                      Nothing ->
+                        --TODO: consult smt about possible failure here
+                        copyBytesToMemory (the state returndata) xSize xFrom xTo
+
+                      Just res ->
+                         if res
+                         then vmError InvalidMemoryAccess
+                         else copyBytesToMemory (the state returndata) xSize xFrom xTo
+
             _ -> underrun
 
         -- op: EXTCODEHASH
