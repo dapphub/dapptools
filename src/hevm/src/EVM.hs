@@ -225,7 +225,7 @@ data FrameState = FrameState
   , _pc           :: Int
   , _stack        :: [SymWord]
   , _memory       :: Buffer
-  , _memorySize   :: SWord 32
+  , _memorySize   :: SymWord
   , _calldata     :: Calldata
   , _callvalue    :: SymWord
   , _caller       :: SAddr
@@ -723,7 +723,7 @@ exec1 = do
         0x35 -> stackOp1 (const g_verylow) $
           case the state calldata of
             CalldataBuffer bf -> flip readSWord bf
-            CalldataDynamic bf -> \(S _ i) -> readStaticWordWithBound (sFromIntegral i) bf
+            CalldataDynamic bf -> flip readStaticWordWithBound bf
 
         -- op: CALLDATASIZE
         0x36 ->
@@ -1007,7 +1007,7 @@ exec1 = do
         -- op: MSIZE
         0x59 ->
           limitStack 1 . burn g_base $
-            next >> pushSym (sw256 $ sFromIntegral $ the state memorySize)
+            next >> pushSym (the state memorySize)
 
         -- op: GAS
         0x5a ->
@@ -2175,10 +2175,10 @@ accessUnboundedMemoryRange fees f l continue =
   if maybe False ((==) 0) (maybeLitWord l) then continue
   -- TODO: check for l .== 0 in the symbolic case as well
   else do
-    m0 <- sw256 <$> sFromIntegral <$> use (state . memorySize)
-    let m1@(S _ m1') = 32 * ceilSDiv (smax m0 (f + l)) 32
+    m0 <- use (state . memorySize)
+    let m1 = 32 * ceilSDiv (smax m0 (f + l)) 32
     burnSym (memoryCost fees m1 - memoryCost fees m0) $ do
-      assign (state . memorySize) (sFromIntegral m1')
+      assign (state . memorySize) m1
       continue
 
 accessMemoryRange
@@ -2205,7 +2205,7 @@ copyCalldataToMemory
  :: Calldata -> SymWord -> SymWord -> SymWord -> EVM ()
 copyCalldataToMemory (CalldataBuffer bf) size xOffset yOffset =
   copyBytesToMemory bf size xOffset yOffset
-copyCalldataToMemory (CalldataDynamic (b, l)) size xOffset yOffset =
+copyCalldataToMemory (CalldataDynamic (b, (S _ l))) size xOffset yOffset =
   case (maybeLitWord size, maybeLitWord xOffset, maybeLitWord yOffset) of
     (Just size', Just xOffset', Just yOffset') ->
       copyBytesToMemory (StaticSymBuffer [ite (i .<= l) x 0 | (x, i) <- zip b [1..]]) (litWord size') (litWord xOffset') (litWord yOffset')

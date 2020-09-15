@@ -729,7 +729,7 @@ symvmFromCommand cmd = do
     -- dynamic calldata via (bounded) haskell list
     (Nothing, Nothing, _) -> do
       cd <- sbytes256
-      len <- freshVar_
+      len <- sw256 <$> freshVar_
       return (CalldataDynamic (cd, len), len .<= 256)
 
     -- fully concrete calldata

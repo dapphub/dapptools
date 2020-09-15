@@ -111,7 +111,7 @@ abstractVM typesignature concreteArgs x storagemodel calldatamodel = do
 
                         BoundedCD -> do
                            cd <- sbytes256
-                           len <- freshVar_
+                           len <- sw256 <$> freshVar_
                            return (CalldataDynamic (cd, len), len .<= 256)
            Just (name, typs) -> do symbytes <- staticCalldata name typs concreteArgs
                                    return (CalldataBuffer (StaticSymBuffer symbytes), sTrue)
@@ -340,7 +340,7 @@ showCounterexample vm maybesig = do
       SAddr caller' = view (EVM.state . EVM.caller) vm
 --  cdlen' <- num <$> getValue cdlen
   calldatainput <- case calldata' of
-    CalldataDynamic (cd, cdlen) -> do
+    CalldataDynamic (cd, (S _ cdlen)) -> do
       cdlen' <- num <$> getValue cdlen
       mapM (getValue.fromSized) (take cdlen' cd) >>= return . pack
     CalldataBuffer (StaticSymBuffer cd) -> mapM (getValue.fromSized) cd >>= return . pack

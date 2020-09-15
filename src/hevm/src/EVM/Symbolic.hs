@@ -187,8 +187,8 @@ writeMemory' bs1 (C _ n) (C _ src) (C _ dst) bs0 =
 readMemoryWord' :: Word -> [SWord 8] -> SymWord
 readMemoryWord' (C _ i) m = sw256 $ fromBytes $ truncpad 32 (drop (num i) m)
 
-readMemoryWord32' :: Word -> [SWord 8] -> SWord 32
-readMemoryWord32' (C _ i) m = fromBytes $ truncpad 4 (drop (num i) m)
+readMemoryWord32' :: Word -> [SWord 8] -> SymWord
+readMemoryWord32' (C _ i) m = sw256 $ fromBytes $ truncpad 4 (drop (num i) m)
 
 setMemoryWord' :: Word -> SymWord -> [SWord 8] -> [SWord 8]
 setMemoryWord' (C _ i) (S _ x) =
@@ -208,8 +208,8 @@ readSWord' (C _ i) x =
   else swordAt (num i) x
 
 -- | Operations over dynamic symbolic memory (smt list of bytes)
-readByteOrZero'' :: SWord 32 -> SList (WordN 8) -> SWord 8
-readByteOrZero'' i bs =
+readByteOrZero'' :: SymWord -> SList (WordN 8) -> SWord 8
+readByteOrZero'' (S _ i) bs =
   ite (sFromIntegral (SL.length bs) .> i + 1)
   (bs .!! (sFromIntegral i))
   (literal 0)
@@ -265,24 +265,24 @@ read32At :: SInteger -> SList (WordN 8) -> SymWord
 read32At i x = sw256 $ fromBytes $ [x .!! literal i | i <- [0..31]]
 
 -- | Although calldata can be modeled perfectly well directly as a Buffer,
--- we allow for it to take on a special form; the pair ([SWord 8], SWord 32)
+-- we allow for it to take on a special form; the pair ([SWord 8], SymWord)
 -- where the second argument is understood as the length of the list.
 -- This allows us to 'fake' dynamically sized calldata arrays in a way
 -- that has proven more efficient than `SList`.
 data Calldata
   = CalldataBuffer Buffer
-  | CalldataDynamic ([SWord 8], SWord 32)
+  | CalldataDynamic ([SWord 8], SymWord)
   deriving Show
 
 -- a whole foldable instance seems overkill, but length is always good to have!
-len :: Buffer -> SymWord --SWord 32
+len :: Buffer -> SymWord
 len (DynamicSymBuffer a) = sw256 $ sFromIntegral $ SL.length a
 len (StaticSymBuffer bs) = litWord . num $ length bs
 len (ConcreteBuffer bs) = litWord . num $ BS.length bs
 
 cdlen :: Calldata -> SymWord
 cdlen (CalldataBuffer bf) = len bf
-cdlen (CalldataDynamic (_, a)) = sw256 $ sFromIntegral a
+cdlen (CalldataDynamic (_, a)) = a
 
 grab :: Int -> Buffer -> Buffer
 grab n (StaticSymBuffer bs) = StaticSymBuffer $ take n bs
@@ -310,7 +310,7 @@ grabS n bs = case unliteral n of
 readByteOrZero :: Int -> Buffer -> SWord 8
 readByteOrZero i (StaticSymBuffer bs) = readByteOrZero' i bs
 readByteOrZero i (ConcreteBuffer bs) = num $ Concrete.readByteOrZero i bs
-readByteOrZero i (DynamicSymBuffer bs) = readByteOrZero'' (literal $ num i) bs
+readByteOrZero i (DynamicSymBuffer bs) = readByteOrZero'' (litWord $ num i) bs
 
 -- pad up to 1000 bytes in the dynamic case
 sliceWithZero :: SymWord -> SymWord -> Buffer -> Buffer
@@ -343,11 +343,13 @@ readMemoryWord i bf = case (maybeLitWord i, bf) of
 
 readMemoryWord32 :: SymWord -> Buffer -> SWord 32
 readMemoryWord32 i m = case (maybeLitWord i, m) of
-  (Just i', StaticSymBuffer m') -> readMemoryWord32' i' m'
+  (Just i', StaticSymBuffer m') -> let S _ s = readMemoryWord32' i' m'
+                                   in sFromIntegral s
   (Just i', ConcreteBuffer m') -> num $ Concrete.readMemoryWord32 i' m'
   (_, DynamicSymBuffer m') -> case truncpad' 4 $ dropS i m' of
     ConcreteBuffer s -> literal $ num $ Concrete.readMemoryWord32 0 s
-    StaticSymBuffer s -> readMemoryWord32' 0 s
+    StaticSymBuffer s -> let S _ s' = readMemoryWord32' 0 s
+                         in sFromIntegral s'
     DynamicSymBuffer s -> fromBytes [s .!! literal k | k <- [0..3]]
     
 
@@ -369,7 +371,7 @@ setMemoryByte i x m = case (maybeLitWord i, m) of
 readSWord :: SymWord -> Buffer -> SymWord
 readSWord i bf = case (maybeLitWord i, bf) of
   (Just i', StaticSymBuffer x) -> readSWord' i' x
-  (Just i', ConcreteBuffer x) -> num $ Concrete.readMemoryWord i' x
+  (Just i', ConcreteBuffer x) -> litWord $ Concrete.readBlobWord i' x
   _  -> readSWord'' i (dynamize bf)
 
 
@@ -381,9 +383,9 @@ select' xs err ind = walk xs ind err
 -- Generates a ridiculously large set of constraints (roughly 25k) when
 -- the index is symbolic, but it still seems (kind of) manageable
 -- for the solvers.
-readStaticWordWithBound :: SWord 32 -> ([SWord 8], SWord 32) -> SymWord
-readStaticWordWithBound ind (xs, bound) =
-  case (num <$> fromSized <$> unliteral ind, num <$> fromSized <$> unliteral bound) of
+readStaticWordWithBound :: SymWord -> ([SWord 8], SymWord) -> SymWord
+readStaticWordWithBound (S _ ind) (xs, S _ bound) =
+  case (num <$> unliteral ind, num <$> unliteral bound) of
     (Just i, Just b) ->
       let bs = truncpad 32 $ drop i (take b xs)
       in S (FromBytes (StaticSymBuffer bs)) (fromBytes bs)
