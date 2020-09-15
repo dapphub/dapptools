@@ -947,30 +947,24 @@ exec1 = do
                   then finishFrame (FrameErrored (OutOfGas availableGas g_callstipend))
                   else do
                     let original = fromMaybe 0 (readStorage (view origStorage this) x)
-
-                        cost = ite (current .== new) (litWord g_sload)
-                                           (ite (current .== original .&& original .== 0) (litWord g_sset)
-                                                (ite (current .== original) (litWord g_sreset)
-                                                     (litWord g_sload)))
-
-                        anticost = ite (current .== new)
-                                       0
-                                       (ite (current .== original)
-                                            (ite (original ./= 0 .&& new .== 0) (litWord r_sclear) 0)
-                                            ((ite (original ./= 0)
-                                                  (ite (new .== 0) (litWord r_sclear) 0)
-                                                  0)
-                                            +
-                                             (ite (original .== 0)
-                                                  (litWord (g_sset   - g_sload))
-                                                  (litWord (g_sreset - g_sload)))))
-
-                        unrefund = ite (current ./= new .&&
-                                        current ./= original .&&
-                                        original ./= 0 .&&
-                                        new ./= 0)
-                                       (litWord r_sclear)
-                                       0
+                        pairPlus :: (SymWord, SymWord) -> (SymWord, SymWord) -> (SymWord, SymWord)
+                        pairPlus (a,b) (c,d) = (a + c, b + d)
+                        (cost, (anticost, unrefund)) =
+                           ite (current .== new) (litWord g_sload, (0, 0))
+                               (ite (original .== current)
+                                    (ite (original .== 0) (litWord g_sset, (0, 0))
+                                         (ite (new .== 0) (litWord g_sreset, (litWord r_sclear, 0))
+                                              (litWord g_sreset, (0, 0))))
+                                    -- cost always g_sload in this clause
+                                    (litWord g_sload, pairPlus
+                                                       (ite (original ./= 0)
+                                                          (pairPlus (ite (current .== 0) (0, litWord r_sclear) (0,0))
+                                                                    (ite (new .== 0)     (litWord r_sclear, 0) (0,0)))
+                                                       (0,0))
+                                                       (ite (original .== new)
+                                                            (ite (original .== 0) (litWord (g_sset   - g_sload), 0)
+                                                                                  (litWord (g_sreset - g_sload), 0))
+                                                            (0,0))))
 
                     burnSym cost $ do
                       next
