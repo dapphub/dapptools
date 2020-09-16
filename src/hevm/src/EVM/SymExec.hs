@@ -177,7 +177,7 @@ interpret fetcher maxIter =
                    interpret fetcher maxIter (Stepper.evm m >>= k)
 
           case q of
-            PleaseAskSMT cond pathcond continue -> do
+            PleaseAskSMT _ _ continue -> do
               codelocation <- getCodeLocation <$> get
               iters <- use (iterations . at codelocation)
               case iters of
