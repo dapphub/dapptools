@@ -47,6 +47,35 @@ let
     "types/array_dynamic_3_fail.sol"
   ];
 
+  z3Timeout = [
+    "operators/compound_assignment_division_1.sol"
+    "operators/compound_assignment_division_2.sol"
+    "operators/delete_array_index_2d.sol"
+  ];
+
+  dynamic = [
+    # OpCalldatacopy
+    "loops/for_loop_array_assignment_memory_memory.sol"
+    "loops/for_loop_array_assignment_memory_storage.sol"
+    "loops/while_loop_array_assignment_memory_memory.sol"
+    "loops/while_loop_array_assignment_memory_storage.sol"
+    "types/address_call.sol"
+    "types/address_delegatecall.sol"
+    "types/address_staticcall.sol"
+    "types/array_aliasing_storage_2.sol"
+    "types/array_aliasing_storage_3.sol"
+    "types/array_aliasing_storage_5.sol"
+    "types/array_branch_1d.sol"
+    "types/array_branches_1d.sol"
+    "types/array_dynamic_parameter_1.sol"
+    "types/array_dynamic_parameter_1_fail.sol"
+    "types/bytes_1.sol"
+    "types/bytes_2.sol"
+    "types/bytes_2_fail.sol"
+    "types/mapping_unsupported_key_type_1.sol"
+    "types/function_type_array_as_reference_type.sol"
+  ];
+
   ignored = [
 
     # --- constructor arguments ---
@@ -115,26 +144,26 @@ let
     # OpJump
     "complex/slither/external_function.sol"
 
-    # OpCalldatacopy
-    "loops/for_loop_array_assignment_memory_memory.sol"
-    "loops/for_loop_array_assignment_memory_storage.sol"
-    "loops/while_loop_array_assignment_memory_memory.sol"
-    "loops/while_loop_array_assignment_memory_storage.sol"
-    "types/address_call.sol"
-    "types/address_delegatecall.sol"
-    "types/address_staticcall.sol"
-    "types/array_aliasing_storage_2.sol"
-    "types/array_aliasing_storage_3.sol"
-    "types/array_aliasing_storage_5.sol"
-    "types/array_branch_1d.sol"
-    "types/array_branches_1d.sol"
-    "types/array_dynamic_parameter_1.sol"
-    "types/array_dynamic_parameter_1_fail.sol"
-    "types/bytes_1.sol"
-    "types/bytes_2.sol"
-    "types/bytes_2_fail.sol"
-    "types/mapping_unsupported_key_type_1.sol"
-    "types/function_type_array_as_reference_type.sol"
+    # # OpCalldatacopy
+    # "loops/for_loop_array_assignment_memory_memory.sol"
+    # "loops/for_loop_array_assignment_memory_storage.sol"
+    # "loops/while_loop_array_assignment_memory_memory.sol"
+    # "loops/while_loop_array_assignment_memory_storage.sol"
+    # "types/address_call.sol"
+    # "types/address_delegatecall.sol"
+    # "types/address_staticcall.sol"
+    # "types/array_aliasing_storage_2.sol"
+    # "types/array_aliasing_storage_3.sol"
+    # "types/array_aliasing_storage_5.sol"
+    # "types/array_branch_1d.sol"
+    # "types/array_branches_1d.sol"
+    # "types/array_dynamic_parameter_1.sol"
+    # "types/array_dynamic_parameter_1_fail.sol"
+    # "types/bytes_1.sol"
+    # "types/bytes_2.sol"
+    # "types/bytes_2_fail.sol"
+    # "types/mapping_unsupported_key_type_1.sol"
+    # "types/function_type_array_as_reference_type.sol"
 
     # OpBlockhash
     "special/blockhash.sol"
@@ -223,8 +252,8 @@ let
   # symbolic` on all contracts within.
   # $1 == input file
   # $2 == hevm smt backend
+  # $3 == dynamic?
   checkWithHevm = pkgs.writeShellScript "checkWithHevm" ''
-
     # write json file to store for later debugging
     testName=$(${testName} $1)
     json=$out/jsonFiles/$testName.json
@@ -236,7 +265,7 @@ let
 
     explore() {
       set -x
-      hevm_output=$(${timeout} 90s ${hevm} symbolic --code "$1" --solver "$2" --json-file "$3" $4 2>&1)
+      hevm_output=$(${timeout} 90s ${hevm} symbolic --code "$1" --solver "$2" --json-file "$3" $4 $5 2>&1)
       status=$?
       set +x
 
@@ -273,10 +302,15 @@ let
         iterations="--max-iterations 3"
       fi
 
+      dynamic=""
+      if ! [[ -z "$3" ]]; then
+        dynamic="--calldata-model DynamicCD"
+      fi
+
       ${echo}
       ${echo} exploring runtime bytecode:
       bin_runtime=$(${jq} -r --arg c $contract -c '.contracts[$c]."bin-runtime"' $json)
-      explore "$bin_runtime" "$2" "$json" "$iterations"
+      explore "$bin_runtime" "$2" "$json" "$iterations" "$dynamic"
     done
 
     exit 0
@@ -305,6 +339,27 @@ let
         exit 0
     fi
 
+    z3Timeouts=(${toString z3Timeout})
+    if [[ " ''${z3Timeouts[@]} " =~ " ''${testName} " ]] && [[ $2 = "z3" ]]; then
+        ${echo} "skipping test:" ${testName}
+        ${echo} "${strings.ignore}"
+        exit 0
+    fi
+
+    dynamicFlag=""
+    dynamicTests=(${toString dynamic})
+    if [[ " ''${dynamicTests[@]} " =~ " ''${testName} " ]]; then
+        # echo $2
+        if [[ $2 = "z3" ]]; then
+          dynamicFlag=1
+        else
+          ${echo} "skipping test:" ${testName}
+          ${echo} "${strings.ignore}"
+
+          exit 0
+        fi
+    fi
+
     ${grep} -q 'Error trying to invoke SMT solver.' $1
     if [ $? == 0 ]; then ${echo} ${strings.smtCheckerFailed} && exit; fi
     ${grep} -q 'Assertion checker does not yet implement' $1
@@ -312,7 +367,7 @@ let
     ${grep} -q 'Assertion checker does not yet support' $1
     if [ $? == 0 ]; then ${echo} ${strings.smtCheckerFailed} && exit; fi
 
-    hevm_output=$(${checkWithHevm} $1 $2 2>&1)
+    hevm_output=$(${checkWithHevm} $1 $2 "$dynamicFlag" 2>&1)
     echo "$hevm_output"
 
     ${grep} -q '${strings.timeout}' <<< "$hevm_output"
