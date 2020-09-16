@@ -12,7 +12,7 @@ import Brick.Widgets.List
 
 import EVM
 import EVM.ABI (abiTypeSolidity, decodeAbiValue, AbiType(..), emptyAbi)
-import EVM.Symbolic (SymWord(..))
+import EVM.Symbolic (SymWord(..), Calldata(..))
 import EVM.SymExec (maxIterationsReached)
 import EVM.Dapp (DappInfo, dappInfo)
 import EVM.Dapp (dappUnitTests, unitTestMethods, dappSolcByName, dappSolcByHash, dappSources)
@@ -778,7 +778,7 @@ updateUiVmState ui vm =
       case view result vm of
         Just (VMSuccess (ConcreteBuffer msg)) ->
           Just ("VMSuccess: " <> (show $ ByteStringS msg))
-        Just (VMSuccess (SymbolicBuffer msg)) ->
+        Just (VMSuccess (StaticSymBuffer msg)) ->
           Just ("VMSuccess: <symbolicbuffer> " <> (show msg))
         Just (VMFailure (Revert msg)) ->
           Just ("VMFailure: " <> (show . ByteStringS $ msg))
@@ -864,21 +864,28 @@ withHighlight False = withDefAttr dimAttr
 withHighlight True  = withDefAttr boldAttr
 
 prettyIfConcrete :: Buffer -> String
-prettyIfConcrete (SymbolicBuffer x) = show x
+prettyIfConcrete (StaticSymBuffer x) = show x
+prettyIfConcrete (DynamicSymBuffer x) = show x
 prettyIfConcrete (ConcreteBuffer x) = prettyHex 40 x
+
+prettyIfConcreteCd :: Calldata -> String
+prettyIfConcreteCd (CalldataBuffer bf) = prettyIfConcrete bf
+prettyIfConcreteCd (CalldataDynamic (x, l)) = show x
 
 drawTracePane :: UiVmState -> UiWidget
 drawTracePane s =
   case view uiShowMemory s of
     True ->
       hBorderWithLabel (txt "Calldata")
-      <=> str (prettyIfConcrete $ fst (view (uiVm . state . calldata) s))
+      <=> str (prettyIfConcreteCd $ view (uiVm . state . calldata) s)
       <=> hBorderWithLabel (txt "Returndata")
       <=> str (prettyIfConcrete (view (uiVm . state . returndata) s))
       <=> hBorderWithLabel (txt "Output")
       <=> str (maybe "" show (view (uiVm . result) s))
       <=> hBorderWithLabel (txt "Cache")
       <=> str (show (view (uiVm . cache . path) s))
+      <=> hBorderWithLabel (txt "refund")
+      <=> str (show (view (uiVm . tx . substate . refunds) s))
       <=> hBorderWithLabel (txt "Memory")
       <=> viewport TracePane Vertical
             (str (prettyIfConcrete (view (uiVm . state . memory) s)))

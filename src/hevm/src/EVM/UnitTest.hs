@@ -553,7 +553,7 @@ setupCall TestVMParams{..} sig args  = do
   use (env . contracts) >>= assign (tx . txReversion)
   assign (tx . isCreate) False
   loadContract testAddress
-  assign (state . calldata) $ (ConcreteBuffer $ abiMethod sig args, literal . num . BS.length $ abiMethod sig args)
+  assign (state . calldata) (CalldataBuffer (ConcreteBuffer $ abiMethod sig args))
   assign (state . caller) (litAddr testCaller)
   assign (state . gas) (w256 testGasCall)
 
@@ -563,7 +563,7 @@ initialUnitTestVm (UnitTestOptions {..}) theContract =
     TestVMParams {..} = testParams
     vm = makeVm $ VMOpts
            { vmoptContract = initialContract (InitCode (view creationCode theContract))
-           , vmoptCalldata = (mempty, 0)
+           , vmoptCalldata = CalldataBuffer mempty
            , vmoptValue = 0
            , vmoptAddress = testAddress
            , vmoptCaller = litAddr testCaller

@@ -66,6 +66,10 @@ test_hevm_symbolic() {
     solc --bin-runtime -o . --overwrite AB.sol
     hevm equivalence --code-a $(<A.bin-runtime) --code-b $(<B.bin-runtime) --solver cvc4
     rm -rf A.bin-runtime B.bin-runtime
+
+    # simple dynamic calldata example
+    solc --bin-runtime -o . --overwrite bytes.sol
+    timeout 2m hevm symbolic --code $(<Bytes.bin-runtime) --calldata-model DynamicCD
 }
 
 test_hevm_symbolic

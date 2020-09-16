@@ -16,10 +16,11 @@ import EVM.Stepper (Stepper)
 import qualified EVM.Stepper as Stepper
 import qualified Control.Monad.Operational as Operational
 import EVM.Types hiding (Word)
-import EVM.Symbolic (SymWord(..), sw256)
+import EVM.Symbolic (SymWord(..), sw256, Calldata(..))
 import EVM.Concrete (createAddress, Word)
 import qualified EVM.FeeSchedule as FeeSchedule
 import Data.SBV.Trans.Control
+import qualified Data.SBV.List as SList
 import Data.SBV.Trans hiding (distinct, Word)
 import Data.SBV hiding (runSMT, newArray_, addAxiom, distinct, sWord8s, Word)
 import Data.Vector (toList, fromList)
@@ -45,33 +46,31 @@ sbytes1024 = liftA2 (++) sbytes512 sbytes512
 -- We don't assume input types are restricted to their proper range here;
 -- such assumptions should instead be given as preconditions.
 -- This could catch some interesting calldata mismanagement errors.
-symAbiArg :: AbiType -> Query ([SWord 8], SWord 32)
-symAbiArg (AbiUIntType n) | n `mod` 8 == 0 && n <= 256 = do x <- sbytes32
-                                                            return (x, 32)
-                          | otherwise = error "bad type"
+symAbiArg :: AbiType -> Query [SWord 8]
+symAbiArg (AbiUIntType n)
+  | n `mod` 8 == 0 && n <= 256 = sbytes32
+  | otherwise = error "bad type"
 
-symAbiArg (AbiIntType n)  | n `mod` 8 == 0 && n <= 256 = do x <- sbytes32
-                                                            return (x, 32)
-                          | otherwise = error "bad type"
-symAbiArg AbiBoolType = do x <- sbytes32
-                           return (x, 32)
+symAbiArg (AbiIntType n)
+  | n `mod` 8 == 0 && n <= 256 = sbytes32
+  | otherwise = error "bad type"
 
-symAbiArg AbiAddressType = do x <- sbytes32
-                              return (x, 32)
+symAbiArg AbiBoolType = sbytes32
 
-symAbiArg (AbiBytesType n) | n <= 32 = do x <- sbytes32
-                                          return (x, 32)
-                           | otherwise = error "bad type"
+symAbiArg AbiAddressType = sbytes32
+
+symAbiArg (AbiBytesType n)
+  | n <= 32 = sbytes32
+  | otherwise = error "bad type"
 
 -- TODO: is this encoding correct?
 symAbiArg (AbiArrayType len typ) =
-  do args <- mapM symAbiArg (replicate len typ)
-     return (litBytes (encodeAbiValue (AbiUInt 256 (fromIntegral len))) <> (concat $ fst <$> args),
-             32 + (sum $ snd <$> args))
+  do args <- mconcat <$> mapM symAbiArg (replicate len typ)
+     return $ litBytes (encodeAbiValue (AbiUInt 256 (fromIntegral len))) <> args
 
 symAbiArg (AbiTupleType tuple) =
-  do args <- mapM symAbiArg (toList tuple)
-     return (concat $ fst <$> args, sum $ snd <$> args)
+  mconcat <$> mapM symAbiArg (toList tuple)
+
 symAbiArg n =
   error $ "Unsupported symbolic abiencoding for"
     <> show n
@@ -81,34 +80,52 @@ symAbiArg n =
 -- with concrete arguments.
 -- Any argument given as "<symbolic>" or omitted at the tail of the list are
 -- kept symbolic.
-symCalldata :: Text -> [AbiType] -> [String] -> Query ([SWord 8], SWord 32)
-symCalldata sig typesignature concreteArgs =
-  let args = concreteArgs <> replicate (length typesignature - length concreteArgs)  "<symbolic>"
-      mkArg typ "<symbolic>" = symAbiArg typ
-      mkArg typ arg = let n = litBytes . encodeAbiValue $ makeAbiValue typ arg
-                      in return (n, num (length n))
-      sig' = litBytes $ selector sig
-  in do calldatas <- zipWithM mkArg typesignature args
-        return (sig' <> concat (fst <$> calldatas), 4 + (sum $ snd <$> calldatas))
+staticCalldata :: Text -> [AbiType] -> [String] -> Query [SWord 8]
+staticCalldata sig typesignature concreteArgs =
+  fmap (sig' <>) $ concat <$> zipWithM mkArg typesignature args
+  where
+    -- ensure arg length is long enough
+    args = concreteArgs <> replicate (length typesignature - length concreteArgs)  "<symbolic>"
 
-abstractVM :: Maybe (Text, [AbiType]) -> [String] -> ByteString -> StorageModel -> Query VM
-abstractVM typesignature concreteArgs x storagemodel = do
-  (cd', cdlen, cdconstraint) <-
-    case typesignature of
-      Nothing -> do cd <- sbytes256
-                    len <- freshVar_
-                    return (cd, len, len .<= 256)
-      Just (name, typs) -> do (cd, cdlen) <- symCalldata name typs concreteArgs
-                              return (cd, cdlen, sTrue)
+    mkArg :: AbiType -> String -> Query [SWord 8]
+    mkArg typ "<symbolic>" = symAbiArg typ
+    mkArg typ arg = return $ litBytes . encodeAbiValue $ makeAbiValue typ arg
+
+    sig' = litBytes $ selector sig
+
+-- | Construct a VM out of a type signature, possibly with specialized concrete arguments
+-- ,bytecode, storagemodel and calldata structure.
+abstractVM :: Maybe (Text, [AbiType]) -> [String] -> ByteString -> StorageModel -> CalldataModel -> Query VM
+abstractVM typesignature concreteArgs x storagemodel calldatamodel = do
+  (cd',pathCond) <- case typesignature of
+           Nothing -> case calldatamodel of
+                        DynamicCD -> do
+                          list <- freshVar_
+                          return (CalldataBuffer (DynamicSymBuffer list),
+                            -- due to some current z3 shenanegans (possibly related to: https://github.com/Z3Prover/z3/issues/4635)
+                            -- we assume the list length to be shorter than max_length both as a bitvector and as an integer.
+                            -- The latter implies the former as long as max_length fits in a bitvector, but assuming it explitly
+                            -- improves z3 (4.8.8) performance.
+                            SList.length list .< 1000 .&&
+                             sw256 (sFromIntegral (SList.length list)) .< sw256 1000)
+
+                        BoundedCD -> do
+                           cd <- sbytes256
+                           len <- sw256 <$> freshVar_
+                           return (CalldataDynamic (cd, len), len .<= 256)
+           Just (name, typs) -> do symbytes <- staticCalldata name typs concreteArgs
+                                   return (CalldataBuffer (StaticSymBuffer symbytes), sTrue)
+
   symstore <- case storagemodel of
     SymbolicS -> Symbolic <$> freshArray_ Nothing
     InitialS -> Symbolic <$> freshArray_ (Just 0)
     ConcreteS -> return $ Concrete mempty
   c <- SAddr <$> freshVar_
   value' <- sw256 <$> freshVar_
-  return $ loadSymVM (RuntimeCode x) symstore storagemodel c value' (SymbolicBuffer cd', cdlen) & over pathConditions ((<>) [cdconstraint])
+  return $ loadSymVM (RuntimeCode x) symstore storagemodel c value' cd'
+    & over pathConditions (<> [pathCond])
 
-loadSymVM :: ContractCode -> Storage -> StorageModel -> SAddr -> SymWord -> (Buffer, SWord 32) -> VM
+loadSymVM :: ContractCode -> Storage -> StorageModel -> SAddr -> SymWord -> Calldata -> VM
 loadSymVM x initStore model addr callvalue' calldata' =
     (makeVm $ VMOpts
     { vmoptContract = contractWithStore x initStore
@@ -135,8 +152,8 @@ loadSymVM x initStore model addr callvalue' calldata' =
 
 
 -- | Interpreter which explores all paths at
--- | branching points.
--- | returns a list of possible final evm states
+-- branching points.
+-- returns a list of possible final evm states
 interpret
   :: Fetch.Fetcher
   -> Maybe Integer --max iterations
@@ -204,17 +221,21 @@ maxIterationsReached vm (Just maxIter) =
 type Precondition = VM -> SBool
 type Postcondition = (VM, VM) -> SBool
 
+checkAssertDynamic :: ByteString -> Query (Either (VM, [VM]) VM)
+checkAssertDynamic c = verifyContract c Nothing [] SymbolicS DynamicCD (const sTrue) (Just checkAssertions)
+
+
 checkAssert :: ByteString -> Maybe (Text, [AbiType]) -> [String] -> Query (Either (VM, [VM]) VM)
-checkAssert c signature' concreteArgs = verifyContract c signature' concreteArgs SymbolicS (const sTrue) (Just checkAssertions)
+checkAssert c signature' concreteArgs = verifyContract c signature' concreteArgs SymbolicS BoundedCD (const sTrue) (Just checkAssertions)
 
 checkAssertions :: Postcondition
 checkAssertions (_, out) = case view result out of
   Just (EVM.VMFailure (EVM.UnrecognizedOpcode 254)) -> sFalse
   _ -> sTrue
 
-verifyContract :: ByteString -> Maybe (Text, [AbiType]) -> [String] -> StorageModel -> Precondition -> Maybe Postcondition -> Query (Either (VM, [VM]) VM)
-verifyContract theCode signature' concreteArgs storagemodel pre maybepost = do
-    preStateRaw <- abstractVM signature' concreteArgs theCode  storagemodel
+verifyContract :: ByteString -> Maybe (Text, [AbiType]) -> [String] -> StorageModel -> CalldataModel -> Precondition -> Maybe Postcondition -> Query (Either (VM, [VM]) VM)
+verifyContract theCode signature' concreteArgs storagemodel calldatamodel pre maybepost = do
+    preStateRaw <- abstractVM signature' concreteArgs theCode  storagemodel calldatamodel
     -- add the pre condition to the pathconditions to ensure that we are only exploring valid paths
     let preState = over pathConditions ((++) [pre preStateRaw]) preStateRaw
     verify preState Nothing Nothing maybepost
@@ -256,15 +277,15 @@ verify preState maxIter rpcinfo maybepost = do
 -- | Compares two contract runtimes for trace equivalence by running two VMs and comparing the end states.
 equivalenceCheck :: ByteString -> ByteString -> Maybe Integer -> Maybe (Text, [AbiType]) -> Query (Either ([VM], [VM]) VM)
 equivalenceCheck bytecodeA bytecodeB maxiter signature' = do
-  preStateA <- abstractVM signature' [] bytecodeA SymbolicS
+  preStateA <- abstractVM signature' [] bytecodeA SymbolicS BoundedCD
 
   let preself = preStateA ^. state . contract
       precaller = preStateA ^. state . caller
       callvalue' = preStateA ^. state . callvalue
       prestorage = preStateA ^?! env . contracts . ix preself . storage
-      (calldata', cdlen) = view (state . calldata) preStateA
+      calldata' = view (state . calldata) preStateA
       pathconds = view pathConditions preStateA
-      preStateB = loadSymVM (RuntimeCode bytecodeB) prestorage SymbolicS precaller callvalue' (calldata', cdlen) & set pathConditions pathconds
+      preStateB = loadSymVM (RuntimeCode bytecodeB) prestorage SymbolicS precaller callvalue' calldata' & set pathConditions pathconds
 
   smtState <- queryState
   push 1
@@ -304,7 +325,8 @@ equivalenceCheck bytecodeA bytecodeB maxiter signature' = do
   constrain $ sOr differingEndStates
 
   checkSat >>= \case
-     Unk -> error "solver said unknown!"
+     Unk -> do io $ putStrLn "postcondition query timed out"
+               return $ Left (pruneDeadPaths aVMs, pruneDeadPaths bVMs)
      Sat -> return $ Right preStateA
      Unsat -> return $ Left (pruneDeadPaths aVMs, pruneDeadPaths bVMs)
 
@@ -313,13 +335,17 @@ both' f (x, y) = (f x, f y)
 
 showCounterexample :: VM -> Maybe (Text, [AbiType]) -> Query ()
 showCounterexample vm maybesig = do
-  let (calldata', cdlen) = view (EVM.state . EVM.calldata) vm
+  let calldata' = view (EVM.state . EVM.calldata) vm
       S _ cvalue = view (EVM.state . EVM.callvalue) vm
       SAddr caller' = view (EVM.state . EVM.caller) vm
-  cdlen' <- num <$> getValue cdlen
+--  cdlen' <- num <$> getValue cdlen
   calldatainput <- case calldata' of
-    SymbolicBuffer cd -> mapM (getValue.fromSized) (take cdlen' cd) >>= return . pack
-    ConcreteBuffer cd -> return $ BS.take cdlen' cd
+    CalldataDynamic (cd, (S _ cdlen)) -> do
+      cdlen' <- num <$> getValue cdlen
+      mapM (getValue.fromSized) (take cdlen' cd) >>= return . pack
+    CalldataBuffer (StaticSymBuffer cd) -> mapM (getValue.fromSized) cd >>= return . pack
+    CalldataBuffer (ConcreteBuffer cd)  -> return $ cd
+    CalldataBuffer (DynamicSymBuffer cd) -> (fmap fromSized) <$> getValue cd >>= return . pack
   callvalue' <- num <$> getValue cvalue
   caller'' <- num <$> getValue caller'
   io $ do

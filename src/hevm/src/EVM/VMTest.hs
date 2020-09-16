@@ -185,7 +185,7 @@ checkExpectedContracts vm expected =
      )
 
 clearOrigStorage :: EVM.Contract -> EVM.Contract
-clearOrigStorage = set EVM.origStorage mempty
+clearOrigStorage = set EVM.origStorage (EVM.Concrete mempty)
 
 clearZeroStorage :: EVM.Contract -> EVM.Contract
 clearZeroStorage c = case EVM._storage c of
@@ -255,7 +255,7 @@ parseVmOpts v =
        (JSON.Object env, JSON.Object exec) ->
          EVM.VMOpts
            <$> (dataField exec "code" >>= pure . EVM.initialContract . EVM.RuntimeCode)
-           <*> (dataField exec "data" >>= \a -> pure ( (ConcreteBuffer a), literal . num $ BS.length a))
+           <*> (dataField exec "data" >>= pure . CalldataBuffer . ConcreteBuffer)
            <*> (w256lit <$> wordField exec "value")
            <*> addrField exec "address"
            <*> (litAddr <$> addrField exec "caller")
@@ -325,16 +325,12 @@ realizeContract x =
   EVM.initialContract (x ^. code)
     & EVM.balance .~ EVM.w256 (x ^. balance)
     & EVM.nonce   .~ EVM.w256 (x ^. nonce)
-    & EVM.storage .~ EVM.Concrete (
-        Map.fromList .
-        map (bimap EVM.w256 (litWord . EVM.w256)) .
-        Map.toList $ x ^. storage
-        )
-    & EVM.origStorage .~ (
-        Map.fromList .
-        map (bimap EVM.w256 EVM.w256) .
-        Map.toList $ x ^. storage
-        )
+    & EVM.storage .~ store
+    & EVM.origStorage .~ store
+  where store = EVM.Concrete $
+          Map.fromList .
+          map (bimap EVM.w256 (litWord . EVM.w256)) .
+          Map.toList $ x ^. storage
 
 data BlockchainError
   = TooManyBlocks
@@ -380,7 +376,7 @@ fromCreateBlockchainCase block tx preState postState =
       in Right $ Case
          (EVM.VMOpts
           { vmoptContract      = EVM.initialContract (EVM.InitCode (txData tx))
-          , vmoptCalldata      = (mempty, 0)
+          , vmoptCalldata      = CalldataBuffer mempty
           , vmoptValue         = w256lit $ txValue tx
           , vmoptAddress       = createdAddr
           , vmoptCaller        = (litAddr origin)
@@ -419,7 +415,7 @@ fromNormalBlockchainCase block tx preState postState =
       (_, _, Just origin, Just checkState) -> Right $ Case
         (EVM.VMOpts
          { vmoptContract      = EVM.initialContract theCode
-         , vmoptCalldata      = (ConcreteBuffer $ txData tx, literal . num . BS.length $ txData tx)
+         , vmoptCalldata      = CalldataBuffer $ ConcreteBuffer $ txData tx
          , vmoptValue         = litWord (EVM.w256 $ txValue tx)
          , vmoptAddress       = toAddr
          , vmoptCaller        = (litAddr origin)

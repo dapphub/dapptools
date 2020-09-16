@@ -14,6 +14,8 @@ import Data.Aeson (FromJSONKey (..), FromJSONKeyFunction (..))
 #endif
 
 import Data.SBV
+import Data.SBV.List ((.++))
+import qualified Data.SBV.List as SL
 import Data.Kind
 import Data.Monoid ((<>))
 import Data.Bifunctor (first)
@@ -88,29 +90,48 @@ instance (FromSizzleBV (WordN 160))
 litBytes :: ByteString -> [SWord 8]
 litBytes bs = fmap (toSized . literal) (BS.unpack bs)
 
--- | Operations over buffers (concrete or symbolic)
+-- * Operations over buffers (concrete or symbolic)
 
--- | A buffer is a list of bytes. For concrete execution, this is simply `ByteString`.
--- In symbolic settings, it is a list of symbolic bitvectors of size 8.
+-- | A buffer is a list of bytes, and is used to model EVM memory or calldata.
+-- During concrete execution, this is simply `ByteString`.
+-- In symbolic settings, the structure of a buffer is sometimes known statically,
+-- in which case simply use a list of symbolic bytes.
+-- When we are dealing with dynamically determined calldata or memory (such as if
+-- we are interpreting a function which a `memory bytes` argument),
+-- we use smt lists. Note that smt lists are not yet supported by cvc4!
 data Buffer
   = ConcreteBuffer ByteString
-  | SymbolicBuffer [SWord 8]
+  | StaticSymBuffer [SWord 8]
+  | DynamicSymBuffer (SList (WordN 8))
   deriving (Show)
 
+dynamize :: Buffer -> SList (WordN 8)
+dynamize (ConcreteBuffer a)  = SL.implode $ litBytes a
+dynamize (StaticSymBuffer a) = SL.implode a
+dynamize (DynamicSymBuffer a) = a
+
+instance EqSymbolic Buffer where
+  ConcreteBuffer a .== ConcreteBuffer b = literal (a == b)
+  ConcreteBuffer a .== StaticSymBuffer b = litBytes a .== b
+  StaticSymBuffer a .== ConcreteBuffer b = a .== litBytes b
+  StaticSymBuffer a .== StaticSymBuffer b = a .== b
+  a .== b = dynamize a .== dynamize b
+
+
 instance Semigroup Buffer where
-  ConcreteBuffer a <> ConcreteBuffer b = ConcreteBuffer (a <> b)
-  ConcreteBuffer a <> SymbolicBuffer b = SymbolicBuffer (litBytes a <> b)
-  SymbolicBuffer a <> ConcreteBuffer b = SymbolicBuffer (a <> litBytes b)
-  SymbolicBuffer a <> SymbolicBuffer b = SymbolicBuffer (a <> b)
+  ConcreteBuffer a     <> ConcreteBuffer b   = ConcreteBuffer (a <> b)
+  ConcreteBuffer a     <> StaticSymBuffer b  = StaticSymBuffer (litBytes a <> b)
+  c@(ConcreteBuffer a) <> DynamicSymBuffer b = DynamicSymBuffer (dynamize c .++ b)
+
+  StaticSymBuffer a     <> ConcreteBuffer b   = StaticSymBuffer (a <> litBytes b)
+  StaticSymBuffer a     <> StaticSymBuffer b  = StaticSymBuffer (a <> b)
+  c@(StaticSymBuffer a) <> DynamicSymBuffer b = DynamicSymBuffer (dynamize c .++ b)
+
+  a <> b = DynamicSymBuffer (dynamize a .++ dynamize b)
 
 instance Monoid Buffer where
   mempty = ConcreteBuffer mempty
 
-instance EqSymbolic Buffer where
-  ConcreteBuffer a .== ConcreteBuffer b = literal (a == b)
-  ConcreteBuffer a .== SymbolicBuffer b = litBytes a .== b
-  SymbolicBuffer a .== ConcreteBuffer b = a .== litBytes b
-  SymbolicBuffer a .== SymbolicBuffer b = a .== b
 
 newtype Addr = Addr { addressWord160 :: Word160 }
   deriving (Num, Integral, Real, Ord, Enum, Eq, Bits, Generic)
@@ -241,11 +262,6 @@ padLeft n xs = BS.replicate (n - BS.length xs) 0 <> xs
 
 padRight :: Int -> ByteString -> ByteString
 padRight n xs = xs <> BS.replicate (n - BS.length xs) 0
-
-truncpad :: Int -> [SWord 8] -> [SWord 8]
-truncpad n xs = if m > n then take n xs
-                else mappend xs (replicate (n - m) 0)
-  where m = length xs
 
 word256 :: ByteString -> Word256
 word256 xs = case Cereal.runGet m (padLeft 32 xs) of

@@ -2,7 +2,7 @@ module EVM.Exec where
 
 import EVM
 import EVM.Concrete (createAddress)
-import EVM.Symbolic (litAddr)
+import EVM.Symbolic (litAddr, Calldata(..))
 import EVM.Types
 
 import qualified EVM.FeeSchedule as FeeSchedule
@@ -22,7 +22,7 @@ vmForEthrunCreation :: ByteString -> VM
 vmForEthrunCreation creationCode =
   (makeVm $ VMOpts
     { vmoptContract = initialContract (InitCode creationCode)
-    , vmoptCalldata = (mempty, 0)
+    , vmoptCalldata = CalldataBuffer mempty
     , vmoptValue = 0
     , vmoptAddress = createAddress ethrunAddress 1
     , vmoptCaller = litAddr ethrunAddress

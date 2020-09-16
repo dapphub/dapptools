@@ -114,7 +114,7 @@ formatBytes b =
     else formatBinary b
 
 formatSBytes :: Buffer -> Text
-formatSBytes (SymbolicBuffer b) = "<" <> pack (show (length b)) <> " symbolic bytes>"
+formatSBytes (StaticSymBuffer b) = "<" <> pack (show (length b)) <> " symbolic bytes>"
 formatSBytes (ConcreteBuffer b) = formatBytes b
 
 formatQString :: ByteString -> Text
@@ -124,7 +124,7 @@ formatString :: ByteString -> Text
 formatString bs = decodeUtf8 (fst (BS.spanEnd (== 0) bs))
 
 formatSString :: Buffer -> Text
-formatSString (SymbolicBuffer bs) = "<" <> pack (show (length bs)) <> " symbolic bytes (string)>"
+formatSString (StaticSymBuffer bs) = "<" <> pack (show (length bs)) <> " symbolic bytes (string)>"
 formatSString (ConcreteBuffer bs) = formatString bs
 
 formatBinary :: ByteString -> Text
@@ -132,7 +132,7 @@ formatBinary =
   (<>) "0x" . decodeUtf8 . toStrict . toLazyByteString . byteStringHex
 
 formatSBinary :: Buffer -> Text
-formatSBinary (SymbolicBuffer bs) = "<" <> pack (show (length bs)) <> " symbolic bytes>"
+formatSBinary (StaticSymBuffer bs) = "<" <> pack (show (length bs)) <> " symbolic bytes>"
 formatSBinary (ConcreteBuffer bs) = formatBinary bs
 
 showTraceTree :: DappInfo -> VM -> Text
@@ -250,7 +250,7 @@ getAbiTypes abi = map (parseTypeName mempty) types
         splitOn "," (dropEnd 1 (last (splitOn "(" abi)))
 
 showCall :: [AbiType] -> Buffer -> Text
-showCall ts (SymbolicBuffer bs) = showValues ts $ SymbolicBuffer (drop 4 bs)
+showCall ts (StaticSymBuffer bs) = showValues ts $ StaticSymBuffer (drop 4 bs)
 showCall ts (ConcreteBuffer bs) = showValues ts $ ConcreteBuffer (BS.drop 4 bs)
 
 showError :: ByteString -> Text
@@ -260,14 +260,14 @@ showError bs = case BS.take 4 bs of
   _             -> formatBinary bs
 
 showValues :: [AbiType] -> Buffer -> Text
-showValues ts (SymbolicBuffer sbs) = "symbolic: " <> (pack . show $ AbiTupleType (fromList ts))
+showValues ts (StaticSymBuffer sbs) = "symbolic: " <> (pack . show $ AbiTupleType (fromList ts))
 showValues ts (ConcreteBuffer bs) =
   case runGetOrFail (getAbiSeq (length ts) ts) (fromStrict bs) of
     Right (_, _, xs) -> showAbiValues xs
     Left (_, _, _)   -> formatBinary bs
 
 showValue :: AbiType -> Buffer -> Text
-showValue t (SymbolicBuffer _) = "symbolic: " <> (pack $ show t)
+showValue t (StaticSymBuffer _) = "symbolic: " <> (pack $ show t)
 showValue t (ConcreteBuffer bs) =
   case runGetOrFail (getAbi t) (fromStrict bs) of
     Right (_, _, x) -> showAbiValue x
