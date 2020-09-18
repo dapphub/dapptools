@@ -16,20 +16,20 @@ import EVM.Concrete (Word (..), Whiff(..))
 import qualified EVM.Concrete as Concrete
 import Data.SBV hiding (runSMT, newArray_, addAxiom, Word)
 
-
 -- | Symbolic words of 256 bits, possibly annotated with additional
 --   "insightful" information
 data SymWord = S Whiff (SWord 256)
 
 -- | Convenience functions transporting between the concrete and symbolic realm
+-- TODO - look for all the occurences of sw256 and replace them with manual construction
 sw256 :: SWord 256 -> SymWord
-sw256 = S Dull
+sw256 x = S Dull x
 
 litWord :: Word -> (SymWord)
 litWord (C whiff a) = S whiff (literal $ toSizzle a)
 
 w256lit :: W256 -> SymWord
-w256lit = S Dull . literal . toSizzle
+w256lit = (\x -> (S (Val (show x)) . literal . toSizzle) x)
 
 litAddr :: Addr -> SAddr
 litAddr = SAddr . literal . toSizzle
@@ -162,7 +162,7 @@ readSWordWithBound ind (SymbolicBuffer xs) bound = case (num <$> fromSized <$> u
 readSWordWithBound ind (ConcreteBuffer xs) bound =
   case fromSized <$> unliteral ind of
     Nothing -> readSWordWithBound ind (SymbolicBuffer (litBytes xs)) bound
-    Just x' ->                                       
+    Just x' ->
        -- INVARIANT: bound should always be length xs for concrete bytes
        -- so we should be able to safely ignore it here
          litWord $ Concrete.readMemoryWord (num x') xs
@@ -229,30 +229,26 @@ instance Show SymWord where
   show s@(S Dull _) = case maybeLitWord s of
     Nothing -> "<symbolic>"
     Just w  -> show w
-  show (S (Var var) x) = var ++ ": " ++ show x
-  show (S (InfixBinOp symbol x y) z) = show x ++ symbol ++ show y  ++ ": " ++ show z
-  show (S (BinOp symbol x y) z) = symbol ++ show x ++ show y  ++ ": " ++ show z
-  show (S (UnOp symbol x) z) = symbol ++ show x ++ ": " ++ show z
-  show (S whiff x) = show whiff ++ ": " ++ show x
+  show (S whiff x) = show whiff
 
 instance EqSymbolic SymWord where
   (.==) (S _ x) (S _ y) = x .== y
 
 instance Num SymWord where
-  (S _ x) + (S _ y) = sw256 (x + y)
-  (S _ x) * (S _ y) = sw256 (x * y)
-  abs (S _ x) = sw256 (abs x)
-  signum (S _ x) = sw256 (signum x)
-  fromInteger x = sw256 (fromInteger x)
-  negate (S _ x) = sw256 (negate x)
+  (S a x) + (S b y) = S (InfixBinOp "+" a b) (x + y)
+  (S a x) * (S b y) = S (InfixBinOp "*" a b) (x * y)
+  abs (S a x) = S (UnOp "abs" a) (abs x)
+  signum (S a x) = S (UnOp "signum" a) (signum x)
+  fromInteger x = S (Val (show x)) (fromInteger x)
+  negate (S a x) = S (UnOp "-" a) (negate x)
 
 instance Bits SymWord where
-  (S _ x) .&. (S _ y) = sw256 (x .&. y)
-  (S _ x) .|. (S _ y) = sw256 (x .|. y)
-  (S _ x) `xor` (S _ y) = sw256 (x `xor` y)
-  complement (S _ x) = sw256 (complement x)
-  shift (S _ x) i = sw256 (shift x i)
-  rotate (S _ x) i = sw256 (rotate x i)
+  (S a x) .&. (S b y) = S (BinOp "&" a b) (x .&. y)
+  (S a x) .|. (S b y) = S (BinOp "|" a b) (x .|. y)
+  (S a x) `xor` (S b y) = S (BinOp "xor" a b) (x `xor` y)
+  complement (S a x) = S (UnOp "~" a) (complement x)
+  shift (S a x) i = S (UnOp ("<<" ++ (show i) ++ " ") a ) (shift x i)
+  rotate (S a x) i = S (UnOp ("rotate " ++ (show i) ++ " ") a) (rotate x i)
   bitSize (S _ x) = bitSize x
   bitSizeMaybe (S _ x) = bitSizeMaybe x
   isSigned (S _ x) = isSigned x
@@ -267,7 +263,7 @@ instance SDivisible SymWord where
                              in (sw256 a, sw256 b)
 
 instance Mergeable SymWord where
-  symbolicMerge a b (S _ x) (S _ y) = sw256 $ symbolicMerge a b x y
+  symbolicMerge a b (S wx x) (S wy y) = S wx (symbolicMerge a b x y)
   select xs (S _ x) b = let ys = fmap (\(S _ y) -> y) xs
                         in sw256 $ select ys x b
 

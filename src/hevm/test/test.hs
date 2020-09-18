@@ -461,7 +461,7 @@ main = defaultMain $ testGroup "hevm"
                   contract C {
                     uint x;
                     A constant a = A(0x35D1b3F3D7966A1DFe207aa4514C12a259A0492B);
-    
+
                     function call_A() public view {
                       // should fail since a.x() can be anything
                       assert(a.x() == x);

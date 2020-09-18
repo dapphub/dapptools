@@ -16,6 +16,8 @@ import Data.Maybe      (fromMaybe)
 import Data.Semigroup  ((<>))
 import Data.Word       (Word8)
 
+import Text.Printf
+
 import qualified Data.ByteString as BS
 
 wordAt :: Int -> ByteString -> W256
@@ -38,13 +40,22 @@ byteStringSliceWithDefaultZeroes offset size bs =
 
 -- | This type can give insight into the provenance of a term
 data Whiff = Dull
+           | Val String
            | FromKeccak ByteString
            | Var String
            | FromBytes Buffer
            | InfixBinOp String Whiff Whiff
            | BinOp String Whiff Whiff
            | UnOp String Whiff
-  deriving Show
+
+instance Show Whiff where
+  show Dull = "Dull"
+  show (Val s) = s
+  show (FromKeccak bstr) = "FromKeccak " ++ show bstr
+  show (Var x) = printf "<%s>" x
+  show (InfixBinOp op a b) = printf "(%s %s %s)" (show a) op (show b)
+  show (BinOp op a b) = printf "%s(%s, %s)" op (show a) (show b)
+  show (UnOp op x) = op ++ "(" ++ (show x) ++ ")"
 
 w256 :: W256 -> Word
 w256 = C Dull

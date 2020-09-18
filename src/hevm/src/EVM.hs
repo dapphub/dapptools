@@ -21,7 +21,7 @@ import EVM.ABI
 import EVM.Types
 import EVM.Solidity
 import EVM.Keccak
-import EVM.Concrete (Word(..), w256, createAddress, wordValue, keccakBlob, create2Address)
+import EVM.Concrete (Word(..), w256, createAddress, wordValue, keccakBlob, create2Address, Whiff(..))
 import EVM.Symbolic
 import EVM.Op
 import EVM.FeeSchedule (FeeSchedule (..))
@@ -613,7 +613,7 @@ exec1 = do
         0x09 -> stackOp3 (const g_mid) (\(x, y, z) -> mulmod x y z)
 
         -- op: LT
-        0x10 -> stackOp2 (const g_verylow) $ \(x, y) -> ite (x .< y) 1 0
+        0x10 -> stackOp2 (const g_verylow) $ \((S a x), (S b y)) -> ite ((S a x) .< (S b y)) (S (InfixBinOp "<" a b) 1) (S (InfixBinOp ">=" a b) 0)
         -- op: GT
         0x11 -> stackOp2 (const g_verylow) $ \(x, y) -> ite (x .> y) 1 0
         -- op: SLT
@@ -622,9 +622,9 @@ exec1 = do
         0x13 -> stackOp2 (const g_verylow) $ uncurry sgt
 
         -- op: EQ
-        0x14 -> stackOp2 (const g_verylow) $ \(x, y) -> ite (x .== y) 1 0
+        0x14 -> stackOp2 (const g_verylow) $ \((S a x), (S b y)) -> ite ((S a x) .== (S b y)) (S (InfixBinOp "==" a b) 1) (S (InfixBinOp "!=" a b) 0)
         -- op: ISZERO
-        0x15 -> stackOp1 (const g_verylow) $ \x -> ite (x .== 0) 1 0
+        0x15 -> stackOp1 (const g_verylow) $ \(S a x) -> ite ((S a x) .== 0) (S (UnOp "isZero" a) 1) (S (UnOp "isNotZero" a) 0)
 
         -- op: AND
         0x16 -> stackOp2 (const g_verylow) $ uncurry (.&.)
@@ -721,7 +721,7 @@ exec1 = do
         -- op: CALLDATASIZE
         0x36 ->
           limitStack 1 . burn g_base $
-            next >> pushSym (sw256 . zeroExtend . snd $ (the state calldata))
+            next >> pushSym ((S (Var "Calldatasize")) . zeroExtend . snd $ (the state calldata))
 
         -- op: CALLDATACOPY
         0x37 ->
