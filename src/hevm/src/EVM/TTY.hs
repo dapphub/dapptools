@@ -731,7 +731,7 @@ drawVmBrowser ui =
       ]
   ]
   where storageDisplay (Concrete s) = pack ( show ( Map.toList s))
-        storageDisplay (Symbolic _) = pack "<symbolic>"
+        storageDisplay (Symbolic a) = pack ("<symbolic> " ++ show a)
         dapp' = dapp (view (browserVm . uiTestOpts) ui)
         Just (_, (_, c)) = listSelectedElement (view browserContractList ui)
 --        currentContract  = view (dappSolcByHash . ix ) dapp
@@ -911,13 +911,13 @@ drawStackPane ui =
     labelText = txt ("Gas available: " <> gasText <> "; stack:")
   in hBorderWithLabel labelText <=>
     renderList
-      (\_ (i, x@(S _ w)) ->
+      (\_ (i, x@(S a w)) ->
          vBox
            [ withHighlight True (str ("#" ++ show i ++ " "))
-               <+> str (show x)
-           , dim (txt ("   " <> case unliteral w of
-                       Nothing -> ""
-                       Just u -> showWordExplanation (fromSizzle u) $ dapp (view uiTestOpts ui)))
+               <+> str (show w)
+           , dim (txt ("   " <> (case unliteral w of
+                       Nothing -> pack $ show a
+                       Just u -> showWordExplanation (fromSizzle u) $ dapp (view uiTestOpts ui)) <> pack (" " ++ (show a))))
            ])
       False
       (view uiStackList ui)

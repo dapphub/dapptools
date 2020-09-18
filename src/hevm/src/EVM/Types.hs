@@ -78,7 +78,7 @@ class FromSizzleBV a where
 
    default fromSizzle :: (Num (FromSizzle a), Integral a) => a -> FromSizzle a
    fromSizzle = fromIntegral
- 
+
 instance (ToSizzleBV W256)
 instance (FromSizzleBV (WordN 256))
 instance (ToSizzleBV Addr)
