@@ -774,8 +774,8 @@ symvmFromCommand cmd = do
                                    )
 
   caller' <- maybe (SAddr <$> freshVar_) (return . litAddr) (caller cmd)
-  ts <- maybe (sw256 <$> freshVar_) (return . w256lit) (timestamp cmd)
-  callvalue' <- maybe (sw256 <$> freshVar_) (return . w256lit) (value cmd)
+  ts <- maybe (S (Var "Timestamp") <$> freshVar_) (return . w256lit) (timestamp cmd)
+  callvalue' <- maybe ((S (Var "CallValue")) <$> freshVar_) (return . w256lit) (value cmd)
   (calldata', cdlen, pathCond) <- case (calldata cmd, sig cmd) of
     -- fully abstract calldata (up to 1024 bytes)
     (Nothing, Nothing) -> do
