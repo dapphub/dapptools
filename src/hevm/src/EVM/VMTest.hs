@@ -30,7 +30,7 @@ import Data.Aeson ((.:), (.:?), FromJSON (..))
 import Data.Bifunctor (bimap)
 import Data.Foldable (fold)
 import Data.Map (Map)
-import Data.Maybe (fromMaybe)
+import Data.Maybe (fromMaybe, isNothing)
 import Data.Witherable (Filterable, catMaybes)
 
 import qualified Data.Map          as Map
@@ -316,9 +316,7 @@ parseBCSuite x = case (JSON.eitherDecode' x) :: Either String (Map String Blockc
 #endif
 
 realizeContracts :: Map Addr Contract -> Map Addr EVM.Contract
-realizeContracts = Map.fromList . map f . Map.toList
-  where
-    f (a, x) = (a, realizeContract x)
+realizeContracts = fmap realizeContract
 
 realizeContract :: Contract -> EVM.Contract
 realizeContract x =
@@ -372,17 +370,18 @@ fromCreateBlockchainCase :: Block -> Transaction
                          -> Either BlockchainError Case
 fromCreateBlockchainCase block tx preState postState =
   case (sender 1 tx,
-        checkCreateTx tx block preState) of
+        checkTx tx block preState) of
     (Nothing, _) -> Left SignatureUnverified
     (_, Nothing) -> Left FailedCreate
-    (Just origin, Just (checkState, createdAddr)) -> let
+    (Just origin, Just checkState) -> let
       feeSchedule = EVM.FeeSchedule.istanbul
       in Right $ Case
          (EVM.VMOpts
           { vmoptContract      = EVM.initialContract (EVM.InitCode (txData tx))
           , vmoptCalldata      = (mempty, 0)
           , vmoptValue         = w256lit $ txValue tx
-          , vmoptAddress       = createdAddr
+          , vmoptAddress       = EVM.createAddress origin $
+                                    view (accountAt origin . nonce) preState
           , vmoptCaller        = (litAddr origin)
           , vmoptOrigin        = origin
           , vmoptGas           = txGasLimit tx - fromIntegral (txGasCost feeSchedule tx)
@@ -413,7 +412,7 @@ fromNormalBlockchainCase block tx preState postState =
       theCode = case toCode of
           Nothing -> EVM.RuntimeCode mempty
           Just c -> view code c
-  in case (toAddr , toCode , sender 1 tx , checkNormalTx tx block preState) of
+  in case (toAddr , toCode , sender 1 tx , checkTx tx block preState) of
       (_, _, Nothing, _) -> Left SignatureUnverified
       (_, _, _, Nothing) -> Left InvalidTx
       (_, _, Just origin, Just checkState) -> Right $ Case
@@ -451,40 +450,27 @@ validateTx tx cs = do
   return $ gasDeposit + (txValue tx) <= originBalance
     && (txNonce tx) == originNonce
 
-checkNormalTx :: Transaction -> Block -> Map Addr Contract -> Maybe (Map Addr Contract)
-checkNormalTx tx block prestate = do
-  toAddr <- txToAddr tx
+checkTx :: Transaction -> Block -> Map Addr Contract -> Maybe (Map Addr Contract)
+checkTx tx block prestate = do
   origin <- sender 1 tx
   valid  <- validateTx tx prestate
   let gasDeposit = fromIntegral (txGasPrice tx) * (txGasLimit tx)
       coinbase   = blockCoinbase block
-  if not valid then mzero else
+      isCreate   = isNothing (txToAddr tx)
+      toAddr     = fromMaybe (EVM.createAddress origin senderNonce) (txToAddr tx)
+      senderNonce = view (accountAt origin . nonce) prestate
+      prevCode    = view (accountAt toAddr .  code) prestate
+      prevNonce   = view (accountAt toAddr . nonce) prestate
+  if not valid
+    || (isCreate && ((prevCode /= EVM.RuntimeCode mempty) || (prevNonce /= 0)))
+  then mzero
+  else
     return $
     (Map.adjust ((over nonce   (+ 1))
                . (over balance (subtract gasDeposit))) origin)
     . touchAccount origin
     . touchAccount toAddr
     . touchAccount coinbase $ prestate
-
-checkCreateTx :: Transaction -> Block -> Map Addr Contract -> Maybe ((Map Addr Contract), Addr)
-checkCreateTx tx block prestate = do
-  origin <- sender 1 tx
-  valid  <- validateTx tx prestate
-  let gasDeposit  = fromIntegral (txGasPrice tx) * (txGasLimit tx)
-      coinbase    = blockCoinbase block
-      senderNonce = view (accountAt origin . nonce) prestate
-      createdAddr = EVM.createAddress origin senderNonce
-      prevCode    = view (accountAt createdAddr .  code) prestate
-      prevNonce   = view (accountAt createdAddr . nonce) prestate
-  if (prevCode /= EVM.RuntimeCode mempty) || (prevNonce /= 0) || (not valid)
-  then mzero
-  else
-    return
-    ((Map.adjust ((over nonce   (+ 1))
-                 . (over balance (subtract gasDeposit))) origin)
-    . touchAccount origin
-    . touchAccount createdAddr
-    . touchAccount coinbase $ prestate, createdAddr)
 
 initTx :: Case -> Map Addr Contract
 initTx x =
