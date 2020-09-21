@@ -338,7 +338,6 @@ data BlockchainError
   = TooManyBlocks
   | TooManyTxs
   | NoTxs
-  | TargetMissing
   | SignatureUnverified
   | InvalidTx
   | OldNetwork
@@ -348,7 +347,6 @@ data BlockchainError
 errorFatal :: BlockchainError -> Bool
 errorFatal TooManyBlocks = True
 errorFatal TooManyTxs = True
-errorFatal TargetMissing = True
 errorFatal SignatureUnverified = True
 errorFatal InvalidTx = True
 errorFatal _ = False
@@ -357,71 +355,27 @@ fromBlockchainCase :: BlockchainCase -> Either BlockchainError Case
 fromBlockchainCase (BlockchainCase blocks preState postState network) =
   case (blocks, network) of
     ([block], "Istanbul") -> case blockTxs block of
-      [tx] -> case txToAddr tx of
-        Nothing -> fromCreateBlockchainCase block tx preState postState
-        Just _  -> fromNormalBlockchainCase block tx preState postState
+      [tx] -> fromBlockchainCase' block tx preState postState
       []        -> Left NoTxs
       _         -> Left TooManyTxs
     ([_], _) -> Left OldNetwork
     (_, _)        -> Left TooManyBlocks
 
-fromCreateBlockchainCase :: Block -> Transaction
-                         -> Map Addr Contract -> Map Addr Contract
-                         -> Either BlockchainError Case
-fromCreateBlockchainCase block tx preState postState =
-  case (sender 1 tx,
-        checkTx tx block preState) of
-    (Nothing, _) -> Left SignatureUnverified
-    (_, Nothing) -> Left FailedCreate
-    (Just origin, Just checkState) -> let
-      feeSchedule = EVM.FeeSchedule.istanbul
-      in Right $ Case
-         (EVM.VMOpts
-          { vmoptContract      = EVM.initialContract (EVM.InitCode (txData tx))
-          , vmoptCalldata      = (mempty, 0)
-          , vmoptValue         = w256lit $ txValue tx
-          , vmoptAddress       = EVM.createAddress origin $
-                                    view (accountAt origin . nonce) preState
-          , vmoptCaller        = (litAddr origin)
-          , vmoptOrigin        = origin
-          , vmoptGas           = txGasLimit tx - fromIntegral (txGasCost feeSchedule tx)
-          , vmoptGaslimit      = txGasLimit tx
-          , vmoptNumber        = blockNumber block
-          , vmoptTimestamp     = blockTimestamp block
-          , vmoptCoinbase      = blockCoinbase block
-          , vmoptDifficulty    = blockDifficulty block
-          , vmoptMaxCodeSize   = 24576
-          , vmoptBlockGaslimit = blockGasLimit block
-          , vmoptGasprice      = txGasPrice tx
-          , vmoptSchedule      = feeSchedule
-          , vmoptChainId       = 1
-          , vmoptCreate        = True
-          , vmoptStorageModel  = EVM.ConcreteS
-          })
-        checkState
-        (Just $ Expectation Nothing postState Nothing)
-
-
-fromNormalBlockchainCase :: Block -> Transaction
+fromBlockchainCase' :: Block -> Transaction
                        -> Map Addr Contract -> Map Addr Contract
                        -> Either BlockchainError Case
-fromNormalBlockchainCase block tx preState postState =
-  let Just toAddr = txToAddr tx
-      feeSchedule = EVM.FeeSchedule.istanbul
-      toCode = Map.lookup toAddr preState
-      theCode = case toCode of
-          Nothing -> EVM.RuntimeCode mempty
-          Just c -> view code c
-  in case (toAddr , toCode , sender 1 tx , checkTx tx block preState) of
-      (_, _, Nothing, _) -> Left SignatureUnverified
-      (_, _, _, Nothing) -> Left InvalidTx
-      (_, _, Just origin, Just checkState) -> Right $ Case
+fromBlockchainCase' block tx preState postState =
+  let isCreate = isNothing (txToAddr tx)
+  in case (sender 1 tx, checkTx tx block preState) of
+      (Nothing, _) -> Left SignatureUnverified
+      (_, Nothing) -> Left (if isCreate then FailedCreate else InvalidTx)
+      (Just origin, Just checkState) -> Right $ Case
         (EVM.VMOpts
          { vmoptContract      = EVM.initialContract theCode
-         , vmoptCalldata      = (ConcreteBuffer $ txData tx, literal . num . BS.length $ txData tx)
+         , vmoptCalldata      = cd
          , vmoptValue         = litWord (EVM.w256 $ txValue tx)
          , vmoptAddress       = toAddr
-         , vmoptCaller        = (litAddr origin)
+         , vmoptCaller        = litAddr origin
          , vmoptOrigin        = origin
          , vmoptGas           = txGasLimit tx - fromIntegral (txGasCost feeSchedule tx)
          , vmoptGaslimit      = txGasLimit tx
@@ -434,26 +388,39 @@ fromNormalBlockchainCase block tx preState postState =
          , vmoptGasprice      = txGasPrice tx
          , vmoptSchedule      = feeSchedule
          , vmoptChainId       = 1
-         , vmoptCreate        = False
+         , vmoptCreate        = isCreate
          , vmoptStorageModel  = EVM.ConcreteS
          })
         checkState
         (Just $ Expectation Nothing postState Nothing)
+          where
+            toAddr = fromMaybe (EVM.createAddress origin senderNonce) (txToAddr tx)
+            senderNonce = view (accountAt origin . nonce) preState
+            feeSchedule = EVM.FeeSchedule.istanbul
+            toCode = Map.lookup toAddr preState
+            theCode = if isCreate
+                      then EVM.InitCode (txData tx)
+                      else maybe (EVM.RuntimeCode mempty) (view code) toCode
+            cd = if isCreate
+                 then (mempty, 0)
+                 else (ConcreteBuffer $ txData tx, literal . num . BS.length $ txData tx)
 
 
-validateTx :: Transaction -> Map Addr Contract -> Maybe Bool
+validateTx :: Transaction -> Map Addr Contract -> Maybe ()
 validateTx tx cs = do
   origin        <- sender 1 tx
   originBalance <- (view balance) <$> view (at origin) cs
   originNonce   <- (view nonce)   <$> view (at origin) cs
   let gasDeposit = fromIntegral (txGasPrice tx) * (txGasLimit tx)
-  return $ gasDeposit + (txValue tx) <= originBalance
+  if gasDeposit + (txValue tx) <= originBalance
     && (txNonce tx) == originNonce
+  then Just ()
+  else Nothing
 
 checkTx :: Transaction -> Block -> Map Addr Contract -> Maybe (Map Addr Contract)
 checkTx tx block prestate = do
   origin <- sender 1 tx
-  valid  <- validateTx tx prestate
+  validateTx tx prestate
   let gasDeposit = fromIntegral (txGasPrice tx) * (txGasLimit tx)
       coinbase   = blockCoinbase block
       isCreate   = isNothing (txToAddr tx)
@@ -461,8 +428,7 @@ checkTx tx block prestate = do
       senderNonce = view (accountAt origin . nonce) prestate
       prevCode    = view (accountAt toAddr .  code) prestate
       prevNonce   = view (accountAt toAddr . nonce) prestate
-  if not valid
-    || (isCreate && ((prevCode /= EVM.RuntimeCode mempty) || (prevNonce /= 0)))
+  if isCreate && ((prevCode /= EVM.RuntimeCode mempty) || (prevNonce /= 0))
   then mzero
   else
     return $
