@@ -455,14 +455,15 @@ initialContract theContractCode = Contract
       keccak (stripBytecodeMetadata theCode)
   , _storage  = Concrete mempty
   , _balance  = 0
-  , _nonce    = 0
+  , _nonce    = if creation then 1 else 0
   , _opIxMap  = mkOpIxMap theCode
   , _codeOps  = mkCodeOps theCode
   , _external = False
   , _origStorage = mempty
-  } where theCode = case theContractCode of
-            InitCode b    -> b
-            RuntimeCode b -> b
+  } where
+      (creation, theCode) = case theContractCode of
+            InitCode b    -> (True, b)
+            RuntimeCode b -> (False, b)
 
 contractWithStore :: ContractCode -> Storage -> Contract
 contractWithStore theContractCode store =
