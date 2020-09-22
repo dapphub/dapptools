@@ -12,6 +12,7 @@ import EVM.Exec
 import EVM.Format
 import EVM.Solidity
 import EVM.Types
+import EVM.VMTest
 
 import qualified EVM.FeeSchedule as FeeSchedule
 
@@ -558,14 +559,19 @@ word32Bytes :: Word32 -> ByteString
 word32Bytes x = BS.pack [byteAt x (3 - i) | i <- [0..3]]
 
 setupCall :: TestVMParams -> Text -> AbiValue -> EVM ()
-setupCall TestVMParams{..} sig args  = do
+setupCall TestVMParams{..} sig args = do
   resetState
-  use (env . contracts) >>= assign (tx . txReversion)
   assign (tx . isCreate) False
   loadContract testAddress
-  assign (state . calldata) $ (ConcreteBuffer $ abiMethod sig args, literal . num . BS.length $ abiMethod sig args)
+  assign (state . calldata) (ConcreteBuffer $ abiMethod sig args, literal . num . BS.length $ abiMethod sig args)
   assign (state . caller) (litAddr testCaller)
   assign (state . gas) (w256 testGasCall)
+  origin' <- fromMaybe (initialContract (RuntimeCode mempty)) <$> use (env . contracts . at testOrigin)
+  let originBal = view balance origin'
+  when (originBal <= (w256 testGasprice) * (w256 testGasCall)) $ error "insufficient balance for gas cost"
+  modifying (env . contracts) (setupTx testOrigin testCoinbase (w256 testGasprice) (w256 testGasCall))
+  vm <- get
+  put $ initTx vm $ view (env . contracts) vm
 
 initialUnitTestVm :: UnitTestOptions -> SolcContract -> VM
 initialUnitTestVm (UnitTestOptions {..}) theContract =

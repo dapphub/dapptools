@@ -1076,9 +1076,7 @@ exec1 = do
                               assign callvalue (litWord xValue)
                               assign caller (litAddr self)
                               assign contract xTo
-                            zoom (env . contracts) $ do
-                              ix self . balance -= xValue
-                              ix xTo  . balance += xValue
+                            transfer self xTo xValue
                             touchAccount self
                             touchAccount xTo
             _ ->
@@ -1247,6 +1245,12 @@ exec1 = do
         xxx ->
           vmError (UnrecognizedOpcode xxx)
 
+transfer :: Addr -> Addr -> Word -> EVM ()
+transfer xFrom xTo xValue =
+  zoom (env . contracts) $ do
+    ix xFrom . balance -= xValue
+    ix xTo  . balance += xValue
+
 -- | Checks a *CALL for failure; OOG, too many callframes, memory access etc.
 callChecks
   :: (?op :: Word8)
@@ -1300,9 +1304,7 @@ precompiledContract this xGas precompileAddr recipient xValue inOffset inSize ou
         Just 1 ->
           fetchAccount recipient $ \_ -> do
 
-          zoom (env . contracts) $ do
-            ix self . balance -= xValue
-            ix recipient  . balance += xValue
+          transfer self recipient xValue
           touchAccount self
           touchAccount recipient
           touchAccount precompileAddr
@@ -1966,14 +1968,12 @@ create self this xGas xValue xs newAddr initCode = do
 
         zoom (env . contracts) $ do
           oldAcc <- use (at newAddr)
-          let oldBal = case oldAcc of
-                Nothing -> 0
-                Just c  -> view balance c
-          assign (at newAddr) (Just newContract)
-          assign (ix newAddr . balance) (oldBal + xValue)
-          assign (ix newAddr . nonce) 1
-          modifying (ix self . balance) (flip (-) xValue)
+          let oldBal = maybe 0 (view balance) oldAcc
+
+          assign (at newAddr) (Just (newContract & balance .~ oldBal))
           modifying (ix self . nonce) succ
+
+        transfer self newAddr xValue
 
         pushTrace (FrameTrace newContext)
         next

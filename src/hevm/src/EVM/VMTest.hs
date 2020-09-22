@@ -6,6 +6,8 @@ module EVM.VMTest
 #if MIN_VERSION_aeson(1, 0, 0)
   , parseBCSuite
 #endif
+  , initTx
+  , setupTx
   , vmForCase
   , checkExpectation
   ) where
@@ -96,7 +98,6 @@ checkStateFail diff x vm (okState, okMoney, okNonce, okData, okCode) = do
         , ("bad-code",    not okCode  || okMoney || okNonce || okData || okState)
         ])
     check = checkContracts x
-    initial = initTx x
     expected = testExpectation x
     actual = view (EVM.env . EVM.contracts . to (fmap (clearZeroStorage.clearOrigStorage))) vm
     printStorage (EVM.Symbolic c) = show c
@@ -104,10 +105,8 @@ checkStateFail diff x vm (okState, okMoney, okNonce, okData, okCode) = do
 
   putStr (unwords reason)
   when (diff && (not okState)) $ do
-    putStrLn "\nCheck balance/state: "
+    putStrLn "\nPre balance/state: "
     printContracts check
-    putStrLn "\nInitial balance/state: "
-    printContracts initial
     putStrLn "\nExpected balance/state: "
     printContracts expected
     putStrLn "\nActual balance/state: "
@@ -315,7 +314,8 @@ checkTx :: Transaction -> Block -> Map Addr EVM.Contract -> Maybe (Map Addr EVM.
 checkTx tx block prestate = do
   origin <- sender 1 tx
   validateTx tx prestate
-  let gasDeposit = EVM.w256 $ (txGasPrice tx) * (txGasLimit tx)
+  let gasPrice = EVM.w256 $ txGasPrice tx
+      gasLimit = EVM.w256 $ txGasLimit tx
       coinbase   = blockCoinbase block
       isCreate   = isNothing (txToAddr tx)
       senderNonce = EVM.wordValue $ view (accountAt origin . nonce) prestate
@@ -325,35 +325,13 @@ checkTx tx block prestate = do
   if isCreate && ((prevCode /= EVM.RuntimeCode mempty) || (prevNonce /= 0))
   then mzero
   else
-    return $
-    (Map.adjust ((over nonce   (+ 1))
-               . (over balance (subtract gasDeposit))) origin)
-    . touchAccount origin
-    . touchAccount toAddr
-    . touchAccount coinbase $ prestate
-
-initTx :: Case -> Map Addr EVM.Contract
-initTx x =
-  let
-    checkState = checkContracts x
-    opts     = testVmOpts x
-    toAddr   = EVM.vmoptAddress  opts
-    origin   = EVM.vmoptOrigin   opts
-    value    = EVM.vmoptValue    opts
-    toContract = EVM.vmoptContract opts
-    oldBalance = view (accountAt toAddr . balance) checkState
-    creation = EVM.vmoptCreate   opts
-  in
-    (Map.adjust (over balance (subtract (forceLit value))) origin)
-    . (Map.adjust (over balance (+ (forceLit value))) toAddr)
-    . (if creation then Map.insert toAddr (toContract & balance .~ oldBalance) else id)
-    $ checkState
+    return $ (setupTx origin coinbase gasPrice gasLimit) . (touchAccount toAddr) $ prestate
 
 vmForCase :: Case -> EVM.VM
 vmForCase x =
   let
     checkState = checkContracts x
-    initState = initTx x
+    vm = EVM.makeVm (testVmOpts x)
     opts = testVmOpts x
     creation = EVM.vmoptCreate opts
     touchedAccounts =
@@ -362,7 +340,39 @@ vmForCase x =
       else
         [EVM.vmoptOrigin opts, EVM.vmoptAddress opts]
   in
-    EVM.makeVm (testVmOpts x)
-    & EVM.env . EVM.contracts .~ initState
-    & EVM.tx . EVM.txReversion .~ checkState
-    & EVM.tx . EVM.substate . EVM.touchedAccounts .~ touchedAccounts
+    initTx vm checkState
+
+-- | Increments origin nonce and pays gas deposit
+setupTx :: Addr -> Addr -> EVM.Word -> EVM.Word -> Map Addr EVM.Contract -> Map Addr EVM.Contract
+setupTx origin coinbase gasPrice gasLimit prestate =
+  let gasCost = gasPrice * gasLimit
+  in (Map.adjust ((over nonce   (+ 1))
+               . (over balance (subtract gasCost))) origin)
+    . touchAccount origin
+    . touchAccount coinbase $ prestate
+
+-- | Given a valid tx loaded into the vm state,
+-- subtract gas payment from the origin, increment the nonce
+-- and pay receiving address
+initTx :: EVM.VM -> Map Addr EVM.Contract -> EVM.VM
+initTx vm preState = let
+    toAddr   = view (EVM.state . EVM.contract) vm
+    origin   = view (EVM.tx . EVM.origin) vm
+    value    = view (EVM.state . EVM.callvalue) vm
+    Just toContract = view (EVM.env . EVM.contracts . at toAddr) vm
+    oldBalance = view (accountAt toAddr . balance) preState
+    creation = view (EVM.tx . EVM.isCreate) vm
+    initState =
+      (Map.adjust (over balance (subtract (forceLit value))) origin)
+      . (Map.adjust (over balance (+ (forceLit value))) toAddr)
+      . (if creation then Map.insert toAddr (toContract & balance .~ oldBalance) else id)
+      $ preState
+
+    touched = if creation
+              then [origin]
+              else [origin, toAddr]
+
+    in
+      vm & EVM.env . EVM.contracts .~ initState
+         & EVM.tx . EVM.txReversion .~ preState
+         & EVM.tx . EVM.substate . EVM.touchedAccounts .~ touched
