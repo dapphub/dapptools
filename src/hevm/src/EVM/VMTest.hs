@@ -52,7 +52,7 @@ data Block = Block
 data Case = Case
   { testVmOpts      :: EVM.VMOpts
   , checkContracts  :: Map Addr EVM.Contract
-  , testExpectation :: Maybe Expectation
+  , testExpectation :: Map Addr EVM.Contract
   } deriving Show
 
 data BlockchainCase = BlockchainCase
@@ -60,12 +60,6 @@ data BlockchainCase = BlockchainCase
   , blockchainPre     :: Map Addr EVM.Contract
   , blockchainPost    :: Map Addr EVM.Contract
   , blockchainNetwork :: String
-  } deriving Show
-
-data Expectation = Expectation
-  { expectedOut       :: Maybe ByteString
-  , expectedContracts :: Map Addr EVM.Contract
-  , expectedGas       :: Maybe W256
   } deriving Show
 
 accountAt :: Addr -> Getter (Map Addr EVM.Contract) EVM.Contract
@@ -83,8 +77,8 @@ splitEithers =
   . (fmap fst &&& fmap snd)
   . (fmap (preview _Left &&& preview _Right))
 
-checkStateFail :: Bool -> Case -> Expectation -> EVM.VM -> (Bool, Bool, Bool, Bool, Bool) -> IO Bool
-checkStateFail diff x expectation vm (okState, okMoney, okNonce, okData, okCode) = do
+checkStateFail :: Bool -> Case -> EVM.VM -> (Bool, Bool, Bool, Bool, Bool) -> IO Bool
+checkStateFail diff x vm (okState, okMoney, okNonce, okData, okCode) = do
   let
     printContracts :: Map Addr EVM.Contract -> IO ()
     printContracts cs = putStrLn $ Map.foldrWithKey (\k v acc ->
@@ -103,7 +97,7 @@ checkStateFail diff x expectation vm (okState, okMoney, okNonce, okData, okCode)
         ])
     check = checkContracts x
     initial = initTx x
-    expected = expectedContracts expectation
+    expected = testExpectation x
     actual = view (EVM.env . EVM.contracts . to (fmap (clearZeroStorage.clearOrigStorage))) vm
     printStorage (EVM.Symbolic c) = show c
     printStorage (EVM.Concrete c) = show $ Map.toList c
@@ -121,27 +115,12 @@ checkStateFail diff x expectation vm (okState, okMoney, okNonce, okData, okCode)
   return okState
 
 checkExpectation :: Bool -> Case -> EVM.VM -> IO Bool
-checkExpectation diff x vm =
-  case (testExpectation x, view EVM.result vm) of
-    (Just expectation, _) -> do
-      let (okState, b2, b3, b4, b5) =
-            checkExpectedContracts vm (expectedContracts expectation)
-      _ <- if not okState then
-               checkStateFail
-                 diff x expectation vm (okState, b2, b3, b4, b5)
-           else return True
-      return okState
-
-    (Nothing, Just (EVM.VMSuccess _)) -> do
-      putStr "unexpected-success"
-      return False
-
-    (Nothing, Just (EVM.VMFailure _)) ->
-      return True
-
-    (_, Nothing) -> do
-      print (view EVM.result vm)
-      error "internal error"
+checkExpectation diff x vm = do
+  let expectation = testExpectation x
+  let (okState, b2, b3, b4, b5) = checkExpectedContracts vm $ expectation
+  unless okState $ void $ checkStateFail
+    diff x vm (okState, b2, b3, b4, b5)
+  return okState
 
 -- quotient account state by nullness
 (~=) :: Map Addr EVM.Contract -> Map Addr EVM.Contract -> Bool
@@ -201,7 +180,7 @@ instance FromJSON EVM.Contract where
        & origStorage .~ fmap EVM.w256 storage'
 
   parseJSON invalid =
-    JSON.typeMismatch "VM test case contract" invalid
+    JSON.typeMismatch "Contract" invalid
 
 instance FromJSON BlockchainCase where
   parseJSON (JSON.Object v) = BlockchainCase
@@ -307,7 +286,7 @@ fromBlockchainCase' block tx preState postState =
          , vmoptStorageModel  = EVM.ConcreteS
          })
         checkState
-        (Just $ Expectation Nothing postState Nothing)
+        postState
           where
             toAddr = fromMaybe (EVM.createAddress origin senderNonce) (txToAddr tx)
             senderNonce = EVM.wordValue $ view (accountAt origin . nonce) preState
