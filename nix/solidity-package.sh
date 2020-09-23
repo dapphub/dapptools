@@ -21,6 +21,13 @@ if [[ "$doCheck" == 1 ]] && command -v dapp2-test-hevm >/dev/null 2>&1; then
   DAPP_OUT=out dapp2-test-hevm
 fi
 
+if [[ $flatten == 1 && ! $x =~ \.t(\.[a-z0-9]+)*\.sol$ ]]; then
+    flat_file="$DAPP_OUT/$dir/${x##*/}.flat"
+    (set -x; solc $REMAPPINGS --allow-paths $DAPP_SRC $solcFlags $jsonopts "$x" >"$json_file")
+    (set -x; hevm flatten --source-file "$x" --json-file "$json_file" >"$flat_file")
+    x="$flat_file"
+fi
+
 if [ "$extract" == 1 ]; then
   mapfile -t contracts < <(<"$json_file" jq '.contracts|keys[]' -r | sort -u -t: -k2 | sort)
   data=$(<"$json_file" jq '.contracts' -r)
