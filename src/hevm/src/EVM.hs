@@ -207,7 +207,9 @@ data FrameContext
     , creationContextSubstate  :: SubState
     }
   | CallContext
-    { callContextOffset    :: Word
+    { callContextTarget    :: Addr
+    , callContextContext   :: Addr
+    , callContextOffset    :: Word
     , callContextSize      :: Word
     , callContextCodehash  :: W256
     , callContextAbi       :: Maybe Word
@@ -1879,11 +1881,13 @@ delegateCall this gasGiven xTo xContext xValue xInOffset xInSize xOutOffset xOut
         Just target ->
           burn xGas $ do
             let newContext = CallContext
-                  { callContextOffset = xOutOffset
-                  , callContextSize = xOutSize
-                  , callContextCodehash = view codehash target
+                  { callContextTarget    = xTo
+                  , callContextContext   = xContext
+                  , callContextOffset    = xOutOffset
+                  , callContextSize      = xOutSize
+                  , callContextCodehash  = view codehash target
                   , callContextReversion = view (env . contracts) vm0
-                  , callContextSubState = view (tx . substate) vm0
+                  , callContextSubState  = view (tx . substate) vm0
                   , callContextAbi =
                       if xInSize >= 4
                       then case unliteral $ readMemoryWord32 xInOffset (view (state . memory) vm0)
@@ -2088,7 +2092,7 @@ finishFrame how = do
       case view frameContext nextFrame of
 
         -- Were we calling?
-        CallContext (num -> outOffset) (num -> outSize) _ _ _ reversion substate' -> do
+        CallContext _ _ (num -> outOffset) (num -> outSize) _ _ _ reversion substate' -> do
 
           let
             revertContracts = assign (env . contracts) reversion

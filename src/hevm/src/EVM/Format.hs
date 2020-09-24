@@ -198,7 +198,7 @@ showTrace dapp trace =
         _ ->
           "\x1b[91merror\x1b[0m " <> pack (show e) <> pos
 
-    ReturnTrace out (CallContext _ _ hash (Just abi) _ _ _) ->
+    ReturnTrace out (CallContext _ _ _ _ hash (Just abi) _ _ _) ->
       case getAbiMethodOutput dapp hash abi of
         Nothing ->
           "← " <> formatSBinary out
@@ -213,7 +213,7 @@ showTrace dapp trace =
       t
     FrameTrace (CreationContext hash _ _ ) ->
       "create " <> maybeContractName (preview (dappSolcByHash . ix hash . _2) dapp) <> pos
-    FrameTrace (CallContext _ _ hash abi calldata _ _) ->
+    FrameTrace (CallContext _ _ _ _ hash abi calldata _ _) ->
       case preview (dappSolcByHash . ix hash . _2) dapp of
         Nothing ->
           "call [unknown]" <> pos
