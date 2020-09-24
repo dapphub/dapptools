@@ -213,10 +213,22 @@ showTrace dapp trace =
       t
     FrameTrace (CreationContext hash _ _ ) ->
       "create " <> maybeContractName (preview (dappSolcByHash . ix hash . _2) dapp) <> pos
-    FrameTrace (CallContext _ _ _ _ hash abi calldata _ _) ->
+    FrameTrace (CallContext target context _ _ hash abi calldata _ _) ->
       case preview (dappSolcByHash . ix hash . _2) dapp of
         Nothing ->
-          "call [unknown]" <> pos
+          if (target == context) then
+            "call "
+              <> pack (show target)
+              <> "::"
+              <> (formatSBinary calldata)
+              <> pos
+          else
+            "delegatecall "
+              <> pack (show target)
+              <> "::"
+              <> (formatSBinary calldata)
+              <> pos
+
         Just solc ->
           "call "
             <> "\x1b[1m"
