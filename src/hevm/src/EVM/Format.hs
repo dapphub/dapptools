@@ -6,7 +6,7 @@ import Prelude hiding (Word)
 
 import EVM (VM, cheatCode, traceForest, traceData, Error (..))
 import EVM (Trace, TraceData (..), Log (..), Query (..), FrameContext (..))
-import EVM.Dapp (DappInfo, dappSolcByHash, showTraceLocation, dappEventMap)
+import EVM.Dapp (DappInfo, dappSolcByHash, dappSolcByName, showTraceLocation, dappEventMap)
 import EVM.Concrete (Word (..), wordValue)
 import EVM.Symbolic (maybeLitWord, len)
 import EVM.Types (W256 (..), num, Buffer(..))
@@ -14,7 +14,7 @@ import EVM.ABI (AbiValue (..), Event (..), AbiType (..))
 import EVM.ABI (Indexed (NotIndexed), getAbiSeq, getAbi)
 import EVM.ABI (parseTypeName)
 import EVM.Solidity (SolcContract, contractName, abiMap)
-import EVM.Solidity (methodOutput, methodSignature)
+import EVM.Solidity (methodOutput, methodSignature, methodName)
 
 import Control.Arrow ((>>>))
 import Control.Lens (view, preview, ix, _2, to, _Just)
@@ -57,6 +57,17 @@ showDec signed (W256 w) =
 
 showWordExact :: Word -> Text
 showWordExact (C _ (W256 w)) = humanizeInteger w
+
+showWordExplanation :: W256 -> DappInfo -> Text
+showWordExplanation w _ | w > 0xffffffff = showDec Unsigned w
+showWordExplanation w dapp =
+  let
+    fullAbiMap =
+      mconcat (map (view abiMap) (Map.elems (view dappSolcByName dapp)))
+  in
+    case Map.lookup (fromIntegral w) fullAbiMap of
+      Nothing -> showDec Unsigned w
+      Just x  -> "keccak(\"" <> view methodSignature x <> "\")"
 
 humanizeInteger :: (Num a, Integral a, Show a) => a -> Text
 humanizeInteger =
@@ -149,6 +160,8 @@ showTrace dapp trace =
       case showTraceLocation dapp trace of
         Left x -> " \x1b[90m" <> x <> "\x1b[0m"
         Right x -> " \x1b[90m(" <> x <> ")\x1b[0m"
+    fullAbiMap =
+      mconcat (map (view abiMap) (Map.elems (view dappSolcByName dapp)))
   in case view traceData trace of
     EventTrace (Log _ bytes topics) ->
       case topics of
@@ -201,7 +214,16 @@ showTrace dapp trace =
     ReturnTrace out (CallContext _ _ _ _ hash (Just abi) _ _ _) ->
       case getAbiMethodOutput dapp hash abi of
         Nothing ->
-          "← " <> formatSBinary out
+          "← " <>
+            case Map.lookup (fromIntegral abi) fullAbiMap of
+              Just m  ->
+                case (view methodOutput m) of
+                  Just (_, t) ->
+                    pack (show t) <> " " <> showValue t out
+                  Nothing ->
+                    formatSBinary out
+              Nothing ->
+                formatSBinary out
         Just (_, t) ->
           "← " <> pack (show t) <> " " <> showValue t out
     ReturnTrace out (CallContext {}) ->
@@ -214,23 +236,24 @@ showTrace dapp trace =
     FrameTrace (CreationContext hash _ _ ) ->
       "create " <> maybeContractName (preview (dappSolcByHash . ix hash . _2) dapp) <> pos
     FrameTrace (CallContext target context _ _ hash abi calldata _ _) ->
-      case preview (dappSolcByHash . ix hash . _2) dapp of
+      let calltype = if target == context
+                     then "call "
+                     else "delegatecall "
+      in case preview (dappSolcByHash . ix hash . _2) dapp of
         Nothing ->
-          if (target == context) then
-            "call "
-              <> pack (show target)
-              <> "::"
-              <> (formatSBinary calldata)
-              <> pos
-          else
-            "delegatecall "
-              <> pack (show target)
-              <> "::"
-              <> (formatSBinary calldata)
-              <> pos
+          calltype
+            <> pack (show target)
+            <> pack "::"
+            <> case Map.lookup (fromIntegral (fromMaybe 0x00 abi)) fullAbiMap of
+                 Just m  ->
+                   view methodName m
+                   <> showCall (catMaybes (getAbiTypes (view methodSignature m))) calldata
+                 Nothing ->
+                   formatSBinary calldata
+            <> pos
 
         Just solc ->
-          "call "
+          calltype
             <> "\x1b[1m"
             <> view (contractName . to contractNamePart) solc
             <> "::"
@@ -238,7 +261,6 @@ showTrace dapp trace =
                  (fromMaybe "[unknown method]" . maybeAbiName solc)
                  abi
             <> maybe ("(" <> formatSBinary calldata <> ")")
-                 -- todo: if unknown method, then just show raw calldata
                  (\x -> showCall (catMaybes x) calldata)
                  (abi >>= fmap getAbiTypes . maybeAbiName solc)
             <> "\x1b[0m"
