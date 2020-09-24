@@ -18,7 +18,7 @@ import EVM.Dapp (DappInfo, dappInfo)
 import EVM.Dapp (dappUnitTests, unitTestMethods, dappSolcByName, dappSolcByHash, dappSources)
 import EVM.Dapp (dappAstSrcMap)
 import EVM.Debug
-import EVM.Format (Signedness (..), showDec, showWordExact)
+import EVM.Format (Signedness (..), showDec, showWordExact, showWordExplanation)
 import EVM.Format (contractNamePart, contractPathPart, showTraceTree)
 import EVM.Hexdump (prettyHex)
 import EVM.Op
@@ -834,17 +834,6 @@ drawStackPane ui =
            ])
       False
       (view uiStackList ui)
-
-showWordExplanation :: W256 -> DappInfo -> Text
-showWordExplanation w _ | w > 0xffffffff = showDec Unsigned w
-showWordExplanation w dapp =
-  let
-    fullAbiMap =
-      mconcat (map (view abiMap) (Map.elems (view dappSolcByName dapp)))
-  in
-    case Map.lookup (fromIntegral w) fullAbiMap of
-      Nothing -> showDec Unsigned w
-      Just x  -> "keccak(\"" <> view methodSignature x <> "\")"
 
 drawBytecodePane :: UiVmState -> UiWidget
 drawBytecodePane ui =
