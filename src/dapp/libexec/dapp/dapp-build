@@ -36,6 +36,8 @@ info() {
   echo >&2 "$FLAGS" "${0##*/}: $ARGS"
 }
 
+cd $DAPP_ROOT
+
 IFS=" " read -r -a opts <<<"$SOLC_FLAGS"
 json_opts=--combined-json=abi,bin,bin-runtime,srcmap,srcmap-runtime,ast,metadata
 

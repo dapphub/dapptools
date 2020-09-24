@@ -12,6 +12,7 @@ export DAPP_SRC=${DAPP_SRC-src}
 export DAPP_LIB=${DAPP_LIB-lib}
 export DAPP_OUT=${DAPP_OUT-out}
 export DAPP_JSON=${DAPP_JSON-${DAPP_OUT}/dapp.sol.json}
+export DAPP_ROOT=${DAPP_ROOT-.}
 
 if ! [[ $DAPP_INIT ]]; then
   export DAPP_INIT=1

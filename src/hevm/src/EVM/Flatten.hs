@@ -171,7 +171,7 @@ flatten dapp target = do
 
         -- Take the highest Solidity version from all pragmas.
         pragma :: Text
-        pragma = maximalPragma (Map.elems asts)
+        pragma = maximalPragma (Map.elems (Map.filterWithKey (\k _ -> k `elem` ordered) asts))
 
       -- Read the source files in order and strip unwanted directives.
       -- Also add an informative comment with the original source file path.
@@ -254,7 +254,7 @@ maximalPragma asts = (
           case filter isVersionPragma (pragmaComponents ast) of
             [_:xs] -> Just xs
             []  -> Nothing
-            _   -> error "multiple version pragmas"
+            x   -> error $ "multiple version pragmas" ++ show x
 
         grok :: [Value] -> SemVerRange
         grok xs =

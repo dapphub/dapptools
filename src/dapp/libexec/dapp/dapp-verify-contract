@@ -1,6 +1,20 @@
 #!/usr/bin/env bash
 set -e
 
+for i in "$@"; do
+  case $i in
+    --async)
+      ASYNC=yes
+      shift
+      ;;
+    *)
+      shift
+      set -- "$@" "$i"
+      ;;
+  esac
+done
+
+
 [[ $ETHERSCAN_API_KEY ]] || {
   cat >&2 <<.
 
@@ -32,8 +46,8 @@ path=${1?contractname}
 name=${path#*:}
 address=${2?contractaddress}
 
-if [[ $4 ]]; then
-    constructorArguments=$(seth calldata "$4" "${@:5}")
+if [[ $3 ]]; then
+    constructorArguments=$(seth calldata "$3" "${@:4}")
     constructorArguments=${constructorArguments#0x}
     constructorArguments=${constructorArguments:8}
 fi
@@ -78,7 +92,7 @@ params=(
   "apikey=$ETHERSCAN_API_KEY"
 )
 
-source=$(hevm flatten --source-file "$file" --json-file "$DAPP_JSON")
+source=$(hevm flatten --source-file "$file" --json-file "$DAPP_JSON" --dapp-root "$DAPP_ROOT")
 
 source=$(cat <<.
 // Verified using https://dapp.tools
@@ -112,6 +126,8 @@ done
   echo >&2 "Response: $message"
   exit 1
 }
+
+[[$ASYNC == yes]] && exit
 
 sleep 20
 response=$(curl -fsS "$ETHERSCAN_API_URL" \

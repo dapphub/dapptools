@@ -55,9 +55,8 @@ address=$(set -x; seth send --create "$bin" "${type/constructor/${1#*:}}" "${@:2
 
 [[ $DAPP_VERIFY_CONTRACT ]] && {
   echo >&2 "Verifying contract at $address"
-  path=$(sed 's|\/|/|g' "$DAPP_JSON" | sed "s/.*\"\(.*:${1}\)\".*/\1/g")
   sleep 5
-  dapp verify-contract "$path" "$address" || true
+  dapp verify-contract "$1" "$address" "${type/constructor/${1#*:}}" "${@:2}"
 }
 
 seth --to-checksum-address "$address"
