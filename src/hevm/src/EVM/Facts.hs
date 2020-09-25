@@ -27,16 +27,18 @@ module EVM.Facts
   , Data (..)
   , Path (..)
   , apply
+  , applyCache
+  , cacheFacts
   , contractFacts
   , vmFacts
   , factToFile
   , fileToFact
   ) where
 
-import EVM          (VM, Contract)
+import EVM          (VM, Contract, Cache)
 import EVM.Concrete (Word)
 import EVM.Symbolic (litWord, SymWord, forceLit)
-import EVM          (balance, nonce, storage, bytecode, env, contracts, contract, state)
+import EVM          (balance, nonce, storage, bytecode, env, contracts, contract, state, cache, fetched)
 import EVM.Types    (Addr)
 
 import qualified EVM
@@ -129,6 +131,11 @@ storageFacts a x = case view storage x of
       , which = fromIntegral k
       }
 
+cacheFacts :: Cache -> Set Fact
+cacheFacts c = Set.fromList $ do
+  (k, v) <- Map.toList (view EVM.fetched c)
+  contractFacts k v
+
 vmFacts :: VM -> Set Fact
 vmFacts vm = Set.fromList $ do
   (k, v) <- Map.toList (view (env . contracts) vm)
@@ -154,6 +161,19 @@ apply1 vm fact =
     NonceFact   {..} ->
       vm & set (env . contracts . ix addr . nonce) what
 
+apply2 :: VM -> Fact -> VM
+apply2 vm fact =
+  case fact of
+    CodeFact    {..} -> flip execState vm $ do
+      assign (cache . fetched . at addr) (Just (EVM.initialContract (EVM.RuntimeCode blob)))
+      when (view (state . contract) vm == addr) $ EVM.loadContract addr
+    StorageFact {..} ->
+      vm & over (cache . fetched . ix addr . storage) (EVM.writeStorage (litWord which) (litWord what))
+    BalanceFact {..} ->
+      vm & set (cache . fetched . ix addr . balance) what
+    NonceFact   {..} ->
+      vm & set (cache . fetched . ix addr . nonce) what
+
 -- Sort facts in the right order for `apply1` to work.
 instance Ord Fact where
   compare = comparing f
@@ -169,6 +189,12 @@ apply :: VM -> Set Fact -> VM
 apply =
   -- The set's ordering is relevant; see `apply1`.
   foldl apply1
+--
+-- Applies a set of facts to a VM.
+applyCache :: VM -> Set Fact -> VM
+applyCache =
+  -- The set's ordering is relevant; see `apply1`.
+  foldl apply2
 
 factToFile :: Fact -> File
 factToFile fact = case fact of

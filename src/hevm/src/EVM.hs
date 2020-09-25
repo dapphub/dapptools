@@ -438,9 +438,7 @@ makeVm o = VM
     , _keccakUsed = mempty
     , _storageModel = vmoptStorageModel o
     }
-  , _cache = Cache (Map.fromList
-    [(vmoptAddress o, vmoptContract o)])
-    mempty
+  , _cache = Cache mempty mempty
   , _burned = 0
   , _pathConditions = []
   , _iterations = mempty
@@ -2007,7 +2005,7 @@ replaceCode target newCode =
           & set balance (view balance now)
           & set nonce   (view nonce now)
         RuntimeCode _ ->
-          error "internal error: can't replace code of deployed contract"
+          error ("internal error: can't replace code of deployed contract " <> show target)
       Nothing ->
         error "internal error: can't replace code of nonexistent contract"
 

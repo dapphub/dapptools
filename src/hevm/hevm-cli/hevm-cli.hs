@@ -165,6 +165,7 @@ data Command w
       , verbose     :: w ::: Maybe Int                <?> "Append call trace: {1} failures {2} all"
       , coverage    :: w ::: Bool                     <?> "Coverage analysis"
       , state       :: w ::: Maybe String             <?> "Path to state repository"
+      , cache       :: w ::: Maybe String             <?> "Path to rpc cache repository"
       , match       :: w ::: Maybe String             <?> "Test case filter - only run methods matching regex"
       }
   | Interactive -- Browse & run unit tests interactively
@@ -235,12 +236,19 @@ unitTestOptions cmd testFile = do
       pure $ dappInfo root contractMap sourceCache
 
   vmModifier <-
-    case state cmd of
-      Nothing ->
+    case (state cmd, cache cmd) of
+      (Nothing, Nothing) -> do
         pure id
-      Just repoPath -> do
-        facts <- Git.loadFacts (Git.RepoAt repoPath)
+      (Nothing, Just cachePath) -> do
+        facts <- Git.loadFacts (Git.RepoAt cachePath)
+        pure (flip Facts.applyCache facts)
+      (Just statePath, Nothing) -> do
+        facts <- Git.loadFacts (Git.RepoAt statePath)
         pure (flip Facts.apply facts)
+      (Just statePath, Just cachePath) -> do
+        stateFacts <- Git.loadFacts (Git.RepoAt statePath)
+        cacheFacts <- Git.loadFacts (Git.RepoAt cachePath)
+        pure ((flip Facts.apply stateFacts) . (flip Facts.applyCache cacheFacts))
 
   params <- getParametersFromEnvironmentVariables
 
@@ -287,7 +295,7 @@ main = do
         testOpts <- unitTestOptions cmd testFile
         case (coverage cmd, optsMode cmd) of
           (False, Run) ->
-            dappTest testOpts (optsMode cmd) testFile
+            dappTest testOpts (optsMode cmd) testFile (cache cmd)
           (False, Debug) ->
             EVM.TTY.main testOpts root testFile
           (True, _) ->
@@ -355,15 +363,32 @@ findJsonFile Nothing = do
         , intercalate ", " xs
         ]
 
-dappTest :: UnitTestOptions -> Mode -> String -> IO ()
-dappTest opts _ solcFile =
+concatMapM :: Monad m => (a -> m [b]) -> [a] -> m [b]
+concatMapM op = foldr f (pure [])
+    where f x xs = do x <- op x; if null x then xs else do xs <- xs; pure $ x++xs
+
+dappTest :: UnitTestOptions -> Mode -> String -> Maybe String -> IO ()
+dappTest opts _ solcFile cache =
   readSolc solcFile >>=
     \case
-      Just (contractMap, cache) -> do
+      Just (contractMap, sourceCache) -> do
         let matcher = regexMatches (EVM.UnitTest.match opts)
             unitTests = (findUnitTests matcher) (Map.elems contractMap)
-        results <- mapM (runUnitTestContract opts contractMap cache) unitTests
-        when (any (== False) results) exitFailure
+
+        results <- concatMapM (runUnitTestContract opts contractMap sourceCache) unitTests
+        let (passing, vms) = unzip results
+
+        case cache of
+          Nothing ->
+            pure ()
+          Just path ->
+            -- merge all of the post-vm caches and save into the state
+            let
+              cache' = mconcat [view EVM.cache vm | vm <- vms]
+            in
+              Git.saveFacts (Git.RepoAt path) (Facts.cacheFacts cache')
+
+        unless (all id passing) exitFailure
       Nothing ->
         error ("Failed to read Solidity JSON for `" ++ solcFile ++ "'")
 

@@ -20,6 +20,10 @@ import Data.Text (isPrefixOf)
 import qualified Data.Map as Map
 import qualified Data.ByteString.Lazy   as LazyByteString
 
+concatMapM :: Monad m => (a -> m [b]) -> [a] -> m [b]
+concatMapM op = foldr f (pure [])
+    where f x xs = do x <- op x; if null x then xs else do xs <- xs; pure $ x++xs
+
 loadDappInfo :: String -> String -> IO DappInfo
 loadDappInfo path file =
   withCurrentDirectory path $
@@ -56,7 +60,10 @@ ghciTest root path state =
       \case
         Just (contractMap, cache) -> do
           let unitTests = findUnitTests ("test" `isPrefixOf`) (Map.elems contractMap)
-          mapM (runUnitTestContract opts contractMap cache) unitTests
+          results <- concatMapM (runUnitTestContract opts contractMap cache) unitTests
+          let (passing, _) = unzip results
+          pure passing
+
         Nothing ->
           error ("Failed to read Solidity JSON for `" ++ path ++ "'")
 
