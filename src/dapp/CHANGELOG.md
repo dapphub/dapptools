@@ -6,11 +6,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
-### Added 
+### Added
 - Support for solc 0.6.8
 - Support for setting solc by path. Use `DAPP_SOLC=/path/to/bin` or
 `dapp --use /path/to/solc ...` to use a custom solc.
-
+- dapp test --cache for RPC caching, via hevm.
 
 ## [0.29.0] - 2020-08-19
 
