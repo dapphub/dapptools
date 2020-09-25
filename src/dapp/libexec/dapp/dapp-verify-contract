@@ -27,6 +27,8 @@ done
   exit 1
 }
 
+set -x
+
 chain=$(seth chain)
 case "$chain" in
   ethlive|mainnet)
@@ -127,7 +129,7 @@ done
   exit 1
 }
 
-[[$ASYNC == yes]] && exit
+[[ $ASYNC == yes ]] && exit
 
 sleep 20
 response=$(curl -fsS "$ETHERSCAN_API_URL" \
