@@ -136,6 +136,7 @@ done
 [[ $status = 0 ]] && {
   echo >&2 "There was an error verifying this contract."
   echo >&2 "Response: $message"
+  echo >&2 "Details: $guid"
   exit 1
 }
 
