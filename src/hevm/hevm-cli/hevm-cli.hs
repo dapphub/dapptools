@@ -48,6 +48,7 @@ import qualified EVM.UnitTest
 import Control.Concurrent.Async   (async, waitCatch)
 import Control.Lens hiding (pre)
 import Control.Monad              (void, when, forM_, unless)
+import Control.Monad.IO.Class     (liftIO)
 import Control.Monad.State.Strict (execStateT)
 import Data.ByteString            (ByteString)
 import Data.List                  (intercalate, isSuffixOf)
@@ -105,8 +106,10 @@ data Command w
       , difficulty    :: w ::: Maybe W256       <?> "Block: difficulty"
       , chainid       :: w ::: Maybe W256       <?> "Env: chainId"
   -- remote state opts
-      , rpc         :: w ::: Maybe URL        <?> "Fetch state from a remote node"
-      , block       :: w ::: Maybe W256       <?> "Block state is be fetched from"
+      , rpc           :: w ::: Maybe URL        <?> "Fetch state from a remote node"
+      , block         :: w ::: Maybe W256       <?> "Block state is be fetched from"
+      , state         :: w ::: Maybe String     <?> "Path to state repository"
+      , cache         :: w ::: Maybe String     <?> "Path to rpc cache repository"
 
   -- symbolic execution opts
       , jsonFile      :: w ::: Maybe String       <?> "Filename or path to dapp build output (default: out/*.solc.json)"
@@ -150,6 +153,7 @@ data Command w
       , debug       :: w ::: Bool             <?> "Run interactively"
       , trace       :: w ::: Bool             <?> "Dump trace"
       , state       :: w ::: Maybe String     <?> "Path to state repository"
+      , cache       :: w ::: Maybe String     <?> "Path to rpc cache repository"
       , rpc         :: w ::: Maybe URL        <?> "Fetch state from a remote node"
       , block       :: w ::: Maybe W256       <?> "Block state is be fetched from"
       , jsonFile    :: w ::: Maybe String     <?> "Filename or path to dapp build output (default: out/*.solc.json)"
@@ -173,6 +177,7 @@ data Command w
       , dappRoot :: w ::: Maybe String <?> "Path to dapp project root directory (default: . )"
       , rpc      :: w ::: Maybe URL    <?> "Fetch state from a remote node"
       , state    :: w ::: Maybe String <?> "Path to state repository"
+      , cache    :: w ::: Maybe String <?> "Path to rpc cache repository"
       , replay   :: w ::: Maybe (Text, ByteString) <?> "Custom fuzz case to run/debug"
       }
   | BcTest -- Run an Ethereum Blockhain/GeneralState test
@@ -227,6 +232,24 @@ instance Options.ParseRecord (Command Options.Wrapped) where
 optsMode :: Command Options.Unwrapped -> Mode
 optsMode x = if debug x then Debug else Run
 
+applyCache :: (Maybe String, Maybe String) -> IO (EVM.VM -> EVM.VM)
+applyCache (state, cache) =
+  let applyState = flip Facts.apply
+      applyCache = flip Facts.applyCache
+  in case (state, cache) of
+    (Nothing, Nothing) -> do
+      pure id
+    (Nothing, Just cachePath) -> do
+      facts <- Git.loadFacts (Git.RepoAt cachePath)
+      pure $ applyCache facts
+    (Just statePath, Nothing) -> do
+      facts <- Git.loadFacts (Git.RepoAt statePath)
+      pure $ applyState facts
+    (Just statePath, Just cachePath) -> do
+      cacheFacts <- Git.loadFacts (Git.RepoAt cachePath)
+      stateFacts <- Git.loadFacts (Git.RepoAt statePath)
+      pure $ (applyState stateFacts) . (applyCache cacheFacts)
+
 unitTestOptions :: Command Options.Unwrapped -> String -> IO UnitTestOptions
 unitTestOptions cmd testFile = do
   let root = fromMaybe "." (dappRoot cmd)
@@ -235,20 +258,7 @@ unitTestOptions cmd testFile = do
     Just (contractMap, sourceCache) ->
       pure $ dappInfo root contractMap sourceCache
 
-  vmModifier <-
-    case (state cmd, cache cmd) of
-      (Nothing, Nothing) -> do
-        pure id
-      (Nothing, Just cachePath) -> do
-        facts <- Git.loadFacts (Git.RepoAt cachePath)
-        pure (flip Facts.applyCache facts)
-      (Just statePath, Nothing) -> do
-        facts <- Git.loadFacts (Git.RepoAt statePath)
-        pure (flip Facts.apply facts)
-      (Just statePath, Just cachePath) -> do
-        stateFacts <- Git.loadFacts (Git.RepoAt statePath)
-        cacheFacts <- Git.loadFacts (Git.RepoAt cachePath)
-        pure ((flip Facts.apply stateFacts) . (flip Facts.applyCache cacheFacts))
+  vmModifier <- applyCache (state cmd, cache cmd)
 
   params <- getParametersFromEnvironmentVariables
 
@@ -553,13 +563,13 @@ dappCoverage :: UnitTestOptions -> Mode -> String -> IO ()
 dappCoverage opts _ solcFile =
   readSolc solcFile >>=
     \case
-      Just (contractMap, cache) -> do
+      Just (contractMap, sourceCache) -> do
         let matcher = regexMatches (EVM.UnitTest.match opts)
         let unitTests = (findUnitTests matcher) (Map.elems contractMap)
-        covs <- mconcat <$> mapM (coverageForUnitTestContract opts contractMap cache) unitTests
+        covs <- mconcat <$> mapM (coverageForUnitTestContract opts contractMap sourceCache) unitTests
 
         let
-          dapp = dappInfo "." contractMap cache
+          dapp = dappInfo "." contractMap sourceCache
           f (k, vs) = do
             putStr "***** hevm coverage for "
             putStrLn (unpack k)
@@ -582,19 +592,10 @@ dappCoverage opts _ solcFile =
 launchExec :: Command Options.Unwrapped -> IO ()
 launchExec cmd = do
   dapp <- getSrcInfo cmd
-
   vm <- vmFromCommand cmd
-  vm1 <- case state cmd of
-    Nothing -> pure vm
-    Just path ->
-      -- Note: this will load the code, so if you've specified a state
-      -- repository, then you effectively can't change `--code' after
-      -- the first run.
-      Facts.apply vm <$> Git.loadFacts (Git.RepoAt path)
-
   case optsMode cmd of
     Run -> do
-      vm' <- execStateT (EVM.Stepper.interpret fetcher . void $ EVM.Stepper.execFully) vm1
+      vm' <- execStateT (EVM.Stepper.interpret fetcher . void $ EVM.Stepper.execFully) vm
       when (trace cmd) $ hPutStr stderr (showTraceTree dapp vm')
       case view EVM.result vm' of
         Nothing ->
@@ -614,7 +615,12 @@ launchExec cmd = do
             Nothing -> pure ()
             Just path ->
               Git.saveFacts (Git.RepoAt path) (Facts.vmFacts vm')
-    Debug -> void $ EVM.TTY.runFromVM Nothing dapp fetcher vm1
+          case cache cmd of
+            Nothing -> pure ()
+            Just path ->
+              Git.saveFacts (Git.RepoAt path) (Facts.cacheFacts (view EVM.cache vm'))
+
+    Debug -> void $ EVM.TTY.runFromVM Nothing dapp fetcher vm
    where fetcher = maybe EVM.Fetch.zero (EVM.Fetch.http block') (rpc cmd)
          block'  = maybe EVM.Fetch.Latest EVM.Fetch.BlockNumber (block cmd)
 
@@ -680,22 +686,35 @@ tohexOrText s = case "0x" `Char8.isPrefixOf` encodeUtf8 s of
 -- | Creates a (concrete) VM from command line options
 vmFromCommand :: Command Options.Unwrapped -> IO EVM.VM
 vmFromCommand cmd = do
-  vm <- case (rpc cmd, address cmd) of
-    (Just url, Just addr') -> do
+  withCache <- applyCache (state cmd, cache cmd)
+  vm <- case (rpc cmd, address cmd, code cmd) of
+    (Just url, Just addr', Just c) -> do
       EVM.Fetch.fetchContractFrom block' url addr' >>= \case
-        Nothing -> error $ "contract not found: " <> show address'
-        Just contract' -> case code cmd of
-          Nothing -> return (vm1 contract')
+        Nothing ->
+          error $ "contract not found: " <> show address'
+        Just contract' ->
           -- if both code and url is given,
           -- fetch the contract and overwrite the code
-          Just c -> return . vm1 $
+          return . withCache . vm0 $
             EVM.initialContract  (codeType $ hexByteString "--code" $ strip0x c)
               & set EVM.storage  (view EVM.storage  contract')
               & set EVM.balance  (view EVM.balance  contract')
               & set EVM.nonce    (view EVM.nonce    contract')
               & set EVM.external (view EVM.external contract')
 
-    _ -> return . vm1 . EVM.initialContract . codeType $ bytes code ""
+    (Just url, Just addr', Nothing) -> do
+      EVM.Fetch.fetchContractFrom block' url addr' >>= \case
+        Nothing ->
+          error $ "contract not found: " <> show address'
+        Just contract' ->
+          return . withCache . vm0 $ contract'
+
+    (_, _, Just c)  ->
+      return . withCache . vm0 $
+        EVM.initialContract (codeType $ hexByteString "--code" $ strip0x c)
+
+    (_, _, Nothing) ->
+      error $ "must provide at least (rpc + address) or code"
 
   return $ vm & EVM.env . EVM.contracts . ix address' . EVM.balance +~ (w256 value')
       where
@@ -710,7 +729,7 @@ vmFromCommand cmd = do
               then createAddress origin' (word nonce 0)
               else addr address 0xacab
 
-        vm1 c = EVM.makeVm $ EVM.VMOpts
+        vm0 c = EVM.makeVm $ EVM.VMOpts
           { EVM.vmoptContract      = c
           , EVM.vmoptCalldata      = (calldata', literal . num $ len calldata')
           , EVM.vmoptValue         = w256lit value'
@@ -768,14 +787,15 @@ symvmFromCommand cmd = do
     Just SymbolicS -> EVM.Symbolic <$> freshArray_ Nothing
     Nothing -> EVM.Symbolic <$> freshArray_ (if create cmd then (Just 0) else Nothing)
 
+  withCache <- liftIO $ applyCache (state cmd, cache cmd)
+
   vm <- case (rpc cmd, address cmd, code cmd) of
     (Just url, Just addr', _) ->
       io (EVM.Fetch.fetchContractFrom block' url addr') >>= \case
         Nothing ->
           error $ "contract not found."
         Just contract' ->
-          return $
-            vm1 cdlen calldata' callvalue' caller' (contract'' & set EVM.storage store)
+          return $ withCache $ vm0 cdlen calldata' callvalue' caller' (contract'' & set EVM.storage store)
           where
             contract'' = case code cmd of
               Nothing -> contract'
@@ -789,8 +809,8 @@ symvmFromCommand cmd = do
                         & set EVM.external    (view EVM.external contract')
 
     (_, _, Just c)  ->
-      return $
-        vm1 cdlen calldata' callvalue' caller' $
+      return $ withCache $
+        vm0 cdlen calldata' callvalue' caller' $
           (EVM.initialContract . codeType $ decipher c) & set EVM.storage store
     (_, _, Nothing) ->
       error $ "must provide at least (rpc + address) or code"
@@ -805,7 +825,7 @@ symvmFromCommand cmd = do
     address' = if create cmd
           then createAddress origin' (word nonce 0)
           else addr address 0xacab
-    vm1 cdlen calldata' callvalue' caller' c = EVM.makeVm $ EVM.VMOpts
+    vm0 cdlen calldata' callvalue' caller' c = EVM.makeVm $ EVM.VMOpts
       { EVM.vmoptContract      = c
       , EVM.vmoptCalldata      = (calldata', cdlen)
       , EVM.vmoptValue         = callvalue'
