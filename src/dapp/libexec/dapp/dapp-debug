@@ -16,6 +16,7 @@ have hevm || {
   exit 1
 }
 
+cd "$DAPP_ROOT"
 # Make sure the dapp is built with libraries linked.
 ( set -x; DAPP_LINK_TEST_LIBRARIES=1 dapp build || exit )
 
@@ -53,4 +54,4 @@ fi
 
 opts=$(dapp --hevm-opts "$0" "$@")
 # shellcheck disable=SC2068
-(set -x; hevm dapp-test --debug --dapp-root=. --state="$state" --json-file="$target" ${opts[@]})
+(set -x; hevm dapp-test --debug --dapp-root="$DAPP_ROOT" --state="$state" --json-file="$target" ${opts[@]})
