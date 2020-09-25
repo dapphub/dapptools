@@ -46,6 +46,10 @@ while [[ $1 ]]; do
       [ -n "$ETH_RPC_URL" ] || fail "ETH_RPC_URL not set."
       shift; HEVM_RPC=yes
       ;;
+    --cache)
+      shift; [ -n "$1" ] || fail "--cache requires a path to a cache dir"
+      opts+=(--cache "$1"); shift
+      ;;
     *)
       fail "unknown argument: $1"
       ;;

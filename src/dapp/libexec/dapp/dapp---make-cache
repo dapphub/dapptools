@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+set -e
+
+[[ "$1" ]] && state="$1" || state="$(TMPDIR=. mktemp -d hevm.cache.XXXXX)"
+# Try to make sure `git commit' definitely succeeds...
+export GIT_CONFIG_NOSYSTEM=1
+export GIT_AUTHOR_NAME=hevm
+export GIT_AUTHOR_EMAIL=hevm@dapphub.com
+export GIT_COMMITTER_NAME=$GIT_AUTHOR_NAME
+export GIT_COMMITTER_EMAIL=$GIT_AUTHOR_EMAIL
+gitopts=(-q --no-verify --no-gpg-sign --allow-empty -m "dapp test")
+( cd "$state" ; git init -q && git add . && git commit "${gitopts[@]}" )
+echo "$state"
