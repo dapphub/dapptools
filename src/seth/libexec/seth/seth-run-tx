@@ -20,7 +20,7 @@ else
 fi
 
 TO=$(<<< "$tx" seth --field to)
-DATA=$(<<< "$tx" seth --field input)
+DATA=$(<<< "$tx" seth --field input | seth --to-hex)
 if [[ "$TO" == 'null' ]]; then
   opts+=(--create --code "$DATA")
 else

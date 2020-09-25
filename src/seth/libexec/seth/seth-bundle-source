@@ -9,7 +9,7 @@
 # seems like we always just want the first element
 set -e
 
-SRC=$(seth source "$1" | jq '.[0]')
+SRC=$(seth source "$1")
 
 SOLC_VERSION=$(echo "$SRC" | jq '.CompilerVersion')
 SOLC_VERSION=${SOLC_VERSION/'"'}
