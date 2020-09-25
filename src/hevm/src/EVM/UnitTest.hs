@@ -30,6 +30,7 @@ import Control.Monad.Par.IO (runParIO)
 import qualified Data.ByteString.Lazy as BSLazy
 import Data.ByteString    (ByteString)
 import Data.SBV
+import Data.Either        (isRight)
 import Data.Foldable      (toList)
 import Data.Map           (Map)
 import Data.Maybe         (fromMaybe, catMaybes, fromJust, isJust, fromMaybe, mapMaybe)
@@ -352,7 +353,7 @@ runUnitTestContract
   -> Map Text SolcContract
   -> SourceCache
   -> (Text, [(Text, [AbiType])])
-  -> IO Bool
+  -> IO [(Bool, VM)]
 runUnitTestContract
   opts@(UnitTestOptions {..}) contractMap sources (name, testSigs) = do
 
@@ -381,7 +382,7 @@ runUnitTestContract
           Text.putStrLn "\x1b[31m[FAIL]\x1b[0m setUp()"
           tick "\n"
           tick $ failOutput vm1 opts "setUp()"
-          pure False
+          pure [(False, vm1)]
         Just (VMSuccess _) -> do
 
           -- Define the thread spawner for normal test cases
@@ -401,13 +402,15 @@ runUnitTestContract
                     pure
                       ("\x1b[32m[PASS]\x1b[0m "
                        <> testName <> argInfo <> " (gas: " <> gasText <> ")"
-                       , Right (passOutput vm opts testName)
+                      , Right (passOutput vm opts testName)
+                      , vm
                       )
               else
                     pure
                       ("\x1b[31m[FAIL]\x1b[0m "
                        <> testName <> argInfo
-                       , Left (failOutput vm opts testName)
+                      , Left (failOutput vm opts testName)
+                      , vm
                       )
 
           -- Define the thread spawner for property based tests
@@ -423,10 +426,12 @@ runUnitTestContract
                 case res of
                   Success numTests _ _ _ _ _ ->
                     pure ("\x1b[32m[PASS]\x1b[0m "
-                           <> testName <> " (runs: " <> (pack $ show numTests) <> ")",
+                           <> testName <> " (runs: " <> (pack $ show numTests) <> ")"
                            -- vm1 isn't quite the post vm we want...
                            -- but the vm we want is not accessible here anyway...
-                           Right (passOutput vm1 opts testName))
+                         , Right (passOutput vm1 opts testName)
+                         , vm1
+                         )
                   Failure _ _ _ _ _ _ _ _ _ _ failCase _ _ ->
                     let abiValue = decodeAbiValue (AbiTupleType (Vector.fromList types)) $ BSLazy.fromStrict $ hexText (pack $ concat failCase)
                         ppOutput = pack $ show abiValue
@@ -437,10 +442,15 @@ runUnitTestContract
                              <> testName <> ". Counterexample: " <> ppOutput
                              <> "\nRun:\n dapp test --replay '(\"" <> testName <> "\",\""
                              <> (pack (concat failCase)) <> "\")'\nto test this case again, or \n dapp debug --replay '(\""
-                             <> testName <> "\",\"" <> (pack (concat failCase)) <> "\")'\nto debug it.",
-                             Left (failOutput vm2 opts testName))
+                             <> testName <> "\",\"" <> (pack (concat failCase)) <> "\")'\nto debug it."
+                         , Left (failOutput vm2 opts testName)
+                         , vm2
+                         )
                   _ -> pure ("\x1b[31m[OOPS]\x1b[0m "
-                              <> testName, Left (failOutput vm1 opts testName))
+                              <> testName
+                            , Left (failOutput vm1 opts testName)
+                            , vm1
+                            )
 
           let runTest (testName, []) = runOne testName emptyAbi
               runTest (testName, types) = case replay of
@@ -450,20 +460,20 @@ runUnitTestContract
                                               decodeAbiValue (AbiTupleType (Vector.fromList types)) callData
                                          else fuzzRun (testName, types)
 
-          let inform (x, y) = Text.putStrLn x >> pure y
+          let inform (x, y, z) = Text.putStrLn x >> pure (y, z)
 
           -- Run all the test cases and print their status updates
           details <-
             mapM (runTest >=> inform) testSigs
 
-          let running = [x | Right x <- details]
-          let bailing = [x | Left x <- details]
+          let running = [x | (Right x, _) <- details]
+          let bailing = [x | (Left  x, _) <- details]
 
           tick "\n"
           tick (Text.unlines (filter (not . Text.null) running))
           tick (Text.unlines (filter (not . Text.null) bailing))
 
-          pure (null bailing)
+          pure [(isRight r, vm) | (r, vm) <- details]
 
 indentLines :: Int -> Text -> Text
 indentLines n s =
