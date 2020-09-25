@@ -333,7 +333,7 @@ data Block = Block
   , _gaslimit    :: Word
   , _maxCodeSize :: Word
   , _schedule    :: FeeSchedule Word
-  }
+  } deriving Show
 
 blankState :: FrameState
 blankState = FrameState

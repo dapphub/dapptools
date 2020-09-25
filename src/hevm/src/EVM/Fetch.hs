@@ -8,7 +8,8 @@ import Prelude hiding (Word)
 
 import EVM.Types    (Addr, W256, hexText)
 import EVM.Concrete (Word, w256)
-import EVM          (EVM, Contract, StorageModel, initialContract, nonce, balance, external)
+import EVM          (EVM, Contract, Block, StorageModel, initialContract, nonce, balance, external)
+import qualified EVM.FeeSchedule as FeeSchedule
 
 import qualified EVM
 
@@ -21,7 +22,7 @@ import Data.SBV.Trans hiding (Word)
 import Data.Aeson
 import Data.Aeson.Lens
 import Data.ByteString (ByteString)
-import Data.Text (Text, unpack)
+import Data.Text (Text, unpack, pack)
 import Network.Wreq
 import Network.Wreq.Session (Session)
 
@@ -30,6 +31,7 @@ import qualified Network.Wreq.Session as Session
 -- | Abstract representation of an RPC fetch request
 data RpcQuery a where
   QueryCode    :: Addr         -> RpcQuery ByteString
+  QueryBlock   ::                 RpcQuery Block
   QueryBalance :: Addr         -> RpcQuery W256
   QueryNonce   :: Addr         -> RpcQuery W256
   QuerySlot    :: Addr -> W256 -> RpcQuery W256
@@ -39,7 +41,7 @@ data BlockNumber = Latest | BlockNumber W256
 
 deriving instance Show (RpcQuery a)
 
-rpc :: String -> [String] -> Value
+rpc :: String -> [Value] -> Value
 rpc method args = object
   [ "jsonrpc" .= ("2.0" :: String)
   , "id"      .= Number 1
@@ -48,17 +50,20 @@ rpc method args = object
   ]
 
 class ToRPC a where
-  toRPC :: a -> String
+  toRPC :: a -> Value
 
 instance ToRPC Addr where
-  toRPC = show
+  toRPC = String . pack . show
 
 instance ToRPC W256 where
-  toRPC = show
+  toRPC = String . pack . show
+
+instance ToRPC Bool where
+  toRPC = Bool
 
 instance ToRPC BlockNumber where
-  toRPC Latest          = "latest"
-  toRPC (BlockNumber n) = show n
+  toRPC Latest          = String "latest"
+  toRPC (BlockNumber n) = String . pack $ show n
 
 readText :: Read a => Text -> a
 readText = read . unpack
@@ -66,32 +71,45 @@ readText = read . unpack
 fetchQuery
   :: Show a
   => BlockNumber
-  -> (Value -> IO (Maybe Text))
+  -> (Value -> IO (Maybe Value))
   -> RpcQuery a
   -> IO (Maybe a)
 fetchQuery n f q = do
   x <- case q of
-    QueryCode addr ->
-      fmap hexText  <$>
-        f (rpc "eth_getCode" [toRPC addr, toRPC n])
-    QueryNonce addr ->
-      fmap readText <$>
-        f (rpc "eth_getTransactionCount" [toRPC addr, toRPC n])
-    QueryBalance addr ->
-      fmap readText <$>
-        f (rpc "eth_getBalance" [toRPC addr, toRPC n])
-    QuerySlot addr slot ->
-      fmap readText <$>
-        f (rpc "eth_getStorageAt" [toRPC addr, toRPC slot, toRPC n])
-    QueryChainId ->
-      fmap readText <$>
-        f (rpc "eth_chainId" [toRPC n])
+    QueryCode addr -> do
+        m <- f (rpc "eth_getCode" [toRPC addr, toRPC n])
+        return $ hexText <$> view _String <$> m
+    QueryNonce addr -> do
+        m <- f (rpc "eth_getTransactionCount" [toRPC addr, toRPC n])
+        return $ readText <$> view _String <$> m
+    QueryBlock -> do
+      m <- f (rpc "eth_getBlockByNumber" [toRPC n, toRPC False])
+      return $ m >>= parseBlock
+    QueryBalance addr -> do
+        m <- f (rpc "eth_getBalance" [toRPC addr, toRPC n])
+        return $ readText <$> view _String <$> m
+    QuerySlot addr slot -> do
+        m <- f (rpc "eth_getStorageAt" [toRPC addr, toRPC slot, toRPC n])
+        return $ readText <$> view _String <$> m
+    QueryChainId -> do
+        m <- f (rpc "eth_chainId" [toRPC n])
+        return $ readText <$> view _String <$> m
   return x
 
-fetchWithSession :: Text -> Session -> Value -> IO (Maybe Text)
+
+parseBlock :: (AsValue s, Show s) => s -> Maybe EVM.Block
+parseBlock json = do
+  coinbase   <- readText <$> json ^? key "miner" . _String
+  timestamp  <- readText <$> json ^? key "timestamp" . _String
+  number     <- readText <$> json ^? key "number" . _String
+  difficulty <- readText <$> json ^? key "difficulty" . _String
+  -- default codesize, default gas limit, default feescedule
+  return $ EVM.Block coinbase timestamp number difficulty 0xffffffff 0xffffffff FeeSchedule.istanbul
+
+fetchWithSession :: Text -> Session -> Value -> IO (Maybe Value)
 fetchWithSession url sess x = do
   r <- asValue =<< Session.post sess (unpack url) x
-  return (r ^? responseBody . key "result" . _String)
+  return (r ^? responseBody . key "result")
 
 fetchContractWithSession
   :: BlockNumber -> Text -> Addr -> Session -> IO (Maybe Contract)
@@ -115,6 +133,16 @@ fetchSlotWithSession
 fetchSlotWithSession n url sess addr slot =
   fmap w256 <$>
     fetchQuery n (fetchWithSession url sess) (QuerySlot addr slot)
+
+fetchBlockWithSession
+  :: BlockNumber -> Text -> Session -> IO (Maybe Block)
+fetchBlockWithSession n url sess =
+  fetchQuery n (fetchWithSession url sess) QueryBlock
+
+fetchBlockFrom :: BlockNumber -> Text -> IO (Maybe Block)
+fetchBlockFrom n url =
+  Session.withAPISession
+    (fetchBlockWithSession n url)
 
 fetchContractFrom :: BlockNumber -> Text -> Addr -> IO (Maybe Contract)
 fetchContractFrom n url addr =
