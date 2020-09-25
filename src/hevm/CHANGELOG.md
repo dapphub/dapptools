@@ -2,8 +2,16 @@
 
 ## Unreleased
 
+### Changed
+
 - z3 updated to 4.8.8
 - optimize SMT queries
+- More useful trace output for unknown calls
+
+### Added
+
+- `--cache` flag for `dapp-test`, `exec`, `symbolic`, `interactive`,
+  enabling caching of contracts received by rpc.
 
 ## 0.41.0 - 2020-08-19
 
@@ -11,7 +19,7 @@
 
 - Switched to [PVP](https://github.com/haskell/pvp/blob/master/pvp-faq.md) for version control, starting now at `0.41.0` (MAJOR.MAJOR.MINOR).
 - z3 updated to 4.8.7
-- Generate more interesting values in property based testing, 
+- Generate more interesting values in property based testing,
  and implement proper shrinking for all abi values.
 - Fixed soundness bug when using KECCAK or SHA256 opcode/precompile
 - Fixed an issue in debug mode where backstepping could cause path information to be forgotten
@@ -39,9 +47,9 @@ As a result, the types of several registers of the EVM have changed to admit sym
   - state.caller: `Addr` -> `SAddr`.
   - state.returndata: `ByteString` -> `[SWord 8]`.
   - state.calldata: `ByteString` -> `([SWord 8], (SWord 32))`. The first element is a list of symbolic bytes, the second is the length of calldata. We have `fst calldata !! i .== 0` for all `snd calldata < i`.
-  
+
   - tx.value: `W256` -> `SymWord`.
-  
+
   - contract.storage: `Map Word Word` -> `Storage`, defined as:
 ```hs
 data Storage
@@ -58,7 +66,7 @@ New cli commands:
 See the README for details on usage.
 
 The new module `EVM.SymExec` exposes several library functions dealing with symbolic execution.
-In particular, 
+In particular,
  - `SymExec.interpret`: implements an operational monad script similar to `TTY.interpret` and `Stepper.interpret`, but returns a list of final VM states rather than a single VM.
  - `SymExec.verify`: takes a prestate and a postcondition, symbolically executes the prestate and checks that all final states matches the postcondition.
 
