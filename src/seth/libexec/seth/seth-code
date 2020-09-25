@@ -9,4 +9,4 @@ set -e
 ADDRESS=$(seth --to-address "$@")
 jshon+=(-s "$ADDRESS" -i append)
 jshon+=(-s "${ETH_BLOCK-latest}" -i append)
-seth rpc eth_getCode -- "${jshon[@]}"
+seth rpc eth_getCode -- "${jshon[@]}" | seth --to-hex
