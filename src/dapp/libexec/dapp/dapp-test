@@ -16,6 +16,8 @@
 set -e
 have() { command -v "$1" >/dev/null; }
 
+cd "$DAPP_ROOT"
+
 have hevm || {
   echo >&2 "${0##*/}: error: \`hevm' not found"
   echo >&2 "${0##*/}: error: please install it and try again"
@@ -34,4 +36,4 @@ trap clean EXIT
 
 opts=$(dapp --hevm-opts "$0" "$@")
 # shellcheck disable=SC2068
-hevm dapp-test --json-file="${DAPP_JSON}" --dapp-root=. --state="$state" ${opts[@]}
+hevm dapp-test --dapp-root="${DAPP_ROOT}" --json-file="${DAPP_JSON}" --dapp-root=. --state="$state" ${opts[@]}

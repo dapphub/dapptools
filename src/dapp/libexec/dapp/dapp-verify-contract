@@ -27,8 +27,6 @@ done
   exit 1
 }
 
-set -x
-
 chain=$(seth chain)
 case "$chain" in
   ethlive|mainnet)
@@ -48,17 +46,23 @@ path=${1?contractname}
 name=${path#*:}
 address=${2?contractaddress}
 
-if [[ $3 ]]; then
-    constructorArguments=$(seth calldata "$3" "${@:4}")
-    constructorArguments=${constructorArguments#0x}
-    constructorArguments=${constructorArguments:8}
-fi
-
+contract=$(<"$DAPP_JSON" jq -r ".contracts[\"$path\"]")
 meta=$(<"$DAPP_JSON" jshon -e contracts -e "$path" -e metadata -u)
 version=$(jshon <<<"$meta" -e compiler -e version -u)
 file=$(jshon <<<"$meta" -e settings -e compilationTarget -k)
 optimized=$(jshon <<<"$meta" -e settings -e optimizer -e enabled -u)
 runs=$(jshon <<<"$meta" -e settings -e optimizer -e runs -u)
+
+abi=$(jq '.["abi"]' -r <<< "$contract")
+type=$(seth --abi-constructor <<< "$abi")
+constructor=${type/constructor/${1#*:}}
+
+if [[ $3 ]]; then
+    constructorArguments=$(seth calldata "$constructor" "${@:3}")
+    constructorArguments=${constructorArguments#0x}
+    constructorArguments=${constructorArguments:8}
+fi
+
 
 # Etherscan requires leading 'v' which isn't in the artifacts
 version="v${version}"
@@ -123,11 +127,20 @@ while [ $count -lt 5 ]; do
   [[ $status = 1 ]] && break;
 done
 
+[[ $status = 0 && $message = "Contract source code already verified" ]] && {
+  echo >&2 "Contract source code already verified."
+  echo >&2 "Go to $ETHERSCAN_URL/$2#code"
+  exit 0
+}
+
 [[ $status = 0 ]] && {
   echo >&2 "There was an error verifying this contract."
   echo >&2 "Response: $message"
   exit 1
 }
+
+
+
 
 [[ $ASYNC == yes ]] && exit
 

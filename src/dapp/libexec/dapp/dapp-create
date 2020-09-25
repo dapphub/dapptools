@@ -46,8 +46,7 @@ done
   exit 1
 }
 
-data=$(<"$DAPP_JSON" jq '.contracts' -r)
-contract=$(echo "$data" | jq '.[''"'"${name[0]}"'"'']')
+contract=$(<"$DAPP_JSON" jq '.contracts[''"'"${name[0]}"'"'']')
 abi=$(jq '.["abi"]' -r <<< "$contract")
 bin=$(jq '.["bin"]' -r <<< "$contract")
 type=$(seth --abi-constructor <<< "$abi")
@@ -55,8 +54,8 @@ address=$(set -x; seth send --create "$bin" "${type/constructor/${1#*:}}" "${@:2
 
 [[ $DAPP_VERIFY_CONTRACT ]] && {
   echo >&2 "Verifying contract at $address"
-  sleep 5
-  dapp verify-contract "$1" "$address" "${type/constructor/${1#*:}}" "${@:2}"
+  sleep 5 # give etherscan some time to process the block
+  dapp verify-contract "$1" "$address" "${@:2}"
 }
 
 seth --to-checksum-address "$address"

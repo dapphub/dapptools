@@ -47,10 +47,6 @@ import qualified Data.Map as Map
 import qualified Data.Text as Text
 import qualified Data.ByteString as BS
 
---- XXX: debugging
-import Debug.Trace (trace)
-
-
 -- Define an alias for FGL graphs with text nodes and unlabeled edges.
 type FileGraph = Fgl.Gr Text ()
 
