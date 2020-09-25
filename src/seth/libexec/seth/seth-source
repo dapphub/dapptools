@@ -27,8 +27,10 @@ MSG=$(echo "$RESPONSE" | seth --field message)
 ABI=$(echo "$RESPONSE" | seth --field result | jq '.[0].ABI' | seth --show-json)
 
 [[ $MSG == OK ]] || seth --fail "error: bad response: $MSG"
+
+
 if [[ $ABI == "Contract source code not verified" ]]; then
     seth --fail "$ABI"
 else
-    echo "$RESPONSE" | seth --field result
+    echo "$RESPONSE" | seth --field result | jq '.[0]]'
 fi
