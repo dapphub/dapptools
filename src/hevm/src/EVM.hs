@@ -1857,7 +1857,15 @@ cheatActions =
               new  = w256lit $ word y
           fetchAccount a $ \_ -> do
             modifying (env . contracts . ix a . storage) (writeStorage slot new)
-          return Nothing
+          return Nothing,
+      action "load(address,bytes32)" [AbiAddressType, AbiBytesType 32] $
+        \[AbiAddress a, AbiBytes 32 x] -> do
+          let slot = w256lit $ word x
+          return $ use (env . contracts . at a) >>= \case
+            Just c ->
+              case readStorage (view storage c) slot of
+                Just x -> case maybeLitWord x of
+                  Just y -> return (decodeAbiValue (AbiBytesType 32) y)
     ]
   where
     action s ts f = (abiKeccak s, (ts, f))
