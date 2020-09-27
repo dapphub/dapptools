@@ -21,7 +21,7 @@ import EVM.ABI
 import EVM.Types
 import EVM.Solidity
 import EVM.Keccak
-import EVM.Concrete (Word(..), w256, createAddress, wordValue, keccakBlob, create2Address)
+import EVM.Concrete (Word(..), w256, createAddress, wordValue, keccakBlob, create2Address, wordAt)
 import EVM.Symbolic
 import EVM.Op
 import EVM.FeeSchedule (FeeSchedule (..))
@@ -1818,49 +1818,46 @@ cheat (inOffset, inSize) (outOffset, outSize) = do
   case fromSized <$> unliteral abi of
     Nothing -> vmError UnexpectedSymbolicArg
     Just abi ->
-              case Map.lookup abi cheatActions of
-                Nothing ->
+      case Map.lookup abi cheatActions of
+        Nothing ->
+          vmError (BadCheatCode (Just abi))
+        Just (argTypes, action) ->
+          case input of
+            SymbolicBuffer _ -> vmError UnexpectedSymbolicArg
+            ConcreteBuffer input' ->
+              case runGetOrFail
+                     (getAbiSeq (length argTypes) argTypes)
+                     (LS.fromStrict input') of
+                Right ("", _, args) -> do
+                  action outOffset outSize (toList args)
+                  next
+                  push 1
+                _ ->
                   vmError (BadCheatCode (Just abi))
-                Just (argTypes, action) ->
-                  case input of
-                    SymbolicBuffer _ -> vmError UnexpectedSymbolicArg
-                    ConcreteBuffer input' ->
-                      case runGetOrFail
-                             (getAbiSeq (length argTypes) argTypes)
-                             (LS.fromStrict input') of
-                        Right ("", _, args) ->
-                          action (toList args) >>= \case
-                            Nothing -> do
-                              next
-                              push 1
-                            Just (encodeAbiValue -> bs) -> do
-                              next
-                              modifying (state . memory)
-                                (writeMemory (ConcreteBuffer bs) outSize 0 outOffset)
-                              push 1
-                        _ ->
-                          vmError (BadCheatCode (Just abi))
 
-type CheatAction = ([AbiType], [AbiValue] -> EVM (Maybe AbiValue))
+type CheatAction = ([AbiType], Word -> Word -> [AbiValue] -> EVM ())
 
 cheatActions :: Map Word32 CheatAction
 cheatActions =
   Map.fromList
     [ action "warp(uint256)" [AbiUIntType 256] $
-        \[AbiUInt 256 x] -> do
-          assign (block . timestamp) (w256 (W256 x))
-          return Nothing,
+        \_ _ [AbiUInt 256 x] ->
+          assign (block . timestamp) (w256 (W256 x)),
       action "roll(uint256)" [AbiUIntType 256] $
-        \[AbiUInt 256 x] -> do
-          assign (block . number) (w256 (W256 x))
-          return Nothing,
+        \_ _ [AbiUInt 256 x] ->
+          assign (block . number) (w256 (W256 x)),
       action "store(address,bytes32,bytes32)" [AbiAddressType, AbiBytesType 32, AbiBytesType 32] $
-        \[AbiAddress a, AbiBytes 32 x, AbiBytes 32 y] -> do
+        \_ _ [AbiAddress a, AbiBytes 32 x, AbiBytes 32 y] -> do
           let slot = w256lit $ word x
               new  = w256lit $ word y
           fetchAccount a $ \_ -> do
-            modifying (env . contracts . ix a . storage) (writeStorage slot new)
-          return Nothing
+            modifying (env . contracts . ix a . storage) (writeStorage slot new),
+      action "load(address,bytes32)" [AbiAddressType, AbiBytesType 32] $
+        \outSize outOffset [AbiAddress a, AbiBytes 32 x] -> do
+          let slot = w256lit $ word x
+          accessStorage a slot $ \res ->
+            assign (state . memory . word256At outOffset) res
+
     ]
   where
     action s ts f = (abiKeccak s, (ts, f))
