@@ -516,7 +516,7 @@ sexpMemory bs =
 
 defaultUnitTestOptions :: MonadIO m => m UnitTestOptions
 defaultUnitTestOptions = do
-  params <- liftIO getParametersFromEnvironmentVariables
+  params <- liftIO $ getParametersFromEnvironmentVariables Nothing
   pure UnitTestOptions
     { oracle            = Fetch.zero
     , verbose           = Nothing
