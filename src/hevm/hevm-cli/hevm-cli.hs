@@ -48,7 +48,6 @@ import qualified EVM.UnitTest
 import Control.Concurrent.Async   (async, waitCatch)
 import Control.Lens hiding (pre)
 import Control.Monad              (void, when, forM_, unless)
-import Control.Monad.IO.Class     (liftIO)
 import Control.Monad.State.Strict (execStateT)
 import Data.ByteString            (ByteString)
 import Data.List                  (intercalate, isSuffixOf)
@@ -787,7 +786,7 @@ symvmFromCommand cmd = do
     Just SymbolicS -> EVM.Symbolic <$> freshArray_ Nothing
     Nothing -> EVM.Symbolic <$> freshArray_ (if create cmd then (Just 0) else Nothing)
 
-  withCache <- liftIO $ applyCache (state cmd, cache cmd)
+  withCache <- io $ applyCache (state cmd, cache cmd)
 
   vm <- case (rpc cmd, address cmd, code cmd) of
     (Just url, Just addr', _) ->
