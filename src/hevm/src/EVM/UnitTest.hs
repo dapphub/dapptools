@@ -1,3 +1,5 @@
+{-# Language LambdaCase #-}
+
 module EVM.UnitTest where
 
 import Prelude hiding (Word)
@@ -13,6 +15,7 @@ import EVM.Format
 import EVM.Solidity
 import EVM.Types
 import EVM.VMTest
+import qualified EVM.Fetch
 
 import qualified EVM.FeeSchedule as FeeSchedule
 
@@ -605,8 +608,26 @@ initialUnitTestVm (UnitTestOptions {..}) theContract =
   in vm
     & set (env . contracts . at ethrunAddress) (Just creator)
 
-getParametersFromEnvironmentVariables :: IO TestVMParams
-getParametersFromEnvironmentVariables = do
+
+maybeM :: (Monad m) => b -> (a -> b) -> m (Maybe a) -> m b
+maybeM def f mayb = do
+  may <- mayb
+  return $ maybe def f may
+
+getParametersFromEnvironmentVariables :: Maybe Text -> IO TestVMParams
+getParametersFromEnvironmentVariables rpc = do
+  block' <- maybeM EVM.Fetch.Latest (EVM.Fetch.BlockNumber . read) (lookupEnv "DAPP_TEST_NUMBER")
+  
+  (miner,ts,blockNum,diff) <-
+    case rpc of
+      Nothing  -> return (0,0,0,0)
+      Just url -> EVM.Fetch.fetchBlockFrom block' url >>= \case
+        Nothing -> error $ "Could not fetch block"
+        Just EVM.Block{..} -> return (_coinbase
+                                      , wordValue _timestamp
+                                      , wordValue _number
+                                      , wordValue _difficulty
+                                      )
   let
     getWord s def = maybe def read <$> lookupEnv s
     getAddr s def = maybe def read <$> lookupEnv s
@@ -619,11 +640,11 @@ getParametersFromEnvironmentVariables = do
     <*> getWord "DAPP_TEST_GAS_CALL" defaultGasForInvoking
     <*> getWord "DAPP_TEST_BALANCE_CREATE" defaultBalanceForCreator
     <*> getWord "DAPP_TEST_BALANCE_CALL" defaultBalanceForCreated
-    <*> getAddr "DAPP_TEST_COINBASE" 0
-    <*> getWord "DAPP_TEST_NUMBER" 0
-    <*> getWord "DAPP_TEST_TIMESTAMP" 1
+    <*> getAddr "DAPP_TEST_COINBASE" miner
+    <*> getWord "DAPP_TEST_NUMBER" blockNum
+    <*> getWord "DAPP_TEST_TIMESTAMP" ts
     <*> getWord "DAPP_TEST_GAS_LIMIT" 0
     <*> getWord "DAPP_TEST_GAS_PRICE" 0
     <*> getWord "DAPP_TEST_MAXCODESIZE" defaultMaxCodeSize
-    <*> getWord "DAPP_TEST_DIFFICULTY" 1
+    <*> getWord "DAPP_TEST_DIFFICULTY" diff
     <*> getWord "DAPP_TEST_CHAINID" 99

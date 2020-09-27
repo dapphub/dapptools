@@ -44,7 +44,7 @@ ghciTest root path state =
         Just repoPath -> do
           facts <- Git.loadFacts (Git.RepoAt repoPath)
           pure (flip Facts.apply facts)
-    params <- getParametersFromEnvironmentVariables
+    params <- getParametersFromEnvironmentVariables Nothing
     let
       opts = UnitTestOptions
         { oracle = EVM.Fetch.zero
@@ -97,7 +97,7 @@ ghciTty root path state =
         Just repoPath -> do
           facts <- Git.loadFacts (Git.RepoAt repoPath)
           pure (flip Facts.apply facts)
-    params <- getParametersFromEnvironmentVariables
+    params <- getParametersFromEnvironmentVariables Nothing
     let
       testOpts = UnitTestOptions
         { oracle = EVM.Fetch.zero
