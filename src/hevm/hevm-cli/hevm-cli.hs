@@ -12,6 +12,11 @@
 
 module Main where
 
+import Network.Wai (responseLBS, Application, getRequestBodyChunk)
+import Network.Wai.Handler.Warp (run)
+import Network.HTTP.Types (status200)
+import Network.HTTP.Types.Header (hContentType)
+
 import EVM (StorageModel(..))
 import qualified EVM
 import EVM.Concrete (createAddress,  wordValue)
@@ -31,6 +36,8 @@ import qualified EVM.VMTest as VMTest
 import EVM.SymExec
 import EVM.Debug
 import EVM.ABI
+import EVM.Serve (serve, Request(..))
+import qualified EVM.Serve as Serve
 import EVM.Solidity
 import EVM.Types hiding (word)
 import EVM.UnitTest (UnitTestOptions, coverageReport, coverageForUnitTestContract)
@@ -156,6 +163,33 @@ data Command w
       , chainid     :: w ::: Maybe W256       <?> "Env: chainId"
       , debug       :: w ::: Bool             <?> "Run interactively"
       , jsontrace   :: w ::: Bool             <?> "Print json trace output at every step"
+      , trace       :: w ::: Bool             <?> "Dump trace"
+      , state       :: w ::: Maybe String     <?> "Path to state repository"
+      , cache       :: w ::: Maybe String     <?> "Path to rpc cache repository"
+      , rpc         :: w ::: Maybe URL        <?> "Fetch state from a remote node"
+      , block       :: w ::: Maybe W256       <?> "Block state is be fetched from"
+      , jsonFile    :: w ::: Maybe String     <?> "Filename or path to dapp build output (default: out/*.solc.json)"
+      , dappRoot    :: w ::: Maybe String     <?> "Path to dapp project root directory (default: . )"
+      }
+  | Rpc
+      { code        :: w ::: Maybe ByteString <?> "Program bytecode"
+      , calldata    :: w ::: Maybe ByteString <?> "Tx: calldata"
+      , address     :: w ::: Maybe Addr       <?> "Tx: address"
+      , caller      :: w ::: Maybe Addr       <?> "Tx: caller"
+      , origin      :: w ::: Maybe Addr       <?> "Tx: origin"
+      , coinbase    :: w ::: Maybe Addr       <?> "Block: coinbase"
+      , value       :: w ::: Maybe W256       <?> "Tx: Eth amount"
+      , nonce       :: w ::: Maybe W256       <?> "Nonce of origin"
+      , gas         :: w ::: Maybe W256       <?> "Tx: gas amount"
+      , number      :: w ::: Maybe W256       <?> "Block: number"
+      , timestamp   :: w ::: Maybe W256       <?> "Block: timestamp"
+      , gaslimit    :: w ::: Maybe W256       <?> "Tx: gas limit"
+      , gasprice    :: w ::: Maybe W256       <?> "Tx: gas price"
+      , create      :: w ::: Bool             <?> "Tx: creation"
+      , maxcodesize :: w ::: Maybe W256       <?> "Block: max code size"
+      , difficulty  :: w ::: Maybe W256       <?> "Block: difficulty"
+      , chainid     :: w ::: Maybe W256       <?> "Env: chainId"
+      , debug       :: w ::: Bool             <?> "Run interactively"
       , trace       :: w ::: Bool             <?> "Dump trace"
       , state       :: w ::: Maybe String     <?> "Path to state repository"
       , cache       :: w ::: Maybe String     <?> "Path to rpc cache repository"
@@ -301,6 +335,7 @@ main = do
     Version {} -> putStrLn (showVersion Paths.version)
     Symbolic {} -> assert cmd
     Equivalence {} -> equivalence cmd
+    Rpc {} -> launchRpc cmd
     Exec {} ->
       launchExec cmd
     Abiencode {} ->
@@ -583,6 +618,48 @@ dappCoverage opts _ solcFile =
       Nothing ->
         error ("Failed to read Solidity JSON for `" ++ solcFile ++ "'")
 
+echo :: Application
+echo request respond = do
+  response <- getRequestBodyChunk request
+  putStrLn (show response)
+  respond $ responseLBS status200 [(hContentType, "text/plain")]
+          $ LazyByteString.fromStrict response
+
+
+rpcServer :: EVM.VM -> Application
+rpcServer vm request respond = do
+  req <- getRequestBodyChunk request
+  let bs = LazyByteString.fromStrict req
+  let json = JSON.decode bs :: Maybe Serve.Request
+
+  let response = case json of
+        Nothing ->
+          "bad request"
+        Just r -> case (view Serve.method r) of
+          "eth_getBlockByNumber" ->
+            show $ view (EVM.block . EVM.number) vm
+          _ ->
+            "hmm?"
+
+  putStrLn (show req)
+  respond
+    $ responseLBS status200 [(hContentType, "application/json")]
+    $ LazyByteString.fromStrict (Char8.pack response)
+
+launchRpc :: Command Options.Unwrapped -> IO ()
+launchRpc cmd = do
+  dapp <- getSrcInfo cmd
+  vm  <- vmFromCommand cmd
+
+  let fetcher = maybe EVM.Fetch.zero (EVM.Fetch.http block') (rpc cmd)
+      block'  = maybe EVM.Fetch.Latest EVM.Fetch.BlockNumber (block cmd)
+
+  -- now we need to listen for requests and serve them from this vm
+  -- read-only for now
+  serve $ rpcServer vm
+  -- or try this for sanity check
+  -- serve echo
+
 launchExec :: Command Options.Unwrapped -> IO ()
 launchExec cmd = do
   dapp <- getSrcInfo cmd
@@ -677,6 +754,77 @@ tohexOrText :: Text -> ByteString
 tohexOrText s = case "0x" `Char8.isPrefixOf` encodeUtf8 s of
                   True -> hexText s
                   False -> encodeUtf8 s
+
+-- | Creates a (concrete) VM from command line options
+rpcVmFromCommand :: Command Options.Unwrapped -> IO EVM.VM
+rpcVmFromCommand cmd = do
+  withCache <- applyCache (state cmd, cache cmd)
+  vm <- case (rpc cmd, address cmd, code cmd) of
+    (Just url, Just addr', Just c) -> do
+      EVM.Fetch.fetchContractFrom block' url addr' >>= \case
+        Nothing ->
+          error $ "contract not found: " <> show address'
+        Just contract' ->
+          -- if both code and url is given,
+          -- fetch the contract and overwrite the code
+          return . withCache . vm0 $
+            EVM.initialContract  (codeType $ hexByteString "--code" $ strip0x c)
+              & set EVM.storage  (view EVM.storage  contract')
+              & set EVM.balance  (view EVM.balance  contract')
+              & set EVM.nonce    (view EVM.nonce    contract')
+              & set EVM.external (view EVM.external contract')
+
+    (Just url, Just addr', Nothing) -> do
+      EVM.Fetch.fetchContractFrom block' url addr' >>= \case
+        Nothing ->
+          error $ "contract not found: " <> show address'
+        Just contract' ->
+          return . withCache . vm0 $ contract'
+
+    (_, _, Just c)  ->
+      return . withCache . vm0 $
+        EVM.initialContract (codeType $ hexByteString "--code" $ strip0x c)
+
+    (_, _, Nothing) ->
+      error $ "must provide at least (rpc + address) or code"
+
+  return $ vm & EVM.env . EVM.contracts . ix address' . EVM.balance +~ (w256 value')
+      where
+        decipher = hexByteString "bytes" . strip0x
+        block'   = maybe EVM.Fetch.Latest EVM.Fetch.BlockNumber (block cmd)
+        value'   = word value 0
+        caller'  = addr caller 0
+        origin'  = addr origin 0
+        calldata' = ConcreteBuffer $ bytes calldata ""
+        codeType = if create cmd then EVM.InitCode else EVM.RuntimeCode
+        address' = if create cmd
+              then createAddress origin' (word nonce 0)
+              else addr address 0xacab
+
+        vm0 c = EVM.makeVm $ EVM.VMOpts
+          { EVM.vmoptContract      = c
+          , EVM.vmoptCalldata      = (calldata', literal . num $ len calldata')
+          , EVM.vmoptValue         = w256lit value'
+          , EVM.vmoptAddress       = address'
+          , EVM.vmoptCaller        = litAddr caller'
+          , EVM.vmoptOrigin        = origin'
+          , EVM.vmoptGas           = word gas 0
+          , EVM.vmoptGaslimit      = word gas 0
+          , EVM.vmoptCoinbase      = addr coinbase 0
+          , EVM.vmoptNumber        = word number 0
+          , EVM.vmoptTimestamp     = word timestamp 0
+          , EVM.vmoptBlockGaslimit = word gaslimit 0
+          , EVM.vmoptGasprice      = word gasprice 0
+          , EVM.vmoptMaxCodeSize   = word maxcodesize 0xffffffff
+          , EVM.vmoptDifficulty    = word difficulty 0
+          , EVM.vmoptSchedule      = FeeSchedule.istanbul
+          , EVM.vmoptChainId       = word chainid 1
+          , EVM.vmoptCreate        = create cmd
+          , EVM.vmoptStorageModel  = ConcreteS
+          }
+        word f def = fromMaybe def (f cmd)
+        addr f def = fromMaybe def (f cmd)
+        bytes f def = maybe def decipher (f cmd)
 
 -- | Creates a (concrete) VM from command line options
 vmFromCommand :: Command Options.Unwrapped -> IO EVM.VM

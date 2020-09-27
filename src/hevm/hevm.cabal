@@ -52,6 +52,7 @@ library
     EVM.Patricia,
     EVM.Precompiled,
     EVM.RLP,
+    EVM.Serve,
     EVM.Solidity,
     EVM.Stepper,
     EVM.StorageLayout,
@@ -80,6 +81,9 @@ library
   install-includes:
     ethjet/tinykeccak.h, ethjet/ethjet.h, ethjet/ethjet-ff.h, ethjet/blake2.h
   build-depends:
+    warp,
+    wai,
+    http-types,
     QuickCheck                        >= 2.13.2 && < 2.15,
     Decimal                           == 0.5.1,
     containers                        >= 0.6.0 && < 0.7,
@@ -160,6 +164,9 @@ executable hevm
   if os(darwin)
     ld-options: -Wl,-keep_dwarf_unwind
   build-depends:
+    warp,
+    wai,
+    http-types,
     QuickCheck,
     aeson,
     ansi-wl-pprint,
