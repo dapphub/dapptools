@@ -526,7 +526,7 @@ assert cmd = do
           when (getModels cmd) $
             forM_ (zip [1..] posts) $ \(i, postVM) -> do
               resetAssertions
-              constrain (sAnd (view EVM.pathConditions postVM))
+              constrain (sAnd (map fst (view EVM.pathConditions postVM)))
               io $ putStrLn $
                 "-- Branch (" <> show i <> "/" <> show (length posts) <> ") --"
               checkSat >>= \case
@@ -536,9 +536,8 @@ assert cmd = do
                                  print $ view EVM.result postVM
                 Sat -> do
                   showCounterexample pre maybesig
-                  v <-  mapM getValue $ view EVM.pathConditions postVM
                   io $ putStrLn "-- Pathconditions --"
-                  io $ print v
+                  io $ print $ map snd (view EVM.pathConditions postVM)
                   case view EVM.result postVM of
                     Nothing ->
                       error "internal error; no EVM result"
@@ -784,17 +783,17 @@ symvmFromCommand cmd = do
     (Nothing, Nothing) -> do
       cd <- sbytes256
       len <- freshVar_
-      return (SymbolicBuffer cd, len, len .<= 256)
+      return (SymbolicBuffer cd, len, (len .<= 256, Val "len < 256"))
     -- fully concrete calldata
     (Just c, Nothing) ->
       let cd = ConcreteBuffer $ decipher c
-      in return (cd, num (len cd), sTrue)
+      in return (cd, num (len cd), (sTrue, Dull))
     -- calldata according to given abi with possible specializations from the `arg` list
     (Nothing, Just sig') -> do
       method' <- io $ functionAbi sig'
       let typs = snd <$> view methodInputs method'
       (cd, cdlen) <- symCalldata (view methodSignature method') typs (arg cmd)
-      return (SymbolicBuffer cd, cdlen, sTrue)
+      return (SymbolicBuffer cd, cdlen, (sTrue, Dull))
 
     _ -> error "incompatible options: calldata and abi"
 
