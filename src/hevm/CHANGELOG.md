@@ -7,11 +7,14 @@
 - z3 updated to 4.8.8
 - optimize SMT queries
 - More useful trace output for unknown calls
+- Default to on chain values for `coinbase`, `timestamp`, `difficulty`, `blocknumber` when rpc is provided
+- Perform tx initialization (gas payment, value transfer) in `hevm exec`, `hevm symbolic` and `hevm dapp-test`.
 
 ### Added
 
 - `--cache` flag for `dapp-test`, `exec`, `symbolic`, `interactive`,
   enabling caching of contracts received by rpc.
+- `load(address,bytes32)` cheat code allowing storage reads from arbitrary contracts.
 
 ## 0.41.0 - 2020-08-19
 
