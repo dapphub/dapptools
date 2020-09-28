@@ -106,7 +106,7 @@ data VM = VM
   , _traces         :: Zipper.TreePos Zipper.Empty Trace
   , _cache          :: Cache
   , _burned         :: Word
-  , _pathConditions :: [SBool]
+  , _pathConditions :: [(SBool, Whiff)]
   , _iterations     :: Map CodeLocation Int
   }
 
@@ -675,14 +675,16 @@ exec1 = do
                                      -- Instead, we keep track of all of the particular invocations of symkeccak' we see
                                      -- (similarly to sha3Crack), and simply assert that injectivity holds for these
                                      -- particular invocations.
+                                     --
+                                     -- TODO - maybe here Dull needs to be replaced with something smarrrtttt
 
                                      SymbolicBuffer bs -> do
                                                    let hash' = symkeccak' bs
                                                        previousUsed = view (env . keccakUsed) vm
                                                    env . keccakUsed <>= [(bs, hash')]
-                                                   pathConditions <>= fmap (\(preimage, image) ->
-                                                                               image .== hash' .=> preimage .== bs)
-                                                                           previousUsed
+                                                   pathConditions <>= (fmap (\(preimage, image) ->
+                                                                               (image .== hash' .=> preimage .== bs, Dull))
+                                                                           previousUsed)
                                                    return (sw256 hash', mempty)
 
                   burn (g_sha3 + g_sha3word * ceilDiv (num xSize) 32) $
@@ -1522,8 +1524,8 @@ getCodeLocation :: VM -> CodeLocation
 getCodeLocation vm = (view (state . contract) vm, view (state . pc) vm)
 
 -- | Construct SMT Query and halt execution until resolved
-askSMT :: CodeLocation -> SBool -> (Bool -> EVM ()) -> EVM ()
-askSMT codeloc condition continue = do
+askSMT :: CodeLocation -> (SBool, Whiff) -> (Bool -> EVM ()) -> EVM ()
+askSMT codeloc (condition, whiff) continue = do
   -- We keep track of how many times we have come across this particular
   -- (contract, pc) combination in the `iteration` mapping.
   iteration <- use (iterations . at codeloc . non 0)
@@ -1542,7 +1544,7 @@ askSMT codeloc condition continue = do
    where -- Only one path is possible
          choosePath :: BranchCondition -> EVM ()
          choosePath (Case v) = do assign result Nothing
-                                  pushTo pathConditions (if v then condition else sNot condition)
+                                  pushTo pathConditions (if v then (condition, UnOp "not" whiff) else (sNot condition, whiff))
                                   iteration <- use (iterations . at codeloc . non 0)
                                   assign (cache . path . at (codeloc, iteration)) (Just v)
                                   assign (iterations . at codeloc) (Just (iteration + 1))
