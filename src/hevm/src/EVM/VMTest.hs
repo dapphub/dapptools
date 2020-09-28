@@ -332,13 +332,6 @@ vmForCase x =
   let
     checkState = checkContracts x
     vm = EVM.makeVm (testVmOpts x)
-    opts = testVmOpts x
-    creation = EVM.vmoptCreate opts
-    touchedAccounts =
-      if creation then
-        [EVM.vmoptOrigin opts]
-      else
-        [EVM.vmoptOrigin opts, EVM.vmoptAddress opts]
   in
     initTx vm checkState
 
