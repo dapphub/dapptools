@@ -16,7 +16,8 @@ import EVM.Stepper (Stepper)
 import qualified EVM.Stepper as Stepper
 import qualified Control.Monad.Operational as Operational
 import EVM.Types hiding (Word)
-import EVM.Symbolic (SymWord(..), sw256)
+import EVM.Concrete (Whiff(..))
+import EVM.Symbolic (litBytes, SymWord(..), sw256, Buffer(..))
 import EVM.Concrete (createAddress, Word)
 import qualified EVM.FeeSchedule as FeeSchedule
 import Data.SBV.Trans.Control
@@ -97,9 +98,9 @@ abstractVM typesignature concreteArgs x storagemodel = do
     case typesignature of
       Nothing -> do cd <- sbytes256
                     len <- freshVar_
-                    return (cd, len, len .<= 256)
+                    return (cd, len, (len .<= 256, Val "len < 256"))
       Just (name, typs) -> do (cd, cdlen) <- symCalldata name typs concreteArgs
-                              return (cd, cdlen, sTrue)
+                              return (cd, cdlen, (sTrue, Val "len < 256"))
   symstore <- case storagemodel of
     SymbolicS -> Symbolic <$> freshArray_ Nothing
     InitialS -> Symbolic <$> freshArray_ (Just 0)
@@ -216,8 +217,8 @@ verifyContract :: ByteString -> Maybe (Text, [AbiType]) -> [String] -> StorageMo
 verifyContract theCode signature' concreteArgs storagemodel pre maybepost = do
     preStateRaw <- abstractVM signature' concreteArgs theCode  storagemodel
     -- add the pre condition to the pathconditions to ensure that we are only exploring valid paths
-    let preState = over pathConditions ((++) [pre preStateRaw]) preStateRaw
-    verify preState Nothing Nothing maybepost
+    let preState = over pathConditions ((++) [(pre preStateRaw, Dull)]) preStateRaw
+    verify preState maxIter Nothing maybepost
 
 pruneDeadPaths :: [VM] -> [VM]
 pruneDeadPaths =
@@ -237,7 +238,7 @@ verify preState maxIter rpcinfo maybepost = do
     (Just post) -> do
       let livePaths = pruneDeadPaths results
       -- can also do these queries individually (even concurrently!). Could save time and report multiple violations
-          postC = sOr $ fmap (\postState -> (sAnd (view pathConditions postState)) .&& sNot (post (preState, postState))) livePaths
+          postC = sOr $ fmap (\postState -> (sAnd (fst <$> view pathConditions postState)) .&& sNot (post (preState, postState))) livePaths
       -- is there any path which can possibly violate
       -- the postcondition?
       resetAssertions
@@ -298,7 +299,7 @@ equivalenceCheck bytecodeA bytecodeB maxiter signature' = do
 
               _ -> error "Internal error during symbolic execution (should not be possible)"
 
-        in sAnd aPath .&& sAnd bPath .&& differingResults
+        in sAnd (map fst aPath) .&& sAnd (map fst bPath) .&& differingResults
   -- If there exists a pair of endstates where this is not the case,
   -- the following constraint is satisfiable
   constrain $ sOr differingEndStates
