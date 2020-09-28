@@ -372,9 +372,19 @@ bytecode = contractcode . to f
 
 instance Semigroup Cache where
   a <> b = Cache
-    { _fetched = mappend (view fetched a) (view fetched b),
-      _path = mappend (view path a) (view path b)
+    { _fetched = Map.unionWith unifyCachedContract (view fetched a) (view fetched b)
+    , _path = mappend (view path a) (view path b)
     }
+
+-- only intended for use in Cache merges, where we expect
+-- everything to be Concrete
+unifyCachedContract :: Contract -> Contract -> Contract
+unifyCachedContract a b = a & set storage merged
+  where merged = case (view storage a, view storage b) of
+                   (Concrete sa, Concrete sb) ->
+                     Concrete (mappend sa sb)
+                   _ ->
+                     view storage a
 
 instance Monoid Cache where
   mempty = Cache { _fetched = mempty,
