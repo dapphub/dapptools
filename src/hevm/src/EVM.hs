@@ -1853,11 +1853,11 @@ cheatActions =
           fetchAccount a $ \_ -> do
             modifying (env . contracts . ix a . storage) (writeStorage slot new),
       action "load(address,bytes32)" [AbiAddressType, AbiBytesType 32] $
-        \outSize outOffset [AbiAddress a, AbiBytes 32 x] -> do
+        \outOffset outSize [AbiAddress a, AbiBytes 32 x] -> do
           let slot = w256lit $ word x
-          accessStorage a slot $ \res ->
+          accessStorage a slot $ \res -> do
+            assign (state . returndata . word256At 0) res
             assign (state . memory . word256At outOffset) res
-
     ]
   where
     action s ts f = (abiKeccak s, (ts, f))
