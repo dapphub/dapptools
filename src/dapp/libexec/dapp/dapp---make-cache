@@ -2,6 +2,7 @@
 set -e
 
 [[ "$1" ]] && state="$1" || state="$(TMPDIR=. mktemp -d hevm.cache.XXXXX)"
+mkdir -p "$state"
 # Try to make sure `git commit' definitely succeeds...
 export GIT_CONFIG_NOSYSTEM=1
 export GIT_AUTHOR_NAME=hevm
