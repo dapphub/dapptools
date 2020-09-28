@@ -909,6 +909,8 @@ drawStackPane ui =
   let
     gasText = showWordExact (view (uiVm . state . gas) ui)
     labelText = txt ("Gas available: " <> gasText <> "; stack:")
+    omfg = map snd $ view (uiVm . pathConditions) ui
+    omg = show omfg
   in hBorderWithLabel labelText <=>
     renderList
       (\_ (i, x@(S a w)) ->
@@ -921,6 +923,7 @@ drawStackPane ui =
            ])
       False
       (view uiStackList ui)
+      <=> str omg
 
 drawBytecodePane :: UiVmState -> UiWidget
 drawBytecodePane ui =
