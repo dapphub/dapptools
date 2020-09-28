@@ -536,6 +536,9 @@ assert cmd = do
                                  print $ view EVM.result postVM
                 Sat -> do
                   showCounterexample pre maybesig
+                  v <-  mapM getValue $ view EVM.pathConditions postVM
+                  io $ putStrLn "-- Pathconditions --"
+                  io $ print v
                   case view EVM.result postVM of
                     Nothing ->
                       error "internal error; no EVM result"
