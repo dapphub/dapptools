@@ -31,7 +31,7 @@ import Data.ByteString (ByteString)
 import Data.Aeson ((.:), FromJSON (..))
 import Data.Foldable (fold)
 import Data.Map (Map)
-import Data.Maybe (fromMaybe, isNothing)
+import Data.Maybe (fromMaybe, isNothing, isJust)
 import Data.Witherable (Filterable, catMaybes)
 
 import qualified Data.Map          as Map
@@ -325,15 +325,15 @@ checkTx tx block prestate = do
   if isCreate && ((prevCode /= EVM.RuntimeCode mempty) || (prevNonce /= 0))
   then mzero
   else
-    return $ (setupTx origin coinbase gasPrice gasLimit) . (touchAccount toAddr) $ prestate
+    return $ prestate
 
 vmForCase :: Case -> EVM.VM
 vmForCase x =
   let
-    checkState = checkContracts x
     vm = EVM.makeVm (testVmOpts x)
+      & set (EVM.env . EVM.contracts) (checkContracts x)
   in
-    initTx vm checkState
+    initTx vm
 
 -- | Increments origin nonce and pays gas deposit
 setupTx :: Addr -> Addr -> EVM.Word -> EVM.Word -> Map Addr EVM.Contract -> Map Addr EVM.Contract
@@ -347,18 +347,26 @@ setupTx origin coinbase gasPrice gasLimit prestate =
 -- | Given a valid tx loaded into the vm state,
 -- subtract gas payment from the origin, increment the nonce
 -- and pay receiving address
-initTx :: EVM.VM -> Map Addr EVM.Contract -> EVM.VM
-initTx vm preState = let
+initTx :: EVM.VM -> EVM.VM
+initTx vm = let
     toAddr   = view (EVM.state . EVM.contract) vm
     origin   = view (EVM.tx . EVM.origin) vm
+    gasPrice = view (EVM.tx . EVM.gasprice) vm
+    gasLimit = view (EVM.tx . EVM.txgaslimit) vm
+    coinbase = view (EVM.block . EVM.coinbase) vm
     value    = view (EVM.state . EVM.callvalue) vm
-    Just toContract = view (EVM.env . EVM.contracts . at toAddr) vm
+    toContract = initialContract (EVM.InitCode (view (EVM.state . EVM.code) vm))
+    preState = setupTx origin coinbase gasPrice gasLimit $ view (EVM.env . EVM.contracts) vm
     oldBalance = view (accountAt toAddr . balance) preState
     creation = view (EVM.tx . EVM.isCreate) vm
     initState =
-      (Map.adjust (over balance (subtract (forceLit value))) origin)
-      . (Map.adjust (over balance (+ (forceLit value))) toAddr)
-      . (if creation then Map.insert toAddr (toContract & balance .~ oldBalance) else id)
+      (if isJust (maybeLitWord value)
+       then (Map.adjust (over balance (subtract (forceLit value))) origin)
+        . (Map.adjust (over balance (+ (forceLit value))) toAddr)
+       else id)
+      . (if creation
+         then Map.insert toAddr (toContract & balance .~ oldBalance)
+         else touchAccount toAddr)
       $ preState
 
     touched = if creation
