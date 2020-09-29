@@ -32,7 +32,7 @@ import Control.Monad.Par.IO (runParIO)
 
 import qualified Data.ByteString.Lazy as BSLazy
 import Data.ByteString    (ByteString)
-import Data.SBV
+import Data.SBV    hiding (verbose)
 import Data.Either        (isRight)
 import Data.Foldable      (toList)
 import Data.Map           (Map)
@@ -387,96 +387,11 @@ runUnitTestContract
           tick $ failOutput vm1 opts "setUp()"
           pure [(False, vm1)]
         Just (VMSuccess _) -> do
-
-          -- Define the thread spawner for normal test cases
-          let
-            runOne :: VM -> ABIMethod -> AbiValue -> IO (Text, Either Text Text, VM)
-            runOne vm testName args = do
-              let argInfo = pack (if args == emptyAbi then "" else " with arguments: " <> show args)
-              (bailed, vm') <-
-                runStateT
-                  (interpret oracle (execTest opts testName args))
-                  vm
-              (success, vm'') <-
-                runStateT
-                  (interpret oracle (checkFailures opts testName args bailed)) vm'
-              if success
-              then
-                 let gasSpent = num (testGasCall testParams) - view (state . gas) vm'
-                     gasText = pack . show $ (fromIntegral gasSpent :: Integer)
-                 in
-                    pure
-                      ("\x1b[32m[PASS]\x1b[0m "
-                       <> testName <> argInfo <> " (gas: " <> gasText <> ")"
-                      , Right (passOutput vm opts testName)
-                      , vm''
-                      )
-              else
-                    pure
-                      ("\x1b[31m[FAIL]\x1b[0m "
-                       <> testName <> argInfo
-                      , Left (failOutput vm opts testName)
-                      , vm''
-                      )
-
-          -- Define the thread spawner for property based tests
-          let
-            fuzzRun :: VM -> Text -> [AbiType] -> IO (Text, Either Text Text, VM)
-            fuzzRun vm testName types = do
-                let args = Args{ replay          = Nothing
-                               , maxSuccess      = fuzzRuns
-                               , maxDiscardRatio = 10
-                               , maxSize         = 100
-                               , chatty          = isJust verbose
-                               , maxShrinks      = maxBound
-                               }
-                res <- quickCheckWithResult args (fuzzTest opts testName types vm)
-                case res of
-                  Success numTests _ _ _ _ _ ->
-                    pure ("\x1b[32m[PASS]\x1b[0m "
-                           <> testName <> " (runs: " <> (pack $ show numTests) <> ")"
-                           -- this isn't the post vm we actually want, as we
-                           -- can't retrieve the correct vm from quickcheck
-                         , Right (passOutput vm opts testName)
-                         , vm
-                         )
-                  Failure _ _ _ _ _ _ _ _ _ _ failCase _ _ ->
-                    let abiValue = decodeAbiValue (AbiTupleType (Vector.fromList types)) $ BSLazy.fromStrict $ hexText (pack $ concat failCase)
-                        ppOutput = pack $ show abiValue
-                    in do
-                    -- Run the failing test again to get a proper trace
-                    vm' <- execStateT (interpret oracle (runUnitTest opts testName abiValue)) vm
-                    pure ("\x1b[31m[FAIL]\x1b[0m "
-                             <> testName <> ". Counterexample: " <> ppOutput
-                             <> "\nRun:\n dapp test --replay '(\"" <> testName <> "\",\""
-                             <> (pack (concat failCase)) <> "\")'\nto test this case again, or \n dapp debug --replay '(\""
-                             <> testName <> "\",\"" <> (pack (concat failCase)) <> "\")'\nto debug it."
-                         , Left (failOutput vm' opts testName)
-                         , vm'
-                         )
-                  _ -> pure ("\x1b[31m[OOPS]\x1b[0m "
-                              <> testName
-                            , Left (failOutput vm opts testName)
-                            , vm
-                            )
-
-          let
-            runTest :: VM -> (Text, [AbiType]) -> IO (Text, Either Text Text, VM)
-            runTest vm (testName, []) = runOne vm testName emptyAbi
-            runTest vm (testName, types) = case replay of
-              Nothing ->
-                fuzzRun vm testName types
-              Just (sig, callData) ->
-                if sig == testName
-                then runOne vm testName $
-                  decodeAbiValue (AbiTupleType (Vector.fromList types)) callData
-                else fuzzRun vm testName types
-
           let
             runCache :: ([(Either Text Text, VM)], VM) -> (Text, [AbiType])
                         -> IO ([(Either Text Text, VM)], VM)
             runCache (results, vm) (testName, types) = do
-              (t, r, vm') <- runTest vm (testName, types)
+              (t, r, vm') <- runTest opts vm (testName, types)
               Text.putStrLn t
               let vmCached = vm & set (cache . fetched) (view (cache . fetched) vm')
               pure (((r, vm'): results), vmCached)
@@ -493,6 +408,90 @@ runUnitTestContract
           tick (Text.unlines (filter (not . Text.null) bailing))
 
           pure [(isRight r, vm) | (r, vm) <- details]
+
+
+
+runTest :: UnitTestOptions -> VM -> (Text, [AbiType]) -> IO (Text, Either Text Text, VM)
+runTest opts@UnitTestOptions{..} vm (testName, []) = runOne opts vm testName emptyAbi
+runTest opts@UnitTestOptions{..} vm (testName, types) = case replay of
+  Nothing ->
+    fuzzRun opts vm testName types
+  Just (sig, callData) ->
+    if sig == testName
+    then runOne opts vm testName $
+      decodeAbiValue (AbiTupleType (Vector.fromList types)) callData
+    else fuzzRun opts vm testName types
+
+-- | Define the thread spawner for normal test cases 
+runOne :: UnitTestOptions -> VM -> ABIMethod -> AbiValue -> IO (Text, Either Text Text, VM)
+runOne opts@UnitTestOptions{..} vm testName args = do
+  let argInfo = pack (if args == emptyAbi then "" else " with arguments: " <> show args)
+  (bailed, vm') <-
+    runStateT
+      (interpret oracle (execTest opts testName args))
+      vm
+  (success, vm'') <-
+    runStateT
+      (interpret oracle (checkFailures opts testName args bailed)) vm'
+  if success
+  then
+     let gasSpent = num (testGasCall testParams) - view (state . gas) vm'
+         gasText = pack . show $ (fromIntegral gasSpent :: Integer)
+     in
+        pure
+          ("\x1b[32m[PASS]\x1b[0m "
+           <> testName <> argInfo <> " (gas: " <> gasText <> ")"
+          , Right (passOutput vm'' opts testName)
+          , vm''
+          )
+  else
+        pure
+          ("\x1b[31m[FAIL]\x1b[0m "
+           <> testName <> argInfo
+          , Left (failOutput vm'' opts testName)
+          , vm''
+          )
+
+-- | Define the thread spawner for property based tests
+fuzzRun :: UnitTestOptions -> VM -> Text -> [AbiType] -> IO (Text, Either Text Text, VM)
+fuzzRun opts@UnitTestOptions{..} vm testName types = do
+  let args = Args{ replay          = Nothing
+                 , maxSuccess      = fuzzRuns
+                 , maxDiscardRatio = 10
+                 , maxSize         = 100
+                 , chatty          = isJust verbose
+                 , maxShrinks      = maxBound
+                 }
+  quickCheckWithResult args (fuzzTest opts testName types vm) >>= \case
+    Success numTests _ _ _ _ _ ->
+      pure ("\x1b[32m[PASS]\x1b[0m "
+             <> testName <> " (runs: " <> (pack $ show numTests) <> ")"
+             -- this isn't the post vm we actually want, as we
+             -- can't retrieve the correct vm from quickcheck
+           , Right (passOutput vm opts testName)
+           , vm
+           )
+    Failure _ _ _ _ _ _ _ _ _ _ failCase _ _ ->
+      let abiValue = decodeAbiValue (AbiTupleType (Vector.fromList types)) $ BSLazy.fromStrict $ hexText (pack $ concat failCase)
+          ppOutput = pack $ show abiValue
+      in do
+        -- Run the failing test again to get a proper trace
+        vm' <- execStateT (interpret oracle (runUnitTest opts testName abiValue)) vm
+        pure ("\x1b[31m[FAIL]\x1b[0m "
+               <> testName <> ". Counterexample: " <> ppOutput
+               <> "\nRun:\n dapp test --replay '(\"" <> testName <> "\",\""
+               <> (pack (concat failCase)) <> "\")'\nto test this case again, or \n dapp debug --replay '(\""
+               <> testName <> "\",\"" <> (pack (concat failCase)) <> "\")'\nto debug it."
+             , Left (failOutput vm' opts testName)
+             , vm'
+             )
+    _ -> pure ("\x1b[31m[OOPS]\x1b[0m "
+               <> testName
+              , Left (failOutput vm opts testName)
+              , vm
+              )
+
+
 
 indentLines :: Int -> Text -> Text
 indentLines n s =
