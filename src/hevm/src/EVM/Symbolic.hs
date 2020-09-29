@@ -226,10 +226,11 @@ readSWord i (ConcreteBuffer x) = num $ Concrete.readMemoryWord i x
 -- analogues for concrete words defined in Concrete.hs
 
 instance Show SymWord where
-  show s@(S Dull _) = case maybeLitWord s of
-    Nothing -> "<symbolic>"
+  show s@(S w _) = case maybeLitWord s of
+    Nothing -> case w of
+      Dull -> "<symbolic>"
+      whiff -> show whiff
     Just w  -> show w
-  show (S whiff x) = show whiff
 
 instance EqSymbolic SymWord where
   (.==) (S _ x) (S _ y) = x .== y
