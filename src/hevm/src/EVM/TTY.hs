@@ -914,10 +914,10 @@ drawStackPane ui =
       (\_ (i, x@(S a w)) ->
          vBox
            [ withHighlight True (str ("#" ++ show i ++ " "))
-               <+> str (show w)
+               <+> str (show x)
            , dim (txt ("   " <> (case unliteral w of
-                       Nothing -> pack $ show a
-                       Just u -> showWordExplanation (fromSizzle u) $ dapp (view uiTestOpts ui)) <> pack (" " ++ (show a))))
+                       Nothing -> ""
+                       Just u -> showWordExplanation (fromSizzle u) $ dapp (view uiTestOpts ui))))
            ])
       False
       (view uiStackList ui)

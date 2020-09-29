@@ -1001,7 +1001,7 @@ exec1 = do
         -- op: JUMPI
         0x57 -> do
           case stk of
-            (x:y:xs) -> forceConcrete x $ \x' ->
+            (x:y@(S w _):xs) -> forceConcrete x $ \x' ->
                 burn g_high $
                   let jump :: Bool -> EVM ()
                       jump True = assign (state . stack) xs >> next
@@ -1009,7 +1009,7 @@ exec1 = do
                   in case maybeLitWord y of
                       Just y' -> jump (0 == y')
                       -- if the jump condition is symbolic, an smt query has to be made.
-                      Nothing -> askSMT (self, the state pc) (0 .== y) jump
+                      Nothing -> askSMT (self, the state pc) (0 .== y, UnOp "isZero" w) jump
             _ -> underrun
 
         -- op: PC
@@ -1539,7 +1539,7 @@ askSMT codeloc (condition, whiff) continue = do
      -- increment the iterations and select appropriate path
      Nothing -> do pathconds <- use pathConditions
                    assign result . Just . VMFailure . Query $ PleaseAskSMT
-                     condition pathconds choosePath
+                     condition (fst <$> pathconds) choosePath
 
    where -- Only one path is possible
          choosePath :: BranchCondition -> EVM ()
@@ -1565,7 +1565,7 @@ fetchAccount addr continue =
           assign (env . contracts . at addr) (Just c)
           continue c
         Nothing ->
-          assign result . Just . VMFailure . Query $
+          assign result . Just . VMFailure $ Query $
             PleaseFetchContract addr
               (\c -> do assign (cache . fetched . at addr) (Just c)
                         assign (env . contracts . at addr) (Just c)
@@ -1612,7 +1612,7 @@ accessStorage addr slot continue =
       fetchAccount addr $ \_ ->
         accessStorage addr slot continue
   where
-      mkQuery = assign result . Just . VMFailure . Query $
+      mkQuery = assign result . Just . VMFailure $ Query $
                   PleaseFetchSlot addr (forceLit slot)
                     (\(litWord -> x) -> do
                         modifying (cache . fetched . ix addr . storage) (writeStorage slot x)

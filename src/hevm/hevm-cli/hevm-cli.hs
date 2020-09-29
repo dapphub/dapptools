@@ -15,8 +15,8 @@ module Main where
 
 import EVM (StorageModel(..))
 import qualified EVM
-import EVM.Concrete (createAddress, w256, wordValue)
-import EVM.Symbolic (forceLitBytes, litAddr, w256lit, sw256, SymWord(..), len, forceLit, litWord)
+import EVM.Concrete (createAddress, w256, Whiff(..))
+import EVM.Symbolic (forceLitBytes, litAddr, w256lit, sw256, SymWord(..), len)
 import qualified EVM.FeeSchedule as FeeSchedule
 import qualified EVM.Fetch
 import qualified EVM.Flatten
