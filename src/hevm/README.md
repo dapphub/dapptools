@@ -292,6 +292,9 @@ sets the block number to `x`.
 - `function store(address c, bytes32 loc, bytes32 val) public`
 sets the slot `loc` of contract `c` to `val`.
 
+- `function load(address c, bytes32 loc) public`
+reads the slot `loc` of contract `c`.
+
 
 ## Contact
 
