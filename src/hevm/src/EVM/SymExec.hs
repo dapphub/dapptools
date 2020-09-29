@@ -17,7 +17,7 @@ import qualified EVM.Stepper as Stepper
 import qualified Control.Monad.Operational as Operational
 import EVM.Types hiding (Word)
 import EVM.Concrete (Whiff(..))
-import EVM.Symbolic (litBytes, SymWord(..), sw256, Buffer(..))
+import EVM.Symbolic (SymWord(..), sw256)
 import EVM.Concrete (createAddress, Word)
 import qualified EVM.FeeSchedule as FeeSchedule
 import Data.SBV.Trans.Control
@@ -98,9 +98,9 @@ abstractVM typesignature concreteArgs x storagemodel = do
     case typesignature of
       Nothing -> do cd <- sbytes256
                     len <- freshVar_
-                    return (cd, len, (len .<= 256, Val "len < 256"))
+                    return (cd, len, (len .<= 256, Val "calldatalength < 256"))
       Just (name, typs) -> do (cd, cdlen) <- symCalldata name typs concreteArgs
-                              return (cd, cdlen, (sTrue, Val "len < 256"))
+                              return (cd, cdlen, (sTrue, Val "True"))
   symstore <- case storagemodel of
     SymbolicS -> Symbolic <$> freshArray_ Nothing
     InitialS -> Symbolic <$> freshArray_ (Just 0)
@@ -134,7 +134,6 @@ loadSymVM x initStore model addr callvalue' calldata' =
     }) & set (env . contracts . at (createAddress ethrunAddress 1))
              (Just (contractWithStore x initStore))
 
-
 -- | Interpreter which explores all paths at
 -- | branching points.
 -- | returns a list of possible final evm states
@@ -142,7 +141,7 @@ interpret
   :: Fetch.Fetcher
   -> Maybe Integer --max iterations
   -> Stepper a
-  -> StateT VM Query [a]
+  -> StateT VM Query [a] -- TODO: change to tree?
 interpret fetcher maxIter =
   eval . Operational.view
 
@@ -218,7 +217,7 @@ verifyContract theCode signature' concreteArgs storagemodel pre maybepost = do
     preStateRaw <- abstractVM signature' concreteArgs theCode  storagemodel
     -- add the pre condition to the pathconditions to ensure that we are only exploring valid paths
     let preState = over pathConditions ((++) [(pre preStateRaw, Dull)]) preStateRaw
-    verify preState maxIter Nothing maybepost
+    verify preState Nothing Nothing maybepost
 
 pruneDeadPaths :: [VM] -> [VM]
 pruneDeadPaths =
