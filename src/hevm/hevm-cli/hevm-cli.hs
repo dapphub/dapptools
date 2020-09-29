@@ -726,9 +726,8 @@ vmFromCommand cmd = do
     (_, _, Nothing) ->
       error $ "must provide at least (rpc + address) or code"
 
-  return $ withCache (vm0 miner ts blockNum diff contract) &
-     EVM.env . EVM.contracts . ix address' . EVM.balance +~ (w256 value')
-      where
+  return $ VMTest.initTx $ withCache (vm0 miner ts blockNum diff contract)
+    where
         decipher = hexByteString "bytes" . strip0x
         block'   = maybe EVM.Fetch.Latest EVM.Fetch.BlockNumber (block cmd)
         value'   = word value 0
@@ -823,19 +822,19 @@ symvmFromCommand cmd = do
               -- if both code and url is given,
               -- fetch the contract and overwrite the code
               Just c -> EVM.initialContract (codeType $ decipher c)
-                        & set EVM.storage     store
                         & set EVM.origStorage (view EVM.origStorage contract')
                         & set EVM.balance     (view EVM.balance contract')
                         & set EVM.nonce       (view EVM.nonce contract')
                         & set EVM.external    (view EVM.external contract')
 
     (_, _, Just c)  ->
-      return $ (EVM.initialContract . codeType $ decipher c) & set EVM.storage store
+      return $ (EVM.initialContract . codeType $ decipher c)
     (_, _, Nothing) ->
       error $ "must provide at least (rpc + address) or code"
 
-  return $ withCache $ vm0 miner ts blockNum diff cdlen calldata' callvalue' caller' contract'
+  return $ (VMTest.initTx $ withCache $ vm0 miner ts blockNum diff cdlen calldata' callvalue' caller' contract')
     & over EVM.pathConditions (<> [pathCond])
+    & set (EVM.env . EVM.contracts . (ix address') . EVM.storage) store
 
   where
     decipher = hexByteString "bytes" . strip0x

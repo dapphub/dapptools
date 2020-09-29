@@ -587,9 +587,8 @@ setupCall TestVMParams{..} sig args = do
   origin' <- fromMaybe (initialContract (RuntimeCode mempty)) <$> use (env . contracts . at testOrigin)
   let originBal = view balance origin'
   when (originBal <= (w256 testGasprice) * (w256 testGasCall)) $ error "insufficient balance for gas cost"
-  modifying (env . contracts) (setupTx testOrigin testCoinbase (w256 testGasprice) (w256 testGasCall))
   vm <- get
-  put $ initTx vm $ view (env . contracts) vm
+  put $ initTx vm
 
 initialUnitTestVm :: UnitTestOptions -> SolcContract -> VM
 initialUnitTestVm (UnitTestOptions {..}) theContract =
