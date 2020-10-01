@@ -1,0 +1,86 @@
+#!/usr/bin/env bash
+### token-permit -- sign and submit permits
+set -e
+display_usage() {
+  echo "Usage: token permit <token> <spender> [amount|allowed] [deadline|expiry] [--submit]"
+}
+
+for i in "$@"; do
+  case $i in
+    --submit)
+      SUBMIT=yes
+      shift
+      ;;
+    *)
+      shift
+      set -- "$@" "$i"
+      ;;
+  esac
+done
+
+if [ $# -lt 2 ];  then
+    display_usage
+    exit 1
+fi
+
+set -x
+
+TOKEN=$1
+SPENDER=$2
+
+
+
+PERMIT_TYPEHASH=$(seth call $1 "PERMIT_TYPEHASH()(bytes32)")
+if [ $EIP2612_TYPEHASH != $PERMIT_TYPEHASH ]; then
+    DAI=yes
+fi
+
+if [ $# -lt 3 ] && [ -z ${DAI+x} ]; then
+    VALUE=$(seth --to-int256 -1)
+elif [ $# -lt 3]; then
+    VALUE=$(seth --to-uint256 1)
+else
+    VALUE=$(seth --to-uint256 $3)
+fi
+
+if [ -z ${ETH_FROM+x} ]; then
+    echo "ETH_FROM must be set";
+    exit 1
+fi
+
+if [ -z ${DOMAIN_SEPARATOR+x} ]; then
+    DOMAIN_SEPARATOR=$(seth call $TOKEN "DOMAIN_SEPARATOR()(bytes32)")
+fi
+
+if [ -z ${NONCE+x} ]; then
+    NONCE=$(seth call $TOKEN "nonces(address)(bytes32)" $ETH_FROM)
+fi
+
+if [ -z ${DEADLINE+x} ] && [ -n ${DAI+x} ]; then
+    DEADLINE=${4:-$(seth --to-uint256 0)}
+elif [ -z ${DEADLINE+x} ]; then
+    DEADLINE=${4:-$(seth --to-int256 -1)}
+fi
+
+PAYLOAD="$(seth --to-uint256 $ETH_FROM)$(seth --to-uint256 $SPENDER)"
+
+if [ $DAI == yes ]; then
+    PAYLOAD="$PAYLOAD$NONCE$DEADLINE$VALUE"
+else
+    PAYLOAD="$PAYLOAD$VALUE$NONCE$DEADLINE"
+fi
+
+MESSAGE="0x1901$(echo "$DOMAIN_SEPARATOR$(seth keccak $(echo "$PERMIT_TYPEHASH$PAYLOAD"|sed 's/0x//g'))"|sed 's/0x//g')"
+
+SIG=$(ethsign msg --passphrase-file $ETH_PASSWORD --no-prefix --data $MESSAGE)
+SIG_V=$((0x$(echo "$SIG" | cut -c 131-132)))
+SIG_R=$(echo "$SIG" | cut -c 1-66)
+SIG_S="0x$(echo "$SIG" | cut -c 67-130)"
+
+if [ $SUBMIT == yes ] && [ -z ${DAI+x}]; then
+    seth send $TOKEN "permit(address, address, uint256, uint256, uint8, bytes32, bytes32)" $ETH_FROM $SPENDER $VALUE $DEADLINE $SIG_V $SIG_R $SIG_S
+elif [ $SUBMIT == yes ]; then
+    seth send $TOKEN "permit(address, address, uint256, uint256, bool, uint8, bytes32, bytes32)" $ETH_FROM $SPENDER $NONCE $ALLOWED $DEADLINE $SIG_V $SIG_R $SIG_S
+else
+    printf '{"permit": {"owner":"%s","spender":"%s","nonce":"%s", "expiry": "%s", "value": "%s", "v": "%s", "r": "%s", "s": "%s"}}\n' "$ETH_FROM" "$SPENDER" "$NONCE" "$DEADLINE" "$VALUE" $SIG_V $SIG_R $SIG_S
+fi
