@@ -9,6 +9,7 @@ Commands:
    approve         approve another account to spend your tokens
    balance         print the token balance of an account
    help            show help about token(1) or one of its subcommands
+   permit          sign (and submit) EIP2612 or DAI style permits
    supply          print the total supply of a token
    transfer        transfer tokens from one account to another
 
@@ -54,3 +55,6 @@ Example usage:
 
    $ token allowance @mkr @kenny daniel
    0.350000000000000000
+
+   $ token permit @mkr @daniel --submit
+
