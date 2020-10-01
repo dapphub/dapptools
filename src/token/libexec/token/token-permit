@@ -23,12 +23,8 @@ if [ $# -lt 2 ];  then
     exit 1
 fi
 
-set -x
-
 TOKEN=$1
 SPENDER=$2
-
-
 
 PERMIT_TYPEHASH=$(seth call $1 "PERMIT_TYPEHASH()(bytes32)")
 if [ $EIP2612_TYPEHASH != $PERMIT_TYPEHASH ]; then
@@ -43,9 +39,10 @@ else
     VALUE=$(seth --to-uint256 $3)
 fi
 
-if [ -z ${ETH_FROM+x} ]; then
-    echo "ETH_FROM must be set";
-    exit 1
+if [ -z ${DEADLINE+x} ] && [ -n ${DAI+x} ]; then
+    DEADLINE=${4:-$(seth --to-uint256 0)}
+elif [ -z ${DEADLINE+x} ]; then
+    DEADLINE=${4:-$(seth --to-int256 -1)}
 fi
 
 if [ -z ${DOMAIN_SEPARATOR+x} ]; then
@@ -54,12 +51,6 @@ fi
 
 if [ -z ${NONCE+x} ]; then
     NONCE=$(seth call $TOKEN "nonces(address)(bytes32)" $ETH_FROM)
-fi
-
-if [ -z ${DEADLINE+x} ] && [ -n ${DAI+x} ]; then
-    DEADLINE=${4:-$(seth --to-uint256 0)}
-elif [ -z ${DEADLINE+x} ]; then
-    DEADLINE=${4:-$(seth --to-int256 -1)}
 fi
 
 PAYLOAD="$(seth --to-uint256 $ETH_FROM)$(seth --to-uint256 $SPENDER)"
