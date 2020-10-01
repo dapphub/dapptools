@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-### token-permit -- sign and submit permits
+### token-permit -- sign (and submit) EIP2612 or DAI style permits
 set -e
 display_usage() {
-  echo "Usage: token permit <token> <spender> [amount|allowed] [deadline|expiry] [--submit]"
+  echo "Usage: token permit <token> <spender> [<amount|allowed>] [<deadline|expiry>] [--submit]"
 }
 
 for i in "$@"; do
@@ -26,23 +26,23 @@ fi
 TOKEN=$1
 SPENDER=$2
 
-PERMIT_TYPEHASH=$(seth call $1 "PERMIT_TYPEHASH()(bytes32)")
-if [ $EIP2612_TYPEHASH != $PERMIT_TYPEHASH ]; then
+EIP2612_TYPEHASH=$(seth keccak $(seth --from-ascii "Permit(address owner,address spender,uint256 value,uint256 nonce,uint256 deadline)"))
+PERMIT_TYPEHASH=$(seth call $TOKEN "PERMIT_TYPEHASH()(bytes32)")
+
+if [ "$EIP2612_TYPEHASH" != "$PERMIT_TYPEHASH" ]; then
     DAI=yes
 fi
 
-if [ $# -lt 3 ] && [ -z ${DAI+x} ]; then
-    VALUE=$(seth --to-int256 -1)
-elif [ $# -lt 3]; then
-    VALUE=$(seth --to-uint256 1)
+if [ -z ${DAI+x} ]; then
+    VALUE=$(seth --to-uint256 ${3:-$(seth --to-int256 -1)})
 else
-    VALUE=$(seth --to-uint256 $3)
+    VALUE=$(seth --to-uint256 ${3:-"1"})
 fi
 
-if [ -z ${DEADLINE+x} ] && [ -n ${DAI+x} ]; then
-    DEADLINE=${4:-$(seth --to-uint256 0)}
-elif [ -z ${DEADLINE+x} ]; then
+if [ -z ${DEADLINE+x} ] && [ -z ${DAI+x} ]; then
     DEADLINE=${4:-$(seth --to-int256 -1)}
+elif [ -z ${DEADLINE+x} ]; then
+    DEADLINE=${4:-$(seth --to-uint256 0)}
 fi
 
 if [ -z ${DOMAIN_SEPARATOR+x} ]; then
@@ -55,23 +55,23 @@ fi
 
 PAYLOAD="$(seth --to-uint256 $ETH_FROM)$(seth --to-uint256 $SPENDER)"
 
-if [ $DAI == yes ]; then
+if [ "$DAI" == "yes" ]; then
     PAYLOAD="$PAYLOAD$NONCE$DEADLINE$VALUE"
 else
     PAYLOAD="$PAYLOAD$VALUE$NONCE$DEADLINE"
 fi
 
-MESSAGE="0x1901$(echo "$DOMAIN_SEPARATOR$(seth keccak $(echo "$PERMIT_TYPEHASH$PAYLOAD"|sed 's/0x//g'))"|sed 's/0x//g')"
+MESSAGE=$(echo "$DOMAIN_SEPARATOR$(seth keccak "$PERMIT_TYPEHASH"$(echo "$PAYLOAD"|sed 's/0x//g'))"|sed 's/0x//g')
 
-SIG=$(ethsign msg --passphrase-file $ETH_PASSWORD --no-prefix --data $MESSAGE)
+SIG=$(ethsign msg --passphrase-file $ETH_PASSWORD --no-prefix --data "0x1901$MESSAGE")
 SIG_V=$((0x$(echo "$SIG" | cut -c 131-132)))
 SIG_R=$(echo "$SIG" | cut -c 1-66)
 SIG_S="0x$(echo "$SIG" | cut -c 67-130)"
 
-if [ $SUBMIT == yes ] && [ -z ${DAI+x}]; then
+if [ "$SUBMIT" == yes ] && [ -z ${DAI+x} ]; then
     seth send $TOKEN "permit(address, address, uint256, uint256, uint8, bytes32, bytes32)" $ETH_FROM $SPENDER $VALUE $DEADLINE $SIG_V $SIG_R $SIG_S
-elif [ $SUBMIT == yes ]; then
-    seth send $TOKEN "permit(address, address, uint256, uint256, bool, uint8, bytes32, bytes32)" $ETH_FROM $SPENDER $NONCE $ALLOWED $DEADLINE $SIG_V $SIG_R $SIG_S
+elif [ "$SUBMIT" == yes ]; then
+    seth send $TOKEN "permit(address, address, uint256, uint256, bool, uint8, bytes32, bytes32)" $ETH_FROM $SPENDER $NONCE $DEADLINE $VALUE $SIG_V $SIG_R $SIG_S
 else
     printf '{"permit": {"owner":"%s","spender":"%s","nonce":"%s", "expiry": "%s", "value": "%s", "v": "%s", "r": "%s", "s": "%s"}}\n' "$ETH_FROM" "$SPENDER" "$NONCE" "$DEADLINE" "$VALUE" $SIG_V $SIG_R $SIG_S
 fi
