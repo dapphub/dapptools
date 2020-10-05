@@ -30,6 +30,8 @@
 module EVM.ABI
   ( AbiValue (..)
   , AbiType (..)
+  , AbiKind (..)
+  , abiKind
   , Event (..)
   , Anonymity (..)
   , Indexed (..)

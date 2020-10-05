@@ -436,7 +436,7 @@ runOne opts@UnitTestOptions{..} vm testName args = do
   if success
   then
      let gasSpent = num (testGasCall testParams) - view (state . gas) vm'
-         gasText = pack . show $ (fromIntegral gasSpent :: Integer)
+         gasText = pack $ show (fromIntegral gasSpent :: Integer)
      in
         pure
           ("\x1b[32m[PASS]\x1b[0m "
