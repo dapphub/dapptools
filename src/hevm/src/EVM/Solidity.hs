@@ -88,7 +88,7 @@ import qualified Data.Text              as Text
 import qualified Data.Vector            as Vector
 
 data StorageItem = StorageItem {
-  _type  :: SlotType,
+  _type   :: SlotType,
   _offset :: Int,
   _slot   :: Int
   } deriving (Show, Eq)

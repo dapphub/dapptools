@@ -23,6 +23,7 @@ import qualified EVM.Flatten
 import qualified EVM.Stepper
 import qualified EVM.TTY
 import qualified EVM.Emacs
+import EVM.Dev (concatMapM)
 
 #if MIN_VERSION_aeson(1, 0, 0)
 import qualified EVM.VMTest as VMTest
@@ -372,10 +373,6 @@ findJsonFile Nothing = do
         , "Files found: "
         , intercalate ", " xs
         ]
-
-concatMapM :: Monad m => (a -> m [b]) -> [a] -> m [b]
-concatMapM op = foldr f (pure [])
-    where f x xs = do x <- op x; if null x then xs else do xs <- xs; pure $ x++xs
 
 dappTest :: UnitTestOptions -> Mode -> String -> Maybe String -> IO ()
 dappTest opts _ solcFile cache =
