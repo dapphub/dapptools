@@ -8,6 +8,7 @@ import Prelude hiding (Word)
 
 import EVM.Types    (Addr, W256, hexText)
 import EVM.Concrete (Word, w256)
+import EVM.Symbolic (litWord)
 import EVM          (EVM, Contract, Block, StorageModel, initialContract, nonce, balance, external)
 import qualified EVM.FeeSchedule as FeeSchedule
 
@@ -100,7 +101,7 @@ fetchQuery n f q = do
 parseBlock :: (AsValue s, Show s) => s -> Maybe EVM.Block
 parseBlock json = do
   coinbase   <- readText <$> json ^? key "miner" . _String
-  timestamp  <- readText <$> json ^? key "timestamp" . _String
+  timestamp  <- litWord <$> readText <$> json ^? key "timestamp" . _String
   number     <- readText <$> json ^? key "number" . _String
   difficulty <- readText <$> json ^? key "difficulty" . _String
   -- default codesize, default gas limit, default feescedule

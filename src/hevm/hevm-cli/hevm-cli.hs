@@ -16,7 +16,7 @@ module Main where
 import EVM (StorageModel(..))
 import qualified EVM
 import EVM.Concrete (createAddress, w256, wordValue)
-import EVM.Symbolic (forceLitBytes, litAddr, w256lit, sw256, SymWord(..), len)
+import EVM.Symbolic (forceLitBytes, litAddr, w256lit, sw256, SymWord(..), len, forceLit, litWord)
 import qualified EVM.FeeSchedule as FeeSchedule
 import qualified EVM.Fetch
 import qualified EVM.Flatten
@@ -690,7 +690,7 @@ vmFromCommand cmd = do
     Just url -> EVM.Fetch.fetchBlockFrom block' url >>= \case
       Nothing -> error $ "Could not fetch block"
       Just EVM.Block{..} -> return (_coinbase
-                                   , wordValue _timestamp
+                                   , wordValue $ forceLit $ _timestamp
                                    , wordValue _number
                                    , wordValue _difficulty
                                    )
@@ -747,7 +747,7 @@ vmFromCommand cmd = do
           , EVM.vmoptGaslimit      = word gas 0
           , EVM.vmoptCoinbase      = addr coinbase miner
           , EVM.vmoptNumber        = word number blockNum
-          , EVM.vmoptTimestamp     = word timestamp ts
+          , EVM.vmoptTimestamp     = w256lit $ word timestamp ts
           , EVM.vmoptBlockGaslimit = word gaslimit 0
           , EVM.vmoptGasprice      = word gasprice 0
           , EVM.vmoptMaxCodeSize   = word maxcodesize 0xffffffff
@@ -764,17 +764,17 @@ vmFromCommand cmd = do
 symvmFromCommand :: Command Options.Unwrapped -> Query EVM.VM
 symvmFromCommand cmd = do
 
-  (miner,ts,blockNum,diff) <- case rpc cmd of
-    Nothing -> return (0,0,0,0)
+  (miner,blockNum,diff) <- case rpc cmd of
+    Nothing -> return (0,0,0)
     Just url -> io $ EVM.Fetch.fetchBlockFrom block' url >>= \case
       Nothing -> error $ "Could not fetch block"
       Just EVM.Block{..} -> return (_coinbase
-                                   , wordValue _timestamp
                                    , wordValue _number
                                    , wordValue _difficulty
                                    )
 
   caller' <- maybe (SAddr <$> freshVar_) (return . litAddr) (caller cmd)
+  ts <- maybe (sw256 <$> freshVar_) (return . w256lit) (timestamp cmd)
   callvalue' <- maybe (sw256 <$> freshVar_) (return . w256lit) (value cmd)
   (calldata', cdlen, pathCond) <- case (calldata cmd, sig cmd) of
     -- fully abstract calldata (up to 1024 bytes)
@@ -852,7 +852,7 @@ symvmFromCommand cmd = do
       , EVM.vmoptGaslimit      = word gas 0xffffffffffffffff
       , EVM.vmoptCoinbase      = addr coinbase miner
       , EVM.vmoptNumber        = word number blockNum
-      , EVM.vmoptTimestamp     = word timestamp ts
+      , EVM.vmoptTimestamp     = ts
       , EVM.vmoptBlockGaslimit = word gaslimit 0
       , EVM.vmoptGasprice      = word gasprice 0
       , EVM.vmoptMaxCodeSize   = word maxcodesize 0xffffffff

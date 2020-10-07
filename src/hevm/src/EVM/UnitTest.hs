@@ -604,7 +604,7 @@ initialUnitTestVm (UnitTestOptions {..}) theContract =
            , vmoptGaslimit = testGasCreate
            , vmoptCoinbase = testCoinbase
            , vmoptNumber = testNumber
-           , vmoptTimestamp = testTimestamp
+           , vmoptTimestamp = litWord $ w256 $ testTimestamp
            , vmoptBlockGaslimit = testGaslimit
            , vmoptGasprice = testGasprice
            , vmoptMaxCodeSize = testMaxCodeSize
@@ -636,8 +636,8 @@ getParametersFromEnvironmentVariables rpc = do
       Nothing  -> return (0,0,0,0)
       Just url -> EVM.Fetch.fetchBlockFrom block' url >>= \case
         Nothing -> error $ "Could not fetch block"
-        Just EVM.Block{..} -> return (_coinbase
-                                      , wordValue _timestamp
+        Just EVM.Block{..} -> return (  _coinbase
+                                      , wordValue $ forceLit $ _timestamp
                                       , wordValue _number
                                       , wordValue _difficulty
                                       )
