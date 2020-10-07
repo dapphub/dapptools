@@ -178,7 +178,7 @@ data VMOpts = VMOpts
   , vmoptGas :: W256
   , vmoptGaslimit :: W256
   , vmoptNumber :: W256
-  , vmoptTimestamp :: W256
+  , vmoptTimestamp :: SymWord
   , vmoptCoinbase :: Addr
   , vmoptDifficulty :: W256
   , vmoptMaxCodeSize :: W256
@@ -327,7 +327,7 @@ data Env = Env
 -- | Data about the block
 data Block = Block
   { _coinbase    :: Addr
-  , _timestamp   :: Word
+  , _timestamp   :: SymWord
   , _number      :: Word
   , _difficulty  :: Word
   , _gaslimit    :: Word
@@ -418,7 +418,7 @@ makeVm o = VM
   , _traces = Zipper.fromForest []
   , _block = Block
     { _coinbase = vmoptCoinbase o
-    , _timestamp = w256 $ vmoptTimestamp o
+    , _timestamp = vmoptTimestamp o
     , _number = w256 $ vmoptNumber o
     , _difficulty = w256 $ vmoptDifficulty o
     , _maxCodeSize = w256 $ vmoptMaxCodeSize o
@@ -861,7 +861,7 @@ exec1 = do
         -- op: TIMESTAMP
         0x42 ->
           limitStack 1 . burn g_base $
-            next >> push (the block timestamp)
+            next >> pushSym (the block timestamp)
 
         -- op: NUMBER
         0x43 ->
@@ -1852,7 +1852,7 @@ cheatActions =
   Map.fromList
     [ action "warp(uint256)" [AbiUIntType 256] $
         \_ _ [AbiUInt 256 x] ->
-          assign (block . timestamp) (w256 (W256 x)),
+          assign (block . timestamp) (sw256 $ num x),
       action "roll(uint256)" [AbiUIntType 256] $
         \_ _ [AbiUInt 256 x] ->
           assign (block . number) (w256 (W256 x)),
