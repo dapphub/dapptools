@@ -492,6 +492,9 @@ initialContract theContractCode = Contract
             InitCode b    -> (True, b)
             RuntimeCode b -> (False, b)
 
+newAccount :: Contract
+newAccount = initialContract $ EVM.RuntimeCode mempty
+
 contractWithStore :: ContractCode -> Storage -> Contract
 contractWithStore theContractCode store =
   initialContract theContractCode & set storage store

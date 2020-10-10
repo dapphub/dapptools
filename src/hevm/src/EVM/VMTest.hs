@@ -65,6 +65,12 @@ data BlockchainCase = BlockchainCase
   , blockchainNetwork :: String
   } deriving Show
 
+accountAt :: Addr -> Getter (Map Addr EVM.Contract) EVM.Contract
+accountAt a = (at a) . (to $ fromMaybe EVM.newAccount)
+
+touchAccount :: Addr -> Map Addr EVM.Contract -> Map Addr EVM.Contract
+touchAccount a = Map.insertWith (flip const) a EVM.newAccount
+
 splitEithers :: (Filterable f) => f (Either a b) -> (f a, f b)
 splitEithers =
   (catMaybes *** catMaybes)
