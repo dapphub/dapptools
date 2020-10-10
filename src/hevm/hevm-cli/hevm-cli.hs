@@ -36,7 +36,7 @@ import qualified EVM.VMTest as VMTest
 import EVM.SymExec
 import EVM.Debug
 import EVM.ABI
-import EVM.Serve (serve, Request(..))
+import EVM.Serve (serve, rpcServer)
 import qualified EVM.Serve as Serve
 import EVM.Solidity
 import EVM.Types hiding (word)
@@ -67,7 +67,7 @@ import Data.Text.IO               (hPutStr)
 import Data.Maybe                 (fromMaybe, fromJust)
 import Data.Version               (showVersion)
 import Data.SBV hiding (Word, solver, verbose, name)
-import Data.SBV.Control hiding (Version, timeout, create)
+import Data.SBV.Control hiding (Version, timeout, create, echo)
 import System.IO                  (hFlush, stdout, stderr, utf8)
 import System.Directory           (withCurrentDirectory, listDirectory)
 import System.Exit                (exitFailure, exitWith, ExitCode(..))
@@ -624,27 +624,6 @@ echo request respond = do
   putStrLn (show response)
   respond $ responseLBS status200 [(hContentType, "text/plain")]
           $ LazyByteString.fromStrict response
-
-
-rpcServer :: EVM.VM -> Application
-rpcServer vm request respond = do
-  req <- getRequestBodyChunk request
-  let bs = LazyByteString.fromStrict req
-  let json = JSON.decode bs :: Maybe Serve.Request
-
-  let response = case json of
-        Nothing ->
-          "bad request"
-        Just r -> case (view Serve.method r) of
-          "eth_getBlockByNumber" ->
-            show $ view (EVM.block . EVM.number) vm
-          _ ->
-            "hmm?"
-
-  putStrLn (show req)
-  respond
-    $ responseLBS status200 [(hContentType, "application/json")]
-    $ LazyByteString.fromStrict (Char8.pack response)
 
 launchRpc :: Command Options.Unwrapped -> IO ()
 launchRpc cmd = do
