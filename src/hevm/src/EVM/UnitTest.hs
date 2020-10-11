@@ -750,6 +750,7 @@ makeTxCall TestVMParams{..} cd = do
   vm <- get
   put $ initTx vm
 
+
 initialUnitTestVm :: UnitTestOptions -> SolcContract -> VM
 initialUnitTestVm (UnitTestOptions {..}) theContract =
   let
