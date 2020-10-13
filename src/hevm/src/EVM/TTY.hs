@@ -76,6 +76,7 @@ type UiWidget = Widget Name
 data UiVmState = UiVmState
   { _uiVm           :: VM
   , _uiStep         :: Int
+  -- todo replace snapshots with zipper
   , _uiSnapshots    :: Map Int (VM, Stepper ())
   , _uiStepper      :: Stepper ()
   , _uiStackList    :: List Name (Int, (SymWord))
