@@ -106,7 +106,8 @@ data VM = VM
   , _traces         :: Zipper.TreePos Zipper.Empty Trace
   , _cache          :: Cache
   , _burned         :: Word
-  , _pathConditions :: [(SBool, Whiff)]
+  -- todo rename it to constraints
+  , _constraints    :: [(SBool, Whiff)]
   , _iterations     :: Map CodeLocation Int
   }
 
@@ -131,7 +132,7 @@ data Query where
   PleaseAskSMT        :: SBool -> [SBool] -> (BranchCondition -> EVM ()) -> Query
 
 data Choose where
-  PleaseChoosePath    :: (Bool -> EVM ()) -> Choose
+  PleaseChoosePath    :: Whiff -> (Bool -> EVM ()) -> Choose
 
 instance Show Query where
   showsPrec _ = \case
@@ -141,14 +142,14 @@ instance Show Query where
       (("<EVM.Query: fetch slot "
         ++ show slot ++ " for "
         ++ show addr ++ ">") ++)
-    PleaseAskSMT condition pathConditions _ ->
+    PleaseAskSMT condition constraints _ ->
       (("<EVM.Query: ask SMT about "
         ++ show condition ++ " in context "
-        ++ show pathConditions ++ ">") ++)
+        ++ show constraints ++ ">") ++)
 
 instance Show Choose where
   showsPrec _ = \case
-    PleaseChoosePath _ ->
+    PleaseChoosePath _ _ ->
       (("<EVM.Choice: waiting for user to select path (0,1)") ++)
 
 -- | Alias for the type of e.g. @exec1@.
@@ -450,7 +451,7 @@ makeVm o = VM
     }
   , _cache = Cache mempty mempty
   , _burned = 0
-  , _pathConditions = []
+  , _constraints = []
   , _iterations = mempty
   } where theCode = case _contractcode (vmoptContract o) of
             InitCode b    -> b
@@ -682,7 +683,7 @@ exec1 = do
                                                    let hash' = symkeccak' bs
                                                        previousUsed = view (env . keccakUsed) vm
                                                    env . keccakUsed <>= [(bs, hash')]
-                                                   pathConditions <>= (fmap (\(preimage, image) ->
+                                                   constraints <>= (fmap (\(preimage, image) ->
                                                                                (image .== hash' .=> preimage .== bs, Dull))
                                                                            previousUsed)
                                                    return (sw256 hash', mempty)
@@ -1537,20 +1538,20 @@ askSMT codeloc (condition, whiff) continue = do
      Just w -> choosePath (Case w)
      -- If this is a new query, run the query, cache the result
      -- increment the iterations and select appropriate path
-     Nothing -> do pathconds <- use pathConditions
+     Nothing -> do pathconds <- use constraints
                    assign result . Just . VMFailure . Query $ PleaseAskSMT
                      condition (fst <$> pathconds) choosePath
 
    where -- Only one path is possible
          choosePath :: BranchCondition -> EVM ()
          choosePath (Case v) = do assign result Nothing
-                                  pushTo pathConditions (if v then (condition, UnOp "not" whiff) else (sNot condition, whiff))
+                                  pushTo constraints (if v then (condition, UnOp "not" whiff) else (sNot condition, whiff))
                                   iteration <- use (iterations . at codeloc . non 0)
                                   assign (cache . path . at (codeloc, iteration)) (Just v)
                                   assign (iterations . at codeloc) (Just (iteration + 1))
                                   continue v
          -- Both paths are possible; we ask for more input
-         choosePath Unknown = assign result . Just . VMFailure . Choose . PleaseChoosePath $ choosePath . Case
+         choosePath Unknown = assign result . Just . VMFailure . Choose . PleaseChoosePath whiff $ choosePath . Case
          -- None of the paths are possible; fail this branch
          choosePath Inconsistent = vmError DeadPath
 

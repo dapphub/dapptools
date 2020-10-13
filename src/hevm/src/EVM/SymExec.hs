@@ -24,6 +24,7 @@ import Data.SBV.Trans.Control
 import Data.SBV.Trans hiding (distinct, Word)
 import Data.SBV hiding (runSMT, newArray_, addAxiom, distinct, sWord8s, Word)
 import Data.Vector (toList, fromList)
+import Data.Tree
 
 import Control.Monad.IO.Class
 import qualified Control.Monad.State.Class as State
@@ -107,7 +108,7 @@ abstractVM typesignature concreteArgs x storagemodel = do
     ConcreteS -> return $ Concrete mempty
   c <- SAddr <$> freshVar_
   value' <- sw256 <$> freshVar_
-  return $ loadSymVM (RuntimeCode x) symstore storagemodel c value' (SymbolicBuffer cd', cdlen) & over pathConditions ((<>) [cdconstraint])
+  return $ loadSymVM (RuntimeCode x) symstore storagemodel c value' (SymbolicBuffer cd', cdlen) & over constraints ((<>) [cdconstraint])
 
 loadSymVM :: ContractCode -> Storage -> StorageModel -> SAddr -> SymWord -> (Buffer, SWord 32) -> VM
 loadSymVM x initStore model addr callvalue' calldata' =
@@ -134,24 +135,29 @@ loadSymVM x initStore model addr callvalue' calldata' =
     }) & set (env . contracts . at (createAddress ethrunAddress 1))
              (Just (contractWithStore x initStore))
 
+data BranchInfo = BranchInfo
+  { _vm                 :: VM,
+    _branchCondition    :: Maybe Whiff
+  }
+
 -- | Interpreter which explores all paths at
 -- | branching points.
 -- | returns a list of possible final evm states
 interpret
   :: Fetch.Fetcher
   -> Maybe Integer --max iterations
-  -> Stepper a
-  -> StateT VM Query [a] -- TODO: change to tree?
+  -> Stepper VM
+  -> StateT VM Query (Tree BranchInfo) -- a - Stepper return value
 interpret fetcher maxIter =
   eval . Operational.view
 
   where
     eval
-      :: Operational.ProgramView Stepper.Action a
-      -> StateT VM Query [a]
+      :: Operational.ProgramView Stepper.Action VM
+      -> StateT VM Query (Tree BranchInfo)
 
     eval (Operational.Return x) =
-      pure [x]
+      pure $ Node BranchInfo {_vm = x, _branchCondition = Nothing } []
 
     eval (action Operational.:>>= k) =
       case action of
@@ -159,7 +165,7 @@ interpret fetcher maxIter =
           exec >>= interpret fetcher maxIter . k
         Stepper.Run ->
           run >>= interpret fetcher maxIter . k
-        Stepper.Ask (EVM.PleaseChoosePath continue) -> do
+        Stepper.Ask (EVM.PleaseChoosePath whiff continue) -> do -- todo add whiff to pleaseChoosePath
           vm <- get
           case maxIterationsReached vm maxIter of
             Nothing -> do push 1
@@ -169,7 +175,8 @@ interpret fetcher maxIter =
                           push 1
                           b <- interpret fetcher maxIter (Stepper.evm (continue False) >>= k)
                           pop 1
-                          return $ a <> b
+                          -- todo: get the whiff from the top most element of the pathcoditions
+                          return $ Node (BranchInfo { _vm = vm, _branchCondition = Just whiff}) [a, b]
             Just n -> interpret fetcher maxIter (Stepper.evm (continue (not n)) >>= k)
         Stepper.Wait q -> do
           let performQuery =
@@ -177,6 +184,7 @@ interpret fetcher maxIter =
                    interpret fetcher maxIter (Stepper.evm m >>= k)
 
           case q of
+          -- todo add whiff to pleaseask smt
             PleaseAskSMT _ _ continue -> do
               codelocation <- getCodeLocation <$> get
               iters <- use (iterations . at codelocation)
@@ -204,7 +212,7 @@ maxIterationsReached vm (Just maxIter) =
 type Precondition = VM -> SBool
 type Postcondition = (VM, VM) -> SBool
 
-checkAssert :: ByteString -> Maybe (Text, [AbiType]) -> [String] -> Query (Either (VM, [VM]) VM)
+checkAssert :: ByteString -> Maybe (Text, [AbiType]) -> [String] -> Query (Either (VM, Tree BranchInfo) VM)
 checkAssert c signature' concreteArgs = verifyContract c signature' concreteArgs SymbolicS (const sTrue) (Just checkAssertions)
 
 checkAssertions :: Postcondition
@@ -212,32 +220,37 @@ checkAssertions (_, out) = case view result out of
   Just (EVM.VMFailure (EVM.UnrecognizedOpcode 254)) -> sFalse
   _ -> sTrue
 
-verifyContract :: ByteString -> Maybe (Text, [AbiType]) -> [String] -> StorageModel -> Precondition -> Maybe Postcondition -> Query (Either (VM, [VM]) VM)
+verifyContract :: ByteString -> Maybe (Text, [AbiType]) -> [String] -> StorageModel -> Precondition -> Maybe Postcondition -> Query (Either (VM, Tree BranchInfo) VM)
 verifyContract theCode signature' concreteArgs storagemodel pre maybepost = do
     preStateRaw <- abstractVM signature' concreteArgs theCode  storagemodel
     -- add the pre condition to the pathconditions to ensure that we are only exploring valid paths
-    let preState = over pathConditions ((++) [(pre preStateRaw, Dull)]) preStateRaw
+    let preState = over constraints ((++) [(pre preStateRaw, Dull)]) preStateRaw
     verify preState Nothing Nothing maybepost
 
-pruneDeadPaths :: [VM] -> [VM]
-pruneDeadPaths =
-  filter $ \vm -> case view result vm of
-    Just (VMFailure DeadPath) -> False
-    _ -> True
+-- pruneDeadPaths :: Tree VM -> Tree VM
+-- pruneDeadPaths =
+--   filter $ \vm -> case view result vm of
+--     Just (VMFailure DeadPath) -> False
+--     _ -> True
+
+leaves :: Tree BranchInfo -> [VM]
+leaves (Node x []) = [_vm x]
+leaves (Node _ xs) = concatMap leaves xs
 
 -- | Symbolically execute the VM and check all endstates against the postcondition, if available.
 -- Returns `Right VM` if the postcondition can be violated, where `VM` is a prestate counterexample,
 -- or `Left (VM, [VM])`, a pair of `prestate` and post vm states.
-verify :: VM -> Maybe Integer -> Maybe (Fetch.BlockNumber, Text) -> Maybe Postcondition -> Query (Either (VM, [VM]) VM)
+-- TODO: check for inconsistency
+verify :: VM -> Maybe Integer -> Maybe (Fetch.BlockNumber, Text) -> Maybe Postcondition -> Query (Either (VM, Tree BranchInfo) VM)
 verify preState maxIter rpcinfo maybepost = do
   let model = view (env . storageModel) preState
   smtState <- queryState
-  results <- fst <$> runStateT (interpret (Fetch.oracle (Just smtState) rpcinfo model False) maxIter Stepper.runFully) preState
+  tree <- fst <$> runStateT (interpret (Fetch.oracle (Just smtState) rpcinfo model False) maxIter Stepper.runFully) preState
   case maybepost of
     (Just post) -> do
-      let livePaths = pruneDeadPaths results
+      let livePaths = leaves tree
       -- can also do these queries individually (even concurrently!). Could save time and report multiple violations
-          postC = sOr $ fmap (\postState -> (sAnd (fst <$> view pathConditions postState)) .&& sNot (post (preState, postState))) livePaths
+          postC = sOr $ fmap (\postState -> (sAnd (fst <$> view constraints postState)) .&& sNot (post (preState, postState))) livePaths
       -- is there any path which can possibly violate
       -- the postcondition?
       resetAssertions
@@ -245,13 +258,13 @@ verify preState maxIter rpcinfo maybepost = do
       io $ putStrLn "checking postcondition..."
       checkSat >>= \case
         Unk -> do io $ putStrLn "postcondition query timed out"
-                  return $ Left (preState, livePaths)
+                  return $ Left (preState, tree)
         Unsat -> do io $ putStrLn "Q.E.D."
-                    return $ Left (preState, livePaths)
+                    return $ Left (preState, tree)
         Sat -> return $ Right preState
 
     Nothing -> do io $ putStrLn "Nothing to check"
-                  return $ Left (preState, pruneDeadPaths results)
+                  return $ Left (preState, tree)
 
 -- | Compares two contract runtimes for trace equivalence by running two VMs and comparing the end states.
 equivalenceCheck :: ByteString -> ByteString -> Maybe Integer -> Maybe (Text, [AbiType]) -> Query (Either ([VM], [VM]) VM)
@@ -263,8 +276,8 @@ equivalenceCheck bytecodeA bytecodeB maxiter signature' = do
       callvalue' = preStateA ^. state . callvalue
       prestorage = preStateA ^?! env . contracts . ix preself . storage
       (calldata', cdlen) = view (state . calldata) preStateA
-      pathconds = view pathConditions preStateA
-      preStateB = loadSymVM (RuntimeCode bytecodeB) prestorage SymbolicS precaller callvalue' (calldata', cdlen) & set pathConditions pathconds
+      pathconds = view constraints preStateA
+      preStateB = loadSymVM (RuntimeCode bytecodeB) prestorage SymbolicS precaller callvalue' (calldata', cdlen) & set constraints pathconds
 
   smtState <- queryState
   push 1
@@ -274,9 +287,9 @@ equivalenceCheck bytecodeA bytecodeB maxiter signature' = do
   bVMs <- fst <$> runStateT (interpret (Fetch.oracle (Just smtState) Nothing SymbolicS False) maxiter Stepper.runFully) preStateB
   pop 1
   -- Check each pair of endstates for equality:
-  let differingEndStates = uncurry distinct <$> [(a,b) | a <- pruneDeadPaths aVMs, b <- pruneDeadPaths bVMs]
+  let differingEndStates = uncurry distinct <$> [(a,b) | a <- leaves aVMs, b <- leaves bVMs]
       distinct a b =
-        let (aPath, bPath) = both' (view pathConditions) (a, b)
+        let (aPath, bPath) = both' (view constraints) (a, b)
             (aSelf, bSelf) = both' (view (state . contract)) (a, b)
             (aEnv, bEnv) = both' (view (env . contracts)) (a, b)
             (aResult, bResult) = both' (view result) (a, b)
@@ -306,7 +319,7 @@ equivalenceCheck bytecodeA bytecodeB maxiter signature' = do
   checkSat >>= \case
      Unk -> error "solver said unknown!"
      Sat -> return $ Right preStateA
-     Unsat -> return $ Left (pruneDeadPaths aVMs, pruneDeadPaths bVMs)
+     Unsat -> return $ Left (leaves aVMs, leaves bVMs)
 
 both' :: (a -> b) -> (a, a) -> (b, b)
 both' f (x, y) = (f x, f y)
