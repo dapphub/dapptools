@@ -325,6 +325,11 @@ contractPathPart x = Text.split (== ':') x !! 0
 
 
 
+-- todo
+-- display in an 'act' was - propagate iff and if's, prune failed paths
+-- display cases instead of branches - collapse cases
+-- display storage changes (M&D)
+-- display condition correctly
 
 data BranchData = BranchData {
   -- todo list of custom navigation datatypes

@@ -135,6 +135,8 @@ loadSymVM x initStore model addr callvalue' calldata' =
     }) & set (env . contracts . at (createAddress ethrunAddress 1))
              (Just (contractWithStore x initStore))
 
+-- todo branchinfo needs to contain two vm's,
+-- the start vm, and the vm before the branching point/ at the (endstate/leaf)
 data BranchInfo = BranchInfo
   { _vm                 :: VM,
     _branchCondition    :: Maybe Whiff

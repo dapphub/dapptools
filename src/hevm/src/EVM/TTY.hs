@@ -76,7 +76,11 @@ type UiWidget = Widget Name
 data UiVmState = UiVmState
   { _uiVm           :: VM
   , _uiStep         :: Int
-  -- todo replace snapshots with zipper
+  -- todo replace snapshots with zipper (D&M)
+  -- 1. in the current implementation in evm.hs#L1551 we 'remember'
+  --    with the cash where we come from, this needs to be removed
+  --    in askSMT
+  -- 2. keep track of the path here in a zipper instead of snapshots
   , _uiSnapshots    :: Map Int (VM, Stepper ())
   , _uiStepper      :: Stepper ()
   , _uiStackList    :: List Name (Int, (SymWord))
