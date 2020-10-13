@@ -40,11 +40,13 @@ ecrec e v r s = (num . word) <$> EVM.Precompiled.execute 1 input 32
   where input = BS.concat (word256Bytes <$> [e, v, r, s])
 
 sender :: Int -> Transaction -> Maybe Addr
-sender chainId tx = ecrec hash v' (txR tx) (txS tx)
-  where hash = keccak $ signingData chainId tx
-        v    = txV tx
+sender chainId tx = ecrec (txHash chainId tx) v' (txR tx) (txS tx)
+  where v    = txV tx
         v'   = if v == 27 || v == 28 then v
                else 28 - mod v 2
+
+txHash :: Int -> Transaction -> W256
+txHash chainId tx = keccak $ signingData chainId tx
 
 signingData :: Int -> Transaction -> ByteString
 signingData chainId tx =
@@ -148,3 +150,18 @@ initTx vm = let
       vm & EVM.env . EVM.contracts .~ initState
          & EVM.tx . EVM.txReversion .~ preState
          & EVM.tx . EVM.substate . EVM.touchedAccounts .~ touched
+
+rlpTx :: RLP -> Maybe Transaction
+rlpTx (List [BS nonce,BS gasPrice,BS gasLimit,BS to,BS value,BS txdata,BS v,BS r,BS s]) = Just $
+ Transaction
+  { txData     = txdata
+  , txGasLimit = word gasLimit
+  , txGasPrice = word gasPrice
+  , txNonce    = word nonce
+  , txR        = word r
+  , txS        = word s
+  , txToAddr   = if BS.null to then Nothing else Just (Addr $ word160 to)
+  , txV        = word v
+  , txValue    = word value
+  } 
+rlpTx _ = Nothing

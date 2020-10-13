@@ -455,6 +455,9 @@ word256 xs = case Cereal.runGet m (padLeft 32 xs) of
 word :: ByteString -> W256
 word = W256 . word256
 
+word160 :: ByteString -> Word160
+word160 = num . word256 
+  
 byteAt :: (Bits a, Bits b, Integral a, Num b) => a -> Int -> b
 byteAt x j = num (x `shiftR` (j * 8)) .&. 0xff
 
@@ -523,3 +526,7 @@ abiKeccak =
     >>> BS.take 4
     >>> BS.unpack
     >>> word32
+
+concatMapM :: Monad m => (a -> m [b]) -> [a] -> m [b]
+concatMapM op = foldr f (pure [])
+    where f x xs = do x <- op x; if null x then xs else do xs <- xs; pure $ x++xs

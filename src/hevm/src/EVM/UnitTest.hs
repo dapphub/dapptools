@@ -44,7 +44,7 @@ import Data.Decimal       (DecimalRaw(..))
 import Data.Either        (isRight, lefts)
 import Data.Foldable      (toList)
 import Data.Map           (Map)
-import Data.Maybe         (fromMaybe, catMaybes, fromJust, isJust, fromMaybe, mapMaybe)
+import Data.Maybe         (fromMaybe, catMaybes, fromJust, isJust, fromMaybe, mapMaybe, isNothing)
 import Data.Monoid        ((<>))
 import Data.Text          (isPrefixOf, stripSuffix, intercalate, Text, pack, unpack)
 import Data.Text.Encoding (encodeUtf8)
@@ -749,7 +749,6 @@ makeTxCall TestVMParams{..} cd = do
   when (originBal < (w256 testGasprice) * (w256 testGasCall)) $ error "insufficient balance for gas cost"
   vm <- get
   put $ initTx vm
-
 
 initialUnitTestVm :: UnitTestOptions -> SolcContract -> VM
 initialUnitTestVm (UnitTestOptions {..}) theContract =

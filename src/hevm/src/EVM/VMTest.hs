@@ -6,8 +6,6 @@ module EVM.VMTest
 #if MIN_VERSION_aeson(1, 0, 0)
   , parseBCSuite
 #endif
-  , initTx
-  , setupTx
   , vmForCase
   , checkExpectation
   ) where

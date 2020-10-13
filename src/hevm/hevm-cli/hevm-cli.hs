@@ -27,7 +27,7 @@ import qualified EVM.Flatten
 import qualified EVM.Stepper
 import qualified EVM.TTY
 import qualified EVM.Emacs
-import EVM.Dev (concatMapM, interpretWithTrace)
+import EVM.Dev (interpretWithTrace)
 
 #if MIN_VERSION_aeson(1, 0, 0)
 import qualified EVM.VMTest as VMTest
@@ -253,7 +253,7 @@ applyCache (state, cache) =
   let applyState = flip Facts.apply
       applyCache' = flip Facts.applyCache
   in case (state, cache) of
-    (Nothing, Nothing) -> do
+    (Nothing, Nothing) ->
       pure id
     (Nothing, Just cachePath) -> do
       facts <- Git.loadFacts (Git.RepoAt cachePath)
@@ -265,6 +265,11 @@ applyCache (state, cache) =
       cacheFacts <- Git.loadFacts (Git.RepoAt cachePath)
       stateFacts <- Git.loadFacts (Git.RepoAt statePath)
       pure $ (applyState stateFacts) . (applyCache' cacheFacts)
+
+writeCache :: (Maybe String, Maybe String) -> EVM.VM -> IO ()
+writeCache (state, cache) vm = do
+  maybe (pure ()) (flip Git.saveFacts (Facts.vmFacts vm) . Git.RepoAt) state
+  maybe (pure ()) (flip Git.saveFacts (Facts.cacheFacts (view EVM.cache vm)) . Git.RepoAt) cache
 
 unitTestOptions :: Command Options.Unwrapped -> String -> Query UnitTestOptions
 unitTestOptions cmd testFile = do
@@ -628,10 +633,13 @@ launchRpc cmd = do
             , EVM.vmoptStorageModel  = ConcreteS
             }
   
-  withCache <- applyCache (state cmd, cache cmd)
   -- now we need to listen for requests and serve them from this vm
   -- read-only for now
-  serve $ rpcServer (withCache vm) (rpcurl cmd)
+  serve $ rpcServer
+    (rpcurl cmd)
+    vm
+    (applyCache (state cmd, cache cmd))
+    (writeCache (state cmd, cache cmd))
   -- or try this for sanity check
   -- serve echo
 
@@ -853,7 +861,7 @@ symvmFromCommand cmd = do
     Just InitialS  -> EVM.Symbolic [] <$> freshArray_ (Just 0)
     Just ConcreteS -> return (EVM.Concrete mempty)
     Just SymbolicS -> EVM.Symbolic [] <$> freshArray_ Nothing
-    Nothing -> EVM.Symbolic [] <$> freshArray_ (if create cmd then (Just 0) else Nothing)
+    Nothing -> EVM.Symbolic [] <$> freshArray_ (if create cmd then Just 0 else Nothing)
 
   withCache <- io $ applyCache (state cmd, cache cmd)
 

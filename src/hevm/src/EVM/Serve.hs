@@ -5,15 +5,19 @@
 module EVM.Serve where
 
 import Prelude hiding (Word, id)
+import qualified Prelude
 --import Data.Maybe
 
 import qualified EVM
+import EVM (VM)
 import EVM.Concrete
+import EVM.RLP
 import EVM.Symbolic
 import EVM.Types
 import EVM.Fetch
 import EVM.Stepper
 import EVM.UnitTest
+import EVM.Transaction
 
 import Control.Lens hiding ((.=), from, to, pre)
 import Control.Monad.State.Strict
@@ -28,8 +32,6 @@ import Data.Aeson
 import Data.ByteString (ByteString)
 import qualified Data.Map as Map
 import Data.Text (Text, pack, unpack)
---import qualified Data.ByteString.Char8  as Char8
--- import qualified Data.Aeson        as JSON
 import qualified Data.Aeson.Types  as JSON
 import qualified Data.ByteString.Lazy   as LazyByteString
 import Data.Aeson.Lens hiding (values)
@@ -89,9 +91,11 @@ serve app = do
   putStrLn $ "Hevm rpc listening on port " ++ show port
   run port app
 
-rpcServer :: EVM.VM -> Text -> Application
-rpcServer vm url request respond = do
+rpcServer :: Text -> VM -> IO (VM -> VM) -> (VM -> IO ()) -> Application
+rpcServer url initialVm readVM writeVM request respond = do
   req <- getRequestBodyChunk request
+  readCache <- readVM
+  let vm = readCache initialVm
   case decode $ LazyByteString.fromStrict req of
     Nothing -> do
       putStrLn (show req)
@@ -101,44 +105,61 @@ rpcServer vm url request respond = do
     Just r -> do
       result <- case method r of
             "net_version" ->
-              return $ String . pack $ show (num $ wordValue $ view (EVM.env . EVM.chainId) vm :: Integer)
+              return $ txt (num $ wordValue $ view (EVM.env . EVM.chainId) vm :: Integer)
 
             "eth_getBlockByNumber" ->
-              return $ String $ pack $ show $ view (EVM.block . EVM.number) vm
+              return $ txt $ view (EVM.block . EVM.number) vm
 
             "eth_getBalance" -> do
-              let Just addr = read . unpack <$> params r ^? ix 0 . _String
-              c <- getContract addr
-              return $ String . pack $ show (view EVM.balance c)
+              let Just addr = param 0 r
+              c <- getContract addr vm
+              return $ txt (view EVM.balance c)
 
             "eth_getTransactionCount" -> do
-              let Just addr = read . unpack <$> params r ^? ix 0 . _String
-              c <- getContract addr
-              return $ String . pack $ show (view EVM.nonce c)
+              let Just addr = param 0 r
+              c <- getContract addr vm
+              return $ txt (view EVM.nonce c)
 
             "eth_getStorageAt" -> do
-              let Just addr = read . unpack <$> params r ^? ix 0 . _String
-                  Just loc  = read . unpack <$> params r ^? ix 1 . _String
-              val <- getSlot addr loc
-              return $ String . pack $ show val
+              let Just addr = param 0 r
+                  Just loc  = param 1 r
+              val <- getSlot addr loc vm
+              return $ txt val
 
             "eth_getCode" -> do
-              let Just addr = read . unpack <$> params r ^? ix 0 . _String
-              EVM.RuntimeCode c <- view EVM.contractcode <$> getContract addr
-              return $ String . pack $ show (ByteStringS c)
+              let Just addr = param 0 r
+              EVM.RuntimeCode c <- view EVM.contractcode <$> getContract addr vm
+              return $ txt (ByteStringS c)
 
             "eth_call" -> do
-              let Just Eth_call{..} = params r ^? ix 0 . _JSON --- . _Object
-              c <- getContract from
-              let pre = execState (call from to (ConcreteBuffer txdata) gas gasPrice value) (vm & over (EVM.env . EVM.contracts) (Map.insert from c))
+              let Just Eth_call{..} = params r ^? ix 0 . _JSON
+              c <- getContract to vm
+              c' <- getContract from vm
+              let pre = execState (call from (Just to) (ConcreteBuffer txdata) gas gasPrice value) (vm & over (EVM.env . EVM.contracts) (Map.insert to c . Map.insert from c'))
               post <- run' pre
               case view EVM.result post of
                 Nothing ->
                   error "internal error; no EVM result"
-                Just (EVM.VMFailure (EVM.Revert msg)) -> return $ String $ pack $  show $ ByteStringS msg
+                Just (EVM.VMFailure (EVM.Revert msg)) -> return $ txt $ ByteStringS msg
                 Just (EVM.VMFailure _) -> return $ "0x"
-                Just (EVM.VMSuccess (ConcreteBuffer msg)) -> return $ String $ pack $ show $ ByteStringS msg
-                Just (EVM.VMSuccess (SymbolicBuffer msg)) -> return $ String $ pack $ show $ msg
+                Just (EVM.VMSuccess (ConcreteBuffer msg)) -> return $ txt $ ByteStringS msg
+                Just (EVM.VMSuccess (SymbolicBuffer msg)) -> return $ txt $ msg
+
+            "eth_sendRawTransaction" -> do
+              let Just (ByteStringS rlptx) = param 0 r
+                  Just tx@Transaction{..} = rlpdecode rlptx >>= rlpTx
+                  chainid = num $ view (EVM.env . EVM.chainId) vm
+                  hash = txHash chainid tx
+                  Just txfrom = sender chainid tx
+              tomod <- (case txToAddr of
+                Nothing -> pure Prelude.id
+                Just to -> do c <- getContract to vm
+                              pure $ Map.insert to c)
+              c' <- getContract txfrom vm
+              let pre = execState (call txfrom txToAddr (ConcreteBuffer txData) txGasLimit txGasPrice txValue) (vm & over (EVM.env . EVM.contracts) (tomod . Map.insert txfrom c'))
+              post <- run' pre
+              writeVM post
+              return $ txt hash
 
             _ -> return $ "hmm?"
 
@@ -150,21 +171,25 @@ rpcServer vm url request respond = do
         $ encode answer
 
   where
+    param :: (Read a) => Int -> Request -> Maybe a
+    param i r = read . unpack <$> params r ^? ix i . _String
     run' :: EVM.VM -> IO (EVM.VM)
     run' = execStateT (interpret fetcher . void $ EVM.Stepper.execFully)
     fetcher = http Latest url
-    -- TODO: optimize getBalance, getCode
-    getContract :: Addr -> IO EVM.Contract
-    getContract addr =
+    -- TODO: optimize getBalance, getCode and caching
+    getContract :: Addr -> EVM.VM -> IO EVM.Contract
+    getContract addr vm =
       case view (EVM.env . EVM.contracts . at addr) vm of
         Just c -> return c
         Nothing -> do Just c <- fetchContractFrom Latest url addr
                       return c
         
-    getSlot :: Addr -> Word -> IO SymWord
-    getSlot addr loc =
+    getSlot :: Addr -> Word -> EVM.VM -> IO SymWord
+    getSlot addr loc vm =
       case EVM.readStorage (view (EVM.env . EVM.contracts . at addr . non EVM.newAccount . EVM.storage) vm) (litWord loc) of
         Just val -> return val
         Nothing -> do Just c <- fetchSlotFrom Latest url addr (wordValue loc)
                       return (litWord c)
         
+txt :: (Show a) => a -> Value
+txt = String . pack . show
