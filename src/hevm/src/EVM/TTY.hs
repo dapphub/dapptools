@@ -187,7 +187,7 @@ interpret mode =
                       interpret (StepUntil p) restart
 
         -- Stepper is waiting for user input from a query
-        Stepper.Ask (EVM.PleaseChoosePath cont) -> do
+        Stepper.Ask (EVM.PleaseChoosePath whiff cont) -> do
           -- ensure we aren't stepping past max iterations
           vm <- use uiVm
           case maxIterationsReached vm ?maxIter of
@@ -408,6 +408,7 @@ appEvent (ViewVm s) (VtyEvent (V.EvKey (V.KChar ' ') [])) =
     suspendAndResume $
       Readline.runInputT Readline.defaultSettings loop
 
+-- todo refactor to zipper step forward
 -- Vm Overview: n - step
 appEvent (ViewVm s) (VtyEvent (V.EvKey (V.KChar 'n') [])) =
   case view (uiVm . result) s of
@@ -458,8 +459,8 @@ appEvent st@(ViewVm s) (VtyEvent (V.EvKey (V.KChar 'p') [])) =
       let
         (step, (vm, stepper)) = fromJust $ lookupLT n (view uiSnapshots s)
         s1 = s
-          & set uiVm vm
-          & set (uiVm . cache) (view (uiVm . cache) s)
+          & set uiVm vm -- set the vm to the one from the snapshot
+          & set (uiVm . cache) (view (uiVm . cache) s) -- persist the cache  --
           & set uiStep step
           & set uiStepper stepper
         stepsToTake = n - step - 1
@@ -533,7 +534,7 @@ appEvent st@(ViewVm s) (VtyEvent (V.EvKey (V.KChar 'p') [V.MCtrl])) =
 -- Vm Overview: 0 - choose no jump
 appEvent (ViewVm s) (VtyEvent (V.EvKey (V.KChar '0') [])) =
   case view (uiVm . result) s of
-    Just (VMFailure (Choose (PleaseChoosePath contin))) ->
+    Just (VMFailure (Choose (PleaseChoosePath whiff contin))) ->
       takeStep (s & set uiStepper (Stepper.evm (contin True) >> (view uiStepper s)))
         (Step 1)
     _ -> continue (ViewVm s)
@@ -541,7 +542,7 @@ appEvent (ViewVm s) (VtyEvent (V.EvKey (V.KChar '0') [])) =
 -- Vm Overview: 1 - choose jump
 appEvent (ViewVm s) (VtyEvent (V.EvKey (V.KChar '1') [])) =
   case view (uiVm . result) s of
-    Just (VMFailure (Choose (PleaseChoosePath contin))) ->
+    Just (VMFailure (Choose (PleaseChoosePath whiff contin))) ->
       takeStep (s & set uiStepper (Stepper.evm (contin False) >> (view uiStepper s)))
         (Step 1)
     _ -> continue (ViewVm s)
@@ -956,7 +957,7 @@ drawTracePane s =
       <=> hBorderWithLabel (txt "Cache")
       <=> str (show (view (uiVm . cache . path) s))
       <=> hBorderWithLabel (txt "Path Conditions")
-      <=> (str $ show $ map snd $ view (uiVm . pathConditions) s)
+      <=> (str $ show $ map snd $ view (uiVm . constraints) s)
       <=> hBorderWithLabel (txt "Memory")
       <=> viewport TracePane Vertical
             (str (prettyIfConcrete (view (uiVm . state . memory) s)))

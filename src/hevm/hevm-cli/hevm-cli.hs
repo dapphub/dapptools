@@ -43,6 +43,7 @@ import EVM.RLP (rlpdecode)
 import qualified EVM.Patricia as Patricia
 import Data.Map (Map)
 
+import Data.Tree
 import qualified EVM.Facts     as Facts
 import qualified EVM.Facts.Git as Git
 import qualified EVM.UnitTest
@@ -479,6 +480,15 @@ getSrcInfo cmd =
 -- consulting z3 about rather trivial matters. But with cvc4 it is quite
 -- pleasant!
 
+formatTree :: Tree BranchInfo -> [String]
+formatTree (Node bi []) = ["  leaf"]
+formatTree (Node bi xs) = let
+  cases = map formatTree xs
+  cond = maybe "" show (_branchCondition bi)
+  indexd = zip [0..] cases -- todo zipWith
+  prefixed = map (\(i, cs) -> map (\str -> (show i) <> "." <> str) cs) indexd
+  in foldl (++) [] prefixed
+
 -- If function signatures are known, they should always be given for best results.
 assert :: Command Options.Unwrapped -> IO ()
 assert cmd = do
@@ -512,10 +522,11 @@ assert cmd = do
           io $ putStrLn "Assertion violation found."
           showCounterexample preState maybesig
           io $ exitWith (ExitFailure 1)
-        Left (pre, posts) -> do
-          io $ putStrLn $ "Explored: " <> show (length posts)
+        Left (pre, tree) -> do
+          io $ putStrLn $ "Explored: " <> show (length tree)
                        <> " branches without assertion violations"
-          let vmErrs = checkForVMErrors posts
+          io $ putStr $ unlines $ formatTree tree
+          let vmErrs = checkForVMErrors $ leaves tree
           unless (null vmErrs) $ io $ do
             putStrLn $
               "However, "
@@ -523,40 +534,41 @@ assert cmd = do
               <> " branch(es) errored while exploring:"
             print vmErrs
           -- When `--get-models` is passed, we print example vm info for each path
-          when (getModels cmd) $
-            forM_ (zip [1..] posts) $ \(i, postVM) -> do
-              resetAssertions
-              constrain (sAnd (map fst (view EVM.pathConditions postVM)))
-              io $ putStrLn $
-                "-- Branch (" <> show i <> "/" <> show (length posts) <> ") --"
-              checkSat >>= \case
-                Unk -> io $ do putStrLn "Timed out"
-                               print $ view EVM.result postVM
-                Unsat -> io $ do putStrLn "Inconsistent path conditions: dead path"
-                                 print $ view EVM.result postVM
-                Sat -> do
-                  showCounterexample pre maybesig
-                  io $ putStrLn "-- Pathconditions --"
-                  io $ print $ map snd (view EVM.pathConditions postVM)
-                  case view EVM.result postVM of
-                    Nothing ->
-                      error "internal error; no EVM result"
-                    Just (EVM.VMFailure (EVM.Revert "")) -> io . putStrLn $
-                      "Reverted"
-                    Just (EVM.VMFailure (EVM.Revert msg)) -> io . putStrLn $
-                      "Reverted: " <> show (ByteStringS msg)
-                    Just (EVM.VMFailure err) -> io . putStrLn $
-                      "Failed: " <> show err
-                    Just (EVM.VMSuccess (ConcreteBuffer msg)) ->
-                      if ByteString.null msg
-                      then io $ putStrLn
-                        "Stopped"
-                      else io $ putStrLn $
-                        "Returned: " <> show (ByteStringS msg)
-                    Just (EVM.VMSuccess (SymbolicBuffer msg)) -> do
-                      out <- mapM (getValue.fromSized) msg
-                      io . putStrLn $
-                        "Returned: " <> show (ByteStringS (ByteString.pack out))
+          -- when (getModels cmd) $
+            -- io $ putStrLn "yess"
+            -- forM_ (zip [1..] (leaves tree)) $ \(i, postVM) -> do
+            --   resetAssertions
+            --   constrain (sAnd (map fst (view EVM.constraints postVM)))
+            --   io $ putStrLn $
+            --     "-- Branch (" <> show i <> "/" <> show (length tree) <> ") --"
+            --   checkSat >>= \case
+            --     Unk -> io $ do putStrLn "Timed out"
+            --                    print $ view EVM.result postVM
+            --     Unsat -> io $ do putStrLn "Inconsistent path conditions: dead path"
+            --                      print $ view EVM.result postVM
+            --     Sat -> do
+            --       showCounterexample pre maybesig
+            --       io $ putStrLn "-- Pathconditions --"
+            --       io $ print $ map snd (view EVM.constraints postVM)
+            --       case view EVM.result postVM of
+            --         Nothing ->
+            --           error "internal error; no EVM result"
+            --         Just (EVM.VMFailure (EVM.Revert "")) -> io . putStrLn $
+            --           "Reverted"
+            --         Just (EVM.VMFailure (EVM.Revert msg)) -> io . putStrLn $
+            --           "Reverted: " <> show (ByteStringS msg)
+            --         Just (EVM.VMFailure err) -> io . putStrLn $
+            --           "Failed: " <> show err
+            --         Just (EVM.VMSuccess (ConcreteBuffer msg)) ->
+            --           if ByteString.null msg
+            --           then io $ putStrLn
+            --             "Stopped"
+            --           else io $ putStrLn $
+            --             "Returned: " <> show (ByteStringS msg)
+            --         Just (EVM.VMSuccess (SymbolicBuffer msg)) -> do
+            --           out <- mapM (getValue.fromSized) msg
+            --           io . putStrLn $
+            --             "Returned: " <> show (ByteStringS (ByteString.pack out))
 
 dappCoverage :: UnitTestOptions -> Mode -> String -> IO ()
 dappCoverage opts _ solcFile =
@@ -723,7 +735,7 @@ vmFromCommand cmd = do
         EVM.initialContract (codeType $ hexByteString "--code" $ strip0x c)
 
     (_, _, Nothing) ->
-      error $ "must provide at least (rpc + address) or code"
+      error "must provide at least (rpc + address) or code"
 
   return $ VMTest.initTx $ withCache (vm0 miner ts blockNum diff contract)
     where
@@ -813,7 +825,7 @@ symvmFromCommand cmd = do
     (Just url, Just addr', _) ->
       io (EVM.Fetch.fetchContractFrom block' url addr') >>= \case
         Nothing ->
-          error $ "contract not found."
+          error "contract not found."
         Just contract' -> return contract''
           where
             contract'' = case code cmd of
@@ -829,7 +841,7 @@ symvmFromCommand cmd = do
     (_, _, Just c)  ->
       return $ (EVM.initialContract . codeType $ decipher c)
     (_, _, Nothing) ->
-      error $ "must provide at least (rpc + address) or code"
+      error "must provide at least (rpc + address) or code"
 
   return $ (VMTest.initTx $ withCache $ vm0 miner ts blockNum diff cdlen calldata' callvalue' caller' contract')
     & over EVM.pathConditions (<> [pathCond])
