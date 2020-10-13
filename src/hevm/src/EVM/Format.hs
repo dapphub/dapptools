@@ -1,13 +1,15 @@
 {-# Language DataKinds #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# Language TemplateHaskell #-}
 module EVM.Format where
 
 import Prelude hiding (Word)
 
-import EVM (VM, cheatCode, traceForest, traceData, Error (..))
+import EVM (VM, cheatCode, traceForest, traceData, Error (..), result)
 import EVM (Trace, TraceData (..), Log (..), Query (..), FrameContext (..))
 import EVM.Dapp (DappInfo, dappSolcByHash, dappSolcByName, showTraceLocation, dappEventMap)
 import EVM.Concrete (Word (..), wordValue)
+import EVM.SymExec
 import EVM.Symbolic (maybeLitWord, len)
 import EVM.Types (W256 (..), num, Buffer(..))
 import EVM.ABI (AbiValue (..), Event (..), AbiType (..))
@@ -17,7 +19,7 @@ import EVM.Solidity (SolcContract, contractName, abiMap)
 import EVM.Solidity (methodOutput, methodSignature, methodName)
 
 import Control.Arrow ((>>>))
-import Control.Lens (view, preview, ix, _2, to, _Just)
+import Control.Lens (view, preview, ix, _2, to, _Just, makeLenses, over)
 import Data.Binary.Get (runGetOrFail)
 import Data.ByteString (ByteString)
 import Data.ByteString.Builder (byteStringHex, toLazyByteString)
@@ -29,6 +31,7 @@ import Data.Monoid ((<>))
 import Data.Text (Text, pack, unpack, intercalate)
 import Data.Text (dropEnd, splitOn)
 import Data.Text.Encoding (decodeUtf8, decodeUtf8')
+import Data.Tree
 import Data.Tree.View (showTree)
 import Data.Vector (Vector, fromList)
 
@@ -319,3 +322,47 @@ contractNamePart x = Text.split (== ':') x !! 1
 
 contractPathPart :: Text -> Text
 contractPathPart x = Text.split (== ':') x !! 0
+
+
+
+
+data BranchData = BranchData {
+  -- todo list of custom navigation datatypes
+  _navigation :: String,
+  -- whiff
+  _constrain :: String,
+  -- custom leaf data
+  _leafData :: String
+  }
+
+makeLenses ''BranchData
+
+adjustTree :: String -> Int -> [BranchData] -> [BranchData]
+adjustTree cond i bds = let
+  indentChild = over navigation $ (<>) "| "
+  children = map indentChild bds
+  branchPrefix = BranchData (show i) cond ""
+  in branchPrefix : children
+
+flattenTree :: Tree BranchInfo -> [BranchData]
+-- leaf case
+flattenTree (Node bi []) = let
+  leafInfo = show $ view result $ _vm bi
+  in [BranchData "" "" leafInfo]
+-- branch case
+flattenTree (Node bi xs) = let
+  cases = map flattenTree xs
+  cond = maybe "" show (_branchCondition bi)
+  prefixed = zipWith (adjustTree cond) [0..] cases
+  in concat prefixed
+
+
+showBranchTree :: Tree BranchInfo -> String
+showBranchTree tree = let
+  flatTree = flattenTree tree
+  showBranchLine bd  = _navigation bd
+                      <> "    "
+                      <> _constrain bd
+                      <> "    "
+                      <> _leafData bd
+  in unlines $ map showBranchLine flatTree

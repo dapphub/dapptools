@@ -38,7 +38,7 @@ import EVM.UnitTest (UnitTestOptions, coverageReport, coverageForUnitTestContrac
 import EVM.UnitTest (runUnitTestContract)
 import EVM.UnitTest (getParametersFromEnvironmentVariables, testNumber)
 import EVM.Dapp (findUnitTests, dappInfo, DappInfo)
-import EVM.Format (showTraceTree)
+import EVM.Format (showTraceTree, showBranchTree)
 import EVM.RLP (rlpdecode)
 import qualified EVM.Patricia as Patricia
 import Data.Map (Map)
@@ -480,14 +480,6 @@ getSrcInfo cmd =
 -- consulting z3 about rather trivial matters. But with cvc4 it is quite
 -- pleasant!
 
-formatTree :: Tree BranchInfo -> [String]
-formatTree (Node bi []) = ["  leaf"]
-formatTree (Node bi xs) = let
-  cases = map formatTree xs
-  cond = maybe "" show (_branchCondition bi)
-  indexd = zip [0..] cases -- todo zipWith
-  prefixed = map (\(i, cs) -> map (\str -> (show i) <> "." <> str) cs) indexd
-  in foldl (++) [] prefixed
 
 -- If function signatures are known, they should always be given for best results.
 assert :: Command Options.Unwrapped -> IO ()
@@ -525,7 +517,7 @@ assert cmd = do
         Left (pre, tree) -> do
           io $ putStrLn $ "Explored: " <> show (length tree)
                        <> " branches without assertion violations"
-          io $ putStr $ unlines $ formatTree tree
+          io $ putStr $ showBranchTree tree
           let vmErrs = checkForVMErrors $ leaves tree
           unless (null vmErrs) $ io $ do
             putStrLn $

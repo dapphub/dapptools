@@ -165,7 +165,7 @@ interpret fetcher maxIter =
           exec >>= interpret fetcher maxIter . k
         Stepper.Run ->
           run >>= interpret fetcher maxIter . k
-        Stepper.Ask (EVM.PleaseChoosePath whiff continue) -> do -- todo add whiff to pleaseChoosePath
+        Stepper.Ask (EVM.PleaseChoosePath whiff continue) -> do
           vm <- get
           case maxIterationsReached vm maxIter of
             Nothing -> do push 1
@@ -175,7 +175,6 @@ interpret fetcher maxIter =
                           push 1
                           b <- interpret fetcher maxIter (Stepper.evm (continue False) >>= k)
                           pop 1
-                          -- todo: get the whiff from the top most element of the pathcoditions
                           return $ Node (BranchInfo { _vm = vm, _branchCondition = Just whiff}) [a, b]
             Just n -> interpret fetcher maxIter (Stepper.evm (continue (not n)) >>= k)
         Stepper.Wait q -> do
@@ -184,7 +183,6 @@ interpret fetcher maxIter =
                    interpret fetcher maxIter (Stepper.evm m >>= k)
 
           case q of
-          -- todo add whiff to pleaseask smt
             PleaseAskSMT _ _ continue -> do
               codelocation <- getCodeLocation <$> get
               iters <- use (iterations . at codelocation)
