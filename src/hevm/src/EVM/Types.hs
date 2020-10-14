@@ -94,16 +94,21 @@ litBytes bs = fmap (toSized . literal) (BS.unpack bs)
 
 -- | A buffer is a list of bytes, and is used to model EVM memory or calldata.
 -- During concrete execution, this is simply `ByteString`.
--- In symbolic settings, the structure of a buffer is sometimes known statically,
--- in which case simply use a list of symbolic bytes.
--- When we are dealing with dynamically determined calldata or memory (such as if
--- we are interpreting a function which a `memory bytes` argument),
--- we use smt lists. Note that smt lists are not yet supported by cvc4!
 data Buffer
   = ConcreteBuffer ByteString
-  | StaticSymBuffer [SWord 8]
-  | DynamicSymBuffer (SList (WordN 8))
+  | SymbolicBuffer SliceSet
   deriving (Show)
+
+type BoundedArray = (SArray (WordN 256) Word8, SWord 256)
+
+data SliceSet
+  = Ground DynBuffer
+  | Insert SymWord Slice SliceSet
+
+type Slice = SymWord SymWord SliceSet
+
+readBoundedArray :: SWord 256 -> BoundedArray -> Word8
+readBoundedArray i (a,len) = ite (i .> len) 0 (readArray i a)
 
 dynamize :: Buffer -> SList (WordN 8)
 dynamize (ConcreteBuffer a)  = SL.implode $ litBytes a
