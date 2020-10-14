@@ -12,6 +12,7 @@
 
 ### Added
 
+- TTY commands `P` and `c-p` for taking larger steps backwards in the debuger.
 - `--cache` flag for `dapp-test`, `exec`, `symbolic`, `interactive`,
   enabling caching of contracts received by rpc.
 - `load(address,bytes32)` cheat code allowing storage reads from arbitrary contracts.
