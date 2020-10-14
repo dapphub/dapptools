@@ -41,7 +41,9 @@ Note: some `hevm` commands (`dapp-test`, `interactive`) assume the use of the `d
   - `0`: choose the branch which does not jump
   - `1`: choose the branch which does jump
   - `N`: step to the next source position
+  - `P`: step previous source instruction
   - `C-n`: step to the next source position and don't enter `CALL` or `CREATE`
+  - `C-p`: step previous source position without entering
   - `m`: toggle memory view
   - `h`: show key-binding help
 
