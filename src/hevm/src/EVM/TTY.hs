@@ -40,7 +40,7 @@ import Control.Monad.State.Strict hiding (state)
 import Data.Aeson.Lens
 import Data.ByteString (ByteString)
 import Data.Maybe (isJust, fromJust, fromMaybe)
-import Data.Map (Map, insert, lookupLT, singleton)
+import Data.Map (Map, insert, lookupLT, singleton, filter)
 import Data.Monoid ((<>))
 import Data.Text (Text, pack)
 import Data.Text.Encoding (decodeUtf8)
@@ -309,6 +309,27 @@ takeStep ui mode =
     m = interpret mode (view uiStepper ui)
     nxt = runStateT (m <* modify renderVm) ui
 
+backstep
+  :: (?fetcher :: Fetcher
+     ,?maxIter :: Maybe Integer)
+  => UiVmState -> EventM n UiVmState
+backstep s = case view uiStep s of
+  0 -> return s
+  n ->
+    let
+      (step, (vm, stepper)) = fromJust $ lookupLT n (view uiSnapshots s)
+      s1 = s
+        & set uiVm vm
+        & set (uiVm . cache) (view (uiVm . cache) s)
+        & set uiStep step
+        & set uiStepper stepper
+      stepsToTake = n - step - 1
+
+    in
+      liftIO $ runStateT (interpret (Step stepsToTake) stepper) s1 >>= \case
+        (Continue steps, ui') -> return $ ui' & set uiStepper steps
+        _ -> error "unexpected end"
+
 appEvent
   :: (?fetcher::Fetcher, ?maxIter :: Maybe Integer) =>
   UiState ->
@@ -422,7 +443,7 @@ appEvent (ViewVm s) (VtyEvent (V.EvKey (V.KChar 'a') [])) =
 
       in takeStep s' (Step 0)
 
--- Vm Overview: p - step
+-- Vm Overview: p - backstep
 appEvent st@(ViewVm s) (VtyEvent (V.EvKey (V.KChar 'p') [])) =
   case view uiStep s of
     0 ->
@@ -444,6 +465,70 @@ appEvent st@(ViewVm s) (VtyEvent (V.EvKey (V.KChar 'p') [])) =
         stepsToTake = n - step - 1
 
       takeStep s1 (Step stepsToTake)
+
+-- Vm Overview: P - backstep
+appEvent st@(ViewVm s) (VtyEvent (V.EvKey (V.KChar 'P') [])) =
+  case view uiStep s of
+    0 ->
+      -- We're already at the first step; ignore command.
+      continue st
+    n -> do
+      s1 <- backstep s
+      let
+        -- find a vm with a different source location than s1
+        snapshots' = Data.Map.filter (isNextSourcePosition s1 . fst) (view uiSnapshots s1)
+      case lookupLT n snapshots' of
+          -- s2 source position is the first one. Go to the beginning.
+          Nothing ->
+            let
+              (step', (vm', stepper')) = fromJust $ lookupLT (n - 1) (view uiSnapshots s)
+              s2 = s1
+                & set uiVm vm'
+                & set (uiVm . cache) (view (uiVm . cache) s1)
+                & set uiStep step'
+                & set uiStepper stepper'
+            in takeStep s2 (Step 0)
+          -- step until we reach the source location of s1
+          Just (step', (vm', stepper')) ->
+            let
+              s2 = s1
+                & set uiVm vm'
+                & set (uiVm . cache) (view (uiVm . cache) s1)
+                & set uiStep step'
+                & set uiStepper stepper'
+            in takeStep s2 (StepUntil (not . isNextSourcePosition s1))
+
+-- Vm Overview: c-p - backstep
+appEvent st@(ViewVm s) (VtyEvent (V.EvKey (V.KChar 'p') [V.MCtrl])) =
+  case view uiStep s of
+    0 ->
+      -- We're already at the first step; ignore command.
+      continue st
+    n -> do
+      s1 <- backstep s
+      let
+        -- find a vm with a different source location than s1
+        snapshots' = Data.Map.filter (isNextSourcePositionWithoutEntering s1 . fst) (view uiSnapshots s1)
+      case lookupLT n snapshots' of
+          -- s2 source position is the first one. Go to the beginning.
+          Nothing ->
+            let
+              (step', (vm', stepper')) = fromJust $ lookupLT (n - 1) (view uiSnapshots s)
+              s2 = s1
+                & set uiVm vm'
+                & set (uiVm . cache) (view (uiVm . cache) s1)
+                & set uiStep step'
+                & set uiStepper stepper'
+            in takeStep s2 (Step 0)
+          -- step until we reach the source location of s1
+          Just (step', (vm', stepper')) ->
+            let
+              s2 = s1
+                & set uiVm vm'
+                & set (uiVm . cache) (view (uiVm . cache) s1)
+                & set uiStep step'
+                & set uiStepper stepper'
+            in takeStep s2 (StepUntil (not . isNextSourcePosition s1))
 
 -- Vm Overview: 0 - choose no jump
 appEvent (ViewVm s) (VtyEvent (V.EvKey (V.KChar '0') [])) =
@@ -571,6 +656,8 @@ drawHelpView =
         "N      Step fwds to the next source position\n" <>
         "C-n    Step fwds to the next source position skipping CALL & CREATE\n" <>
         "p      Step back by one instruction\n\n" <>
+        "P      Step back to the previous source position\n\n" <>
+        "C-p    Step back to the previous source position skipping CALL & CREATE\n\n" <>
         "m      Toggle memory pane\n" <>
         "0      Choose the branch which does not jump \n" <>
         "1      Choose the branch which does jump \n" <>
