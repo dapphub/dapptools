@@ -148,363 +148,363 @@ main = defaultMain $ testGroup "hevm"
        === (Just $ Literal Patricia.Empty)
     ]
 
-  , testGroup "Symbolic execution"
-      [
-      -- Somewhat tautological since we are asserting the precondition
-      -- on the same form as the actual "requires" clause.
-      testCase "SafeAdd success case" $ do
-        Just safeAdd <- solcRuntime "SafeAdd"
-          [i|
-          contract SafeAdd {
-            function add(uint x, uint y) public pure returns (uint z) {
-                 require((z = x + y) >= x);
-            }
-          }
-          |]
-        let pre preVM = let [x, y] = getStaticAbiArgs preVM
-                        in x .<= x + y
-                           .&& view (state . callvalue) preVM .== 0
-            post = Just $ \(prestate, poststate) ->
-              let [x, y] = getStaticAbiArgs prestate
-              in case view result poststate of
-                Just (VMSuccess (SymbolicBuffer out)) -> (fromBytes out) .== x + y
-                _ -> sFalse
-        Left (_, res) <- runSMT $ query $ verifyContract safeAdd (Just ("add(uint256,uint256)", [AbiUIntType 256, AbiUIntType 256])) [] SymbolicS pre post
-        putStrLn $ "successfully explored: " <> show (length res) <> " paths"
-     ,
+  -- , testGroup "Symbolic execution"
+  --     [
+  --     -- Somewhat tautological since we are asserting the precondition
+  --     -- on the same form as the actual "requires" clause.
+  --     testCase "SafeAdd success case" $ do
+  --       Just safeAdd <- solcRuntime "SafeAdd"
+  --         [i|
+  --         contract SafeAdd {
+  --           function add(uint x, uint y) public pure returns (uint z) {
+  --                require((z = x + y) >= x);
+  --           }
+  --         }
+  --         |]
+  --       let pre preVM = let [x, y] = getStaticAbiArgs preVM
+  --                       in x .<= x + y
+  --                          .&& view (state . callvalue) preVM .== 0
+  --           post = Just $ \(prestate, poststate) ->
+  --             let [x, y] = getStaticAbiArgs prestate
+  --             in case view result poststate of
+  --               Just (VMSuccess (SymbolicBuffer out)) -> (fromBytes out) .== x + y
+  --               _ -> sFalse
+  --       Left (_, res) <- runSMT $ query $ verifyContract safeAdd (Just ("add(uint256,uint256)", [AbiUIntType 256, AbiUIntType 256])) [] SymbolicS pre post
+  --       putStrLn $ "successfully explored: " <> show (length res) <> " paths"
+  --    ,
 
-      testCase "x == y => x + y == 2 * y" $ do
-        Just safeAdd <- solcRuntime "SafeAdd"
-          [i|
-          contract SafeAdd {
-            function add(uint x, uint y) public pure returns (uint z) {
-                 require((z = x + y) >= x);
-            }
-          }
-          |]
-        let pre preVM = let [x, y] = getStaticAbiArgs preVM
-                        in (x .<= x + y)
-                           .&& (x .== y)
-                           .&& view (state . callvalue) preVM .== 0
-            post (prestate, poststate) =
-              let [_, y] = getStaticAbiArgs prestate
-              in case view result poststate of
-                      Just (VMSuccess (SymbolicBuffer out)) -> fromBytes out .== 2 * y
-                      _ -> sFalse
-        Left (_, res) <- runSMTWith z3 $ query $
-          verifyContract safeAdd (Just ("add(uint256,uint256)", [AbiUIntType 256, AbiUIntType 256])) [] SymbolicS pre (Just post)
-        putStrLn $ "successfully explored: " <> show (length res) <> " paths"
-      ,
-        testCase "factorize 973013" $ do
-        Just factor <- solcRuntime "PrimalityCheck"
-          [i|
-          contract PrimalityCheck {
-            function factor(uint x, uint y) public pure  {
-                   require(1 < x && x < 973013 && 1 < y && y < 973013);
-                   assert(x*y != 973013);
-            }
-          }
-          |]
-        bs <- runSMTWith cvc4 $ query $ do
-          Right vm <- checkAssert factor (Just ("factor(uint256,uint256)", [AbiUIntType 256, AbiUIntType 256])) []
-          case view (state . calldata . _1) vm of
-            SymbolicBuffer bs -> BS.pack <$> mapM (getValue.fromSized) bs
-            ConcreteBuffer _ -> error "unexpected"
+  --     testCase "x == y => x + y == 2 * y" $ do
+  --       Just safeAdd <- solcRuntime "SafeAdd"
+  --         [i|
+  --         contract SafeAdd {
+  --           function add(uint x, uint y) public pure returns (uint z) {
+  --                require((z = x + y) >= x);
+  --           }
+  --         }
+  --         |]
+  --       let pre preVM = let [x, y] = getStaticAbiArgs preVM
+  --                       in (x .<= x + y)
+  --                          .&& (x .== y)
+  --                          .&& view (state . callvalue) preVM .== 0
+  --           post (prestate, poststate) =
+  --             let [_, y] = getStaticAbiArgs prestate
+  --             in case view result poststate of
+  --                     Just (VMSuccess (SymbolicBuffer out)) -> fromBytes out .== 2 * y
+  --                     _ -> sFalse
+  --       Left (_, res) <- runSMTWith z3 $ query $
+  --         verifyContract safeAdd (Just ("add(uint256,uint256)", [AbiUIntType 256, AbiUIntType 256])) [] SymbolicS pre (Just post)
+  --       putStrLn $ "successfully explored: " <> show (length res) <> " paths"
+  --     ,
+  --       testCase "factorize 973013" $ do
+  --       Just factor <- solcRuntime "PrimalityCheck"
+  --         [i|
+  --         contract PrimalityCheck {
+  --           function factor(uint x, uint y) public pure  {
+  --                  require(1 < x && x < 973013 && 1 < y && y < 973013);
+  --                  assert(x*y != 973013);
+  --           }
+  --         }
+  --         |]
+  --       bs <- runSMTWith cvc4 $ query $ do
+  --         Right vm <- checkAssert factor (Just ("factor(uint256,uint256)", [AbiUIntType 256, AbiUIntType 256])) []
+  --         case view (state . calldata . _1) vm of
+  --           SymbolicBuffer bs -> BS.pack <$> mapM (getValue.fromSized) bs
+  --           ConcreteBuffer _ -> error "unexpected"
 
-        let [AbiUInt 256 x, AbiUInt 256 y] = decodeAbiValues [AbiUIntType 256, AbiUIntType 256] bs
-        assertEqual "" True (x == 953 && y == 1021 || x == 1021 && y == 953)
-        ,
+  --       let [AbiUInt 256 x, AbiUInt 256 y] = decodeAbiValues [AbiUIntType 256, AbiUIntType 256] bs
+  --       assertEqual "" True (x == 953 && y == 1021 || x == 1021 && y == 953)
+  --       ,
 
-        testCase "summary storage writes" $ do
-        Just c <- solcRuntime "A"
-          [i|
-          contract A {
-            uint x;
-            function f(uint256 y) public {
-               x += y;
-               x += y;
-            }
-          }
-          |]
-        let pre vm = 0 .== view (state . callvalue) vm
-            post = Just $ \(prestate, poststate) ->
-              let [y] = getStaticAbiArgs prestate
-                  this = view (state . codeContract) prestate
-                  Just preC = view (env.contracts . at this) prestate
-                  Just postC = view (env.contracts . at this) poststate
-                  Symbolic prestore = _storage preC
-                  Symbolic poststore = _storage postC
-                  prex = readArray prestore 0
-                  postx = readArray poststore 0
-              in case view result poststate of
-                Just (VMSuccess _) -> prex + 2 * y .== postx
-                _ -> sFalse
-        Left (_, res) <- runSMT $ query $ verifyContract c (Just ("f(uint256)", [AbiUIntType 256])) [] SymbolicS pre post
-        putStrLn $ "successfully explored: " <> show (length res) <> " paths"
-        ,
-        -- Inspired by these `msg.sender == to` token bugs
-        -- which break linearity of totalSupply.
-        testCase "catch storage collisions" $ do
-        Just c <- solcRuntime "A"
-          [i|
-          contract A {
-            function f(uint x, uint y) public {
-               assembly {
-                 let newx := sub(sload(x), 1)
-                 let newy := add(sload(y), 1)
-                 sstore(x,newx)
-                 sstore(y,newy)
-               }
-            }
-          }
-          |]
-        let pre vm = 0 .== view (state . callvalue) vm
-            post (prestate, poststate) =
-              let [x,y] = getStaticAbiArgs prestate
-                  this = view (state . codeContract) prestate
-                  (Just preC, Just postC) = both' (view (env.contracts . at this)) (prestate, poststate)
-                  --Just postC = view (env.contracts . at this) poststate
-                  (Symbolic prestore, Symbolic poststore) = both' (view storage) (preC, postC)
-                  (prex,  prey)  = both' (readArray prestore) (x, y)
-                  (postx, posty) = both' (readArray poststore) (x, y)
-              in case view result poststate of
-                Just (VMSuccess _) -> prex + prey .== postx + (posty :: SWord 256)
-                _ -> sFalse
-        bs <- runSMT $ query $ do
-          Right vm <- verifyContract c (Just ("f(uint256,uint256)", [AbiUIntType 256, AbiUIntType 256])) [] SymbolicS pre (Just post)
-          case view (state . calldata . _1) vm of
-            SymbolicBuffer bs -> BS.pack <$> mapM (getValue.fromSized) bs
-            ConcreteBuffer bs -> error "unexpected"
+  --       testCase "summary storage writes" $ do
+  --       Just c <- solcRuntime "A"
+  --         [i|
+  --         contract A {
+  --           uint x;
+  --           function f(uint256 y) public {
+  --              x += y;
+  --              x += y;
+  --           }
+  --         }
+  --         |]
+  --       let pre vm = 0 .== view (state . callvalue) vm
+  --           post = Just $ \(prestate, poststate) ->
+  --             let [y] = getStaticAbiArgs prestate
+  --                 this = view (state . codeContract) prestate
+  --                 Just preC = view (env.contracts . at this) prestate
+  --                 Just postC = view (env.contracts . at this) poststate
+  --                 Symbolic prestore = _storage preC
+  --                 Symbolic poststore = _storage postC
+  --                 prex = readArray prestore 0
+  --                 postx = readArray poststore 0
+  --             in case view result poststate of
+  --               Just (VMSuccess _) -> prex + 2 * y .== postx
+  --               _ -> sFalse
+  --       Left (_, res) <- runSMT $ query $ verifyContract c (Just ("f(uint256)", [AbiUIntType 256])) [] SymbolicS pre post
+  --       putStrLn $ "successfully explored: " <> show (length res) <> " paths"
+  --       ,
+  --       -- Inspired by these `msg.sender == to` token bugs
+  --       -- which break linearity of totalSupply.
+  --       testCase "catch storage collisions" $ do
+  --       Just c <- solcRuntime "A"
+  --         [i|
+  --         contract A {
+  --           function f(uint x, uint y) public {
+  --              assembly {
+  --                let newx := sub(sload(x), 1)
+  --                let newy := add(sload(y), 1)
+  --                sstore(x,newx)
+  --                sstore(y,newy)
+  --              }
+  --           }
+  --         }
+  --         |]
+  --       let pre vm = 0 .== view (state . callvalue) vm
+  --           post (prestate, poststate) =
+  --             let [x,y] = getStaticAbiArgs prestate
+  --                 this = view (state . codeContract) prestate
+  --                 (Just preC, Just postC) = both' (view (env.contracts . at this)) (prestate, poststate)
+  --                 --Just postC = view (env.contracts . at this) poststate
+  --                 (Symbolic prestore, Symbolic poststore) = both' (view storage) (preC, postC)
+  --                 (prex,  prey)  = both' (readArray prestore) (x, y)
+  --                 (postx, posty) = both' (readArray poststore) (x, y)
+  --             in case view result poststate of
+  --               Just (VMSuccess _) -> prex + prey .== postx + (posty :: SWord 256)
+  --               _ -> sFalse
+  --       bs <- runSMT $ query $ do
+  --         Right vm <- verifyContract c (Just ("f(uint256,uint256)", [AbiUIntType 256, AbiUIntType 256])) [] SymbolicS pre (Just post)
+  --         case view (state . calldata . _1) vm of
+  --           SymbolicBuffer bs -> BS.pack <$> mapM (getValue.fromSized) bs
+  --           ConcreteBuffer bs -> error "unexpected"
 
-        let [AbiUInt 256 x, AbiUInt 256 y] = decodeAbiValues [AbiUIntType 256, AbiUIntType 256] bs
-        assertEqual "Catch storage collisions" x y
-        ,
-        testCase "Deposit contract loop (z3)" $ do
-          Just c <- solcRuntime "Deposit"
-            [i|
-            contract Deposit {
-              function deposit(uint256 deposit_count) external pure {
-                require(deposit_count < 2**32 - 1);
-                ++deposit_count;
-                bool found = false;
-                for (uint height = 0; height < 32; height++) {
-                  if ((deposit_count & 1) == 1) {
-                    found = true;
-                    break;
-                  }
-                 deposit_count = deposit_count >> 1;
-                 }
-                assert(found);
-              }
-             }
-            |]
-          Left (_, res) <- runSMTWith z3 $ query $ checkAssert c (Just ("deposit(uint256)", [AbiUIntType 256])) []
-          putStrLn $ "successfully explored: " <> show (length res) <> " paths"
-        ,
-                testCase "Deposit contract loop (cvc4)" $ do
-          Just c <- solcRuntime "Deposit"
-            [i|
-            contract Deposit {
-              function deposit(uint256 deposit_count) external pure {
-                require(deposit_count < 2**32 - 1);
-                ++deposit_count;
-                bool found = false;
-                for (uint height = 0; height < 32; height++) {
-                  if ((deposit_count & 1) == 1) {
-                    found = true;
-                    break;
-                  }
-                 deposit_count = deposit_count >> 1;
-                 }
-                assert(found);
-              }
-             }
-            |]
-          Left (_, res) <- runSMTWith cvc4 $ query $ checkAssert c (Just ("deposit(uint256)", [AbiUIntType 256])) []
-          putStrLn $ "successfully explored: " <> show (length res) <> " paths"
-        ,
-        testCase "Deposit contract loop (error version)" $ do
-          Just c <- solcRuntime "Deposit"
-            [i|
-            contract Deposit {
-              function deposit(uint8 deposit_count) external pure {
-                require(deposit_count < 2**32 - 1);
-                ++deposit_count;
-                bool found = false;
-                for (uint height = 0; height < 32; height++) {
-                  if ((deposit_count & 1) == 1) {
-                    found = true;
-                    break;
-                  }
-                 deposit_count = deposit_count >> 1;
-                 }
-                assert(found);
-              }
-             }
-            |]
-          bs <- runSMT $ query $ do
-            Right vm <- checkAssert c (Just ("deposit(uint8)", [AbiUIntType 8])) []
-            case view (state . calldata . _1) vm of
-              SymbolicBuffer bs -> BS.pack <$> mapM (getValue.fromSized) bs
-              ConcreteBuffer _ -> error "unexpected"
+  --       let [AbiUInt 256 x, AbiUInt 256 y] = decodeAbiValues [AbiUIntType 256, AbiUIntType 256] bs
+  --       assertEqual "Catch storage collisions" x y
+  --       ,
+  --       testCase "Deposit contract loop (z3)" $ do
+  --         Just c <- solcRuntime "Deposit"
+  --           [i|
+  --           contract Deposit {
+  --             function deposit(uint256 deposit_count) external pure {
+  --               require(deposit_count < 2**32 - 1);
+  --               ++deposit_count;
+  --               bool found = false;
+  --               for (uint height = 0; height < 32; height++) {
+  --                 if ((deposit_count & 1) == 1) {
+  --                   found = true;
+  --                   break;
+  --                 }
+  --                deposit_count = deposit_count >> 1;
+  --                }
+  --               assert(found);
+  --             }
+  --            }
+  --           |]
+  --         Left (_, res) <- runSMTWith z3 $ query $ checkAssert c (Just ("deposit(uint256)", [AbiUIntType 256])) []
+  --         putStrLn $ "successfully explored: " <> show (length res) <> " paths"
+  --       ,
+  --               testCase "Deposit contract loop (cvc4)" $ do
+  --         Just c <- solcRuntime "Deposit"
+  --           [i|
+  --           contract Deposit {
+  --             function deposit(uint256 deposit_count) external pure {
+  --               require(deposit_count < 2**32 - 1);
+  --               ++deposit_count;
+  --               bool found = false;
+  --               for (uint height = 0; height < 32; height++) {
+  --                 if ((deposit_count & 1) == 1) {
+  --                   found = true;
+  --                   break;
+  --                 }
+  --                deposit_count = deposit_count >> 1;
+  --                }
+  --               assert(found);
+  --             }
+  --            }
+  --           |]
+  --         Left (_, res) <- runSMTWith cvc4 $ query $ checkAssert c (Just ("deposit(uint256)", [AbiUIntType 256])) []
+  --         putStrLn $ "successfully explored: " <> show (length res) <> " paths"
+  --       ,
+  --       testCase "Deposit contract loop (error version)" $ do
+  --         Just c <- solcRuntime "Deposit"
+  --           [i|
+  --           contract Deposit {
+  --             function deposit(uint8 deposit_count) external pure {
+  --               require(deposit_count < 2**32 - 1);
+  --               ++deposit_count;
+  --               bool found = false;
+  --               for (uint height = 0; height < 32; height++) {
+  --                 if ((deposit_count & 1) == 1) {
+  --                   found = true;
+  --                   break;
+  --                 }
+  --                deposit_count = deposit_count >> 1;
+  --                }
+  --               assert(found);
+  --             }
+  --            }
+  --           |]
+  --         bs <- runSMT $ query $ do
+  --           Right vm <- checkAssert c (Just ("deposit(uint8)", [AbiUIntType 8])) []
+  --           case view (state . calldata . _1) vm of
+  --             SymbolicBuffer bs -> BS.pack <$> mapM (getValue.fromSized) bs
+  --             ConcreteBuffer _ -> error "unexpected"
 
-          let [deposit] = decodeAbiValues [AbiUIntType 8] bs
-          assertEqual "overflowing uint8" deposit (AbiUInt 8 255)
-     ,
-        testCase "explore function dispatch" $ do
-        Just c <- solcRuntime "A"
-          [i|
-          contract A {
-            function f(uint x) public pure returns (uint) {
-              return x;
-            }
-          }
-          |]
-        Left (_, res) <- runSMTWith z3 $ do
-          setTimeOut 5000
-          query $ checkAssert c Nothing []
-        putStrLn $ "successfully explored: " <> show (length res) <> " paths"
-        ,
+  --         let [deposit] = decodeAbiValues [AbiUIntType 8] bs
+  --         assertEqual "overflowing uint8" deposit (AbiUInt 8 255)
+  --    ,
+  --       testCase "explore function dispatch" $ do
+  --       Just c <- solcRuntime "A"
+  --         [i|
+  --         contract A {
+  --           function f(uint x) public pure returns (uint) {
+  --             return x;
+  --           }
+  --         }
+  --         |]
+  --       Left (_, res) <- runSMTWith z3 $ do
+  --         setTimeOut 5000
+  --         query $ checkAssert c Nothing []
+  --       putStrLn $ "successfully explored: " <> show (length res) <> " paths"
+  --       ,
 
-        testCase "injectivity of keccak (32 bytes)" $ do
-          Just c <- solcRuntime "A"
-            [i|
-            contract A {
-              function f(uint x, uint y) public pure {
-                if (keccak256(abi.encodePacked(x)) == keccak256(abi.encodePacked(y))) assert(x == y);
-              }
-            }
-            |]
-          Left (_, res) <- runSMTWith cvc4 $ query $ checkAssert c (Just ("f(uint256,uint256)", [AbiUIntType 256, AbiUIntType 256])) []
-          putStrLn $ "successfully explored: " <> show (length res) <> " paths"
-        ,
-        testCase "injectivity of keccak (32 bytes)" $ do
-          Just c <- solcRuntime "A"
-            [i|
-            contract A {
-              function f(uint x, uint y) public pure {
-                if (keccak256(abi.encodePacked(x)) == keccak256(abi.encodePacked(y))) assert(x == y);
-              }
-            }
-            |]
-          Left (_, res) <- runSMTWith z3 $ query $ checkAssert c (Just ("f(uint256,uint256)", [AbiUIntType 256, AbiUIntType 256])) []
-          putStrLn $ "successfully explored: " <> show (length res) <> " paths"
-       ,
+  --       testCase "injectivity of keccak (32 bytes)" $ do
+  --         Just c <- solcRuntime "A"
+  --           [i|
+  --           contract A {
+  --             function f(uint x, uint y) public pure {
+  --               if (keccak256(abi.encodePacked(x)) == keccak256(abi.encodePacked(y))) assert(x == y);
+  --             }
+  --           }
+  --           |]
+  --         Left (_, res) <- runSMTWith cvc4 $ query $ checkAssert c (Just ("f(uint256,uint256)", [AbiUIntType 256, AbiUIntType 256])) []
+  --         putStrLn $ "successfully explored: " <> show (length res) <> " paths"
+  --       ,
+  --       testCase "injectivity of keccak (32 bytes)" $ do
+  --         Just c <- solcRuntime "A"
+  --           [i|
+  --           contract A {
+  --             function f(uint x, uint y) public pure {
+  --               if (keccak256(abi.encodePacked(x)) == keccak256(abi.encodePacked(y))) assert(x == y);
+  --             }
+  --           }
+  --           |]
+  --         Left (_, res) <- runSMTWith z3 $ query $ checkAssert c (Just ("f(uint256,uint256)", [AbiUIntType 256, AbiUIntType 256])) []
+  --         putStrLn $ "successfully explored: " <> show (length res) <> " paths"
+  --      ,
 
-        testCase "injectivity of keccak (64 bytes)" $ do
-          Just c <- solcRuntime "A"
-            [i|
-            contract A {
-              function f(uint x, uint y, uint w, uint z) public pure {
-                assert (keccak256(abi.encodePacked(x,y)) != keccak256(abi.encodePacked(w,z)));
-              }
-            }
-            |]
-          bs <- runSMTWith z3 $ query $ do
-            Right vm <- checkAssert c (Just ("f(uint256,uint256,uint256,uint256)", replicate 4 (AbiUIntType 256))) []
-            case view (state . calldata . _1) vm of
-              SymbolicBuffer bs -> BS.pack <$> mapM (getValue.fromSized) bs
-              ConcreteBuffer _ -> error "unexpected"
+  --       testCase "injectivity of keccak (64 bytes)" $ do
+  --         Just c <- solcRuntime "A"
+  --           [i|
+  --           contract A {
+  --             function f(uint x, uint y, uint w, uint z) public pure {
+  --               assert (keccak256(abi.encodePacked(x,y)) != keccak256(abi.encodePacked(w,z)));
+  --             }
+  --           }
+  --           |]
+  --         bs <- runSMTWith z3 $ query $ do
+  --           Right vm <- checkAssert c (Just ("f(uint256,uint256,uint256,uint256)", replicate 4 (AbiUIntType 256))) []
+  --           case view (state . calldata . _1) vm of
+  --             SymbolicBuffer bs -> BS.pack <$> mapM (getValue.fromSized) bs
+  --             ConcreteBuffer _ -> error "unexpected"
               
-          let [AbiUInt 256 x,
-               AbiUInt 256 y,
-               AbiUInt 256 w,
-               AbiUInt 256 z] = decodeAbiValues [AbiUIntType 256,
-                                                 AbiUIntType 256,
-                                                 AbiUIntType 256,
-                                                 AbiUIntType 256] bs
-          assertEqual "x == w" x w
-          assertEqual "y == z" y z
-       ,
+  --         let [AbiUInt 256 x,
+  --              AbiUInt 256 y,
+  --              AbiUInt 256 w,
+  --              AbiUInt 256 z] = decodeAbiValues [AbiUIntType 256,
+  --                                                AbiUIntType 256,
+  --                                                AbiUIntType 256,
+  --                                                AbiUIntType 256] bs
+  --         assertEqual "x == w" x w
+  --         assertEqual "y == z" y z
+  --      ,
 
-        testCase "calldata beyond calldatasize is 0 (z3)" $ do
-          Just c <- solcRuntime "A"
-            [i|
-            contract A {
-              function f() public pure {
-                uint y;
-                assembly {
-                  let x := calldatasize()
-                  y := calldataload(x)
-                }
-                assert(y == 0);
-              }
-            }
-            |]
-          Left (_, res) <- runSMTWith z3 $ do
-            setTimeOut 5000
-            query $ checkAssert c Nothing []
-          putStrLn $ "successfully explored: " <> show (length res) <> " paths"
+  --       testCase "calldata beyond calldatasize is 0 (z3)" $ do
+  --         Just c <- solcRuntime "A"
+  --           [i|
+  --           contract A {
+  --             function f() public pure {
+  --               uint y;
+  --               assembly {
+  --                 let x := calldatasize()
+  --                 y := calldataload(x)
+  --               }
+  --               assert(y == 0);
+  --             }
+  --           }
+  --           |]
+  --         Left (_, res) <- runSMTWith z3 $ do
+  --           setTimeOut 5000
+  --           query $ checkAssert c Nothing []
+  --         putStrLn $ "successfully explored: " <> show (length res) <> " paths"
 
-       ,
+  --      ,
 
-        testCase "keccak soundness" $ do
-          Just c <- solcRuntime "C"
-            [i|
-              contract C {
-                mapping (uint => mapping (uint => uint)) maps;
+  --       testCase "keccak soundness" $ do
+  --         Just c <- solcRuntime "C"
+  --           [i|
+  --             contract C {
+  --               mapping (uint => mapping (uint => uint)) maps;
 
-                  function f(uint x, uint y) public view {
-                  assert(maps[y][0] == maps[x][0]);
-                }
-              }
-            |]
-          -- should find a counterexample
-          Right counterexample <- runSMTWith cvc4 $ query $ checkAssert c (Just ("f(uint256,uint256)", [AbiUIntType 256, AbiUIntType 256])) []
-          putStrLn $ "found counterexample:"
+  --                 function f(uint x, uint y) public view {
+  --                 assert(maps[y][0] == maps[x][0]);
+  --               }
+  --             }
+  --           |]
+  --         -- should find a counterexample
+  --         Right counterexample <- runSMTWith cvc4 $ query $ checkAssert c (Just ("f(uint256,uint256)", [AbiUIntType 256, AbiUIntType 256])) []
+  --         putStrLn $ "found counterexample:"
 
 
-      ,
-         testCase "multiple contracts" $ do
-          let code =
-                [i|
-                  contract C {
-                    uint x;
-                    A constant a = A(0x35D1b3F3D7966A1DFe207aa4514C12a259A0492B);
+  --     ,
+  --        testCase "multiple contracts" $ do
+  --         let code =
+  --               [i|
+  --                 contract C {
+  --                   uint x;
+  --                   A constant a = A(0x35D1b3F3D7966A1DFe207aa4514C12a259A0492B);
     
-                    function call_A() public view {
-                      // should fail since a.x() can be anything
-                      assert(a.x() == x);
-                    }
-                  }
-                  contract A {
-                    uint public x;
-                  }
-                |]
-              aAddr = Addr 0x35D1b3F3D7966A1DFe207aa4514C12a259A0492B
-          Just c <- solcRuntime "C" code
-          Just a <- solcRuntime "A" code
-          Right cex <- runSMT $ query $ do
-            vm0 <- abstractVM (Just ("call_A()", [])) [] c SymbolicS
-            store <- freshArray (show aAddr) Nothing
-            let vm = vm0
-                  & set (state . callvalue) 0
-                  & over (env . contracts)
-                       (Map.insert aAddr (initialContract (RuntimeCode a) &
-                                           set EVM.storage (Symbolic store)))
-            verify vm Nothing Nothing (Just checkAssertions)
-          putStrLn $ "found counterexample:"
+  --                   function call_A() public view {
+  --                     // should fail since a.x() can be anything
+  --                     assert(a.x() == x);
+  --                   }
+  --                 }
+  --                 contract A {
+  --                   uint public x;
+  --                 }
+  --               |]
+  --             aAddr = Addr 0x35D1b3F3D7966A1DFe207aa4514C12a259A0492B
+  --         Just c <- solcRuntime "C" code
+  --         Just a <- solcRuntime "A" code
+  --         Right cex <- runSMT $ query $ do
+  --           vm0 <- abstractVM (Just ("call_A()", [])) [] c SymbolicS
+  --           store <- freshArray (show aAddr) Nothing
+  --           let vm = vm0
+  --                 & set (state . callvalue) 0
+  --                 & over (env . contracts)
+  --                      (Map.insert aAddr (initialContract (RuntimeCode a) &
+  --                                          set EVM.storage (Symbolic store)))
+  --           verify vm Nothing Nothing (Just checkAssertions)
+  --         putStrLn $ "found counterexample:"
 
-    ]
-  , testGroup "Equivalence checking"
-    [
-      testCase "yul optimized" $ do
-        -- These yul programs are not equivalent: (try --calldata $(seth --to-uint256 2) for example)
-        --  A:                               B:
-        --  {                                {
-        --     calldatacopy(0, 0, 32)           calldatacopy(0, 0, 32)
-        --     switch mload(0)                  switch mload(0)
-        --     case 0 { }                       case 0 { }
-        --     case 1 { }                       case 2 { }
-        --     default { invalid() }            default { invalid() }
-        -- }                                 }
-        let aPrgm = hex "602060006000376000805160008114601d5760018114602457fe6029565b8191506029565b600191505b50600160015250"
-            bPrgm = hex "6020600060003760005160008114601c5760028114602057fe6021565b6021565b5b506001600152"
-        runSMTWith z3 $ query $ do
-          Right counterexample <- equivalenceCheck aPrgm bPrgm Nothing Nothing
-          return ()
+  --   ]
+  -- , testGroup "Equivalence checking"
+  --   [
+  --     testCase "yul optimized" $ do
+  --       -- These yul programs are not equivalent: (try --calldata $(seth --to-uint256 2) for example)
+  --       --  A:                               B:
+  --       --  {                                {
+  --       --     calldatacopy(0, 0, 32)           calldatacopy(0, 0, 32)
+  --       --     switch mload(0)                  switch mload(0)
+  --       --     case 0 { }                       case 0 { }
+  --       --     case 1 { }                       case 2 { }
+  --       --     default { invalid() }            default { invalid() }
+  --       -- }                                 }
+  --       let aPrgm = hex "602060006000376000805160008114601d5760018114602457fe6029565b8191506029565b600191505b50600160015250"
+  --           bPrgm = hex "6020600060003760005160008114601c5760028114602057fe6021565b6021565b5b506001600152"
+  --       runSMTWith z3 $ query $ do
+  --         Right counterexample <- equivalenceCheck aPrgm bPrgm Nothing Nothing
+  --         return ()
 
-    ]
+  --   ]
   ]
   where
     (===>) = assertSolidityComputation

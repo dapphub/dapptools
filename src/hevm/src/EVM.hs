@@ -170,7 +170,7 @@ data Cache = Cache
 -- | A way to specify an initial VM state
 data VMOpts = VMOpts
   { vmoptContract :: Contract
-  , vmoptCalldata :: (Buffer, (SWord 32)) -- maximum size of uint32 as per eip 1985
+  , vmoptCalldata :: (Buffer, SInteger)
   , vmoptValue :: SymWord
   , vmoptAddress :: Addr
   , vmoptCaller :: SAddr
@@ -227,7 +227,7 @@ data FrameState = FrameState
   , _stack        :: [SymWord]
   , _memory       :: Buffer
   , _memorySize   :: Int
-  , _calldata     :: (Buffer, (SWord 32))
+  , _calldata     :: (Buffer, SInteger)
   , _callvalue    :: SymWord
   , _caller       :: SAddr
   , _gas          :: Word
@@ -268,7 +268,7 @@ data ContractCode
 -- depending on what type of execution we are doing
 data Storage
   = Concrete (Map Word SymWord)
-  | Symbolic (SArray (WordN 256) (WordN 256))
+  | Symbolic (SArray Integer Integer)
   deriving (Show)
 
 -- to allow for Eq Contract (which useful for debugging vmtests)
@@ -320,7 +320,7 @@ data Env = Env
   , _chainId      :: Word
   , _storageModel :: StorageModel
   , _sha3Crack    :: Map Word ByteString
-  , _keccakUsed   :: [([SWord 8], SWord 256)]
+  , _keccakUsed   :: [([SWord 8], SInteger)]
   }
 
 
@@ -656,7 +656,7 @@ exec1 = do
         -- op: SHR
         0x1c -> stackOp2 (const g_verylow) $ uncurry shiftRight'
         -- op: SAR
-        0x1d -> stackOp2 (const g_verylow) $ \((S _ n), (S _ x)) -> sw256 $ sSignedShiftArithRight x n
+        0x1d -> stackOp2 (const g_verylow) $ \((S _ n), (S _ x)) -> sw256 $ chop $ sShiftRight (signed x) n
 
         -- op: SHA3
         -- more accurately refered to as KECCAK
@@ -732,7 +732,7 @@ exec1 = do
         -- op: CALLDATASIZE
         0x36 ->
           limitStack 1 . burn g_base $
-            next >> pushSym (sw256 . zeroExtend . snd $ (the state calldata))
+            next >> pushSym (sw256 . snd $ (the state calldata))
 
         -- op: CALLDATACOPY
         0x37 ->
@@ -743,7 +743,7 @@ exec1 = do
                   next
                   assign (state . stack) xs
                   case the state calldata of
-                    (SymbolicBuffer cd, cdlen) -> copyBytesToMemory (SymbolicBuffer [ite (i .<= cdlen) x 0 | (x, i) <- zip cd [1..]]) xSize xFrom xTo
+                    (SymbolicBuffer cd, cdlen) -> copyBytesToMemory (SymbolicBuffer [ite (num i .<= cdlen) x 0 | (x, i) <- zip cd [1..]]) xSize xFrom xTo
                     -- when calldata is concrete,
                     -- the bound should always be equal to the bytestring length
                     (cd, _) -> copyBytesToMemory cd xSize xFrom xTo
@@ -921,7 +921,7 @@ exec1 = do
             (x':(S _ y):xs) -> forceConcrete x' $ \x ->
               burn g_verylow $
                 accessMemoryRange fees x 1 $ do
-                  let yByte = bvExtract (Proxy :: Proxy 7) (Proxy :: Proxy 0) y
+                  let yByte = sFromIntegral y
                   next
                   modifying (state . memory) (setMemoryByte x yByte)
                   assign (state . stack) xs
@@ -1040,8 +1040,9 @@ exec1 = do
         0x0b ->
           stackOp2 (const g_low) $ \((forceLit -> bytes), w@(S _ x)) ->
             if bytes >= 32 then w
-            else let n = num bytes * 8 + 7 in
-              sw256 $ ite (sTestBit x n)
+            else let n = num bytes * 8 + 7
+                     bit' = (x `sDiv` (2^n)) `sMod` 2 .== 1
+                 in sw256 $ ite bit'
                       (x .|. complement (bit n - 1))
                       (x .&. (bit n - 1))
 
@@ -2595,10 +2596,10 @@ memoryCost FeeSchedule{..} byteCount =
 
 -- * Uninterpreted functions
 
-symSHA256N :: SInteger -> SInteger -> SWord 256
+symSHA256N :: SInteger -> SInteger -> SInteger
 symSHA256N = uninterpret "sha256"
 
-symkeccakN :: SInteger -> SInteger -> SWord 256
+symkeccakN :: SInteger -> SInteger -> SInteger
 symkeccakN = uninterpret "keccak"
 
 toSInt :: [SWord 8] -> SInteger
@@ -2608,15 +2609,15 @@ toSInt bs = sum $ zipWith (\a i -> sFromIntegral a * 256 ^ i) bs [0..]
 -- we cannot because [a] is not a symbolic type. We must convert the list into a suitable
 -- symbolic type first. The only important property of this conversion is that it is injective.
 -- We embedd the bytestring as a pair of symbolic integers, this is a fairly easy solution.
-symkeccak' :: [SWord 8] -> SWord 256
+symkeccak' :: [SWord 8] -> SInteger
 symkeccak' bytes = case length bytes of
-  0 -> literal $ toSizzle $ keccak ""
+  0 -> literal $ num $ keccak ""
   n -> symkeccakN (num n) (toSInt bytes)
 
 symSHA256 :: [SWord 8] -> [SWord 8]
 symSHA256 bytes = case length bytes of
   0 -> litBytes $ BS.pack $ BA.unpack $ (Crypto.hash BS.empty :: Digest SHA256)
-  n -> toBytes $ symSHA256N (num n) (toSInt bytes)
+  n -> as32Bytes $ symSHA256N (num n) (toSInt bytes)
 
 
 -- * Arithmetic

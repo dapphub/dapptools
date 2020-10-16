@@ -19,23 +19,23 @@ import Data.SBV hiding (runSMT, newArray_, addAxiom, Word)
 
 -- | Symbolic words of 256 bits, possibly annotated with additional
 --   "insightful" information
-data SymWord = S Whiff (SWord 256)
+data SymWord = S Whiff SInteger
 
 -- | Convenience functions transporting between the concrete and symbolic realm
-sw256 :: SWord 256 -> SymWord
+sw256 :: SInteger -> SymWord
 sw256 = S Dull
 
 litWord :: Word -> (SymWord)
-litWord (C whiff a) = S whiff (literal $ toSizzle a)
+litWord (C whiff a) = S whiff (literal $ num a)
 
 w256lit :: W256 -> SymWord
-w256lit = S Dull . literal . toSizzle
+w256lit = S Dull . literal . num
 
 litAddr :: Addr -> SAddr
-litAddr = SAddr . literal . toSizzle
+litAddr = SAddr . literal . num
 
 maybeLitWord :: SymWord -> Maybe Word
-maybeLitWord (S whiff a) = fmap (C whiff . fromSizzle) (unliteral a)
+maybeLitWord (S whiff a) = fmap (C whiff . num) (unliteral a)
 
 maybeLitAddr :: SAddr -> Maybe Addr
 maybeLitAddr (SAddr a) = fmap fromSizzle (unliteral a)
@@ -50,7 +50,7 @@ maybeLitBytes xs = fmap (\x -> BS.pack (fmap fromSized x)) (mapM unliteral xs)
 
 forceLit :: SymWord -> Word
 forceLit (S whiff a) = case unliteral a of
-  Just c -> C whiff (fromSizzle c)
+  Just c -> C whiff (num c)
   Nothing -> error "unexpected symbolic argument"
 
 forceLitBytes :: [SWord 8] -> ByteString
@@ -61,47 +61,48 @@ forceBuffer (ConcreteBuffer b) = b
 forceBuffer (SymbolicBuffer b) = forceLitBytes b
 
 -- | Arithmetic operations on SymWord
+chop :: SInteger -> SInteger
+chop x = x `sMod` (2^256)
+
+signed :: SInteger -> SInteger
+signed x = ite (x .< 2 ^ 255) x (x - 2^256)
 
 sdiv :: SymWord -> SymWord -> SymWord
-sdiv (S _ x) (S _ y) = let sx, sy :: SInt 256
-                           sx = sFromIntegral x
-                           sy = sFromIntegral y
-                       in sw256 $ sFromIntegral (sx `sQuot` sy)
+sdiv (S _ x) (S _ y) = sw256 $ x `sQuot` y
 
 smod :: SymWord -> SymWord -> SymWord
-smod (S _ x) (S _ y) = let sx, sy :: SInt 256
-                           sx = sFromIntegral x
-                           sy = sFromIntegral y
-                       in sw256 $ ite (y .== 0) 0 (sFromIntegral (sx `sRem` sy))
+smod (S _ x) (S _ y) = sw256 $ x `sRem` y
 
 addmod :: SymWord -> SymWord -> SymWord -> SymWord
-addmod (S _ x) (S _ y) (S _ z) = let to512 :: SWord 256 -> SWord 512
-                                     to512 = sFromIntegral
-                                 in sw256 $ sFromIntegral $ ((to512 x) + (to512 y)) `sMod` (to512 z)
+addmod (S _ x) (S _ y) (S _ z) = sw256 $ chop $ x + y `sMod` z
 
 mulmod :: SymWord -> SymWord -> SymWord -> SymWord
-mulmod (S _ x) (S _ y) (S _ z) = let to512 :: SWord 256 -> SWord 512
-                                     to512 = sFromIntegral
-                                 in sw256 $ sFromIntegral $ ((to512 x) * (to512 y)) `sMod` (to512 z)
+mulmod (S _ x) (S _ y) (S _ z) = sw256 $ chop $ x * y `sMod` z
 
 slt :: SymWord -> SymWord -> SymWord
 slt (S _ x) (S _ y) =
-  sw256 $ ite (sFromIntegral x .< (sFromIntegral y :: (SInt 256))) 1 0
+  sw256 $ ite (signed x .< signed y) 1 0
 
 sgt :: SymWord -> SymWord -> SymWord
 sgt (S _ x) (S _ y) =
-  sw256 $ ite (sFromIntegral x .> (sFromIntegral y :: (SInt 256))) 1 0
+  sw256 $ ite (signed x .> signed y) 1 0
 
 shiftRight' :: SymWord -> SymWord -> SymWord
 shiftRight' (S _ a') b@(S _ b') = case (num <$> unliteral a', b) of
   (Just n, (S (FromBytes (SymbolicBuffer a)) _)) | n `mod` 8 == 0 && n <= 256 ->
     let bs = replicate (n `div` 8) 0 <> (take ((256 - n) `div` 8) a)
-    in S (FromBytes (SymbolicBuffer bs)) (fromBytes bs)
+    in S (FromBytes (SymbolicBuffer bs)) (from32Bytes bs)
   _ -> sw256 $ sShiftRight b' a'
 
 -- | Operations over symbolic memory (list of symbolic bytes)
+as32Bytes :: SInteger -> [SWord 8]
+as32Bytes x = [ sFromIntegral $ x `sDiv` (256^i) | i <- reverse [0..32]]
+
+from32Bytes :: [SWord 8] -> SInteger
+from32Bytes x = sum $ zipWith (\a i -> sFromIntegral a * 256 ^ i) x $ reverse [0..32]
+
 swordAt :: Int -> [SWord 8] -> SymWord
-swordAt i bs = sw256 . fromBytes $ truncpad 32 $ drop i bs
+swordAt i bs = sw256 . from32Bytes $ truncpad 32 $ drop i bs
 
 readByteOrZero' :: Int -> [SWord 8] -> SWord 8
 readByteOrZero' i bs = fromMaybe 0 (bs ^? ix i)
@@ -122,14 +123,14 @@ writeMemory' bs1 (C _ n) (C _ src) (C _ dst) bs0 =
     a <> a' <> c <> b'
 
 readMemoryWord' :: Word -> [SWord 8] -> SymWord
-readMemoryWord' (C _ i) m = sw256 $ fromBytes $ truncpad 32 (drop (num i) m)
+readMemoryWord' (C _ i) m = sw256 $ from32Bytes $ truncpad 32 (drop (num i) m)
 
 readMemoryWord32' :: Word -> [SWord 8] -> SWord 32
 readMemoryWord32' (C _ i) m = fromBytes $ truncpad 4 (drop (num i) m)
 
 setMemoryWord' :: Word -> SymWord -> [SWord 8] -> [SWord 8]
 setMemoryWord' (C _ i) (S _ x) =
-  writeMemory' (toBytes x) 32 0 (num i)
+  writeMemory' (as32Bytes x) 32 0 (num i)
 
 setMemoryByte' :: Word -> SWord 8 -> [SWord 8] -> [SWord 8]
 setMemoryByte' (C _ i) x =
@@ -150,17 +151,17 @@ select' xs err ind = walk xs ind err
 -- Generates a ridiculously large set of constraints (roughly 25k) when
 -- the index is symbolic, but it still seems (kind of) manageable
 -- for the solvers.
-readSWordWithBound :: SWord 32 -> Buffer -> SWord 32 -> SymWord
-readSWordWithBound ind (SymbolicBuffer xs) bound = case (num <$> fromSized <$> unliteral ind, num <$> fromSized <$> unliteral bound) of
+readSWordWithBound :: SInteger -> Buffer -> SInteger -> SymWord
+readSWordWithBound ind (SymbolicBuffer xs) bound = case (num <$> unliteral ind, num <$> unliteral bound) of
   (Just i, Just b) ->
     let bs = truncpad 32 $ drop i (take b xs)
-    in S (FromBytes (SymbolicBuffer bs)) (fromBytes bs)
+    in S (FromBytes (SymbolicBuffer bs)) (from32Bytes bs)
   _ -> 
-    let boundedList = [ite (i .<= bound) x 0 | (x, i) <- zip xs [1..]]
-    in sw256 . fromBytes $ [select' boundedList 0 (ind + j) | j <- [0..31]]
+    let boundedList = [ite (num i .<= bound) x 0 | (x, i) <- zip xs [1..]]
+    in sw256 $ from32Bytes [select' boundedList 0 (ind + num j) | j <- [0..31]]
 
 readSWordWithBound ind (ConcreteBuffer xs) bound =
-  case fromSized <$> unliteral ind of
+  case unliteral ind of
     Nothing -> readSWordWithBound ind (SymbolicBuffer (litBytes xs)) bound
     Just x' ->                                       
        -- INVARIANT: bound should always be length xs for concrete bytes
@@ -239,8 +240,8 @@ instance EqSymbolic SymWord where
   (.==) (S _ x) (S _ y) = x .== y
 
 instance Num SymWord where
-  (S _ x) + (S _ y) = sw256 (x + y)
-  (S _ x) * (S _ y) = sw256 (x * y)
+  (S _ x) + (S _ y) = sw256 $ chop $ (x + y)
+  (S _ x) * (S _ y) = sw256 $ chop $ (x * y)
   abs (S _ x) = sw256 (abs x)
   signum (S _ x) = sw256 (signum x)
   fromInteger x = sw256 (fromInteger x)
@@ -272,15 +273,13 @@ instance Mergeable SymWord where
                         in sw256 $ select ys x b
 
 instance Bounded SymWord where
-  minBound = sw256 minBound
-  maxBound = sw256 maxBound
+  minBound = sw256 0
+  maxBound = sw256 $ 2 ^ 256 - 1
 
+-- Eq instance just so we can make a Bits instance
 instance Eq SymWord where
-  (S _ x) == (S _ y) = x == y
+  (S _ x) == (S _ y) = error "don't compare symwords!"
 
-instance Enum SymWord where
-  toEnum i = sw256 (toEnum i)
-  fromEnum (S _ x) = fromEnum x
 
 instance OrdSymbolic SymWord where
   (.<) (S _ x) (S _ y) = (.<) x y

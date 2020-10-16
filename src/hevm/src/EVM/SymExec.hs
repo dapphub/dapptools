@@ -42,7 +42,7 @@ sbytes1024 = liftA2 (++) sbytes512 sbytes512
 -- We don't assume input types are restricted to their proper range here;
 -- such assumptions should instead be given as preconditions.
 -- This could catch some interesting calldata mismanagement errors.
-symAbiArg :: AbiType -> Query ([SWord 8], SWord 32)
+symAbiArg :: AbiType -> Query ([SWord 8], SInteger)
 symAbiArg (AbiUIntType n) | n `mod` 8 == 0 && n <= 256 = do x <- sbytes32
                                                             return (x, 32)
                           | otherwise = error "bad type"
@@ -78,7 +78,7 @@ symAbiArg n =
 -- with concrete arguments.
 -- Any argument given as "<symbolic>" or omitted at the tail of the list are
 -- kept symbolic.
-symCalldata :: Text -> [AbiType] -> [String] -> Query ([SWord 8], SWord 32)
+symCalldata :: Text -> [AbiType] -> [String] -> Query ([SWord 8], SInteger)
 symCalldata sig typesignature concreteArgs =
   let args = concreteArgs <> replicate (length typesignature - length concreteArgs)  "<symbolic>"
       mkArg typ "<symbolic>" = symAbiArg typ
@@ -105,7 +105,7 @@ abstractVM typesignature concreteArgs x storagemodel = do
   value' <- sw256 <$> freshVar_
   return $ loadSymVM (RuntimeCode x) symstore storagemodel c value' (SymbolicBuffer cd', cdlen) & over pathConditions ((<>) [cdconstraint])
 
-loadSymVM :: ContractCode -> Storage -> StorageModel -> SAddr -> SymWord -> (Buffer, SWord 32) -> VM
+loadSymVM :: ContractCode -> Storage -> StorageModel -> SAddr -> SymWord -> (Buffer, SInteger) -> VM
 loadSymVM x initStore model addr callvalue' calldata' =
     (makeVm $ VMOpts
     { vmoptContract = contractWithStore x initStore
@@ -132,8 +132,8 @@ loadSymVM x initStore model addr callvalue' calldata' =
 
 
 -- | Interpreter which explores all paths at
--- | branching points.
--- | returns a list of possible final evm states
+-- branching points.
+-- returns a list of possible final evm states
 interpret :: Fetch.Fetcher -> Maybe Integer -> StateT VM Query [VM]
 interpret fetcher maxIter =
   exec >>= \case

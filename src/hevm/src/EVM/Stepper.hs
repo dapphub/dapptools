@@ -26,23 +26,17 @@ where
 
 import Prelude hiding (fail)
 
-import Control.Monad.Operational (Program(..), singleton, view, ProgramViewT(..), ProgramView)
+import Control.Monad.Operational (Program, singleton, view, ProgramViewT(..), ProgramView)
 import Control.Monad.State.Strict (runState, liftIO, StateT)
 import qualified Control.Monad.State.Class as State
 import qualified EVM.Exec
-import Control.Lens (use)
-import Data.Binary.Get (runGetOrFail)
 import Data.Text (Text)
 import EVM.Types (Buffer)
 
 import EVM (EVM, VM, VMResult (VMFailure, VMSuccess), Error (Query, Choose), Query, Choose)
 import qualified EVM
 
-import EVM.ABI (AbiType, AbiValue, getAbi)
 import qualified EVM.Fetch as Fetch
-
-import Data.ByteString (ByteString)
-import qualified Data.ByteString.Lazy as LazyByteString
 
 -- | The instruction type of the operational monad
 data Action a where

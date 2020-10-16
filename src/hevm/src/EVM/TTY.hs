@@ -917,7 +917,7 @@ drawStackPane ui =
                <+> str (show x)
            , dim (txt ("   " <> case unliteral w of
                        Nothing -> ""
-                       Just u -> showWordExplanation (fromSizzle u) $ dapp (view uiTestOpts ui)))
+                       Just u -> showWordExplanation (num u) $ dapp (view uiTestOpts ui)))
            ])
       False
       (view uiStackList ui)
