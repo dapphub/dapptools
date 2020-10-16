@@ -9,6 +9,7 @@ import Prelude hiding (Word)
 
 import Control.Lens hiding (pre)
 import EVM hiding (Query, push)
+import qualified EVM
 import EVM.Exec
 import qualified EVM.Fetch as Fetch
 import EVM.ABI
@@ -18,7 +19,7 @@ import qualified Control.Monad.Operational as Operational
 import EVM.Types hiding (Word)
 import EVM.Concrete (Whiff(..))
 import EVM.Symbolic (SymWord(..), sw256)
-import EVM.Concrete (createAddress, Word)
+import EVM.Concrete (createAddress)
 import qualified EVM.FeeSchedule as FeeSchedule
 import Data.SBV.Trans.Control
 import Data.SBV.Trans hiding (distinct, Word)
@@ -27,16 +28,15 @@ import Data.Vector (toList, fromList)
 import Data.Tree
 
 import Control.Monad.IO.Class
-import qualified Control.Monad.State.Class as State
 import Data.ByteString (ByteString, pack)
 import qualified Data.ByteString.Lazy as Lazy
 import qualified Data.ByteString as BS
 import Data.Text (Text, splitOn, unpack)
-import Control.Monad.State.Strict (runStateT, runState, StateT, get, put, zipWithM)
+import Control.Monad.State.Strict (runStateT, StateT, get, put, zipWithM)
 import Control.Applicative
 
 -- | Convenience functions for generating large symbolic byte strings
-sbytes32, sbytes256, sbytes512, sbytes1024 :: Query ([SWord 8])
+sbytes32, sbytes128, sbytes256, sbytes512, sbytes1024 :: Query ([SWord 8])
 sbytes32 = toBytes <$> freshVar_ @ (WordN 256)
 sbytes128 = toBytes <$> freshVar_ @ (WordN 1024)
 sbytes256 = liftA2 (++) sbytes128 sbytes128
@@ -145,60 +145,36 @@ data BranchInfo = BranchInfo
 -- | Interpreter which explores all paths at
 -- | branching points.
 -- | returns a list of possible final evm states
-interpret
-  :: Fetch.Fetcher
-  -> Maybe Integer --max iterations
-  -> Stepper VM
-  -> StateT VM Query (Tree BranchInfo) -- a - Stepper return value
+interpret :: Fetch.Fetcher -> Maybe Integer -> StateT VM Query (Tree BranchInfo)
 interpret fetcher maxIter =
-  eval . Operational.view
-
-  where
-    eval
-      :: Operational.ProgramView Stepper.Action VM
-      -> StateT VM Query (Tree BranchInfo)
-
-    eval (Operational.Return x) =
-      pure $ Node BranchInfo {_vm = x, _branchCondition = Nothing } []
-
-    eval (action Operational.:>>= k) =
-      case action of
-        Stepper.Exec ->
-          exec >>= interpret fetcher maxIter . k
-        Stepper.Run ->
-          run >>= interpret fetcher maxIter . k
-        Stepper.Ask (EVM.PleaseChoosePath whiff continue) -> do
-          vm <- get
-          case maxIterationsReached vm maxIter of
-            Nothing -> do push 1
-                          a <- interpret fetcher maxIter (Stepper.evm (continue True) >>= k)
-                          put vm
-                          pop 1
-                          push 1
-                          b <- interpret fetcher maxIter (Stepper.evm (continue False) >>= k)
-                          pop 1
-                          return $ Node (BranchInfo { _vm = vm, _branchCondition = Just whiff}) [a, b]
-            Just n -> interpret fetcher maxIter (Stepper.evm (continue (not n)) >>= k)
-        Stepper.Wait q -> do
-          let performQuery =
-                do m <- liftIO (fetcher q)
-                   interpret fetcher maxIter (Stepper.evm m >>= k)
-
-          case q of
-            PleaseAskSMT _ _ continue -> do
-              codelocation <- getCodeLocation <$> get
-              iters <- use (iterations . at codelocation)
-              case iters of
-                -- if this is the first time we are branching at this point,
-                -- explore both branches without consulting SMT.
-                -- Exploring too many branches is a lot cheaper than
-                -- consulting our SMT solver.
-                Nothing -> interpret fetcher maxIter (Stepper.evm (continue EVM.Unknown) >>= k)
-                _ -> performQuery
-            _ -> performQuery
-
-        Stepper.EVM m ->
-          State.state (runState m) >>= interpret fetcher maxIter . k
+  exec >>= \case
+   VMFailure (EVM.Query q) ->
+     let performQuery = liftIO (fetcher q) >> interpret fetcher maxIter
+     in case q of
+       PleaseAskSMT _ _ continue -> do
+         codelocation <- getCodeLocation <$> get
+         use (iterations . at codelocation) >>= \case
+           -- if this is the first time we are branching at this point,
+           -- explore both branches without consulting SMT.
+           -- Exploring too many branches is a lot cheaper than
+           -- consulting our SMT solver.
+           Nothing -> pure (continue EVM.Unknown) >> interpret fetcher maxIter
+           _ -> performQuery
+       _ -> performQuery
+   VMFailure (Choose (EVM.PleaseChoosePath whiff continue)) -> do
+     vm <- get
+     case maxIterationsReached vm maxIter of
+       Nothing -> do push 1
+                     a <- pure (continue True) >> interpret fetcher maxIter
+                     pop 1
+                     put vm
+                     push 1
+                     b <- pure (continue False) >> interpret fetcher maxIter
+                     pop 1
+                     return $ Node (BranchInfo { _vm = vm, _branchCondition = Just whiff}) [a, b]
+       Just n -> pure (continue (not n)) >> interpret fetcher maxIter
+   _ -> do vm <- get
+           return $ Node BranchInfo {_vm = vm, _branchCondition = Nothing } []
 
 maxIterationsReached :: VM -> Maybe Integer -> Maybe Bool
 maxIterationsReached _ Nothing = Nothing
@@ -245,7 +221,7 @@ verify :: VM -> Maybe Integer -> Maybe (Fetch.BlockNumber, Text) -> Maybe Postco
 verify preState maxIter rpcinfo maybepost = do
   let model = view (env . storageModel) preState
   smtState <- queryState
-  tree <- fst <$> runStateT (interpret (Fetch.oracle (Just smtState) rpcinfo model False) maxIter Stepper.runFully) preState
+  tree <- fst <$> runStateT (interpret (Fetch.oracle (Just smtState) rpcinfo model False) maxIter) preState
   case maybepost of
     (Just post) -> do
       let livePaths = leaves tree
@@ -281,10 +257,10 @@ equivalenceCheck bytecodeA bytecodeB maxiter signature' = do
 
   smtState <- queryState
   push 1
-  aVMs <- fst <$> runStateT (interpret (Fetch.oracle (Just smtState) Nothing SymbolicS False) maxiter Stepper.runFully) preStateA
+  aVMs <- fst <$> runStateT (interpret (Fetch.oracle (Just smtState) Nothing SymbolicS False) maxiter) preStateA
   pop 1
   push 1
-  bVMs <- fst <$> runStateT (interpret (Fetch.oracle (Just smtState) Nothing SymbolicS False) maxiter Stepper.runFully) preStateB
+  bVMs <- fst <$> runStateT (interpret (Fetch.oracle (Just smtState) Nothing SymbolicS False) maxiter) preStateB
   pop 1
   -- Check each pair of endstates for equality:
   let differingEndStates = uncurry distinct <$> [(a,b) | a <- leaves aVMs, b <- leaves bVMs]
