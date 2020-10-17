@@ -1043,7 +1043,7 @@ exec1 = do
             else let n = num bytes * 8 + 7
                      bit' = (x `sDiv` (2^n)) `sMod` 2 .== 1
                  in sw256 $ ite bit'
-                      (x .|. complement (bit n - 1))
+                      (x .|. (2^256 - 1 - (bit n - 1)))
                       (x .&. (bit n - 1))
 
         -- op: CREATE

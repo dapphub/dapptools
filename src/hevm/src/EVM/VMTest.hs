@@ -27,7 +27,6 @@ import Control.Arrow ((***), (&&&))
 import Control.Lens
 import Control.Monad
 
-import Data.ByteString (ByteString)
 import Data.Aeson ((.:), FromJSON (..))
 import Data.Foldable (fold)
 import Data.Map (Map)

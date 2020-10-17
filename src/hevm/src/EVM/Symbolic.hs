@@ -71,13 +71,14 @@ sdiv :: SymWord -> SymWord -> SymWord
 sdiv (S _ x) (S _ y) = sw256 $ x `sQuot` y
 
 smod :: SymWord -> SymWord -> SymWord
-smod (S _ x) (S _ y) = sw256 $ x `sRem` y
+smod (S _ x) (S _ y) = sw256 $ ite (y .== 0) 0 ((signed x) `sRem` (signed y))
 
 addmod :: SymWord -> SymWord -> SymWord -> SymWord
-addmod (S _ x) (S _ y) (S _ z) = sw256 $ chop $ x + y `sMod` z
+addmod (S _ x) (S _ y) (S _ z) = sw256 $ chop $ ite (z .== 0) 0 ((x + y) `sMod` z)
 
 mulmod :: SymWord -> SymWord -> SymWord -> SymWord
-mulmod (S _ x) (S _ y) (S _ z) = sw256 $ chop $ x * y `sMod` z
+mulmod (S _ x) (S _ y) (S _ z) =
+  sw256 $ chop $ ite (z .== 0) 0 ((x * y) `sMod` z)
 
 slt :: SymWord -> SymWord -> SymWord
 slt (S _ x) (S _ y) =
@@ -166,7 +167,9 @@ readSWordWithBound ind (ConcreteBuffer xs) bound =
     Just x' ->                                       
        -- INVARIANT: bound should always be length xs for concrete bytes
        -- so we should be able to safely ignore it here
-         litWord $ Concrete.readMemoryWord (num x') xs
+         if x' > num (BS.length xs)
+         then 0
+         else litWord $ Concrete.readMemoryWord (num x') xs
 
 -- a whole foldable instance seems overkill, but length is always good to have!
 len :: Buffer -> Int
@@ -251,7 +254,7 @@ instance Bits SymWord where
   (S _ x) .&. (S _ y) = sw256 (x .&. y)
   (S _ x) .|. (S _ y) = sw256 (x .|. y)
   (S _ x) `xor` (S _ y) = sw256 (x `xor` y)
-  complement (S _ x) = sw256 (complement x)
+  complement (S _ x) = sw256 (2^256 - 1 -  x)
   shift (S _ x) i = sw256 (shift x i)
   rotate (S _ x) i = sw256 (rotate x i)
   bitSize (S _ x) = bitSize x
