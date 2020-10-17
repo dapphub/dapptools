@@ -68,7 +68,7 @@ test_hevm_symbolic() {
     rm -rf A.bin-runtime B.bin-runtime
 }
 
-test_hevm_symbolic
+#test_hevm_symbolic
 
 # SETH CALLDATA TESTS
 test_calldata_1() {
