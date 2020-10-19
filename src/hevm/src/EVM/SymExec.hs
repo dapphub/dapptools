@@ -32,7 +32,7 @@ import Data.ByteString (ByteString, pack)
 import qualified Data.ByteString.Lazy as Lazy
 import qualified Data.ByteString as BS
 import Data.Text (Text, splitOn, unpack)
-import Control.Monad.State.Strict (runStateT, StateT, get, put, zipWithM)
+import Control.Monad.State.Strict (runStateT, execState, StateT, get, put, zipWithM, mapStateT)
 import Control.Applicative
 
 -- | Convenience functions for generating large symbolic byte strings
@@ -149,7 +149,8 @@ interpret :: Fetch.Fetcher -> Maybe Integer -> StateT VM Query (Tree BranchInfo)
 interpret fetcher maxIter =
   exec >>= \case
    VMFailure (EVM.Query q) ->
-     let performQuery = liftIO (fetcher q) >> interpret fetcher maxIter
+     let performQuery = do liftIO (fetcher q) >>= embed
+                           interpret fetcher maxIter
      in case q of
        PleaseAskSMT _ _ continue -> do
          codelocation <- getCodeLocation <$> get
@@ -158,23 +159,25 @@ interpret fetcher maxIter =
            -- explore both branches without consulting SMT.
            -- Exploring too many branches is a lot cheaper than
            -- consulting our SMT solver.
-           Nothing -> pure (continue EVM.Unknown) >> interpret fetcher maxIter
+           Nothing -> embed (continue EVM.Unknown) >> interpret fetcher maxIter
            _ -> performQuery
        _ -> performQuery
    VMFailure (Choose (EVM.PleaseChoosePath whiff continue)) -> do
      vm <- get
      case maxIterationsReached vm maxIter of
        Nothing -> do push 1
-                     a <- pure (continue True) >> interpret fetcher maxIter
+                     a <- embed (continue True) >> interpret fetcher maxIter
                      pop 1
                      put vm
                      push 1
-                     b <- pure (continue False) >> interpret fetcher maxIter
+                     b <- embed (continue False) >> interpret fetcher maxIter
                      pop 1
                      return $ Node (BranchInfo { _vm = vm, _branchCondition = Just whiff}) [a, b]
-       Just n -> pure (continue (not n)) >> interpret fetcher maxIter
+       Just n -> embed (continue (not n)) >> interpret fetcher maxIter
    _ -> do vm <- get
            return $ Node BranchInfo {_vm = vm, _branchCondition = Nothing } []
+  where embed :: EVM a -> StateT VM Query a
+        embed = mapStateT (pure . runIdentity)
 
 maxIterationsReached :: VM -> Maybe Integer -> Maybe Bool
 maxIterationsReached _ Nothing = Nothing
