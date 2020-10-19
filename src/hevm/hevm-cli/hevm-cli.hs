@@ -15,8 +15,8 @@ module Main where
 
 import EVM (StorageModel(..))
 import qualified EVM
-import EVM.Concrete (createAddress, w256, wordValue)
-import EVM.Symbolic (forceLitBytes, litAddr, w256lit, sw256, SymWord(..), len, forceLit, litWord)
+import EVM.Concrete (createAddress, wordValue)
+import EVM.Symbolic (forceLitBytes, litAddr, w256lit, sw256, len, forceLit)
 import qualified EVM.FeeSchedule as FeeSchedule
 import qualified EVM.Fetch
 import qualified EVM.Flatten
@@ -60,9 +60,9 @@ import Data.Maybe                 (fromMaybe, fromJust)
 import Data.Version               (showVersion)
 import Data.SBV hiding (Word, solver, verbose, name)
 import Data.SBV.Control hiding (Version, timeout, create)
-import System.IO                  (hFlush, hPrint, stdout, stderr)
+import System.IO                  (hFlush, stdout, stderr)
 import System.Directory           (withCurrentDirectory, listDirectory)
-import System.Exit                (die, exitFailure, exitWith, ExitCode(..))
+import System.Exit                (exitFailure, exitWith, ExitCode(..))
 import System.Environment         (setEnv)
 import System.Process             (callProcess)
 import qualified Data.Aeson        as JSON
@@ -563,7 +563,7 @@ dappCoverage opts _ solcFile =
       Just (contractMap, sourceCache) -> do
         let matcher = regexMatches (EVM.UnitTest.match opts)
         let unitTests = (findUnitTests matcher) (Map.elems contractMap)
-        covs <- mconcat <$> mapM (coverageForUnitTestContract opts contractMap sourceCache) unitTests
+        covs <- mconcat <$> mapM (coverageForUnitTestContract opts contractMap) unitTests
 
         let
           dapp = dappInfo "." contractMap sourceCache

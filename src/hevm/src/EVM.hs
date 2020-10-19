@@ -652,7 +652,7 @@ exec1 = do
           (n, x) | otherwise          -> 0xff .&. shiftR x (8 * (31 - num (forceLit n)))
 
         -- op: SHL
-        0x1b -> stackOp2 (const g_verylow) $ \((S _ n), (S _ x)) -> sw256 $ sShiftLeft x n
+        0x1b -> stackOp2 (const g_verylow) $ \((S _ n), (S _ x)) -> sw256 $ chop $ sShiftLeft x n
         -- op: SHR
         0x1c -> stackOp2 (const g_verylow) $ uncurry shiftRight'
         -- op: SAR

@@ -313,11 +313,10 @@ coverageReport dapp cov =
 coverageForUnitTestContract
   :: UnitTestOptions
   -> Map Text SolcContract
-  -> SourceCache
   -> (Text, [(Text, [AbiType])])
   -> IO (MultiSet SrcMap)
 coverageForUnitTestContract
-  opts@(UnitTestOptions {..}) contractMap sources (name, testNames) = do
+  opts@(UnitTestOptions {..}) contractMap (name, testNames) = do
 
   -- Look for the wanted contract by name from the Solidity info
   case preview (ix name) contractMap of
