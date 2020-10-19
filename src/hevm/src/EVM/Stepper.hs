@@ -6,7 +6,6 @@ module EVM.Stepper
   , Stepper
   , exec
   , execFully
-  , runFully
   , wait
   , ask
   , evm
@@ -44,9 +43,6 @@ data Action a where
   -- | Keep executing until an intermediate result is reached
   Exec ::           Action VMResult
 
-  -- | Keep executing until an intermediate state is reached
-  Run ::             Action VM
-
   -- | Wait for a query to be resolved
   Wait :: Query   -> Action ()
 
@@ -63,9 +59,6 @@ type Stepper a = Program Action a
 
 exec :: Stepper VMResult
 exec = singleton Exec
-
-run :: Stepper VM
-run = singleton Run
 
 wait :: Query -> Stepper ()
 wait = singleton . Wait
@@ -88,19 +81,6 @@ execFully =
       pure (Left x)
     VMSuccess x ->
       pure (Right x)
-
--- | Run the VM until its final state
-runFully :: Stepper EVM.VM
-runFully = do
-  vm <- run
-  case EVM._result vm of
-    Nothing -> error "should not occur"
-    Just (VMFailure (Query q)) ->
-      wait q >> runFully
-    Just (VMFailure (Choose q)) ->
-      ask q >> runFully
-    Just _ ->
-      pure vm
 
 entering :: Text -> Stepper a -> Stepper a
 entering t stepper = do
@@ -128,8 +108,6 @@ interpret fetcher =
       case action of
         Exec ->
           EVM.Exec.exec >>= interpret fetcher . k
-        Run ->
-          EVM.Exec.run >>= interpret fetcher . k
         Wait q ->
           do m <- liftIO (fetcher q)
              State.state (runState m) >> interpret fetcher (k ())

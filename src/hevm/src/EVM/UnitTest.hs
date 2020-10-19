@@ -218,11 +218,7 @@ currentOpLocation vm =
         (fromMaybe (error "internal error: op ix") (vmOpIx vm))
 
 execWithCoverage :: StateT CoverageState IO VMResult
-execWithCoverage = do _ <- runWithCoverage
-                      fromJust <$> use (_1 . result)
-
-runWithCoverage :: StateT CoverageState IO VM
-runWithCoverage = do
+execWithCoverage = do
   -- This is just like `exec` except for every instruction evaluated,
   -- we also increment a counter indexed by the current code location.
   vm0 <- use _1
@@ -230,8 +226,8 @@ runWithCoverage = do
     Nothing -> do
       vm1 <- zoom _1 (State.state (runState exec1) >> get)
       zoom _2 (modify (MultiSet.insert (currentOpLocation vm1)))
-      runWithCoverage
-    Just _ -> pure vm0
+      execWithCoverage
+    Just r -> pure r
 
 
 interpretWithCoverage
@@ -253,8 +249,6 @@ interpretWithCoverage opts =
       case action of
         Stepper.Exec ->
           execWithCoverage >>= interpretWithCoverage opts . k
-        Stepper.Run ->
-          runWithCoverage >>= interpretWithCoverage opts . k
         Stepper.Wait q ->
           do m <- liftIO (oracle opts q)
              zoom _1 (State.state (runState m)) >> interpretWithCoverage opts (k ())
