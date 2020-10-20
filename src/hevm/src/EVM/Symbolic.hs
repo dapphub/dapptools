@@ -97,10 +97,10 @@ shiftRight' (S _ a') b@(S _ b') = case (num <$> unliteral a', b) of
 
 -- | Operations over symbolic memory (list of symbolic bytes)
 as32Bytes :: SInteger -> [SWord 8]
-as32Bytes x = [ sFromIntegral $ x `sDiv` (256^i) | i <- reverse [0..32]]
+as32Bytes x = [ sFromIntegral $ x `sDiv` (256^i) | i <- reverse [0..31]]
 
 from32Bytes :: [SWord 8] -> SInteger
-from32Bytes x = sum $ zipWith (\a i -> sFromIntegral a * 256 ^ i) x $ reverse [0..32]
+from32Bytes x = sum $ zipWith (\a i -> sFromIntegral a * 256 ^ i) x $ reverse [0..31]
 
 swordAt :: Int -> [SWord 8] -> SymWord
 swordAt i bs = sw256 . from32Bytes $ truncpad 32 $ drop i bs
