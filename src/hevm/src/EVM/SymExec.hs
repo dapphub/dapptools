@@ -1,6 +1,7 @@
 {-# Language DataKinds #-}
 {-# Language OverloadedStrings #-}
 {-# Language TypeApplications #-}
+{-# Language TemplateHaskell #-}
 
 module EVM.SymExec where
 
@@ -10,12 +11,13 @@ import Prelude hiding (Word)
 import Control.Lens hiding (pre)
 import EVM hiding (Query, push)
 import qualified EVM
-import EVM.Exec
+import EVM.Exec hiding (exec)
 import qualified EVM.Fetch as Fetch
 import EVM.ABI
 import EVM.Stepper (Stepper)
 import qualified EVM.Stepper as Stepper
 import qualified Control.Monad.Operational as Operational
+import Control.Monad.State.Strict hiding (state)
 import EVM.Types hiding (Word)
 import EVM.Concrete (Whiff(..))
 import EVM.Symbolic (SymWord(..), sw256)
@@ -32,8 +34,10 @@ import Data.ByteString (ByteString, pack)
 import qualified Data.ByteString.Lazy as Lazy
 import qualified Data.ByteString as BS
 import Data.Text (Text, splitOn, unpack)
-import Control.Monad.State.Strict (runStateT, execState, StateT, get, put, zipWithM, mapStateT)
+import Control.Monad.State.Strict (runState, runStateT, execState, StateT(..), get, put, zipWithM, mapStateT)
+import qualified Control.Monad.State.Class as State
 import Control.Applicative
+import Control.Monad.State.Class (MonadState)
 
 -- | Convenience functions for generating large symbolic byte strings
 sbytes32, sbytes128, sbytes256, sbytes512, sbytes1024 :: Query ([SWord 8])
@@ -142,42 +146,66 @@ data BranchInfo = BranchInfo
     _branchCondition    :: Maybe Whiff
   }
 
+data WrapVM = WrapVM
+  { _wrapvm :: VM
+  , _old :: VM
+  }
+
+makeLenses ''WrapVM
+
+-- Nothing -> State.state (runState exec1) >> exec
+-- exec1 :: EVM ()
+exec :: MonadState WrapVM m => m VMResult
+exec = use (wrapvm.EVM.result) >>= \case
+    Nothing -> let
+      fwrapvm vm2 (a, vm) = (a, WrapVM vm vm2)
+      stateRunner (WrapVM vm vm2) = (fwrapvm vm2) $ runState exec1 vm
+      in State.state stateRunner >> exec
+    Just x  -> return x
+
+
 -- | Interpreter which explores all paths at
 -- | branching points.
 -- | returns a list of possible final evm states
-interpret :: Fetch.Fetcher -> Maybe Integer -> StateT VM Query (Tree BranchInfo)
+interpret :: Fetch.Fetcher -> Maybe Integer -> StateT WrapVM Query (Tree BranchInfo)
 interpret fetcher maxIter =
   exec >>= \case
    VMFailure (EVM.Query q) ->
-     let performQuery = do liftIO (fetcher q) >>= embed
+     let performQuery = do wvm <- get
+                           liftIO (fetcher q) >>= embed wvm
                            interpret fetcher maxIter
      in case q of
        PleaseAskSMT _ _ continue -> do
-         codelocation <- getCodeLocation <$> get
-         use (iterations . at codelocation) >>= \case
+         wvm <- get
+         codelocation <- getCodeLocation <$> use wrapvm
+         use (wrapvm . iterations . at codelocation) >>= \case
            -- if this is the first time we are branching at this point,
            -- explore both branches without consulting SMT.
            -- Exploring too many branches is a lot cheaper than
            -- consulting our SMT solver.
-           Nothing -> embed (continue EVM.Unknown) >> interpret fetcher maxIter
+           Nothing -> embed wvm (continue EVM.Unknown) >> interpret fetcher maxIter
            _ -> performQuery
        _ -> performQuery
    VMFailure (Choose (EVM.PleaseChoosePath whiff continue)) -> do
-     vm <- get
+     vm <- use wrapvm
+     wvm <- get
      case maxIterationsReached vm maxIter of
        Nothing -> do push 1
-                     a <- embed (continue True) >> interpret fetcher maxIter
+                     a <- embed wvm (continue True) >> interpret fetcher maxIter
                      pop 1
-                     put vm
+                     put wvm
                      push 1
-                     b <- embed (continue False) >> interpret fetcher maxIter
+                     b <- embed wvm (continue False) >> interpret fetcher maxIter
                      pop 1
                      return $ Node (BranchInfo { _vm = vm, _branchCondition = Just whiff}) [a, b]
-       Just n -> embed (continue (not n)) >> interpret fetcher maxIter
-   _ -> do vm <- get
+       Just n -> embed wvm (continue (not n)) >> interpret fetcher maxIter
+   _ -> do vm <- use wrapvm
            return $ Node BranchInfo {_vm = vm, _branchCondition = Nothing } []
-  where embed :: EVM a -> StateT VM Query a
-        embed = mapStateT (pure . runIdentity)
+  where embed :: WrapVM -> StateT VM Identity () -> StateT WrapVM Query ()
+        embed (WrapVM _ oldvm) (StateT runStateT) = StateT runWrapStateT
+          where runWrapStateT :: WrapVM -> QueryT IO ((), WrapVM)
+                runWrapStateT (WrapVM vm _) = pure (x, WrapVM vm' oldvm)
+                  where (x, vm') = runIdentity $ runStateT vm
 
 maxIterationsReached :: VM -> Maybe Integer -> Maybe Bool
 maxIterationsReached _ Nothing = Nothing
@@ -224,7 +252,7 @@ verify :: VM -> Maybe Integer -> Maybe (Fetch.BlockNumber, Text) -> Maybe Postco
 verify preState maxIter rpcinfo maybepost = do
   let model = view (env . storageModel) preState
   smtState <- queryState
-  tree <- fst <$> runStateT (interpret (Fetch.oracle (Just smtState) rpcinfo model False) maxIter) preState
+  tree <- fst <$> runStateT (interpret (Fetch.oracle (Just smtState) rpcinfo model False) maxIter) (WrapVM preState preState)
   case maybepost of
     (Just post) -> do
       let livePaths = leaves tree
@@ -260,10 +288,10 @@ equivalenceCheck bytecodeA bytecodeB maxiter signature' = do
 
   smtState <- queryState
   push 1
-  aVMs <- fst <$> runStateT (interpret (Fetch.oracle (Just smtState) Nothing SymbolicS False) maxiter) preStateA
+  aVMs <- fst <$> runStateT (interpret (Fetch.oracle (Just smtState) Nothing SymbolicS False) maxiter) (WrapVM preStateA preStateA)
   pop 1
   push 1
-  bVMs <- fst <$> runStateT (interpret (Fetch.oracle (Just smtState) Nothing SymbolicS False) maxiter) preStateB
+  bVMs <- fst <$> runStateT (interpret (Fetch.oracle (Just smtState) Nothing SymbolicS False) maxiter) (WrapVM preStateB preStateB)
   pop 1
   -- Check each pair of endstates for equality:
   let differingEndStates = uncurry distinct <$> [(a,b) | a <- leaves aVMs, b <- leaves bVMs]
