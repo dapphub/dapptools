@@ -38,6 +38,7 @@ import Control.Monad.State.Strict (runState, runStateT, execState, StateT(..), g
 import qualified Control.Monad.State.Class as State
 import Control.Applicative
 import Control.Monad.State.Class (MonadState)
+import GHC.Base (IO(..))
 
 -- | Convenience functions for generating large symbolic byte strings
 sbytes32, sbytes128, sbytes256, sbytes512, sbytes1024 :: Query ([SWord 8])
@@ -153,59 +154,34 @@ data WrapVM = WrapVM
 
 makeLenses ''WrapVM
 
--- Nothing -> State.state (runState exec1) >> exec
--- exec1 :: EVM ()
-exec :: MonadState WrapVM m => m VMResult
-exec = use (wrapvm.EVM.result) >>= \case
-    Nothing -> let
-      fwrapvm vm2 (a, vm) = (a, WrapVM vm vm2)
-      stateRunner (WrapVM vm vm2) = (fwrapvm vm2) $ runState exec1 vm
-      in State.state stateRunner >> exec
-    Just x  -> return x
+interpret :: Fetch.Fetcher -> Maybe Integer -> WrapVM -> IO (Tree BranchInfo)
+interpret fetcher maxIter (WrapVM vm startvm) = let
+  eval _state = snd $ runState _state vm
+  cont _state = interpret fetcher maxIter (WrapVM (eval _state) startvm)
+  in case view EVM.result vm of
 
+    Nothing -> cont exec1
 
--- | Interpreter which explores all paths at
--- | branching points.
--- | returns a list of possible final evm states
-interpret :: Fetch.Fetcher -> Maybe Integer -> StateT WrapVM Query (Tree BranchInfo)
-interpret fetcher maxIter =
-  exec >>= \case
-   VMFailure (EVM.Query q) ->
-     let performQuery = do wvm <- get
-                           liftIO (fetcher q) >>= embed wvm
-                           interpret fetcher maxIter
-     in case q of
-       PleaseAskSMT _ _ continue -> do
-         wvm <- get
-         codelocation <- getCodeLocation <$> use wrapvm
-         use (wrapvm . iterations . at codelocation) >>= \case
-           -- if this is the first time we are branching at this point,
-           -- explore both branches without consulting SMT.
-           -- Exploring too many branches is a lot cheaper than
-           -- consulting our SMT solver.
-           Nothing -> embed wvm (continue EVM.Unknown) >> interpret fetcher maxIter
-           _ -> performQuery
-       _ -> performQuery
-   VMFailure (Choose (EVM.PleaseChoosePath whiff continue)) -> do
-     vm <- use wrapvm
-     wvm <- get
-     case maxIterationsReached vm maxIter of
-       Nothing -> do push 1
-                     a <- embed wvm (continue True) >> interpret fetcher maxIter
-                     pop 1
-                     put wvm
-                     push 1
-                     b <- embed wvm (continue False) >> interpret fetcher maxIter
-                     pop 1
-                     return $ Node (BranchInfo { _vm = vm, _branchCondition = Just whiff}) [a, b]
-       Just n -> embed wvm (continue (not n)) >> interpret fetcher maxIter
-   _ -> do vm <- use wrapvm
-           return $ Node BranchInfo {_vm = vm, _branchCondition = Nothing } []
-  where embed :: WrapVM -> StateT VM Identity () -> StateT WrapVM Query ()
-        embed (WrapVM _ oldvm) (StateT runStateT) = StateT runWrapStateT
-          where runWrapStateT :: WrapVM -> QueryT IO ((), WrapVM)
-                runWrapStateT (WrapVM vm _) = pure (x, WrapVM vm' oldvm)
-                  where (x, vm') = runIdentity $ runStateT vm
+    Just (VMFailure (EVM.Query q@(PleaseAskSMT _ _ continue))) -> let
+      codelocation = getCodeLocation vm
+      location = view (iterations . at codelocation) vm
+      in case location of
+        Nothing -> cont $ continue EVM.Unknown
+        Just _ -> fetcher q >>= cont
+
+    Just (VMFailure (EVM.Query q)) -> fetcher q >>= cont
+
+    Just (VMFailure (Choose (EVM.PleaseChoosePath whiff continue)))
+      -> case (maxIterationsReached vm maxIter) of
+        Nothing -> do
+            left <- cont $ continue True
+            right <- cont $ continue False
+            return $ Node (BranchInfo vm (Just whiff)) [left, right]
+        Just n -> cont $ continue (not n)
+
+    Just _
+      -> return $ Node BranchInfo {_vm = vm, _branchCondition = Nothing } []
+
 
 maxIterationsReached :: VM -> Maybe Integer -> Maybe Bool
 maxIterationsReached _ Nothing = Nothing
@@ -252,7 +228,7 @@ verify :: VM -> Maybe Integer -> Maybe (Fetch.BlockNumber, Text) -> Maybe Postco
 verify preState maxIter rpcinfo maybepost = do
   let model = view (env . storageModel) preState
   smtState <- queryState
-  tree <- fst <$> runStateT (interpret (Fetch.oracle (Just smtState) rpcinfo model False) maxIter) (WrapVM preState preState)
+  tree <- liftIO $ interpret (Fetch.oracle (Just smtState) rpcinfo model False) maxIter (WrapVM preState preState)
   case maybepost of
     (Just post) -> do
       let livePaths = leaves tree
@@ -288,10 +264,10 @@ equivalenceCheck bytecodeA bytecodeB maxiter signature' = do
 
   smtState <- queryState
   push 1
-  aVMs <- fst <$> runStateT (interpret (Fetch.oracle (Just smtState) Nothing SymbolicS False) maxiter) (WrapVM preStateA preStateA)
+  aVMs <- liftIO $ interpret (Fetch.oracle (Just smtState) Nothing SymbolicS False) maxiter (WrapVM preStateA preStateA)
   pop 1
   push 1
-  bVMs <- fst <$> runStateT (interpret (Fetch.oracle (Just smtState) Nothing SymbolicS False) maxiter) (WrapVM preStateB preStateB)
+  bVMs <- liftIO $ interpret (Fetch.oracle (Just smtState) Nothing SymbolicS False) maxiter (WrapVM preStateB preStateB)
   pop 1
   -- Check each pair of endstates for equality:
   let differingEndStates = uncurry distinct <$> [(a,b) | a <- leaves aVMs, b <- leaves bVMs]
