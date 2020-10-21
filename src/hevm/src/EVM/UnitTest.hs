@@ -317,7 +317,7 @@ coverageForUnitTestContract
   -> (Text, [(Text, [AbiType])])
   -> IO (MultiSet SrcMap)
 coverageForUnitTestContract
-  opts@(UnitTestOptions {..}) contractMap sources (name, testNames) = do
+  opts@(UnitTestOptions {..}) contractMap _ (name, testNames) = do
 
   -- Look for the wanted contract by name from the Solidity info
   case preview (ix name) contractMap of
@@ -336,15 +336,15 @@ coverageForUnitTestContract
 
       -- Define the thread spawner for test cases
       let
-        runOne (testName, _) = spawn_ . liftIO $ do
-          (x, (_, cov)) <-
+        runOne' (testName, _) = spawn_ . liftIO $ do
+          (_, (_, cov)) <-
             runStateT
               (interpretWithCoverage opts (runUnitTest opts testName emptyAbi))
               (vm1, mempty)
           pure cov
       -- Run all the test cases in parallel and gather their coverages
       covs <-
-        runParIO (mapM runOne testNames >>= mapM Par.get)
+        runParIO (mapM runOne' testNames >>= mapM Par.get)
 
       -- Sum up all the coverage counts
       let cov2 = MultiSet.unions (cov1 : covs)
@@ -358,7 +358,7 @@ runUnitTestContract
   -> (Text, [(Text, [AbiType])])
   -> IO [(Bool, VM)]
 runUnitTestContract
-  opts@(UnitTestOptions {..}) contractMap sources (name, testSigs) = do
+  opts@(UnitTestOptions {..}) contractMap _ (name, testSigs) = do
 
   -- Print a header
   putStrLn $ "Running " ++ show (length testSigs) ++ " tests for "
@@ -604,7 +604,7 @@ initialUnitTestVm (UnitTestOptions {..}) theContract =
            , vmoptGaslimit = testGasCreate
            , vmoptCoinbase = testCoinbase
            , vmoptNumber = testNumber
-           , vmoptTimestamp = litWord $ w256 $ testTimestamp
+           , vmoptTimestamp = litWord $ w256 testTimestamp
            , vmoptBlockGaslimit = testGaslimit
            , vmoptGasprice = testGasprice
            , vmoptMaxCodeSize = testMaxCodeSize
@@ -635,9 +635,9 @@ getParametersFromEnvironmentVariables rpc = do
     case rpc of
       Nothing  -> return (0,0,0,0)
       Just url -> EVM.Fetch.fetchBlockFrom block' url >>= \case
-        Nothing -> error $ "Could not fetch block"
+        Nothing -> error "Could not fetch block"
         Just EVM.Block{..} -> return (  _coinbase
-                                      , wordValue $ forceLit $ _timestamp
+                                      , wordValue $ forceLit _timestamp
                                       , wordValue _number
                                       , wordValue _difficulty
                                       )
