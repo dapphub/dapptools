@@ -195,7 +195,7 @@ maxIterationsReached vm (Just maxIter) =
 type Precondition = VM -> SBool
 type Postcondition = (VM, VM) -> SBool
 
-checkAssert :: ByteString -> Maybe (Text, [AbiType]) -> [String] -> Query (Either (VM, Tree BranchInfo) VM)
+checkAssert :: ByteString -> Maybe (Text, [AbiType]) -> [String] -> Query (Either (VM, Tree BranchInfo) (VM, Tree BranchInfo))
 checkAssert c signature' concreteArgs = verifyContract c signature' concreteArgs SymbolicS (const sTrue) (Just checkAssertions)
 
 checkAssertions :: Postcondition
@@ -203,7 +203,7 @@ checkAssertions (_, out) = case view result out of
   Just (EVM.VMFailure (EVM.UnrecognizedOpcode 254)) -> sFalse
   _ -> sTrue
 
-verifyContract :: ByteString -> Maybe (Text, [AbiType]) -> [String] -> StorageModel -> Precondition -> Maybe Postcondition -> Query (Either (VM, Tree BranchInfo) VM)
+verifyContract :: ByteString -> Maybe (Text, [AbiType]) -> [String] -> StorageModel -> Precondition -> Maybe Postcondition -> Query (Either (VM, Tree BranchInfo) (VM, Tree BranchInfo))
 verifyContract theCode signature' concreteArgs storagemodel pre maybepost = do
     preStateRaw <- abstractVM signature' concreteArgs theCode  storagemodel
     -- add the pre condition to the pathconditions to ensure that we are only exploring valid paths
@@ -224,7 +224,7 @@ leaves (Node _ xs) = concatMap leaves xs
 -- Returns `Right VM` if the postcondition can be violated, where `VM` is a prestate counterexample,
 -- or `Left (VM, [VM])`, a pair of `prestate` and post vm states.
 -- TODO: check for inconsistency
-verify :: VM -> Maybe Integer -> Maybe (Fetch.BlockNumber, Text) -> Maybe Postcondition -> Query (Either (VM, Tree BranchInfo) VM)
+verify :: VM -> Maybe Integer -> Maybe (Fetch.BlockNumber, Text) -> Maybe Postcondition -> Query (Either (VM, Tree BranchInfo) (VM, Tree BranchInfo))
 verify preState maxIter rpcinfo maybepost = do
   let model = view (env . storageModel) preState
   smtState <- queryState
@@ -244,7 +244,7 @@ verify preState maxIter rpcinfo maybepost = do
                   return $ Left (preState, tree)
         Unsat -> do io $ putStrLn "Q.E.D."
                     return $ Left (preState, tree)
-        Sat -> return $ Right preState
+        Sat -> return $ Right (preState, tree)
 
     Nothing -> do io $ putStrLn "Nothing to check"
                   return $ Left (preState, tree)
