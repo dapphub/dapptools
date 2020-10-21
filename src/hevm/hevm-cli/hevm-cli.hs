@@ -510,9 +510,10 @@ assert cmd = do
     runSMTWithTimeOut (solver cmd) (smttimeout cmd) $ query $ do
       preState <- symvmFromCommand cmd
       verify preState (maxIterations cmd) rpcinfo (Just checkAssertions) >>= \case
-        Right _ -> do
+        Right (_, tree) -> do
           io $ putStrLn "Assertion violation found."
           showCounterexample preState maybesig
+          io $ putStr $ showBranchTree tree
           io $ exitWith (ExitFailure 1)
         Left (pre, tree) -> do
           io $ putStrLn $ "Explored: " <> show (length tree)
