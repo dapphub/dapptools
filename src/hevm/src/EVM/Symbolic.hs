@@ -93,7 +93,9 @@ shiftRight' (S _ a') b@(S _ b') = case (num <$> unliteral a', b) of
   (Just n, (S (FromBytes (SymbolicBuffer a)) _)) | n `mod` 8 == 0 && n <= 256 ->
     let bs = replicate (n `div` 8) 0 <> (take ((256 - n) `div` 8) a)
     in S (FromBytes (SymbolicBuffer bs)) (from32Bytes bs)
-  _ -> sw256 $ sShiftRight b' a'
+  _ -> case unliteral a' of
+    Nothing -> sw256 $ sShiftRight b' a'
+    Just n  -> if n > 255 then 0 else sw256 $ sShiftRight b' a'
 
 -- | Operations over symbolic memory (list of symbolic bytes)
 as32Bytes :: SInteger -> [SWord 8]
