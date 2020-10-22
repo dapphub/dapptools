@@ -14,7 +14,7 @@ in self-hs: super-hs:
         (self-hs.callCabal2nix x y {});
 
     sbv_prepatch = pkgs.haskell.lib.dontCheck (self-hs.callCabal2nix "sbv" (builtins.fetchGit {
-        url = "https://github.com/LeventErkok/sbv/";
+        url = "https://github.com/LeventErkok/sbv";
         rev = "fe5f5aff026307a1582cc7eafbbabd26796ef434";
     })    {inherit (pkgs) z3;});
 
