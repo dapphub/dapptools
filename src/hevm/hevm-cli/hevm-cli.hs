@@ -913,7 +913,7 @@ runVMTest diffmode mode timelimit (name, x) =
     action <- async $
       case mode of
         Run ->
-          Timeout.timeout (1e6 * (fromMaybe 10 timelimit)) $
+          Timeout.timeout (1000000 * (fromMaybe 10 timelimit)) $
             execStateT (EVM.Stepper.interpret EVM.Fetch.zero . void $ EVM.Stepper.execFully) vm0
         Debug ->
           Just <$> EVM.TTY.runFromVM Nothing emptyDapp EVM.Fetch.zero vm0
