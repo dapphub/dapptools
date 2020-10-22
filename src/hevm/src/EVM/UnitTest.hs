@@ -32,6 +32,7 @@ import Control.Monad.Par.Class (spawn_)
 import Control.Monad.Par.IO (runParIO)
 
 import qualified Data.ByteString.Lazy as BSLazy
+import qualified Data.SBV.Trans.Control as SBV (Query)
 import Data.ByteString    (ByteString)
 import Data.SBV    hiding (verbose)
 import Data.Either        (isRight)
@@ -63,7 +64,7 @@ import qualified Data.Vector as Vector
 import Test.QuickCheck hiding (verbose)
 
 data UnitTestOptions = UnitTestOptions
-  { oracle     :: Query -> IO (EVM ())
+  { oracle     :: EVM.Query -> IO (EVM ())
   , verbose    :: Maybe Int
   , maxIter    :: Maybe Integer
   , match      :: Text
@@ -356,12 +357,12 @@ runUnitTestContract
   :: UnitTestOptions
   -> Map Text SolcContract
   -> (Text, [(Test, [AbiType])])
-  -> IO [(Bool, VM)]
+  -> SBV.Query [(Bool, VM)]
 runUnitTestContract
   opts@(UnitTestOptions {..}) contractMap (name, testSigs) = do
 
   -- Print a header
-  putStrLn $ "Running " ++ show (length testSigs) ++ " tests for "
+  liftIO $ putStrLn $ "Running " ++ show (length testSigs) ++ " tests for "
     ++ unpack name
 
   -- Look for the wanted contract by name from the Solidity info
@@ -374,14 +375,14 @@ runUnitTestContract
       -- Construct the initial VM and begin the contract's constructor
       let vm0 = initialUnitTestVm opts theContract
       vm1 <-
-        execStateT
+        liftIO $ execStateT
           (EVM.Stepper.interpret oracle
             (Stepper.enter name >> initializeUnitTest opts))
           vm0
 
       case view result vm1 of
         Nothing -> error "internal error: setUp() did not end with a result"
-        Just (VMFailure _) -> do
+        Just (VMFailure _) -> liftIO $ do
           Text.putStrLn "\x1b[31m[FAIL]\x1b[0m setUp()"
           tick "\n"
           tick $ failOutput vm1 opts "setUp()"
@@ -389,10 +390,10 @@ runUnitTestContract
         Just (VMSuccess _) -> do
           let
             runCache :: ([(Either Text Text, VM)], VM) -> (Test, [AbiType])
-                        -> IO ([(Either Text Text, VM)], VM)
+                        -> SBV.Query ([(Either Text Text, VM)], VM)
             runCache (results, vm) (test, types) = do
               (t, r, vm') <- runTest opts vm (test, types)
-              Text.putStrLn t
+              liftIO $ Text.putStrLn t
               let vmCached = vm & set (cache . fetched) (view (cache . fetched) vm')
               pure (((r, vm'): results), vmCached)
 
@@ -403,15 +404,15 @@ runUnitTestContract
           let running = [x | (Right x, _) <- details]
           let bailing = [x | (Left  x, _) <- details]
 
-          tick "\n"
-          tick (Text.unlines (filter (not . Text.null) running))
-          tick (Text.unlines (filter (not . Text.null) bailing))
+          liftIO $ do
+            tick "\n"
+            tick (Text.unlines (filter (not . Text.null) running))
+            tick (Text.unlines (filter (not . Text.null) bailing))
 
           pure [(isRight r, vm) | (r, vm) <- details]
 
 
-
-runTest :: UnitTestOptions -> VM -> (Test, [AbiType]) -> IO (Text, Either Text Text, VM)
+runTest :: UnitTestOptions -> VM -> (Test, [AbiType]) -> SBV.Query (Text, Either Text Text, VM)
 runTest opts@UnitTestOptions{..} vm (ConcreteTest testName, []) = runOne opts vm testName emptyAbi
 runTest opts@UnitTestOptions{..} vm (ConcreteTest testName, types) = case replay of
   Nothing ->
@@ -424,15 +425,15 @@ runTest opts@UnitTestOptions{..} vm (ConcreteTest testName, types) = case replay
 runTest opts vm (SymbolicTest testName, types) = symRun opts vm testName types
 
 -- | Define the thread spawner for normal test cases
-runOne :: UnitTestOptions -> VM -> ABIMethod -> AbiValue -> IO (Text, Either Text Text, VM)
+runOne :: UnitTestOptions -> VM -> ABIMethod -> AbiValue -> SBV.Query (Text, Either Text Text, VM)
 runOne opts@UnitTestOptions{..} vm testName args = do
   let argInfo = pack (if args == emptyAbi then "" else " with arguments: " <> show args)
   (bailed, vm') <-
-    runStateT
+    liftIO $ runStateT
       (EVM.Stepper.interpret oracle (execTest opts testName args))
       vm
   (success, vm'') <-
-    runStateT
+    liftIO $ runStateT
       (EVM.Stepper.interpret oracle (checkFailures opts testName args bailed)) vm'
   if success
   then
@@ -454,7 +455,7 @@ runOne opts@UnitTestOptions{..} vm testName args = do
           )
 
 -- | Define the thread spawner for property based tests
-fuzzRun :: UnitTestOptions -> VM -> Text -> [AbiType] -> IO (Text, Either Text Text, VM)
+fuzzRun :: UnitTestOptions -> VM -> Text -> [AbiType] -> SBV.Query (Text, Either Text Text, VM)
 fuzzRun opts@UnitTestOptions{..} vm testName types = do
   let args = Args{ replay          = Nothing
                  , maxSuccess      = fuzzRuns
@@ -463,7 +464,7 @@ fuzzRun opts@UnitTestOptions{..} vm testName types = do
                  , chatty          = isJust verbose
                  , maxShrinks      = maxBound
                  }
-  quickCheckWithResult args (fuzzTest opts testName types vm) >>= \case
+  liftIO $ quickCheckWithResult args (fuzzTest opts testName types vm) >>= \case
     Success numTests _ _ _ _ _ ->
       pure ("\x1b[32m[PASS]\x1b[0m "
              <> testName <> " (runs: " <> (pack $ show numTests) <> ")"
@@ -493,9 +494,9 @@ fuzzRun opts@UnitTestOptions{..} vm testName types = do
               )
 
 -- | Define the thread spawner for symbolic tests
-symRun :: UnitTestOptions -> VM -> Text -> [AbiType] -> IO (Text, Either Text Text, VM)
-symRun opts vm testName types = do
-    symArgs <- symAbiArg <*> types
+symRun :: UnitTestOptions -> VM -> Text -> [AbiType] -> SBV.Query (Text, Either Text Text, VM)
+symRun opts@UnitTestOptions{..} vm testName types = do
+    symArgs <- mapM symAbiArg types
     return ("", Left "", vm)
 
 indentLines :: Int -> Text -> Text

@@ -14,7 +14,8 @@ import qualified EVM.Facts.Git as Git
 import qualified EVM.Stepper
 import qualified EVM.VMTest    as VMTest
 
-import Control.Monad.State.Strict (execStateT)
+import Data.SBV.Trans.Control
+import Control.Monad.State.Strict (execStateT, liftIO)
 import Data.Text (isPrefixOf)
 
 import qualified Data.Map as Map
@@ -34,9 +35,9 @@ loadDappInfo path file =
         _ ->
           error "nope, sorry"
 
-ghciTest :: String -> String -> Maybe String -> IO [Bool]
+ghciTest :: String -> String -> Maybe String -> Query [Bool]
 ghciTest root path state =
-  withCurrentDirectory root $ do
+  liftIO $ withCurrentDirectory root $ do
     loadFacts <-
       case state of
         Nothing ->
