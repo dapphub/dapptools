@@ -314,7 +314,7 @@ coverageForUnitTestContract
   :: UnitTestOptions
   -> Map Text SolcContract
   -> SourceCache
-  -> (Text, [(Text, [AbiType])])
+  -> (Text, [(Test, [AbiType])])
   -> IO (MultiSet SrcMap)
 coverageForUnitTestContract
   opts@(UnitTestOptions {..}) contractMap _ (name, testNames) = do
@@ -336,10 +336,10 @@ coverageForUnitTestContract
 
       -- Define the thread spawner for test cases
       let
-        runOne' (testName, _) = spawn_ . liftIO $ do
+        runOne' (test, _) = spawn_ . liftIO $ do
           (_, (_, cov)) <-
             runStateT
-              (interpretWithCoverage opts (runUnitTest opts testName emptyAbi))
+              (interpretWithCoverage opts (runUnitTest opts (extractSig test) emptyAbi))
               (vm1, mempty)
           pure cov
       -- Run all the test cases in parallel and gather their coverages
@@ -354,11 +354,10 @@ coverageForUnitTestContract
 runUnitTestContract
   :: UnitTestOptions
   -> Map Text SolcContract
-  -> SourceCache
-  -> (Text, [(Text, [AbiType])])
+  -> (Text, [(Test, [AbiType])])
   -> IO [(Bool, VM)]
 runUnitTestContract
-  opts@(UnitTestOptions {..}) contractMap _ (name, testSigs) = do
+  opts@(UnitTestOptions {..}) contractMap (name, testSigs) = do
 
   -- Print a header
   putStrLn $ "Running " ++ show (length testSigs) ++ " tests for "
@@ -388,10 +387,10 @@ runUnitTestContract
           pure [(False, vm1)]
         Just (VMSuccess _) -> do
           let
-            runCache :: ([(Either Text Text, VM)], VM) -> (Text, [AbiType])
+            runCache :: ([(Either Text Text, VM)], VM) -> (Test, [AbiType])
                         -> IO ([(Either Text Text, VM)], VM)
-            runCache (results, vm) (testName, types) = do
-              (t, r, vm') <- runTest opts vm (testName, types)
+            runCache (results, vm) (test, types) = do
+              (t, r, vm') <- runTest opts vm (test, types)
               Text.putStrLn t
               let vmCached = vm & set (cache . fetched) (view (cache . fetched) vm')
               pure (((r, vm'): results), vmCached)
@@ -411,9 +410,9 @@ runUnitTestContract
 
 
 
-runTest :: UnitTestOptions -> VM -> (Text, [AbiType]) -> IO (Text, Either Text Text, VM)
-runTest opts@UnitTestOptions{..} vm (testName, []) = runOne opts vm testName emptyAbi
-runTest opts@UnitTestOptions{..} vm (testName, types) = case replay of
+runTest :: UnitTestOptions -> VM -> (Test, [AbiType]) -> IO (Text, Either Text Text, VM)
+runTest opts@UnitTestOptions{..} vm (ConcreteTest testName, []) = runOne opts vm testName emptyAbi
+runTest opts@UnitTestOptions{..} vm (ConcreteTest testName, types) = case replay of
   Nothing ->
     fuzzRun opts vm testName types
   Just (sig, callData) ->
@@ -421,6 +420,7 @@ runTest opts@UnitTestOptions{..} vm (testName, types) = case replay of
     then runOne opts vm testName $
       decodeAbiValue (AbiTupleType (Vector.fromList types)) callData
     else fuzzRun opts vm testName types
+runTest opts@UnitTestOptions{..} vm (SymbolicTest testName, types) = undefined
 
 -- | Define the thread spawner for normal test cases
 runOne :: UnitTestOptions -> VM -> ABIMethod -> AbiValue -> IO (Text, Either Text Text, VM)
@@ -491,7 +491,9 @@ fuzzRun opts@UnitTestOptions{..} vm testName types = do
               , vm
               )
 
-
+-- | Define the thread spawner for symbolic tests
+symRun :: UnitTestOptions -> VM -> Text -> [AbiType] -> IO (Text, Either Text Text, VM)
+symRun = undefined
 
 indentLines :: Int -> Text -> Text
 indentLines n s =

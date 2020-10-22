@@ -381,11 +381,12 @@ dappTest :: UnitTestOptions -> Mode -> String -> Maybe String -> IO ()
 dappTest opts _ solcFile cache =
   readSolc solcFile >>=
     \case
-      Just (contractMap, sourceCache) -> do
+      Just (contractMap, _) -> do
+        -- TODO: use this matcher!
         let matcher = regexMatches (EVM.UnitTest.match opts)
-            unitTests = (findUnitTests matcher) (Map.elems contractMap)
+            unitTests = findUnitTests $ Map.elems contractMap
 
-        results <- concatMapM (runUnitTestContract opts contractMap sourceCache) unitTests
+        results <- concatMapM (runUnitTestContract opts contractMap) unitTests
         let (passing, vms) = unzip results
 
         case cache of
@@ -398,7 +399,7 @@ dappTest opts _ solcFile cache =
             in
               Git.saveFacts (Git.RepoAt path) (Facts.cacheFacts cache')
 
-        unless (all id passing) exitFailure
+        unless (and passing) exitFailure
       Nothing ->
         error ("Failed to read Solidity JSON for `" ++ solcFile ++ "'")
 
@@ -575,8 +576,9 @@ dappCoverage opts _ solcFile =
   readSolc solcFile >>=
     \case
       Just (contractMap, sourceCache) -> do
+        -- TODO: use this matcher
         let matcher = regexMatches (EVM.UnitTest.match opts)
-        let unitTests = (findUnitTests matcher) (Map.elems contractMap)
+        let unitTests = findUnitTests $ Map.elems contractMap
         covs <- mconcat <$> mapM (coverageForUnitTestContract opts contractMap sourceCache) unitTests
 
         let

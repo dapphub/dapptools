@@ -14,7 +14,7 @@ import EVM
 import EVM.ABI (abiTypeSolidity, decodeAbiValue, AbiType(..), emptyAbi)
 import EVM.Symbolic (SymWord(..))
 import EVM.SymExec (maxIterationsReached)
-import EVM.Dapp (DappInfo, dappInfo)
+import EVM.Dapp (DappInfo, dappInfo, Test, extractSig)
 import EVM.Dapp (dappUnitTests, unitTestMethods, dappSolcByName, dappSolcByHash, dappSources)
 import EVM.Dapp (dappAstSrcMap)
 import EVM.Debug
@@ -38,6 +38,7 @@ import Control.Lens
 import Control.Monad.State.Strict hiding (state)
 
 import Data.Aeson.Lens
+import Data.Bifunctor (first)
 import Data.ByteString (ByteString)
 import Data.Maybe (isJust, fromJust, fromMaybe)
 import Data.Map (Map, insert, lookupLT, singleton, filter)
@@ -261,12 +262,12 @@ initUiVmState vm0 opts script =
 
 -- filters out fuzztests, unless they have
 -- explicitly been given an argument by `replay`
-concreteTests :: UnitTestOptions -> (Text, [(Text, [AbiType])]) -> [(Text, Text)]
+concreteTests :: UnitTestOptions -> (Text, [(Test, [AbiType])]) -> [(Text, Text)]
 concreteTests UnitTestOptions{..} (contractname, tests) = case replay of
-  Nothing -> [(contractname, fst x) | x <- tests,
+  Nothing -> [(contractname, extractSig $ fst x) | x <- tests,
                                       null $ snd x]
-  Just (sig, _) -> [(contractname, fst x) | x <- tests,
-                                            null (snd x) || fst x == sig]
+  Just (sig, _) -> [(contractname, extractSig $ fst x) | x <- tests,
+                                            null (snd x) || (extractSig $ fst x) == sig]
 
 main :: UnitTestOptions -> FilePath -> FilePath -> IO ()
 main opts root jsonFilePath =
@@ -612,7 +613,7 @@ initialUiVmStateForTest
 initialUiVmStateForTest opts@UnitTestOptions{..} (theContractName, theTestName) =
   ui
   where
-    Just typesig = lookup theTestName (unitTestMethods testContract)
+    Just typesig = lookup theTestName (fmap (first extractSig) $ unitTestMethods testContract)
     args = case replay of
       Nothing -> emptyAbi
       Just (sig, callData) ->
