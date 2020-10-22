@@ -14,6 +14,7 @@ import qualified EVM.Facts.Git as Git
 import qualified EVM.Stepper
 import qualified EVM.VMTest    as VMTest
 
+import Data.SBV
 import Data.SBV.Trans.Control
 import Control.Monad.State.Strict (execStateT, liftIO)
 import Data.Text (isPrefixOf)
@@ -61,10 +62,9 @@ ghciTest root path state =
       \case
         Just (contractMap, _) -> do
           let unitTests = findUnitTests (Map.elems contractMap)
-          do
-            results <- concatMapM (runUnitTestContract opts contractMap) unitTests
-            let (passing, _) = unzip results
-            passing
+          results <- runSMT $ query $ concatMapM (runUnitTestContract opts contractMap) unitTests
+          let (passing, _) = unzip results
+          pure passing
 
         Nothing ->
           error ("Failed to read Solidity JSON for `" ++ path ++ "'")

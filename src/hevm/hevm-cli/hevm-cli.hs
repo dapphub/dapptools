@@ -6,7 +6,6 @@
 {-# Language DeriveGeneric #-}
 {-# Language GADTs #-}
 {-# Language LambdaCase #-}
-{-# Language NumDecimals #-}
 {-# Language OverloadedStrings #-}
 {-# Language TypeOperators #-}
 {-# Language RecordWildCards #-}
@@ -49,7 +48,7 @@ import qualified EVM.UnitTest
 
 import GHC.IO.Encoding
 import Control.Concurrent.Async   (async, waitCatch)
-import Control.Lens hiding (pre)
+import Control.Lens hiding (pre, passing)
 import Control.Monad              (void, when, forM_, unless)
 import Control.Monad.State.Strict (execStateT)
 import Data.ByteString            (ByteString)
@@ -166,15 +165,18 @@ data Command w
   | DappTest -- Run DSTest unit tests
       { jsonFile    :: w ::: Maybe String             <?> "Filename or path to dapp build output (default: out/*.solc.json)"
       , dappRoot    :: w ::: Maybe String             <?> "Path to dapp project root directory (default: . )"
-      , debug       :: w ::: Bool                     <?> "Run interactively"
-      , fuzzRuns    :: w ::: Maybe Int                <?> "Number of times to run fuzz tests"
-      , replay      :: w ::: Maybe (Text, ByteString) <?> "Custom fuzz case to run/debug"
-      , rpc         :: w ::: Maybe URL                <?> "Fetch state from a remote node"
-      , verbose     :: w ::: Maybe Int                <?> "Append call trace: {1} failures {2} all"
-      , coverage    :: w ::: Bool                     <?> "Coverage analysis"
-      , state       :: w ::: Maybe String             <?> "Path to state repository"
-      , cache       :: w ::: Maybe String             <?> "Path to rpc cache repository"
-      , match       :: w ::: Maybe String             <?> "Test case filter - only run methods matching regex"
+      , debug         :: w ::: Bool                     <?> "Run interactively"
+      , fuzzRuns      :: w ::: Maybe Int                <?> "Number of times to run fuzz tests"
+      , replay        :: w ::: Maybe (Text, ByteString) <?> "Custom fuzz case to run/debug"
+      , rpc           :: w ::: Maybe URL                <?> "Fetch state from a remote node"
+      , verbose       :: w ::: Maybe Int                <?> "Append call trace: {1} failures {2} all"
+      , coverage      :: w ::: Bool                     <?> "Coverage analysis"
+      , state         :: w ::: Maybe String             <?> "Path to state repository"
+      , cache         :: w ::: Maybe String             <?> "Path to rpc cache repository"
+      , match         :: w ::: Maybe String             <?> "Test case filter - only run methods matching regex"
+      , smttimeout    :: w ::: Maybe Integer            <?> "Timeout given to SMT solver in milliseconds (default: 20000)"
+      , maxIterations :: w ::: Maybe Integer            <?> "Number of times we may revisit a particular branching point"
+      , solver        :: w ::: Maybe Text               <?> "Used SMT solver: z3 (default) or cvc4"
       }
   | Interactive -- Browse & run unit tests interactively
       { jsonFile :: w ::: Maybe String <?> "Filename or path to dapp build output (default: out/*.solc.json)"
@@ -309,7 +311,7 @@ main = do
         testOpts <- unitTestOptions cmd testFile
         case (coverage cmd, optsMode cmd) of
           (False, Run) ->
-            dappTest testOpts (optsMode cmd) testFile (cache cmd)
+            dappTest testOpts (solver cmd) (smttimeout cmd) testFile (cache cmd)
           (False, Debug) ->
             EVM.TTY.main testOpts root testFile
           (True, _) ->
@@ -377,8 +379,8 @@ findJsonFile Nothing = do
         , intercalate ", " xs
         ]
 
-dappTest :: UnitTestOptions -> Mode -> String -> Maybe String -> IO ()
-dappTest opts _ solcFile cache =
+dappTest :: UnitTestOptions -> Maybe Text -> Maybe Integer -> String -> Maybe String -> IO ()
+dappTest opts solver smttimeout solcFile cache =
   readSolc solcFile >>=
     \case
       Just (contractMap, _) -> do
@@ -386,7 +388,7 @@ dappTest opts _ solcFile cache =
         let matcher = regexMatches (EVM.UnitTest.match opts)
             unitTests = findUnitTests $ Map.elems contractMap
 
-        results <- concatMapM (runUnitTestContract opts contractMap) unitTests
+        results <- runSMTWithTimeOut solver smttimeout $ query $ concatMapM (runUnitTestContract opts contractMap) unitTests
         let (passing, vms) = unzip results
 
         case cache of
