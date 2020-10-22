@@ -13,6 +13,7 @@ import EVM.Debug (srcMapCodePos)
 import EVM.Exec
 import EVM.Format
 import EVM.Solidity
+import EVM.SymExec
 import EVM.Types
 import EVM.VMTest
 import qualified EVM.Fetch
@@ -181,7 +182,7 @@ checkFailures UnitTestOptions { .. } method args bailed = do
 fuzzTest :: UnitTestOptions -> Text -> [AbiType] -> VM -> Property
 fuzzTest opts sig types vm = forAllShow (genAbiValue (AbiTupleType $ Vector.fromList types)) (show . ByteStringS . encodeAbiValue)
   $ \args -> ioProperty $
-    fst <$> runStateT (interpret (oracle opts) (runUnitTest opts sig args)) vm
+    fst <$> runStateT (EVM.Stepper.interpret (oracle opts) (runUnitTest opts sig args)) vm
 
 tick :: Text -> IO ()
 tick x = Text.putStr x >> hFlush stdout
@@ -374,7 +375,7 @@ runUnitTestContract
       let vm0 = initialUnitTestVm opts theContract
       vm1 <-
         execStateT
-          (interpret oracle
+          (EVM.Stepper.interpret oracle
             (Stepper.enter name >> initializeUnitTest opts))
           vm0
 
@@ -420,7 +421,7 @@ runTest opts@UnitTestOptions{..} vm (ConcreteTest testName, types) = case replay
     then runOne opts vm testName $
       decodeAbiValue (AbiTupleType (Vector.fromList types)) callData
     else fuzzRun opts vm testName types
-runTest opts@UnitTestOptions{..} vm (SymbolicTest testName, types) = undefined
+runTest opts vm (SymbolicTest testName, types) = symRun opts vm testName types
 
 -- | Define the thread spawner for normal test cases
 runOne :: UnitTestOptions -> VM -> ABIMethod -> AbiValue -> IO (Text, Either Text Text, VM)
@@ -428,11 +429,11 @@ runOne opts@UnitTestOptions{..} vm testName args = do
   let argInfo = pack (if args == emptyAbi then "" else " with arguments: " <> show args)
   (bailed, vm') <-
     runStateT
-      (interpret oracle (execTest opts testName args))
+      (EVM.Stepper.interpret oracle (execTest opts testName args))
       vm
   (success, vm'') <-
     runStateT
-      (interpret oracle (checkFailures opts testName args bailed)) vm'
+      (EVM.Stepper.interpret oracle (checkFailures opts testName args bailed)) vm'
   if success
   then
      let gasSpent = num (testGasCall testParams) - view (state . gas) vm'
@@ -476,7 +477,7 @@ fuzzRun opts@UnitTestOptions{..} vm testName types = do
           ppOutput = pack $ show abiValue
       in do
         -- Run the failing test again to get a proper trace
-        vm' <- execStateT (interpret oracle (runUnitTest opts testName abiValue)) vm
+        vm' <- execStateT (EVM.Stepper.interpret oracle (runUnitTest opts testName abiValue)) vm
         pure ("\x1b[31m[FAIL]\x1b[0m "
                <> testName <> ". Counterexample: " <> ppOutput
                <> "\nRun:\n dapp test --replay '(\"" <> testName <> "\",\""
@@ -493,7 +494,9 @@ fuzzRun opts@UnitTestOptions{..} vm testName types = do
 
 -- | Define the thread spawner for symbolic tests
 symRun :: UnitTestOptions -> VM -> Text -> [AbiType] -> IO (Text, Either Text Text, VM)
-symRun = undefined
+symRun opts vm testName types = do
+    symArgs <- symAbiArg <*> types
+    return ("", Left "", vm)
 
 indentLines :: Int -> Text -> Text
 indentLines n s =
