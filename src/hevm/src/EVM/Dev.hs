@@ -61,9 +61,10 @@ ghciTest root path state =
       \case
         Just (contractMap, _) -> do
           let unitTests = findUnitTests (Map.elems contractMap)
-          results <- concatMapM (runUnitTestContract opts contractMap) unitTests
-          let (passing, _) = unzip results
-          pure passing
+          do
+            results <- concatMapM (runUnitTestContract opts contractMap) unitTests
+            let (passing, _) = unzip results
+            passing
 
         Nothing ->
           error ("Failed to read Solidity JSON for `" ++ path ++ "'")
