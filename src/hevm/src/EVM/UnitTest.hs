@@ -516,25 +516,23 @@ symRun opts@UnitTestOptions{..} vm testName types = do
       constrain (sAnd (view EVM.pathConditions postVM))
       checkSat >>= \case
         Unsat -> pure Nothing
-        Sat -> pure $ Just postVM
+        Sat -> do
+          let cd' = _calldata $ _state postVM
+          prettyCd <- prettyCalldata cd' testName types
+          pure $ Just (postVM, prettyCd)
         Unk -> error "SMT timeout"
         DSat _ -> error "Unexpected Dsat"
 
-    results <- liftIO $ forM reachable $ \postState -> do
+    results <- liftIO $ forM reachable $ \(postState, model) -> do
       (res, _) <- runStateT
         (EVM.Stepper.interpret oracle (checkSymFailures opts testName))
         postState
-      pure (res, postState)
+      pure (res, model)
 
-    models <- forM results $ \(res, vm') -> do
-      let cd' = _calldata $ _state vm'
-      prettyCd <- prettyCalldata cd' testName types
-      pure (res, prettyCd)
-    traceShowM models
-
+    traceShowM results
     let success = if "proveFail" `isPrefixOf` testName
-                  then or (fmap fst results)
-                  else and (fmap fst results)
+                  then or (fmap (view _1) results)
+                  else and (fmap (view _1) results)
     if success
     then
       return ("\x1b[32m[PASS]\x1b[0m " <> testName, Right "", vm)
