@@ -109,12 +109,14 @@ data VM = VM
   , _constraints    :: [(SBool, Whiff)]
   , _iterations     :: Map CodeLocation Int
   }
+  deriving (Show)
 
 data Trace = Trace
   { _traceCodehash :: W256
   , _traceOpIx     :: Int
   , _traceData     :: TraceData
   }
+  deriving (Show)
 
 data TraceData
   = EventTrace Log
@@ -123,6 +125,7 @@ data TraceData
   | ErrorTrace Error
   | EntryTrace Text
   | ReturnTrace Buffer FrameContext
+  deriving (Show)
 
 -- | Queries halt execution until resolved through RPC calls or SMT queries
 data Query where
@@ -192,12 +195,14 @@ data VMOpts = VMOpts
 
 -- | A log entry
 data Log = Log Addr Buffer [SymWord]
+  deriving (Show)
 
 -- | An entry in the VM's "call/create stack"
 data Frame = Frame
   { _frameContext   :: FrameContext
   , _frameState     :: FrameState
   }
+  deriving (Show)
 
 -- | Call/create info
 data FrameContext
@@ -217,6 +222,7 @@ data FrameContext
     , callContextReversion :: Map Addr Contract
     , callContextSubState  :: SubState
     }
+  deriving (Show)
 
 -- | The "registers" of the VM along with memory and data stack
 data FrameState = FrameState
@@ -234,6 +240,7 @@ data FrameState = FrameState
   , _returndata   :: Buffer
   , _static       :: Bool
   }
+  deriving (Show)
 
 -- | The state that spans a whole transaction
 data TxState = TxState
@@ -246,6 +253,7 @@ data TxState = TxState
   , _isCreate        :: Bool
   , _txReversion     :: Map Addr Contract
   }
+  deriving (Show)
 
 -- | The "accrued substate" across a transaction
 data SubState = SubState
@@ -254,6 +262,7 @@ data SubState = SubState
   , _refunds         :: [(Addr, Word)]
   -- in principle we should include logs here, but do not for now
   }
+  deriving (Show)
 
 -- | A contract is either in creation (running its "constructor") or
 -- post-creation, and code in these two modes is treated differently
@@ -322,6 +331,7 @@ data Env = Env
   , _sha3Crack    :: Map Word ByteString
   , _keccakUsed   :: [([SWord 8], SWord 256)]
   }
+  deriving (Show)
 
 
 -- | Data about the block
