@@ -517,8 +517,7 @@ symRun opts@UnitTestOptions{..} vm testName types = do
       checkSat >>= \case
         Unsat -> pure Nothing
         Sat -> do
-          let cd' = _calldata $ _state postVM
-          prettyCd <- prettyCalldata cd' testName types
+          prettyCd <- prettyCalldata (first SymbolicBuffer cd) testName types
           pure $ Just (postVM, prettyCd)
         Unk -> error "SMT timeout"
         DSat _ -> error "Unexpected Dsat"
