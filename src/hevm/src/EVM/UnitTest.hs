@@ -1,4 +1,5 @@
 {-# Language LambdaCase #-}
+{-# Language DataKinds #-}
 
 module EVM.UnitTest where
 
@@ -32,7 +33,8 @@ import Control.Monad.Par.Class (spawn_)
 import Control.Monad.Par.IO (runParIO)
 
 import qualified Data.ByteString.Lazy as BSLazy
-import qualified Data.SBV.Trans.Control as SBV (Query)
+import qualified Data.SBV.Trans.Control as SBV (Query, queryState)
+import Data.Bifunctor     (first)
 import Data.ByteString    (ByteString)
 import Data.SBV    hiding (verbose)
 import Data.Either        (isRight)
@@ -62,6 +64,8 @@ import Data.Vector (Vector)
 import qualified Data.Vector as Vector
 
 import Test.QuickCheck hiding (verbose)
+
+import Debug.Trace
 
 data UnitTestOptions = UnitTestOptions
   { oracle     :: EVM.Query -> IO (EVM ())
@@ -413,8 +417,8 @@ runUnitTestContract
 
 
 runTest :: UnitTestOptions -> VM -> (Test, [AbiType]) -> SBV.Query (Text, Either Text Text, VM)
-runTest opts@UnitTestOptions{..} vm (ConcreteTest testName, []) = runOne opts vm testName emptyAbi
-runTest opts@UnitTestOptions{..} vm (ConcreteTest testName, types) = case replay of
+runTest opts@UnitTestOptions{..} vm (ConcreteTest testName, []) = liftIO $ runOne opts vm testName emptyAbi
+runTest opts@UnitTestOptions{..} vm (ConcreteTest testName, types) = liftIO $ case replay of
   Nothing ->
     fuzzRun opts vm testName types
   Just (sig, callData) ->
@@ -425,15 +429,15 @@ runTest opts@UnitTestOptions{..} vm (ConcreteTest testName, types) = case replay
 runTest opts vm (SymbolicTest testName, types) = symRun opts vm testName types
 
 -- | Define the thread spawner for normal test cases
-runOne :: UnitTestOptions -> VM -> ABIMethod -> AbiValue -> SBV.Query (Text, Either Text Text, VM)
+runOne :: UnitTestOptions -> VM -> ABIMethod -> AbiValue -> IO (Text, Either Text Text, VM)
 runOne opts@UnitTestOptions{..} vm testName args = do
   let argInfo = pack (if args == emptyAbi then "" else " with arguments: " <> show args)
   (bailed, vm') <-
-    liftIO $ runStateT
+    runStateT
       (EVM.Stepper.interpret oracle (execTest opts testName args))
       vm
   (success, vm'') <-
-    liftIO $ runStateT
+    runStateT
       (EVM.Stepper.interpret oracle (checkFailures opts testName args bailed)) vm'
   if success
   then
@@ -455,7 +459,7 @@ runOne opts@UnitTestOptions{..} vm testName args = do
           )
 
 -- | Define the thread spawner for property based tests
-fuzzRun :: UnitTestOptions -> VM -> Text -> [AbiType] -> SBV.Query (Text, Either Text Text, VM)
+fuzzRun :: UnitTestOptions -> VM -> Text -> [AbiType] -> IO (Text, Either Text Text, VM)
 fuzzRun opts@UnitTestOptions{..} vm testName types = do
   let args = Args{ replay          = Nothing
                  , maxSuccess      = fuzzRuns
@@ -464,7 +468,7 @@ fuzzRun opts@UnitTestOptions{..} vm testName types = do
                  , chatty          = isJust verbose
                  , maxShrinks      = maxBound
                  }
-  liftIO $ quickCheckWithResult args (fuzzTest opts testName types vm) >>= \case
+  quickCheckWithResult args (fuzzTest opts testName types vm) >>= \case
     Success numTests _ _ _ _ _ ->
       pure ("\x1b[32m[PASS]\x1b[0m "
              <> testName <> " (runs: " <> (pack $ show numTests) <> ")"
@@ -496,8 +500,62 @@ fuzzRun opts@UnitTestOptions{..} vm testName types = do
 -- | Define the thread spawner for symbolic tests
 symRun :: UnitTestOptions -> VM -> Text -> [AbiType] -> SBV.Query (Text, Either Text Text, VM)
 symRun opts@UnitTestOptions{..} vm testName types = do
-    symArgs <- mapM symAbiArg types
+    cd <- symCalldata testName types []
+    smtState <- SBV.queryState
+    paths <-
+      fst <$> runStateT
+        (EVM.SymExec.interpret
+          (EVM.Fetch.oracle (Just smtState) Nothing ConcreteS False)
+          Nothing
+          (execSymTest opts testName cd))
+        vm
+
+    let livePaths = pruneDeadPaths paths
+    results <- liftIO $ forM livePaths $ \postState -> do
+      runStateT
+        (EVM.Stepper.interpret oracle (checkSymFailures opts testName))
+        postState
+
+    traceShowM results
     return ("", Left "", vm)
+
+execSymTest :: UnitTestOptions -> ABIMethod -> ([SWord 8], SWord 32) -> Stepper VM
+execSymTest UnitTestOptions { .. } method cd = do
+  -- Set up the call to the test method
+  Stepper.evm $ do
+    setupSymCall testParams cd
+    pushTrace (EntryTrace method)
+  -- Try running the test method
+  Stepper.runFully
+
+setupSymCall :: TestVMParams -> ([SWord 8], SWord 32) -> EVM ()
+setupSymCall TestVMParams{..} cd = do
+  resetState
+  assign (tx . isCreate) False
+  loadContract testAddress
+  assign (state . calldata) $ first SymbolicBuffer cd
+  assign (state . caller) (litAddr testCaller)
+  assign (state . gas) (w256 testGasCall)
+  origin' <- fromMaybe (initialContract (RuntimeCode mempty)) <$> use (env . contracts . at testOrigin)
+  let originBal = view balance origin'
+  when (originBal <= (w256 testGasprice) * (w256 testGasCall)) $ error "insufficient balance for gas cost"
+  vm <- get
+  put $ initTx vm
+
+checkSymFailures :: UnitTestOptions -> ABIMethod -> Stepper Bool
+checkSymFailures UnitTestOptions { .. } method = do
+   -- Decide whether the test is supposed to fail or succeed
+  let shouldFail = "proveFail" `isPrefixOf` method
+  -- Ask whether any assertions failed
+  Stepper.evm $ do
+    popTrace
+    setupCall testParams "failed()" emptyAbi
+  res <- Stepper.execFully
+  case res of
+    Right (ConcreteBuffer r) ->
+      let AbiBool failed = decodeAbiValue AbiBoolType (BSLazy.fromStrict r)
+      in pure (shouldFail == failed)
+    _ -> error "internal error: unexpected failure code"
 
 indentLines :: Int -> Text -> Text
 indentLines n s =

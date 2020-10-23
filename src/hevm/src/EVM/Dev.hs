@@ -36,9 +36,9 @@ loadDappInfo path file =
         _ ->
           error "nope, sorry"
 
-ghciTest :: String -> String -> Maybe String -> Query [Bool]
+ghciTest :: String -> String -> Maybe String -> IO [Bool]
 ghciTest root path state =
-  liftIO $ withCurrentDirectory root $ do
+  withCurrentDirectory root $ do
     loadFacts <-
       case state of
         Nothing ->
