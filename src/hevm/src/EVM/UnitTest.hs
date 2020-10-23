@@ -33,10 +33,11 @@ import Control.Monad.Par.Class (spawn_)
 import Control.Monad.Par.IO (runParIO)
 
 import qualified Data.ByteString.Lazy as BSLazy
-import qualified Data.SBV.Trans.Control as SBV (Query, queryState)
-import Data.Bifunctor     (first)
+import qualified Data.SBV.Trans.Control as SBV (Query, queryState, getValue, resetAssertions)
+import Data.Bifunctor     (first, second)
 import Data.ByteString    (ByteString)
 import Data.SBV    hiding (verbose)
+import Data.SBV.Control   (CheckSatResult(..), checkSat)
 import Data.Either        (isRight)
 import Data.Foldable      (toList)
 import Data.Map           (Map)
@@ -503,21 +504,53 @@ symRun opts@UnitTestOptions{..} vm testName types = do
     cd <- symCalldata testName types []
     smtState <- SBV.queryState
     paths <-
-      fst <$> runStateT
+      pruneDeadPaths . fst <$> runStateT
         (EVM.SymExec.interpret
           (EVM.Fetch.oracle (Just smtState) Nothing ConcreteS False)
           Nothing
           (execSymTest opts testName cd))
         vm
 
-    let livePaths = pruneDeadPaths paths
-    results <- liftIO $ forM livePaths $ \postState -> do
-      runStateT
+    reachable <- fmap catMaybes $ forM paths $ \postVM -> do
+      SBV.resetAssertions
+      constrain (sAnd (view EVM.pathConditions postVM))
+      checkSat >>= \case
+        Unsat -> pure Nothing
+        Sat -> pure $ Just postVM
+        Unk -> error "SMT timeout"
+        DSat _ -> error "Unexpected Dsat"
+
+    results <- liftIO $ forM reachable $ \postState -> do
+      (res, _) <- runStateT
         (EVM.Stepper.interpret oracle (checkSymFailures opts testName))
         postState
+      pure (res, postState)
 
-    traceShowM results
-    return ("", Left "", vm)
+    models <- forM results $ \(res, vm') -> do
+      let cd' = _calldata $ _state vm'
+      prettyCd <- prettyCalldata cd' testName types
+      pure (res, prettyCd)
+    traceShowM models
+
+    let success = if "proveFail" `isPrefixOf` testName
+                  then or (fmap fst results)
+                  else and (fmap fst results)
+    if success
+    then
+      return ("\x1b[32m[PASS]\x1b[0m " <> testName, Right "", vm)
+    else
+      return ("\x1b[31m[FAIL]\x1b[0m " <> testName, Left "", vm)
+
+prettyCalldata :: (Buffer, SWord 32) -> Text -> [AbiType]-> SBV.Query String
+prettyCalldata (buffer, cdlen) sig types = do
+  cdlen' <- num <$> SBV.getValue cdlen
+  calldatainput <- case buffer of
+    SymbolicBuffer cd -> mapM (SBV.getValue . fromSized) (take cdlen' cd) <&> BS.pack
+    ConcreteBuffer cd -> return $ BS.take cdlen' cd
+  pure $ Text.unpack (head (Text.splitOn "(" sig)) ++
+          show (decodeAbiValue
+                (AbiTupleType (Vector.fromList types))
+                (BSLazy.fromStrict (BS.drop 4 calldatainput)))
 
 execSymTest :: UnitTestOptions -> ABIMethod -> ([SWord 8], SWord 32) -> Stepper VM
 execSymTest UnitTestOptions { .. } method cd = do
