@@ -528,7 +528,6 @@ symRun opts@UnitTestOptions{..} vm testName types = do
         postState
       pure (res, model)
 
-    traceShowM results
     let success = if "proveFail" `isPrefixOf` testName
                   then or (fmap (view _1) results)
                   else and (fmap (view _1) results)
@@ -536,18 +535,28 @@ symRun opts@UnitTestOptions{..} vm testName types = do
     then
       return ("\x1b[32m[PASS]\x1b[0m " <> testName, Right "", vm)
     else
-      return ("\x1b[31m[FAIL]\x1b[0m " <> testName, Left "", vm)
+      return ("\x1b[31m[FAIL]\x1b[0m " <> testName, Left $ displayCounterExamples testName results, vm)
 
-prettyCalldata :: (Buffer, SWord 32) -> Text -> [AbiType]-> SBV.Query String
+displayCounterExamples :: Text -> [(Bool, Text)] -> Text
+displayCounterExamples testName results = mconcat
+  [ "Counter Examples: "
+  , testName
+  , "\n"
+  , intercalate "\n" $ indentLines 2 <$> (fmap snd failing')
+  ]
+  where
+    failing' = filter (\(r, _) -> not r) results
+
+prettyCalldata :: (Buffer, SWord 32) -> Text -> [AbiType]-> SBV.Query Text
 prettyCalldata (buffer, cdlen) sig types = do
   cdlen' <- num <$> SBV.getValue cdlen
   calldatainput <- case buffer of
     SymbolicBuffer cd -> mapM (SBV.getValue . fromSized) (take cdlen' cd) <&> BS.pack
     ConcreteBuffer cd -> return $ BS.take cdlen' cd
-  pure $ Text.unpack (head (Text.splitOn "(" sig)) ++
-          show (decodeAbiValue
-                (AbiTupleType (Vector.fromList types))
-                (BSLazy.fromStrict (BS.drop 4 calldatainput)))
+  pure $ (head (Text.splitOn "(" sig)) <>
+           (Text.pack $ show (decodeAbiValue
+                  (AbiTupleType (Vector.fromList types))
+                  (BSLazy.fromStrict (BS.drop 4 calldatainput))))
 
 execSymTest :: UnitTestOptions -> ABIMethod -> ([SWord 8], SWord 32) -> Stepper VM
 execSymTest UnitTestOptions { .. } method cd = do
