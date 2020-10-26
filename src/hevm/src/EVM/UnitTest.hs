@@ -499,6 +499,7 @@ fuzzRun opts@UnitTestOptions{..} vm testName types = do
               )
 
 -- | Define the thread spawner for symbolic tests
+-- TODO: return a list of VM's
 symRun :: UnitTestOptions -> VM -> Text -> [AbiType] -> SBV.Query (Text, Either Text Text, VM)
 symRun opts@UnitTestOptions{..} vm testName types = do
     cd <- symCalldata testName types []
@@ -519,7 +520,7 @@ symRun opts@UnitTestOptions{..} vm testName types = do
         Sat -> do
           prettyCd <- prettyCalldata (first SymbolicBuffer cd) testName types
           pure $ Just (postVM, prettyCd)
-        Unk -> error "SMT timeout"
+        Unk -> error "SMT timeout" -- TODO: handle this properly
         DSat _ -> error "Unexpected Dsat"
 
     results <- liftIO $ forM reachable $ \(postState, model) -> do
@@ -535,11 +536,11 @@ symRun opts@UnitTestOptions{..} vm testName types = do
     then
       return ("\x1b[32m[PASS]\x1b[0m " <> testName, Right "", vm)
     else
-      return ("\x1b[31m[FAIL]\x1b[0m " <> testName, Left $ displayCounterExamples testName results, vm)
+      return ("\x1b[31m[FAIL]\x1b[0m " <> testName, Left $ symFailure testName results, vm)
 
-displayCounterExamples :: Text -> [(Bool, Text)] -> Text
-displayCounterExamples testName results = mconcat
-  [ "Counter Examples: "
+symFailure :: Text -> [(Bool, Text)] -> Text
+symFailure testName results = mconcat
+  [ "Failure: "
   , testName
   , "\n"
   , intercalate "\n" $ indentLines 2 <$> (fmap snd failing')
