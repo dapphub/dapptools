@@ -6,6 +6,7 @@
 module EVM.Solidity
   ( solidity
   , solcRuntime
+  , solidity'
   , JumpType (..)
   , SolcContract (..)
   , StorageItem (..)
@@ -49,18 +50,13 @@ import EVM.ABI
 import EVM.Keccak
 import EVM.Types
 
-import Codec.CBOR.Term      (decodeTerm)
-import Codec.CBOR.Read      (deserialiseFromBytes)
 import Control.Applicative
 import Control.Lens         hiding (Indexed)
 import Data.Aeson           (Value (..))
 import Data.Aeson.Lens
 import Data.Scientific
-import Data.Binary.Get      (runGet, getWord16be)
 import Data.ByteString      (ByteString)
-import Data.ByteString.Lazy (fromStrict)
 import Data.Char            (isDigit)
-import Data.Either          (isRight)
 import Data.Foldable
 import Data.Map.Strict      (Map)
 import Data.Maybe
@@ -440,14 +436,23 @@ solidity' src = withSystemTempFile "hevm.sol" $ \path handle -> do
 -- as the codehash matches otherwise, we don't care if there is some
 -- difference there.
 stripBytecodeMetadata :: ByteString -> ByteString
-stripBytecodeMetadata bc | BS.length cl /= 2 = bc
-                         | BS.length h >= cl' && (isRight . deserialiseFromBytes decodeTerm $ fromStrict cbor) = bc'
-                         | otherwise = bc
-  where
-      l = BS.length bc
-      (h, cl) = BS.splitAt (l - 2) bc
-      cl' = fromIntegral . runGet getWord16be $ fromStrict cl
-      (bc', cbor) = BS.splitAt (BS.length h - cl') h
+stripBytecodeMetadata bs =
+  let stripCandidates = flip BS.breakSubstring bs <$> knownBzzrPrefixes in
+    case find ((/= mempty) . snd) stripCandidates of
+      Nothing -> bs
+      Just (b, _) -> b
+
+knownBzzrPrefixes :: [ByteString]
+knownBzzrPrefixes = [
+  -- a1 65 "bzzr0" 0x58 0x20 (solc <= 0.5.8)
+  BS.pack [0xa1, 0x65, 98, 122, 122, 114, 48, 0x58, 0x20],
+  -- a2 65 "bzzr0" 0x58 0x20 (solc >= 0.5.9)
+  BS.pack [0xa2, 0x65, 98, 122, 122, 114, 48, 0x58, 0x20],
+  -- a2 65 "bzzr1" 0x58 0x20 (solc >= 0.5.11)
+  BS.pack [0xa2, 0x65, 98, 122, 122, 114, 49, 0x58, 0x20],
+  -- a2 64 "ipfs" 0x58 0x22 (solc >= 0.6.0)
+  BS.pack [0xa2, 0x64, 0x69, 0x70, 0x66, 0x73, 0x58, 0x22]
+  ]
 
 -- | Every node in the AST has an ID, and other nodes reference those
 -- IDs.  This function recurses through the tree looking for objects

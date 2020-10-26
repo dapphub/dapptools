@@ -123,6 +123,31 @@ main = defaultMain $ testGroup "hevm"
         in x == y
     ]
 
+  , testGroup "metadata stripper"
+    [ testCase "it strips the metadata for solc => 0.6" $ do
+        let code = hexText "0x608060405234801561001057600080fd5b50600436106100365760003560e01c806317bf8bac1461003b578063acffee6b1461005d575b600080fd5b610043610067565b604051808215151515815260200191505060405180910390f35b610065610073565b005b60008060015414905090565b6000809054906101000a900473ffffffffffffffffffffffffffffffffffffffff1673ffffffffffffffffffffffffffffffffffffffff1663f8a8fd6d6040518163ffffffff1660e01b815260040160206040518083038186803b1580156100da57600080fd5b505afa1580156100ee573d6000803e3d6000fd5b505050506040513d602081101561010457600080fd5b810190808051906020019092919050505060018190555056fea265627a7a723158205d775f914dcb471365a430b5f5b2cfe819e615cbbb5b2f1ccc7da1fd802e43c364736f6c634300050b0032"
+            stripped = stripBytecodeMetadata code
+        assertEqual "failed to strip metadata" (show (ByteStringS stripped)) "0x608060405234801561001057600080fd5b50600436106100365760003560e01c806317bf8bac1461003b578063acffee6b1461005d575b600080fd5b610043610067565b604051808215151515815260200191505060405180910390f35b610065610073565b005b60008060015414905090565b6000809054906101000a900473ffffffffffffffffffffffffffffffffffffffff1673ffffffffffffffffffffffffffffffffffffffff1663f8a8fd6d6040518163ffffffff1660e01b815260040160206040518083038186803b1580156100da57600080fd5b505afa1580156100ee573d6000803e3d6000fd5b505050506040513d602081101561010457600080fd5b810190808051906020019092919050505060018190555056fe"
+    ,
+      testCase "it strips the metadata and constructor args" $ do
+        let srccode =
+              [i|
+                contract A {
+                  uint y;
+                  constructor(uint x) public {
+                    y = x;
+                  }
+                }
+                |]
+
+        (json, path) <- solidity' srccode
+        let Just (solc, _, _) = readJSON json
+            initCode :: ByteString
+            Just initCode = solc ^? ix (path <> ":A") . creationCode
+        -- add constructor arguments
+        assertEqual "constructor args screwed up metadata stripping" (stripBytecodeMetadata (initCode <> encodeAbiValue (AbiUInt 256 1))) (stripBytecodeMetadata initCode)
+    ]
+
   , testGroup "RLP encodings"
     [ testProperty "rlp decode is a retraction (bytes)" $ \(Bytes bs) ->
 --      withMaxSuccess 100000 $
