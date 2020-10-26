@@ -27,7 +27,6 @@ import Control.Arrow ((***), (&&&))
 import Control.Lens
 import Control.Monad
 
-import Data.ByteString (ByteString)
 import Data.Aeson ((.:), FromJSON (..))
 import Data.Foldable (fold)
 import Data.Map (Map)
@@ -314,10 +313,7 @@ checkTx :: Transaction -> Block -> Map Addr EVM.Contract -> Maybe (Map Addr EVM.
 checkTx tx block prestate = do
   origin <- sender 1 tx
   validateTx tx prestate
-  let gasPrice = EVM.w256 $ txGasPrice tx
-      gasLimit = EVM.w256 $ txGasLimit tx
-      coinbase   = blockCoinbase block
-      isCreate   = isNothing (txToAddr tx)
+  let isCreate   = isNothing (txToAddr tx)
       senderNonce = EVM.wordValue $ view (accountAt origin . nonce) prestate
       toAddr      = fromMaybe (EVM.createAddress origin senderNonce) (txToAddr tx)
       prevCode    = view (accountAt toAddr . contractcode) prestate

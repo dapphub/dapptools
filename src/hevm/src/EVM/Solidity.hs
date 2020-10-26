@@ -6,6 +6,7 @@
 module EVM.Solidity
   ( solidity
   , solcRuntime
+  , solidity'
   , JumpType (..)
   , SolcContract (..)
   , StorageItem (..)
@@ -66,7 +67,6 @@ import Data.Sequence        (Seq)
 import Data.Text            (Text, pack, intercalate)
 import Data.Text.Encoding   (encodeUtf8)
 import Data.Text.IO         (readFile, writeFile)
-import Data.Tuple           (swap)
 import Data.Vector          (Vector)
 import Data.Word
 import GHC.Generics         (Generic)
@@ -437,9 +437,8 @@ solidity' src = withSystemTempFile "hevm.sol" $ \path handle -> do
 -- difference there.
 stripBytecodeMetadata :: ByteString -> ByteString
 stripBytecodeMetadata bs =
-  let breakSubstringFromEnd x suff = swap $ (bimap BS.reverse BS.reverse) $ BS.breakSubstring (BS.reverse suff) (BS.reverse x)
-      stripCandidates = breakSubstringFromEnd bs <$> knownBzzrPrefixes in
-    case find ((/= mempty) . fst) stripCandidates of
+  let stripCandidates = flip BS.breakSubstring bs <$> knownBzzrPrefixes in
+    case find ((/= mempty) . snd) stripCandidates of
       Nothing -> bs
       Just (b, _) -> b
 

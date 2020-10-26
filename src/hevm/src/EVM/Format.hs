@@ -294,7 +294,7 @@ showError bs = case BS.take 4 bs of
   _             -> formatBinary bs
 
 showValues :: [AbiType] -> Buffer -> Text
-showValues ts (SymbolicBuffer sbs) = "symbolic: " <> (pack . show $ AbiTupleType (fromList ts))
+showValues ts (SymbolicBuffer  _) = "symbolic: " <> (pack . show $ AbiTupleType (fromList ts))
 showValues ts (ConcreteBuffer bs) =
   case runGetOrFail (getAbiSeq (length ts) ts) (fromStrict bs) of
     Right (_, _, xs) -> showAbiValues xs
