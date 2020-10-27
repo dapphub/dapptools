@@ -17,10 +17,6 @@ import Data.SBV hiding (runSMT, newArray_, addAxiom, Word)
 import qualified Data.SBV.List as SL
 import Data.SBV.List ((.++), (.!!))
 
--- | Symbolic words of 256 bits, possibly annotated with additional
---   "insightful" information
-data SymWord = S Whiff (SWord 256)
-
 -- | Convenience functions transporting between the concrete and symbolic realm
 sw256 :: SWord 256 -> SymWord
 sw256 = S Dull
@@ -37,9 +33,6 @@ w256lit = S Dull . literal . toSizzle
 
 litAddr :: Addr -> SAddr
 litAddr = SAddr . literal . toSizzle
-
-maybeLitWord :: SymWord -> Maybe Word
-maybeLitWord (S whiff a) = fmap (C whiff . fromSizzle) (unliteral a)
 
 maybeLitAddr :: SAddr -> Maybe Addr
 maybeLitAddr (SAddr a) = fmap fromSizzle (unliteral a)
@@ -395,23 +388,12 @@ readStaticWordWithBound (S _ ind) (xs, S _ bound) =
 
 -- | Custom instances for SymWord, many of which have direct
 -- analogues for concrete words defined in Concrete.hs
-
-instance Show SymWord where
-  show s@(S Dull _) = case maybeLitWord s of
-    Nothing -> "<symbolic>"
-    Just w  -> show w
-  show (S (Var var) x) = var ++ ": " ++ show x
-  show (S (InfixBinOp symbol x y) z) = show x ++ symbol ++ show y  ++ ": " ++ show z
-  show (S (BinOp symbol x y) z) = symbol ++ show x ++ show y  ++ ": " ++ show z
-  show (S (UnOp symbol x) z) = symbol ++ show x ++ ": " ++ show z
-  show (S whiff x) = show whiff ++ ": " ++ show x
-
 instance EqSymbolic SymWord where
   (.==) (S _ x) (S _ y) = x .== y
 
 instance Num SymWord where
-  (S _ x) + (S _ y) = sw256 (x + y)
-  (S _ x) * (S _ y) = sw256 (x * y)
+  (S _ x) + (S _ y) = sw256 (x + y `mod` 2 ^ 256)
+  (S _ x) * (S _ y) = sw256 (x * y `mod ` 2 ^256)
   abs (S _ x) = sw256 (abs x)
   signum (S _ x) = sw256 (signum x)
   fromInteger x = sw256 (fromInteger x)

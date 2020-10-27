@@ -7,13 +7,14 @@
 
 module EVM.Types where
 
+import Prelude hiding (Word)
 import Data.Aeson (FromJSON (..), (.:))
 
 #if MIN_VERSION_aeson(1, 0, 0)
 import Data.Aeson (FromJSONKey (..), FromJSONKeyFunction (..))
 #endif
 
-import Data.SBV
+import Data.SBV hiding (Word)
 import Data.SBV.List ((.++))
 import qualified Data.SBV.List as SL
 import Data.Kind
@@ -96,46 +97,80 @@ litBytes bs = fmap (toSized . literal) (BS.unpack bs)
 -- During concrete execution, this is simply `ByteString`.
 data Buffer
   = ConcreteBuffer ByteString
-  | SymbolicBuffer SliceSet
+  | Slice SymWord SymWord Buffer
+  | SymbolicBuffer BoundedArray
+  | Insert SymWord Buffer Buffer
   deriving (Show)
 
 type BoundedArray = (SArray (WordN 256) Word8, SWord 256)
 
-data SliceSet
-  = Ground DynBuffer
-  | Insert SymWord Slice SliceSet
+readBoundedArray :: SWord 256 -> BoundedArray -> SWord8
+readBoundedArray i (a,len) = ite (i .> len) 0 (readArray a i)
 
-type Slice = SymWord SymWord SliceSet
+-- | Symbolic words of 256 bits, possibly annotated with additional
+--   "insightful" information
+data SymWord = S Whiff (SWord 256)
 
-readBoundedArray :: SWord 256 -> BoundedArray -> Word8
-readBoundedArray i (a,len) = ite (i .> len) 0 (readArray i a)
+data Word = C Whiff W256 --maybe to remove completely in the future
 
-dynamize :: Buffer -> SList (WordN 8)
-dynamize (ConcreteBuffer a)  = SL.implode $ litBytes a
-dynamize (StaticSymBuffer a) = SL.implode a
-dynamize (DynamicSymBuffer a) = a
+-- | This type can give insight into the provenance of a term
+data Whiff = Dull
+           | FromKeccak ByteString
+           | Var String
+           | FromBytes Buffer
+           | InfixBinOp String Whiff Whiff
+           | BinOp String Whiff Whiff
+           | UnOp String Whiff
+  deriving Show
 
-instance EqSymbolic Buffer where
-  ConcreteBuffer a .== ConcreteBuffer b = literal (a == b)
-  ConcreteBuffer a .== StaticSymBuffer b = litBytes a .== b
-  StaticSymBuffer a .== ConcreteBuffer b = a .== litBytes b
-  StaticSymBuffer a .== StaticSymBuffer b = a .== b
-  a .== b = dynamize a .== dynamize b
+maybeLitWord :: SymWord -> Maybe Word
+maybeLitWord (S whiff a) = fmap (C whiff . fromSizzle) (unliteral a)
+
+instance Show SymWord where
+  show s@(S Dull _) = case maybeLitWord s of
+    Nothing -> "<symbolic>"
+    Just w  -> show w
+  show (S (Var var) x) = var ++ ": " ++ show x
+  show (S (InfixBinOp symbol x y) z) = show x ++ symbol ++ show y  ++ ": " ++ show z
+  show (S (BinOp symbol x y) z) = symbol ++ show x ++ show y  ++ ": " ++ show z
+  show (S (UnOp symbol x) z) = symbol ++ show x ++ ": " ++ show z
+  show (S whiff x) = show whiff ++ ": " ++ show x
+
+instance Show Word where
+  show (C Dull x) = show x
+  show (C (Var var) x) = var ++ ": " ++ show x
+  show (C (InfixBinOp symbol x y) z) = show x ++ symbol ++ show y  ++ ": " ++ show z
+  show (C (BinOp symbol x y) z) = symbol ++ show x ++ show y  ++ ": " ++ show z
+  show (C (UnOp symbol x) z) = symbol ++ show x ++ ": " ++ show z
+  show (C whiff x) = show whiff ++ ": " ++ show x
 
 
-instance Semigroup Buffer where
-  ConcreteBuffer a     <> ConcreteBuffer b   = ConcreteBuffer (a <> b)
-  ConcreteBuffer a     <> StaticSymBuffer b  = StaticSymBuffer (litBytes a <> b)
-  c@(ConcreteBuffer a) <> DynamicSymBuffer b = DynamicSymBuffer (dynamize c .++ b)
+-- dynamize :: Buffer -> SList (WordN 8)
+-- dynamize (ConcreteBuffer a)  = SL.implode $ litBytes a
+-- dynamize (StaticSymBuffer a) = SL.implode a
+-- dynamize (DynamicSymBuffer a) = a
 
-  StaticSymBuffer a     <> ConcreteBuffer b   = StaticSymBuffer (a <> litBytes b)
-  StaticSymBuffer a     <> StaticSymBuffer b  = StaticSymBuffer (a <> b)
-  c@(StaticSymBuffer a) <> DynamicSymBuffer b = DynamicSymBuffer (dynamize c .++ b)
+-- instance EqSymbolic Buffer where
+--   ConcreteBuffer a .== ConcreteBuffer b = literal (a == b)
+--   ConcreteBuffer a .== StaticSymBuffer b = litBytes a .== b
+--   StaticSymBuffer a .== ConcreteBuffer b = a .== litBytes b
+--   StaticSymBuffer a .== StaticSymBuffer b = a .== b
+--   a .== b = dynamize a .== dynamize b
 
-  a <> b = DynamicSymBuffer (dynamize a .++ dynamize b)
 
-instance Monoid Buffer where
-  mempty = ConcreteBuffer mempty
+-- instance Semigroup Buffer where
+--   ConcreteBuffer a     <> ConcreteBuffer b   = ConcreteBuffer (a <> b)
+--   ConcreteBuffer a     <> StaticSymBuffer b  = StaticSymBuffer (litBytes a <> b)
+--   c@(ConcreteBuffer a) <> DynamicSymBuffer b = DynamicSymBuffer (dynamize c .++ b)
+
+--   StaticSymBuffer a     <> ConcreteBuffer b   = StaticSymBuffer (a <> litBytes b)
+--   StaticSymBuffer a     <> StaticSymBuffer b  = StaticSymBuffer (a <> b)
+--   c@(StaticSymBuffer a) <> DynamicSymBuffer b = DynamicSymBuffer (dynamize c .++ b)
+
+--   a <> b = DynamicSymBuffer (dynamize a .++ dynamize b)
+
+-- instance Monoid Buffer where
+--   mempty = ConcreteBuffer mempty
 
 
 newtype Addr = Addr { addressWord160 :: Word160 }

@@ -106,35 +106,31 @@ type ABIMethod = Text
 
 -- | Assuming a constructor is loaded, this stepper will run the constructor
 -- to create the test contract, give it an initial balance, and run `setUp()'.
-initializeUnitTest :: UnitTestOptions -> Stepper ()
+initializeUnitTest :: UnitTestOptions -> EVM ()
 initializeUnitTest UnitTestOptions { .. } = do
 
   let addr = testAddress testParams
 
-  Stepper.evm $ do
-    -- Maybe modify the initial VM, e.g. to load library code
-    modify vmModifier
-    -- Make a trace entry for running the constructor
-    pushTrace (EntryTrace "constructor")
+  -- Maybe modify the initial VM, e.g. to load library code
+  modify vmModifier
+  -- Make a trace entry for running the constructor
+  pushTrace (EntryTrace "constructor")
 
   -- Constructor is loaded; run until it returns code
-  void Stepper.execFully
+  exec
 
   -- Give a balance to the test target
-  Stepper.evm $ do
-    env . contracts . ix addr . balance += w256 (testBalanceCreate testParams)
+  env . contracts . ix addr . balance += w256 (testBalanceCreate testParams)
 
-    -- Initialize the test contract
-    setupCall testParams "setUp()" emptyAbi
-    popTrace
-    pushTrace (EntryTrace "initialize test")
-
+  -- Initialize the test contract
+  setupCall testParams "setUp()" emptyAbi
+  popTrace
+  pushTrace (EntryTrace "initialize test")
   -- Let `setUp()' run to completion
-  res <- Stepper.execFully
-  Stepper.evm $ case res of
+  res <- exec
+  case res of
     Left e -> pushTrace (ErrorTrace e)
     _ -> popTrace
-
 
 -- | Assuming a test contract is loaded and initialized, this stepper
 -- will run the specified test method and return whether it succeeded.
