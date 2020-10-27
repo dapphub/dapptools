@@ -34,10 +34,10 @@ import Control.Monad.Par.IO (runParIO)
 
 import qualified Data.ByteString.Lazy as BSLazy
 import qualified Data.SBV.Trans.Control as SBV (Query, queryState, getValue, resetAssertions)
-import Data.Bifunctor     (first, second)
+import Data.Bifunctor     (first)
 import Data.ByteString    (ByteString)
 import Data.SBV    hiding (verbose)
-import Data.SBV.Control   (CheckSatResult(..), checkSat)
+import Data.SBV.Control   (CheckSatResult(..), checkSat, freshArray_)
 import Data.Either        (isRight)
 import Data.Foldable      (toList)
 import Data.Map           (Map)
@@ -501,7 +501,8 @@ fuzzRun opts@UnitTestOptions{..} vm testName types = do
 -- | Define the thread spawner for symbolic tests
 -- TODO: return a list of VM's
 symRun :: UnitTestOptions -> VM -> Text -> [AbiType] -> SBV.Query (Text, Either Text Text, VM)
-symRun opts@UnitTestOptions{..} vm testName types = do
+symRun opts@UnitTestOptions{..} concreteVm testName types = do
+    vm <- symbolify concreteVm
     cd <- symCalldata testName types []
     smtState <- SBV.queryState
     paths <-
@@ -716,7 +717,7 @@ initialUnitTestVm (UnitTestOptions {..}) theContract =
            , vmoptSchedule = FeeSchedule.istanbul
            , vmoptChainId = testChainId
            , vmoptCreate = True
-           , vmoptStorageModel = ConcreteS
+           , vmoptStorageModel = ConcreteS -- TODO: support RPC
            }
     creator =
       initialContract (RuntimeCode mempty)
@@ -730,6 +731,26 @@ maybeM :: (Monad m) => b -> (a -> b) -> m (Maybe a) -> m b
 maybeM def f mayb = do
   may <- mayb
   return $ maybe def f may
+
+-- | takes a concrete VM and makes all storage symbolic
+symbolify :: VM -> SBV.Query VM
+symbolify vm = do
+    symContracts <- mapM mkSymContract (view (env . contracts) vm)
+    let setStorageModel = set (env . storageModel) SymbolicS
+        setContracts = set (env . contracts) symContracts
+    pure $ setContracts $ setStorageModel vm
+  where
+    mkSymContract :: Contract -> SBV.Query Contract
+    mkSymContract contract' = do
+      newStore <- mkSymStorage (view storage contract')
+      pure $ set storage newStore contract'
+
+    mkSymStorage :: Storage -> SBV.Query Storage
+    mkSymStorage (Symbolic s) = pure $ Symbolic s
+    mkSymStorage (Concrete s) = do
+      newStore <- Symbolic <$> freshArray_ Nothing
+      let update acc key val = writeStorage (litWord key) val acc
+      pure $ Map.foldlWithKey update newStore s
 
 getParametersFromEnvironmentVariables :: Maybe Text -> IO TestVMParams
 getParametersFromEnvironmentVariables rpc = do
