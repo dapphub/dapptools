@@ -342,11 +342,20 @@ data BranchData = BranchData {
 
 makeLenses ''BranchData
 
+
+showTreeIndentSymbol :: Bool      -- isLastChild
+                     -> Bool      -- isFirstLine
+                     -> String
+showTreeIndentSymbol True  True  = "\x2514"
+showTreeIndentSymbol False True  = "\x251c"
+showTreeIndentSymbol True  False = " "
+showTreeIndentSymbol False False = "\x2502"
+
 adjustTree :: String -> Int -> [BranchData] -> [BranchData]
 adjustTree cond i bds = let
-  indentChild = over navigation $ (<>) "| "
+  indentChild = over navigation $ (<>) ((showTreeIndentSymbol (i==1) False) <> " ")
   children = map indentChild bds
-  branchPrefix = BranchData (show i) cond ""
+  branchPrefix = BranchData (showTreeIndentSymbol (i==1) True <> " " <> show i) cond ""
   in branchPrefix : children
 
 flattenTree :: Tree BranchInfo -> [BranchData]
