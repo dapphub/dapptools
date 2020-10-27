@@ -18,7 +18,6 @@ import EVM.Fetch
 import EVM.Stepper
 import EVM.UnitTest
 import EVM.Transaction
-import Debug.Trace
 
 import Control.Lens hiding ((.=), from, to, pre)
 import Control.Monad.State.Strict
@@ -27,6 +26,8 @@ import Network.Wai (responseLBS, Application, getRequestBodyChunk)
 import Network.Wai.Handler.Warp (run)
 import Network.HTTP.Types (status200)
 import Network.HTTP.Types.Header (hContentType)
+import qualified Network.Wreq.Session as Session
+
 
 import Data.Aeson
 import Control.Applicative
@@ -54,6 +55,14 @@ instance FromJSON Request where
     return $ Request id' jsonrpc' method' params'
   parseJSON invalid =
     JSON.typeMismatch "Request" invalid
+
+instance ToJSON Request where
+  toJSON (Request id' jsonrpc' method' params') =
+    object [ "id" .= either (Number . num) (String . pack) id'
+           , "jsonrpc" .= jsonrpc'
+           , "method" .= method'
+           , "params" .= params'
+           ]
 
 data Eth_call = Eth_call
   { from :: Addr
@@ -125,17 +134,7 @@ rpcServer url initialVm readVM writeVM request respond = do
 
     Just r -> do
       result <- case method r of
-            "net_version" ->
-              return $ txt (num $ wordValue $ view (EVM.env . EVM.chainId) vm :: Integer)
-
-            "eth_chainId" ->
-              return $ txt (num $ wordValue $ view (EVM.env . EVM.chainId) vm :: Integer)
-
             "eth_blockNumber" ->
-              return $ txt $ view (EVM.block . EVM.number) vm
-
-            "eth_getBlockByNumber" -> do
---              let Just n = param 0 r
               return $ txt $ view (EVM.block . EVM.number) vm
 
             "eth_getBalance" -> do
@@ -158,6 +157,15 @@ rpcServer url initialVm readVM writeVM request respond = do
               let Just addr = param 0 r
               EVM.RuntimeCode c <- view EVM.contractcode <$> getContract addr vm
               return $ txt (ByteStringS c)
+
+            "eth_estimateGas" -> do
+              let Just Eth_call{..} = params r ^? ix 0 . _JSON
+              c <- getContract to vm
+              c' <- getContract from vm
+              let c'' = c' & set EVM.balance 0xffffffffffffffffffff
+                  pre = execState (call from (Just to) (ConcreteBuffer txdata) gas gasPrice value) (vm & over (EVM.env . EVM.contracts) (Map.insert to c . Map.insert from c''))
+              post <- run' pre
+              return $ Number $ num $ view (EVM.state . EVM.gas) post
 
             "eth_call" -> do
               let Just Eth_call{..} = params r ^? ix 0 . _JSON
@@ -186,10 +194,12 @@ rpcServer url initialVm readVM writeVM request respond = do
               c' <- getContract txfrom vm
               let pre = execState (call txfrom txToAddr (ConcreteBuffer txData) txGasLimit txGasPrice txValue) (vm & over (EVM.env . EVM.contracts) (tomod . Map.insert txfrom c'))
               post <- run' pre
-              writeVM post
+              writeVM (post & over (EVM.block . EVM.number) (+ 1))
               return $ txt hash
 
-            _ -> return $ "hmm?"
+            _ -> do
+              Just v <- fwd (toJSON r)
+              return v
 
       let answer = Response (getId r) (getJsonRpc r) result
 
@@ -202,6 +212,8 @@ rpcServer url initialVm readVM writeVM request respond = do
   where
     param :: (Read a) => Int -> Request -> Maybe a
     param i r = read . unpack <$> params r ^? ix i . _String
+    fwd :: Value -> IO (Maybe Value)
+    fwd req = Session.withAPISession $ \s -> fetchWithSession url s req
     run' :: EVM.VM -> IO (EVM.VM)
     run' = execStateT (interpret fetcher . void $ EVM.Stepper.execFully)
     fetcher = http Latest url
