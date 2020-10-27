@@ -11,7 +11,7 @@ import Prelude hiding (Word)
 import Control.Lens hiding (pre)
 import EVM hiding (Query, push)
 import qualified EVM
-import EVM.Exec hiding (exec)
+import EVM.Exec
 import qualified EVM.Fetch as Fetch
 import EVM.ABI
 import EVM.Stepper (Stepper)
@@ -154,10 +154,10 @@ data WrapVM = WrapVM
 
 makeLenses ''WrapVM
 
-interpret :: Fetch.Fetcher -> Maybe Integer -> WrapVM -> IO (Tree BranchInfo)
-interpret fetcher maxIter (WrapVM vm startvm) = let
+interpret' :: Fetch.Fetcher -> Maybe Integer -> WrapVM -> IO (Tree BranchInfo)
+interpret' fetcher maxIter (WrapVM vm startvm) = let
   eval _state = snd $ runState _state vm
-  cont _state = interpret fetcher maxIter (WrapVM (eval _state) startvm)
+  cont _state = interpret' fetcher maxIter (WrapVM (eval _state) startvm)
   in case view EVM.result vm of
 
     Nothing -> cont exec1
@@ -181,6 +181,61 @@ interpret fetcher maxIter (WrapVM vm startvm) = let
 
     Just _
       -> return $ Node BranchInfo {_vm = vm, _branchCondition = Nothing } []
+
+interpret
+  :: Fetch.Fetcher
+  -> Maybe Integer --max iterations
+  -> Stepper a
+  -> StateT VM Query [a]
+interpret fetcher maxIter =
+  eval . Operational.view
+
+  where
+    eval
+      :: Operational.ProgramView Stepper.Action a
+      -> StateT VM Query [a]
+
+    eval (Operational.Return x) =
+      pure [x]
+
+    eval (action Operational.:>>= k) =
+      case action of
+        Stepper.Exec ->
+          exec >>= interpret fetcher maxIter . k
+        Stepper.Run ->
+          run >>= interpret fetcher maxIter . k
+        Stepper.Ask (EVM.PleaseChoosePath _ continue) -> do
+          vm <- get
+          case maxIterationsReached vm maxIter of
+            Nothing -> do push 1
+                          a <- interpret fetcher maxIter (Stepper.evm (continue True) >>= k)
+                          put vm
+                          pop 1
+                          push 1
+                          b <- interpret fetcher maxIter (Stepper.evm (continue False) >>= k)
+                          pop 1
+                          return $ a <> b
+            Just n -> interpret fetcher maxIter (Stepper.evm (continue (not n)) >>= k)
+        Stepper.Wait q -> do
+          let performQuery =
+                do m <- liftIO (fetcher q)
+                   interpret fetcher maxIter (Stepper.evm m >>= k)
+
+          case q of
+            PleaseAskSMT _ _ continue -> do
+              codelocation <- getCodeLocation <$> get
+              iters <- use (iterations . at codelocation)
+              case iters of
+                -- if this is the first time we are branching at this point,
+                -- explore both branches without consulting SMT.
+                -- Exploring too many branches is a lot cheaper than
+                -- consulting our SMT solver.
+                Nothing -> interpret fetcher maxIter (Stepper.evm (continue EVM.Unknown) >>= k)
+                _ -> performQuery
+            _ -> performQuery
+
+        Stepper.EVM m ->
+          State.state (runState m) >>= interpret fetcher maxIter . k
 
 
 maxIterationsReached :: VM -> Maybe Integer -> Maybe Bool
@@ -228,7 +283,7 @@ verify :: VM -> Maybe Integer -> Maybe (Fetch.BlockNumber, Text) -> Maybe Postco
 verify preState maxIter rpcinfo maybepost = do
   let model = view (env . storageModel) preState
   smtState <- queryState
-  tree <- liftIO $ interpret (Fetch.oracle (Just smtState) rpcinfo model False) maxIter (WrapVM preState preState)
+  tree <- liftIO $ interpret' (Fetch.oracle (Just smtState) rpcinfo model False) maxIter (WrapVM preState preState)
   case maybepost of
     (Just post) -> do
       let livePaths = leaves tree
@@ -264,10 +319,10 @@ equivalenceCheck bytecodeA bytecodeB maxiter signature' = do
 
   smtState <- queryState
   push 1
-  aVMs <- liftIO $ interpret (Fetch.oracle (Just smtState) Nothing SymbolicS False) maxiter (WrapVM preStateA preStateA)
+  aVMs <- liftIO $ interpret' (Fetch.oracle (Just smtState) Nothing SymbolicS False) maxiter (WrapVM preStateA preStateA)
   pop 1
   push 1
-  bVMs <- liftIO $ interpret (Fetch.oracle (Just smtState) Nothing SymbolicS False) maxiter (WrapVM preStateB preStateB)
+  bVMs <- liftIO $ interpret' (Fetch.oracle (Just smtState) Nothing SymbolicS False) maxiter (WrapVM preStateB preStateB)
   pop 1
   -- Check each pair of endstates for equality:
   let differingEndStates = uncurry distinct <$> [(a,b) | a <- leaves aVMs, b <- leaves bVMs]
