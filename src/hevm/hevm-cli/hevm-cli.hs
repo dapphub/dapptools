@@ -611,6 +611,14 @@ echo request respond = do
 
 launchRpc :: Command Options.Unwrapped -> IO ()
 launchRpc cmd = do
+  let block' = maybe EVM.Fetch.Latest EVM.Fetch.BlockNumber (block cmd)
+  (miner,ts,blockNum,diff) <- EVM.Fetch.fetchBlockFrom block' (rpcurl cmd) >>= \case
+      Nothing -> error $ "Could not fetch block"
+      Just EVM.Block{..} -> return (_coinbase
+                                   , wordValue $ forceLit $ _timestamp
+                                   , wordValue _number
+                                   , wordValue _difficulty
+                                   )
   let vm = EVM.makeVm $ EVM.VMOpts
             { EVM.vmoptContract      = EVM.newAccount
             , EVM.vmoptCalldata      = (mempty, 0)
@@ -620,13 +628,13 @@ launchRpc cmd = do
             , EVM.vmoptOrigin        = 0
             , EVM.vmoptGas           = 0
             , EVM.vmoptGaslimit      = 0
-            , EVM.vmoptCoinbase      = 0
-            , EVM.vmoptNumber        = 0
-            , EVM.vmoptTimestamp     = 0
+            , EVM.vmoptCoinbase      = miner
+            , EVM.vmoptNumber        = blockNum
+            , EVM.vmoptTimestamp     = w256lit ts
             , EVM.vmoptBlockGaslimit = 0
             , EVM.vmoptGasprice      = 0
             , EVM.vmoptMaxCodeSize   = 0
-            , EVM.vmoptDifficulty    = 0
+            , EVM.vmoptDifficulty    = diff
             , EVM.vmoptSchedule      = FeeSchedule.istanbul
             , EVM.vmoptChainId       = 1
             , EVM.vmoptCreate        = False

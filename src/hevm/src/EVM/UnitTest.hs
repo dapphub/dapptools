@@ -739,14 +739,15 @@ word32Bytes x = BS.pack [byteAt x (3 - i) | i <- [0..3]]
 makeTxCall :: TestVMParams -> (Buffer, SWord 256) -> EVM ()
 makeTxCall TestVMParams{..} cd = do
   resetState
-  assign (tx . isCreate) False
-  loadContract testAddress
-  assign (state . calldata) cd
-  assign (state . caller) (litAddr testCaller)
-  assign (state . gas) (w256 testGasCall)
-  origin' <- fromMaybe (initialContract (RuntimeCode mempty)) <$> use (env . contracts . at testOrigin)
+  assign (tx . isCreate) (isNothing to)
+  maybe (pure ()) loadContract to
+  when (isJust to) $ assign (state . calldata) (txdata,  literal . num $ len txdata)
+  assign (state . caller) (litAddr from)
+  assign (state . gas) (w256 txgas)
+  assign (state . callvalue) (litWord $ w256 value)
+  origin' <- fromMaybe (initialContract (RuntimeCode mempty)) <$> use (env . contracts . at from)
   let originBal = view balance origin'
-  when (originBal < (w256 testGasprice) * (w256 testGasCall)) $ error "insufficient balance for gas cost"
+  when (originBal < (w256 gasPrice) * (w256 txgas) + w256 value) $ error "insufficient balance for call"
   vm <- get
   put $ initTx vm
 

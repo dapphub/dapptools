@@ -18,10 +18,10 @@ import EVM.Fetch
 import EVM.Stepper
 import EVM.UnitTest
 import EVM.Transaction
+import Debug.Trace
 
 import Control.Lens hiding ((.=), from, to, pre)
 import Control.Monad.State.Strict
-import GHC.Generics hiding (from, to)
 
 import Network.Wai (responseLBS, Application, getRequestBodyChunk)
 import Network.Wai.Handler.Warp (run)
@@ -29,6 +29,7 @@ import Network.HTTP.Types (status200)
 import Network.HTTP.Types.Header (hContentType)
 
 import Data.Aeson
+import Control.Applicative
 import Data.ByteString (ByteString)
 import qualified Data.Map as Map
 import Data.Text (Text, pack, unpack)
@@ -37,11 +38,22 @@ import qualified Data.ByteString.Lazy   as LazyByteString
 import Data.Aeson.Lens hiding (values)
 
 data Request = Request
-  { id      :: Int
+  { id      :: Either Int String
   , jsonrpc :: String
   , method  :: String
   , params  :: Array
-  } deriving (Show, Generic, FromJSON)
+  } deriving (Show)
+
+instance FromJSON Request where
+  parseJSON (Object val) = do
+    id' <- (     (Left  <$> val .: "id")
+             <|> (Right <$> val .: "id"))
+    jsonrpc' <- val .: "jsonrpc"
+    method' <-  val .: "method"
+    params' <-  val .: "params"
+    return $ Request id' jsonrpc' method' params'
+  parseJSON invalid =
+    JSON.typeMismatch "Request" invalid
 
 data Eth_call = Eth_call
   { from :: Addr
@@ -74,16 +86,23 @@ instance ToJSON Eth_call where
            , "value" .= show value
            ]
 
-getId :: Request -> Int
+getId :: Request -> Either Int String
 getId = id
 getJsonRpc :: Request -> String
 getJsonRpc = jsonrpc
 
 data Response = Response
-  { id      :: Int
+  { id      :: Either Int String
   , jsonrpc :: String
   , result  :: Value
-  } deriving (Show, Generic, ToJSON)
+  } deriving (Show)
+
+instance ToJSON Response where
+  toJSON (Response id' jsonrpc' result') =
+    object [ "id" .= either (Number . num) (String . pack) id'
+           , "jsonrpc" .= jsonrpc'
+           , "result" .= result'
+           ]
 
 serve :: Application -> IO ()
 serve app = do
@@ -95,10 +114,12 @@ rpcServer :: Text -> VM -> IO (VM -> VM) -> (VM -> IO ()) -> Application
 rpcServer url initialVm readVM writeVM request respond = do
   req <- getRequestBodyChunk request
   readCache <- readVM
+  putStrLn "--- Received request ---"
+  print req
   let vm = readCache initialVm
   case decode $ LazyByteString.fromStrict req of
     Nothing -> do
-      putStrLn (show req)
+      putStrLn "Could not decode request"
       respond $ responseLBS status200 [(hContentType, "text/plain")]
               $ LazyByteString.fromStrict "sad"
 
@@ -107,7 +128,14 @@ rpcServer url initialVm readVM writeVM request respond = do
             "net_version" ->
               return $ txt (num $ wordValue $ view (EVM.env . EVM.chainId) vm :: Integer)
 
-            "eth_getBlockByNumber" ->
+            "eth_chainId" ->
+              return $ txt (num $ wordValue $ view (EVM.env . EVM.chainId) vm :: Integer)
+
+            "eth_blockNumber" ->
+              return $ txt $ view (EVM.block . EVM.number) vm
+
+            "eth_getBlockByNumber" -> do
+--              let Just n = param 0 r
               return $ txt $ view (EVM.block . EVM.number) vm
 
             "eth_getBalance" -> do
@@ -165,7 +193,8 @@ rpcServer url initialVm readVM writeVM request respond = do
 
       let answer = Response (getId r) (getJsonRpc r) result
 
-      putStrLn (show req)
+      putStrLn "response:"
+      print (encode answer)
       respond
         $ responseLBS status200 [(hContentType, "application/json")]
         $ encode answer
