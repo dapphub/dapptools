@@ -230,7 +230,7 @@ instance Show SymWord where
     Nothing -> case w of
       Dull -> "<symbolic>"
       whiff -> show whiff
-    Just w  -> show w
+    Just w'  -> show w'
 
 instance EqSymbolic SymWord where
   (.==) (S _ x) (S _ y) = x .== y
@@ -264,7 +264,7 @@ instance SDivisible SymWord where
                              in (sw256 a, sw256 b)
 
 instance Mergeable SymWord where
-  symbolicMerge a b (S wx x) (S wy y) = S wx (symbolicMerge a b x y)
+  symbolicMerge a b (S wx x) (S _ y) = S wx (symbolicMerge a b x y)
   select xs (S _ x) b = let ys = fmap (\(S _ y) -> y) xs
                         in sw256 $ select ys x b
 

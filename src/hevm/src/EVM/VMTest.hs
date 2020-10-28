@@ -258,7 +258,7 @@ fromBlockchainCase' :: Block -> Transaction
                        -> Either BlockchainError Case
 fromBlockchainCase' block tx preState postState =
   let isCreate = isNothing (txToAddr tx)
-  in case (sender 1 tx, checkTx tx block preState) of
+  in case (sender 1 tx, checkTx tx preState) of
       (Nothing, _) -> Left SignatureUnverified
       (_, Nothing) -> Left (if isCreate then FailedCreate else InvalidTx)
       (Just origin, Just checkState) -> Right $ Case
@@ -309,8 +309,8 @@ validateTx tx cs = do
   then Just ()
   else Nothing
 
-checkTx :: Transaction -> Block -> Map Addr EVM.Contract -> Maybe (Map Addr EVM.Contract)
-checkTx tx block prestate = do
+checkTx :: Transaction -> Map Addr EVM.Contract -> Maybe (Map Addr EVM.Contract)
+checkTx tx prestate = do
   origin <- sender 1 tx
   validateTx tx prestate
   let isCreate   = isNothing (txToAddr tx)
