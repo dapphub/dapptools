@@ -732,7 +732,7 @@ drawVmBrowser ui =
       ]
   ]
   where storageDisplay (Concrete s) = pack ( show ( Map.toList s))
-        storageDisplay (Symbolic a) = pack ("<symbolic> " ++ show a)
+        storageDisplay (Symbolic _) = pack "<symbolic>"
         dapp' = dapp (view (browserVm . uiTestOpts) ui)
         Just (_, (_, c)) = listSelectedElement (view browserContractList ui)
 --        currentContract  = view (dappSolcByHash . ix ) dapp

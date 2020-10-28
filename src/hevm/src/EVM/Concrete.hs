@@ -49,7 +49,7 @@ data Whiff = Dull
            | UnOp String Whiff
 
 instance Show Whiff where
-  show Dull = "Dull"
+  show Dull = "<symbolic>"
   show (Val s) = s
   show (FromKeccak bstr) = "FromKeccak " ++ show bstr
   show (Var x) = printf "<%s>" x
@@ -125,12 +125,7 @@ keccakBlob :: ByteString -> Word
 keccakBlob x = C (FromKeccak x) (keccak x)
 
 instance Show Word where
-  show (C Dull x) = show x
-  show (C (Var var) x) = var ++ ": " ++ show x
-  show (C (InfixBinOp symbol x y) z) = show x ++ symbol ++ show y  ++ ": " ++ show z
-  show (C (BinOp symbol x y) z) = symbol ++ show x ++ show y  ++ ": " ++ show z
-  show (C (UnOp symbol x) z) = symbol ++ show x ++ ": " ++ show z
-  show (C whiff x) = show whiff ++ ": " ++ show x
+  show (C _ x) = show x
 
 instance Read Word where
   readsPrec n s =
