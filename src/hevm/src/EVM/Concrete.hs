@@ -53,6 +53,7 @@ instance Show Whiff where
   show (Val s) = s
   show (FromKeccak bstr) = "FromKeccak " ++ show bstr
   show (Var x) = printf "<%s>" x
+  show (FromBytes buf) = "FromBuffer " ++ show buf
   show (InfixBinOp op a b) = printf "(%s %s %s)" (show a) op (show b)
   show (BinOp op a b) = printf "%s(%s, %s)" op (show a) (show b)
   show (UnOp op x) = op ++ "(" ++ (show x) ++ ")"
