@@ -17,6 +17,7 @@ import EVM.Stepper (Stepper)
 import qualified EVM.Stepper as Stepper
 import qualified Control.Monad.Operational as Operational
 import Control.Monad.State.Strict hiding (state)
+import Data.Maybe (catMaybes)
 import EVM.Types
 import EVM.Concrete (Whiff(..))
 import EVM.Symbolic (SymWord(..), sw256)
@@ -161,7 +162,7 @@ interpret' fetcher maxIter vm = let
     Just (VMFailure (EVM.Query q)) -> fetcher q >>= cont
 
     Just (VMFailure (Choose (EVM.PleaseChoosePath whiff continue)))
-      -> case (maxIterationsReached vm maxIter) of
+      -> case maxIterationsReached vm maxIter of
         Nothing -> do
             left <- cont $ continue True
             right <- cont $ continue False
@@ -169,7 +170,7 @@ interpret' fetcher maxIter vm = let
         Just n -> cont $ continue (not n)
 
     Just _
-      -> return $ Node BranchInfo {_vm = vm, _branchCondition = Nothing } []
+      -> return $ Node (BranchInfo vm Nothing) []
 
 -- | Interpreter which explores all paths at
 -- | branching points.
@@ -262,6 +263,27 @@ pruneDeadPaths =
     Just (VMFailure DeadPath) -> False
     _ -> True
 
+consistentPath :: VM -> Query (Maybe VM)
+consistentPath vm = do
+  resetAssertions
+  constrain $ sAnd $ fst <$> view constraints vm
+  checkSat >>= \case
+    Sat -> return $ Just vm
+    _   -> return $ Nothing
+
+consistentTree :: Tree BranchInfo -> Query (Maybe (Tree BranchInfo))
+consistentTree (Node (BranchInfo vm w) []) = do
+  consistentPath vm >>= \case
+    Nothing  -> return Nothing
+    Just vm' -> return $ Just $ Node (BranchInfo vm' w) []
+consistentTree (Node b xs) = do
+  consistentChildren <- catMaybes <$> forM xs consistentTree
+  if null consistentChildren then
+    return Nothing
+  else
+    return $ Just (Node b consistentChildren)
+    
+  
 leaves :: Tree BranchInfo -> [VM]
 leaves (Node x []) = [_vm x]
 leaves (Node _ xs) = concatMap leaves xs

@@ -5,13 +5,13 @@ module EVM.Format where
 
 import Prelude hiding (Word)
 
-import EVM (VM, cheatCode, traceForest, traceData, Error (..), result)
+import EVM (VM, VMResult(..), cheatCode, traceForest, traceData, Error (..), result)
 import EVM (Trace, TraceData (..), Log (..), Query (..), FrameContext (..))
 import EVM.Dapp (DappInfo, dappSolcByHash, dappSolcByName, showTraceLocation, dappEventMap)
 import EVM.Concrete (Word (..), wordValue)
 import EVM.SymExec
 import EVM.Symbolic (maybeLitWord, len)
-import EVM.Types (W256 (..), num, Buffer(..))
+import EVM.Types (W256 (..), num, Buffer(..), ByteStringS(..))
 import EVM.ABI (AbiValue (..), Event (..), AbiType (..))
 import EVM.ABI (Indexed (NotIndexed), getAbiSeq, getAbi)
 import EVM.ABI (parseTypeName)
@@ -323,7 +323,16 @@ contractNamePart x = Text.split (== ':') x !! 1
 contractPathPart :: Text -> Text
 contractPathPart x = Text.split (== ':') x !! 0
 
-
+prettyvmresult :: VMResult -> String
+prettyvmresult (EVM.VMFailure (EVM.Revert ""))  = "Reverted"
+prettyvmresult (EVM.VMFailure (EVM.Revert msg)) = "Reverted: " <> show (ByteStringS msg)
+prettyvmresult (EVM.VMFailure err) = "Failed: " <> show err
+prettyvmresult (EVM.VMSuccess (ConcreteBuffer msg)) =
+  if BS.null msg
+  then "Stopped"
+  else "Returned: " <> show (ByteStringS msg)
+prettyvmresult (EVM.VMSuccess (SymbolicBuffer msg)) =
+  "Returned: " <> show (length msg) <> " symbolic bytes"
 
 -- TODO
 -- display in an 'act' was - propagate iff and if's, prune failed paths
@@ -341,7 +350,6 @@ data BranchData = BranchData {
   }
 
 makeLenses ''BranchData
-
 
 showTreeIndentSymbol :: Bool      -- ^ isLastChild
                      -> Bool      -- ^ isFirstLine
@@ -361,7 +369,7 @@ adjustTree cond i bds = let
 flattenTree :: Tree BranchInfo -> [BranchData]
 -- leaf case
 flattenTree (Node bi []) = let
-  leafInfo = show $ view result $ _vm bi
+  leafInfo = maybe (error "expected result") prettyvmresult (view result $ _vm bi)
   in [BranchData "" "" leafInfo]
 -- branch case
 flattenTree (Node bi xs) = let

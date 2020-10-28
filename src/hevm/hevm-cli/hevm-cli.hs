@@ -53,6 +53,7 @@ import Control.Monad              (void, when, forM_, unless)
 import Control.Monad.State.Strict (execStateT)
 import Data.ByteString            (ByteString)
 import Data.List                  (intercalate, isSuffixOf)
+import Data.Tree
 import Data.Text                  (Text, unpack, pack)
 import Data.Text.Encoding         (encodeUtf8)
 import Data.Text.IO               (hPutStr)
@@ -120,6 +121,7 @@ data Command w
       , arg           :: w ::: [String]           <?> "Values to encode"
       , debug         :: w ::: Bool               <?> "Run interactively"
       , getModels     :: w ::: Bool               <?> "Print example testcase for each execution path"
+      , showTree      :: w ::: Bool               <?> "Print branches explored in tree view"
       , smttimeout    :: w ::: Maybe Integer      <?> "Timeout given to SMT solver in milliseconds (default: 20000)"
       , maxIterations :: w ::: Maybe Integer      <?> "Number of times we may revisit a particular branching point"
       , solver        :: w ::: Maybe Text         <?> "Used SMT solver: z3 (default) or cvc4"
@@ -485,6 +487,13 @@ assert cmd = do
   let block'  = maybe EVM.Fetch.Latest EVM.Fetch.BlockNumber (block cmd)
       rpcinfo = (,) block' <$> rpc cmd
       model = fromMaybe (if create cmd then InitialS else SymbolicS) (storageModel cmd)
+      treeShowing :: Tree BranchInfo -> Query ()
+      treeShowing tree =
+        when (showTree cmd) $ do
+          consistentTree tree >>= \case
+            Nothing -> io $ putStrLn "No consistent paths" -- unlikely
+            Just tree' -> io $ putStrLn $ showBranchTree tree'
+
   srcInfo <- getSrcInfo cmd
   maybesig <- case sig cmd of
     Nothing ->
@@ -511,12 +520,12 @@ assert cmd = do
         Right (_, tree) -> do
           io $ putStrLn "Assertion violation found."
           showCounterexample preState maybesig
-          io $ putStr $ showBranchTree tree
+          treeShowing tree
           io $ exitWith (ExitFailure 1)
         Left (pre, tree) -> do
           io $ putStrLn $ "Explored: " <> show (length tree)
                        <> " branches without assertion violations"
-          io $ putStr $ showBranchTree tree
+          treeShowing tree
           let vmErrs = checkForVMErrors $ leaves tree
           unless (null vmErrs) $ io $ do
             putStrLn $

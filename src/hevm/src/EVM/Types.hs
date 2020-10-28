@@ -95,7 +95,11 @@ litBytes bs = fmap (toSized . literal) (BS.unpack bs)
 data Buffer
   = ConcreteBuffer ByteString
   | SymbolicBuffer [SWord 8]
-  deriving (Show)
+
+instance Show Buffer where
+  show (ConcreteBuffer b) = show $ ByteStringS b
+  show (SymbolicBuffer b) = show (length b) ++ " bytes"
+
 
 instance Semigroup Buffer where
   ConcreteBuffer a <> ConcreteBuffer b = ConcreteBuffer (a <> b)
