@@ -324,15 +324,16 @@ contractPathPart :: Text -> Text
 contractPathPart x = Text.split (== ':') x !! 0
 
 prettyvmresult :: VMResult -> String
-prettyvmresult (EVM.VMFailure (EVM.Revert ""))  = "Reverted"
-prettyvmresult (EVM.VMFailure (EVM.Revert msg)) = "Reverted: " <> show (ByteStringS msg)
+prettyvmresult (EVM.VMFailure (EVM.Revert ""))  = "Revert"
+prettyvmresult (EVM.VMFailure (EVM.Revert msg)) = "Revert" ++ (unpack $ showError msg)
+prettyvmresult (EVM.VMFailure (EVM.UnrecognizedOpcode 254)) = "Assertion violation"
 prettyvmresult (EVM.VMFailure err) = "Failed: " <> show err
 prettyvmresult (EVM.VMSuccess (ConcreteBuffer msg)) =
   if BS.null msg
-  then "Stopped"
-  else "Returned: " <> show (ByteStringS msg)
+  then "Stop"
+  else "Return: " <> show (ByteStringS msg)
 prettyvmresult (EVM.VMSuccess (SymbolicBuffer msg)) =
-  "Returned: " <> show (length msg) <> " symbolic bytes"
+  "Return: " <> show (length msg) <> " symbolic bytes"
 
 -- TODO
 -- display in an 'act' was - propagate iff and if's, prune failed paths
