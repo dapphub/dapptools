@@ -36,7 +36,6 @@ import Data.Text (Text, splitOn, unpack)
 import Control.Monad.State.Strict (runState, get, put, zipWithM)
 import qualified Control.Monad.State.Class as State
 import Control.Applicative
-import GHC.Base (IO(..))
 
 -- | Convenience functions for generating large symbolic byte strings
 sbytes32, sbytes128, sbytes256, sbytes512, sbytes1024 :: Query ([SWord 8])
@@ -145,7 +144,7 @@ data BranchInfo = BranchInfo
     _branchCondition    :: Maybe Whiff
   }
 
-interpret' :: Fetch.Fetcher -> Maybe Integer -> VM -> IO (Tree BranchInfo)
+interpret' :: Fetch.Fetcher -> Maybe Integer -> VM -> Query (Tree BranchInfo)
 interpret' fetcher maxIter vm = let
   cont s = interpret' fetcher maxIter $ execState s vm
   in case view EVM.result vm of
@@ -157,15 +156,19 @@ interpret' fetcher maxIter vm = let
       location = view (iterations . at codelocation) vm
       in case location of
         Nothing -> cont $ continue EVM.Unknown
-        Just _ -> fetcher q >>= cont
+        Just _ -> io (fetcher q) >>= cont
 
-    Just (VMFailure (EVM.Query q)) -> fetcher q >>= cont
+    Just (VMFailure (EVM.Query q)) -> io (fetcher q) >>= cont
 
     Just (VMFailure (Choose (EVM.PleaseChoosePath whiff continue)))
       -> case maxIterationsReached vm maxIter of
         Nothing -> do
+            push 1
             left <- cont $ continue True
+            pop 1
+            push 1
             right <- cont $ continue False
+            pop 1
             return $ Node (BranchInfo vm (Just whiff)) [left, right]
         Just n -> cont $ continue (not n)
 
@@ -295,7 +298,7 @@ verify :: VM -> Maybe Integer -> Maybe (Fetch.BlockNumber, Text) -> Maybe Postco
 verify preState maxIter rpcinfo maybepost = do
   let model = view (env . storageModel) preState
   smtState <- queryState
-  tree <- liftIO $ interpret' (Fetch.oracle (Just smtState) rpcinfo model False) maxIter preState
+  tree <- interpret' (Fetch.oracle (Just smtState) rpcinfo model False) maxIter preState
   case maybepost of
     (Just post) -> do
       let livePaths = pruneDeadPaths $ leaves tree
@@ -331,10 +334,10 @@ equivalenceCheck bytecodeA bytecodeB maxiter signature' = do
 
   smtState <- queryState
   push 1
-  aVMs <- liftIO $ interpret' (Fetch.oracle (Just smtState) Nothing SymbolicS False) maxiter preStateA
+  aVMs <- interpret' (Fetch.oracle (Just smtState) Nothing SymbolicS False) maxiter preStateA
   pop 1
   push 1
-  bVMs <- liftIO $ interpret' (Fetch.oracle (Just smtState) Nothing SymbolicS False) maxiter preStateB
+  bVMs <- interpret' (Fetch.oracle (Just smtState) Nothing SymbolicS False) maxiter preStateB
   pop 1
   -- Check each pair of endstates for equality:
   let differingEndStates = uncurry distinct <$> [(a,b) | a <- pruneDeadPaths (leaves aVMs), b <- pruneDeadPaths (leaves bVMs)]
