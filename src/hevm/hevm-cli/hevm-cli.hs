@@ -15,8 +15,8 @@ module Main where
 
 import EVM (StorageModel(..))
 import qualified EVM
-import EVM.Concrete (createAddress, w256, Whiff(..))
-import EVM.Symbolic (forceLitBytes, litAddr, w256lit, sw256, SymWord(..), len)
+import EVM.Concrete (createAddress, Whiff(..), wordValue)
+import EVM.Symbolic (forceLitBytes, litAddr, w256lit, SymWord(..), len, forceLit)
 import qualified EVM.FeeSchedule as FeeSchedule
 import qualified EVM.Fetch
 import qualified EVM.Flatten
@@ -43,7 +43,6 @@ import EVM.RLP (rlpdecode)
 import qualified EVM.Patricia as Patricia
 import Data.Map (Map)
 
-import Data.Tree
 import qualified EVM.Facts     as Facts
 import qualified EVM.Facts.Git as Git
 import qualified EVM.UnitTest
@@ -61,9 +60,9 @@ import Data.Maybe                 (fromMaybe, fromJust)
 import Data.Version               (showVersion)
 import Data.SBV hiding (Word, solver, verbose, name)
 import Data.SBV.Control hiding (Version, timeout, create)
-import System.IO                  (hFlush, hPrint, stdout, stderr)
+import System.IO                  (hFlush, stdout, stderr)
 import System.Directory           (withCurrentDirectory, listDirectory)
-import System.Exit                (die, exitFailure, exitWith, ExitCode(..))
+import System.Exit                (exitFailure, exitWith, ExitCode(..))
 import System.Environment         (setEnv)
 import System.Process             (callProcess)
 import qualified Data.Aeson        as JSON
@@ -237,20 +236,20 @@ optsMode x = if debug x then Debug else Run
 applyCache :: (Maybe String, Maybe String) -> IO (EVM.VM -> EVM.VM)
 applyCache (state, cache) =
   let applyState = flip Facts.apply
-      applyCache = flip Facts.applyCache
+      applyCache' = flip Facts.applyCache
   in case (state, cache) of
     (Nothing, Nothing) -> do
       pure id
     (Nothing, Just cachePath) -> do
       facts <- Git.loadFacts (Git.RepoAt cachePath)
-      pure $ applyCache facts
+      pure $ applyCache' facts
     (Just statePath, Nothing) -> do
       facts <- Git.loadFacts (Git.RepoAt statePath)
       pure $ applyState facts
     (Just statePath, Just cachePath) -> do
       cacheFacts <- Git.loadFacts (Git.RepoAt cachePath)
       stateFacts <- Git.loadFacts (Git.RepoAt statePath)
-      pure $ (applyState stateFacts) . (applyCache cacheFacts)
+      pure $ (applyState stateFacts) . (applyCache' cacheFacts)
 
 unitTestOptions :: Command Options.Unwrapped -> String -> IO UnitTestOptions
 unitTestOptions cmd testFile = do
@@ -480,7 +479,6 @@ getSrcInfo cmd =
 -- consulting z3 about rather trivial matters. But with cvc4 it is quite
 -- pleasant!
 
-
 -- If function signatures are known, they should always be given for best results.
 assert :: Command Options.Unwrapped -> IO ()
 assert cmd = do
@@ -530,7 +528,7 @@ assert cmd = do
           when (getModels cmd) $
             forM_ (zip [1..] (leaves tree)) $ \(i, postVM) -> do
               resetAssertions
-              constrain (sAnd (map fst (view EVM.constraints postVM)))
+              constrain (sAnd (fst <$> view EVM.constraints postVM))
               io $ putStrLn $
                 "-- Branch (" <> show i <> "/" <> show (length tree) <> ") --"
               checkSat >>= \case
@@ -541,7 +539,7 @@ assert cmd = do
                 Sat -> do
                   showCounterexample pre maybesig
                   io $ putStrLn "-- Pathconditions --"
-                  io $ print $ map snd (view EVM.constraints postVM)
+                  io $ print $ snd <$> view EVM.constraints postVM
                   case view EVM.result postVM of
                     Nothing ->
                       error "internal error; no EVM result"
@@ -786,8 +784,8 @@ symvmFromCommand cmd = do
     -- fully abstract calldata (up to 1024 bytes)
     (Nothing, Nothing) -> do
       cd <- sbytes256
-      len <- freshVar_
-      return (SymbolicBuffer cd, len, (len .<= 256, Val "len < 256"))
+      len' <- freshVar_
+      return (SymbolicBuffer cd, len', (len' .<= 256, Val "len < 256"))
     -- fully concrete calldata
     (Just c, Nothing) ->
       let cd = ConcreteBuffer $ decipher c
@@ -836,7 +834,7 @@ symvmFromCommand cmd = do
       error "must provide at least (rpc + address) or code"
 
   return $ (VMTest.initTx $ withCache $ vm0 miner ts blockNum diff cdlen calldata' callvalue' caller' contract')
-    & over EVM.pathConditions (<> [pathCond])
+    & over EVM.constraints (<> [pathCond])
     & set (EVM.env . EVM.contracts . (ix address') . EVM.storage) store
 
   where
