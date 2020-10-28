@@ -29,7 +29,7 @@ litWord :: Word -> (SymWord)
 litWord (C whiff a) = S whiff (literal $ toSizzle a)
 
 w256lit :: W256 -> SymWord
-w256lit = (\x -> (S (Val (show x)) . literal . toSizzle) x)
+w256lit x = S (Val (show x)) $ literal $ toSizzle x
 
 litAddr :: Addr -> SAddr
 litAddr = SAddr . literal . toSizzle

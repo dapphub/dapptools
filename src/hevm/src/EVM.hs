@@ -106,7 +106,6 @@ data VM = VM
   , _traces         :: Zipper.TreePos Zipper.Empty Trace
   , _cache          :: Cache
   , _burned         :: Word
-  -- todo rename it to constraints
   , _constraints    :: [(SBool, Whiff)]
   , _iterations     :: Map CodeLocation Int
   }
@@ -683,9 +682,9 @@ exec1 = do
                                                    let hash' = symkeccak' bs
                                                        previousUsed = view (env . keccakUsed) vm
                                                    env . keccakUsed <>= [(bs, hash')]
-                                                   constraints <>= (fmap (\(preimage, image) ->
+                                                   constraints <>= fmap (\(preimage, image) ->
                                                                                (image .== hash' .=> preimage .== bs, Dull))
-                                                                           previousUsed)
+                                                                           previousUsed
                                                    return (sw256 hash', mempty)
 
                   burn (g_sha3 + g_sha3word * ceilDiv (num xSize) 32) $
@@ -1613,7 +1612,7 @@ accessStorage addr slot continue =
       fetchAccount addr $ \_ ->
         accessStorage addr slot continue
   where
-      mkQuery = assign result . Just . VMFailure $ Query $
+      mkQuery = assign result . Just . VMFailure . Query $
                   PleaseFetchSlot addr (forceLit slot)
                     (\(litWord -> x) -> do
                         modifying (cache . fetched . ix addr . storage) (writeStorage slot x)

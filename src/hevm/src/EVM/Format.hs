@@ -325,7 +325,7 @@ contractPathPart x = Text.split (== ':') x !! 0
 
 
 
--- todo
+-- TODO
 -- display in an 'act' was - propagate iff and if's, prune failed paths
 -- display cases instead of branches - collapse cases
 -- display storage changes (M&D)
@@ -343,8 +343,8 @@ data BranchData = BranchData {
 makeLenses ''BranchData
 
 
-showTreeIndentSymbol :: Bool      -- isLastChild
-                     -> Bool      -- isFirstLine
+showTreeIndentSymbol :: Bool      -- ^ isLastChild
+                     -> Bool      -- ^ isFirstLine
                      -> String
 showTreeIndentSymbol True  True  = "\x2514"
 showTreeIndentSymbol False True  = "\x251c"
@@ -353,9 +353,9 @@ showTreeIndentSymbol False False = "\x2502"
 
 adjustTree :: String -> Int -> [BranchData] -> [BranchData]
 adjustTree cond i bds = let
-  indentChild = over navigation $ (<>) ((showTreeIndentSymbol (i==1) False) <> " ")
+  indentChild = over navigation $ (<>) ((showTreeIndentSymbol (i == 1) False) <> " ")
   children = map indentChild bds
-  branchPrefix = BranchData (showTreeIndentSymbol (i==1) True <> " " <> show i) cond ""
+  branchPrefix = BranchData (showTreeIndentSymbol (i == 1) True <> " " <> show i) cond ""
   in branchPrefix : children
 
 flattenTree :: Tree BranchInfo -> [BranchData]
@@ -373,10 +373,9 @@ flattenTree (Node bi xs) = let
 
 showBranchTree :: Tree BranchInfo -> String
 showBranchTree tree = let
-  flatTree = flattenTree tree
   showBranchLine bd  = _navigation bd
                       <> "    "
                       <> _constrain bd
                       <> "    "
                       <> _leafData bd
-  in unlines $ map showBranchLine flatTree
+  in unlines $ showBranchLine <$> flattenTree tree

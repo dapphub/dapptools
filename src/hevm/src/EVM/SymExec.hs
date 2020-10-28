@@ -1,7 +1,6 @@
 {-# Language DataKinds #-}
 {-# Language OverloadedStrings #-}
 {-# Language TypeApplications #-}
-{-# Language TemplateHaskell #-}
 
 module EVM.SymExec where
 
@@ -18,7 +17,7 @@ import EVM.Stepper (Stepper)
 import qualified EVM.Stepper as Stepper
 import qualified Control.Monad.Operational as Operational
 import Control.Monad.State.Strict hiding (state)
-import EVM.Types hiding (Word)
+import EVM.Types
 import EVM.Concrete (Whiff(..))
 import EVM.Symbolic (SymWord(..), sw256)
 import EVM.Concrete (createAddress)
@@ -29,15 +28,13 @@ import Data.SBV hiding (runSMT, newArray_, addAxiom, distinct, sWord8s, Word)
 import Data.Vector (toList, fromList)
 import Data.Tree
 
-import Control.Monad.IO.Class
 import Data.ByteString (ByteString, pack)
 import qualified Data.ByteString.Lazy as Lazy
 import qualified Data.ByteString as BS
 import Data.Text (Text, splitOn, unpack)
-import Control.Monad.State.Strict (runState, runStateT, execState, StateT(..), get, put, zipWithM, mapStateT)
+import Control.Monad.State.Strict (runState, get, put, zipWithM)
 import qualified Control.Monad.State.Class as State
 import Control.Applicative
-import Control.Monad.State.Class (MonadState)
 import GHC.Base (IO(..))
 
 -- | Convenience functions for generating large symbolic byte strings
@@ -147,17 +144,9 @@ data BranchInfo = BranchInfo
     _branchCondition    :: Maybe Whiff
   }
 
-data WrapVM = WrapVM
-  { _wrapvm :: VM
-  , _old :: VM
-  }
-
-makeLenses ''WrapVM
-
-interpret' :: Fetch.Fetcher -> Maybe Integer -> WrapVM -> IO (Tree BranchInfo)
-interpret' fetcher maxIter (WrapVM vm startvm) = let
-  eval _state = snd $ runState _state vm
-  cont _state = interpret' fetcher maxIter (WrapVM (eval _state) startvm)
+interpret' :: Fetch.Fetcher -> Maybe Integer -> VM -> IO (Tree BranchInfo)
+interpret' fetcher maxIter vm = let
+  cont s = interpret' fetcher maxIter $ execState s vm
   in case view EVM.result vm of
 
     Nothing -> cont exec1
@@ -182,6 +171,9 @@ interpret' fetcher maxIter (WrapVM vm startvm) = let
     Just _
       -> return $ Node BranchInfo {_vm = vm, _branchCondition = Nothing } []
 
+-- | Interpreter which explores all paths at
+-- | branching points.
+-- | returns a list of possible final evm states
 interpret
   :: Fetch.Fetcher
   -> Maybe Integer --max iterations
@@ -237,7 +229,6 @@ interpret fetcher maxIter =
         Stepper.EVM m ->
           State.state (runState m) >>= interpret fetcher maxIter . k
 
-
 maxIterationsReached :: VM -> Maybe Integer -> Maybe Bool
 maxIterationsReached _ Nothing = Nothing
 maxIterationsReached vm (Just maxIter) =
@@ -265,11 +256,11 @@ verifyContract theCode signature' concreteArgs storagemodel pre maybepost = do
     let preState = over constraints ((++) [(pre preStateRaw, Dull)]) preStateRaw
     verify preState Nothing Nothing maybepost
 
--- pruneDeadPaths :: Tree VM -> Tree VM
--- pruneDeadPaths =
---   filter $ \vm -> case view result vm of
---     Just (VMFailure DeadPath) -> False
---     _ -> True
+pruneDeadPaths :: [VM] -> [VM]
+pruneDeadPaths =
+  filter $ \vm -> case view result vm of
+    Just (VMFailure DeadPath) -> False
+    _ -> True
 
 leaves :: Tree BranchInfo -> [VM]
 leaves (Node x []) = [_vm x]
@@ -278,15 +269,14 @@ leaves (Node _ xs) = concatMap leaves xs
 -- | Symbolically execute the VM and check all endstates against the postcondition, if available.
 -- Returns `Right VM` if the postcondition can be violated, where `VM` is a prestate counterexample,
 -- or `Left (VM, [VM])`, a pair of `prestate` and post vm states.
--- TODO: check for inconsistency
 verify :: VM -> Maybe Integer -> Maybe (Fetch.BlockNumber, Text) -> Maybe Postcondition -> Query (Either (VM, Tree BranchInfo) (VM, Tree BranchInfo))
 verify preState maxIter rpcinfo maybepost = do
   let model = view (env . storageModel) preState
   smtState <- queryState
-  tree <- liftIO $ interpret' (Fetch.oracle (Just smtState) rpcinfo model False) maxIter (WrapVM preState preState)
+  tree <- liftIO $ interpret' (Fetch.oracle (Just smtState) rpcinfo model False) maxIter preState
   case maybepost of
     (Just post) -> do
-      let livePaths = leaves tree
+      let livePaths = pruneDeadPaths $ leaves tree
       -- can also do these queries individually (even concurrently!). Could save time and report multiple violations
           postC = sOr $ fmap (\postState -> (sAnd (fst <$> view constraints postState)) .&& sNot (post (preState, postState))) livePaths
       -- is there any path which can possibly violate
@@ -319,13 +309,13 @@ equivalenceCheck bytecodeA bytecodeB maxiter signature' = do
 
   smtState <- queryState
   push 1
-  aVMs <- liftIO $ interpret' (Fetch.oracle (Just smtState) Nothing SymbolicS False) maxiter (WrapVM preStateA preStateA)
+  aVMs <- liftIO $ interpret' (Fetch.oracle (Just smtState) Nothing SymbolicS False) maxiter preStateA
   pop 1
   push 1
-  bVMs <- liftIO $ interpret' (Fetch.oracle (Just smtState) Nothing SymbolicS False) maxiter (WrapVM preStateB preStateB)
+  bVMs <- liftIO $ interpret' (Fetch.oracle (Just smtState) Nothing SymbolicS False) maxiter preStateB
   pop 1
   -- Check each pair of endstates for equality:
-  let differingEndStates = uncurry distinct <$> [(a,b) | a <- leaves aVMs, b <- leaves bVMs]
+  let differingEndStates = uncurry distinct <$> [(a,b) | a <- pruneDeadPaths (leaves aVMs), b <- pruneDeadPaths (leaves bVMs)]
       distinct a b =
         let (aPath, bPath) = both' (view constraints) (a, b)
             (aSelf, bSelf) = both' (view (state . contract)) (a, b)
@@ -349,7 +339,7 @@ equivalenceCheck bytecodeA bytecodeB maxiter signature' = do
 
               _ -> error "Internal error during symbolic execution (should not be possible)"
 
-        in sAnd (map fst aPath) .&& sAnd (map fst bPath) .&& differingResults
+        in sAnd (fst <$> aPath) .&& sAnd (fst <$> bPath) .&& differingResults
   -- If there exists a pair of endstates where this is not the case,
   -- the following constraint is satisfiable
   constrain $ sOr differingEndStates
