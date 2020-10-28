@@ -61,6 +61,11 @@ forceBuffer (ConcreteBuffer b) = b
 forceBuffer (SymbolicBuffer b) = forceLitBytes b
 
 -- | Arithmetic operations on SymWord
+iteWhiff :: String -> SBool -> SymWord -> SymWord -> SymWord
+iteWhiff symbol cond (S a _) (S b _) =
+  ite cond
+  (S (InfixBinOp symbol a b) 1) (S (UnOp "not" (InfixBinOp symbol a b)) 0)
+
 
 sdiv :: SymWord -> SymWord -> SymWord
 sdiv (S _ x) (S _ y) = let sx, sy :: SInt 256
@@ -85,12 +90,12 @@ mulmod (S _ x) (S _ y) (S _ z) = let to512 :: SWord 256 -> SWord 512
                                  in sw256 $ sFromIntegral $ ((to512 x) * (to512 y)) `sMod` (to512 z)
 
 slt :: SymWord -> SymWord -> SymWord
-slt (S _ x) (S _ y) =
-  sw256 $ ite (sFromIntegral x .< (sFromIntegral y :: (SInt 256))) 1 0
+slt x'@(S _ x) y'@(S _ y) =
+  iteWhiff "signed<" (sFromIntegral x .< (sFromIntegral y :: (SInt 256))) x' y'
 
 sgt :: SymWord -> SymWord -> SymWord
-sgt (S _ x) (S _ y) =
-  sw256 $ ite (sFromIntegral x .> (sFromIntegral y :: (SInt 256))) 1 0
+sgt x'@(S _ x) y'@(S _ y) =
+  iteWhiff "signed>" (sFromIntegral x .> (sFromIntegral y :: (SInt 256))) x' y'
 
 shiftRight' :: SymWord -> SymWord -> SymWord
 shiftRight' (S _ a') b@(S _ b') = case (num <$> unliteral a', b) of
@@ -244,9 +249,9 @@ instance Num SymWord where
   negate (S a x) = S (UnOp "-" a) (negate x)
 
 instance Bits SymWord where
-  (S a x) .&. (S b y) = S (BinOp "&" a b) (x .&. y)
-  (S a x) .|. (S b y) = S (BinOp "|" a b) (x .|. y)
-  (S a x) `xor` (S b y) = S (BinOp "xor" a b) (x `xor` y)
+  (S a x) .&. (S b y) = S (InfixBinOp "&" a b) (x .&. y)
+  (S a x) .|. (S b y) = S (InfixBinOp "|" a b) (x .|. y)
+  (S a x) `xor` (S b y) = S (InfixBinOp "xor" a b) (x `xor` y)
   complement (S a x) = S (UnOp "~" a) (complement x)
   shift (S a x) i = S (UnOp ("<<" ++ (show i) ++ " ") a ) (shift x i)
   rotate (S a x) i = S (UnOp ("rotate " ++ (show i) ++ " ") a) (rotate x i)

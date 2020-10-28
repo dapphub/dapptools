@@ -624,18 +624,18 @@ exec1 = do
         0x09 -> stackOp3 (const g_mid) (\(x, y, z) -> mulmod x y z)
 
         -- op: LT
-        0x10 -> stackOp2 (const g_verylow) $ \((S a x), (S b y)) -> ite ((S a x) .< (S b y)) (S (InfixBinOp "<" a b) 1) (S (InfixBinOp ">=" a b) 0)
+        0x10 -> stackOp2 (const g_verylow) $ \(x, y) -> iteWhiff "<" (x .< y) x y
         -- op: GT
-        0x11 -> stackOp2 (const g_verylow) $ \(x, y) -> ite (x .> y) 1 0
+        0x11 -> stackOp2 (const g_verylow) $ \(x, y) -> iteWhiff ">" (x .> y) x y
         -- op: SLT
         0x12 -> stackOp2 (const g_verylow) $ uncurry slt
         -- op: SGT
         0x13 -> stackOp2 (const g_verylow) $ uncurry sgt
 
         -- op: EQ
-        0x14 -> stackOp2 (const g_verylow) $ \((S a x), (S b y)) -> ite ((S a x) .== (S b y)) (S (InfixBinOp "==" a b) 1) (S (InfixBinOp "!=" a b) 0)
+        0x14 -> stackOp2 (const g_verylow) $ \(x, y) -> iteWhiff "==" (x .== y) x y
         -- op: ISZERO
-        0x15 -> stackOp1 (const g_verylow) $ \(S a x) -> ite ((S a x) .== 0) (S (UnOp "isZero" a) 1) (S (UnOp "isNotZero" a) 0)
+        0x15 -> stackOp1 (const g_verylow) $ \(S a x) -> ite ((S a x) .== 0) (S (UnOp "isZero" a) 1) (S (UnOp "NonZero" a) 0)
 
         -- op: AND
         0x16 -> stackOp2 (const g_verylow) $ uncurry (.&.)
