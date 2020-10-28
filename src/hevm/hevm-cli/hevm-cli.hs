@@ -47,6 +47,7 @@ import qualified EVM.Facts     as Facts
 import qualified EVM.Facts.Git as Git
 import qualified EVM.UnitTest
 
+import GHC.IO.Encoding
 import Control.Concurrent.Async   (async, waitCatch)
 import Control.Lens hiding (pre)
 import Control.Monad              (void, when, forM_, unless)
@@ -61,7 +62,7 @@ import Data.Maybe                 (fromMaybe, fromJust)
 import Data.Version               (showVersion)
 import Data.SBV hiding (Word, solver, verbose, name)
 import Data.SBV.Control hiding (Version, timeout, create)
-import System.IO                  (hFlush, stdout, stderr)
+import System.IO                  (hFlush, stdout, stderr, utf8)
 import System.Directory           (withCurrentDirectory, listDirectory)
 import System.Exit                (exitFailure, exitWith, ExitCode(..))
 import System.Environment         (setEnv)
@@ -492,7 +493,7 @@ assert cmd = do
         when (showTree cmd) $ do
           consistentTree tree >>= \case
             Nothing -> io $ putStrLn "No consistent paths" -- unlikely
-            Just tree' -> io $ putStrLn $ showBranchTree tree'
+            Just tree' -> io $ setLocaleEncoding utf8 >> putStrLn (showBranchTree tree')
 
   srcInfo <- getSrcInfo cmd
   maybesig <- case sig cmd of
