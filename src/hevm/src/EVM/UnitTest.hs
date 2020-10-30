@@ -38,7 +38,7 @@ import Data.Bifunctor     (first)
 import Data.ByteString    (ByteString)
 import Data.SBV    hiding (verbose)
 import Data.SBV.Control   (CheckSatResult(..), checkSat, freshArray_)
-import Data.Either        (isRight)
+import Data.Either        (isRight, lefts, rights)
 import Data.Foldable      (toList)
 import Data.Map           (Map)
 import Data.Maybe         (fromMaybe, catMaybes, fromJust, isJust, fromMaybe, mapMaybe)
@@ -504,72 +504,48 @@ symRun :: UnitTestOptions -> VM -> Text -> [AbiType] -> SBV.Query (Text, Either 
 symRun opts@UnitTestOptions{..} concreteVm testName types = do
     vm <- symbolify concreteVm
     cd <- symCalldata testName types []
+    traceShowM cd
     smtState <- SBV.queryState
     let model = view (env . storageModel) vm
 
     -- get all posible postVMs for the test method
-    allPaths <-
-      pruneDeadPaths . fst <$> runStateT
+    allPaths <- fst <$> runStateT
         (EVM.SymExec.interpret
           (EVM.Fetch.oracle (Just smtState) Nothing model False)
           Nothing
           (execSymTest opts testName cd))
         vm
 
-    -- strip unreachable paths and extract concrete values for the calldata on each branch
-    validPaths <- fmap catMaybes $ forM allPaths $ \vm' -> do
-      SBV.resetAssertions
-      constrain (sAnd (view EVM.pathConditions vm'))
-      checkSat >>= \case
-        Sat -> do
-          prettyCd <- prettyCalldata (first SymbolicBuffer cd) testName types
-          pure $ Just (vm', prettyCd)
-        Unsat -> pure Nothing
-        Unk -> error "SMT timeout"
-        DSat _ -> error "unexpected DSat"
-
-    -- call `failed()` in each VM to check the test status
-    testStatus <- liftIO $ forM validPaths $ \(vm', cd') -> do
-      res <- runStateT
-        (EVM.Stepper.interpret oracle (checkSymFailures opts))
-        vm'
-      pure (res, cd')
-
+    let shouldFail = "proveFail" `isPrefixOf` testName
     -- for each vm ask the SMT solver if the vm is reachable and the result is false
-    results <- forM testStatus (\((res, vm'), cd') ->
-      case res of
-        Right (SymbolicBuffer buf) -> do
+    results <- forM (pruneDeadPaths $ rights allPaths) $ \vm' ->
+      case view result vm' of
+        Just (VMSuccess (SymbolicBuffer buf)) -> do
           SBV.resetAssertions
-          constrain (sAnd (view EVM.pathConditions vm'))
-          constrain $ (litBytes $ encodeAbiValue (AbiBool False)) .== buf
+          constrain $ sAnd (view EVM.pathConditions vm')
+          constrain $ litBytes (encodeAbiValue $ AbiBool $ not shouldFail) .== buf
           checkSat >>= \case
             Sat -> do
-              pure (False, cd')
-            Unsat -> pure (True, cd')
+              prettyCd <- prettyCalldata (first SymbolicBuffer cd) testName types
+              return $ Left prettyCd
+            Unsat -> return $ Right ()
             Unk -> error "SMT timeout"
             DSat _ -> error "unexpected DSat"
-        _ -> error "unexpected return value")
+        _ -> error "unexpected return value"
 
-    -- process results
-    let shouldFail = "proveFail" `isPrefixOf` testName
-    let success = if shouldFail
-                  then or $ not <$> (fmap (view _1) results)
-                  else and (fmap (view _1) results)
-    if success
+    if null $ lefts results
     then
       return ("\x1b[32m[PASS]\x1b[0m " <> testName, Right "", vm)
     else
-      return ("\x1b[31m[FAIL]\x1b[0m " <> testName, Left $ symFailure testName results, vm)
+      return ("\x1b[31m[FAIL]\x1b[0m " <> testName, Left $ symFailure testName (lefts results), vm)
 
-symFailure :: Text -> [(Bool, Text)] -> Text
-symFailure testName results = mconcat
+symFailure :: Text -> [Text] -> Text
+symFailure testName failing = mconcat
   [ "Failure: "
   , testName
   , "\n"
-  , intercalate "\n" $ indentLines 2 . snd <$> failing'
+  , intercalate "\n" $ indentLines 2 <$> failing
   ]
-  where
-    failing' = filter (\(r, _) -> not r) results
 
 getCalldata :: VM -> Text -> [AbiType] -> SBV.Query Text
 getCalldata vm testName types = do
@@ -587,14 +563,19 @@ prettyCalldata (buffer, cdlen) sig types = do
                   (AbiTupleType (Vector.fromList types))
                   (BSLazy.fromStrict (BS.drop 4 calldatainput))))
 
-execSymTest :: UnitTestOptions -> ABIMethod -> ([SWord 8], SWord 32) -> Stepper VM
-execSymTest UnitTestOptions { .. } method cd = do
+execSymTest :: UnitTestOptions -> ABIMethod -> ([SWord 8], SWord 32) -> Stepper (Either Bool VM)
+execSymTest opts@UnitTestOptions{ .. } method cd = do
   -- Set up the call to the test method
   Stepper.evm $ do
     setupSymCall testParams cd
     pushTrace (EntryTrace method)
   -- Try running the test method
-  Stepper.runFully
+  Stepper.execFully >>= \case
+     -- If we failed, put the error in the trace.
+    -- note: currently allows for reverts (TODO: mayRevert() modifier in the future)
+    Left e -> do traceShowM e
+                 Stepper.evm (pushTrace (ErrorTrace e)) >> pure (Left True)
+    _ -> Right <$> checkSymFailures opts
 
 setupSymCall :: TestVMParams -> ([SWord 8], SWord 32) -> EVM ()
 setupSymCall TestVMParams{..} cd = do
@@ -610,13 +591,13 @@ setupSymCall TestVMParams{..} cd = do
   vm <- get
   put $ initTx vm
 
-checkSymFailures :: UnitTestOptions -> Stepper (Either Error Buffer)
+checkSymFailures :: UnitTestOptions -> Stepper VM
 checkSymFailures UnitTestOptions { .. } = do
   -- Ask whether any assertions failed
   Stepper.evm $ do
     popTrace
     setupCall testParams "failed()" emptyAbi
-  Stepper.execFully
+  Stepper.runFully
 
 indentLines :: Int -> Text -> Text
 indentLines n s =
