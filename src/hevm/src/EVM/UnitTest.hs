@@ -507,7 +507,7 @@ symRun opts@UnitTestOptions{..} concreteVm testName types = do
     smtState <- SBV.queryState
     let model = view (env . storageModel) vm
 
-    -- gett all posible postVMs for the test method
+    -- get all posible postVMs for the test method
     allPaths <-
       pruneDeadPaths . fst <$> runStateT
         (EVM.SymExec.interpret
@@ -516,49 +516,57 @@ symRun opts@UnitTestOptions{..} concreteVm testName types = do
           (execSymTest opts testName cd))
         vm
 
+    -- strip unreachable paths and extract concrete values for the calldata on each branch
+    validPaths <- fmap catMaybes $ forM allPaths $ \vm' -> do
+      SBV.resetAssertions
+      constrain (sAnd (view EVM.pathConditions vm'))
+      checkSat >>= \case
+        Sat -> do
+          prettyCd <- prettyCalldata (first SymbolicBuffer cd) testName types
+          pure $ Just (vm', prettyCd)
+        Unsat -> pure Nothing
+        Unk -> error "SMT timeout"
+        DSat _ -> error "unexpected DSat"
+
     -- call `failed()` in each VM to check the test status
-    results <- liftIO $ forM allPaths $ \vm' -> do
+    testStatus <- liftIO $ forM validPaths $ \(vm', cd') -> do
       res <- runStateT
         (EVM.Stepper.interpret oracle (checkSymFailures opts))
         vm'
-      pure (res, vm')
+      pure (res, cd')
 
-    -- for each vm ask the SMT solver if:
-    --   1. the conjunction of the path conditions is Satisfiable
-    --   2. the result is false
-    failures <- forM results (\((res, postVM), _) ->
+    -- for each vm ask the SMT solver if the vm is reachable and the result is false
+    results <- forM testStatus (\((res, vm'), cd') ->
       case res of
         Right (SymbolicBuffer buf) -> do
           SBV.resetAssertions
-          constrain (sAnd (view EVM.pathConditions postVM))
+          constrain (sAnd (view EVM.pathConditions vm'))
           constrain $ (litBytes $ encodeAbiValue (AbiBool False)) .== buf
-
           checkSat >>= \case
             Sat -> do
-              let cd' = view (state . calldata) postVM
-              prettyCd <- prettyCalldata cd' testName types
-              traceM $ "HI: " <> (unpack prettyCd)
-              pure (False, Just prettyCd)
-            _ -> pure (True, Nothing)
+              pure (False, cd')
+            Unsat -> pure (True, cd')
+            Unk -> error "SMT timeout"
+            DSat _ -> error "unexpected DSat"
         _ -> error "unexpected return value")
 
     -- process results
     let shouldFail = "proveFail" `isPrefixOf` testName
     let success = if shouldFail
-                  then or (fmap (view _1) failures)
-                  else and (fmap (view _1) failures)
+                  then or $ not <$> (fmap (view _1) results)
+                  else and (fmap (view _1) results)
     if success
     then
       return ("\x1b[32m[PASS]\x1b[0m " <> testName, Right "", vm)
     else
-      return ("\x1b[31m[FAIL]\x1b[0m " <> testName, Left $ symFailure testName failures, vm)
+      return ("\x1b[31m[FAIL]\x1b[0m " <> testName, Left $ symFailure testName results, vm)
 
-symFailure :: Text -> [(Bool, Maybe Text)] -> Text
+symFailure :: Text -> [(Bool, Text)] -> Text
 symFailure testName results = mconcat
   [ "Failure: "
   , testName
   , "\n"
-  , intercalate "\n" $ indentLines 2 <$> (mapMaybe snd failing')
+  , intercalate "\n" $ indentLines 2 . snd <$> failing'
   ]
   where
     failing' = filter (\(r, _) -> not r) results
