@@ -505,49 +505,68 @@ symRun opts@UnitTestOptions{..} concreteVm testName types = do
     vm <- symbolify concreteVm
     cd <- symCalldata testName types []
     smtState <- SBV.queryState
-    paths <-
+    let model = view (env . storageModel) vm
+
+    -- gett all posible postVMs for the test method
+    allPaths <-
       pruneDeadPaths . fst <$> runStateT
         (EVM.SymExec.interpret
-          (EVM.Fetch.oracle (Just smtState) Nothing ConcreteS False)
+          (EVM.Fetch.oracle (Just smtState) Nothing model False)
           Nothing
           (execSymTest opts testName cd))
         vm
 
-    reachable <- fmap catMaybes $ forM paths $ \postVM -> do
-      SBV.resetAssertions
-      constrain (sAnd (view EVM.pathConditions postVM))
-      checkSat >>= \case
-        Unsat -> pure Nothing
-        Sat -> do
-          prettyCd <- prettyCalldata (first SymbolicBuffer cd) testName types
-          pure $ Just (postVM, prettyCd)
-        Unk -> error "SMT timeout" -- TODO: handle this properly
-        DSat _ -> error "Unexpected Dsat"
+    -- call `failed()` in each VM to check the test status
+    results <- liftIO $ forM allPaths $ \vm' -> do
+      res <- runStateT
+        (EVM.Stepper.interpret oracle (checkSymFailures opts))
+        vm'
+      pure (res, vm')
 
-    results <- liftIO $ forM reachable $ \(postState, model) -> do
-      (res, _) <- runStateT
-        (EVM.Stepper.interpret oracle (checkSymFailures opts testName))
-        postState
-      pure (res, model)
+    -- for each vm ask the SMT solver if:
+    --   1. the conjunction of the path conditions is Satisfiable
+    --   2. the result is false
+    failures <- forM results (\((res, postVM), _) ->
+      case res of
+        Right (SymbolicBuffer buf) -> do
+          SBV.resetAssertions
+          constrain (sAnd (view EVM.pathConditions postVM))
+          constrain $ (litBytes $ encodeAbiValue (AbiBool True)) .== buf
 
-    let success = if "proveFail" `isPrefixOf` testName
-                  then or (fmap (view _1) results)
-                  else and (fmap (view _1) results)
+          checkSat >>= \case
+            Sat -> do
+              let cd' = view (state . calldata) postVM
+              prettyCd <- prettyCalldata cd' testName types
+              traceM $ "HI: " <> (unpack prettyCd)
+              pure (False, Just prettyCd)
+            _ -> pure (True, Nothing)
+        _ -> error "unexpected return value")
+
+    -- process results
+    let shouldFail = "proveFail" `isPrefixOf` testName
+    let success = if shouldFail
+                  then or (fmap (view _1) failures)
+                  else and (fmap (view _1) failures)
     if success
     then
       return ("\x1b[32m[PASS]\x1b[0m " <> testName, Right "", vm)
     else
-      return ("\x1b[31m[FAIL]\x1b[0m " <> testName, Left $ symFailure testName results, vm)
+      return ("\x1b[31m[FAIL]\x1b[0m " <> testName, Left $ symFailure testName failures, vm)
 
-symFailure :: Text -> [(Bool, Text)] -> Text
+symFailure :: Text -> [(Bool, Maybe Text)] -> Text
 symFailure testName results = mconcat
   [ "Failure: "
   , testName
   , "\n"
-  , intercalate "\n" $ indentLines 2 <$> (fmap snd failing')
+  , intercalate "\n" $ indentLines 2 <$> (mapMaybe snd failing')
   ]
   where
     failing' = filter (\(r, _) -> not r) results
+
+getCalldata :: VM -> Text -> [AbiType] -> SBV.Query Text
+getCalldata vm testName types = do
+  let cd = view (state . calldata) vm
+  prettyCalldata cd testName types
 
 prettyCalldata :: (Buffer, SWord 32) -> Text -> [AbiType]-> SBV.Query Text
 prettyCalldata (buffer, cdlen) sig types = do
@@ -583,20 +602,13 @@ setupSymCall TestVMParams{..} cd = do
   vm <- get
   put $ initTx vm
 
-checkSymFailures :: UnitTestOptions -> ABIMethod -> Stepper Bool
-checkSymFailures UnitTestOptions { .. } method = do
-   -- Decide whether the test is supposed to fail or succeed
-  let shouldFail = "proveFail" `isPrefixOf` method
+checkSymFailures :: UnitTestOptions -> Stepper (Either Error Buffer)
+checkSymFailures UnitTestOptions { .. } = do
   -- Ask whether any assertions failed
   Stepper.evm $ do
     popTrace
     setupCall testParams "failed()" emptyAbi
-  res <- Stepper.execFully
-  case res of
-    Right (ConcreteBuffer r) ->
-      let AbiBool failed = decodeAbiValue AbiBoolType (BSLazy.fromStrict r)
-      in pure (shouldFail == failed)
-    _ -> error "internal error: unexpected failure code"
+  Stepper.execFully
 
 indentLines :: Int -> Text -> Text
 indentLines n s =
