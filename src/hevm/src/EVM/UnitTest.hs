@@ -531,7 +531,7 @@ symRun opts@UnitTestOptions{..} concreteVm testName types = do
         Right (SymbolicBuffer buf) -> do
           SBV.resetAssertions
           constrain (sAnd (view EVM.pathConditions postVM))
-          constrain $ (litBytes $ encodeAbiValue (AbiBool True)) .== buf
+          constrain $ (litBytes $ encodeAbiValue (AbiBool False)) .== buf
 
           checkSat >>= \case
             Sat -> do
