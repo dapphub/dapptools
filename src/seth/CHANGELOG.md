@@ -4,12 +4,10 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## Unreleased
+## [0.9.2] - 2020-10-31
 
 ### Added
-- Support for setting solc by path. Use `DAPP_SOLC=/path/to/bin` or
-`dapp --use /path/to/solc ...` to use a custom solc.
-
+- Updated `dapp` and `hevm`
 
 ## [0.9.1] - 2020-08-19
 
