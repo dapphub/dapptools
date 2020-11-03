@@ -193,22 +193,16 @@ oracle smtstate info model ensureConsistency q = do
         Nothing -> error ("oracle error: " ++ show q)
 
     EVM.PleaseMakeUnique val pathconditions continue ->
-      case smtstate of
-        Nothing -> return $ continue Nothing
-        Just state -> flip runReaderT state $ SBV.runQueryT $ do
-          resetAssertions
-          constrain $ sAnd pathconditions
-          res <- checkSat
-          out <- case res of
-            Sat -> do val' <- getValue val
-                      resetAssertions
-                      constrain (val ./= literal val')
-                      res' <- checkSat
-                      pure $ case res' of
-                        Sat -> Just val'
-                        _ -> Nothing
-            _ -> pure Nothing
-          pure $ continue out
+          case smtstate of
+            Nothing -> return $ continue Nothing
+            Just state -> flip runReaderT state $ SBV.runQueryT $ do
+              constrain $ sAnd $ pathconditions <> [val .== val]
+              checkSat >>= \case
+                Sat -> do val' <- getValue val
+                          checksat (val ./= literal val') >>= \case
+                            Unsat -> pure $ continue $ Just val'
+                            _ -> pure $ continue Nothing
+                _ -> pure $ continue Nothing
 
     --- for other queries (there's only slot left right now) we default to zero or http
     EVM.PleaseFetchSlot addr slot continue ->
