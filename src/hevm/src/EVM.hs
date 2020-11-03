@@ -792,7 +792,7 @@ exec1 = do
         -- op: EXTCODESIZE
         0x3b ->
           case stk of
-            (x':xs) -> forceConcrete x' $ \x ->
+            (S _ x':xs) -> makeUnique x' $ \x ->
               if x == num cheatCode
                 then do
                   next
