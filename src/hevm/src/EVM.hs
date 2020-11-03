@@ -1529,7 +1529,9 @@ makeUnique val cont = case unliteral val of
   Nothing -> do
     conditions <- use pathConditions
     assign result . Just . VMFailure . Query $ PleaseMakeUnique val conditions $ \case
-      Just a -> cont a
+      Just a -> do
+        assign result Nothing
+        cont a
       Nothing -> vmError NotUnique
   Just a -> cont a
 
