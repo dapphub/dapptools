@@ -518,12 +518,12 @@ assert cmd = do
     runSMTWithTimeOut (solver cmd) (smttimeout cmd) $ query $ do
       preState <- symvmFromCommand cmd
       verify preState (maxIterations cmd) rpcinfo (Just checkAssertions) >>= \case
-        Right (_, tree) -> do
+        Right tree -> do
           io $ putStrLn "Assertion violation found."
           showCounterexample preState maybesig
           treeShowing tree
           io $ exitWith (ExitFailure 1)
-        Left (pre, tree) -> do
+        Left tree -> do
           io $ putStrLn $ "Explored: " <> show (length tree)
                        <> " branches without assertion violations"
           treeShowing tree
@@ -547,7 +547,7 @@ assert cmd = do
                 Unsat -> io $ do putStrLn "Inconsistent path conditions: dead path"
                                  print $ view EVM.result postVM
                 Sat -> do
-                  showCounterexample pre maybesig
+                  showCounterexample preState maybesig
                   io $ putStrLn "-- Pathconditions --"
                   io $ print $ snd <$> view EVM.constraints postVM
                   case view EVM.result postVM of

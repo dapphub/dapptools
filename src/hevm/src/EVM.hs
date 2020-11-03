@@ -1544,7 +1544,7 @@ askSMT codeloc (condition, whiff) continue = do
    where -- Only one path is possible
          choosePath :: BranchCondition -> EVM ()
          choosePath (Case v) = do assign result Nothing
-                                  pushTo constraints (if v then (condition, UnOp "not" whiff) else (sNot condition, whiff))
+                                  pushTo constraints $ if v then (condition, whiff) else (sNot condition, UnOp "not" whiff)
                                   iteration <- use (iterations . at codeloc . non 0)
                                   assign (cache . path . at (codeloc, iteration)) (Just v)
                                   assign (iterations . at codeloc) (Just (iteration + 1))

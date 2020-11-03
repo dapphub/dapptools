@@ -194,7 +194,7 @@ main = defaultMain $ testGroup "hevm"
               in case view result poststate of
                 Just (VMSuccess (SymbolicBuffer out)) -> (fromBytes out) .== x + y
                 _ -> sFalse
-        Left (_, res) <- runSMT $ query $ verifyContract safeAdd (Just ("add(uint256,uint256)", [AbiUIntType 256, AbiUIntType 256])) [] SymbolicS pre post
+        (Left res, _) <- runSMT $ query $ verifyContract safeAdd (Just ("add(uint256,uint256)", [AbiUIntType 256, AbiUIntType 256])) [] SymbolicS pre post
         putStrLn $ "successfully explored: " <> show (length res) <> " paths"
      ,
 
@@ -216,7 +216,7 @@ main = defaultMain $ testGroup "hevm"
               in case view result poststate of
                       Just (VMSuccess (SymbolicBuffer out)) -> fromBytes out .== 2 * y
                       _ -> sFalse
-        Left (_, res) <- runSMTWith z3 $ query $
+        (Left res, _) <- runSMTWith z3 $ query $
           verifyContract safeAdd (Just ("add(uint256,uint256)", [AbiUIntType 256, AbiUIntType 256])) [] SymbolicS pre (Just post)
         putStrLn $ "successfully explored: " <> show (length res) <> " paths"
       ,
@@ -231,7 +231,7 @@ main = defaultMain $ testGroup "hevm"
           }
           |]
         bs <- runSMTWith cvc4 $ query $ do
-          Right (vm, _) <- checkAssert factor (Just ("factor(uint256,uint256)", [AbiUIntType 256, AbiUIntType 256])) []
+          (Right _, vm) <- checkAssert factor (Just ("factor(uint256,uint256)", [AbiUIntType 256, AbiUIntType 256])) []
           case view (state . calldata . _1) vm of
             SymbolicBuffer bs -> BS.pack <$> mapM (getValue.fromSized) bs
             ConcreteBuffer _ -> error "unexpected"
@@ -264,7 +264,7 @@ main = defaultMain $ testGroup "hevm"
               in case view result poststate of
                 Just (VMSuccess _) -> prex + 2 * y .== postx
                 _ -> sFalse
-        Left (_, res) <- runSMT $ query $ verifyContract c (Just ("f(uint256)", [AbiUIntType 256])) [] SymbolicS pre post
+        (Left res, _) <- runSMT $ query $ verifyContract c (Just ("f(uint256)", [AbiUIntType 256])) [] SymbolicS pre post
         putStrLn $ "successfully explored: " <> show (length res) <> " paths"
         ,
         -- Inspired by these `msg.sender == to` token bugs
@@ -296,7 +296,7 @@ main = defaultMain $ testGroup "hevm"
                 Just (VMSuccess _) -> prex + prey .== postx + (posty :: SWord 256)
                 _ -> sFalse
         bs <- runSMT $ query $ do
-          Right (vm, _) <- verifyContract c (Just ("f(uint256,uint256)", [AbiUIntType 256, AbiUIntType 256])) [] SymbolicS pre (Just post)
+          (Right _, vm) <- verifyContract c (Just ("f(uint256,uint256)", [AbiUIntType 256, AbiUIntType 256])) [] SymbolicS pre (Just post)
           case view (state . calldata . _1) vm of
             SymbolicBuffer bs -> BS.pack <$> mapM (getValue.fromSized) bs
             ConcreteBuffer bs -> error "unexpected"
@@ -323,7 +323,7 @@ main = defaultMain $ testGroup "hevm"
               }
              }
             |]
-          Left (_, res) <- runSMTWith z3 $ query $ checkAssert c (Just ("deposit(uint256)", [AbiUIntType 256])) []
+          (Left res, _) <- runSMTWith z3 $ query $ checkAssert c (Just ("deposit(uint256)", [AbiUIntType 256])) []
           putStrLn $ "successfully explored: " <> show (length res) <> " paths"
         ,
                 testCase "Deposit contract loop (cvc4)" $ do
@@ -345,7 +345,7 @@ main = defaultMain $ testGroup "hevm"
               }
              }
             |]
-          Left (_, res) <- runSMTWith cvc4 $ query $ checkAssert c (Just ("deposit(uint256)", [AbiUIntType 256])) []
+          (Left res, _) <- runSMTWith cvc4 $ query $ checkAssert c (Just ("deposit(uint256)", [AbiUIntType 256])) []
           putStrLn $ "successfully explored: " <> show (length res) <> " paths"
         ,
         testCase "Deposit contract loop (error version)" $ do
@@ -368,7 +368,7 @@ main = defaultMain $ testGroup "hevm"
              }
             |]
           bs <- runSMT $ query $ do
-            Right (vm, _) <- checkAssert c (Just ("deposit(uint8)", [AbiUIntType 8])) []
+            (Right _, vm) <- checkAssert c (Just ("deposit(uint8)", [AbiUIntType 8])) []
             case view (state . calldata . _1) vm of
               SymbolicBuffer bs -> BS.pack <$> mapM (getValue.fromSized) bs
               ConcreteBuffer _ -> error "unexpected"
@@ -385,7 +385,7 @@ main = defaultMain $ testGroup "hevm"
             }
           }
           |]
-        Left (_, res) <- runSMTWith z3 $ do
+        (Left res, _) <- runSMTWith z3 $ do
           setTimeOut 5000
           query $ checkAssert c Nothing []
         putStrLn $ "successfully explored: " <> show (length res) <> " paths"
@@ -400,7 +400,7 @@ main = defaultMain $ testGroup "hevm"
               }
             }
             |]
-          Left (_, res) <- runSMTWith cvc4 $ query $ checkAssert c (Just ("f(uint256,uint256)", [AbiUIntType 256, AbiUIntType 256])) []
+          (Left res, _) <- runSMTWith cvc4 $ query $ checkAssert c (Just ("f(uint256,uint256)", [AbiUIntType 256, AbiUIntType 256])) []
           putStrLn $ "successfully explored: " <> show (length res) <> " paths"
         ,
         testCase "injectivity of keccak (32 bytes)" $ do
@@ -412,7 +412,7 @@ main = defaultMain $ testGroup "hevm"
               }
             }
             |]
-          Left (_, res) <- runSMTWith z3 $ query $ checkAssert c (Just ("f(uint256,uint256)", [AbiUIntType 256, AbiUIntType 256])) []
+          (Left res, _) <- runSMTWith z3 $ query $ checkAssert c (Just ("f(uint256,uint256)", [AbiUIntType 256, AbiUIntType 256])) []
           putStrLn $ "successfully explored: " <> show (length res) <> " paths"
        ,
 
@@ -426,7 +426,7 @@ main = defaultMain $ testGroup "hevm"
             }
             |]
           bs <- runSMTWith z3 $ query $ do
-            Right (vm, _) <- checkAssert c (Just ("f(uint256,uint256,uint256,uint256)", replicate 4 (AbiUIntType 256))) []
+            (Right _, vm) <- checkAssert c (Just ("f(uint256,uint256,uint256,uint256)", replicate 4 (AbiUIntType 256))) []
             case view (state . calldata . _1) vm of
               SymbolicBuffer bs -> BS.pack <$> mapM (getValue.fromSized) bs
               ConcreteBuffer _ -> error "unexpected"
@@ -456,9 +456,9 @@ main = defaultMain $ testGroup "hevm"
               }
             }
             |]
-          Left (_, res) <- runSMTWith z3 $ do
+          Left res <- runSMTWith z3 $ do
             setTimeOut 5000
-            query $ checkAssert c Nothing []
+            query $ fst <$> checkAssert c Nothing []
           putStrLn $ "successfully explored: " <> show (length res) <> " paths"
 
        ,
@@ -475,7 +475,7 @@ main = defaultMain $ testGroup "hevm"
               }
             |]
           -- should find a counterexample
-          Right (counterexample, _) <- runSMTWith cvc4 $ query $ checkAssert c (Just ("f(uint256,uint256)", [AbiUIntType 256, AbiUIntType 256])) []
+          Right _ <- runSMTWith cvc4 $ query $ fst <$> checkAssert c (Just ("f(uint256,uint256)", [AbiUIntType 256, AbiUIntType 256])) []
           putStrLn $ "found counterexample:"
 
 
