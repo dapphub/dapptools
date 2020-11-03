@@ -85,6 +85,7 @@ data Error
   | PrecompileFailure
   | UnexpectedSymbolicArg
   | DeadPath
+  | NotUnique
 deriving instance Show Error
 
 -- | The possible result states of a VM
@@ -129,8 +130,9 @@ data TraceData
 
 -- | Queries halt execution until resolved through RPC calls or SMT queries
 data Query where
-  PleaseFetchContract :: Addr         -> (Contract   -> EVM ()) -> Query
-  PleaseFetchSlot     :: Addr -> Word -> (Word       -> EVM ()) -> Query
+  PleaseFetchContract :: Addr -> (Contract -> EVM ()) -> Query
+  PleaseMakeUnique    :: SBV a -> [SBool] -> (Maybe a -> EVM ()) -> Query
+  PleaseFetchSlot     :: Addr -> Word -> (Word -> EVM ()) -> Query
   PleaseAskSMT        :: SBool -> [SBool] -> (BranchCondition -> EVM ()) -> Query
 
 data Choose where
@@ -147,6 +149,10 @@ instance Show Query where
     PleaseAskSMT condition constraints _ ->
       (("<EVM.Query: ask SMT about "
         ++ show condition ++ " in context "
+        ++ show constraints ++ ">") ++)
+    PleaseMakeUnique val constraints _ ->
+      (("<EVM.Query: make value "
+        ++ show val ++ " unique in context "
         ++ show constraints ++ ">") ++)
 
 instance Show Choose where
@@ -1076,31 +1082,25 @@ exec1 = do
         0xf1 ->
           case stk of
             ( xGas'
-              : xTo'
+              : S _ xTo
               : (forceLit -> xValue)
               : xInOffset'
               : xInSize'
               : xOutOffset'
               : xOutSize'
               : xs
-             ) -> forceConcrete6 (xGas', xTo', xInOffset', xInSize', xOutOffset', xOutSize') $
-              \(xGas, (num -> xTo), xInOffset, xInSize, xOutOffset, xOutSize) ->
+             ) -> forceConcrete5 (xGas',xInOffset', xInSize', xOutOffset', xOutSize') $
+              \(xGas, xInOffset, xInSize, xOutOffset, xOutSize) ->
               (if xValue > 0 then notStatic else id) $
-                case xTo of
-                  n | n > 0 && n <= 9 ->
-                    precompiledContract this xGas xTo xTo xValue xInOffset xInSize xOutOffset xOutSize xs
-                  n | num n == cheatCode ->
-                    do
-                      assign (state . stack) xs
-                      cheat (xInOffset, xInSize) (xOutOffset, xOutSize)
-                  _ -> delegateCall this xGas xTo xTo xValue xInOffset xInSize xOutOffset xOutSize xs $ do
-                            zoom state $ do
-                              assign callvalue (litWord xValue)
-                              assign caller (litAddr self)
-                              assign contract xTo
-                            transfer self xTo xValue
-                            touchAccount self
-                            touchAccount xTo
+                let target = SAddr $ sFromIntegral xTo in
+                delegateCall this xGas target target xValue xInOffset xInSize xOutOffset xOutSize xs $ \callee -> do
+                  zoom state $ do
+                    assign callvalue (litWord xValue)
+                    assign caller (litAddr self)
+                    assign contract callee
+                  transfer self callee xValue
+                  touchAccount self
+                  touchAccount callee
             _ ->
               underrun
 
@@ -1108,23 +1108,21 @@ exec1 = do
         0xf2 ->
           case stk of
             ( xGas'
-              : xTo'
+              : S _ xTo'
               : (forceLit -> xValue)
               : xInOffset'
               : xInSize'
               : xOutOffset'
               : xOutSize'
               : xs
-              ) -> forceConcrete6 (xGas', xTo', xInOffset', xInSize', xOutOffset', xOutSize') $
-              \(xGas, (num -> xTo), xInOffset, xInSize, xOutOffset, xOutSize) ->
-                case xTo of
-                  n | n > 0 && n <= 9 ->
-                    precompiledContract this xGas xTo self xValue xInOffset xInSize xOutOffset xOutSize xs
-                  _ -> delegateCall this xGas xTo self xValue xInOffset xInSize xOutOffset xOutSize xs $ do
-                         zoom state $ do
-                           assign callvalue (litWord xValue)
-                           assign caller (litAddr self)
-                         touchAccount self
+              ) -> forceConcrete5 (xGas', xInOffset', xInSize', xOutOffset', xOutSize') $
+              \(xGas, xInOffset, xInSize, xOutOffset, xOutSize) ->
+                let target = SAddr $ sFromIntegral xTo' in
+                delegateCall this xGas target (litAddr self) xValue xInOffset xInSize xOutOffset xOutSize xs $ \_ -> do
+                  zoom state $ do
+                    assign callvalue (litWord xValue)
+                    assign caller (litAddr self)
+                  touchAccount self
             _ ->
               underrun
 
@@ -1168,22 +1166,16 @@ exec1 = do
         0xf4 ->
           case stk of
             (xGas'
-             :xTo'
+             :S _ xTo
              :xInOffset'
              :xInSize'
              :xOutOffset'
              :xOutSize'
-             :xs) -> forceConcrete6 (xGas', xTo', xInOffset', xInSize', xOutOffset', xOutSize') $
-              \(xGas, (num -> xTo), xInOffset, xInSize, xOutOffset, xOutSize) ->
-                case xTo of
-                  n | n > 0 && n <= 9 ->
-                    precompiledContract this xGas xTo self 0 xInOffset xInSize xOutOffset xOutSize xs
-                  n | num n == cheatCode -> do
-                        assign (state . stack) xs
-                        cheat (xInOffset, xInSize) (xOutOffset, xOutSize)
-                  _ -> do
-                        delegateCall this xGas xTo self 0 xInOffset xInSize xOutOffset xOutSize xs $ do
-                          touchAccount self
+             :xs) -> forceConcrete5 (xGas', xInOffset', xInSize', xOutOffset', xOutSize') $
+              \(xGas, xInOffset, xInSize, xOutOffset, xOutSize) ->
+                let target = SAddr $ sFromIntegral xTo in
+                delegateCall this xGas target (litAddr self) 0 xInOffset xInSize xOutOffset xOutSize xs $ \_ -> do
+                  touchAccount self
             _ -> underrun
 
         -- op: CREATE2
@@ -1209,24 +1201,22 @@ exec1 = do
         0xfa ->
           case stk of
             (xGas'
-             :xTo'
+             :S _ xTo
              :xInOffset'
              :xInSize'
              :xOutOffset'
              :xOutSize'
-             :xs) -> forceConcrete6 (xGas', xTo', xInOffset', xInSize', xOutOffset', xOutSize') $
-              \(xGas, (num -> xTo), xInOffset, xInSize, xOutOffset, xOutSize) ->
-                case xTo of
-                  n | n > 0 && n <= 9 ->
-                    precompiledContract this xGas xTo xTo 0 xInOffset xInSize xOutOffset xOutSize xs
-                  _ -> delegateCall this xGas xTo xTo 0 xInOffset xInSize xOutOffset xOutSize xs $ do
-                            zoom state $ do
-                              assign callvalue 0
-                              assign caller (litAddr self)
-                              assign contract xTo
-                              assign static True
-                            touchAccount self
-                            touchAccount xTo
+             :xs) -> forceConcrete5 (xGas', xInOffset', xInSize', xOutOffset', xOutSize') $
+              \(xGas, xInOffset, xInSize, xOutOffset, xOutSize) -> do
+                let target = SAddr $ sFromIntegral xTo
+                delegateCall this xGas target target 0 xInOffset xInSize xOutOffset xOutSize xs $ \callee -> do
+                  zoom state $ do
+                    assign callvalue 0
+                    assign caller (litAddr self)
+                    assign contract callee
+                    assign static True
+                  touchAccount self
+                  touchAccount callee
             _ ->
               underrun
 
@@ -1299,7 +1289,7 @@ callChecks this xGas xContext xValue xInOffset xInSize xOutOffset xOutSize xs co
              then do
                assign (state . stack) (0 : xs)
                assign (state . returndata) mempty
-               pushTrace $ ErrorTrace $ CallDepthLimitReached
+               pushTrace $ ErrorTrace CallDepthLimitReached
                next
              else continue gas'
 
@@ -1346,7 +1336,7 @@ executePrecompile preCompileAddr gasCap inOffset inSize outOffset outSize xs  = 
       notImplemented = error $ "precompile at address " <> show preCompileAddr <> " not yet implemented"
       precompileFail = burn (gasCap - cost) $ do
                          assign (state . stack) (0 : xs)
-                         pushTrace $ ErrorTrace $ PrecompileFailure
+                         pushTrace $ ErrorTrace PrecompileFailure
                          next
   if cost > gasCap then
     burn gasCap $ do
@@ -1375,7 +1365,7 @@ executePrecompile preCompileAddr gasCap inOffset inSize outOffset outSize xs  = 
         0x2 ->
           let
             hash = case input of
-                     ConcreteBuffer input' -> ConcreteBuffer $ BS.pack $ BA.unpack $ (Crypto.hash input' :: Digest SHA256)
+                     ConcreteBuffer input' -> ConcreteBuffer $ BS.pack $ BA.unpack (Crypto.hash input' :: Digest SHA256)
                      SymbolicBuffer input' -> SymbolicBuffer $ symSHA256 input'
           in do
             assign (state . stack) (1 : xs)
@@ -1419,9 +1409,9 @@ executePrecompile preCompileAddr gasCap inOffset inSize outOffset outSize xs  = 
                    truncpadlit (num lenm) (asBE (0 :: Int))
                  False ->
                    let
-                     b = asInteger $ lazySlice 96 lenb $ input'
-                     e = asInteger $ lazySlice (96 + lenb) lene $ input'
-                     m = asInteger $ lazySlice (96 + lenb + lene) lenm $ input'
+                     b = asInteger $ lazySlice 96 lenb input'
+                     e = asInteger $ lazySlice (96 + lenb) lene input'
+                     m = asInteger $ lazySlice (96 + lenb + lene) lenm input'
                    in
                      padLeft (num lenm) (asBE (expFast b e m))
           in do
@@ -1532,6 +1522,16 @@ pushToSequence f x = f %= (Seq.|> x)
 
 getCodeLocation :: VM -> CodeLocation
 getCodeLocation vm = (view (state . contract) vm, view (state . pc) vm)
+
+-- | Ask the SMT solver to provide a concrete model for val iff a unique model exists
+makeUnique :: SymVal a => SBV a -> (a -> EVM ()) -> EVM ()
+makeUnique val cont = case unliteral val of
+  Nothing -> do
+    conditions <- use pathConditions
+    assign result . Just . VMFailure . Query $ PleaseMakeUnique val conditions $ \case
+      Just a -> cont a
+      Nothing -> vmError NotUnique
+  Just a -> cont a
 
 -- | Construct SMT Query and halt execution until resolved
 askSMT :: CodeLocation -> (SBool, Whiff) -> (Bool -> EVM ()) -> EVM ()
@@ -1887,57 +1887,65 @@ cheatActions =
 -- * General call implementation ("delegateCall")
 delegateCall
   :: (?op :: Word8)
-  => Contract -> Word -> Addr -> Addr -> Word -> Word -> Word -> Word -> Word -> [SymWord]
-  -> EVM ()
+  => Contract -> Word -> SAddr -> SAddr -> Word -> Word -> Word -> Word -> Word -> [SymWord]
+  -> (Addr -> EVM ())
   -> EVM ()
 delegateCall this gasGiven xTo xContext xValue xInOffset xInSize xOutOffset xOutSize xs continue =
-  callChecks this gasGiven xContext xValue xInOffset xInSize xOutOffset xOutSize xs $
-  \xGas -> do
-    vm0 <- get
-    fetchAccount xTo . const $
-      preuse (env . contracts . ix xTo) >>= \case
-        Nothing ->
-          vmError (NoSuchContract xTo)
-        Just target ->
-          burn xGas $ do
-            let newContext = CallContext
-                  { callContextTarget    = xTo
-                  , callContextContext   = xContext
-                  , callContextOffset    = xOutOffset
-                  , callContextSize      = xOutSize
-                  , callContextCodehash  = view codehash target
-                  , callContextReversion = view (env . contracts) vm0
-                  , callContextSubState  = view (tx . substate) vm0
-                  , callContextAbi =
-                      if xInSize >= 4
-                      then case unliteral $ readMemoryWord32 xInOffset (view (state . memory) vm0)
-                           of Nothing -> Nothing
-                              Just abi -> Just . w256 $ num abi
-                      else Nothing
-                  , callContextData = (readMemory (num xInOffset) (num xInSize) vm0)
-                  }
+  makeUnique (saddressWord160 xTo) $ \(fromSizzle -> xTo') ->
+    makeUnique (saddressWord160 xContext) $ \(fromSizzle -> xContext') ->
+      if xTo' > 0 && xTo' <= 9 then precompiledContract this gasGiven xTo' xTo' xValue xInOffset xInSize xOutOffset xOutSize xs
+      else if num xTo' == cheatCode then
+        do
+          assign (state . stack) xs
+          cheat (xInOffset, xInSize) (xOutOffset, xOutSize)
+      else
+        callChecks this gasGiven xContext' xValue xInOffset xInSize xOutOffset xOutSize xs $
+        \xGas -> do
+          vm0 <- get
+          fetchAccount xTo' . const $
+            preuse (env . contracts . ix xTo') >>= \case
+              Nothing ->
+                vmError (NoSuchContract xTo')
+              Just target -> do
+                burn xGas $ do
+                  let newContext = CallContext
+                                    { callContextTarget    = xTo'
+                                    , callContextContext   = xContext'
+                                    , callContextOffset    = xOutOffset
+                                    , callContextSize      = xOutSize
+                                    , callContextCodehash  = view codehash target
+                                    , callContextReversion = view (env . contracts) vm0
+                                    , callContextSubState  = view (tx . substate) vm0
+                                    , callContextAbi =
+                                        if xInSize >= 4
+                                        then case unliteral $ readMemoryWord32 xInOffset (view (state . memory) vm0)
+                                             of Nothing -> Nothing
+                                                Just abi -> Just . w256 $ num abi
+                                        else Nothing
+                                    , callContextData = (readMemory (num xInOffset) (num xInSize) vm0)
+                                    }
 
-            pushTrace (FrameTrace newContext)
-            next
-            vm1 <- get
+                  pushTrace (FrameTrace newContext)
+                  next
+                  vm1 <- get
 
-            pushTo frames $ Frame
-              { _frameState = (set stack xs) (view state vm1)
-              , _frameContext = newContext
-              }
+                  pushTo frames $ Frame
+                    { _frameState = (set stack xs) (view state vm1)
+                    , _frameContext = newContext
+                    }
 
-            zoom state $ do
-              assign gas xGas
-              assign pc 0
-              assign code (view bytecode target)
-              assign codeContract xTo
-              assign stack mempty
-              assign memory mempty
-              assign memorySize 0
-              assign returndata mempty
-              assign calldata (readMemory (num xInOffset) (num xInSize) vm0, literal (num xInSize))
+                  zoom state $ do
+                    assign gas xGas
+                    assign pc 0
+                    assign code (view bytecode target)
+                    assign codeContract xTo'
+                    assign stack mempty
+                    assign memory mempty
+                    assign memorySize 0
+                    assign returndata mempty
+                    assign calldata (readMemory (num xInOffset) (num xInSize) vm0, literal (num xInSize))
 
-            continue
+                  continue xTo'
 
 -- -- * Contract creation
 
