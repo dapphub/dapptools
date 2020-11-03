@@ -335,18 +335,10 @@ prettyvmresult (EVM.VMSuccess (ConcreteBuffer msg)) =
 prettyvmresult (EVM.VMSuccess (SymbolicBuffer msg)) =
   "Return: " <> show (length msg) <> " symbolic bytes"
 
--- TODO
--- display in an 'act' was - propagate iff and if's, prune failed paths
--- display cases instead of branches - collapse cases
--- display storage changes (M&D)
--- display condition correctly
-
+-- TODO: display in an 'act' format
 data BranchData = BranchData {
-  -- todo list of custom navigation datatypes
   _navigation :: String,
-  -- whiff
-  _constrain :: String,
-  -- custom leaf data
+  _constraint :: String,
   _leafData :: String
   }
 
@@ -384,7 +376,7 @@ showBranchTree :: Tree BranchInfo -> String
 showBranchTree tree = let
   showBranchLine bd  = _navigation bd
                       <> "    "
-                      <> _constrain bd
+                      <> _constraint bd
                       <> "    "
                       <> _leafData bd
   in unlines $ showBranchLine <$> flattenTree tree

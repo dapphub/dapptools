@@ -243,7 +243,7 @@ maxIterationsReached vm (Just maxIter) =
 type Precondition = VM -> SBool
 type Postcondition = (VM, VM) -> SBool
 
-checkAssert :: ByteString -> Maybe (Text, [AbiType]) -> [String] -> Query (Either (VM, Tree BranchInfo) (VM, Tree BranchInfo))
+checkAssert :: ByteString -> Maybe (Text, [AbiType]) -> [String] -> Query (Either (Tree BranchInfo) (Tree BranchInfo), VM)
 checkAssert c signature' concreteArgs = verifyContract c signature' concreteArgs SymbolicS (const sTrue) (Just checkAssertions)
 
 checkAssertions :: Postcondition
@@ -251,12 +251,13 @@ checkAssertions (_, out) = case view result out of
   Just (EVM.VMFailure (EVM.UnrecognizedOpcode 254)) -> sFalse
   _ -> sTrue
 
-verifyContract :: ByteString -> Maybe (Text, [AbiType]) -> [String] -> StorageModel -> Precondition -> Maybe Postcondition -> Query (Either (VM, Tree BranchInfo) (VM, Tree BranchInfo))
+verifyContract :: ByteString -> Maybe (Text, [AbiType]) -> [String] -> StorageModel -> Precondition -> Maybe Postcondition -> Query (Either (Tree BranchInfo) (Tree BranchInfo), VM)
 verifyContract theCode signature' concreteArgs storagemodel pre maybepost = do
     preStateRaw <- abstractVM signature' concreteArgs theCode  storagemodel
     -- add the pre condition to the pathconditions to ensure that we are only exploring valid paths
     let preState = over constraints ((++) [(pre preStateRaw, Dull)]) preStateRaw
-    verify preState Nothing Nothing maybepost
+    v <- verify preState Nothing Nothing maybepost
+    return (v, preState)
 
 pruneDeadPaths :: [VM] -> [VM]
 pruneDeadPaths =
@@ -270,7 +271,8 @@ consistentPath vm = do
   constrain $ sAnd $ fst <$> view constraints vm
   checkSat >>= \case
     Sat -> return $ Just vm
-    _   -> return $ Nothing
+    Unk -> return $ Just vm -- the path may still be consistent
+    Unsat -> return Nothing
 
 consistentTree :: Tree BranchInfo -> Query (Maybe (Tree BranchInfo))
 consistentTree (Node (BranchInfo vm w) []) = do
@@ -290,9 +292,9 @@ leaves (Node x []) = [_vm x]
 leaves (Node _ xs) = concatMap leaves xs
 
 -- | Symbolically execute the VM and check all endstates against the postcondition, if available.
--- Returns `Right VM` if the postcondition can be violated, where `VM` is a prestate counterexample,
--- or `Left (VM, [VM])`, a pair of `prestate` and post vm states.
-verify :: VM -> Maybe Integer -> Maybe (Fetch.BlockNumber, Text) -> Maybe Postcondition -> Query (Either (VM, Tree BranchInfo) (VM, Tree BranchInfo))
+-- Returns `Right (Tree BranchInfo)` if the postcondition can be violated, or
+-- or `Left (Tree BranchInfo)`, if the postcondition holds for all endstates.
+verify :: VM -> Maybe Integer -> Maybe (Fetch.BlockNumber, Text) -> Maybe Postcondition -> Query (Either (Tree BranchInfo) (Tree BranchInfo))
 verify preState maxIter rpcinfo maybepost = do
   let model = view (env . storageModel) preState
   smtState <- queryState
@@ -309,13 +311,13 @@ verify preState maxIter rpcinfo maybepost = do
       io $ putStrLn "checking postcondition..."
       checkSat >>= \case
         Unk -> do io $ putStrLn "postcondition query timed out"
-                  return $ Left (preState, tree)
+                  return $ Left tree
         Unsat -> do io $ putStrLn "Q.E.D."
-                    return $ Left (preState, tree)
-        Sat -> return $ Right (preState, tree)
+                    return $ Left tree
+        Sat -> return $ Right tree
 
     Nothing -> do io $ putStrLn "Nothing to check"
-                  return $ Left (preState, tree)
+                  return $ Left tree
 
 -- | Compares two contract runtimes for trace equivalence by running two VMs and comparing the end states.
 equivalenceCheck :: ByteString -> ByteString -> Maybe Integer -> Maybe (Text, [AbiType]) -> Query (Either ([VM], [VM]) VM)
