@@ -192,6 +192,24 @@ oracle smtstate info model ensureConsistency q = do
                   & set EVM.storage (EVM.Symbolic store)
         Nothing -> error ("oracle error: " ++ show q)
 
+    EVM.PleaseMakeUnique val pathconditions continue ->
+      case smtstate of
+        Nothing -> return $ continue Nothing
+        Just state -> flip runReaderT state $ SBV.runQueryT $ do
+          resetAssertions
+          constrain $ sAnd pathconditions
+          res <- checkSat
+          out <- case res of
+            Sat -> do val' <- getValue val
+                      resetAssertions
+                      constrain (val ./= literal val')
+                      res' <- checkSat
+                      pure $ case res' of
+                        Sat -> Just val'
+                        _ -> Nothing
+            _ -> pure Nothing
+          pure $ continue out
+
     --- for other queries (there's only slot left right now) we default to zero or http
     EVM.PleaseFetchSlot addr slot continue ->
       case info of
@@ -235,8 +253,10 @@ checkBranch pathconds branchcondition False = do
                Sat -> return EVM.Unknown
                -- Explore both branches in case of timeout
                Unk -> return EVM.Unknown
+               _ -> error "checkBranch: unexpected SMT result"
      -- If the query times out, we simply explore both paths
      Unk -> return EVM.Unknown
+     _ -> error "checkBranch: unexpected SMT result"
 
 checkBranch pathconds branchcondition True = do
   constrain pathconds

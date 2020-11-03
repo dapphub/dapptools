@@ -504,7 +504,6 @@ symRun :: UnitTestOptions -> VM -> Text -> [AbiType] -> SBV.Query (Text, Either 
 symRun opts@UnitTestOptions{..} concreteVm testName types = do
     vm <- symbolify concreteVm
     cd <- symCalldata testName types []
-    traceShowM cd
     smtState <- SBV.queryState
     let model = view (env . storageModel) vm
 

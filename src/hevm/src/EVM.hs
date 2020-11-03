@@ -131,7 +131,7 @@ data TraceData
 -- | Queries halt execution until resolved through RPC calls or SMT queries
 data Query where
   PleaseFetchContract :: Addr -> (Contract -> EVM ()) -> Query
-  PleaseMakeUnique    :: SBV a -> [SBool] -> (Maybe a -> EVM ()) -> Query
+  PleaseMakeUnique    :: SymVal a => SBV a -> [SBool] -> (Maybe a -> EVM ()) -> Query
   PleaseFetchSlot     :: Addr -> Word -> (Word -> EVM ()) -> Query
   PleaseAskSMT        :: SBool -> [SBool] -> (BranchCondition -> EVM ()) -> Query
 
@@ -1091,16 +1091,16 @@ exec1 = do
               : xs
              ) -> forceConcrete5 (xGas',xInOffset', xInSize', xOutOffset', xOutSize') $
               \(xGas, xInOffset, xInSize, xOutOffset, xOutSize) ->
-              (if xValue > 0 then notStatic else id) $
-                let target = SAddr $ sFromIntegral xTo in
-                delegateCall this xGas target target xValue xInOffset xInSize xOutOffset xOutSize xs $ \callee -> do
-                  zoom state $ do
-                    assign callvalue (litWord xValue)
-                    assign caller (litAddr self)
-                    assign contract callee
-                  transfer self callee xValue
-                  touchAccount self
-                  touchAccount callee
+                (if xValue > 0 then notStatic else id) $
+                  let target = SAddr $ sFromIntegral xTo in
+                  delegateCall this xGas target target xValue xInOffset xInSize xOutOffset xOutSize xs $ \callee -> do
+                    zoom state $ do
+                      assign callvalue (litWord xValue)
+                      assign caller (litAddr self)
+                      assign contract callee
+                    transfer self callee xValue
+                    touchAccount self
+                    touchAccount callee
             _ ->
               underrun
 
@@ -1116,13 +1116,13 @@ exec1 = do
               : xOutSize'
               : xs
               ) -> forceConcrete5 (xGas', xInOffset', xInSize', xOutOffset', xOutSize') $
-              \(xGas, xInOffset, xInSize, xOutOffset, xOutSize) ->
-                let target = SAddr $ sFromIntegral xTo' in
-                delegateCall this xGas target (litAddr self) xValue xInOffset xInSize xOutOffset xOutSize xs $ \_ -> do
-                  zoom state $ do
-                    assign callvalue (litWord xValue)
-                    assign caller (litAddr self)
-                  touchAccount self
+                \(xGas, xInOffset, xInSize, xOutOffset, xOutSize) ->
+                  let target = SAddr $ sFromIntegral xTo' in
+                  delegateCall this xGas target (litAddr self) xValue xInOffset xInSize xOutOffset xOutSize xs $ \_ -> do
+                    zoom state $ do
+                      assign callvalue (litWord xValue)
+                      assign caller (litAddr self)
+                    touchAccount self
             _ ->
               underrun
 
