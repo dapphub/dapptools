@@ -503,7 +503,7 @@ fuzzRun opts@UnitTestOptions{..} vm testName types = do
 symRun :: UnitTestOptions -> VM -> Text -> [AbiType] -> SBV.Query (Text, Either Text Text, VM)
 symRun opts@UnitTestOptions{..} concreteVm testName types = do
     SBV.resetAssertions
-    vm <- symbolify concreteVm
+    let vm = symbolify concreteVm
     cd <- symCalldata testName types []
     smtState <- SBV.queryState
     let model = view (env . storageModel) vm
@@ -734,24 +734,14 @@ maybeM def f mayb = do
   return $ maybe def f may
 
 -- | takes a concrete VM and makes all storage symbolic
-symbolify :: VM -> SBV.Query VM
-symbolify vm = do
-    symContracts <- mapM mkSymContract (view (env . contracts) vm)
-    let setStorageModel = set (env . storageModel) InitialS
-        setContracts = set (env . contracts) symContracts
-    pure $ setContracts $ setStorageModel vm
+symbolify :: VM -> VM
+symbolify vm =
+  vm & over (env . contracts . each . storage) mkSymStorage
+     & set (env . storageModel) InitialS
   where
-    mkSymContract :: Contract -> SBV.Query Contract
-    mkSymContract contract' = do
-      newStore <- mkSymStorage (view storage contract')
-      pure $ set storage newStore contract'
-
-    mkSymStorage :: Storage -> SBV.Query Storage
-    mkSymStorage (Symbolic s) = pure $ Symbolic s
-    mkSymStorage (Concrete s) = do
-      newStore <- Symbolic <$> freshArray_ (Just 0)
-      let update acc key val = writeStorage (litWord key) val acc
-      pure $ Map.foldlWithKey update newStore s
+    mkSymStorage :: Storage -> Storage
+    mkSymStorage (Symbolic s) = error "should not happen"
+    mkSymStorage (Concrete s) = Symbolic $ sListArray 0 [(literal $ toSizzle k, v) | (C _ k, S _ v) <- Map.toList s]
 
 getParametersFromEnvironmentVariables :: Maybe Text -> IO TestVMParams
 getParametersFromEnvironmentVariables rpc = do
