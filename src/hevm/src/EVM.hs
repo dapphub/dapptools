@@ -682,7 +682,14 @@ exec1 = do
               forceConcrete xOffset' $
                 \xOffset -> forceConcrete xSize' $ \xSize -> do
                   (hash, invMap) <- case readMemory xOffset xSize vm of
-                                     ConcreteBuffer bs -> pure (litWord $ keccakBlob bs, Map.singleton (keccakBlob bs) bs)
+                                     ConcreteBuffer bs -> do
+                                       let S _ hash' = litWord $ keccakBlob bs
+                                           previousUsed = view (env . keccakUsed) vm
+                                       env . keccakUsed <>= [(litBytes bs, hash')]
+                                       pathConditions <>= fmap (\(preimage, image) ->
+                                           (image .> 100) .&& (image .== hash' .=> preimage .== litBytes bs))
+                                         previousUsed
+                                       pure (litWord $ keccakBlob bs, Map.singleton (keccakBlob bs) bs)
 
                                      -- Although we would like to simply assert that the uninterpreted function symkeccak'
                                      -- is injective, this proves to cause a lot of concern for our smt solvers, probably
@@ -692,16 +699,18 @@ exec1 = do
                                      -- (similarly to sha3Crack), and simply assert that injectivity holds for these
                                      -- particular invocations.
                                      --
-                                     -- TODO - maybe here Dull needs to be replaced with something smarrrtttt
+                                     -- We additionally make the probabalisitc assumption that the output of symkeccak'
+                                     -- is greater than 100. This lets us avoid having to reason about storage collisions
+                                     -- between mappings and "normal" slots
 
                                      SymbolicBuffer bs -> do
-                                                   let hash' = symkeccak' bs
-                                                       previousUsed = view (env . keccakUsed) vm
-                                                   env . keccakUsed <>= [(bs, hash')]
-                                                   constraints <>= fmap (\(preimage, image) ->
-                                                     ((image .> 100) .&& (image .== hash' .=> preimage .== bs), Dull))
-                                                     previousUsed
-                                                   return (sw256 hash', mempty)
+                                       let hash' = symkeccak' bs
+                                           previousUsed = view (env . keccakUsed) vm
+                                       env . keccakUsed <>= [(bs, hash')]
+                                       constraints <>= fmap (\(preimage, image) ->
+                                           ((image .> 100) .&& (image .== hash' .=> preimage .== bs), Dull))
+                                         previousUsed
+                                       return (sw256 hash', mempty)
 
                   burn (g_sha3 + g_sha3word * ceilDiv (num xSize) 32) $
                     accessMemoryRange fees xOffset xSize $ do
