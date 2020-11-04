@@ -749,7 +749,7 @@ symbolify vm = do
     mkSymStorage :: Storage -> SBV.Query Storage
     mkSymStorage (Symbolic s) = pure $ Symbolic s
     mkSymStorage (Concrete s) = do
-      newStore <- Symbolic <$> freshArray_ Nothing
+      newStore <- Symbolic <$> freshArray_ (Just 0)
       let update acc key val = writeStorage (litWord key) val acc
       pure $ Map.foldlWithKey update newStore s
 
