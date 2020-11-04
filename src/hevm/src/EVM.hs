@@ -1902,7 +1902,8 @@ delegateCall
 delegateCall this gasGiven xTo xContext xValue xInOffset xInSize xOutOffset xOutSize xs continue =
   makeUnique (saddressWord160 xTo) $ \(fromSizzle -> xTo') ->
     makeUnique (saddressWord160 xContext) $ \(fromSizzle -> xContext') ->
-      if xTo' > 0 && xTo' <= 9 then precompiledContract this gasGiven xTo' xTo' xValue xInOffset xInSize xOutOffset xOutSize xs
+      if xTo' > 0 && xTo' <= 9
+      then precompiledContract this gasGiven xTo' xContext' xValue xInOffset xInSize xOutOffset xOutSize xs
       else if num xTo' == cheatCode then
         do
           assign (state . stack) xs
