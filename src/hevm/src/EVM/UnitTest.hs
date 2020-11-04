@@ -520,7 +520,7 @@ symRun opts@UnitTestOptions{..} concreteVm testName types = do
     -- for each vm ask the SMT solver if the vm is reachable and the result is false
     results <- forM allPaths $ \case
       Left (e, vm') -> do
-        constrain $ sAnd (view EVM.pathConditions vm')
+        constrain $ sAnd (fst <$> view EVM.constraints vm')
         checkSat >>= \case
           Sat -> do
             prettyCd <- prettyCalldata (first SymbolicBuffer cd) testName types
@@ -534,7 +534,7 @@ symRun opts@UnitTestOptions{..} concreteVm testName types = do
         case view result vm' of
           Just (VMSuccess (SymbolicBuffer buf)) -> do
             SBV.resetAssertions
-            constrain $ sAnd (view EVM.pathConditions vm')
+            constrain $ sAnd (fst <$> view EVM.constraints vm')
             constrain $ litBytes (encodeAbiValue $ AbiBool $ not shouldFail) .== buf
             checkSat >>= \case
               Sat -> do

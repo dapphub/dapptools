@@ -702,7 +702,7 @@ exec1 = do
 
                   let previousUsed = view (env . keccakUsed) vm
                   env . keccakUsed <>= [(bytes, hash')]
-                  pathConditions <>= (hash' .> 100):
+                  constraints <>= (hash' .> 100, Dull):
                     (fmap (\(preimage, image) ->
                       -- keccak is a function
                       ((preimage .== bytes .=> image .== hash') .&&
@@ -1534,8 +1534,8 @@ getCodeLocation vm = (view (state . contract) vm, view (state . pc) vm)
 makeUnique :: SymVal a => SBV a -> (a -> EVM ()) -> EVM ()
 makeUnique val cont = case unliteral val of
   Nothing -> do
-    conditions <- use pathConditions
-    assign result . Just . VMFailure . Query $ PleaseMakeUnique val conditions $ \case
+    conditions <- use constraints
+    assign result . Just . VMFailure . Query $ PleaseMakeUnique val (fst <$> conditions) $ \case
       Just a -> do
         assign result Nothing
         cont a
