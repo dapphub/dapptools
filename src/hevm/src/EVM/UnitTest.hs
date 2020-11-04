@@ -737,7 +737,7 @@ maybeM def f mayb = do
 symbolify :: VM -> SBV.Query VM
 symbolify vm = do
     symContracts <- mapM mkSymContract (view (env . contracts) vm)
-    let setStorageModel = set (env . storageModel) SymbolicS
+    let setStorageModel = set (env . storageModel) InitialS
         setContracts = set (env . contracts) symContracts
     pure $ setContracts $ setStorageModel vm
   where
