@@ -518,20 +518,32 @@ symRun opts@UnitTestOptions{..} concreteVm testName types = do
 
     let shouldFail = "proveFail" `isPrefixOf` testName
     -- for each vm ask the SMT solver if the vm is reachable and the result is false
-    results <- forM (pruneDeadPaths $ rights allPaths) $ \vm' ->
-      case view result vm' of
-        Just (VMSuccess (SymbolicBuffer buf)) -> do
-          SBV.resetAssertions
-          constrain $ sAnd (view EVM.pathConditions vm')
-          constrain $ litBytes (encodeAbiValue $ AbiBool $ not shouldFail) .== buf
-          checkSat >>= \case
-            Sat -> do
-              prettyCd <- prettyCalldata (first SymbolicBuffer cd) testName types
-              return $ Left prettyCd
-            Unsat -> return $ Right ()
-            Unk -> error "SMT timeout"
-            DSat _ -> error "unexpected DSat"
-        _ -> error "unexpected return value"
+    results <- forM allPaths $ \case
+      Left (e, vm') -> do
+        constrain $ sAnd (view EVM.pathConditions vm')
+        checkSat >>= \case
+          Sat -> do
+            prettyCd <- prettyCalldata (first SymbolicBuffer cd) testName types
+            case e of
+              Revert msg -> return $ Left (prettyCd, "Revert" <> EVM.Format.showError msg)
+              _ -> return $ Left (prettyCd, Text.pack $ show e)
+          Unsat -> return $ Right ()
+          Unk -> error "SMT timeout"
+          DSat _ -> error "Unexpected DSat"
+      Right vm' ->
+        case view result vm' of
+          Just (VMSuccess (SymbolicBuffer buf)) -> do
+            SBV.resetAssertions
+            constrain $ sAnd (view EVM.pathConditions vm')
+            constrain $ litBytes (encodeAbiValue $ AbiBool $ not shouldFail) .== buf
+            checkSat >>= \case
+              Sat -> do
+                prettyCd <- prettyCalldata (first SymbolicBuffer cd) testName types
+                return $ Left (prettyCd, "Assertion Violation")
+              Unsat -> return $ Right ()
+              Unk -> error "SMT timeout"
+              DSat _ -> error "unexpected DSat"
+          _ -> error "unexpected return value"
 
     if null $ lefts results
     then
@@ -539,13 +551,15 @@ symRun opts@UnitTestOptions{..} concreteVm testName types = do
     else
       return ("\x1b[31m[FAIL]\x1b[0m " <> testName, Left $ symFailure testName (lefts results), vm)
 
-symFailure :: Text -> [Text] -> Text
-symFailure testName failing = mconcat
+symFailure :: Text -> [(Text, Text)] -> Text
+symFailure testName failures' = mconcat
   [ "Failure: "
   , testName
-  , "\n"
-  , intercalate "\n" $ indentLines 2 <$> failing
+  , "\n\n"
+  , intercalate "\n" $ indentLines 2 . mkMsg <$> failures'
   ]
+  where
+    mkMsg (cd, err) = "Counter Example:\n\n  result:   " <> err <> "\n  calldata: " <> cd
 
 getCalldata :: VM -> Text -> [AbiType] -> SBV.Query Text
 getCalldata vm testName types = do
@@ -563,19 +577,19 @@ prettyCalldata (buffer, cdlen) sig types = do
                   (AbiTupleType (Vector.fromList types))
                   (BSLazy.fromStrict (BS.drop 4 calldatainput))))
 
-execSymTest :: UnitTestOptions -> ABIMethod -> ([SWord 8], SWord 32) -> Stepper (Either Bool VM)
+execSymTest :: UnitTestOptions -> ABIMethod -> ([SWord 8], SWord 32) -> Stepper (Either (Error, VM) VM)
 execSymTest opts@UnitTestOptions{ .. } method cd = do
   -- Set up the call to the test method
   Stepper.evm $ do
     setupSymCall testParams cd
     pushTrace (EntryTrace method)
   -- Try running the test method
-  Stepper.execFully >>= \case
-     -- If we failed, put the error in the trace.
-    -- note: currently allows for reverts (TODO: mayRevert() modifier in the future)
-    Left e -> do traceShowM e
-                 Stepper.evm (pushTrace (ErrorTrace e)) >> pure (Left True)
-    _ -> Right <$> checkSymFailures opts
+  Stepper.runFully >>= \vm' -> case view result vm' of
+    Just (VMFailure err) ->
+      -- If we failed, put the error in the trace.
+      Stepper.evm (pushTrace (ErrorTrace err)) >> pure (Left (err, vm'))
+    Just (VMSuccess _) -> Right <$> checkSymFailures opts
+    Nothing -> error "Internal Error: execSymTest: vm has not completed execution!"
 
 setupSymCall :: TestVMParams -> ([SWord 8], SWord 32) -> EVM ()
 setupSymCall TestVMParams{..} cd = do
