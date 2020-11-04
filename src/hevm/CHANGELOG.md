@@ -1,5 +1,12 @@
 # hevm changelog
 
+## Unreleased
+
+### Added
+
+- A `--show-tree` option to `hevm symbolic` which prints the execution tree explored.
+- Some symbolic terms are displayed with richer semantic information, instead of the black box `<symbolic>`.
+
 ## 0.42.0 - 2020-10-31
 
 ### Changed
