@@ -502,6 +502,7 @@ fuzzRun opts@UnitTestOptions{..} vm testName types = do
 -- TODO: return a list of VM's
 symRun :: UnitTestOptions -> VM -> Text -> [AbiType] -> SBV.Query (Text, Either Text Text, VM)
 symRun opts@UnitTestOptions{..} concreteVm testName types = do
+    SBV.resetAssertions
     vm <- symbolify concreteVm
     cd <- symCalldata testName types []
     smtState <- SBV.queryState
