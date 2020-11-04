@@ -516,10 +516,10 @@ symRun opts@UnitTestOptions{..} concreteVm testName types = do
           (execSymTest opts testName cd))
         vm
 
-    let shouldFail = "proveFail" `isPrefixOf` testName
-    -- for each vm ask the SMT solver if the vm is reachable and the result is false
     results <- forM allPaths $ \case
+      -- If the vm execution failed, check if vm is reachable, and if so, report a failure
       Left (e, vm') -> do
+        SBV.resetAssertions
         constrain $ sAnd (fst <$> view EVM.constraints vm')
         checkSat >>= \case
           Sat -> do
@@ -530,10 +530,13 @@ symRun opts@UnitTestOptions{..} concreteVm testName types = do
           Unsat -> return $ Right ()
           Unk -> error "SMT timeout"
           DSat _ -> error "Unexpected DSat"
+      -- If the vm execution succeeded, check if vm is reachable, and if any ds-test assertions were triggered.
+      -- Report a failure depending on the prefix of the test name
       Right vm' ->
         case view result vm' of
           Just (VMSuccess (SymbolicBuffer buf)) -> do
             SBV.resetAssertions
+            let shouldFail = "proveFail" `isPrefixOf` testName
             constrain $ sAnd (fst <$> view EVM.constraints vm')
             constrain $ litBytes (encodeAbiValue $ AbiBool $ not shouldFail) .== buf
             checkSat >>= \case
