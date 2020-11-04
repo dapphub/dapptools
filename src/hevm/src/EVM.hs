@@ -688,17 +688,17 @@ exec1 = do
                                        let hash' = symkeccak' bs
                                        return (sw256 hash', mempty, bs)
 
-             -- Although we would like to simply assert that the uninterpreted function symkeccak'
-             -- is injective, this proves to cause a lot of concern for our smt solvers, probably
-             -- due to the introduction of universal quantifiers into the queries.
+                  -- Although we would like to simply assert that the uninterpreted function symkeccak'
+                  -- is injective, this proves to cause a lot of concern for our smt solvers, probably
+                  -- due to the introduction of universal quantifiers into the queries.
 
-             -- Instead, we keep track of all of the particular invocations of symkeccak' we see
-             -- (similarly to sha3Crack), and simply assert that injectivity holds for these
-             -- particular invocations.
-             --
-             -- We additionally make the probabalisitc assumption that the output of symkeccak'
-             -- is greater than 100. This lets us avoid having to reason about storage collisions
-             -- between mappings and "normal" slots
+                  -- Instead, we keep track of all of the particular invocations of symkeccak' we see
+                  -- (similarly to sha3Crack), and simply assert that injectivity holds for these
+                  -- particular invocations.
+                  --
+                  -- We additionally make the probabalisitc assumption that the output of symkeccak'
+                  -- is greater than 100. This lets us avoid having to reason about storage collisions
+                  -- between mappings and "normal" slots
 
                   let previousUsed = view (env . keccakUsed) vm
                   env . keccakUsed <>= [(bytes, hash')]
