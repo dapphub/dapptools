@@ -699,8 +699,8 @@ exec1 = do
                                                        previousUsed = view (env . keccakUsed) vm
                                                    env . keccakUsed <>= [(bs, hash')]
                                                    constraints <>= fmap (\(preimage, image) ->
-                                                                               (image .== hash' .=> preimage .== bs, Dull))
-                                                                           previousUsed
+                                                     ((image .> 100) .&& (image .== hash' .=> preimage .== bs), Dull))
+                                                     previousUsed
                                                    return (sw256 hash', mempty)
 
                   burn (g_sha3 + g_sha3word * ceilDiv (num xSize) 32) $
