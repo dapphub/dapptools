@@ -20,7 +20,6 @@ import Data.Proxy (Proxy(..))
 import EVM.ABI
 import EVM.Types
 import EVM.Solidity
-import EVM.Keccak
 import EVM.Concrete (Word(..), w256, createAddress, wordValue, keccakBlob, create2Address, Whiff(..))
 import EVM.Symbolic
 import EVM.Op

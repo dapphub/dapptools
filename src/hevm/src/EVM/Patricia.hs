@@ -4,7 +4,6 @@
 
 module EVM.Patricia where
 
-import EVM.Keccak
 import EVM.RLP
 import EVM.Types
 

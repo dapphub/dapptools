@@ -4,7 +4,7 @@ import Prelude hiding (Word)
 
 import EVM.Concrete
 import EVM.FeeSchedule
-import EVM.Keccak (keccak)
+import EVM.Types (keccak)
 import EVM.Precompiled (execute)
 import EVM.RLP
 import EVM.Types

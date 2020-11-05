@@ -52,7 +52,6 @@ module EVM.ABI
   , selector
   ) where
 
-import EVM.Keccak (abiKeccak)
 import EVM.Types
 
 import Control.Monad      (replicateM, replicateM_, forM_, void)

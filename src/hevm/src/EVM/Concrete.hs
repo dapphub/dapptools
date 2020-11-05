@@ -5,9 +5,8 @@ module EVM.Concrete where
 
 import Prelude hiding (Word)
 
-import EVM.Keccak (keccak)
 import EVM.RLP
-import EVM.Types (Addr, W256 (..), num, word, padRight, word160Bytes, word256Bytes, Buffer)
+import EVM.Types (Addr, W256 (..), num, word, padRight, word160Bytes, word256Bytes, Buffer, keccak)
 
 import Control.Lens    ((^?), ix)
 import Data.Bits       (Bits (..), FiniteBits (..), shiftL, shiftR)

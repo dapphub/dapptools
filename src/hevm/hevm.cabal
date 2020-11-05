@@ -48,7 +48,6 @@ library
     EVM.Fetch,
     EVM.FeeSchedule,
     EVM.Hexdump,
-    EVM.Keccak,
     EVM.Op,
     EVM.Patricia,
     EVM.Precompiled,

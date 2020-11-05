@@ -47,7 +47,6 @@ module EVM.Solidity
 ) where
 
 import EVM.ABI
-import EVM.Keccak
 import EVM.Types
 
 import Control.Applicative
@@ -88,7 +87,7 @@ data StorageItem = StorageItem {
   _offset :: Int,
   _slot   :: Int
   } deriving (Show, Eq)
-  
+
 data SlotType
   -- Note that mapping keys can only be elementary;
   -- that excludes arrays, contracts, and mappings.
