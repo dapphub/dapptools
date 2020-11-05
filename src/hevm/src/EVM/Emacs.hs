@@ -418,7 +418,7 @@ instance SDisplay (SExpr Text) where
   sexp = id
 
 instance SDisplay Storage where
-  sexp (Symbolic _) = error "idk"
+  sexp (Symbolic _ _) = error "idk"
   sexp (Concrete d) = sexp d
 
 instance SDisplay VM where

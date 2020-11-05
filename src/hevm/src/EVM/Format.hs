@@ -6,12 +6,12 @@ module EVM.Format where
 import Prelude hiding (Word)
 
 import EVM (VM, VMResult(..), cheatCode, traceForest, traceData, Error (..), result)
-import EVM (Trace, TraceData (..), Log (..), Query (..), FrameContext (..))
-import EVM.Dapp (DappInfo (..), dappSolcByHash, dappAbiMap, dappEventMap)
-import EVM.Dapp (showTraceLocation)
+import EVM (Trace, TraceData (..), Log (..), Query (..), FrameContext (..), Storage(..))
+import EVM.Dapp (DappInfo (..), dappSolcByHash, dappSolcByName, showTraceLocation, dappEventMap)
+import qualified EVM
 import EVM.Concrete (Word (..), wordValue)
 import EVM.SymExec
-import EVM.Symbolic (maybeLitWord, len)
+import EVM.Symbolic (SymWord(..), maybeLitWord, len, litWord)
 import EVM.Types (W256 (..), num, Buffer(..), ByteStringS(..))
 import EVM.ABI (AbiValue (..), Event (..), AbiType (..))
 import EVM.ABI (Indexed (NotIndexed), getAbiSeq, getAbi)
@@ -20,7 +20,7 @@ import EVM.Solidity (SolcContract, contractName, abiMap)
 import EVM.Solidity (methodOutput, methodSignature, methodName)
 
 import Control.Arrow ((>>>))
-import Control.Lens (view, preview, ix, _2, to, _Just, makeLenses, over)
+import Control.Lens (view, preview, ix, _2, to, _Just, makeLenses, over, (^?!))
 import Data.Binary.Get (runGetOrFail)
 import Data.ByteString (ByteString)
 import Data.ByteString.Builder (byteStringHex, toLazyByteString)
@@ -340,7 +340,7 @@ prettyvmresult (EVM.VMSuccess (SymbolicBuffer msg)) =
 data BranchData = BranchData {
   _navigation :: String,
   _constraint :: String,
-  _leafData :: String
+  _leafData :: Maybe (VMResult, [(SymWord, SymWord)])
   }
 
 makeLenses ''BranchData
@@ -357,13 +357,19 @@ adjustTree :: String -> Int -> [BranchData] -> [BranchData]
 adjustTree cond i bds = let
   indentChild = over navigation $ (<>) ((showTreeIndentSymbol (i == 1) False) <> " ")
   children = map indentChild bds
-  branchPrefix = BranchData (showTreeIndentSymbol (i == 1) True <> " " <> show i) cond ""
+  branchPrefix = BranchData (showTreeIndentSymbol (i == 1) True <> " " <> show i) cond Nothing
   in branchPrefix : children
 
 flattenTree :: Tree BranchInfo -> [BranchData]
 -- leaf case
 flattenTree (Node bi []) = let
-  leafInfo = maybe (error "expected result") prettyvmresult (view result $ _vm bi)
+  vm = _vm bi
+--  self :: Addr
+  self = view (EVM.state . EVM.contract) vm
+  xs = case view (EVM.env . EVM.contracts) vm ^?! ix self . EVM.storage of
+    Symbolic v _ -> v
+    Concrete x -> [(litWord k,v) | (k, v) <- Map.toList x]
+  leafInfo = Just (fromMaybe (error "expected result") $ view result vm, xs)
   in [BranchData "" "" leafInfo]
 -- branch case
 flattenTree (Node bi xs) = let
@@ -372,12 +378,26 @@ flattenTree (Node bi xs) = let
   prefixed = zipWith (adjustTree cond) [0..] cases
   in concat prefixed
 
+displayUpdates :: [(SymWord, SymWord)] -> [String]
+displayUpdates = fmap (\(k, v) -> show k <> " => " <> show v)
+
+indent :: Int -> String -> String
+indent n = (<>) $ replicate n ' '
 
 showBranchTree :: Tree BranchInfo -> String
-showBranchTree tree = let
-  showBranchLine bd  = _navigation bd
-                      <> "    "
-                      <> _constraint bd
-                      <> "    "
-                      <> _leafData bd
+showBranchTree tree =
+  let
+    showBranchLine bd =
+      _navigation bd
+      <> "    "
+      <> _constraint bd
+      <> (unlines $ fmap (indent 4)
+          (case _leafData bd of
+             Nothing -> []
+             Just (res, updates) ->
+               if not $ null updates then
+                 ("storage":(indent 4 <$> displayUpdates updates))
+                 <> if prettyvmresult res == "Stop" then [] else
+                      [prettyvmresult res]
+               else [prettyvmresult res]))
   in unlines $ showBranchLine <$> flattenTree tree

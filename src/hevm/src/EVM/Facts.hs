@@ -121,7 +121,7 @@ contractFacts a x = storageFacts a x ++
 
 storageFacts :: Addr -> Contract -> [Fact]
 storageFacts a x = case view storage x of
-  EVM.Symbolic _ -> []
+  EVM.Symbolic _ _ -> []
   EVM.Concrete s -> map f (Map.toList s)
   where
     f :: (Word, SymWord) -> Fact

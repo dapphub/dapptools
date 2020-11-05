@@ -178,7 +178,7 @@ data Cache = Cache
 -- | A way to specify an initial VM state
 data VMOpts = VMOpts
   { vmoptContract :: Contract
-  , vmoptCalldata :: (Buffer, (SWord 32)) -- maximum size of uint32 as per eip 1985
+  , vmoptCalldata :: (Buffer, SWord 32) -- maximum size of uint32 as per eip 1985
   , vmoptValue :: SymWord
   , vmoptAddress :: Addr
   , vmoptCaller :: SAddr
@@ -282,7 +282,7 @@ data ContractCode
 -- depending on what type of execution we are doing
 data Storage
   = Concrete (Map Word SymWord)
-  | Symbolic (SArray (WordN 256) (WordN 256))
+  | Symbolic [(SymWord, SymWord)] (SArray (WordN 256) (WordN 256))
   deriving (Show)
 
 -- to allow for Eq Contract (which useful for debugging vmtests)
@@ -290,8 +290,8 @@ data Storage
 -- It should not (cannot) be used though.
 instance Eq Storage where
   (==) (Concrete a) (Concrete b) = fmap forceLit a == fmap forceLit b
-  (==) (Symbolic _) (Concrete _) = False
-  (==) (Concrete _) (Symbolic _) = False
+  (==) (Symbolic _ _) (Concrete _) = False
+  (==) (Concrete _) (Symbolic _ _) = False
   (==) _ _ = error "do not compare two symbolic arrays like this!"
 
 -- | The state of a contract
@@ -974,7 +974,7 @@ exec1 = do
                   else do
                     let original = case view storage this of
                                   Concrete _ -> fromMaybe 0 (Map.lookup (forceLit x) (view origStorage this))
-                                  Symbolic _ -> 0 -- we don't use this value anywhere anyway
+                                  Symbolic _ _ -> 0 -- we don't use this value anywhere anyway
                         cost = case (maybeLitWord current, maybeLitWord new) of
                                  (Just current', Just new') ->
                                     if (current' == new') then g_sload
@@ -1597,11 +1597,11 @@ fetchAccount addr continue =
         else continue c
 
 readStorage :: Storage -> SymWord -> Maybe (SymWord)
-readStorage (Symbolic s) (S _ loc) = Just . sw256 $ readArray s loc
+readStorage (Symbolic _ s) (S w loc) = Just $ S (FromStorage w) $ readArray s loc
 readStorage (Concrete s) loc = Map.lookup (forceLit loc) s
 
 writeStorage :: SymWord -> SymWord -> Storage -> Storage
-writeStorage (S _ loc) (S _ val) (Symbolic s) = Symbolic (writeArray s loc val)
+writeStorage k@(S _ loc) v@(S _ val) (Symbolic xs s) = Symbolic ((k,v):xs) (writeArray s loc val)
 writeStorage loc val (Concrete s) = Concrete (Map.insert (forceLit loc) val s)
 
 accessStorage
@@ -2000,8 +2000,8 @@ create self this xGas' xValue xs newAddr initCode = do
         let
           store = case view (env . storageModel) vm0 of
             ConcreteS -> Concrete mempty
-            SymbolicS -> Symbolic $ sListArray 0 []
-            InitialS -> Symbolic $ sListArray 0 []
+            SymbolicS -> Symbolic [] $ sListArray 0 []
+            InitialS -> Symbolic [] $ sListArray 0 []
           newContract =
             initialContract (InitCode initCode) & set storage store
           newContext  =
