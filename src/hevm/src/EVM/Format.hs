@@ -16,7 +16,7 @@ import EVM.Types (maybeLitWord, Word (..), Whiff(..), SymWord(..), W256 (..), nu
 import EVM.ABI (AbiValue (..), Event (..), AbiType (..))
 import EVM.ABI (Indexed (NotIndexed), getAbiSeq, getAbi)
 import EVM.ABI (parseTypeName)
-import EVM.Solidity (SolcContract(..), contractName, abiMap, SrcMap, Method(..))
+import EVM.Solidity (SolcContract(..), contractName, abiMap)
 import EVM.Solidity (methodOutput, methodSignature, methodName)
 
 import Control.Arrow ((>>>))
@@ -35,9 +35,6 @@ import Data.Text.Encoding (decodeUtf8, decodeUtf8')
 import Data.Tree (Tree (Node))
 import Data.Tree.View (showTree)
 import Data.Vector (Vector, fromList)
-import qualified Data.Vector.Storable as SVec
-
-import Numeric (showHex)
 
 import qualified Data.ByteString as BS
 import qualified Data.Char as Char
@@ -386,45 +383,38 @@ showStorage :: [(SymWord, SymWord)] -> [String]
 showStorage = fmap (\(k, v) -> show k <> " => " <> show v)
 
 showLeaf :: DappInfo -> BranchInfo -> [String]
-showLeaf srcInfo bi = let
-  vm      = _vm bi
+showLeaf srcInfo (BranchInfo vm _) = let
   self    = view (EVM.state . EVM.contract) vm
   updates = case view (EVM.env . EVM.contracts) vm ^?! ix self . EVM.storage of
     Symbolic v _ -> v
     Concrete x -> [(litWord k,v) | (k, v) <- Map.toList x]
-  res     = fromMaybe (error "expected result") $ view result vm
-  showResult = [prettyvmresult res]
+  showResult = [prettyvmresult res | Just res <- [view result vm]]
   in showResult
   ++ showStorage updates
   ++ [""]
 
 formatBranchInfo :: DappInfo -> BranchInfo -> String
-formatBranchInfo srcInfo bi = let
-  maybeSig   = case _branchCondition bi of
+formatBranchInfo srcInfo bi =
+  let cond = maybe "" show (_branchCondition bi)
+  in case _branchCondition bi of
     -- recover number if branch condition is `isZero(<hexNr> == _)`
     -- TODO this is dirty and dangerous, do this only for a certain tree depth where abi discovery takes place
     --      this could be extended by requiering the second information to be Slice 0:4 of CALLDATALOAD
     -- TODO rewrite this as a multi case rose tree unraveling, make sure n case jump in the debugger is implemented
-    Just (UnOp "isZero" (InfixBinOp "==" (Val x) _)) -> Just $ fst $ head $ readHex $ drop 2 x
-    _       -> Nothing
-  -- TODO many many monads, @martin i'm sure there is some do monad magic here?!
-  cond      = maybe "" show (_branchCondition bi)
-  abiMap    = case currentSolc srcInfo (_vm bi) of
-    Nothing -> Map.empty
-    Just c  -> _abiMap c
-  abiMethod = case maybeSig of
-    Just x  -> Map.lookup x abiMap
-    Nothing -> Nothing
-  bcase     = case abiMethod of
-    Just x  -> show $ _methodSignature x
-    Nothing -> cond
-  in bcase
+    Just (UnOp "isZero" (InfixBinOp "==" (Val x) _)) ->
+      let
+        abimap = view abiMap <$> currentSolc srcInfo (_vm bi)
+        method = abimap >>= Map.lookup (read x)
+      in maybe cond (show . view methodSignature) method
+
+    _ -> cond
 
 flattenTree :: DappInfo -> Tree BranchInfo -> [TreeLine]
 -- leaf case
-flattenTree srcInfo (Node bi []) = let
-  tail = showLeaf srcInfo bi
-  in map (\x -> TreeLine "" x) tail
+flattenTree srcInfo (Node bi []) =
+  let
+    tail = showLeaf srcInfo bi
+  in TreeLine "" <$> tail
 -- branch case
 flattenTree srcInfo (Node bi xs) = let
   cases = map (flattenTree srcInfo) xs
