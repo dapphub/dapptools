@@ -16,7 +16,7 @@ import EVM.Types (maybeLitWord, Word (..), Whiff(..), SymWord(..), W256 (..), nu
 import EVM.ABI (AbiValue (..), Event (..), AbiType (..))
 import EVM.ABI (Indexed (NotIndexed), getAbiSeq, getAbi)
 import EVM.ABI (parseTypeName)
-import EVM.Solidity (SolcContract(..), contractName, abiMap, SrcMap, Method(..))
+import EVM.Solidity (SolcContract(..), contractName, abiMap)
 import EVM.Solidity (methodOutput, methodSignature, methodName)
 
 import Control.Arrow ((>>>))
@@ -35,7 +35,6 @@ import Data.Text.Encoding (decodeUtf8, decodeUtf8')
 import Data.Tree (Tree (Node))
 import Data.Tree.View (showTree)
 import Data.Vector (Vector, fromList)
-import qualified Data.Vector.Storable as SVec
 
 import qualified Data.ByteString as BS
 import qualified Data.Char as Char
