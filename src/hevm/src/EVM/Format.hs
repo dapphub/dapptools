@@ -4,19 +4,19 @@
 module EVM.Format where
 
 import Prelude hiding (Word)
-
+import Numeric
 import EVM (VM, VMResult(..), cheatCode, traceForest, traceData, Error (..), result)
 import EVM (Trace, TraceData (..), Log (..), Query (..), FrameContext (..), Storage(..))
-import EVM.Dapp (DappInfo (..), dappSolcByHash, dappSolcByName, showTraceLocation, dappEventMap)
 import qualified EVM
-import EVM.Concrete (Word (..), wordValue)
+import EVM.Concrete (Word (..), wordValue, Whiff(..))
+import EVM.Dapp (DappInfo (..), dappSolcByHash, dappSolcByName, showTraceLocation, dappEventMap)
 import EVM.SymExec
 import EVM.Symbolic (SymWord(..), maybeLitWord, len, litWord)
 import EVM.Types (W256 (..), num, Buffer(..), ByteStringS(..))
 import EVM.ABI (AbiValue (..), Event (..), AbiType (..))
 import EVM.ABI (Indexed (NotIndexed), getAbiSeq, getAbi)
 import EVM.ABI (parseTypeName)
-import EVM.Solidity (SolcContract, contractName, abiMap)
+import EVM.Solidity (SolcContract(..), contractName, abiMap, SrcMap, Method(..))
 import EVM.Solidity (methodOutput, methodSignature, methodName)
 
 import Control.Arrow ((>>>))
@@ -35,6 +35,7 @@ import Data.Text.Encoding (decodeUtf8, decodeUtf8')
 import Data.Tree (Tree (Node))
 import Data.Tree.View (showTree)
 import Data.Vector (Vector, fromList)
+import qualified Data.Vector.Storable as SVec
 
 import Numeric (showHex)
 
@@ -336,68 +337,113 @@ prettyvmresult (EVM.VMSuccess (ConcreteBuffer msg)) =
 prettyvmresult (EVM.VMSuccess (SymbolicBuffer msg)) =
   "Return: " <> show (length msg) <> " symbolic bytes"
 
--- TODO: display in an 'act' format
-data BranchData = BranchData {
-  _navigation :: String,
-  _constraint :: String,
-  _leafData :: Maybe (VMResult, [(SymWord, SymWord)])
-  }
 
-makeLenses ''BranchData
+currentSolc :: DappInfo -> VM -> Maybe SolcContract
+currentSolc dapp vm =
+  let
+    this = vm ^?! env . contracts . ix (view (state . contract) vm)
+    h = view codehash this
+  in
+    preview (dappSolcByHash . ix h . _2) dapp
+
+-- TODO: display in an 'act' format
+--
+-- TreeLine describes a singe line of the tree
+-- it contains the indentation which is prefixed to it
+-- and its content which contains the rest
+data TreeLine = TreeLine {
+  _indent   :: String,
+  _content  :: String
+  }
+  -- _leafData :: Maybe (VMResult, [(SymWord, SymWord)])
+
+makeLenses ''TreeLine
 
 showTreeIndentSymbol :: Bool      -- ^ isLastChild
-                     -> Bool      -- ^ isFirstLine
+                     -> Bool      -- ^ isTreeHead
                      -> String
 showTreeIndentSymbol True  True  = "\x2514"
 showTreeIndentSymbol False True  = "\x251c"
 showTreeIndentSymbol True  False = " "
 showTreeIndentSymbol False False = "\x2502"
 
-adjustTree :: String -> Int -> [BranchData] -> [BranchData]
-adjustTree cond i bds = let
-  indentChild = over navigation $ (<>) ((showTreeIndentSymbol (i == 1) False) <> " ")
-  children = map indentChild bds
-  branchPrefix = BranchData (showTreeIndentSymbol (i == 1) True <> " " <> show i) cond Nothing
-  in branchPrefix : children
+-- gets one single case with its children
+-- indents the children
+-- formats and adds the branch head
+adjustTree :: String  -- Branch Head - one line containing information for this branch case (e.g. condition)
+  -> Int              -- Case index
+  -> Int              -- total number of cases
+  -> [TreeLine]       -- Lines of Branch Children
+  -> [TreeLine]       -- Lines of Branch Children
+adjustTree head totalCases i bds = let
+  isLastCase       = i + 1 == totalCases
+  indentLine       = over indent $ (<>) ((showTreeIndentSymbol isLastCase False) <> " ")
+  indentedChildren = map indentLine bds
+  branchHead       = TreeLine (showTreeIndentSymbol isLastCase True <> " " <> show i) head
+  in branchHead : indentedChildren
 
-flattenTree :: Tree BranchInfo -> [BranchData]
--- leaf case
-flattenTree (Node bi []) = let
-  vm = _vm bi
---  self :: Addr
-  self = view (EVM.state . EVM.contract) vm
-  xs = case view (EVM.env . EVM.contracts) vm ^?! ix self . EVM.storage of
+showStorage :: [(SymWord, SymWord)] -> [String]
+showStorage = fmap (\(k, v) -> show k <> " => " <> show v)
+
+showLeaf :: DappInfo -> BranchInfo -> [String]
+showLeaf srcInfo bi = let
+  vm      = _vm bi
+  self    = view (EVM.state . EVM.contract) vm
+  updates = case view (EVM.env . EVM.contracts) vm ^?! ix self . EVM.storage of
     Symbolic v _ -> v
     Concrete x -> [(litWord k,v) | (k, v) <- Map.toList x]
-  leafInfo = Just (fromMaybe (error "expected result") $ view result vm, xs)
-  in [BranchData "" "" leafInfo]
+  res     = fromMaybe (error "expected result") $ view result vm
+  showResult = [prettyvmresult res]
+  in showResult
+  ++ showStorage updates
+  ++ [""]
+
+formatBranchInfo :: DappInfo -> BranchInfo -> String
+formatBranchInfo srcInfo bi = let
+  maybeSig   = case _branchCondition bi of
+    -- recover number if branch condition is `isZero(<hexNr> == _)`
+    -- TODO this is dirty and dangerous, do this only for a certain tree depth where abi discovery takes place
+    --      this could be extended by requiering the second information to be Slice 0:4 of CALLDATALOAD
+    -- TODO rewrite this as a multi case rose tree unraveling, make sure n case jump in the debugger is implemented
+    Just (UnOp "isZero" (InfixBinOp "==" (Val x) _)) -> Just $ fst $ head $ readHex $ drop 2 x
+    _       -> Nothing
+  -- TODO many many monads, @martin i'm sure there is some do monad magic here?!
+  cond      = maybe "" show (_branchCondition bi)
+  abiMap    = case currentSolc srcInfo (_vm bi) of
+    Nothing -> Map.empty
+    Just c  -> _abiMap c
+  abiMethod = case maybeSig of
+    Just x  -> Map.lookup x abiMap
+    Nothing -> Nothing
+  bcase     = case abiMethod of
+    Just x  -> show $ _methodSignature x
+    Nothing -> cond
+  in bcase
+
+flattenTree :: DappInfo -> Tree BranchInfo -> [TreeLine]
+-- leaf case
+flattenTree srcInfo (Node bi []) = let
+  tail = showLeaf srcInfo bi
+  in map (\x -> TreeLine "" x) tail
 -- branch case
-flattenTree (Node bi xs) = let
-  cases = map flattenTree xs
-  cond = maybe "" show (_branchCondition bi)
-  prefixed = zipWith (adjustTree cond) [0..] cases
+flattenTree srcInfo (Node bi xs) = let
+  cases = map (flattenTree srcInfo) xs
+  bhead = formatBranchInfo srcInfo bi
+  prefixed = zipWith (adjustTree bhead (length cases)) [0..] cases
   in concat prefixed
 
-displayUpdates :: [(SymWord, SymWord)] -> [String]
-displayUpdates = fmap (\(k, v) -> show k <> " => " <> show v)
+leftpad :: Int -> String -> String
+leftpad n = (<>) $ replicate n ' '
 
-indent :: Int -> String -> String
-indent n = (<>) $ replicate n ' '
-
-showBranchTree :: Tree BranchInfo -> String
-showBranchTree tree =
+showBranchTree :: DappInfo -> Tree BranchInfo -> String
+showBranchTree srcInfo tree =
   let
-    showBranchLine bd =
-      _navigation bd
-      <> "    "
-      <> _constraint bd
-      <> (unlines $ fmap (indent 4)
-          (case _leafData bd of
-             Nothing -> []
-             Just (res, updates) ->
-               if not $ null updates then
-                 ("storage":(indent 4 <$> displayUpdates updates))
-                 <> if prettyvmresult res == "Stop" then [] else
-                      [prettyvmresult res]
-               else [prettyvmresult res]))
-  in unlines $ showBranchLine <$> flattenTree tree
+    treeLines = flattenTree srcInfo tree
+    doMax treeLine x = max x $ length $ _indent treeLine
+    maxIndent = 2 + foldr doMax 0 treeLines
+    showTreeLine bd = let
+      colIndent  = _indent bd
+      colContent = _content bd
+      indentSize = (maxIndent -(length colIndent))
+      in colIndent <> leftpad indentSize colContent
+  in unlines $ showTreeLine <$> treeLines
