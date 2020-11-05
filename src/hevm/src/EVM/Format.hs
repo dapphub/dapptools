@@ -11,7 +11,7 @@ import EVM.Concrete ( wordValue )
 import EVM (VM, VMResult(..), cheatCode, traceForest, traceData, Error (..), result)
 import EVM (Trace, TraceData (..), Log (..), Query (..), FrameContext (..), Storage(..))
 import EVM.SymExec
-import EVM.Symbolic ( len, litWord)
+import EVM.Symbolic (len, litWord)
 import EVM.Types (maybeLitWord, Word (..), Whiff(..), SymWord(..), W256 (..), num, Buffer(..), ByteStringS(..))
 import EVM.ABI (AbiValue (..), Event (..), AbiType (..))
 import EVM.ABI (Indexed (NotIndexed), getAbiSeq, getAbi)

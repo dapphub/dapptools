@@ -35,7 +35,6 @@ byteStringSliceWithDefaultZeroes offset size bs =
     let bs' = BS.take size (BS.drop offset bs)
     in bs' <> BS.replicate (size - BS.length bs') 0
 
-
 wordValue :: Word -> W256
 wordValue (C _ x) = x
 
