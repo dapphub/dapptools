@@ -570,11 +570,6 @@ symFailure testName failures' = mconcat
   where
     mkMsg (cd, err) = "Counter Example:\n\n  result:   " <> err <> "\n  calldata: " <> cd
 
-getCalldata :: VM -> Text -> [AbiType] -> SBV.Query Text
-getCalldata vm testName types = do
-  let cd = view (state . calldata) vm
-  prettyCalldata cd testName types
-
 prettyCalldata :: (Buffer, SWord 32) -> Text -> [AbiType]-> SBV.Query Text
 prettyCalldata (buffer, cdlen) sig types = do
   cdlen' <- num <$> SBV.getValue cdlen
