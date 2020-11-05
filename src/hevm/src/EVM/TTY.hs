@@ -18,7 +18,7 @@ import EVM.Dapp (DappInfo, dappInfo, Test, extractSig, Test(..))
 import EVM.Dapp (dappUnitTests, unitTestMethods, dappSolcByName, dappSolcByHash, dappSources)
 import EVM.Dapp (dappAstSrcMap)
 import EVM.Debug
-import EVM.Format (showWordExact, showWordExplanation)
+import EVM.Format (showWordExact, showWordExplanation )
 import EVM.Format (contractNamePart, contractPathPart, showTraceTree)
 import EVM.Hexdump (prettyHex)
 import EVM.Op

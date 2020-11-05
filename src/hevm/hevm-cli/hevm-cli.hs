@@ -466,6 +466,7 @@ getSrcInfo cmd =
 -- If function signatures are known, they should always be given for best results.
 assert :: Command Options.Unwrapped -> IO ()
 assert cmd = do
+  srcInfo <- getSrcInfo cmd
   let block'  = maybe EVM.Fetch.Latest EVM.Fetch.BlockNumber (block cmd)
       rpcinfo = (,) block' <$> rpc cmd
       treeShowing :: Tree BranchInfo -> Query ()
@@ -473,9 +474,8 @@ assert cmd = do
         when (showTree cmd) $ do
           consistentTree tree >>= \case
             Nothing -> io $ putStrLn "No consistent paths" -- unlikely
-            Just tree' -> io $ setLocaleEncoding utf8 >> putStrLn (showBranchTree tree')
+            Just tree' -> io $ setLocaleEncoding utf8 >> putStrLn (showBranchTree srcInfo tree')
 
-  srcInfo <- getSrcInfo cmd
   maybesig <- case sig cmd of
     Nothing ->
       return Nothing
