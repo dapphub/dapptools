@@ -37,8 +37,8 @@ import qualified Data.SBV.Trans.Control as SBV (Query, queryState, getValue, res
 import Data.Bifunctor     (first)
 import Data.ByteString    (ByteString)
 import Data.SBV    hiding (verbose)
-import Data.SBV.Control   (CheckSatResult(..), checkSat, freshArray_)
-import Data.Either        (isRight, lefts, rights)
+import Data.SBV.Control   (CheckSatResult(..), checkSat)
+import Data.Either        (isRight, lefts)
 import Data.Foldable      (toList)
 import Data.Map           (Map)
 import Data.Maybe         (fromMaybe, catMaybes, fromJust, isJust, fromMaybe, mapMaybe)
@@ -65,8 +65,6 @@ import Data.Vector (Vector)
 import qualified Data.Vector as Vector
 
 import Test.QuickCheck hiding (verbose)
-
-import Debug.Trace
 
 data UnitTestOptions = UnitTestOptions
   { oracle     :: EVM.Query -> IO (EVM ())
@@ -136,7 +134,8 @@ initializeUnitTest UnitTestOptions { .. } = do
     env . contracts . ix addr . balance += w256 (testBalanceCreate testParams)
 
     -- Initialize the test contract
-    setupCall testParams "setUp()" emptyAbi
+    let cd = abiMethod "setUp()" emptyAbi
+    setupCall testParams (ConcreteBuffer cd, literal . num . BS.length $ cd)
     popTrace
     pushTrace (EntryTrace "initialize test")
 
@@ -158,7 +157,8 @@ execTest :: UnitTestOptions -> ABIMethod -> AbiValue -> Stepper Bool
 execTest UnitTestOptions { .. } method args = do
   -- Set up the call to the test method
   Stepper.evm $ do
-    setupCall testParams method args
+    let cd = abiMethod method args
+    setupCall testParams (ConcreteBuffer cd, literal . num . BS.length $ cd)
     pushTrace (EntryTrace method)
   -- Try running the test method
   Stepper.execFully >>= \case
@@ -176,7 +176,8 @@ checkFailures UnitTestOptions { .. } method args bailed = do
     -- Ask whether any assertions failed
     Stepper.evm $ do
       popTrace
-      setupCall testParams "failed()" args
+      let cd = abiMethod "failed()" args
+      setupCall testParams (ConcreteBuffer cd, literal . num . BS.length $ cd)
     res <- Stepper.execFully -- >>= \(ConcreteBuffer bs) -> (Stepper.decode AbiBoolType bs)
     case res of
       Right (ConcreteBuffer r) ->
@@ -504,7 +505,7 @@ symRun :: UnitTestOptions -> VM -> Text -> [AbiType] -> SBV.Query (Text, Either 
 symRun opts@UnitTestOptions{..} concreteVm testName types = do
     SBV.resetAssertions
     let vm = symbolify concreteVm
-    cd <- symCalldata testName types []
+    cd <- first SymbolicBuffer <$> symCalldata testName types []
     smtState <- SBV.queryState
     let model = view (env . storageModel) vm
 
@@ -517,20 +518,21 @@ symRun opts@UnitTestOptions{..} concreteVm testName types = do
         vm
 
     results <- forM allPaths $ \case
-      -- If the vm execution failed, check if vm is reachable, and if so, report a failure
+      -- If the vm execution failed, check if the vm is reachable, and if so, report a failure
       Left (e, vm') -> do
         SBV.resetAssertions
         constrain $ sAnd (fst <$> view EVM.constraints vm')
         checkSat >>= \case
           Sat -> do
-            prettyCd <- prettyCalldata (first SymbolicBuffer cd) testName types
+            prettyCd <- prettyCalldata cd testName types
             case e of
               Revert msg -> return $ Left (prettyCd, "Revert" <> EVM.Format.showError msg)
               _ -> return $ Left (prettyCd, Text.pack $ show e)
           Unsat -> return $ Right ()
           Unk -> error "SMT timeout"
           DSat _ -> error "Unexpected DSat"
-      -- If the vm execution succeeded, check if vm is reachable, and if any ds-test assertions were triggered.
+
+      -- If the vm execution succeeded, check if the vm is reachable, and if any ds-test assertions were triggered
       -- Report a failure depending on the prefix of the test name
       Right vm' ->
         case view result vm' of
@@ -541,7 +543,7 @@ symRun opts@UnitTestOptions{..} concreteVm testName types = do
             constrain $ litBytes (encodeAbiValue $ AbiBool $ not shouldFail) .== buf
             checkSat >>= \case
               Sat -> do
-                prettyCd <- prettyCalldata (first SymbolicBuffer cd) testName types
+                prettyCd <- prettyCalldata cd testName types
                 return $ Left (prettyCd, "Assertion Violation")
               Unsat -> return $ Right ()
               Unk -> error "SMT timeout"
@@ -580,11 +582,11 @@ prettyCalldata (buffer, cdlen) sig types = do
                   (AbiTupleType (Vector.fromList types))
                   (BSLazy.fromStrict (BS.drop 4 calldatainput))))
 
-execSymTest :: UnitTestOptions -> ABIMethod -> ([SWord 8], SWord 32) -> Stepper (Either (Error, VM) VM)
+execSymTest :: UnitTestOptions -> ABIMethod -> (Buffer, SWord 32) -> Stepper (Either (Error, VM) VM)
 execSymTest opts@UnitTestOptions{ .. } method cd = do
   -- Set up the call to the test method
   Stepper.evm $ do
-    setupSymCall testParams cd
+    setupCall testParams cd
     pushTrace (EntryTrace method)
   -- Try running the test method
   Stepper.runFully >>= \vm' -> case view result vm' of
@@ -594,26 +596,13 @@ execSymTest opts@UnitTestOptions{ .. } method cd = do
     Just (VMSuccess _) -> Right <$> checkSymFailures opts
     Nothing -> error "Internal Error: execSymTest: vm has not completed execution!"
 
-setupSymCall :: TestVMParams -> ([SWord 8], SWord 32) -> EVM ()
-setupSymCall TestVMParams{..} cd = do
-  resetState
-  assign (tx . isCreate) False
-  loadContract testAddress
-  assign (state . calldata) $ first SymbolicBuffer cd
-  assign (state . caller) (litAddr testCaller)
-  assign (state . gas) (w256 testGasCall)
-  origin' <- fromMaybe (initialContract (RuntimeCode mempty)) <$> use (env . contracts . at testOrigin)
-  let originBal = view balance origin'
-  when (originBal <= (w256 testGasprice) * (w256 testGasCall)) $ error "insufficient balance for gas cost"
-  vm <- get
-  put $ initTx vm
-
 checkSymFailures :: UnitTestOptions -> Stepper VM
 checkSymFailures UnitTestOptions { .. } = do
   -- Ask whether any assertions failed
   Stepper.evm $ do
     popTrace
-    setupCall testParams "failed()" emptyAbi
+    let cd = abiMethod "failed()" emptyAbi
+    setupCall testParams (ConcreteBuffer cd, literal . num . BS.length $ cd)
   Stepper.runFully
 
 indentLines :: Int -> Text -> Text
@@ -698,12 +687,12 @@ formatTestLog events (Log _ args (topic:_)) =
 word32Bytes :: Word32 -> ByteString
 word32Bytes x = BS.pack [byteAt x (3 - i) | i <- [0..3]]
 
-setupCall :: TestVMParams -> Text -> AbiValue -> EVM ()
-setupCall TestVMParams{..} sig args = do
+setupCall :: TestVMParams -> (Buffer, SWord 32) -> EVM ()
+setupCall TestVMParams{..} cd = do
   resetState
   assign (tx . isCreate) False
   loadContract testAddress
-  assign (state . calldata) (ConcreteBuffer $ abiMethod sig args, literal . num . BS.length $ abiMethod sig args)
+  assign (state . calldata) cd
   assign (state . caller) (litAddr testCaller)
   assign (state . gas) (w256 testGasCall)
   origin' <- fromMaybe (initialContract (RuntimeCode mempty)) <$> use (env . contracts . at testOrigin)
@@ -757,7 +746,7 @@ symbolify vm =
      & set (env . storageModel) InitialS
   where
     mkSymStorage :: Storage -> Storage
-    mkSymStorage (Symbolic s) = error "should not happen"
+    mkSymStorage (Symbolic _) = error "should not happen"
     mkSymStorage (Concrete s) = Symbolic $ sListArray 0 [(literal $ toSizzle k, v) | (C _ k, S _ v) <- Map.toList s]
 
 getParametersFromEnvironmentVariables :: Maybe Text -> IO TestVMParams
