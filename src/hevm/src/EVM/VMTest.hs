@@ -99,7 +99,7 @@ checkStateFail diff x vm (okState, okMoney, okNonce, okData, okCode) = do
     check = checkContracts x
     expected = testExpectation x
     actual = view (EVM.env . EVM.contracts . to (fmap (clearZeroStorage.clearOrigStorage))) vm
-    printStorage (EVM.Symbolic c) = show c
+    printStorage (EVM.Symbolic _ c) = show c
     printStorage (EVM.Concrete c) = show $ Map.toList c
 
   putStr (unwords reason)
@@ -145,7 +145,7 @@ clearOrigStorage = set origStorage mempty
 
 clearZeroStorage :: EVM.Contract -> EVM.Contract
 clearZeroStorage c = case view storage c of
-  EVM.Symbolic _ -> c
+  EVM.Symbolic _ _ -> c
   EVM.Concrete m -> let store = Map.filter (\x -> forceLit x /= 0) m
                     in set EVM.storage (EVM.Concrete store) c
 

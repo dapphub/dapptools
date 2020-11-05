@@ -795,10 +795,10 @@ symvmFromCommand cmd = do
     -- ConcreteS cannot (instead values can be fetched from rpc!)
     -- Initial defaults to 0 for uninitialized storage slots,
     -- whereas the values of SymbolicS are unconstrained.
-    Just InitialS  -> EVM.Symbolic <$> freshArray_ (Just 0)
+    Just InitialS  -> EVM.Symbolic [] <$> freshArray_ (Just 0)
     Just ConcreteS -> return (EVM.Concrete mempty)
-    Just SymbolicS -> EVM.Symbolic <$> freshArray_ Nothing
-    Nothing -> EVM.Symbolic <$> freshArray_ (if create cmd then (Just 0) else Nothing)
+    Just SymbolicS -> EVM.Symbolic [] <$> freshArray_ Nothing
+    Nothing -> EVM.Symbolic [] <$> freshArray_ (if create cmd then (Just 0) else Nothing)
 
   withCache <- io $ applyCache (state cmd, cache cmd)
 

@@ -105,8 +105,8 @@ abstractVM typesignature concreteArgs x storagemodel = do
       Just (name, typs) -> do (cd, cdlen) <- symCalldata name typs concreteArgs
                               return (cd, cdlen, (sTrue, Val "True"))
   symstore <- case storagemodel of
-    SymbolicS -> Symbolic <$> freshArray_ Nothing
-    InitialS -> Symbolic <$> freshArray_ (Just 0)
+    SymbolicS -> Symbolic [] <$> freshArray_ Nothing
+    InitialS -> Symbolic [] <$> freshArray_ (Just 0)
     ConcreteS -> return $ Concrete mempty
   c <- SAddr <$> freshVar_
   value' <- sw256 <$> freshVar_
@@ -346,7 +346,7 @@ equivalenceCheck bytecodeA bytecodeB maxiter signature' = do
             (aSelf, bSelf) = both' (view (state . contract)) (a, b)
             (aEnv, bEnv) = both' (view (env . contracts)) (a, b)
             (aResult, bResult) = both' (view result) (a, b)
-            (Symbolic aStorage, Symbolic bStorage) = (view storage (aEnv ^?! ix aSelf), view storage (bEnv ^?! ix bSelf))
+            (Symbolic _ aStorage, Symbolic _ bStorage) = (view storage (aEnv ^?! ix aSelf), view storage (bEnv ^?! ix bSelf))
             differingResults = case (aResult, bResult) of
 
               (Just (VMSuccess aOut), Just (VMSuccess bOut)) ->

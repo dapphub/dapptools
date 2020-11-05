@@ -162,7 +162,8 @@ readSWordWithBound ind (SymbolicBuffer xs) bound = case (num <$> fromSized <$> u
     in S (FromBytes (SymbolicBuffer bs)) (fromBytes bs)
   _ -> 
     let boundedList = [ite (i .<= bound) x 0 | (x, i) <- zip xs [1..]]
-    in sw256 . fromBytes $ [select' boundedList 0 (ind + j) | j <- [0..31]]
+        res = [select' boundedList 0 (ind + j) | j <- [0..31]]
+    in S (FromBytes (SymbolicBuffer res)) $ fromBytes $ res
 
 readSWordWithBound ind (ConcreteBuffer xs) bound =
   case fromSized <$> unliteral ind of
