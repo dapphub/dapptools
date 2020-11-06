@@ -70,6 +70,8 @@ data UnitTestOptions = UnitTestOptions
   { oracle     :: EVM.Query -> IO (EVM ())
   , verbose    :: Maybe Int
   , maxIter    :: Maybe Integer
+  , smtTimeout :: Maybe Integer
+  , solver     :: Maybe Text
   , match      :: Text
   , fuzzRuns   :: Int
   , replay     :: Maybe (Text, BSLazy.ByteString)

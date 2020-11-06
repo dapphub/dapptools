@@ -36,7 +36,7 @@ import EVM.Types hiding (word)
 import EVM.UnitTest (UnitTestOptions, coverageReport, coverageForUnitTestContract)
 import EVM.UnitTest (runUnitTestContract)
 import EVM.UnitTest (getParametersFromEnvironmentVariables, testNumber)
-import EVM.Dapp (findUnitTests, dappInfo, DappInfo)
+import EVM.Dapp (findUnitTests, dappInfo, DappInfo, Test(..))
 import EVM.Format (showTraceTree, showBranchTree)
 import EVM.RLP (rlpdecode)
 import qualified EVM.Patricia as Patricia
@@ -279,10 +279,13 @@ unitTestOptions cmd testFile = do
         case rpc cmd of
          Just url -> EVM.Fetch.http block' url
          Nothing  -> EVM.Fetch.zero
+    , EVM.UnitTest.maxIter = maxIterations cmd
+    , EVM.UnitTest.smtTimeout = smttimeout cmd
+    , EVM.UnitTest.solver = solver cmd
     , EVM.UnitTest.verbose = verbose cmd
-    , EVM.UnitTest.match   = pack $ fromMaybe "^test" (match cmd)
+    , EVM.UnitTest.match = pack $ fromMaybe "^test" (match cmd)
     , EVM.UnitTest.fuzzRuns = fromMaybe 100 (fuzzRuns cmd)
-    , EVM.UnitTest.replay   = do
+    , EVM.UnitTest.replay = do
         arg' <- replay cmd
         return (fst arg', LazyByteString.fromStrict (hexByteString "--replay" $ strip0x $ snd arg'))
     , EVM.UnitTest.vmModifier = vmModifier
@@ -311,7 +314,7 @@ main = do
         testOpts <- unitTestOptions cmd testFile
         case (coverage cmd, optsMode cmd) of
           (False, Run) ->
-            dappTest testOpts (solver cmd) (smttimeout cmd) testFile (cache cmd)
+            dappTest testOpts testFile (cache cmd)
           (False, Debug) ->
             EVM.TTY.main testOpts root testFile
           (True, _) ->
@@ -379,16 +382,16 @@ findJsonFile Nothing = do
         , intercalate ", " xs
         ]
 
-dappTest :: UnitTestOptions -> Maybe Text -> Maybe Integer -> String -> Maybe String -> IO ()
-dappTest opts solver smttimeout solcFile cache =
+dappTest :: UnitTestOptions -> String -> Maybe String -> IO ()
+dappTest opts solcFile cache =
   readSolc solcFile >>=
     \case
       Just (contractMap, _) -> do
-        -- TODO: use this matcher!
         let matcher = regexMatches (EVM.UnitTest.match opts)
-            unitTests = findUnitTests $ Map.elems contractMap
+            unitTests = fmap (filterTests matcher) $ findUnitTests $ Map.elems contractMap
 
-        results <- runSMTWithTimeOut solver smttimeout $ query $ concatMapM (runUnitTestContract opts contractMap) unitTests
+        results <- runSMTWithTimeOut (EVM.UnitTest.solver opts) (EVM.UnitTest.smtTimeout opts) $ query
+                      $ concatMapM (runUnitTestContract opts contractMap) unitTests
         let (passing, vms) = unzip results
 
         case cache of
@@ -415,6 +418,12 @@ regexMatches regexSource =
     regex = Regex.makeRegexOpts compOpts execOpts (unpack regexSource)
   in
     Regex.matchTest regex . Seq.fromList . unpack
+
+filterTests :: (Text -> Bool) -> (Text, [(Test, [AbiType])]) -> (Text, [(Test, [AbiType])])
+filterTests matcher (contract, tests) = (contract, (flip filter) tests $
+                                          \(test, _) -> case test of
+                                                          SymbolicTest name -> matcher name
+                                                          ConcreteTest name -> matcher name)
 
 equivalence :: Command Options.Unwrapped -> IO ()
 equivalence cmd =
