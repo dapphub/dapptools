@@ -1,4 +1,4 @@
-{-
+{-|
 
   The ABI encoding is mostly straightforward.
 

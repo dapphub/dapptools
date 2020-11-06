@@ -20,11 +20,11 @@ foreign import ccall "&ethjet_free"
   ethjet_free :: FunPtr (Ptr EthjetContext -> IO ())
 foreign import ccall "ethjet"
   ethjet
-    :: Ptr EthjetContext     -- initialized context
-    -> CInt                  -- operation
-    -> Ptr CChar -> CInt     -- input
-    -> Ptr CChar -> CInt     -- output
-    -> IO CInt               -- 1 if good
+    :: Ptr EthjetContext     -- ^ initialized context
+    -> CInt                  -- ^ operation
+    -> Ptr CChar -> CInt     -- ^ input
+    -> Ptr CChar -> CInt     -- ^ output
+    -> IO CInt               -- ^ 1 if good
 
 -- Lazy evaluation ensures this context is only initialized once,
 -- and `unsafePerformIO` in such situations is a common pattern.
