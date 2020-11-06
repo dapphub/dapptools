@@ -515,7 +515,7 @@ symRun opts@UnitTestOptions{..} concreteVm testName types = do
     allPaths <- fst <$> runStateT
         (EVM.SymExec.interpret
           (EVM.Fetch.oracle (Just smtState) Nothing model False)
-          Nothing
+          maxIter
           (execSymTest opts testName cd))
         vm
 
