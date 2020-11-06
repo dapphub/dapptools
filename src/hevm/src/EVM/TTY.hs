@@ -24,8 +24,7 @@ import EVM.Hexdump (prettyHex)
 import EVM.Op
 import EVM.Solidity
 import EVM.Types hiding (padRight)
-import EVM.UnitTest (UnitTestOptions (..), execSymTest)
-import EVM.UnitTest (initialUnitTestVm, initializeUnitTest, runUnitTest)
+import EVM.UnitTest
 import EVM.StorageLayout
 
 import EVM.Stepper (Stepper)
@@ -666,7 +665,9 @@ initialUiVmStateForTest opts@UnitTestOptions{..} (theContractName, theTestName) 
                            then decodeAbiValue (AbiTupleType (Vec.fromList types)) callData
                            else emptyAbi
             void (runUnitTest opts theTestName args)
-          SymbolicTest _ -> void (execSymTest opts theTestName (first SymbolicBuffer symArgs))
+          SymbolicTest _ -> do
+            Stepper.evm $ modify symbolify
+            void (execSymTest opts theTestName (first SymbolicBuffer symArgs))
   pure $ initUiVmState vm0 opts script
   where
     (test, types) = head $ Prelude.filter (\(test',_) -> extractSig test' == theTestName) $ unitTestMethods testContract
