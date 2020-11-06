@@ -50,7 +50,7 @@ import GHC.IO.Encoding
 import Control.Concurrent.Async   (async, waitCatch)
 import Control.Lens hiding (pre, passing)
 import Control.Monad              (void, when, forM_, unless)
-import Control.Monad.State.Strict (execStateT)
+import Control.Monad.State.Strict (execStateT, liftIO)
 import Data.ByteString            (ByteString)
 import Data.List                  (intercalate, isSuffixOf)
 import Data.Tree
@@ -282,6 +282,7 @@ unitTestOptions cmd testFile = do
     , EVM.UnitTest.maxIter = maxIterations cmd
     , EVM.UnitTest.smtTimeout = smttimeout cmd
     , EVM.UnitTest.solver = solver cmd
+    , EVM.UnitTest.smtState = Nothing
     , EVM.UnitTest.verbose = verbose cmd
     , EVM.UnitTest.match = pack $ fromMaybe "^test" (match cmd)
     , EVM.UnitTest.fuzzRuns = fromMaybe 100 (fuzzRuns cmd)
@@ -315,8 +316,10 @@ main = do
         case (coverage cmd, optsMode cmd) of
           (False, Run) ->
             dappTest testOpts testFile (cache cmd)
-          (False, Debug) ->
-            EVM.TTY.main testOpts root testFile
+          (False, Debug) -> runSMTWithTimeOut (solver cmd) (smttimeout cmd) $ query $ do
+              state <- queryState
+              let opts = testOpts { EVM.UnitTest.smtState = Just state }
+              liftIO $ EVM.TTY.main opts root testFile
           (True, _) ->
             dappCoverage testOpts (optsMode cmd) testFile
     Interactive {} ->
@@ -390,8 +393,10 @@ dappTest opts solcFile cache =
         let matcher = regexMatches (EVM.UnitTest.match opts)
             unitTests = fmap (filterTests matcher) $ findUnitTests $ Map.elems contractMap
 
-        results <- runSMTWithTimeOut (EVM.UnitTest.solver opts) (EVM.UnitTest.smtTimeout opts) $ query
-                      $ concatMapM (runUnitTestContract opts contractMap) unitTests
+        results <- runSMTWithTimeOut (EVM.UnitTest.solver opts) (EVM.UnitTest.smtTimeout opts) $ query $ do
+          state' <- queryState
+          let opts' = opts { EVM.UnitTest.smtState = Just state' }
+          concatMapM (runUnitTestContract opts' contractMap) unitTests
         let (passing, vms) = unzip results
 
         case cache of
@@ -439,12 +444,12 @@ equivalence cmd =
          Right vm -> do io $ putStrLn "Not equal!"
                         io $ putStrLn "Counterexample:"
                         showCounterexample vm maybeSignature
-                        io $ exitFailure
+                        io exitFailure
          Left (postAs, postBs) -> io $ do
            putStrLn $ "Explored: " <> show (length postAs)
                        <> " execution paths of A and: "
                        <> show (length postBs) <> " paths of B."
-           putStrLn $ "No discrepancies found."
+           putStrLn "No discrepancies found."
 
 
 -- cvc4 sets timeout via a commandline option instead of smtlib `(set-option)`
@@ -482,10 +487,10 @@ getSrcInfo cmd =
   let root = fromMaybe "." (dappRoot cmd)
   in case (jsonFile cmd) of
     Nothing ->
-      pure $ emptyDapp
+      pure emptyDapp
     Just json -> readSolc json >>= \case
       Nothing ->
-        pure $ emptyDapp
+        pure emptyDapp
       Just (contractMap, sourceCache) ->
         pure $ dappInfo root contractMap sourceCache
 
@@ -589,7 +594,7 @@ dappCoverage opts _ solcFile =
       Just (contractMap, sourceCache) -> do
         -- TODO: use this matcher
         let matcher = regexMatches (EVM.UnitTest.match opts)
-        let unitTests = findUnitTests $ Map.elems contractMap
+            unitTests = fmap (filterTests matcher) $ findUnitTests $ Map.elems contractMap
         covs <- mconcat <$> mapM (coverageForUnitTestContract opts contractMap sourceCache) unitTests
 
         let
@@ -715,9 +720,9 @@ vmFromCommand cmd = do
   (miner,ts,blockNum,diff) <- case rpc cmd of
     Nothing -> return (0,0,0,0)
     Just url -> EVM.Fetch.fetchBlockFrom block' url >>= \case
-      Nothing -> error $ "Could not fetch block"
+      Nothing -> error "Could not fetch block"
       Just EVM.Block{..} -> return (_coinbase
-                                   , wordValue $ forceLit $ _timestamp
+                                   , wordValue $ forceLit _timestamp
                                    , wordValue _number
                                    , wordValue _difficulty
                                    )

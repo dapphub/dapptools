@@ -34,6 +34,7 @@ import Control.Monad.Par.IO (runParIO)
 
 import qualified Data.ByteString.Lazy as BSLazy
 import qualified Data.SBV.Trans.Control as SBV (Query, queryState, getValue, resetAssertions)
+import qualified Data.SBV.Internals as SBV (State)
 import Data.Bifunctor     (first)
 import Data.ByteString    (ByteString)
 import Data.SBV    hiding (verbose)
@@ -71,6 +72,7 @@ data UnitTestOptions = UnitTestOptions
   , verbose    :: Maybe Int
   , maxIter    :: Maybe Integer
   , smtTimeout :: Maybe Integer
+  , smtState   :: Maybe SBV.State
   , solver     :: Maybe Text
   , match      :: Text
   , fuzzRuns   :: Int
