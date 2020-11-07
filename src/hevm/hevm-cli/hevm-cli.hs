@@ -316,10 +316,7 @@ main = do
         runSMTWithTimeOut (solver cmd) (smttimeout cmd) $ query $ do
           testOpts <- unitTestOptions cmd testFile
           case (coverage cmd, optsMode cmd) of
-            (False, Run) -> do
-              (query', next) <- liftIO $ dappTest testOpts testFile (cache cmd)
-              results <- query'
-              liftIO $ next results
+            (False, Run) -> dappTest testOpts testFile (cache cmd)
             (False, Debug) -> liftIO $ EVM.TTY.main testOpts root testFile
             (True, _) -> liftIO $ dappCoverage testOpts (optsMode cmd) testFile
     Interactive {} ->
@@ -386,32 +383,28 @@ findJsonFile Nothing = do
         , intercalate ", " xs
         ]
 
-dappTest :: UnitTestOptions -> String -> Maybe String
-            -> IO (Query [(Bool, EVM.VM)], [(Bool, EVM.VM)] -> IO ())
-dappTest opts solcFile cache =
-  readSolc solcFile >>=
-    \case
-      Just (contractMap, _) -> do
-        let matcher = regexMatches (EVM.UnitTest.match opts)
-            unitTests = fmap (filterTests matcher) $ findUnitTests $ Map.elems contractMap
+dappTest :: UnitTestOptions -> String -> Maybe String -> Query ()
+dappTest opts solcFile cache = do
+  out <- liftIO $ readSolc solcFile
+  case out of
+    Just (contractMap, _) -> do
+      let matcher = regexMatches (EVM.UnitTest.match opts)
+          unitTests = fmap (filterTests matcher) $ findUnitTests $ Map.elems contractMap
+      results <- concatMapM (runUnitTestContract opts contractMap) unitTests
+      let (passing, vms) = unzip results
+      case cache of
+        Nothing ->
+          pure ()
+        Just path ->
+          -- merge all of the post-vm caches and save into the state
+          let
+            cache' = mconcat [view EVM.cache vm | vm <- vms]
+          in
+            liftIO $ Git.saveFacts (Git.RepoAt path) (Facts.cacheFacts cache')
 
-        let query' = concatMapM (runUnitTestContract opts contractMap) unitTests
-        let next = \results -> do
-                      let (passing, vms) = unzip results
-                      case cache of
-                        Nothing ->
-                          pure ()
-                        Just path ->
-                          -- merge all of the post-vm caches and save into the state
-                          let
-                            cache' = mconcat [view EVM.cache vm | vm <- vms]
-                          in
-                            Git.saveFacts (Git.RepoAt path) (Facts.cacheFacts cache')
-
-                      unless (and passing) exitFailure
-        pure (query', next)
-      Nothing ->
-        error ("Failed to read Solidity JSON for `" ++ solcFile ++ "'")
+      liftIO $ unless (and passing) exitFailure
+    Nothing ->
+      error ("Failed to read Solidity JSON for `" ++ solcFile ++ "'")
 
 regexMatches :: Text -> Text -> Bool
 regexMatches regexSource =
