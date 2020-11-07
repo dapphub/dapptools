@@ -79,7 +79,7 @@ contract C is DSTest {
     a = new A();
   }
   function test_isEven() external {
-    assertTrue(a.isEven(4);
+    assertTrue(a.isEven(4));
   }
 }
 ```
