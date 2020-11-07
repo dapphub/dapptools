@@ -256,17 +256,18 @@ applyCache (state, cache) =
       stateFacts <- Git.loadFacts (Git.RepoAt statePath)
       pure $ (applyState stateFacts) . (applyCache' cacheFacts)
 
-unitTestOptions :: Command Options.Unwrapped -> String -> IO UnitTestOptions
+unitTestOptions :: Command Options.Unwrapped -> String -> Query UnitTestOptions
 unitTestOptions cmd testFile = do
   let root = fromMaybe "." (dappRoot cmd)
-  srcInfo <- readSolc testFile >>= \case
+  srcInfo <- liftIO $ readSolc testFile >>= \case
     Nothing -> error "Could not read .sol.json file"
     Just (contractMap, sourceCache) ->
       pure $ dappInfo root contractMap sourceCache
 
-  vmModifier <- applyCache (state cmd, cache cmd)
+  vmModifier <- liftIO $ applyCache (state cmd, cache cmd)
 
-  params <- getParametersFromEnvironmentVariables (rpc cmd)
+  params <- liftIO $ getParametersFromEnvironmentVariables (rpc cmd)
+  state <- queryState
 
   let
     testn = testNumber params
@@ -277,14 +278,14 @@ unitTestOptions cmd testFile = do
   pure EVM.UnitTest.UnitTestOptions
     { EVM.UnitTest.oracle =
         case rpc cmd of
-         Just url -> EVM.Fetch.http block' url
-         Nothing  -> EVM.Fetch.zero
+         Just url -> EVM.Fetch.oracle (Just state) (Just (block', url)) InitialS True
+         Nothing  -> EVM.Fetch.oracle (Just state) Nothing InitialS True
     , EVM.UnitTest.maxIter = maxIterations cmd
     , EVM.UnitTest.smtTimeout = smttimeout cmd
     , EVM.UnitTest.solver = solver cmd
-    , EVM.UnitTest.smtState = Nothing
+    , EVM.UnitTest.smtState = Just state
     , EVM.UnitTest.verbose = verbose cmd
-    , EVM.UnitTest.match = pack $ fromMaybe "^test" (match cmd)
+    , EVM.UnitTest.match = pack $ fromMaybe ".*" (match cmd)
     , EVM.UnitTest.fuzzRuns = fromMaybe 100 (fuzzRuns cmd)
     , EVM.UnitTest.replay = do
         arg' <- replay cmd
@@ -312,21 +313,21 @@ main = do
     DappTest {} ->
       withCurrentDirectory root $ do
         testFile <- findJsonFile (jsonFile cmd)
-        testOpts <- unitTestOptions cmd testFile
-        case (coverage cmd, optsMode cmd) of
-          (False, Run) ->
-            dappTest testOpts testFile (cache cmd)
-          (False, Debug) -> runSMTWithTimeOut (solver cmd) (smttimeout cmd) $ query $ do
-              state <- queryState
-              let opts = testOpts { EVM.UnitTest.smtState = Just state }
-              liftIO $ EVM.TTY.main opts root testFile
-          (True, _) ->
-            dappCoverage testOpts (optsMode cmd) testFile
+        runSMTWithTimeOut (solver cmd) (smttimeout cmd) $ query $ do
+          testOpts <- unitTestOptions cmd testFile
+          case (coverage cmd, optsMode cmd) of
+            (False, Run) -> do
+              (query', next) <- liftIO $ dappTest testOpts testFile (cache cmd)
+              results <- query'
+              liftIO $ next results
+            (False, Debug) -> liftIO $ EVM.TTY.main testOpts root testFile
+            (True, _) -> liftIO $ dappCoverage testOpts (optsMode cmd) testFile
     Interactive {} ->
       withCurrentDirectory root $ do
-        testFile <- findJsonFile (jsonFile cmd)
-        testOpts <- unitTestOptions cmd testFile
-        EVM.TTY.main testOpts root testFile
+        runSMTWithTimeOut (solver cmd) (smttimeout cmd) $ query $ do
+          testFile <- liftIO $ findJsonFile (jsonFile cmd)
+          testOpts <- unitTestOptions cmd testFile
+          liftIO $ EVM.TTY.main testOpts root testFile
     Compliance {} ->
       case (group cmd) of
         Just "Blockchain" -> launchScript "/run-blockchain-tests" cmd
@@ -385,7 +386,8 @@ findJsonFile Nothing = do
         , intercalate ", " xs
         ]
 
-dappTest :: UnitTestOptions -> String -> Maybe String -> IO ()
+dappTest :: UnitTestOptions -> String -> Maybe String
+            -> IO (Query [(Bool, EVM.VM)], [(Bool, EVM.VM)] -> IO ())
 dappTest opts solcFile cache =
   readSolc solcFile >>=
     \case
@@ -393,23 +395,21 @@ dappTest opts solcFile cache =
         let matcher = regexMatches (EVM.UnitTest.match opts)
             unitTests = fmap (filterTests matcher) $ findUnitTests $ Map.elems contractMap
 
-        results <- runSMTWithTimeOut (EVM.UnitTest.solver opts) (EVM.UnitTest.smtTimeout opts) $ query $ do
-          state' <- queryState
-          let opts' = opts { EVM.UnitTest.smtState = Just state' }
-          concatMapM (runUnitTestContract opts' contractMap) unitTests
-        let (passing, vms) = unzip results
+        let query' = concatMapM (runUnitTestContract opts contractMap) unitTests
+        let next = \results -> do
+                      let (passing, vms) = unzip results
+                      case cache of
+                        Nothing ->
+                          pure ()
+                        Just path ->
+                          -- merge all of the post-vm caches and save into the state
+                          let
+                            cache' = mconcat [view EVM.cache vm | vm <- vms]
+                          in
+                            Git.saveFacts (Git.RepoAt path) (Facts.cacheFacts cache')
 
-        case cache of
-          Nothing ->
-            pure ()
-          Just path ->
-            -- merge all of the post-vm caches and save into the state
-            let
-              cache' = mconcat [view EVM.cache vm | vm <- vms]
-            in
-              Git.saveFacts (Git.RepoAt path) (Facts.cacheFacts cache')
-
-        unless (and passing) exitFailure
+                      unless (and passing) exitFailure
+        pure (query', next)
       Nothing ->
         error ("Failed to read Solidity JSON for `" ++ solcFile ++ "'")
 
@@ -553,12 +553,13 @@ assert cmd = do
             print vmErrs
           -- When `--get-models` is passed, we print example vm info for each path
           when (getModels cmd) $
-            forM_ (zip [1..] (leaves tree)) $ \(i, postVM) -> do
+            forM_ (zip [(1:: Integer)..] (leaves tree)) $ \(i, postVM) -> do
               resetAssertions
               constrain (sAnd (fst <$> view EVM.constraints postVM))
               io $ putStrLn $
                 "-- Branch (" <> show i <> "/" <> show (length tree) <> ") --"
               checkSat >>= \case
+                DSat _ -> error "assert: unexpected SMT result"
                 Unk -> io $ do putStrLn "Timed out"
                                print $ view EVM.result postVM
                 Unsat -> io $ do putStrLn "Inconsistent path conditions: dead path"
@@ -592,7 +593,6 @@ dappCoverage opts _ solcFile =
   readSolc solcFile >>=
     \case
       Just (contractMap, sourceCache) -> do
-        -- TODO: use this matcher
         let matcher = regexMatches (EVM.UnitTest.match opts)
             unitTests = fmap (filterTests matcher) $ findUnitTests $ Map.elems contractMap
         covs <- mconcat <$> mapM (coverageForUnitTestContract opts contractMap sourceCache) unitTests

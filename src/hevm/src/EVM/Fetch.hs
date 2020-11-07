@@ -79,29 +79,29 @@ fetchQuery n f q = do
   x <- case q of
     QueryCode addr -> do
         m <- f (rpc "eth_getCode" [toRPC addr, toRPC n])
-        return $ hexText <$> view _String <$> m
+        return $ hexText . view _String <$> m
     QueryNonce addr -> do
         m <- f (rpc "eth_getTransactionCount" [toRPC addr, toRPC n])
-        return $ readText <$> view _String <$> m
+        return $ readText . view _String <$> m
     QueryBlock -> do
       m <- f (rpc "eth_getBlockByNumber" [toRPC n, toRPC False])
       return $ m >>= parseBlock
     QueryBalance addr -> do
         m <- f (rpc "eth_getBalance" [toRPC addr, toRPC n])
-        return $ readText <$> view _String <$> m
+        return $ readText . view _String <$> m
     QuerySlot addr slot -> do
         m <- f (rpc "eth_getStorageAt" [toRPC addr, toRPC slot, toRPC n])
-        return $ readText <$> view _String <$> m
+        return $ readText . view _String <$> m
     QueryChainId -> do
         m <- f (rpc "eth_chainId" [toRPC n])
-        return $ readText <$> view _String <$> m
+        return $ readText . view _String <$> m
   return x
 
 
 parseBlock :: (AsValue s, Show s) => s -> Maybe EVM.Block
 parseBlock j = do
   coinbase   <- readText <$> j ^? key "miner" . _String
-  timestamp  <- litWord <$> readText <$> j ^? key "timestamp" . _String
+  timestamp  <- litWord . readText <$> j ^? key "timestamp" . _String
   number     <- readText <$> j ^? key "number" . _String
   difficulty <- readText <$> j ^? key "difficulty" . _String
   -- default codesize, default gas limit, default feescedule
@@ -158,6 +158,9 @@ fetchSlotFrom n url addr slot =
 http :: BlockNumber -> Text -> Fetcher
 http n url = oracle Nothing (Just (n, url)) EVM.ConcreteS True
 
+zero :: Fetcher
+zero = oracle Nothing Nothing EVM.ConcreteS True
+
 -- smtsolving + (http or zero)
 oracle :: Maybe SBV.State -> Maybe (BlockNumber, Text) -> StorageModel -> Bool -> Fetcher
 oracle smtstate info model ensureConsistency q = do
@@ -204,7 +207,6 @@ oracle smtstate info model ensureConsistency q = do
                             _ -> pure $ continue Nothing
                 _ -> pure $ continue Nothing
 
-    --- for other queries (there's only slot left right now) we default to zero or http
     EVM.PleaseFetchSlot addr slot continue ->
       case info of
         Nothing -> return (continue 0)
@@ -213,9 +215,6 @@ oracle smtstate info model ensureConsistency q = do
            Just x  -> return (continue x)
            Nothing ->
              error ("oracle error: " ++ show q)
-
-zero :: Fetcher
-zero = oracle Nothing Nothing EVM.ConcreteS True
 
 type Fetcher = EVM.Query -> IO (EVM ())
 
@@ -247,10 +246,10 @@ checkBranch pathconds branchcondition False = do
                Sat -> return EVM.Unknown
                -- Explore both branches in case of timeout
                Unk -> return EVM.Unknown
-               _ -> error "checkBranch: unexpected SMT result"
+               DSat _ -> error "checkBranch: unexpected SMT result"
      -- If the query times out, we simply explore both paths
      Unk -> return EVM.Unknown
-     _ -> error "checkBranch: unexpected SMT result"
+     DSat _ -> error "checkBranch: unexpected SMT result"
 
 checkBranch pathconds branchcondition True = do
   constrain pathconds
@@ -264,6 +263,7 @@ checkBranch pathconds branchcondition True = do
                 Sat -> return $ EVM.Case False
                 -- Assume the negated condition is still possible.
                 Unk -> return $ EVM.Case False
+                DSat _ -> error "checkBranch: unexpected SMT result"
      -- Sat means its possible for condition to hold
      Sat -> -- is its negation also possible?
             checksat (sNot branchcondition) >>= \case
@@ -273,6 +273,8 @@ checkBranch pathconds branchcondition True = do
                Sat -> return EVM.Unknown
                -- Explore both branches in case of timeout
                Unk -> return EVM.Unknown
+               DSat _ -> error "checkBranch: unexpected SMT result"
 
      -- If the query times out, we simply explore both paths
      Unk -> return EVM.Unknown
+     DSat _ -> error "Internal Error: unexpected SMT result"
