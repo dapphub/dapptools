@@ -159,37 +159,14 @@ interpret mode =
           use (uiVm . result) >>= \case
             Just _ -> do
               -- Yes, proceed with the next action.
-              vmState <- get
-              interpret mode (k (view uiVm vmState))
+              vm <- use uiVm
+              interpret mode (k vm)
             Nothing -> do
               -- No, keep performing the current action
-              let restart = Stepper.run >>= k
-
-              case mode of
-                Step 0 -> do
-                  -- We come here when we've continued while stepping,
-                  -- either from a query or from a return;
-                  -- we should pause here and wait for the user.
-                  pure (Continue restart)
-
-                Step i -> do
-                  -- Run one instruction and recurse
-                  stepOneOpcode restart
-                  interpret (Step (i - 1)) restart
-
-                StepUntil p -> do
-                  vm <- use uiVm
-                  case p vm of
-                    True ->
-                      interpret (Step 0) restart
-                    False -> do
-                      -- Run one instruction and recurse
-                      stepOneOpcode restart
-                      interpret (StepUntil p) restart
+              keepExecuting mode (Stepper.run >>= k)
 
         -- Stepper wants to keep executing?
         Stepper.Exec -> do
-
           -- Have we reached the final result of this action?
           use (uiVm . result) >>= \case
             Just r ->
@@ -197,29 +174,7 @@ interpret mode =
               interpret mode (k r)
             Nothing -> do
               -- No, keep performing the current action
-              let restart = Stepper.exec >>= k
-
-              case mode of
-                Step 0 -> do
-                  -- We come here when we've continued while stepping,
-                  -- either from a query or from a return;
-                  -- we should pause here and wait for the user.
-                  pure (Continue restart)
-
-                Step i -> do
-                  -- Run one instruction and recurse
-                  stepOneOpcode restart
-                  interpret (Step (i - 1)) restart
-
-                StepUntil p -> do
-                  vm <- use uiVm
-                  case p vm of
-                    True ->
-                      interpret (Step 0) restart
-                    False -> do
-                      -- Run one instruction and recurse
-                      stepOneOpcode restart
-                      interpret (StepUntil p) restart
+              keepExecuting mode (Stepper.exec >>= k)
 
         -- Stepper is waiting for user input from a query
         Stepper.Ask (PleaseChoosePath _ cont) -> do
@@ -240,6 +195,33 @@ interpret mode =
           let (r, vm1) = runState m vm
           assign uiVm vm1
           interpret mode (Stepper.exec >> (k r))
+
+keepExecuting :: (?fetcher :: Fetcher
+              ,   ?maxIter :: Maybe Integer)
+              => StepMode
+              -> Operational.ProgramT Stepper.Action Identity a
+              -> StateT UiVmState IO (Continuation a)
+keepExecuting mode restart = case mode of
+  Step 0 -> do
+    -- We come here when we've continued while stepping,
+    -- either from a query or from a return;
+    -- we should pause here and wait for the user.
+    pure (Continue restart)
+
+  Step i -> do
+    -- Run one instruction and recurse
+    stepOneOpcode restart
+    interpret (Step (i - 1)) restart
+
+  StepUntil p -> do
+    vm <- use uiVm
+    case p vm of
+      True ->
+        interpret (Step 0) restart
+      False -> do
+        -- Run one instruction and recurse
+        stepOneOpcode restart
+        interpret (StepUntil p) restart
 
 isUnitTestContract :: Text -> DappInfo -> Bool
 isUnitTestContract name dapp =

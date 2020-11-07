@@ -88,8 +88,7 @@ findUnitTests =
 unitTestMethods :: SolcContract -> [(Test, [AbiType])]
 unitTestMethods = view abiMap
                   >>> Map.elems
-                  >>> map (\f -> (mkTest $ view methodSignature f,
-                                  snd <$> view methodInputs f))
+                  >>> map (\f -> (mkTest $ view methodSignature f, snd <$> view methodInputs f))
                   >>> filter (isJust . fst)
                   >>> fmap (first fromJust)
 
