@@ -512,6 +512,7 @@ symRun opts@UnitTestOptions{..} concreteVm testName types = do
     cd <- first SymbolicBuffer <$> symCalldata testName types []
     smtState <- SBV.queryState
     let model = view (env . storageModel) vm
+        shouldFail = "proveFail" `isPrefixOf` testName
 
     -- get all posible postVMs for the test method
     allPaths <- fst <$> runStateT
@@ -520,55 +521,59 @@ symRun opts@UnitTestOptions{..} concreteVm testName types = do
           maxIter
           (execSymTest opts testName cd))
         vm
+    results <- forM allPaths $
+      -- If the vm execution succeeded, check if the vm is reachable,
+      -- and if any ds-test assertions were triggered
+      -- Report a failure depending on the prefix of the test name
 
-    results <- forM allPaths $ \case
-      -- If the vm execution failed, check if the vm is reachable, and if so, report a failure
-      Left (e, vm') -> do
+      -- If the vm execution failed, check if the vm is reachable, and if so,
+      -- report a failure unless the test is supposed to fail.
+
+      \(bailed, vm') -> do
         SBV.resetAssertions
         constrain $ sAnd (fst <$> view EVM.constraints vm')
+        unless bailed $
+          case view result vm' of
+            Just (VMSuccess (SymbolicBuffer buf)) ->
+              constrain $ litBytes (encodeAbiValue $ AbiBool $ not shouldFail) .== buf
+            _ -> error "unexpected return value"
         checkSat >>= \case
           Sat -> do
             prettyCd <- prettyCalldata cd testName types
-            case e of
-              Revert msg -> return $ Left (prettyCd, "Revert" <> EVM.Format.showError msg)
-              _ -> return $ Left (prettyCd, Text.pack $ show e)
+            return $
+              if shouldFail && bailed
+              then Right ()
+              else Left (vm, prettyCd)
           Unsat -> return $ Right ()
           Unk -> error "SMT timeout"
           DSat _ -> error "Unexpected DSat"
-
-      -- If the vm execution succeeded, check if the vm is reachable, and if any ds-test assertions were triggered
-      -- Report a failure depending on the prefix of the test name
-      Right vm' ->
-        case view result vm' of
-          Just (VMSuccess (SymbolicBuffer buf)) -> do
-            SBV.resetAssertions
-            let shouldFail = "proveFail" `isPrefixOf` testName
-            constrain $ sAnd (fst <$> view EVM.constraints vm')
-            constrain $ litBytes (encodeAbiValue $ AbiBool $ not shouldFail) .== buf
-            checkSat >>= \case
-              Sat -> do
-                prettyCd <- prettyCalldata cd testName types
-                return $ Left (prettyCd, "Assertion Violation")
-              Unsat -> return $ Right ()
-              Unk -> error "SMT timeout"
-              DSat _ -> error "unexpected DSat"
-          _ -> error "unexpected return value"
 
     if null $ lefts results
     then
       return ("\x1b[32m[PASS]\x1b[0m " <> testName, Right "", vm)
     else
-      return ("\x1b[31m[FAIL]\x1b[0m " <> testName, Left $ symFailure testName (lefts results), vm)
+      return ("\x1b[31m[FAIL]\x1b[0m " <> testName, Left $ symFailure opts testName (lefts results), vm)
 
-symFailure :: Text -> [(Text, Text)] -> Text
-symFailure testName failures' = mconcat
+symFailure :: UnitTestOptions -> Text -> [(VM, Text)] -> Text
+symFailure UnitTestOptions {..} testName failures' = mconcat
   [ "Failure: "
   , testName
   , "\n\n"
   , intercalate "\n" $ indentLines 2 . mkMsg <$> failures'
   ]
   where
-    mkMsg (cd, err) = "Counter Example:\n\n  result:   " <> err <> "\n  calldata: " <> cd
+    showRes vm = let Just res = view result vm
+                 in prettyvmresult res
+    mkMsg (vm, cd) = pack $ unlines
+      ["Counter Example:"
+      ,""
+      ,"  result:   " <> showRes vm
+      ,"  calldata: " <> unpack cd
+      , case verbose of
+          Just _ -> unpack $ indentLines 2 (showTraceTree dapp vm)
+          _ -> ""
+      ]
+  
 
 prettyCalldata :: (Buffer, SWord 32) -> Text -> [AbiType]-> SBV.Query Text
 prettyCalldata (buffer, cdlen) sig types = do
@@ -581,7 +586,7 @@ prettyCalldata (buffer, cdlen) sig types = do
                   (AbiTupleType (Vector.fromList types))
                   (BSLazy.fromStrict (BS.drop 4 calldatainput))))
 
-execSymTest :: UnitTestOptions -> ABIMethod -> (Buffer, SWord 32) -> Stepper (Either (Error, VM) VM)
+execSymTest :: UnitTestOptions -> ABIMethod -> (Buffer, SWord 32) -> Stepper (Bool, VM)
 execSymTest opts@UnitTestOptions{ .. } method cd = do
   -- Set up the call to the test method
   Stepper.evm $ do
@@ -591,8 +596,8 @@ execSymTest opts@UnitTestOptions{ .. } method cd = do
   Stepper.runFully >>= \vm' -> case view result vm' of
     Just (VMFailure err) ->
       -- If we failed, put the error in the trace.
-      Stepper.evm (pushTrace (ErrorTrace err)) >> pure (Left (err, vm'))
-    Just (VMSuccess _) -> Right <$> checkSymFailures opts
+      Stepper.evm (pushTrace (ErrorTrace err)) >> pure (True, vm')
+    Just (VMSuccess _) -> pure (False, vm')
     Nothing -> error "Internal Error: execSymTest: vm has not completed execution!"
 
 checkSymFailures :: UnitTestOptions -> Stepper VM

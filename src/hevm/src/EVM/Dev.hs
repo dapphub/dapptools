@@ -16,7 +16,7 @@ import qualified EVM.VMTest    as VMTest
 
 import Data.SBV
 import Data.SBV.Trans.Control
-import Control.Monad.State.Strict (execStateT, liftIO)
+import Control.Monad.State.Strict (execStateT)
 
 import qualified Data.Map as Map
 import qualified Data.ByteString.Lazy   as LazyByteString
