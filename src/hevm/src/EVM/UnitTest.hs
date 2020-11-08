@@ -33,7 +33,7 @@ import Control.Monad.Par.Class (spawn_)
 import Control.Monad.Par.IO (runParIO)
 
 import qualified Data.ByteString.Lazy as BSLazy
-import qualified Data.SBV.Trans.Control as SBV (Query, queryState, getValue, resetAssertions)
+import qualified Data.SBV.Trans.Control as SBV (Query, getValue, resetAssertions)
 import qualified Data.SBV.Internals as SBV (State)
 import Data.Bifunctor     (first)
 import Data.ByteString    (ByteString)
@@ -510,14 +510,13 @@ symRun opts@UnitTestOptions{..} concreteVm testName types = do
     SBV.resetAssertions
     let vm = symbolify concreteVm
     cd <- first SymbolicBuffer <$> symCalldata testName types []
-    smtState <- SBV.queryState
     let model = view (env . storageModel) vm
         shouldFail = "proveFail" `isPrefixOf` testName
 
     -- get all posible postVMs for the test method
     allPaths <- fst <$> runStateT
         (EVM.SymExec.interpret
-          (EVM.Fetch.oracle (Just smtState) Nothing model False)
+          (EVM.Fetch.oracle smtState Nothing model False)
           maxIter
           (execSymTest opts testName cd))
         vm
@@ -573,7 +572,6 @@ symFailure UnitTestOptions {..} testName failures' = mconcat
           Just _ -> unpack $ indentLines 2 (showTraceTree dapp vm)
           _ -> ""
       ]
-  
 
 prettyCalldata :: (Buffer, SWord 32) -> Text -> [AbiType]-> SBV.Query Text
 prettyCalldata (buffer, cdlen) sig types = do
@@ -596,8 +594,10 @@ execSymTest opts@UnitTestOptions{ .. } method cd = do
   Stepper.runFully >>= \vm' -> case view result vm' of
     Just (VMFailure err) ->
       -- If we failed, put the error in the trace.
-      Stepper.evm (pushTrace (ErrorTrace err)) >> pure (True, vm')
-    Just (VMSuccess _) -> pure (False, vm')
+      Stepper.evm (pushTrace (ErrorTrace err)) >> (pure (True, vm'))
+    Just (VMSuccess _) -> do
+      postVm <- checkSymFailures opts
+      pure (False, postVm)
     Nothing -> error "Internal Error: execSymTest: vm has not completed execution!"
 
 checkSymFailures :: UnitTestOptions -> Stepper VM
