@@ -199,10 +199,13 @@ If left out, calldata is a fully abstract buffer of at most 256 bytes.
 Usage: hevm dapp-test [--json-file STRING] [--dapp-root STRING] [--debug]
                       [--fuzz-runs INT] [--replay (TEXT,BYTESTRING)]
                       [--rpc TEXT] [--verbose INT] [--coverage] [--state STRING]
-                      [--match STRING]
+                      [--match STRING] [--smttimeout INT] [--max-iterations INT]
+                      [--solver STRING] [--cache STRING]
 ```
 
-Run any ds-test testing functions. Run under the hood whenever `dapp test` or `dapp debug` is called. If testing functions have been given arguments, they will be randomly instantiated and run `--fuzz-runs` number of times. In `--debug` mode, property based tests will not be available unless given specific arguments using `--replay`.
+Run any ds-test testing functions. Run under the hood whenever `dapp test` or `dapp debug` is called. If testing functions have been given arguments, they will be randomly instantiated and run `--fuzz-runs` number of times. In `--debug` mode, property based tests will not be available unless given specific arguments using `--replay`. If testing functions are prefixed with `prove` they will be symbolically executed.
+
+The `smttimeout`, `max-iterations` and `solver` options have the same semantics as in `hevm symbolic`
 
 ### Environment Variables
 
