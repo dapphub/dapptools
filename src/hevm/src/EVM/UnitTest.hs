@@ -539,10 +539,17 @@ symRun opts@UnitTestOptions{..} concreteVm testName types = do
         checkSat >>= \case
           Sat -> do
             prettyCd <- prettyCalldata cd testName types
+            let explorationFailed = case (view result vm') of
+                  Just (VMFailure e) -> case e of
+                                          NotUnique -> True
+                                          UnexpectedSymbolicArg -> True
+                                          DeadPath -> True
+                                          _ -> False
+                  _ -> False
             return $
-              if shouldFail && bailed
+              if shouldFail && bailed && not explorationFailed
               then Right ()
-              else Left (vm, prettyCd)
+              else Left (vm', prettyCd)
           Unsat -> return $ Right ()
           Unk -> error "SMT timeout"
           DSat _ -> error "Unexpected DSat"
