@@ -4,7 +4,7 @@ The `hevm` project is an implementation of the Ethereum virtual machine (EVM) ma
 
 ### Usage
 
-Note: some `hevm` commands (`dapp-test`, `interactive`) assume the use of the `ds-test` framework for Solidity unit tests and the [`dapp` tool suite](https://github.com/dapphub/dapptools/tree/master/src/dapp), while others (`exec`, `symbolic`, ...) are available as standalone commands.
+Note: some `hevm` commands (`dapp-test`) assume the use of the `ds-test` framework for Solidity unit tests and the [`dapp` tool suite](https://github.com/dapphub/dapptools/tree/master/src/dapp), while others (`exec`, `symbolic`, ...) are available as standalone commands.
 
 ### Commands
 
@@ -19,7 +19,6 @@ Note: some `hevm` commands (`dapp-test`, `interactive`) assume the use of the `d
       exec            Execute a given program with specified env & calldata
       equivalence     Prove equivalence between two programs using symbolic execution
       dapp-test       Run unit tests
-      interactive     Browse and run unit tests interactively
 
       bc-test         Run an Ethereum Blockchain/GeneralState test
       merkle-test     Run a merkle test file and ensure the root matches
@@ -204,10 +203,6 @@ Usage: hevm dapp-test [--json-file STRING] [--dapp-root STRING] [--debug]
 ```
 
 Run any ds-test testing functions. Run under the hood whenever `dapp test` or `dapp debug` is called. If testing functions have been given arguments, they will be randomly instantiated and run `--fuzz-runs` number of times. In `--debug` mode, property based tests will not be available unless given specific arguments using `--replay`.
-
-### `hevm interactive`
-
-Equivalent to `hevm dapp-test [options] --debug`
 
 ### Environment Variables
 

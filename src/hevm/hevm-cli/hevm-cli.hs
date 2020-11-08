@@ -178,14 +178,6 @@ data Command w
       , maxIterations :: w ::: Maybe Integer            <?> "Number of times we may revisit a particular branching point"
       , solver        :: w ::: Maybe Text               <?> "Used SMT solver: z3 (default) or cvc4"
       }
-  | Interactive -- Browse & run unit tests interactively
-      { jsonFile :: w ::: Maybe String <?> "Filename or path to dapp build output (default: out/*.solc.json)"
-      , dappRoot :: w ::: Maybe String <?> "Path to dapp project root directory (default: . )"
-      , rpc      :: w ::: Maybe URL    <?> "Fetch state from a remote node"
-      , state    :: w ::: Maybe String <?> "Path to state repository"
-      , cache    :: w ::: Maybe String <?> "Path to rpc cache repository"
-      , replay   :: w ::: Maybe (Text, ByteString) <?> "Custom fuzz case to run/debug"
-      }
   | BcTest -- Run an Ethereum Blockhain/GeneralState test
       { file    :: w ::: String    <?> "Path to .json test file"
       , test    :: w ::: [String]  <?> "Test case filter - only run specified test method(s)"
@@ -319,12 +311,6 @@ main = do
             (False, Run) -> dappTest testOpts testFile (cache cmd)
             (False, Debug) -> liftIO $ EVM.TTY.main testOpts root testFile
             (True, _) -> liftIO $ dappCoverage testOpts (optsMode cmd) testFile
-    Interactive {} ->
-      withCurrentDirectory root $ do
-        runSMTWithTimeOut (solver cmd) (smttimeout cmd) $ query $ do
-          testFile <- liftIO $ findJsonFile (jsonFile cmd)
-          testOpts <- unitTestOptions cmd testFile
-          liftIO $ EVM.TTY.main testOpts root testFile
     Compliance {} ->
       case (group cmd) of
         Just "Blockchain" -> launchScript "/run-blockchain-tests" cmd
