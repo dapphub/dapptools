@@ -551,7 +551,7 @@ symRun opts@UnitTestOptions{..} concreteVm testName types = do
               then Right ()
               else Left (vm', prettyCd)
           Unsat -> return $ Right ()
-          Unk -> error "SMT timeout"
+          Unk -> return $ Left (vm', "SMT Timeout")
           DSat _ -> error "Unexpected DSat"
 
     if null $ lefts results
