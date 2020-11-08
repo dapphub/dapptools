@@ -569,7 +569,10 @@ symFailure UnitTestOptions {..} testName failures' = mconcat
       ,"  result:   " <> showRes vm
       ,"  calldata: " <> unpack cd
       , case verbose of
-          Just _ -> unpack $ indentLines 2 (showTraceTree dapp vm)
+          Just _ -> unlines
+            [ ""
+            , unpack $ indentLines 2 (showTraceTree dapp vm)
+            ]
           _ -> ""
       ]
 
