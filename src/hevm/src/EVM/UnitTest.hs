@@ -1,4 +1,5 @@
 {-# Language LambdaCase #-}
+{-# Language DataKinds #-}
 
 module EVM.UnitTest where
 
@@ -13,6 +14,7 @@ import EVM.Debug (srcMapCodePos)
 import EVM.Exec
 import EVM.Format
 import EVM.Solidity
+import EVM.SymExec
 import EVM.Types
 import EVM.VMTest
 import qualified EVM.Fetch
@@ -31,9 +33,13 @@ import Control.Monad.Par.Class (spawn_)
 import Control.Monad.Par.IO (runParIO)
 
 import qualified Data.ByteString.Lazy as BSLazy
+import qualified Data.SBV.Trans.Control as SBV (Query, getValue, resetAssertions)
+import qualified Data.SBV.Internals as SBV (State)
+import Data.Bifunctor     (first)
 import Data.ByteString    (ByteString)
 import Data.SBV    hiding (verbose)
-import Data.Either        (isRight)
+import Data.SBV.Control   (CheckSatResult(..), checkSat)
+import Data.Either        (isRight, lefts)
 import Data.Foldable      (toList)
 import Data.Map           (Map)
 import Data.Maybe         (fromMaybe, catMaybes, fromJust, isJust, fromMaybe, mapMaybe)
@@ -62,9 +68,12 @@ import qualified Data.Vector as Vector
 import Test.QuickCheck hiding (verbose)
 
 data UnitTestOptions = UnitTestOptions
-  { oracle     :: Query -> IO (EVM ())
+  { oracle     :: EVM.Query -> IO (EVM ())
   , verbose    :: Maybe Int
   , maxIter    :: Maybe Integer
+  , smtTimeout :: Maybe Integer
+  , smtState   :: Maybe SBV.State
+  , solver     :: Maybe Text
   , match      :: Text
   , fuzzRuns   :: Int
   , replay     :: Maybe (Text, BSLazy.ByteString)
@@ -129,7 +138,8 @@ initializeUnitTest UnitTestOptions { .. } = do
     env . contracts . ix addr . balance += w256 (testBalanceCreate testParams)
 
     -- Initialize the test contract
-    setupCall testParams "setUp()" emptyAbi
+    let cd = abiMethod "setUp()" emptyAbi
+    setupCall testParams (ConcreteBuffer cd, literal . num . BS.length $ cd)
     popTrace
     pushTrace (EntryTrace "initialize test")
 
@@ -151,7 +161,8 @@ execTest :: UnitTestOptions -> ABIMethod -> AbiValue -> Stepper Bool
 execTest UnitTestOptions { .. } method args = do
   -- Set up the call to the test method
   Stepper.evm $ do
-    setupCall testParams method args
+    let cd = abiMethod method args
+    setupCall testParams (ConcreteBuffer cd, literal . num . BS.length $ cd)
     pushTrace (EntryTrace method)
   -- Try running the test method
   Stepper.execFully >>= \case
@@ -169,7 +180,8 @@ checkFailures UnitTestOptions { .. } method args bailed = do
     -- Ask whether any assertions failed
     Stepper.evm $ do
       popTrace
-      setupCall testParams "failed()" args
+      let cd = abiMethod "failed()" args
+      setupCall testParams (ConcreteBuffer cd, literal . num . BS.length $ cd)
     res <- Stepper.execFully -- >>= \(ConcreteBuffer bs) -> (Stepper.decode AbiBoolType bs)
     case res of
       Right (ConcreteBuffer r) ->
@@ -181,7 +193,7 @@ checkFailures UnitTestOptions { .. } method args bailed = do
 fuzzTest :: UnitTestOptions -> Text -> [AbiType] -> VM -> Property
 fuzzTest opts sig types vm = forAllShow (genAbiValue (AbiTupleType $ Vector.fromList types)) (show . ByteStringS . encodeAbiValue)
   $ \args -> ioProperty $
-    fst <$> runStateT (interpret (oracle opts) (runUnitTest opts sig args)) vm
+    fst <$> runStateT (EVM.Stepper.interpret (oracle opts) (runUnitTest opts sig args)) vm
 
 tick :: Text -> IO ()
 tick x = Text.putStr x >> hFlush stdout
@@ -314,10 +326,10 @@ coverageForUnitTestContract
   :: UnitTestOptions
   -> Map Text SolcContract
   -> SourceCache
-  -> (Text, [(Text, [AbiType])])
+  -> (Text, [(Test, [AbiType])])
   -> IO (MultiSet SrcMap)
 coverageForUnitTestContract
-  opts@(UnitTestOptions {..}) contractMap sources (name, testNames) = do
+  opts@(UnitTestOptions {..}) contractMap _ (name, testNames) = do
 
   -- Look for the wanted contract by name from the Solidity info
   case preview (ix name) contractMap of
@@ -336,15 +348,15 @@ coverageForUnitTestContract
 
       -- Define the thread spawner for test cases
       let
-        runOne (testName, _) = spawn_ . liftIO $ do
-          (x, (_, cov)) <-
+        runOne' (test, _) = spawn_ . liftIO $ do
+          (_, (_, cov)) <-
             runStateT
-              (interpretWithCoverage opts (runUnitTest opts testName emptyAbi))
+              (interpretWithCoverage opts (runUnitTest opts (extractSig test) emptyAbi))
               (vm1, mempty)
           pure cov
       -- Run all the test cases in parallel and gather their coverages
       covs <-
-        runParIO (mapM runOne testNames >>= mapM Par.get)
+        runParIO (mapM runOne' testNames >>= mapM Par.get)
 
       -- Sum up all the coverage counts
       let cov2 = MultiSet.unions (cov1 : covs)
@@ -354,14 +366,13 @@ coverageForUnitTestContract
 runUnitTestContract
   :: UnitTestOptions
   -> Map Text SolcContract
-  -> SourceCache
-  -> (Text, [(Text, [AbiType])])
-  -> IO [(Bool, VM)]
+  -> (Text, [(Test, [AbiType])])
+  -> SBV.Query [(Bool, VM)]
 runUnitTestContract
-  opts@(UnitTestOptions {..}) contractMap sources (name, testSigs) = do
+  opts@(UnitTestOptions {..}) contractMap (name, testSigs) = do
 
   -- Print a header
-  putStrLn $ "Running " ++ show (length testSigs) ++ " tests for "
+  liftIO $ putStrLn $ "Running " ++ show (length testSigs) ++ " tests for "
     ++ unpack name
 
   -- Look for the wanted contract by name from the Solidity info
@@ -374,25 +385,25 @@ runUnitTestContract
       -- Construct the initial VM and begin the contract's constructor
       let vm0 = initialUnitTestVm opts theContract
       vm1 <-
-        execStateT
-          (interpret oracle
+        liftIO $ execStateT
+          (EVM.Stepper.interpret oracle
             (Stepper.enter name >> initializeUnitTest opts))
           vm0
 
       case view result vm1 of
         Nothing -> error "internal error: setUp() did not end with a result"
-        Just (VMFailure _) -> do
+        Just (VMFailure _) -> liftIO $ do
           Text.putStrLn "\x1b[31m[FAIL]\x1b[0m setUp()"
           tick "\n"
           tick $ failOutput vm1 opts "setUp()"
           pure [(False, vm1)]
         Just (VMSuccess _) -> do
           let
-            runCache :: ([(Either Text Text, VM)], VM) -> (Text, [AbiType])
-                        -> IO ([(Either Text Text, VM)], VM)
-            runCache (results, vm) (testName, types) = do
-              (t, r, vm') <- runTest opts vm (testName, types)
-              Text.putStrLn t
+            runCache :: ([(Either Text Text, VM)], VM) -> (Test, [AbiType])
+                        -> SBV.Query ([(Either Text Text, VM)], VM)
+            runCache (results, vm) (test, types) = do
+              (t, r, vm') <- runTest opts vm (test, types)
+              liftIO $ Text.putStrLn t
               let vmCached = vm & set (cache . fetched) (view (cache . fetched) vm')
               pure (((r, vm'): results), vmCached)
 
@@ -403,17 +414,17 @@ runUnitTestContract
           let running = [x | (Right x, _) <- details]
           let bailing = [x | (Left  x, _) <- details]
 
-          tick "\n"
-          tick (Text.unlines (filter (not . Text.null) running))
-          tick (Text.unlines (filter (not . Text.null) bailing))
+          liftIO $ do
+            tick "\n"
+            tick (Text.unlines (filter (not . Text.null) running))
+            tick (Text.unlines (filter (not . Text.null) bailing))
 
           pure [(isRight r, vm) | (r, vm) <- details]
 
 
-
-runTest :: UnitTestOptions -> VM -> (Text, [AbiType]) -> IO (Text, Either Text Text, VM)
-runTest opts@UnitTestOptions{..} vm (testName, []) = runOne opts vm testName emptyAbi
-runTest opts@UnitTestOptions{..} vm (testName, types) = case replay of
+runTest :: UnitTestOptions -> VM -> (Test, [AbiType]) -> SBV.Query (Text, Either Text Text, VM)
+runTest opts@UnitTestOptions{..} vm (ConcreteTest testName, []) = liftIO $ runOne opts vm testName emptyAbi
+runTest opts@UnitTestOptions{..} vm (ConcreteTest testName, types) = liftIO $ case replay of
   Nothing ->
     fuzzRun opts vm testName types
   Just (sig, callData) ->
@@ -421,18 +432,19 @@ runTest opts@UnitTestOptions{..} vm (testName, types) = case replay of
     then runOne opts vm testName $
       decodeAbiValue (AbiTupleType (Vector.fromList types)) callData
     else fuzzRun opts vm testName types
+runTest opts vm (SymbolicTest testName, types) = symRun opts vm testName types
 
--- | Define the thread spawner for normal test cases 
+-- | Define the thread spawner for normal test cases
 runOne :: UnitTestOptions -> VM -> ABIMethod -> AbiValue -> IO (Text, Either Text Text, VM)
 runOne opts@UnitTestOptions{..} vm testName args = do
   let argInfo = pack (if args == emptyAbi then "" else " with arguments: " <> show args)
   (bailed, vm') <-
     runStateT
-      (interpret oracle (execTest opts testName args))
+      (EVM.Stepper.interpret oracle (execTest opts testName args))
       vm
   (success, vm'') <-
     runStateT
-      (interpret oracle (checkFailures opts testName args bailed)) vm'
+      (EVM.Stepper.interpret oracle (checkFailures opts testName args bailed)) vm'
   if success
   then
      let gasSpent = num (testGasCall testParams) - view (state . gas) vm'
@@ -476,7 +488,7 @@ fuzzRun opts@UnitTestOptions{..} vm testName types = do
           ppOutput = pack $ show abiValue
       in do
         -- Run the failing test again to get a proper trace
-        vm' <- execStateT (interpret oracle (runUnitTest opts testName abiValue)) vm
+        vm' <- execStateT (EVM.Stepper.interpret oracle (runUnitTest opts testName abiValue)) vm
         pure ("\x1b[31m[FAIL]\x1b[0m "
                <> testName <> ". Counterexample: " <> ppOutput
                <> "\nRun:\n dapp test --replay '(\"" <> testName <> "\",\""
@@ -491,7 +503,121 @@ fuzzRun opts@UnitTestOptions{..} vm testName types = do
               , vm
               )
 
+-- | Define the thread spawner for symbolic tests
+-- TODO: return a list of VM's
+symRun :: UnitTestOptions -> VM -> Text -> [AbiType] -> SBV.Query (Text, Either Text Text, VM)
+symRun opts@UnitTestOptions{..} concreteVm testName types = do
+    SBV.resetAssertions
+    let vm = symbolify concreteVm
+    cd <- first SymbolicBuffer <$> symCalldata testName types []
+    let model = view (env . storageModel) vm
+        shouldFail = "proveFail" `isPrefixOf` testName
 
+    -- get all posible postVMs for the test method
+    allPaths <- fst <$> runStateT
+        (EVM.SymExec.interpret
+          (EVM.Fetch.oracle smtState Nothing model False)
+          maxIter
+          (execSymTest opts testName cd))
+        vm
+    results <- forM allPaths $
+      -- If the vm execution succeeded, check if the vm is reachable,
+      -- and if any ds-test assertions were triggered
+      -- Report a failure depending on the prefix of the test name
+
+      -- If the vm execution failed, check if the vm is reachable, and if so,
+      -- report a failure unless the test is supposed to fail.
+
+      \(bailed, vm') -> do
+        SBV.resetAssertions
+        constrain $ sAnd (fst <$> view EVM.constraints vm')
+        unless bailed $
+          case view result vm' of
+            Just (VMSuccess (SymbolicBuffer buf)) ->
+              constrain $ litBytes (encodeAbiValue $ AbiBool $ not shouldFail) .== buf
+            _ -> error "unexpected return value"
+        checkSat >>= \case
+          Sat -> do
+            prettyCd <- prettyCalldata cd testName types
+            let explorationFailed = case (view result vm') of
+                  Just (VMFailure e) -> case e of
+                                          NotUnique -> True
+                                          UnexpectedSymbolicArg -> True
+                                          DeadPath -> True
+                                          _ -> False
+                  _ -> False
+            return $
+              if shouldFail && bailed && not explorationFailed
+              then Right ()
+              else Left (vm', prettyCd)
+          Unsat -> return $ Right ()
+          Unk -> return $ Left (vm', "SMT Timeout")
+          DSat _ -> error "Unexpected DSat"
+
+    if null $ lefts results
+    then
+      return ("\x1b[32m[PASS]\x1b[0m " <> testName, Right "", vm)
+    else
+      return ("\x1b[31m[FAIL]\x1b[0m " <> testName, Left $ symFailure opts testName (lefts results), vm)
+
+symFailure :: UnitTestOptions -> Text -> [(VM, Text)] -> Text
+symFailure UnitTestOptions {..} testName failures' = mconcat
+  [ "Failure: "
+  , testName
+  , "\n\n"
+  , intercalate "\n" $ indentLines 2 . mkMsg <$> failures'
+  ]
+  where
+    showRes vm = let Just res = view result vm
+                 in prettyvmresult res
+    mkMsg (vm, cd) = pack $ unlines
+      ["Counter Example:"
+      ,""
+      ,"  result:   " <> showRes vm
+      ,"  calldata: " <> unpack cd
+      , case verbose of
+          Just _ -> unlines
+            [ ""
+            , unpack $ indentLines 2 (showTraceTree dapp vm)
+            ]
+          _ -> ""
+      ]
+
+prettyCalldata :: (Buffer, SWord 32) -> Text -> [AbiType]-> SBV.Query Text
+prettyCalldata (buffer, cdlen) sig types = do
+  cdlen' <- num <$> SBV.getValue cdlen
+  calldatainput <- case buffer of
+    SymbolicBuffer cd -> mapM (SBV.getValue . fromSized) (take cdlen' cd) <&> BS.pack
+    ConcreteBuffer cd -> return $ BS.take cdlen' cd
+  pure $ (head (Text.splitOn "(" sig)) <>
+           (Text.pack $ show (decodeAbiValue
+                  (AbiTupleType (Vector.fromList types))
+                  (BSLazy.fromStrict (BS.drop 4 calldatainput))))
+
+execSymTest :: UnitTestOptions -> ABIMethod -> (Buffer, SWord 32) -> Stepper (Bool, VM)
+execSymTest opts@UnitTestOptions{ .. } method cd = do
+  -- Set up the call to the test method
+  Stepper.evm $ do
+    setupCall testParams cd
+    pushTrace (EntryTrace method)
+  -- Try running the test method
+  Stepper.runFully >>= \vm' -> case view result vm' of
+    Just (VMFailure err) ->
+      -- If we failed, put the error in the trace.
+      Stepper.evm (pushTrace (ErrorTrace err)) >> (pure (True, vm'))
+    Just (VMSuccess _) -> do
+      postVm <- checkSymFailures opts
+      pure (False, postVm)
+    Nothing -> error "Internal Error: execSymTest: vm has not completed execution!"
+
+checkSymFailures :: UnitTestOptions -> Stepper VM
+checkSymFailures UnitTestOptions { .. } = do
+  -- Ask whether any assertions failed
+  Stepper.evm $ do
+    popTrace
+    let cd = abiMethod "failed()" emptyAbi
+    setupCall testParams (ConcreteBuffer cd, literal . num . BS.length $ cd)
+  Stepper.runFully
 
 indentLines :: Int -> Text -> Text
 indentLines n s =
@@ -575,12 +701,12 @@ formatTestLog events (Log _ args (topic:_)) =
 word32Bytes :: Word32 -> ByteString
 word32Bytes x = BS.pack [byteAt x (3 - i) | i <- [0..3]]
 
-setupCall :: TestVMParams -> Text -> AbiValue -> EVM ()
-setupCall TestVMParams{..} sig args = do
+setupCall :: TestVMParams -> (Buffer, SWord 32) -> EVM ()
+setupCall TestVMParams{..} cd = do
   resetState
   assign (tx . isCreate) False
   loadContract testAddress
-  assign (state . calldata) (ConcreteBuffer $ abiMethod sig args, literal . num . BS.length $ abiMethod sig args)
+  assign (state . calldata) cd
   assign (state . caller) (litAddr testCaller)
   assign (state . gas) (w256 testGasCall)
   origin' <- fromMaybe (initialContract (RuntimeCode mempty)) <$> use (env . contracts . at testOrigin)
@@ -604,7 +730,7 @@ initialUnitTestVm (UnitTestOptions {..}) theContract =
            , vmoptGaslimit = testGasCreate
            , vmoptCoinbase = testCoinbase
            , vmoptNumber = testNumber
-           , vmoptTimestamp = litWord $ w256 $ testTimestamp
+           , vmoptTimestamp = litWord $ w256 testTimestamp
            , vmoptBlockGaslimit = testGaslimit
            , vmoptGasprice = testGasprice
            , vmoptMaxCodeSize = testMaxCodeSize
@@ -612,7 +738,7 @@ initialUnitTestVm (UnitTestOptions {..}) theContract =
            , vmoptSchedule = FeeSchedule.istanbul
            , vmoptChainId = testChainId
            , vmoptCreate = True
-           , vmoptStorageModel = ConcreteS
+           , vmoptStorageModel = ConcreteS -- TODO: support RPC
            }
     creator =
       initialContract (RuntimeCode mempty)
@@ -627,6 +753,16 @@ maybeM def f mayb = do
   may <- mayb
   return $ maybe def f may
 
+-- | takes a concrete VM and makes all storage symbolic
+symbolify :: VM -> VM
+symbolify vm =
+  vm & over (env . contracts . each . storage) mkSymStorage
+     & set (env . storageModel) InitialS
+  where
+    mkSymStorage :: Storage -> Storage
+    mkSymStorage (Symbolic _) = error "should not happen"
+    mkSymStorage (Concrete s) = Symbolic $ sListArray 0 [(literal $ toSizzle k, v) | (C _ k, S _ v) <- Map.toList s]
+
 getParametersFromEnvironmentVariables :: Maybe Text -> IO TestVMParams
 getParametersFromEnvironmentVariables rpc = do
   block' <- maybeM EVM.Fetch.Latest (EVM.Fetch.BlockNumber . read) (lookupEnv "DAPP_TEST_NUMBER")
@@ -635,9 +771,9 @@ getParametersFromEnvironmentVariables rpc = do
     case rpc of
       Nothing  -> return (0,0,0,0)
       Just url -> EVM.Fetch.fetchBlockFrom block' url >>= \case
-        Nothing -> error $ "Could not fetch block"
+        Nothing -> error "Could not fetch block"
         Just EVM.Block{..} -> return (  _coinbase
-                                      , wordValue $ forceLit $ _timestamp
+                                      , wordValue $ forceLit _timestamp
                                       , wordValue _number
                                       , wordValue _difficulty
                                       )

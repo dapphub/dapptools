@@ -13,8 +13,8 @@ import Brick.Widgets.List
 import EVM
 import EVM.ABI (abiTypeSolidity, decodeAbiValue, AbiType(..), emptyAbi)
 import EVM.Symbolic (SymWord(..))
-import EVM.SymExec (maxIterationsReached)
-import EVM.Dapp (DappInfo, dappInfo)
+import EVM.SymExec (maxIterationsReached, symCalldata)
+import EVM.Dapp (DappInfo, dappInfo, Test, extractSig, Test(..))
 import EVM.Dapp (dappUnitTests, unitTestMethods, dappSolcByName, dappSolcByHash, dappSources)
 import EVM.Dapp (dappAstSrcMap)
 import EVM.Debug
@@ -24,8 +24,7 @@ import EVM.Hexdump (prettyHex)
 import EVM.Op
 import EVM.Solidity
 import EVM.Types hiding (padRight)
-import EVM.UnitTest (UnitTestOptions (..))
-import EVM.UnitTest (initialUnitTestVm, initializeUnitTest, runUnitTest)
+import EVM.UnitTest
 import EVM.StorageLayout
 
 import EVM.Stepper (Stepper)
@@ -35,19 +34,22 @@ import qualified Control.Monad.Operational as Operational
 import EVM.Fetch (Fetcher)
 
 import Control.Lens
+import Control.Monad.Trans.Reader
 import Control.Monad.State.Strict hiding (state)
 
 import Data.Aeson.Lens
+import Data.Bifunctor (first)
 import Data.ByteString (ByteString)
 import Data.Maybe (isJust, fromJust, fromMaybe)
 import Data.Map (Map, insert, lookupLT, singleton, filter)
 import Data.Monoid ((<>))
 import Data.Text (Text, pack)
 import Data.Text.Encoding (decodeUtf8)
-import Data.List (sort, lookup)
+import Data.List (sort, find)
 import Data.Version (showVersion)
 import Data.SBV hiding (solver)
 
+import qualified Data.SBV.Internals as SBV
 import qualified Data.ByteString as BS
 import qualified Data.Map as Map
 import qualified Data.Text as Text
@@ -152,9 +154,19 @@ interpret mode =
     eval (action Operational.:>>= k) =
       case action of
 
+        Stepper.Run -> do
+          -- Have we reached the final result of this action?
+          use (uiVm . result) >>= \case
+            Just _ -> do
+              -- Yes, proceed with the next action.
+              vm <- use uiVm
+              interpret mode (k vm)
+            Nothing -> do
+              -- No, keep performing the current action
+              keepExecuting mode (Stepper.run >>= k)
+
         -- Stepper wants to keep executing?
         Stepper.Exec -> do
-
           -- Have we reached the final result of this action?
           use (uiVm . result) >>= \case
             Just r ->
@@ -162,29 +174,7 @@ interpret mode =
               interpret mode (k r)
             Nothing -> do
               -- No, keep performing the current action
-              let restart = Stepper.exec >>= k
-
-              case mode of
-                Step 0 -> do
-                  -- We come here when we've continued while stepping,
-                  -- either from a query or from a return;
-                  -- we should pause here and wait for the user.
-                  pure (Continue restart)
-
-                Step i -> do
-                  -- Run one instruction and recurse
-                  stepOneOpcode restart
-                  interpret (Step (i - 1)) restart
-
-                StepUntil p -> do
-                  vm <- use uiVm
-                  case p vm of
-                    True ->
-                      interpret (Step 0) restart
-                    False -> do
-                      -- Run one instruction and recurse
-                      stepOneOpcode restart
-                      interpret (StepUntil p) restart
+              keepExecuting mode (Stepper.exec >>= k)
 
         -- Stepper is waiting for user input from a query
         Stepper.Ask (PleaseChoosePath _ cont) -> do
@@ -206,6 +196,33 @@ interpret mode =
           assign uiVm vm1
           interpret mode (Stepper.exec >> (k r))
 
+keepExecuting :: (?fetcher :: Fetcher
+              ,   ?maxIter :: Maybe Integer)
+              => StepMode
+              -> Operational.ProgramT Stepper.Action Identity a
+              -> StateT UiVmState IO (Continuation a)
+keepExecuting mode restart = case mode of
+  Step 0 -> do
+    -- We come here when we've continued while stepping,
+    -- either from a query or from a return;
+    -- we should pause here and wait for the user.
+    pure (Continue restart)
+
+  Step i -> do
+    -- Run one instruction and recurse
+    stepOneOpcode restart
+    interpret (Step (i - 1)) restart
+
+  StepUntil p -> do
+    vm <- use uiVm
+    case p vm of
+      True ->
+        interpret (Step 0) restart
+      False -> do
+        -- Run one instruction and recurse
+        stepOneOpcode restart
+        interpret (StepUntil p) restart
+
 isUnitTestContract :: Text -> DappInfo -> Bool
 isUnitTestContract name dapp =
   elem name (map fst (view dappUnitTests dapp))
@@ -224,6 +241,9 @@ runFromVM maxIter' dappinfo oracle' vm = do
       { oracle            = oracle'
       , verbose           = Nothing
       , maxIter           = maxIter'
+      , smtTimeout        = Nothing
+      , smtState          = Nothing
+      , solver            = Nothing
       , match             = ""
       , fuzzRuns          = 1
       , replay            = error "irrelevant"
@@ -261,12 +281,15 @@ initUiVmState vm0 opts script =
 
 -- filters out fuzztests, unless they have
 -- explicitly been given an argument by `replay`
-concreteTests :: UnitTestOptions -> (Text, [(Text, [AbiType])]) -> [(Text, Text)]
-concreteTests UnitTestOptions{..} (contractname, tests) = case replay of
-  Nothing -> [(contractname, fst x) | x <- tests,
-                                      null $ snd x]
-  Just (sig, _) -> [(contractname, fst x) | x <- tests,
-                                            null (snd x) || fst x == sig]
+debuggableTests :: UnitTestOptions -> (Text, [(Test, [AbiType])]) -> [(Text, Text)]
+debuggableTests UnitTestOptions{..} (contractname, tests) = case replay of
+  Nothing -> [(contractname, extractSig $ fst x) | x <- tests, not $ isFuzzTest x]
+  Just (sig, _) -> [(contractname, extractSig $ fst x) | x <- tests, not $ isFuzzTest x || (extractSig $ fst x) == sig]
+
+isFuzzTest :: (Test, [AbiType]) -> Bool
+isFuzzTest (SymbolicTest _, _) = False
+isFuzzTest (ConcreteTest _, []) = False
+isFuzzTest (ConcreteTest _, _) = True
 
 main :: UnitTestOptions -> FilePath -> FilePath -> IO ()
 main opts root jsonFilePath =
@@ -283,7 +306,7 @@ main opts root jsonFilePath =
                   TestPickerPane
                   (Vec.fromList
                    (concatMap
-                    (concreteTests opts)
+                    (debuggableTests opts)
                     (view dappUnitTests dapp)))
                   1
             , _testPickerDapp = dapp
@@ -357,7 +380,7 @@ appEvent st@(ViewVm s) (VtyEvent (V.EvKey V.KEsc [])) =
   let opts = view uiTestOpts s
       dapp' = dapp (view uiTestOpts s)
       tests = concatMap
-                (concreteTests opts)
+                (debuggableTests opts)
                 (view dappUnitTests dapp')
   in case tests of
     [] -> halt st
@@ -561,10 +584,9 @@ appEvent s (VtyEvent (V.EvKey V.KEsc [])) =
 appEvent (ViewPicker s) (VtyEvent (V.EvKey V.KEnter [])) =
   case listSelectedElement (view testPickerList s) of
     Nothing -> error "nothing selected"
-    Just (_, x) ->
-      continue . ViewVm $
-        initialUiVmStateForTest (view testOpts s) x
---          (view testPickerDapp s) x
+    Just (_, x) -> do
+      initVm <- liftIO $ initialUiVmStateForTest (view testOpts s) x
+      continue . ViewVm $ initVm
 
 -- UnitTest Picker: (main) - render list
 appEvent (ViewPicker s) (VtyEvent e) = do
@@ -608,23 +630,29 @@ app opts =
 initialUiVmStateForTest
   :: UnitTestOptions
   -> (Text, Text)
-  -> UiVmState
-initialUiVmStateForTest opts@UnitTestOptions{..} (theContractName, theTestName) =
-  ui
+  -> IO UiVmState
+initialUiVmStateForTest opts@UnitTestOptions{..} (theContractName, theTestName) = do
+  let state' = fromMaybe (error "Internal Error: missing smtState") smtState
+  symArgs <- flip runReaderT state' $ SBV.runQueryT $ symCalldata theTestName types []
+  let script = do
+        Stepper.evm . pushTrace . EntryTrace $
+          "test " <> theTestName <> " (" <> theContractName <> ")"
+        initializeUnitTest opts
+        case test of
+          ConcreteTest _ -> do
+            let args = case replay of
+                         Nothing -> emptyAbi
+                         Just (sig, callData) ->
+                           if theTestName == sig
+                           then decodeAbiValue (AbiTupleType (Vec.fromList types)) callData
+                           else emptyAbi
+            void (runUnitTest opts theTestName args)
+          SymbolicTest _ -> do
+            Stepper.evm $ modify symbolify
+            void (execSymTest opts theTestName (first SymbolicBuffer symArgs))
+  pure $ initUiVmState vm0 opts script
   where
-    Just typesig = lookup theTestName (unitTestMethods testContract)
-    args = case replay of
-      Nothing -> emptyAbi
-      Just (sig, callData) ->
-        if theTestName == sig
-        then decodeAbiValue (AbiTupleType (Vec.fromList typesig)) callData
-        else emptyAbi
-    script = do
-      Stepper.evm . pushTrace . EntryTrace $
-        "test " <> theTestName <> " (" <> theContractName <> ")"
-      initializeUnitTest opts
-      void (runUnitTest opts theTestName args)
-    ui = initUiVmState vm0 opts script
+    Just (test, types) = find (\(test',_) -> extractSig test' == theTestName) $ unitTestMethods testContract
     Just testContract =
       view (dappSolcByName . at theContractName) dapp
     vm0 =

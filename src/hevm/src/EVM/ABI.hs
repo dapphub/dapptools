@@ -52,7 +52,6 @@ module EVM.ABI
   , selector
   ) where
 
-import EVM.Keccak (abiKeccak)
 import EVM.Types
 
 import Control.Monad      (replicateM, replicateM_, forM_, void)
@@ -183,7 +182,7 @@ getAbi t = label (Text.unpack (abiTypeSolidity t)) $
 
     AbiIntType n   -> asUInt n (AbiInt n)
     AbiAddressType -> asUInt 256 AbiAddress
-    AbiBoolType    -> asUInt 256 (AbiBool . (== (1 :: Int)))
+    AbiBoolType    -> asUInt 256 (AbiBool . (> (0 :: Integer)))
 
     AbiBytesType n ->
       AbiBytes n <$> getBytesWith256BitPadding n

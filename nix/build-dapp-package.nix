@@ -23,6 +23,8 @@ in
   , solc ? pkgs.solc
   , test-hevm ? pkgs.dapp2.test-hevm
   , solcFlags ? ""
+  , shouldFail ? false
+  , hevmFlags ? ""
   , doCheck ? true
   , extract ? false
   , ... }@args:
@@ -75,9 +77,12 @@ in
         fi
       '';
 
-      checkPhase = ''
-        DAPP_OUT=out dapp2-test-hevm
-      '';
+      checkPhase = let
+        cmd = "DAPP_OUT=out dapp2-test-hevm $hevmFlags";
+      in
+        if shouldFail
+          then "${cmd} && exit 1 || echo 0"
+          else cmd;
 
       installPhase = ''
         mkdir -p $out/dapp/$name

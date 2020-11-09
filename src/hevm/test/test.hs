@@ -509,6 +509,49 @@ main = defaultMain $ testGroup "hevm"
                                            set EVM.storage (Symbolic store)))
             verify vm Nothing Nothing (Just checkAssertions)
           putStrLn $ "found counterexample:"
+      ,
+         testCase "calling unique contracts (read from storage)" $ do
+          let code =
+                [i|
+                  contract C {
+                    uint x;
+                    A a;
+
+                    function call_A() public {
+                      a = new A();
+                      // should fail since a.x() can be anything
+                      assert(a.x() == x);
+                    }
+                  }
+                  contract A {
+                    uint public x;
+                  }
+                |]
+          Just c <- solcRuntime "C" code
+          Right cex <- runSMT $ query $ do
+            vm0 <- abstractVM (Just ("call_A()", [])) [] c SymbolicS
+            let vm = vm0 & set (state . callvalue) 0
+            verify vm Nothing Nothing (Just checkAssertions)
+          putStrLn $ "found counterexample:"
+      ,
+
+         testCase "keccak concrete and sym agree" $ do
+          let code =
+                [i|
+                  contract C {
+                    function kecc(uint x) public {
+                      if (x == 0) {
+                         assert(keccak256(abi.encode(x)) == keccak256(abi.encode(0)));
+                      }
+                    }
+                  }
+                |]
+          Just c <- solcRuntime "C" code
+          Left _ <- runSMT $ query $ do
+            vm0 <- abstractVM (Just ("kecc(uint256)", [AbiUIntType 256])) [] c SymbolicS
+            let vm = vm0 & set (state . callvalue) 0
+            verify vm Nothing Nothing (Just checkAssertions)
+          putStrLn $ "found counterexample:"
 
     ]
   , testGroup "Equivalence checking"

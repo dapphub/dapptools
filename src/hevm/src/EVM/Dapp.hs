@@ -5,19 +5,20 @@ module EVM.Dapp where
 import EVM (Trace, traceCodehash, traceOpIx)
 import EVM.ABI (Event, AbiType)
 import EVM.Debug (srcMapCodePos)
-import EVM.Keccak (abiKeccak)
 import EVM.Solidity (SolcContract, CodeType (..), SourceCache, SrcMap)
 import EVM.Solidity (contractName, methodInputs)
 import EVM.Solidity (runtimeCodehash, creationCodehash, abiMap)
 import EVM.Solidity (runtimeSrcmap, creationSrcmap, eventMap)
 import EVM.Solidity (methodSignature, contractAst, astIdMap, astSrcMap)
-import EVM.Types (W256)
+import EVM.Types (W256, abiKeccak)
 
 import Data.Aeson (Value)
-import Data.Text (Text, isPrefixOf, pack)
+import Data.Bifunctor (first)
+import Data.Text (Text, isPrefixOf, pack, unpack)
 import Data.Text.Encoding (encodeUtf8)
 import Data.Map (Map)
 import Data.Monoid ((<>))
+import Data.Maybe (isJust, fromJust)
 import Data.Word (Word32)
 
 import Control.Applicative ((<$>))
@@ -31,13 +32,18 @@ data DappInfo = DappInfo
   , _dappSolcByName :: Map Text SolcContract
   , _dappSolcByHash :: Map W256 (CodeType, SolcContract)
   , _dappSources    :: SourceCache
-  , _dappUnitTests  :: [(Text, [(Text, [AbiType])])]
+  , _dappUnitTests  :: [(Text, [(Test, [AbiType])])]
   , _dappEventMap   :: Map W256 Event
   , _dappAstIdMap   :: Map Int Value
   , _dappAstSrcMap  :: SrcMap -> Maybe Value
   }
 
+data Test = ConcreteTest Text | SymbolicTest Text
+
 makeLenses ''DappInfo
+
+instance Show Test where
+  show t = unpack $ extractSig t
 
 dappInfo
   :: FilePath -> Map Text SolcContract -> SourceCache -> DappInfo
@@ -48,7 +54,7 @@ dappInfo root solcByName sources =
 
   in DappInfo
     { _dappRoot = root
-    , _dappUnitTests = findUnitTests ("test" `isPrefixOf`) solcs
+    , _dappUnitTests = findUnitTests solcs
     , _dappSources = sources
     , _dappSolcByName = solcByName
     , _dappSolcByHash =
@@ -70,23 +76,31 @@ dappInfo root solcByName sources =
 unitTestMarkerAbi :: Word32
 unitTestMarkerAbi = abiKeccak (encodeUtf8 "IS_TEST()")
 
-findUnitTests :: (Text -> Bool) -> ([SolcContract] -> [(Text, [(Text, [AbiType])])])
-findUnitTests matcher =
+findUnitTests :: ([SolcContract] -> [(Text, [(Test, [AbiType])])])
+findUnitTests =
   concatMap $ \c ->
     case preview (abiMap . ix unitTestMarkerAbi) c of
       Nothing -> []
       Just _  ->
-        let testNames = unitTestMethodsFiltered matcher c
+        let testNames = unitTestMethods c
         in ([(view contractName c, testNames) | not (null testNames)])
 
-unitTestMethodsFiltered :: (Text -> Bool) -> (SolcContract -> [(Text, [AbiType])])
-unitTestMethodsFiltered matcher c = filter (matcher . fst) $ unitTestMethods c
-
-unitTestMethods :: SolcContract -> [(Text, [AbiType])]
+unitTestMethods :: SolcContract -> [(Test, [AbiType])]
 unitTestMethods = view abiMap
                   >>> Map.elems
-                  >>> map (\f -> (view methodSignature f,
-                                  snd <$> view methodInputs f))
+                  >>> map (\f -> (mkTest $ view methodSignature f, snd <$> view methodInputs f))
+                  >>> filter (isJust . fst)
+                  >>> fmap (first fromJust)
+
+mkTest :: Text -> Maybe Test
+mkTest sig
+  | "test" `isPrefixOf` sig = Just (ConcreteTest sig)
+  | "prove" `isPrefixOf` sig = Just (SymbolicTest sig)
+  | otherwise = Nothing
+
+extractSig :: Test -> Text
+extractSig (ConcreteTest sig) = sig
+extractSig (SymbolicTest sig) = sig
 
 traceSrcMap :: DappInfo -> Trace -> Maybe SrcMap
 traceSrcMap dapp trace =

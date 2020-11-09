@@ -14,8 +14,9 @@ import qualified EVM.Facts.Git as Git
 import qualified EVM.Stepper
 import qualified EVM.VMTest    as VMTest
 
+import Data.SBV
+import Data.SBV.Trans.Control
 import Control.Monad.State.Strict (execStateT)
-import Data.Text (isPrefixOf)
 
 import qualified Data.Map as Map
 import qualified Data.ByteString.Lazy   as LazyByteString
@@ -58,9 +59,9 @@ ghciTest root path state =
         }
     readSolc path >>=
       \case
-        Just (contractMap, cache) -> do
-          let unitTests = findUnitTests ("test" `isPrefixOf`) (Map.elems contractMap)
-          results <- concatMapM (runUnitTestContract opts contractMap cache) unitTests
+        Just (contractMap, _) -> do
+          let unitTests = findUnitTests (Map.elems contractMap)
+          results <- runSMT $ query $ concatMapM (runUnitTestContract opts contractMap) unitTests
           let (passing, _) = unzip results
           pure passing
 

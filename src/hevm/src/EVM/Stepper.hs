@@ -6,6 +6,7 @@ module EVM.Stepper
   , Stepper
   , exec
   , execFully
+  , run
   , runFully
   , wait
   , ask

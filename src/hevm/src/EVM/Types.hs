@@ -13,11 +13,13 @@ import Data.Aeson (FromJSON (..), (.:))
 import Data.Aeson (FromJSONKey (..), FromJSONKeyFunction (..))
 #endif
 
+import Crypto.Hash
 import Data.SBV
 import Data.Kind
 import Data.Monoid ((<>))
 import Data.Bifunctor (first)
 import Data.Char
+import Data.Bifunctor (bimap)
 import Data.ByteString (ByteString)
 import Data.ByteString.Base16 as BS16
 import Data.ByteString.Builder (byteStringHex, toLazyByteString)
@@ -29,13 +31,15 @@ import Data.Maybe (fromMaybe)
 import Data.Word (Word8)
 import Numeric (readHex, showHex)
 import Options.Generic
+import Control.Arrow ((>>>))
 
-import qualified Data.Aeson          as JSON
-import qualified Data.Aeson.Types    as JSON
-import qualified Data.ByteString     as BS
-import qualified Data.Serialize.Get  as Cereal
-import qualified Data.Text           as Text
-import qualified Data.Text.Encoding  as Text
+import qualified Data.ByteArray       as BA
+import qualified Data.Aeson           as JSON
+import qualified Data.Aeson.Types     as JSON
+import qualified Data.ByteString      as BS
+import qualified Data.Serialize.Get   as Cereal
+import qualified Data.Text            as Text
+import qualified Data.Text.Encoding   as Text
 import qualified Text.Read
 
 -- Some stuff for "generic programming", needed to create Word512
@@ -134,14 +138,22 @@ instance Read Addr where
   readsPrec _ s = readHex s
 
 instance Show Addr where
-  showsPrec _ s a =
-    let h = showHex s a
-    in "0x" ++ replicate (40 - length h) '0' ++ h
+  showsPrec _ addr next =
+    let hex = showHex addr next
+        str = replicate (40 - length hex) '0' ++ hex
+    in "0x" ++ toChecksumAddress str
 
 instance Show SAddr where
   show (SAddr a) = case unliteral a of
     Nothing -> "<symbolic addr>"
-    Just c -> show c
+    Just c -> show $ fromSizzle c
+
+-- https://eips.ethereum.org/EIPS/eip-55
+toChecksumAddress :: String -> String
+toChecksumAddress addr = zipWith transform nibbles addr
+  where
+    nibbles = unpackNibbles . BS.take 20 $ keccakBytes (Char8.pack addr)
+    transform nibble = if nibble >= 8 then toUpper else id
 
 strip0x :: ByteString -> ByteString
 strip0x bs = if "0x" `Char8.isPrefixOf` bs then Char8.drop 2 bs else bs
@@ -155,7 +167,7 @@ instance Show ByteStringS where
         Text.decodeUtf8 . toStrict . toLazyByteString . byteStringHex
 
 instance Read ByteStringS where
-    readsPrec _ ('0':'x':x) = [(ByteStringS $ fst bytes, Text.unpack . Text.decodeUtf8 $ snd bytes)]
+    readsPrec _ ('0':'x':x) = [bimap ByteStringS (Text.unpack . Text.decodeUtf8) bytes]
        where bytes = BS16.decode (Text.encodeUtf8 (Text.pack x))
     readsPrec _ _ = []
 
@@ -307,4 +319,29 @@ unpackNibbles bs = BS.unpack bs >>= unpackByte
 packNibbles :: [Nibble] -> ByteString
 packNibbles [] = mempty
 packNibbles (n1:n2:ns) = BS.singleton (toByte n1 n2) <> packNibbles ns
-packNibbles _ = error "cant pack odd number of nibbles"
+packNibbles _ = error "can't pack odd number of nibbles"
+
+-- Keccak hashing
+
+keccakBytes :: ByteString -> ByteString
+keccakBytes =
+  (hash :: ByteString -> Digest Keccak_256)
+    >>> BA.unpack
+    >>> BS.pack
+
+word32 :: [Word8] -> Word32
+word32 xs = sum [ fromIntegral x `shiftL` (8*n)
+                | (n, x) <- zip [0..] (reverse xs) ]
+
+keccak :: ByteString -> W256
+keccak =
+  keccakBytes
+    >>> BS.take 32
+    >>> word
+
+abiKeccak :: ByteString -> Word32
+abiKeccak =
+  keccakBytes
+    >>> BS.take 4
+    >>> BS.unpack
+    >>> word32
