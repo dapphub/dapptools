@@ -45,7 +45,7 @@ import Data.Map (Map, insert, lookupLT, singleton, filter)
 import Data.Monoid ((<>))
 import Data.Text (Text, pack)
 import Data.Text.Encoding (decodeUtf8)
-import Data.List (sort)
+import Data.List (sort, find)
 import Data.Version (showVersion)
 import Data.SBV hiding (solver)
 
@@ -652,7 +652,7 @@ initialUiVmStateForTest opts@UnitTestOptions{..} (theContractName, theTestName) 
             void (execSymTest opts theTestName (first SymbolicBuffer symArgs))
   pure $ initUiVmState vm0 opts script
   where
-    (test, types) = head $ Prelude.filter (\(test',_) -> extractSig test' == theTestName) $ unitTestMethods testContract
+    Just (test, types) = find (\(test',_) -> extractSig test' == theTestName) $ unitTestMethods testContract
     Just testContract =
       view (dappSolcByName . at theContractName) dapp
     vm0 =
