@@ -112,8 +112,8 @@ let
     deps = [ ds-test ds-token ds-value ];
   };
 
-  runTest = { dir, shouldFail, hevmFlags?"" }: pkgs.buildDappPackage {
-    name = "dapp-tests";
+  runTest = { dir, shouldFail, name, hevmFlags?"" }: pkgs.buildDappPackage {
+    name = name;
     shouldFail = shouldFail;
     src = dir;
     hevmFlags = "${hevmFlags}";
@@ -127,12 +127,18 @@ in
 
     dappTestsShouldPass = runTest {
       dir = ./pass;
+      name = "dappTestsShouldPass";
       shouldFail = false;
       hevmFlags = "--max-iterations 50";
     };
 
     dappTestsShouldFail = let
-      fail = match : runTest { dir = ./fail; shouldFail = true; hevmFlags = "--match ${match}"; };
+      fail = match : runTest {
+        dir = ./fail;
+        shouldFail = true;
+        name = "dappTestsShouldFail-${match}";
+        hevmFlags = "--match ${match}";
+      };
     in {
       prove-add = fail "prove_add";
       prove-fail-call = fail "proveFail_shouldFail";
