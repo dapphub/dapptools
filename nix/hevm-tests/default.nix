@@ -9,11 +9,11 @@ let
   };
   runWithSolver = file : solver : (import file) { inherit pkgs solc solidity solver; };
 in
-{
-  yulEquivalence-z3 = runWithSolver ./yul-equivalence.nix "z3";
-  yulEquivalence-cvc4 = runWithSolver ./yul-equivalence.nix "cvc4";
+  pkgs.recurseIntoAttrs {
+    yulEquivalence-z3 = runWithSolver ./yul-equivalence.nix "z3";
+    yulEquivalence-cvc4 = runWithSolver ./yul-equivalence.nix "cvc4";
 
-  # z3 takes 3hrs to run these tests on a fast machine, and even then ~180 timeout
-  #smtChecker-z3 = runWithSolver ./smt-checker.nix "z3";
-  smtChecker-cvc4 = runWithSolver ./smt-checker.nix "cvc4";
-}
+    # z3 takes 3hrs to run these tests on a fast machine, and even then ~180 timeout
+    #smtChecker-z3 = runWithSolver ./smt-checker.nix "z3";
+    smtChecker-cvc4 = runWithSolver ./smt-checker.nix "cvc4";
+  }

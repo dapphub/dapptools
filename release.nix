@@ -40,13 +40,12 @@ let
     inherit qrtx;
     inherit seth;
     inherit token;
+    inherit solc-versions;
 
+    inherit dapp-tests;
+    inherit hevm-tests;
     hevm-compliance = hevmCompliance dist;
-  # the union is necessary because nix-build does not evaluate sets
-  # recursively.
-  } // dist.pkgs.solc-versions
-    // dist.pkgs.hevm-tests
-    // dist.pkgs.dapp-tests;
+  };
 
 in {
   dapphub.linux.stable = stable linux;
