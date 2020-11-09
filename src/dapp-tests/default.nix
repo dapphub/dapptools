@@ -131,8 +131,10 @@ in
       shouldFail = false;
       hevmFlags = "--max-iterations 50";
     };
-
-    dappTestsShouldFail = let
+  }
+  //
+  (
+    let
       fail = match : runTest {
         dir = ./fail;
         shouldFail = true;
@@ -145,5 +147,5 @@ in
       prove-multi = fail "prove_multi";
       prove-smtTimeout = fail "prove_smtTimeout";
       prove-transfer = fail "prove_transfer";
-    };
-  }
+    }
+  )

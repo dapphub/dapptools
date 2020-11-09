@@ -46,8 +46,7 @@ let
   # recursively.
   } // dist.pkgs.solc-versions
     // dist.pkgs.hevm-tests
-    // dist.pkgs.dapp-tests
-    // dist.pkgs.dapp-tests.dappTestsShouldFail;
+    // dist.pkgs.dapp-tests;
 
 in {
   dapphub.linux.stable = stable linux;
