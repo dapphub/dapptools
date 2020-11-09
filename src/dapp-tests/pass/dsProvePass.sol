@@ -28,7 +28,7 @@ contract SolidityTest is DSTest {
     }
 
     function proveFail_revertSmoke() public {
-        assertTrue(false);
+        require(false);
     }
 
     function proveFail_assertSmoke() public {
@@ -59,12 +59,12 @@ contract SolidityTest is DSTest {
         assertEq(supply - amt, token.totalSupply());
     }
 
-    //function prove_loop(uint n) public {
-        //uint counter = 0;
-        //for (uint i = 0; i < n; i++) {
-            //counter++;
-        //}
-        //assertTrue(counter < 100);
-    //}
+    function prove_loop(uint n) public {
+        uint counter = 0;
+        for (uint i = 0; i < n; i++) {
+            counter++;
+        }
+        assertTrue(counter < 100);
+    }
 }
 

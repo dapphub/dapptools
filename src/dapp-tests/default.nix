@@ -112,7 +112,6 @@ let
     deps = [ ds-test ds-token ds-value ];
   };
 
-
   runTest = { dir, shouldFail, hevmFlags?"" }: pkgs.buildDappPackage {
     name = "dapp-tests";
     shouldFail = shouldFail;
