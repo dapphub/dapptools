@@ -53,18 +53,18 @@ dapp_testnet
 test_hevm_symbolic() {
     solc --bin-runtime -o . --overwrite factor.sol
     # should find counterexample
-    hevm symbolic --code $(<A.bin-runtime) --sig "factor(uint x, uint y)" --smttimeout 40000 && error || echo "hevm success: found counterexample"
+    hevm symbolic --code "$(<A.bin-runtime)" --sig "factor(uint x, uint y)" --smttimeout 40000 && error || echo "hevm success: found counterexample"
     rm -rf A.bin-runtime
-    hevm symbolic --code $(<dstoken.bin-runtime) --sig "transferFrom(address, address, uint)" --get-models
+    hevm symbolic --code "$(<dstoken.bin-runtime)" --sig "transferFrom(address, address, uint)" --get-models
 
     solc --bin-runtime -o . --overwrite token.sol
     # This one explores all paths (cvc4 is better at this)
-    hevm symbolic --code $(<Token.bin-runtime) --solver cvc4
+    hevm symbolic --code "$(<Token.bin-runtime)" --solver cvc4
     rm -rf Token.bin-runtime
 
     # The contracts A and B should be equivalent:
     solc --bin-runtime -o . --overwrite AB.sol
-    hevm equivalence --code-a $(<A.bin-runtime) --code-b $(<B.bin-runtime) --solver cvc4
+    hevm equivalence --code-a "$(<A.bin-runtime)" --code-b "$(<B.bin-runtime)" --solver cvc4
     rm -rf A.bin-runtime B.bin-runtime
 }
 

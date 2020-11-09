@@ -112,11 +112,33 @@ let
     deps = [ ds-test ds-token ds-value ];
   };
 
-in
-  pkgs.buildDappPackage {
-    name = "dapp-tests";
-    src = ./.;
-    deps = [ ds-test dss ];
 
+  runTest = { dir, shouldFail, hevmFlags?"" }: pkgs.buildDappPackage {
+    name = "dapp-tests";
+    shouldFail = shouldFail;
+    src = dir;
+    hevmFlags = "${hevmFlags}";
+    deps = [ ds-test ds-token ];
     checkInputs = with pkgs; [ hevm jq seth dapp solc ];
+  };
+
+in
+  {
+    runDssTests = dss;
+
+    dappTestsShouldPass = runTest {
+      dir = ./pass;
+      shouldFail = false;
+      hevmFlags = "--max-iterations 50";
+    };
+
+    dappTestsShouldFail = let
+      fail = match : runTest { dir = ./fail; shouldFail = true; hevmFlags = "--match ${match}"; };
+    in {
+      prove-add = fail "prove_add";
+      prove-fail-call = fail "proveFail_shouldFail";
+      prove-multi = fail "prove_multi";
+      prove-smtTimeout = fail "prove_smtTimeout";
+      prove-transfer = fail "prove_transfer";
+    };
   }
