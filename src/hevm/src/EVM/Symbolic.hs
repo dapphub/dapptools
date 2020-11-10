@@ -12,13 +12,10 @@ import Control.Lens hiding (op, (:<), (|>), (.>))
 import Data.Maybe                   (fromMaybe, fromJust)
 
 import EVM.Types
-import EVM.Concrete (Word (..), Whiff(..))
+import EVM.Concrete
 import qualified EVM.Concrete as Concrete
 import Data.SBV hiding (runSMT, newArray_, addAxiom, Word)
 
--- | Symbolic words of 256 bits, possibly annotated with additional
---   "insightful" information
-data SymWord = S Whiff (SWord 256)
 
 -- | Convenience functions transporting between the concrete and symbolic realm
 -- TODO - look for all the occurences of sw256 and replace them with manual construction
@@ -33,9 +30,6 @@ w256lit x = S (Val (show x)) $ literal $ toSizzle x
 
 litAddr :: Addr -> SAddr
 litAddr = SAddr . literal . toSizzle
-
-maybeLitWord :: SymWord -> Maybe Word
-maybeLitWord (S whiff a) = fmap (C whiff . fromSizzle) (unliteral a)
 
 maybeLitAddr :: SAddr -> Maybe Addr
 maybeLitAddr (SAddr a) = fmap fromSizzle (unliteral a)
@@ -99,9 +93,9 @@ sgt x'@(S _ x) y'@(S _ y) =
 
 shiftRight' :: SymWord -> SymWord -> SymWord
 shiftRight' (S _ a') b@(S _ b') = case (num <$> unliteral a', b) of
-  (Just n, (S (FromBytes (SymbolicBuffer a)) _)) | n `mod` 8 == 0 && n <= 256 ->
+  (Just n, (S (FromBytes index (SymbolicBuffer a)) _)) | n `mod` 8 == 0 && n <= 256 ->
     let bs = replicate (n `div` 8) 0 <> (take ((256 - n) `div` 8) a)
-    in S (FromBytes (SymbolicBuffer bs)) (fromBytes bs)
+    in S (FromBytes index (SymbolicBuffer bs)) (fromBytes bs)
   _ -> sw256 $ sShiftRight b' a'
 
 -- | Operations over symbolic memory (list of symbolic bytes)
@@ -155,19 +149,19 @@ select' xs err ind = walk xs ind err
 -- Generates a ridiculously large set of constraints (roughly 25k) when
 -- the index is symbolic, but it still seems (kind of) manageable
 -- for the solvers.
-readSWordWithBound :: SWord 32 -> Buffer -> SWord 32 -> SymWord
-readSWordWithBound ind (SymbolicBuffer xs) bound = case (num <$> fromSized <$> unliteral ind, num <$> fromSized <$> unliteral bound) of
+readSWordWithBound :: SymWord -> Buffer -> SWord 32 -> SymWord
+readSWordWithBound sind@(S whiff ind) (SymbolicBuffer xs) bound = case (num <$> maybeLitWord sind, num <$> fromSized <$> unliteral bound) of
   (Just i, Just b) ->
     let bs = truncpad 32 $ drop i (take b xs)
-    in S (FromBytes (SymbolicBuffer bs)) (fromBytes bs)
-  _ -> 
+    in S (FromBytes sind (SymbolicBuffer bs)) (fromBytes bs)
+  _ ->
     let boundedList = [ite (i .<= bound) x 0 | (x, i) <- zip xs [1..]]
         res = [select' boundedList 0 (ind + j) | j <- [0..31]]
-    in S (FromBytes (SymbolicBuffer res)) $ fromBytes $ res
+    in S (FromBytes sind (SymbolicBuffer res)) $ fromBytes $ res
 
-readSWordWithBound ind (ConcreteBuffer xs) bound =
-  case fromSized <$> unliteral ind of
-    Nothing -> readSWordWithBound ind (SymbolicBuffer (litBytes xs)) bound
+readSWordWithBound sind@(S whiff ind) (ConcreteBuffer xs) bound =
+  case num <$> maybeLitWord sind of
+    Nothing -> readSWordWithBound sind (SymbolicBuffer (litBytes xs)) bound
     Just x' ->
        -- INVARIANT: bound should always be length xs for concrete bytes
        -- so we should be able to safely ignore it here
@@ -231,12 +225,6 @@ readSWord i (ConcreteBuffer x) = num $ Concrete.readMemoryWord i x
 -- | Custom instances for SymWord, many of which have direct
 -- analogues for concrete words defined in Concrete.hs
 
-instance Show SymWord where
-  show s@(S w _) = case maybeLitWord s of
-    Nothing -> case w of
-      Dull -> "<symbolic>"
-      whiff -> show whiff
-    Just w'  -> show w'
 
 instance EqSymbolic SymWord where
   (.==) (S _ x) (S _ y) = x .== y

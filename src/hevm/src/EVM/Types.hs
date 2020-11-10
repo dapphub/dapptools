@@ -7,6 +7,8 @@
 
 module EVM.Types where
 
+import Prelude hiding  (Word)
+
 import Data.Aeson (FromJSON (..), (.:))
 
 #if MIN_VERSION_aeson(1, 0, 0)
@@ -14,7 +16,7 @@ import Data.Aeson (FromJSONKey (..), FromJSONKeyFunction (..))
 #endif
 
 import Crypto.Hash
-import Data.SBV
+import Data.SBV hiding (Word)
 import Data.Kind
 import Data.Monoid ((<>))
 import Data.Bifunctor (first)
@@ -33,6 +35,8 @@ import Numeric (readHex, showHex)
 import Options.Generic
 import Control.Arrow ((>>>))
 
+import Text.Printf
+
 import qualified Data.ByteArray       as BA
 import qualified Data.Aeson           as JSON
 import qualified Data.Aeson.Types     as JSON
@@ -45,15 +49,85 @@ import qualified Text.Read
 -- Some stuff for "generic programming", needed to create Word512
 import Data.Data
 
--- We need a 512-bit word for doing ADDMOD and MULMOD with full precision.
-mkUnpackedDoubleWord "Word512" ''Word256 "Int512" ''Int256 ''Word256
-  [''Typeable, ''Data, ''Generic]
+
+data Buffer
+  = ConcreteBuffer ByteString
+  | SymbolicBuffer [SWord 8]
 
 newtype W256 = W256 Word256
   deriving
     ( Num, Integral, Real, Ord, Enum, Eq
     , Bits, FiniteBits, Bounded, Generic
     )
+
+data Word = C Whiff W256 --maybe to remove completely in the future
+
+instance Show Word where
+  show (C _ x) = show x
+
+-- | Symbolic words of 256 bits, possibly annotated with additional
+--   "insightful" information
+data SymWord = S Whiff (SWord 256)
+
+instance Show SymWord where
+  show s@(S w _) = case maybeLitWord s of
+    Nothing -> case w of
+      Dull -> "<symbolic>"
+      whiff -> show whiff
+    Just w'  -> show w'
+
+
+-- | This type can give insight into the provenance of a term
+data Whiff = Dull
+           | Val String
+           | FromKeccak ByteString
+           | Var String
+           | FromBytes SymWord Buffer
+           | FromStorage Whiff
+           | InfixBinOp String Whiff Whiff
+           | BinOp String Whiff Whiff
+           | UnOp String Whiff
+
+instance Show Whiff where
+  show Dull = "<symbolic>"
+  show (Val s) = s
+  show (FromKeccak bstr) = "FromKeccak " ++ show bstr
+  show (Var x) = printf "<%s>" x
+  show (FromBytes index buf) = "FromBuffer " ++ (show index) ++ " " ++ show buf
+  show (FromStorage w) = "SREAD(" ++ show w ++ ")"
+  show (InfixBinOp op a b) = printf "(%s %s %s)" (show a) op (show b)
+  show (BinOp op a b) = printf "%s(%s, %s)" op (show a) (show b)
+  show (UnOp op x) = op ++ "(" ++ (show x) ++ ")"
+
+newtype Addr = Addr { addressWord160 :: Word160 }
+  deriving (Num, Integral, Real, Ord, Enum, Eq, Bits, Generic)
+
+newtype SAddr = SAddr { saddressWord160 :: SWord 160 }
+  deriving (Num)
+
+-- | Capture the correspondence between sized and fixed-sized BVs
+type family FromSizzle (t :: Type) :: Type where
+   FromSizzle (WordN 256) = W256
+   FromSizzle (WordN 160) = Addr
+
+-- | Conversion from a sized BV to a fixed-sized bit-vector.
+class FromSizzleBV a where
+   -- | Convert a sized bit-vector to the corresponding fixed-sized bit-vector,
+   -- for instance 'SWord 16' to 'SWord16'. See also 'toSized'.
+   fromSizzle :: a -> FromSizzle a
+
+   default fromSizzle :: (Num (FromSizzle a), Integral a) => a -> FromSizzle a
+   fromSizzle = fromIntegral
+
+maybeLitWord :: SymWord -> Maybe Word
+maybeLitWord (S whiff a) = fmap (C whiff . fromSizzle) (unliteral a)
+
+
+-- We need a 512-bit word for doing ADDMOD and MULMOD with full precision.
+mkUnpackedDoubleWord "Word512" ''Word256 "Int512" ''Int256 ''Word256
+  [''Typeable, ''Data, ''Generic]
+
+
 
 -- | convert between (WordN 256) and Word256
 type family ToSizzle (t :: Type) :: Type where
@@ -68,20 +142,7 @@ class ToSizzleBV a where
    default toSizzle :: (Num (ToSizzle a), Integral a) => (a -> ToSizzle a)
    toSizzle = fromIntegral
 
--- | Capture the correspondence between sized and fixed-sized BVs
-type family FromSizzle (t :: Type) :: Type where
-   FromSizzle (WordN 256) = W256
-   FromSizzle (WordN 160) = Addr
 
-
--- | Conversion from a sized BV to a fixed-sized bit-vector.
-class FromSizzleBV a where
-   -- | Convert a sized bit-vector to the corresponding fixed-sized bit-vector,
-   -- for instance 'SWord 16' to 'SWord16'. See also 'toSized'.
-   fromSizzle :: a -> FromSizzle a
-
-   default fromSizzle :: (Num (FromSizzle a), Integral a) => a -> FromSizzle a
-   fromSizzle = fromIntegral
 
 instance (ToSizzleBV W256)
 instance (FromSizzleBV (WordN 256))
@@ -96,10 +157,6 @@ litBytes bs = fmap (toSized . literal) (BS.unpack bs)
 
 -- | A buffer is a list of bytes. For concrete execution, this is simply `ByteString`.
 -- In symbolic settings, it is a list of symbolic bitvectors of size 8.
-data Buffer
-  = ConcreteBuffer ByteString
-  | SymbolicBuffer [SWord 8]
-
 instance Show Buffer where
   show (ConcreteBuffer b) = show $ ByteStringS b
   show (SymbolicBuffer b) = show (length b) ++ " bytes"
@@ -120,11 +177,6 @@ instance EqSymbolic Buffer where
   SymbolicBuffer a .== ConcreteBuffer b = a .== litBytes b
   SymbolicBuffer a .== SymbolicBuffer b = a .== b
 
-newtype Addr = Addr { addressWord160 :: Word160 }
-  deriving (Num, Integral, Real, Ord, Enum, Eq, Bits, Generic)
-
-newtype SAddr = SAddr { saddressWord160 :: SWord 160 }
-  deriving (Num)
 
 instance Read W256 where
   readsPrec _ "0x" = [(0, "")]

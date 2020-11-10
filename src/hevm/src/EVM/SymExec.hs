@@ -19,8 +19,7 @@ import qualified Control.Monad.Operational as Operational
 import Control.Monad.State.Strict hiding (state)
 import Data.Maybe (catMaybes)
 import EVM.Types
-import EVM.Concrete (Whiff(..))
-import EVM.Symbolic (SymWord(..), sw256)
+import EVM.Symbolic (sw256)
 import EVM.Concrete (createAddress)
 import qualified EVM.FeeSchedule as FeeSchedule
 import Data.SBV.Trans.Control
@@ -285,8 +284,8 @@ consistentTree (Node b xs) = do
     return Nothing
   else
     return $ Just (Node b consistentChildren)
-    
-  
+
+
 leaves :: Tree BranchInfo -> [VM]
 leaves (Node x []) = [_vm x]
 leaves (Node _ xs) = concatMap leaves xs

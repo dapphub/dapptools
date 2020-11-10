@@ -6,7 +6,7 @@ module EVM.Concrete where
 import Prelude hiding (Word)
 
 import EVM.RLP
-import EVM.Types (Addr, W256 (..), num, word, padRight, word160Bytes, word256Bytes, Buffer, keccak)
+import EVM.Types (Addr, W256 (..), num, word, padRight, word160Bytes, word256Bytes, Buffer, keccak, Whiff(..), Word(..))
 
 import Control.Lens    ((^?), ix)
 import Data.Bits       (Bits (..), FiniteBits (..), shiftL, shiftR)
@@ -15,8 +15,6 @@ import Data.Maybe      (fromMaybe)
 import Data.Semigroup  ((<>))
 import Data.Word       (Word8)
 import Data.Aeson
-
-import Text.Printf
 
 import qualified Data.ByteString as BS
 
@@ -38,35 +36,9 @@ byteStringSliceWithDefaultZeroes offset size bs =
     let bs' = BS.take size (BS.drop offset bs)
     in bs' <> BS.replicate (size - BS.length bs') 0
 
--- | This type can give insight into the provenance of a term
-data Whiff = Dull
-           | Val String
-           | FromKeccak ByteString
-           | Var String
-           | FromBytes Buffer
-           | FromStorage Whiff
-           | InfixBinOp String Whiff Whiff
-           | BinOp String Whiff Whiff
-           | UnOp String Whiff
-
-instance Show Whiff where
-  show Dull = "<symbolic>"
-  show (Val s) = s
-  show (FromKeccak bstr) = "FromKeccak " ++ show bstr
-  show (Var x) = printf "<%s>" x
-  show (FromBytes buf) = "FromBuffer " ++ show buf
-  show (FromStorage w) = "SREAD(" ++ show w ++ ")"
-  show (InfixBinOp op a b) = printf "(%s %s %s)" (show a) op (show b)
-  show (BinOp op a b) = printf "%s(%s, %s)" op (show a) (show b)
-  show (UnOp op x) = op ++ "(" ++ (show x) ++ ")"
 
 w256 :: W256 -> Word
 w256 = C Dull
-
-data Word = C Whiff W256 --maybe to remove completely in the future
-
-instance ToJSON Word where
-  toJSON (C _ x) = toJSON x
 
 wordValue :: Word -> W256
 wordValue (C _ x) = x
@@ -129,8 +101,6 @@ blobSize x = w256 (num (BS.length x))
 keccakBlob :: ByteString -> Word
 keccakBlob x = C (FromKeccak x) (keccak x)
 
-instance Show Word where
-  show (C _ x) = show x
 
 instance Read Word where
   readsPrec n s =
