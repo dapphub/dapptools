@@ -5,7 +5,7 @@
 module EVM.SymExec where
 
 
-import Prelude hiding (Word)
+import Prelude hiding (Word, LT, GT)
 
 import Control.Lens hiding (pre)
 import EVM hiding (Query, push)
@@ -99,16 +99,16 @@ abstractVM typesignature concreteArgs x storagemodel = do
     case typesignature of
       Nothing -> do cd <- sbytes256
                     len <- freshVar_
-                    return (cd, len, (len .<= 256, Val "calldatalength < 256"))
+                    return (cd, len, (len .<= 256, LT (Var "calldatalength") (Literal (fromInteger 256))))
       Just (name, typs) -> do (cd, cdlen) <- symCalldata name typs concreteArgs
-                              return (cd, cdlen, (sTrue, Val "True"))
+                              return (cd, cdlen, (sTrue, Literal (fromInteger 1)))
   symstore <- case storagemodel of
     SymbolicS -> Symbolic [] <$> freshArray_ Nothing
     InitialS -> Symbolic [] <$> freshArray_ (Just 0)
     ConcreteS -> return $ Concrete mempty
   c <- SAddr <$> freshVar_
   value' <- sw256 <$> freshVar_
-  return $ loadSymVM (RuntimeCode x) symstore storagemodel c value' (SymbolicBuffer cd', cdlen) & over constraints ((<>) [cdconstraint])
+  return $ loadSymVM (RuntimeCode x) symstore storagemodel c value' (SymbolicBuffer Oops cd', cdlen) & over constraints ((<>) [cdconstraint])
 
 loadSymVM :: ContractCode -> Storage -> StorageModel -> SAddr -> SymWord -> (Buffer, SWord 256) -> VM
 loadSymVM x initStore model addr callvalue' calldata' =
@@ -389,8 +389,8 @@ showCounterexample vm maybesig = do
       SAddr caller' = view (EVM.state . EVM.caller) vm
   cdlen' <- num <$> getValue cdlen
   calldatainput <- case calldata' of
-    SymbolicBuffer cd -> mapM (getValue.fromSized) (take cdlen' cd) >>= return . pack
-    ConcreteBuffer cd -> return $ BS.take cdlen' cd
+    SymbolicBuffer _ cd -> mapM (getValue.fromSized) (take cdlen' cd) >>= return . pack
+    ConcreteBuffer _ cd -> return $ BS.take cdlen' cd
   callvalue' <- num <$> getValue cvalue
   caller'' <- num <$> getValue caller'
   io $ do

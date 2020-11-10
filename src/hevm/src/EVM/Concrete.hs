@@ -57,6 +57,7 @@ writeMemory bs1 (C _ n) (C _ src) (C _ dst) bs0 =
   in
     a <> a' <> c <> b'
 
+-- TODO - add whiff
 readMemoryWord :: Word -> ByteString -> Word
 readMemoryWord (C _ i) m =
   if i > (num $ BS.length m) then 0 else
@@ -84,8 +85,8 @@ setMemoryByte :: Word -> Word8 -> ByteString -> ByteString
 setMemoryByte (C _ i) x =
   writeMemory (BS.singleton x) 1 0 (num i)
 
-keccakBlob :: ByteString -> Word
-keccakBlob x = C (FromKeccak x) (keccak x)
+keccakBlob :: ByteString -> Whiff -> Word
+keccakBlob x w = C (FromKeccak w) (keccak x)
 
 -- Copied from the standard library just to get specialization.
 -- We also use bit operations instead of modulo and multiply.

@@ -139,7 +139,7 @@ initializeUnitTest UnitTestOptions { .. } = do
 
     -- Initialize the test contract
     let cd = abiMethod "setUp()" emptyAbi
-    setupCall testParams (ConcreteBuffer cd, literal . num . BS.length $ cd)
+    setupCall testParams (ConcreteBuffer Oops cd, literal . num . BS.length $ cd)
     popTrace
     pushTrace (EntryTrace "initialize test")
 
@@ -162,7 +162,7 @@ execTest UnitTestOptions { .. } method args = do
   -- Set up the call to the test method
   Stepper.evm $ do
     let cd = abiMethod method args
-    setupCall testParams (ConcreteBuffer cd, literal . num . BS.length $ cd)
+    setupCall testParams (ConcreteBuffer Oops cd, literal . num . BS.length $ cd)
     pushTrace (EntryTrace method)
   -- Try running the test method
   Stepper.execFully >>= \case
@@ -181,10 +181,10 @@ checkFailures UnitTestOptions { .. } method args bailed = do
     Stepper.evm $ do
       popTrace
       let cd = abiMethod "failed()" args
-      setupCall testParams (ConcreteBuffer cd, literal . num . BS.length $ cd)
+      setupCall testParams (ConcreteBuffer Oops cd, literal . num . BS.length $ cd)
     res <- Stepper.execFully -- >>= \(ConcreteBuffer bs) -> (Stepper.decode AbiBoolType bs)
     case res of
-      Right (ConcreteBuffer r) ->
+      Right (ConcreteBuffer _ r) ->
         let AbiBool failed = decodeAbiValue AbiBoolType (BSLazy.fromStrict r)
         in pure (shouldFail == failed)
       _ -> error "internal error: unexpected failure code"
@@ -516,8 +516,9 @@ symRun :: UnitTestOptions -> VM -> Text -> [AbiType] -> SBV.Query (Text, Either 
 symRun opts@UnitTestOptions{..} concreteVm testName types = do
     SBV.resetAssertions
     let vm = symbolify concreteVm
-    cd <- first SymbolicBuffer <$> symCalldata testName types []
-    let shouldFail = "proveFail" `isPrefixOf` testName
+    cd <- first (SymbolicBuffer Oops) <$> symCalldata testName types []
+    let model = view (env . storageModel) vm
+        shouldFail = "proveFail" `isPrefixOf` testName
 
     -- get all posible postVMs for the test method
     allPaths <- fst <$> runStateT
@@ -539,7 +540,7 @@ symRun opts@UnitTestOptions{..} concreteVm testName types = do
         constrain $ sAnd (fst <$> view EVM.constraints vm')
         unless bailed $
           case view result vm' of
-            Just (VMSuccess (SymbolicBuffer buf)) ->
+            Just (VMSuccess (SymbolicBuffer _ buf)) ->
               constrain $ litBytes (encodeAbiValue $ AbiBool $ not shouldFail) .== buf
             _ -> error "unexpected return value"
         checkSat >>= \case
@@ -593,8 +594,8 @@ prettyCalldata :: (Buffer, SWord 256) -> Text -> [AbiType]-> SBV.Query Text
 prettyCalldata (buffer, cdlen) sig types = do
   cdlen' <- num <$> SBV.getValue cdlen
   calldatainput <- case buffer of
-    SymbolicBuffer cd -> mapM (SBV.getValue . fromSized) (take cdlen' cd) <&> BS.pack
-    ConcreteBuffer cd -> return $ BS.take cdlen' cd
+    SymbolicBuffer _ cd -> mapM (SBV.getValue . fromSized) (take cdlen' cd) <&> BS.pack
+    ConcreteBuffer _ cd -> return $ BS.take cdlen' cd
   pure $ (head (Text.splitOn "(" sig)) <>
            (Text.pack $ show (decodeAbiValue
                   (AbiTupleType (Vector.fromList types))
@@ -622,7 +623,7 @@ checkSymFailures UnitTestOptions { .. } = do
   Stepper.evm $ do
     popTrace
     let cd = abiMethod "failed()" emptyAbi
-    setupCall testParams (ConcreteBuffer cd, literal . num . BS.length $ cd)
+    setupCall testParams (ConcreteBuffer Oops cd, literal . num . BS.length $ cd)
   Stepper.runFully
 
 indentLines :: Int -> Text -> Text

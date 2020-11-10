@@ -11,6 +11,7 @@
 {-# Language RecordWildCards #-}
 
 module Main where
+import Prelude hiding  (Word, LT)
 
 import EVM (StorageModel(..))
 import qualified EVM
@@ -543,13 +544,13 @@ assert cmd = do
                       "Reverted: " <> show (ByteStringS msg)
                     Just (EVM.VMFailure err) -> io . putStrLn $
                       "Failed: " <> show err
-                    Just (EVM.VMSuccess (ConcreteBuffer msg)) ->
+                    Just (EVM.VMSuccess (ConcreteBuffer _ msg)) ->
                       if ByteString.null msg
                       then io $ putStrLn
                         "Stopped"
                       else io $ putStrLn $
                         "Returned: " <> show (ByteStringS msg)
-                    Just (EVM.VMSuccess (SymbolicBuffer msg)) -> do
+                    Just (EVM.VMSuccess (SymbolicBuffer _ msg)) -> do
                       out <- mapM (getValue.fromSized) msg
                       io . putStrLn $
                         "Returned: " <> show (ByteStringS (ByteString.pack out))
@@ -602,8 +603,8 @@ launchExec cmd = do
           exitWith (ExitFailure 2)
         Just (EVM.VMSuccess buf) -> do
           let msg = case buf of
-                SymbolicBuffer msg' -> forceLitBytes msg'
-                ConcreteBuffer msg' -> msg'
+                SymbolicBuffer _ msg' -> forceLitBytes msg'
+                ConcreteBuffer _ msg' -> msg'
           print $ ByteStringS msg
           case state cmd of
             Nothing -> pure ()
@@ -728,7 +729,7 @@ vmFromCommand cmd = do
         value'   = word value 0
         caller'  = addr caller 0
         origin'  = addr origin 0
-        calldata' = ConcreteBuffer $ bytes calldata ""
+        calldata' = ConcreteBuffer Oops $ bytes calldata ""
         codeType = if create cmd then EVM.InitCode else EVM.RuntimeCode
         address' = if create cmd
               then createAddress origin' (word nonce 0)
@@ -779,17 +780,17 @@ symvmFromCommand cmd = do
     (Nothing, Nothing) -> do
       cd <- sbytes256
       len' <- freshVar_
-      return (SymbolicBuffer cd, len', (len' .<= 256, Val "len < 256"))
+      return (SymbolicBuffer Oops cd, len', (len' .<= 256, LT (Var "len") (Literal (fromInteger 256))))
     -- fully concrete calldata
     (Just c, Nothing) ->
-      let cd = ConcreteBuffer $ decipher c
+      let cd = ConcreteBuffer Oops $ decipher c
       in return (cd, num (len cd), (sTrue, Dull))
     -- calldata according to given abi with possible specializations from the `arg` list
     (Nothing, Just sig') -> do
       method' <- io $ functionAbi sig'
       let typs = snd <$> view methodInputs method'
       (cd, cdlen) <- symCalldata (view methodSignature method') typs (arg cmd)
-      return (SymbolicBuffer cd, cdlen, (sTrue, Dull))
+      return (SymbolicBuffer Oops cd, cdlen, (sTrue, Dull))
 
     _ -> error "incompatible options: calldata and abi"
 

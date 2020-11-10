@@ -13,7 +13,7 @@
 
 module EVM where
 
-import Prelude hiding (log, Word, exponent)
+import Prelude hiding (log, Word, exponent, LT, GT)
 
 import Data.SBV hiding (Word, output, Unknown)
 import Data.Proxy (Proxy(..))
@@ -639,18 +639,18 @@ exec1 = do
         0x09 -> stackOp3 (const g_mid) (\(x, y, z) -> mulmod x y z)
 
         -- op: LT
-        0x10 -> stackOp2 (const g_verylow) $ \(x, y) -> iteWhiff "<" (x .< y) x y
+        0x10 -> stackOp2 (const g_verylow) $ \(S a x, S b y) -> iteWhiff (LT a b) (x .< y)
         -- op: GT
-        0x11 -> stackOp2 (const g_verylow) $ \(x, y) -> iteWhiff ">" (x .> y) x y
+        0x11 -> stackOp2 (const g_verylow) $ \(S a x, S b y) -> iteWhiff (GT a b) (x .> y)
         -- op: SLT
         0x12 -> stackOp2 (const g_verylow) $ uncurry slt
         -- op: SGT
         0x13 -> stackOp2 (const g_verylow) $ uncurry sgt
 
         -- op: EQ
-        0x14 -> stackOp2 (const g_verylow) $ \(x, y) -> iteWhiff "==" (x .== y) x y
+        0x14 -> stackOp2 (const g_verylow) $ \(S a x, S b y) -> iteWhiff (Eq a b) (x .== y)
         -- op: ISZERO
-        0x15 -> stackOp1 (const g_verylow) $ \(S a x) -> ite ((S a x) .== 0) (S (UnOp "isZero" a) 1) (S (UnOp "NonZero" a) 0)
+        0x15 -> stackOp1 (const g_verylow) $ \(S a x) -> ite ((S a x) .== 0) (S (IsZero a) 1) (S (NonZero a) 0)
 
         -- op: AND
         0x16 -> stackOp2 (const g_verylow) $ uncurry (.&.)
@@ -683,9 +683,9 @@ exec1 = do
                   burn (g_sha3 + g_sha3word * ceilDiv (num xSize) 32) $
                     accessMemoryRange fees xOffset xSize $ do
                       (hash@(S _ hash'), invMap, bytes) <- case readMemory xOffset xSize vm of
-                                         ConcreteBuffer bs -> do
-                                           pure (litWord $ keccakBlob bs, Map.singleton (keccakBlob bs) bs, litBytes bs)
-                                         SymbolicBuffer bs -> do
+                                         ConcreteBuffer w bs -> do
+                                           pure (litWord $ keccakBlob bs Dull, Map.singleton (keccakBlob bs Dull) bs, litBytes bs)
+                                         SymbolicBuffer w bs -> do
                                            let hash' = symkeccak' bs
                                            return (sw256 hash', mempty, bs)
 
@@ -767,7 +767,7 @@ exec1 = do
                   next
                   assign (state . stack) xs
                   case the state calldata of
-                    (SymbolicBuffer cd, cdlen) -> copyBytesToMemory (SymbolicBuffer [ite (i .<= cdlen) x 0 | (x, i) <- zip cd [1..]]) xSize xFrom xTo
+                    (SymbolicBuffer _ cd, cdlen) -> copyBytesToMemory (SymbolicBuffer Oops [ite (i .<= cdlen) x 0 | (x, i) <- zip cd [1..]]) xSize xFrom xTo
                     -- when calldata is concrete,
                     -- the bound should always be equal to the bytestring length
                     (cd, _) -> copyBytesToMemory cd xSize xFrom xTo
@@ -786,7 +786,7 @@ exec1 = do
                 accessUnboundedMemoryRange fees memOffset n $ do
                   next
                   assign (state . stack) xs
-                  copyBytesToMemory (ConcreteBuffer (the state code))
+                  copyBytesToMemory (ConcreteBuffer Oops (the state code))
                     n codeOffset memOffset
             _ -> underrun
 
@@ -828,7 +828,7 @@ exec1 = do
                       fetchAccount (num extAccount) $ \c -> do
                         next
                         assign (state . stack) xs
-                        copyBytesToMemory (ConcreteBuffer (view bytecode c))
+                        copyBytesToMemory (ConcreteBuffer Oops (view bytecode c))
                           codeSize codeOffset memOffset
             _ -> underrun
 
@@ -940,6 +940,7 @@ exec1 = do
             _ -> underrun
 
         -- op: MSTORE8
+        -- TODO - why is this implemented with loss of whiff?
         0x53 ->
           case stk of
             (x':(S _ y):xs) -> forceConcrete x' $ \x ->
@@ -1031,7 +1032,7 @@ exec1 = do
                   in case maybeLitWord y of
                       Just y' -> jump (0 == y')
                       -- if the jump condition is symbolic, an smt query has to be made.
-                      Nothing -> askSMT (self, the state pc) (0 .== y, UnOp "isZero" w) jump
+                      Nothing -> askSMT (self, the state pc) (0 .== y, IsZero w) jump
             _ -> underrun
 
         -- op: PC
@@ -1363,16 +1364,16 @@ executePrecompile preCompileAddr gasCap inOffset inSize outOffset outSize xs  = 
               next
             Just output -> do
               assign (state . stack) (1 : xs)
-              assign (state . returndata) (ConcreteBuffer output)
-              copyBytesToMemory (ConcreteBuffer output) outSize 0 outOffset
+              assign (state . returndata) (ConcreteBuffer Oops output)
+              copyBytesToMemory (ConcreteBuffer Oops output) outSize 0 outOffset
               next
 
         -- SHA2-256
         0x2 ->
           let
             hash = case input of
-                     ConcreteBuffer input' -> ConcreteBuffer $ BS.pack $ BA.unpack (Crypto.hash input' :: Digest SHA256)
-                     SymbolicBuffer input' -> SymbolicBuffer $ symSHA256 input'
+                     ConcreteBuffer _ input' -> ConcreteBuffer Oops $ BS.pack $ BA.unpack (Crypto.hash input' :: Digest SHA256)
+                     SymbolicBuffer _ input' -> SymbolicBuffer Oops $ symSHA256 input'
           in do
             assign (state . stack) (1 : xs)
             assign (state . returndata) hash
@@ -1387,7 +1388,7 @@ executePrecompile preCompileAddr gasCap inOffset inSize outOffset outSize xs  = 
           let
             padding = BS.pack $ replicate 12 0
             hash' = BS.pack $ BA.unpack (Crypto.hash input' :: Digest RIPEMD160)
-            hash  = ConcreteBuffer $ padding <> hash'
+            hash  = ConcreteBuffer Oops $ padding <> hash'
           in do
             assign (state . stack) (1 : xs)
             assign (state . returndata) hash
@@ -1409,7 +1410,7 @@ executePrecompile preCompileAddr gasCap inOffset inSize outOffset outSize xs  = 
           let
             (lenb, lene, lenm) = parseModexpLength input'
 
-            output = ConcreteBuffer $
+            output = ConcreteBuffer Oops $
               case (isZero (96 + lenb + lene) lenm input') of
                  True ->
                    truncpadlit (num lenm) (asBE (0 :: Int))
@@ -1433,7 +1434,7 @@ executePrecompile preCompileAddr gasCap inOffset inSize outOffset outSize xs  = 
            case EVM.Precompiled.execute 0x6 (truncpadlit 128 input') 64 of
           Nothing -> precompileFail
           Just output -> do
-            let truncpaddedOutput = ConcreteBuffer $ truncpadlit 64 output
+            let truncpaddedOutput = ConcreteBuffer Oops $ truncpadlit 64 output
             assign (state . stack) (1 : xs)
             assign (state . returndata) truncpaddedOutput
             copyBytesToMemory truncpaddedOutput outSize 0 outOffset
@@ -1447,7 +1448,7 @@ executePrecompile preCompileAddr gasCap inOffset inSize outOffset outSize xs  = 
           case EVM.Precompiled.execute 0x7 (truncpadlit 96 input') 64 of
           Nothing -> precompileFail
           Just output -> do
-            let truncpaddedOutput = ConcreteBuffer $ truncpadlit 64 output
+            let truncpaddedOutput = ConcreteBuffer Oops $ truncpadlit 64 output
             assign (state . stack) (1 : xs)
             assign (state . returndata) truncpaddedOutput
             copyBytesToMemory truncpaddedOutput outSize 0 outOffset
@@ -1461,7 +1462,7 @@ executePrecompile preCompileAddr gasCap inOffset inSize outOffset outSize xs  = 
           case EVM.Precompiled.execute 0x8 input' 32 of
           Nothing -> precompileFail
           Just output -> do
-            let truncpaddedOutput = ConcreteBuffer $ truncpadlit 32 output
+            let truncpaddedOutput = ConcreteBuffer Oops $ truncpadlit 32 output
             assign (state . stack) (1 : xs)
             assign (state . returndata) truncpaddedOutput
             copyBytesToMemory truncpaddedOutput outSize 0 outOffset
@@ -1475,7 +1476,7 @@ executePrecompile preCompileAddr gasCap inOffset inSize outOffset outSize xs  = 
           case (BS.length input', 1 >= BS.last input') of
             (213, True) -> case EVM.Precompiled.execute 0x9 input' 64 of
               Just output -> do
-                let truncpaddedOutput = ConcreteBuffer $ truncpadlit 64 output
+                let truncpaddedOutput = ConcreteBuffer Oops $ truncpadlit 64 output
                 assign (state . stack) (1 : xs)
                 assign (state . returndata) truncpaddedOutput
                 copyBytesToMemory truncpaddedOutput outSize 0 outOffset
@@ -1562,7 +1563,7 @@ askSMT codeloc (condition, whiff) continue = do
    where -- Only one path is possible
          choosePath :: BranchCondition -> EVM ()
          choosePath (Case v) = do assign result Nothing
-                                  pushTo constraints $ if v then (condition, whiff) else (sNot condition, UnOp "not" whiff)
+                                  pushTo constraints $ if v then (condition, whiff) else (sNot condition, Neg whiff)
                                   iteration <- use (iterations . at codeloc . non 0)
                                   assign (cache . path . at (codeloc, iteration)) (Just v)
                                   assign (iterations . at codeloc) (Just (iteration + 1))
@@ -1809,10 +1810,10 @@ forceConcrete6 (k,l,m,n,o,p) continue = case (maybeLitWord k, maybeLitWord l, ma
   _ -> vmError UnexpectedSymbolicArg
 
 forceConcreteBuffer :: Buffer -> (ByteString -> EVM ()) -> EVM ()
-forceConcreteBuffer (SymbolicBuffer b) continue = case maybeLitBytes b of
+forceConcreteBuffer (SymbolicBuffer _ b) continue = case maybeLitBytes b of
   Nothing -> vmError UnexpectedSymbolicArg
   Just bs -> continue bs
-forceConcreteBuffer (ConcreteBuffer b) continue = continue b
+forceConcreteBuffer (ConcreteBuffer _ b) continue = continue b
 
 -- * Substate manipulation
 refund :: Integer -> EVM ()
@@ -1860,8 +1861,8 @@ cheat (inOffset, inSize) (outOffset, outSize) = do
           vmError (BadCheatCode (Just abi'))
         Just (argTypes, action) ->
           case input of
-            SymbolicBuffer _ -> vmError UnexpectedSymbolicArg
-            ConcreteBuffer input' ->
+            SymbolicBuffer _ _ -> vmError UnexpectedSymbolicArg
+            ConcreteBuffer _ input' ->
               case runGetOrFail
                      (getAbiSeq (length argTypes) argTypes)
                      (LS.fromStrict input') of
@@ -2111,9 +2112,9 @@ finishFrame how = do
         case how of
           FrameErrored e ->
             ErrorTrace e
-          FrameReverted (ConcreteBuffer output) ->
+          FrameReverted (ConcreteBuffer _ output) ->
             ErrorTrace (Revert output)
-          FrameReverted (SymbolicBuffer output) ->
+          FrameReverted (SymbolicBuffer _ output) ->
             ErrorTrace (Revert (forceLitBytes output))
           FrameReturned output ->
             ReturnTrace output (view frameContext nextFrame)
@@ -2595,8 +2596,8 @@ costOfPrecompile (FeeSchedule {..}) precompileAddr input =
     -- MODEXP
     0x5 -> num $ (f (num (max lenm lenb)) * num (max lene' 1)) `div` (num g_quaddivisor)
       where input' = case input of
-              SymbolicBuffer _ -> error "unsupported: symbolic MODEXP gas cost calc"
-              ConcreteBuffer b -> b
+              SymbolicBuffer _ _ -> error "unsupported: symbolic MODEXP gas cost calc"
+              ConcreteBuffer _ b -> b
             (lenb, lene, lenm) = parseModexpLength input'
             lene' | lene <= 32 && ez = 0
                   | lene <= 32 = num (log2 e')
@@ -2619,8 +2620,8 @@ costOfPrecompile (FeeSchedule {..}) precompileAddr input =
     0x8 -> num $ ((len input) `div` 192) * (num g_pairing_point) + (num g_pairing_base)
     -- BLAKE2
     0x9 -> let input' = case input of
-                         SymbolicBuffer _ -> error "unsupported: symbolic BLAKE2B gas cost calc"
-                         ConcreteBuffer b -> b
+                         SymbolicBuffer _ _ -> error "unsupported: symbolic BLAKE2B gas cost calc"
+                         ConcreteBuffer _ b -> b
            in g_fround * (num $ asInteger $ lazySlice 0 4 input')
     _ -> error ("unimplemented precompiled contract " ++ show precompileAddr)
 

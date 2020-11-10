@@ -12,7 +12,7 @@ import EVM (VM, VMResult(..), cheatCode, traceForest, traceData, Error (..), res
 import EVM (Trace, TraceData (..), Log (..), Query (..), FrameContext (..), Storage(..))
 import EVM.SymExec
 import EVM.Symbolic (len, litWord)
-import EVM.Types (maybeLitWord, Word (..), Whiff(..), SymWord(..), W256 (..), num, Buffer(..), ByteStringS(..))
+import EVM.Types (maybeLitWord, Word (..), Whiff(..), SymWord(..), W256 (..), num, Buffer(..), ByteStringS(..), Sniff(..))
 import EVM.ABI (AbiValue (..), Event (..), AbiType (..))
 import EVM.ABI (Indexed (NotIndexed), getAbiSeq, getAbi)
 import EVM.ABI (parseTypeName)
@@ -123,8 +123,8 @@ formatBytes b =
     else formatBinary b
 
 formatSBytes :: Buffer -> Text
-formatSBytes (SymbolicBuffer b) = "<" <> pack (show (length b)) <> " symbolic bytes>"
-formatSBytes (ConcreteBuffer b) = formatBytes b
+formatSBytes (SymbolicBuffer wbuff b) = "<" <> pack ((show (length b)) <> " symbolic bytes> " <> show wbuff)
+formatSBytes (ConcreteBuffer _ b) = formatBytes b
 
 formatQString :: ByteString -> Text
 formatQString = pack . show
@@ -133,16 +133,16 @@ formatString :: ByteString -> Text
 formatString bs = decodeUtf8 (fst (BS.spanEnd (== 0) bs))
 
 formatSString :: Buffer -> Text
-formatSString (SymbolicBuffer bs) = "<" <> pack (show (length bs)) <> " symbolic bytes (string)>"
-formatSString (ConcreteBuffer bs) = formatString bs
+formatSString (SymbolicBuffer wbuff bs) = "<" <> pack ((show (length bs)) <> " symbolic bytes (string)> " <> show wbuff)
+formatSString (ConcreteBuffer _ bs) = formatString bs
 
 formatBinary :: ByteString -> Text
 formatBinary =
   (<>) "0x" . decodeUtf8 . toStrict . toLazyByteString . byteStringHex
 
 formatSBinary :: Buffer -> Text
-formatSBinary (SymbolicBuffer bs) = "<" <> pack (show (length bs)) <> " symbolic bytes>"
-formatSBinary (ConcreteBuffer bs) = formatBinary bs
+formatSBinary (SymbolicBuffer wbuff bs) = "<" <> pack ((show (length bs)) <> " symbolic bytes> " <> show wbuff)
+formatSBinary (ConcreteBuffer _ bs) = formatBinary bs
 
 showTraceTree :: DappInfo -> VM -> Text
 showTraceTree dapp =
@@ -286,25 +286,25 @@ getAbiTypes abi = map (parseTypeName mempty) types
         splitOn "," (dropEnd 1 (last (splitOn "(" abi)))
 
 showCall :: [AbiType] -> Buffer -> Text
-showCall ts (SymbolicBuffer bs) = showValues ts $ SymbolicBuffer (drop 4 bs)
-showCall ts (ConcreteBuffer bs) = showValues ts $ ConcreteBuffer (BS.drop 4 bs)
+showCall ts (SymbolicBuffer wbuff bs) = showValues ts $ SymbolicBuffer Oops (drop 4 bs)
+showCall ts (ConcreteBuffer wbuff bs) = showValues ts $ ConcreteBuffer Oops (BS.drop 4 bs)
 
 showError :: ByteString -> Text
 showError bs = case BS.take 4 bs of
   -- Method ID for Error(string)
-  "\b\195y\160" -> showCall [AbiStringType] (ConcreteBuffer bs)
+  "\b\195y\160" -> showCall [AbiStringType] (ConcreteBuffer Oops bs)
   _             -> formatBinary bs
 
 showValues :: [AbiType] -> Buffer -> Text
-showValues ts (SymbolicBuffer  _) = "symbolic: " <> (pack . show $ AbiTupleType (fromList ts))
-showValues ts (ConcreteBuffer bs) =
+showValues ts (SymbolicBuffer _  _) = "symbolic: " <> (pack . show $ AbiTupleType (fromList ts))
+showValues ts (ConcreteBuffer _ bs) =
   case runGetOrFail (getAbiSeq (length ts) ts) (fromStrict bs) of
     Right (_, _, xs) -> showAbiValues xs
     Left (_, _, _)   -> formatBinary bs
 
 showValue :: AbiType -> Buffer -> Text
-showValue t (SymbolicBuffer _) = "symbolic: " <> (pack $ show t)
-showValue t (ConcreteBuffer bs) =
+showValue t (SymbolicBuffer _ _) = "symbolic: " <> (pack $ show t)
+showValue t (ConcreteBuffer _ bs) =
   case runGetOrFail (getAbi t) (fromStrict bs) of
     Right (_, _, x) -> showAbiValue x
     Left (_, _, _)  -> formatBinary bs
@@ -327,11 +327,11 @@ prettyvmresult (EVM.VMFailure (EVM.Revert ""))  = "Revert"
 prettyvmresult (EVM.VMFailure (EVM.Revert msg)) = "Revert" ++ (unpack $ showError msg)
 prettyvmresult (EVM.VMFailure (EVM.UnrecognizedOpcode 254)) = "Assertion violation"
 prettyvmresult (EVM.VMFailure err) = "Failed: " <> show err
-prettyvmresult (EVM.VMSuccess (ConcreteBuffer msg)) =
+prettyvmresult (EVM.VMSuccess (ConcreteBuffer _ msg)) =
   if BS.null msg
   then "Stop"
   else "Return: " <> show (ByteStringS msg)
-prettyvmresult (EVM.VMSuccess (SymbolicBuffer msg)) =
+prettyvmresult (EVM.VMSuccess (SymbolicBuffer _ msg)) =
   "Return: " <> show (length msg) <> " symbolic bytes"
 
 
@@ -417,12 +417,12 @@ showBranchInfoWithAbi :: DappInfo -> BranchInfo -> [String]
 showBranchInfoWithAbi _ (BranchInfo _ Nothing) = [""]
 showBranchInfoWithAbi srcInfo (BranchInfo vm (Just y)) =
   case y of
-    (UnOp "isZero" (InfixBinOp "==" (Val x) _)) ->
+    (IsZero (Eq (Literal x) _)) ->
       let
         abimap = view abiMap <$> currentSolc srcInfo vm
-        method = abimap >>= Map.lookup (read x)
-      in [maybe (show y) (show . view methodSignature) method]
-    y' -> [show y']
+        method = abimap >>= Map.lookup (num x)
+      in [maybe (show x) (show . view methodSignature) method]
+    w -> [show w]
 
 renderTree :: (a -> [String])
            -> (a -> [String])

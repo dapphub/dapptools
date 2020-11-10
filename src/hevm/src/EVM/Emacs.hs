@@ -457,10 +457,13 @@ instance SDisplay (SymWord) where
 instance SDisplay (SWord 8) where
   sexp x = A (txt (txt x))
 
+instance SDisplay Whiff where
+  sexp x = A (pack (show x))
+
 -- no idea what's going on here
 instance SDisplay Buffer where
-  sexp (SymbolicBuffer x) = sexp x
-  sexp (ConcreteBuffer x) = sexp x
+  sexp (SymbolicBuffer _ x) = sexp x
+  sexp (ConcreteBuffer _ x) = sexp x
 
 instance (SDisplay k, SDisplay v) => SDisplay (Map k v) where
   sexp x = L [L [sexp k, sexp v] | (k, v) <- Map.toList x]
