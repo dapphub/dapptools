@@ -301,8 +301,6 @@ data Contract = Contract
   , _balance      :: Word
   , _nonce        :: Word
   , _codehash     :: W256
-  , _opIxMap      :: Vector Int
-  , _codeOps      :: RegularVector.Vector (Int, Op)
   , _external     :: Bool
   , _origStorage  :: Map Word Word
   }
@@ -383,6 +381,16 @@ makeLenses ''VM
 bytecode :: Getter Contract ByteString
 bytecode = contractcode . to f
   where f (InitCode _)    = BS.empty
+        f (RuntimeCode b) = b
+
+opIxMap :: Getter Contract (Vector Int)
+opIxMap = contractcode . to f . to mkOpIxMap
+  where f (InitCode b) = b
+        f (RuntimeCode b) = b
+
+codeOps :: Getter Contract (RegularVector.Vector (Int, Op))
+codeOps = contractcode . to f . to mkCodeOps
+  where f (InitCode b) = b
         f (RuntimeCode b) = b
 
 instance Semigroup Cache where
@@ -481,8 +489,6 @@ initialContract theContractCode = Contract
   , _storage  = Concrete mempty
   , _balance  = 0
   , _nonce    = if creation then 1 else 0
-  , _opIxMap  = mkOpIxMap theCode
-  , _codeOps  = mkCodeOps theCode
   , _external = False
   , _origStorage = mempty
   } where
@@ -2263,7 +2269,7 @@ withTraceLocation x = do
   vm <- get
   let
     Just this =
-      preview (env . contracts . ix (view (state . codeContract) vm)) vm
+      currentContract vm
   pure Trace
     { _traceData = x
     , _traceCodehash = view codehash this
