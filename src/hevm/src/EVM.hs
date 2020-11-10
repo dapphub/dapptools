@@ -751,7 +751,7 @@ exec1 = do
 
         -- op: CALLDATALOAD
         0x35 -> stackOp1 (const g_verylow) $
-          \ind -> uncurry (readSWordWithBound ind) (the state calldata)
+          \ind -> uncurry (readSWordWithBoundCalldata ind) (the state calldata)
 
         -- op: CALLDATASIZE
         0x36 ->
