@@ -519,7 +519,7 @@ main = defaultMain $ testGroup "hevm"
 
                     function call_A() public {
                       a = new A();
-                      // should fail since a.x() can be anything
+                      // should fail since x can be anything
                       assert(a.x() == x);
                     }
                   }

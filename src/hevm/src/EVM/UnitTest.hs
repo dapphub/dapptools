@@ -711,7 +711,7 @@ setupCall TestVMParams{..} cd = do
   assign (state . gas) (w256 testGasCall)
   origin' <- fromMaybe (initialContract (RuntimeCode mempty)) <$> use (env . contracts . at testOrigin)
   let originBal = view balance origin'
-  when (originBal <= (w256 testGasprice) * (w256 testGasCall)) $ error "insufficient balance for gas cost"
+  when (originBal < (w256 testGasprice) * (w256 testGasCall)) $ error "insufficient balance for gas cost"
   vm <- get
   put $ initTx vm
 
@@ -748,11 +748,6 @@ initialUnitTestVm (UnitTestOptions {..}) theContract =
     & set (env . contracts . at ethrunAddress) (Just creator)
 
 
-maybeM :: (Monad m) => b -> (a -> b) -> m (Maybe a) -> m b
-maybeM def f mayb = do
-  may <- mayb
-  return $ maybe def f may
-
 -- | takes a concrete VM and makes all storage symbolic
 symbolify :: VM -> VM
 symbolify vm =
@@ -765,7 +760,7 @@ symbolify vm =
 
 getParametersFromEnvironmentVariables :: Maybe Text -> IO TestVMParams
 getParametersFromEnvironmentVariables rpc = do
-  block' <- maybeM EVM.Fetch.Latest (EVM.Fetch.BlockNumber . read) (lookupEnv "DAPP_TEST_NUMBER")
+  block' <- maybe EVM.Fetch.Latest (EVM.Fetch.BlockNumber . read) <$> (lookupEnv "DAPP_TEST_NUMBER")
 
   (miner,ts,blockNum,diff) <-
     case rpc of

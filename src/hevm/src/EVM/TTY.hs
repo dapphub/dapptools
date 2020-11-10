@@ -80,13 +80,7 @@ data UiVmState = UiVmState
   , _uiStep         :: Int
   , _uiSnapshots    :: Map Int (VM, Stepper ())
   , _uiStepper      :: Stepper ()
-  , _uiStackList    :: List Name (Int, (SymWord))
-  , _uiBytecodeList :: List Name (Int, Op)
-  , _uiTraceList    :: List Name Text
-  , _uiSolidityList :: List Name (Int, ByteString)
-  , _uiMessage      :: Maybe String
   , _uiShowMemory   :: Bool
-  , _uiSolc         :: Maybe SolcContract
   , _uiTestOpts     :: UnitTestOptions
   }
 
@@ -262,18 +256,11 @@ runFromVM maxIter' dappinfo oracle' vm = do
 
 initUiVmState :: VM -> UnitTestOptions -> Stepper () -> UiVmState
 initUiVmState vm0 opts script =
-  renderVm $
   UiVmState
     { _uiVm           = vm0
     , _uiStepper      = script
-    , _uiStackList    = undefined
-    , _uiBytecodeList = undefined
-    , _uiTraceList    = undefined
-    , _uiSolidityList = undefined
-    , _uiSolc         = currentSolc (dapp opts) vm0
     , _uiStep         = 0
     , _uiSnapshots    = singleton 0 (vm0, script)
-    , _uiMessage      = Just "Creating unit test contract"
     , _uiShowMemory   = False
     , _uiTestOpts     = opts
     }
@@ -330,7 +317,7 @@ takeStep ui mode =
       continue (ViewVm (ui' & set uiStepper steps))
   where
     m = interpret mode (view uiStepper ui)
-    nxt = runStateT (m <* modify renderVm) ui
+    nxt = runStateT m ui
 
 backstep
   :: (?fetcher :: Fetcher
@@ -862,7 +849,7 @@ isExecutionHalted _ vm = isJust (view result vm)
 currentSrcMap :: DappInfo -> VM -> Maybe SrcMap
 currentSrcMap dapp vm =
   let
-    this = vm ^?! env . contracts . ix (view (state . codeContract) vm)
+    Just this = currentContract vm
     i = (view opIxMap this) SVec.! (view (state . pc) vm)
     h = view codehash this
   in
@@ -877,67 +864,17 @@ currentSrcMap dapp vm =
 currentSolc :: DappInfo -> VM -> Maybe SolcContract
 currentSolc dapp vm =
   let
-    this = vm ^?! env . contracts . ix (view (state . contract) vm)
+    Just this = currentContract vm
     h = view codehash this
   in
     preview (dappSolcByHash . ix h . _2) dapp
-
-renderVm :: UiVmState -> UiVmState
-renderVm ui = updateUiVmState ui (view uiVm ui)
-
-updateUiVmState :: UiVmState -> VM -> UiVmState
-updateUiVmState ui vm =
-  let
-    move = maybe id listMoveTo (vmOpIx vm)
-    address = view (state . contract) vm
-    message =
-      case view result vm of
-        Just (VMSuccess (ConcreteBuffer msg)) ->
-          Just ("VMSuccess: " <> (show $ ByteStringS msg))
-        Just (VMSuccess (SymbolicBuffer msg)) ->
-          Just ("VMSuccess: <symbolicbuffer> " <> (show msg))
-        Just (VMFailure (Revert msg)) ->
-          Just ("VMFailure: " <> (show . ByteStringS $ msg))
-        Just (VMFailure err) ->
-          Just ("VMFailure: " <> show err)
-        Nothing ->
-          Just ("Executing EVM code in " <> show address)
-    in ui
-      & set uiVm vm
-      & set uiStackList
-          (list StackPane (Vec.fromList $ zip [1..] (view (state . stack) vm)) 2)
-      & set uiBytecodeList
-          (move $ list BytecodePane
-             (view codeOps (fromJust (currentContract vm)))
-             1)
-      & set uiMessage message
-      & set uiTraceList
-          (list
-            TracePane
-            (Vec.fromList
-              . Text.lines
-              . showTraceTree dapp'
-              $ vm)
-            1)
-      & set uiSolidityList
-          (list SolidityPane
-              (case currentSrcMap dapp' vm of
-                Nothing -> mempty
-                Just x ->
-                  view (dappSources
-                        . sourceLines
-                        . ix (srcMapFile x)
-                        . to (Vec.imap (,)))
-                    dapp')
-              1)
-      where
-        dapp' = dapp (view uiTestOpts ui)
 
 drawStackPane :: UiVmState -> UiWidget
 drawStackPane ui =
   let
     gasText = showWordExact (view (uiVm . state . gas) ui)
     labelText = txt ("Gas available: " <> gasText <> "; stack:")
+    stackList = list StackPane (Vec.fromList $ zip [1..] (view (uiVm . state . stack) ui)) 2
   in hBorderWithLabel labelText <=>
     renderList
       (\_ (i, x@(S _ w)) ->
@@ -949,17 +886,39 @@ drawStackPane ui =
                        Just u -> showWordExplanation (fromSizzle u) $ dapp (view uiTestOpts ui)))
            ])
       False
-      (view uiStackList ui)
+      stackList
+
+message :: VM -> String
+message vm =
+  case view result vm of
+    Just (VMSuccess (ConcreteBuffer msg)) ->
+      "VMSuccess: " <> (show $ ByteStringS msg)
+    Just (VMSuccess (SymbolicBuffer msg)) ->
+      "VMSuccess: <symbolicbuffer> " <> (show msg)
+    Just (VMFailure (Revert msg)) ->
+      "VMFailure: " <> (show . ByteStringS $ msg)
+    Just (VMFailure err) ->
+      "VMFailure: " <> show err
+    Nothing ->
+      "Executing EVM code in " <> show (view (state . contract) vm)
+
 
 drawBytecodePane :: UiVmState -> UiWidget
 drawBytecodePane ui =
-  hBorderWithLabel (case view uiMessage ui of { Nothing -> str ""; Just s -> str s }) <=>
+  let
+    vm = view uiVm ui
+    move = maybe id listMoveTo $ vmOpIx vm
+  in
+    hBorderWithLabel (str $ message vm) <=>
     Centered.renderList
       (\active x -> if not active
                     then withDefAttr dimAttr (opWidget x)
                     else withDefAttr boldAttr (opWidget x))
       False
-      (view uiBytecodeList ui)
+      (move $ list BytecodePane
+        (view codeOps (fromJust (currentContract vm)))
+        1)
+
 
 dim :: Widget n -> Widget n
 dim = withDefAttr dimAttr
@@ -974,32 +933,57 @@ prettyIfConcrete (ConcreteBuffer x) = prettyHex 40 x
 
 drawTracePane :: UiVmState -> UiWidget
 drawTracePane s =
-  case view uiShowMemory s of
+  let vm = view uiVm s
+      dapp' = dapp (view uiTestOpts s)
+      traceList =
+        list
+          TracePane
+          (Vec.fromList
+            . Text.lines
+            . showTraceTree dapp'
+            $ vm)
+          1
+
+  in case view uiShowMemory s of
     True ->
       hBorderWithLabel (txt "Calldata")
-      <=> str (prettyIfConcrete $ fst (view (uiVm . state . calldata) s))
+      <=> str (prettyIfConcrete $ fst (view (state . calldata) vm))
       <=> hBorderWithLabel (txt "Returndata")
-      <=> str (prettyIfConcrete (view (uiVm . state . returndata) s))
+      <=> str (prettyIfConcrete (view (state . returndata) vm))
       <=> hBorderWithLabel (txt "Output")
-      <=> str (maybe "" show (view (uiVm . result) s))
+      <=> str (maybe "" show (view result vm))
       <=> hBorderWithLabel (txt "Cache")
-      <=> str (show (view (uiVm . cache . path) s))
+      <=> str (show (view (cache . path) vm))
       <=> hBorderWithLabel (txt "Path Conditions")
-      <=> (str $ show $ snd <$> view (uiVm . constraints) s)
+      <=> (str $ show $ snd <$> view constraints vm)
       <=> hBorderWithLabel (txt "Memory")
       <=> viewport TracePane Vertical
-            (str (prettyIfConcrete (view (uiVm . state . memory) s)))
+            (str (prettyIfConcrete (view (state . memory) vm)))
     False ->
       hBorderWithLabel (txt "Trace")
       <=> renderList
             (\_ x -> txt x)
             False
-            (view uiTraceList s)
+            traceList
+
+solidityList :: VM -> DappInfo -> List Name (Int, ByteString)
+solidityList vm dapp' =
+  list SolidityPane
+    (case currentSrcMap dapp' vm of
+        Nothing -> mempty
+        Just x ->
+          view (dappSources
+            . sourceLines
+            . ix (srcMapFile x)
+            . to (Vec.imap (,)))
+          dapp')
+    1
 
 drawSolidityPane :: UiVmState -> UiWidget
 drawSolidityPane ui =
   let dapp' = dapp (view uiTestOpts ui)
-  in case currentSrcMap dapp' (view uiVm ui) of
+      vm = view uiVm ui
+  in case currentSrcMap dapp' vm of
     Nothing -> padBottom Max (hBorderWithLabel (txt "<no source map>"))
     Just sm ->
       case view (dappSources . sourceLines . at (srcMapFile sm)) dapp' of
@@ -1015,7 +999,7 @@ drawSolidityPane ui =
           in vBox
             [ hBorderWithLabel $
                 txt (maybe "<unknown>" contractPathPart
-                      (preview (uiSolc . _Just . contractName) ui))
+                      (preview (_Just . contractName) (currentSolc dapp' vm)))
                   <+> str (":" ++ show lineNo)
 
                   -- Show the AST node type if present
@@ -1038,7 +1022,7 @@ drawSolidityPane ui =
                                   ])
                 False
                 (listMoveTo lineNo
-                  (view uiSolidityList ui))
+                  (solidityList vm dapp'))
             ]
 
 ifTallEnough :: Int -> Widget n -> Widget n -> Widget n
