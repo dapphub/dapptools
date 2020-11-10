@@ -20,7 +20,7 @@ import Data.Proxy (Proxy(..))
 import EVM.ABI
 import EVM.Types
 import EVM.Solidity
-import EVM.Concrete (Word(..), w256, createAddress, wordValue, keccakBlob, create2Address, Whiff(..))
+import EVM.Concrete (w256, createAddress, wordValue, keccakBlob, create2Address)
 import EVM.Symbolic
 import EVM.Op
 import EVM.FeeSchedule (FeeSchedule (..))
@@ -751,7 +751,7 @@ exec1 = do
 
         -- op: CALLDATALOAD
         0x35 -> stackOp1 (const g_verylow) $
-          \(S _ x) -> uncurry (readSWordWithBound (sFromIntegral x)) (the state calldata)
+          \ind -> uncurry (readSWordWithBound ind) (the state calldata)
 
         -- op: CALLDATASIZE
         0x36 ->
@@ -2164,7 +2164,6 @@ finishFrame how = do
               revertSubstate
               assign (state . returndata) mempty
               push 0
-
         -- Or were we creating?
         CreationContext _ reversion substate' -> do
           creator <- use (state . contract)

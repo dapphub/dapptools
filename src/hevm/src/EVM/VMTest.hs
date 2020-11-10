@@ -12,6 +12,8 @@ module EVM.VMTest
   , checkExpectation
   ) where
 
+import Prelude hiding (Word)
+
 import qualified EVM
 import EVM (contractcode, storage, origStorage, balance, nonce, Storage(..), initialContract)
 import qualified EVM.Concrete as EVM
@@ -21,7 +23,7 @@ import EVM.Symbolic
 import EVM.Transaction
 import EVM.Types
 
-import Data.SBV
+import Data.SBV hiding (Word)
 
 import Control.Arrow ((***), (&&&))
 import Control.Lens
@@ -332,7 +334,7 @@ vmForCase x =
     initTx vm
 
 -- | Increments origin nonce and pays gas deposit
-setupTx :: Addr -> Addr -> EVM.Word -> EVM.Word -> Map Addr EVM.Contract -> Map Addr EVM.Contract
+setupTx :: Addr -> Addr -> Word -> Word -> Map Addr EVM.Contract -> Map Addr EVM.Contract
 setupTx origin coinbase gasPrice gasLimit prestate =
   let gasCost = gasPrice * gasLimit
   in (Map.adjust ((over nonce   (+ 1))

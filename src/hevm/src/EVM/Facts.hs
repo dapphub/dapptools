@@ -36,10 +36,9 @@ module EVM.Facts
   ) where
 
 import EVM          (VM, Contract, Cache)
-import EVM.Concrete (Word)
-import EVM.Symbolic (litWord, SymWord, forceLit)
+import EVM.Symbolic (litWord, forceLit)
 import EVM          (balance, nonce, storage, bytecode, env, contracts, contract, state, cache, fetched)
-import EVM.Types    (Addr)
+import EVM.Types    (Addr, Word, SymWord)
 
 import qualified EVM
 

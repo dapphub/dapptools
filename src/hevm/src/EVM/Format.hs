@@ -5,14 +5,14 @@ module EVM.Format where
 
 import Prelude hiding (Word)
 import Numeric
+import qualified EVM
+import EVM.Dapp (DappInfo (..), dappSolcByHash, dappSolcByName, showTraceLocation, dappEventMap)
+import EVM.Concrete ( wordValue )
 import EVM (VM, VMResult(..), cheatCode, traceForest, traceData, Error (..), result)
 import EVM (Trace, TraceData (..), Log (..), Query (..), FrameContext (..), Storage(..))
-import qualified EVM
-import EVM.Concrete (Word (..), wordValue, Whiff(..))
-import EVM.Dapp (DappInfo (..), dappSolcByHash, dappSolcByName, showTraceLocation, dappEventMap)
 import EVM.SymExec
-import EVM.Symbolic (SymWord(..), maybeLitWord, len, litWord)
-import EVM.Types (W256 (..), num, Buffer(..), ByteStringS(..))
+import EVM.Symbolic ( len, litWord)
+import EVM.Types (maybeLitWord, Word (..), Whiff(..), SymWord(..), W256 (..), num, Buffer(..), ByteStringS(..))
 import EVM.ABI (AbiValue (..), Event (..), AbiType (..))
 import EVM.ABI (Indexed (NotIndexed), getAbiSeq, getAbi)
 import EVM.ABI (parseTypeName)
