@@ -96,6 +96,9 @@ shiftRight' (S _ a') b@(S _ b') = case (num <$> unliteral a', b) of
   (Just n, (S (FromBytes index (SymbolicBuffer a)) _)) | n `mod` 8 == 0 && n <= 256 ->
     let bs = replicate (n `div` 8) 0 <> (take ((256 - n) `div` 8) a)
     in S (FromBytes index (SymbolicBuffer bs)) (fromBytes bs)
+  (Just n, (S (FromCalldata index (SymbolicBuffer a)) _)) | n `mod` 8 == 0 && n <= 256 ->
+    let bs = replicate (n `div` 8) 0 <> (take ((256 - n) `div` 8) a)
+    in S (FromCalldata index (SymbolicBuffer bs)) (fromBytes bs)
   _ -> sw256 $ sShiftRight b' a'
 
 -- | Operations over symbolic memory (list of symbolic bytes)
@@ -162,6 +165,24 @@ readSWordWithBound sind@(S whiff ind) (SymbolicBuffer xs) bound = case (num <$> 
 readSWordWithBound sind@(S whiff ind) (ConcreteBuffer xs) bound =
   case num <$> maybeLitWord sind of
     Nothing -> readSWordWithBound sind (SymbolicBuffer (litBytes xs)) bound
+    Just x' ->
+       -- INVARIANT: bound should always be length xs for concrete bytes
+       -- so we should be able to safely ignore it here
+         litWord $ Concrete.readMemoryWord (num x') xs
+
+readSWordWithBoundCalldata :: SymWord -> Buffer -> SWord 32 -> SymWord
+readSWordWithBoundCalldata sind@(S whiff ind) (SymbolicBuffer xs) bound = case (num <$> maybeLitWord sind, num <$> fromSized <$> unliteral bound) of
+  (Just i, Just b) ->
+    let bs = truncpad 32 $ drop i (take b xs)
+    in S (FromCalldata sind (SymbolicBuffer bs)) (fromBytes bs)
+  _ ->
+    let boundedList = [ite (i .<= bound) x 0 | (x, i) <- zip xs [1..]]
+        res = [select' boundedList 0 (ind + j) | j <- [0..31]]
+    in S (FromCalldata sind (SymbolicBuffer res)) $ fromBytes $ res
+
+readSWordWithBoundCalldata sind@(S whiff ind) (ConcreteBuffer xs) bound =
+  case num <$> maybeLitWord sind of
+    Nothing -> readSWordWithBoundCalldata sind (SymbolicBuffer (litBytes xs)) bound
     Just x' ->
        -- INVARIANT: bound should always be length xs for concrete bytes
        -- so we should be able to safely ignore it here
