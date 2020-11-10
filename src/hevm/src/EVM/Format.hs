@@ -6,7 +6,7 @@ module EVM.Format where
 import Prelude hiding (Word)
 import Numeric
 import qualified EVM
-import EVM.Dapp (DappInfo (..), dappSolcByHash, dappSolcByName, showTraceLocation, dappEventMap)
+import EVM.Dapp (DappInfo (..), dappSolcByHash, dappAbiMap, dappSolcByName, showTraceLocation, dappEventMap)
 import EVM.Concrete ( wordValue )
 import EVM (VM, VMResult(..), cheatCode, traceForest, traceData, Error (..), result)
 import EVM (Trace, TraceData (..), Log (..), Query (..), FrameContext (..), Storage(..))
@@ -405,7 +405,7 @@ formatBranchInfo srcInfo bi =
       let
         abimap = view abiMap <$> currentSolc srcInfo (_vm bi)
         method = abimap >>= Map.lookup (read x)
-      in maybe cond (show . view methodSignature) method
+      in cond -- maybe cond (show . view methodSignature) method
 
     _ -> cond
 
@@ -437,3 +437,16 @@ showBranchTree srcInfo tree =
       indentSize = (maxIndent -(length colIndent))
       in colIndent <> leftpad indentSize colContent
   in unlines $ showTreeLine <$> treeLines
+
+
+data AbiBranching = NoBranching | ConcreteBranching | CompareBranching
+
+abiBranching :: BranchInfo -> AbiBranching
+abiBranching _ = NoBranching -- TODO fix
+
+flattenAbi :: Bool -> DappInfo -> Tree BranchInfo -> Tree BranchInfo
+flattenAbi False srcInfo t@(Node bi children) = case abiBranching bi of
+  NoBranching       -> Node bi $ map (flattenAbi False srcInfo) children
+  ConcreteBranching -> t
+  CompareBranching  -> t
+flattenAbi False srcInfo t = t

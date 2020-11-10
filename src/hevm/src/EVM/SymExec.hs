@@ -141,7 +141,7 @@ data BranchInfo = BranchInfo
     _branchCondition    :: Maybe Whiff
   }
 
-interpret' :: Fetch.Fetcher -> Maybe Integer -> VM -> Query (Tree BranchInfo)
+interpret' :: Fetch.Fetcher -> Maybe Integer -> VM -> Query (VM, [(Tree BranchInfo)])
 interpret' fetcher maxIter vm = let
   cont s = interpret' fetcher maxIter $ execState s vm
   in case view EVM.result vm of
@@ -159,18 +159,21 @@ interpret' fetcher maxIter vm = let
 
     Just (VMFailure (Choose (EVM.PleaseChoosePath whiff continue)))
       -> case maxIterationsReached vm maxIter of
-        Nothing -> do
+        Nothing -> let
+          lvm = execState (continue True) vm
+          rvm = execState (continue False) vm
+          in do
             push 1
-            left <- cont $ continue True
+            (leftvm, left) <- interpret' fetcher maxIter lvm
             pop 1
             push 1
-            right <- cont $ continue False
+            (rightvm, right) <- interpret' fetcher maxIter rvm
             pop 1
-            return $ Node (BranchInfo vm (Just whiff)) [left, right]
+            return (vm, [Node (BranchInfo leftvm (Just whiff)) left, Node (BranchInfo rightvm (Just whiff)) right])
         Just n -> cont $ continue (not n)
 
     Just _
-      -> return $ Node (BranchInfo vm Nothing) []
+      -> return (vm, [])
 
 -- | Interpreter which explores all paths at
 -- | branching points.
@@ -297,7 +300,7 @@ verify :: VM -> Maybe Integer -> Maybe (Fetch.BlockNumber, Text) -> Maybe Postco
 verify preState maxIter rpcinfo maybepost = do
   let model = view (env . storageModel) preState
   smtState <- queryState
-  tree <- interpret' (Fetch.oracle (Just smtState) rpcinfo False) maxIter preState
+  tree <- Node (BranchInfo preState Nothing) . snd <$> interpret' (Fetch.oracle (Just smtState) rpcinfo False) maxIter preState
   case maybepost of
     (Just post) -> do
       let livePaths = pruneDeadPaths $ leaves tree
@@ -333,10 +336,10 @@ equivalenceCheck bytecodeA bytecodeB maxiter signature' = do
 
   smtState <- queryState
   push 1
-  aVMs <- interpret' (Fetch.oracle (Just smtState) Nothing False) maxiter preStateA
+  aVMs <- Node (BranchInfo preStateA Nothing) . snd <$> interpret' (Fetch.oracle (Just smtState) Nothing False) maxiter preStateA
   pop 1
   push 1
-  bVMs <- interpret' (Fetch.oracle (Just smtState) Nothing False) maxiter preStateB
+  bVMs <- Node (BranchInfo preStateB Nothing) . snd <$> interpret' (Fetch.oracle (Just smtState) Nothing False) maxiter preStateB
   pop 1
   -- Check each pair of endstates for equality:
   let differingEndStates = uncurry distinct <$> [(a,b) | a <- pruneDeadPaths (leaves aVMs), b <- pruneDeadPaths (leaves bVMs)]
