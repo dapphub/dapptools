@@ -510,13 +510,12 @@ symRun opts@UnitTestOptions{..} concreteVm testName types = do
     SBV.resetAssertions
     let vm = symbolify concreteVm
     cd <- first SymbolicBuffer <$> symCalldata testName types []
-    let model = view (env . storageModel) vm
-        shouldFail = "proveFail" `isPrefixOf` testName
+    let shouldFail = "proveFail" `isPrefixOf` testName
 
     -- get all posible postVMs for the test method
     allPaths <- fst <$> runStateT
         (EVM.SymExec.interpret
-          (EVM.Fetch.oracle smtState Nothing model False)
+          (EVM.Fetch.oracle smtState Nothing False)
           maxIter
           (execSymTest opts testName cd))
         vm

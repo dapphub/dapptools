@@ -129,7 +129,7 @@ data TraceData
 
 -- | Queries halt execution until resolved through RPC calls or SMT queries
 data Query where
-  PleaseFetchContract :: Addr -> (Contract -> EVM ()) -> Query
+  PleaseFetchContract :: Addr -> StorageModel -> (Contract -> EVM ()) -> Query
   PleaseMakeUnique    :: SymVal a => SBV a -> [SBool] -> (Maybe a -> EVM ()) -> Query
   PleaseFetchSlot     :: Addr -> Word -> (Word -> EVM ()) -> Query
   PleaseAskSMT        :: SBool -> [SBool] -> (BranchCondition -> EVM ()) -> Query
@@ -139,7 +139,7 @@ data Choose where
 
 instance Show Query where
   showsPrec _ = \case
-    PleaseFetchContract addr _ ->
+    PleaseFetchContract addr _ _ ->
       (("<EVM.Query: fetch contract " ++ show addr ++ ">") ++)
     PleaseFetchSlot addr slot _ ->
       (("<EVM.Query: fetch slot "
@@ -1588,9 +1588,10 @@ fetchAccount addr continue =
         Just c -> do
           assign (env . contracts . at addr) (Just c)
           continue c
-        Nothing ->
+        Nothing -> do
+          model <- use (env . storageModel)
           assign result . Just . VMFailure $ Query $
-            PleaseFetchContract addr
+            PleaseFetchContract addr model
               (\c -> do assign (cache . fetched . at addr) (Just c)
                         assign (env . contracts . at addr) (Just c)
                         assign result Nothing

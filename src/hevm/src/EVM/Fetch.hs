@@ -156,14 +156,14 @@ fetchSlotFrom n url addr slot =
     (\s -> fetchSlotWithSession n url s addr slot)
 
 http :: BlockNumber -> Text -> Fetcher
-http n url = oracle Nothing (Just (n, url)) EVM.ConcreteS True
+http n url = oracle Nothing (Just (n, url)) True
 
 zero :: Fetcher
-zero = oracle Nothing Nothing EVM.ConcreteS True
+zero = oracle Nothing Nothing True
 
 -- smtsolving + (http or zero)
-oracle :: Maybe SBV.State -> Maybe (BlockNumber, Text) -> StorageModel -> Bool -> Fetcher
-oracle smtstate info model ensureConsistency q = do
+oracle :: Maybe SBV.State -> Maybe (BlockNumber, Text) -> Bool -> Fetcher
+oracle smtstate info ensureConsistency q = do
   case q of
     EVM.PleaseAskSMT branchcondition pathconditions continue ->
       case smtstate of
@@ -175,7 +175,7 @@ oracle smtstate info model ensureConsistency q = do
 
     -- if we are using a symbolic storage model,
     -- we generate a new array to the fetched contract here
-    EVM.PleaseFetchContract addr continue -> do
+    EVM.PleaseFetchContract addr model continue -> do
       contract <- case info of
                     Nothing -> return $ Just $ initialContract (EVM.RuntimeCode mempty)
                     Just (n, url) -> fetchContractFrom n url addr
