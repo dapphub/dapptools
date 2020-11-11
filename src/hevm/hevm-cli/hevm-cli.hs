@@ -36,7 +36,7 @@ import EVM.Types hiding (word)
 import EVM.UnitTest (UnitTestOptions, coverageReport, coverageForUnitTestContract)
 import EVM.UnitTest (runUnitTestContract)
 import EVM.UnitTest (getParametersFromEnvironmentVariables, testNumber)
-import EVM.Dapp (findUnitTests, dappInfo, DappInfo, Test(..))
+import EVM.Dapp (findUnitTests, dappInfo, DappInfo)
 import EVM.Format (showTraceTree, showBranchTree)
 import EVM.RLP (rlpdecode)
 import qualified EVM.Patricia as Patricia
@@ -375,7 +375,7 @@ dappTest opts solcFile cache = do
   case out of
     Just (contractMap, _) -> do
       let matcher = regexMatches (EVM.UnitTest.match opts)
-          unitTests = fmap (filterTests matcher) $ findUnitTests $ Map.elems contractMap
+          unitTests = findUnitTests matcher $ Map.elems contractMap
       results <- concatMapM (runUnitTestContract opts contractMap) unitTests
       let (passing, vms) = unzip results
       case cache of
@@ -402,12 +402,6 @@ regexMatches regexSource =
     regex = Regex.makeRegexOpts compOpts execOpts (unpack regexSource)
   in
     Regex.matchTest regex . Seq.fromList . unpack
-
-filterTests :: (Text -> Bool) -> (Text, [(Test, [AbiType])]) -> (Text, [(Test, [AbiType])])
-filterTests matcher (contract, tests) = (contract, (flip filter) tests $
-                                          \(test, _) -> case test of
-                                                          SymbolicTest name -> matcher name
-                                                          ConcreteTest name -> matcher name)
 
 equivalence :: Command Options.Unwrapped -> IO ()
 equivalence cmd =
@@ -573,7 +567,7 @@ dappCoverage opts _ solcFile =
     \case
       Just (contractMap, sourceCache) -> do
         let matcher = regexMatches (EVM.UnitTest.match opts)
-            unitTests = fmap (filterTests matcher) $ findUnitTests $ Map.elems contractMap
+            unitTests = findUnitTests matcher $ Map.elems contractMap
         covs <- mconcat <$> mapM (coverageForUnitTestContract opts contractMap sourceCache) unitTests
 
         let
