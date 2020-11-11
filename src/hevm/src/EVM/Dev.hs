@@ -20,6 +20,7 @@ import Control.Monad.State.Strict (execStateT)
 
 import qualified Data.Map as Map
 import qualified Data.ByteString.Lazy   as LazyByteString
+import Data.Text (Text, isPrefixOf)
 
 concatMapM :: Monad m => (a -> m [b]) -> [a] -> m [b]
 concatMapM op = foldr f (pure [])
@@ -60,7 +61,8 @@ ghciTest root path state =
     readSolc path >>=
       \case
         Just (contractMap, _) -> do
-          let unitTests = findUnitTests (Map.elems contractMap)
+          let unitTests = findUnitTests
+                (\a -> "test" `isPrefixOf` a || "prove" `isPrefixOf` a) (Map.elems contractMap)
           results <- runSMT $ query $ concatMapM (runUnitTestContract opts contractMap) unitTests
           let (passing, _) = unzip results
           pure passing
