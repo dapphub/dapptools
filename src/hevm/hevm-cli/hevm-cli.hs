@@ -270,8 +270,8 @@ unitTestOptions cmd testFile = do
   pure EVM.UnitTest.UnitTestOptions
     { EVM.UnitTest.oracle =
         case rpc cmd of
-         Just url -> EVM.Fetch.oracle (Just state) (Just (block', url)) InitialS True
-         Nothing  -> EVM.Fetch.oracle (Just state) Nothing InitialS True
+         Just url -> EVM.Fetch.oracle (Just state) (Just (block', url)) True
+         Nothing  -> EVM.Fetch.oracle (Just state) Nothing True
     , EVM.UnitTest.maxIter = maxIterations cmd
     , EVM.UnitTest.smtTimeout = smttimeout cmd
     , EVM.UnitTest.solver = solver cmd
@@ -477,7 +477,6 @@ assert :: Command Options.Unwrapped -> IO ()
 assert cmd = do
   let block'  = maybe EVM.Fetch.Latest EVM.Fetch.BlockNumber (block cmd)
       rpcinfo = (,) block' <$> rpc cmd
-      model = fromMaybe (if create cmd then InitialS else SymbolicS) (storageModel cmd)
       treeShowing :: Tree BranchInfo -> Query ()
       treeShowing tree =
         when (showTree cmd) $ do
@@ -501,7 +500,7 @@ assert cmd = do
       io $ void $ EVM.TTY.runFromVM
         (maxIterations cmd)
         srcInfo
-        (EVM.Fetch.oracle (Just smtState) rpcinfo model True)
+        (EVM.Fetch.oracle (Just smtState) rpcinfo True)
         preState
 
   else
