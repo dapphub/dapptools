@@ -364,20 +364,7 @@ showTreeIndentSymbol False True  = "\x251c"
 showTreeIndentSymbol True  False = " "
 showTreeIndentSymbol False False = "\x2502"
 
--- gets one single case with its children
--- indents the children
--- formats and adds the branch head
-adjustTree :: String  -- Branch Head - one line containing information for this branch case (e.g. condition)
-  -> Int              -- Case index
-  -> Int              -- total number of cases
-  -> [TreeLine]       -- Lines of Branch Children
-  -> [TreeLine]       -- Lines of Branch Children
-adjustTree head totalCases i bds = let
-  isLastCase       = i + 1 == totalCases
-  indentLine       = over indent $ (<>) ((showTreeIndentSymbol isLastCase False) <> " ")
-  indentedChildren = map indentLine bds
-  branchHead       = TreeLine (showTreeIndentSymbol isLastCase True <> " " <> show i) head
-  in branchHead : indentedChildren
+
 
 showStorage :: [(SymWord, SymWord)] -> [String]
 showStorage = fmap (\(k, v) -> show k <> " => " <> show v)
@@ -409,26 +396,43 @@ formatBranchInfo srcInfo bi =
 
     _ -> cond
 
-flattenTree :: DappInfo -> Tree BranchInfo -> [TreeLine]
+
+flattenTree :: DappInfo ->
+               Int -> -- total number of cases
+               Int -> -- case index
+               Tree BranchInfo ->
+               [TreeLine]
 -- leaf case
-flattenTree srcInfo (Node bi []) =
-  let
-    tail = showLeaf srcInfo bi
-  in TreeLine "" <$> tail
--- branch case
-flattenTree srcInfo (Node bi xs) = let
-  cases = map (flattenTree srcInfo) xs
+flattenTree srcInfo totalCases i (Node bi []) = let
   bhead = formatBranchInfo srcInfo bi
-  prefixed = zipWith (adjustTree bhead (length cases)) [0..] cases
-  in concat prefixed
+  isLastCase       = i + 1 == totalCases
+  indenthead       = showTreeIndentSymbol isLastCase True <> " " <> show i
+  tail = showLeaf srcInfo bi
+  in TreeLine indenthead (bhead)
+  : ((TreeLine (showTreeIndentSymbol isLastCase False <> " ")) <$> tail)
+
+-- branch case
+flattenTree srcInfo totalCases i (Node bi xs) = let
+  bhead            = formatBranchInfo srcInfo bi
+  isLastCase       = i + 1 == totalCases
+  indenthead       = showTreeIndentSymbol isLastCase True <> " " <> show i <> " "
+  indentchild      = showTreeIndentSymbol isLastCase False <> " "
+  forest           = flattenForest srcInfo xs
+  indentLine       = over indent $ (<>) indentchild
+  indentedChildren = map indentLine forest
+  in (TreeLine indenthead bhead)
+  :  indentedChildren
+
+flattenForest :: DappInfo -> [Tree BranchInfo] -> [TreeLine]
+flattenForest srcInfo forest = concat $ zipWith (flattenTree srcInfo (length forest)) [0..] forest
 
 leftpad :: Int -> String -> String
 leftpad n = (<>) $ replicate n ' '
 
 showBranchTree :: DappInfo -> Tree BranchInfo -> String
-showBranchTree srcInfo tree =
+showBranchTree srcInfo (Node _ children) =
   let
-    treeLines = flattenTree srcInfo tree
+    treeLines = flattenForest srcInfo children
     doMax treeLine x = max x $ length $ _indent treeLine
     maxIndent = 2 + foldr doMax 0 treeLines
     showTreeLine bd = let
@@ -444,7 +448,10 @@ data AbiBranching = NoBranching | ConcreteBranching | CompareBranching
 abiBranching :: BranchInfo -> AbiBranching
 abiBranching _ = NoBranching -- TODO fix
 
-flattenAbi :: Bool -> DappInfo -> Tree BranchInfo -> Tree BranchInfo
+flattenAbi :: Bool ->
+              DappInfo ->
+              Tree BranchInfo ->
+              Tree BranchInfo
 flattenAbi False srcInfo t@(Node bi children) = case abiBranching bi of
   NoBranching       -> Node bi $ map (flattenAbi False srcInfo) children
   ConcreteBranching -> t
