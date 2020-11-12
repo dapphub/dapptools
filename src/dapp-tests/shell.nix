@@ -2,8 +2,16 @@
   pkgs ? import ../.. {}
 }:
 
-pkgs.mkShell {
-  name = "dapp-tests";
+with pkgs;
+let
+  my-python-packages = python-packages: with python-packages; [
+    hypothesis
+    # other python packages you want
+  ]; 
+  python-with-pkgs = python3.withPackages my-python-packages;
+in
 
-  buildInputs = with pkgs; [ killall cacert bashInteractive curl dapp gnumake hevm procps seth solc ];
+mkShell {
+  name = "dapp-tests";
+  buildInputs = [ killall cacert bashInteractive curl dapp gnumake hevm procps seth solc go-ethereum python-with-pkgs ];
 }
