@@ -34,6 +34,7 @@ import Data.Text (dropEnd, splitOn)
 import Data.Text.Encoding (decodeUtf8, decodeUtf8')
 import Data.Tree (Tree (Node))
 import Data.Tree.View (showTree)
+import Data.Tree.Lens
 import Data.Vector (Vector, fromList)
 
 import qualified Data.ByteString as BS
@@ -392,7 +393,7 @@ formatBranchInfo srcInfo bi =
       let
         abimap = view abiMap <$> currentSolc srcInfo (_vm bi)
         method = abimap >>= Map.lookup (read x)
-      in cond -- maybe cond (show . view methodSignature) method
+      in maybe cond (show . view methodSignature) method
 
     _ -> cond
 
@@ -432,7 +433,7 @@ leftpad n = (<>) $ replicate n ' '
 showBranchTree :: DappInfo -> Tree BranchInfo -> String
 showBranchTree srcInfo (Node _ children) =
   let
-    treeLines = flattenForest srcInfo children
+    treeLines = flattenForest srcInfo (restack (flattenAbi False children))
     doMax treeLine x = max x $ length $ _indent treeLine
     maxIndent = 2 + foldr doMax 0 treeLines
     showTreeLine bd = let
@@ -446,14 +447,42 @@ showBranchTree srcInfo (Node _ children) =
 data AbiBranching = NoBranching | ConcreteBranching | CompareBranching
 
 abiBranching :: BranchInfo -> AbiBranching
-abiBranching _ = NoBranching -- TODO fix
+abiBranching (BranchInfo _ (Just (UnOp "isZero" (InfixBinOp "==" (Val _) (FromCalldata _ _))))) = ConcreteBranching
+abiBranching (BranchInfo _ (Just (UnOp "isZero" (InfixBinOp ">" (Val _) (FromCalldata _ _))))) = CompareBranching
+abiBranching _ = NoBranching
 
-flattenAbi :: Bool ->
-              DappInfo ->
-              Tree BranchInfo ->
-              Tree BranchInfo
-flattenAbi False srcInfo t@(Node bi children) = case abiBranching bi of
-  NoBranching       -> Node bi $ map (flattenAbi False srcInfo) children
-  ConcreteBranching -> t
-  CompareBranching  -> t
-flattenAbi False srcInfo t = t
+flattenAbi :: Bool ->               -- have we hit the abi barrier?
+              [Tree BranchInfo] ->
+              [Tree BranchInfo]
+flattenAbi False forest@((Node lbi ls):(Node rbi rs):_) = let
+    ff = flattenAbi False
+    ft = flattenAbi True
+  in case abiBranching lbi of
+      NoBranching       -> map (over branches ff) forest
+      ConcreteBranching -> (Node rbi rs) : (ft ls)
+      CompareBranching  -> (ft ls) ++ (ft rs)
+flattenAbi True forest@((Node lbi ls):(Node rbi rs):_) = let
+    ft = flattenAbi True
+  in case abiBranching lbi of
+      NoBranching       -> forest
+      ConcreteBranching -> (Node rbi rs) : (ft ls)
+      CompareBranching  -> (ft ls) ++ (ft rs)
+flattenAbi _ t = t -- should never happen
+
+isAbi :: BranchInfo -> Bool
+isAbi (BranchInfo _ (Just (UnOp "isZero" (InfixBinOp "==" (Val _) (FromCalldata _ _))))) = True
+isAbi _ = False
+
+abiForest :: [Tree BranchInfo] -> [Tree BranchInfo]
+abiForest [] = []
+abiForest f@((Node bi _):_) = let
+  xx = concatMap (abiForest . view branches) f
+  in if isAbi bi then f else xx
+
+-- TODO - doesn't work correctly, compare to real tree
+restack :: [Tree BranchInfo] -> [Tree BranchInfo]
+restack forest = let
+  insertIntoHollow cs [] = cs
+  insertIntoHollow cs f@((Node bi cl):xs) = if isAbi bi then cs else map (over branches (insertIntoHollow cs)) f
+  forest' = abiForest forest
+  in map (\(Node bi cs) -> Node bi (insertIntoHollow cs forest)) forest'
