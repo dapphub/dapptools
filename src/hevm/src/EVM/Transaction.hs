@@ -65,7 +65,7 @@ signingData chainId tx =
                               rlpWord256 0x0,
                               rlpWord256 0x0]
 
-txGasCost :: FeeSchedule Word -> Transaction -> Word
+txGasCost :: FeeSchedule Integer -> Transaction -> Integer
 txGasCost fs tx =
   let calldata     = txData tx
       zeroBytes    = BS.count 0 calldata
