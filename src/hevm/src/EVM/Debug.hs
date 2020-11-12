@@ -15,7 +15,7 @@ import qualified Data.Map              as Map
 
 import Text.PrettyPrint.ANSI.Leijen
 
-data Mode = Debug | Run deriving (Eq, Show)
+data Mode = Debug | Run | JsonTrace deriving (Eq, Show)
 
 object :: [(Doc, Doc)] -> Doc
 object xs =

@@ -22,7 +22,7 @@ import qualified EVM.Flatten
 import qualified EVM.Stepper
 import qualified EVM.TTY
 import qualified EVM.Emacs
-import EVM.Dev (concatMapM)
+import EVM.Dev (concatMapM, interpretWithTrace)
 
 #if MIN_VERSION_aeson(1, 0, 0)
 import qualified EVM.VMTest as VMTest
@@ -154,6 +154,7 @@ data Command w
       , difficulty  :: w ::: Maybe W256       <?> "Block: difficulty"
       , chainid     :: w ::: Maybe W256       <?> "Env: chainId"
       , debug       :: w ::: Bool             <?> "Run interactively"
+      , jsontrace   :: w ::: Bool             <?> "Print json trace output at every step"
       , trace       :: w ::: Bool             <?> "Dump trace"
       , state       :: w ::: Maybe String     <?> "Path to state repository"
       , cache       :: w ::: Maybe String     <?> "Path to rpc cache repository"
@@ -228,7 +229,7 @@ instance Options.ParseRecord (Command Options.Wrapped) where
     Options.parseRecordWithModifiers Options.lispCaseModifiers
 
 optsMode :: Command Options.Unwrapped -> Mode
-optsMode x = if debug x then Debug else Run
+optsMode x = if debug x then Debug else if jsontrace x then JsonTrace else Run
 
 applyCache :: (Maybe String, Maybe String) -> IO (EVM.VM -> EVM.VM)
 applyCache (state, cache) =
@@ -622,6 +623,7 @@ launchExec cmd = do
               Git.saveFacts (Git.RepoAt path) (Facts.cacheFacts (view EVM.cache vm'))
 
     Debug -> void $ EVM.TTY.runFromVM Nothing dapp fetcher vm
+    JsonTrace -> void $ execStateT (interpretWithTrace fetcher EVM.Stepper.runFully) vm
    where fetcher = maybe EVM.Fetch.zero (EVM.Fetch.http block') (rpc cmd)
          block'  = maybe EVM.Fetch.Latest EVM.Fetch.BlockNumber (block cmd)
 
