@@ -133,6 +133,9 @@ instance Read W256 where
 instance Show W256 where
   showsPrec _ s = ("0x" ++) . showHex s
 
+instance JSON.ToJSON W256 where
+  toJSON = JSON.String . Text.pack . show
+
 instance Read Addr where
   readsPrec _ ('0':'x':s) = readHex s
   readsPrec _ s = readHex s
@@ -170,6 +173,9 @@ instance Read ByteStringS where
     readsPrec _ ('0':'x':x) = [bimap ByteStringS (Text.unpack . Text.decodeUtf8) bytes]
        where bytes = BS16.decode (Text.encodeUtf8 (Text.pack x))
     readsPrec _ _ = []
+
+instance JSON.ToJSON ByteStringS where
+  toJSON = JSON.String . Text.pack . show
 
 instance FromJSON W256 where
   parseJSON v = do

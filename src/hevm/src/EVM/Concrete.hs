@@ -14,6 +14,7 @@ import Data.ByteString (ByteString)
 import Data.Maybe      (fromMaybe)
 import Data.Semigroup  ((<>))
 import Data.Word       (Word8)
+import Data.Aeson
 
 import Text.Printf
 
@@ -61,6 +62,9 @@ w256 :: W256 -> Word
 w256 = C Dull
 
 data Word = C Whiff W256 --maybe to remove completely in the future
+
+instance ToJSON Word where
+  toJSON (C _ x) = toJSON x
 
 wordValue :: Word -> W256
 wordValue (C _ x) = x
