@@ -16,6 +16,7 @@ from hypothesis.strategies import binary
 @example(bytes.fromhex('45'))
 @example(bytes.fromhex('46'))
 @example(bytes.fromhex('4151'))
+@example(bytes.fromhex('303b3b'))
 def test_compare_geth_hevm(b):
     code = b.hex()
     print("code")
@@ -25,7 +26,7 @@ def test_compare_geth_hevm(b):
     assert x == y
     gethlines = open('gethout').read().split('\n')
     hevmlines = open('hevmout').read().split('\n')
-    for i in range(len(hevmlines) - 2):
+    for i in range(len(hevmlines) - 3):
         gethline = gethlines[i]
         hevmline = hevmlines[i]
         hjson = json.loads(hevmline)

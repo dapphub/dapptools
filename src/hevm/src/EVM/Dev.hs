@@ -31,7 +31,7 @@ import qualified Data.ByteString.Lazy   as LazyByteString
 import qualified Data.ByteString      as BS
 import qualified Data.ByteString.Lazy.Char8 as B
 import qualified Control.Monad.State.Class as State
-import Control.Monad.State.Strict (runState, liftIO, StateT, get)
+import Control.Monad.State.Strict (runState, liftIO, StateT, get, when)
 import Control.Lens
 import Control.Monad.Operational (Program, singleton, ProgramViewT(..), ProgramView)
 import qualified Control.Monad.Operational as Operational
@@ -155,6 +155,13 @@ data VMTraceResult =
   , gasUsed :: Word
   } deriving (Generic, JSON.ToJSON)
 
+getOp :: VM -> Word8
+getOp vm =
+  if BS.length (view (state . code) vm) <= view (state . EVM.pc) vm
+  then 0
+  else fromIntegral $ BS.index (view (state . code) vm) (view (state . EVM.pc) vm)
+
+
 vmtrace :: VM -> VMTrace
 vmtrace vm =
   let
@@ -162,12 +169,9 @@ vmtrace vm =
     -- Arcane type signature needed to avoid monomorphism restriction.
     the :: (b -> VM -> Const a VM) -> ((a -> Const a a) -> b) -> a
     the f g = view (f . g) vm
-    op' = if BS.length (the state code) <= the state EVM.pc
-          then 0
-          else fromIntegral $ BS.index (the state code) (the state EVM.pc)
     memsize = the state memorySize
   in VMTrace { pc = the state EVM.pc
-             , op = op'
+             , op = num $ getOp vm
              , gas = the state EVM.gas
              -- pad to match geth format
              , memory = ByteStringS . padRight memsize $ forceBuffer $ the state EVM.memory
@@ -200,7 +204,9 @@ interpretWithTrace fetcher =
       :: ProgramView EVM.Stepper.Action a
       -> StateT VM IO a
 
-    eval (Return x) =
+    eval (Return x) = do
+      vm <- get
+      liftIO $ B.putStrLn $ JSON.encode $ vmres vm
       pure x
 
     eval (action :>>= k) = do
@@ -210,7 +216,6 @@ interpretWithTrace fetcher =
           -- Have we reached the final result of this action?
           use result >>= \case
             Just _ -> do
-              liftIO $ B.putStrLn $ JSON.encode $ vmres vm
               -- Yes, proceed with the next action.
               interpretWithTrace fetcher (k vm)
             Nothing -> do
@@ -225,7 +230,6 @@ interpretWithTrace fetcher =
           -- Have we reached the final result of this action?
           use result >>= \case
             Just r -> do
-              liftIO $ B.putStrLn $ JSON.encode $ vmres vm
               -- Yes, proceed with the next action.
               interpretWithTrace fetcher (k r)
             Nothing -> do
