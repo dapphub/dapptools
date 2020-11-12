@@ -5,7 +5,7 @@ import os
 from hypothesis import given, example, settings
 from hypothesis.strategies import binary
 
-@settings(max_examples=999)
+@settings(max_examples=9999999999)
 @given(binary(min_size=1))
 @example(bytes.fromhex('60016000036000f3'))
 @example(bytes.fromhex('65f3b2bd95ccaa4520ee607eb0825f'))
