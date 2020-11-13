@@ -17,11 +17,12 @@ from hypothesis.strategies import binary
 @example(bytes.fromhex('46'))
 @example(bytes.fromhex('4151'))
 @example(bytes.fromhex('303b3b'))
+@example(bytes.fromhex('6219000151'))
 def test_compare_geth_hevm(b):
     code = b.hex()
     print("code")
     print(code)
-    x = os.system('evm --code ' + code + ' --gas 0xfffffffff --json --receiver 0xacab run > gethout')
+    x = os.system('evm --code ' + code + ' --gas 0xfffffffff --json --receiver 0xacab run --nomemory > gethout')
     y = os.system('hevm exec --code ' + code + ' --gas 0xfffffffff --chainid 0x539 --gaslimit 0xfffffffff --jsontrace --origin 0x73656e646572 --caller 0x73656e646572 > hevmout')
     assert x == y
     gethlines = open('gethout').read().split('\n')
@@ -41,9 +42,9 @@ def test_compare_geth_hevm(b):
 
         assert hjson['pc']      == gjson['pc']
         assert hjson['stack']   == gjson['stack']
-        # we can't compare memory for now because geth
-        # uses an odd format
-        # assert hjson['memory']  == gjson['memory']
+        # we can't compare memsize for now because geth
+        # measures memory and memsize after the instruction,
+        # as opposed to all other fields...
         # assert hjson['memSize'] == gjson['memSize']
         assert hjson['gas']     == gjson['gas']
     gethres = json.loads(gethlines[len(gethlines) - 2])
