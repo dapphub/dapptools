@@ -1,11 +1,10 @@
-from datetime import timedelta
 import json
 import os
 
-from hypothesis import given, example, settings
+from hypothesis import given, example, settings, note, target
 from hypothesis.strategies import binary
 
-@settings(max_examples=9999999999)
+@settings(max_examples=999, deadline=1000)
 @given(binary(min_size=1))
 @example(bytes.fromhex('60016000036000f3'))
 @example(bytes.fromhex('65f3b2bd95ccaa4520ee607eb0825f'))
@@ -18,27 +17,30 @@ from hypothesis.strategies import binary
 @example(bytes.fromhex('4151'))
 @example(bytes.fromhex('303b3b'))
 @example(bytes.fromhex('6219000151'))
+@example(bytes.fromhex('600134f3'))
 def test_compare_geth_hevm(b):
     code = b.hex()
-    print("code")
-    print(code)
+    note("code that caused failure: ")
+    note(code)
     x = os.system('evm --code ' + code + ' --gas 0xfffffffff --json --receiver 0xacab --nomemory run  > gethout')
     y = os.system('hevm exec --code ' + code + ' --gas 0xfffffffff --chainid 0x539 --gaslimit 0xfffffffff --jsontrace --origin 0x73656e646572 --caller 0x73656e646572 > hevmout')
     assert x == y
     gethlines = open('gethout').read().split('\n')
     hevmlines = open('hevmout').read().split('\n')
+    target(float(len(gethlines)))
     for i in range(len(hevmlines) - 3):
         gethline = gethlines[i]
         hevmline = hevmlines[i]
         hjson = json.loads(hevmline)
         gjson = json.loads(gethline)
-        # print('')
-        # print('--- STEP ----')
-        # print('geth thinks that')
-        # print(gethline)
-        # print('while hevm believes')
-        # print(hevmline)
-        # print('')
+        ## printed when diverging
+        note('')
+        note('--- STEP ----')
+        note('geth thinks that')
+        note(gethline)
+        note('while hevm believes')
+        note(hevmline)
+        note('')
 
         assert hjson['pc']      == gjson['pc']
         assert hjson['stack']   == gjson['stack']
@@ -49,11 +51,11 @@ def test_compare_geth_hevm(b):
         assert hjson['gas']     == gjson['gas']
     gethres = json.loads(gethlines[len(gethlines) - 2])
     hevmres = json.loads(hevmlines[len(hevmlines) - 2])
-    # print('--- OUTPUT ----')
-    # print('geth thinks that')
-    # print(gethres)
-    # print('while hevm believes')
-    # print(hevmres)
+    note('--- OUTPUT ----')
+    note('geth thinks that')
+    note(gethres)
+    note('while hevm believes')
+    note(hevmres)
     assert gethres['output'] == hevmres['output']
     assert gethres['gasUsed'] == hevmres['gasUsed']
         
