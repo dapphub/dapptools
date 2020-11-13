@@ -116,9 +116,9 @@ traceSrcMap dapp trace =
     Nothing ->
       Nothing
     Just (Creation, solc) ->
-      preview (creationSrcmap . ix i) solc
+      i >>= \i' -> preview (creationSrcmap . ix i') solc
     Just (Runtime, solc) ->
-      preview (runtimeSrcmap . ix i) solc
+      i >>= \i' -> preview (runtimeSrcmap . ix i') solc
 
 showTraceLocation :: DappInfo -> Trace -> Either Text Text
 showTraceLocation dapp trace =
