@@ -113,7 +113,7 @@ data VM = VM
 
 data Trace = Trace
   { _traceCodehash :: W256
-  , _traceOpIx     :: Int
+  , _traceOpIx     :: Maybe Int
   , _traceData     :: TraceData
   }
   deriving (Show)
@@ -2281,7 +2281,7 @@ withTraceLocation x = do
   pure Trace
     { _traceData = x
     , _traceCodehash = view codehash this
-    , _traceOpIx = (view opIxMap this) Vector.! (view (state . pc) vm)
+    , _traceOpIx = (view opIxMap this) Vector.!? (view (state . pc) vm)
     }
 
 pushTrace :: TraceData -> EVM ()
