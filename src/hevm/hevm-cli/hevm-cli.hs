@@ -167,6 +167,7 @@ data Command w
       { jsonFile    :: w ::: Maybe String             <?> "Filename or path to dapp build output (default: out/*.solc.json)"
       , dappRoot    :: w ::: Maybe String             <?> "Path to dapp project root directory (default: . )"
       , debug         :: w ::: Bool                     <?> "Run interactively"
+      , jsontrace     :: w ::: Bool                     <?> "Print json trace output at every step"
       , fuzzRuns      :: w ::: Maybe Int                <?> "Number of times to run fuzz tests"
       , replay        :: w ::: Maybe (Text, ByteString) <?> "Custom fuzz case to run/debug"
       , rpc           :: w ::: Maybe URL                <?> "Fetch state from a remote node"
@@ -180,11 +181,12 @@ data Command w
       , solver        :: w ::: Maybe Text               <?> "Used SMT solver: z3 (default) or cvc4"
       }
   | BcTest -- Run an Ethereum Blockhain/GeneralState test
-      { file    :: w ::: String    <?> "Path to .json test file"
-      , test    :: w ::: [String]  <?> "Test case filter - only run specified test method(s)"
-      , debug   :: w ::: Bool      <?> "Run interactively"
-      , diff    :: w ::: Bool      <?> "Print expected vs. actual state on failure"
-      , timeout :: w ::: Maybe Int <?> "Execution timeout (default: 10 sec.)"
+      { file      :: w ::: String    <?> "Path to .json test file"
+      , test      :: w ::: [String]  <?> "Test case filter - only run specified test method(s)"
+      , debug     :: w ::: Bool      <?> "Run interactively"
+      , jsontrace :: w ::: Bool             <?> "Print json trace output at every step"
+      , diff      :: w ::: Bool      <?> "Print expected vs. actual state on failure"
+      , timeout   :: w ::: Maybe Int <?> "Execution timeout (default: 10 sec.)"
       }
   | Compliance -- Run Ethereum Blockhain compliance report
       { tests   :: w ::: String       <?> "Path to Ethereum Tests directory"
@@ -311,6 +313,7 @@ main = do
           case (coverage cmd, optsMode cmd) of
             (False, Run) -> dappTest testOpts testFile (cache cmd)
             (False, Debug) -> liftIO $ EVM.TTY.main testOpts root testFile
+            (False, JsonTrace) -> error "json traces not implemented for dappTest"
             (True, _) -> liftIO $ dappCoverage testOpts (optsMode cmd) testFile
     Compliance {} ->
       case (group cmd) of
@@ -905,6 +908,8 @@ runVMTest diffmode mode timelimit (name, x) =
             execStateT (EVM.Stepper.interpret EVM.Fetch.zero . void $ EVM.Stepper.execFully) vm0
         Debug ->
           Just <$> EVM.TTY.runFromVM Nothing emptyDapp EVM.Fetch.zero vm0
+        JsonTrace ->
+          Just <$> execStateT (interpretWithTrace EVM.Fetch.zero EVM.Stepper.runFully) vm0
     waitCatch action
   case result of
     Right (Just vm1) -> do
