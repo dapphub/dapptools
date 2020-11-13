@@ -12,11 +12,6 @@ error() {
     exit 1
 }
 
-hevm_diff_fuzz() {
-    python3 ./integration/diff-fuzz.py
-}
-hevm_diff_fuzz
-
 # tests some of the behaviour of
 # `dapp testnet`
 # `seth ls`
