@@ -28,8 +28,20 @@ while [[ $1 ]]; do
       shift; [ -n "$1" ] || fail "--fuzz-runs requires an argument."
       opts+=(--fuzz-runs "$1"); shift
       ;;
+    --smttimeout)
+      shift; [ -n "$1" ] || fail "--smttimeout requires an argument."
+      opts+=(--smttimeout "$1"); shift
+      ;;
+    --solver)
+      shift; [ -n "$1" ] || fail "--solver requires an argument."
+      opts+=(--solver "$1"); shift
+      ;;
+    --max-iterations)
+      shift; [ -n "$1" ] || fail "--max-iterations requires an argument."
+      opts+=(--max-iterations "$1"); shift
+      ;;
     --replay)
-      shift; [ -n "$1" ] || fail "--fuzz-runs requires an argument."
+      shift; [ -n "$1" ] || fail "--replay requires an argument."
       opts+=(--replay "$1"); shift
       ;;
     --rpc-url)
