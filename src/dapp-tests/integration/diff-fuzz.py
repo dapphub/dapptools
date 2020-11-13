@@ -22,7 +22,7 @@ def test_compare_geth_hevm(b):
     code = b.hex()
     print("code")
     print(code)
-    x = os.system('evm --code ' + code + ' --gas 0xfffffffff --json --receiver 0xacab run --nomemory > gethout')
+    x = os.system('evm --code ' + code + ' --gas 0xfffffffff --json --receiver 0xacab --nomemory run  > gethout')
     y = os.system('hevm exec --code ' + code + ' --gas 0xfffffffff --chainid 0x539 --gaslimit 0xfffffffff --jsontrace --origin 0x73656e646572 --caller 0x73656e646572 > hevmout')
     assert x == y
     gethlines = open('gethout').read().split('\n')
