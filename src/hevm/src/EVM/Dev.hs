@@ -185,6 +185,7 @@ vmres vm =
     gasUsed' = view (tx . txgaslimit) vm - view (state . EVM.gas) vm
     res = case view result vm of
       Just (VMSuccess out) -> forceBuffer out
+      Just (VMFailure (Revert out)) -> out
       _ -> mempty
   in VMTraceResult
      -- more oddities to comply with geth
