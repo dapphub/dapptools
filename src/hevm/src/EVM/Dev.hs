@@ -143,7 +143,7 @@ data VMTrace =
   { pc      :: Int
   , op      :: Int
   , stack   :: [Word]
-  , memory  :: ByteStringS
+--  , memory  :: ByteStringS
   , memSize :: Int
   , depth   :: Int
   , gas     :: Word
@@ -174,7 +174,7 @@ vmtrace vm =
              , op = num $ getOp vm
              , gas = the state EVM.gas
              -- pad to match geth format
-             , memory = ByteStringS . padRight memsize $ forceBuffer $ the state EVM.memory
+--             , memory = ByteStringS . padRight memsize $ forceBuffer $ the state EVM.memory
              , memSize = memsize
              -- increment to match geth format
              , depth = 1 + length (view frames vm)
