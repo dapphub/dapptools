@@ -1,4 +1,5 @@
 {-# Language TemplateHaskell #-}
+{-# Language OverloadedStrings #-}
 
 module EVM.Dapp where
 
@@ -14,7 +15,7 @@ import EVM.Types (W256, abiKeccak)
 
 import Data.Aeson (Value)
 import Data.Bifunctor (first)
-import Data.Text (Text, isPrefixOf, pack, unpack)
+import Data.Text (Text, isPrefixOf, pack, unpack, breakOnEnd)
 import Data.Text.Encoding (encodeUtf8)
 import Data.Map (Map)
 import Data.Monoid ((<>))
@@ -55,7 +56,8 @@ dappInfo root solcByName sources =
   in DappInfo
     { _dappRoot = root
     , _dappUnitTests = findUnitTests
-      (\a -> "test" `isPrefixOf` a || "prove" `isPrefixOf` a) solcs
+      (\a -> "test"  `isPrefixOf` (snd (breakOnEnd a "."))
+          || "prove" `isPrefixOf` (snd (breakOnEnd a "."))) solcs
     , _dappSources = sources
     , _dappSolcByName = solcByName
     , _dappSolcByHash =
@@ -88,14 +90,20 @@ findUnitTests matcher =
 
 
 unitTestMethodsFiltered :: (Text -> Bool) -> (SolcContract -> [(Test, [AbiType])])
-unitTestMethodsFiltered matcher c = filter (matcher . extractSig . fst) $ unitTestMethods c
+unitTestMethodsFiltered matcher c =
+  let
+    testName :: (Test, [AbiType]) -> Text
+    testName method = (view contractName c) <> "." <> (extractSig (fst method))
+  in
+    filter (matcher . testName) (unitTestMethods c)
 
 unitTestMethods :: SolcContract -> [(Test, [AbiType])]
-unitTestMethods = view abiMap
-                  >>> Map.elems
-                  >>> map (\f -> (mkTest $ view methodSignature f, snd <$> view methodInputs f))
-                  >>> filter (isJust . fst)
-                  >>> fmap (first fromJust)
+unitTestMethods =
+  view abiMap
+  >>> Map.elems
+  >>> map (\f -> (mkTest $ view methodSignature f, snd <$> view methodInputs f))
+  >>> filter (isJust . fst)
+  >>> fmap (first fromJust)
 
 mkTest :: Text -> Maybe Test
 mkTest sig

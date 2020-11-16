@@ -8,6 +8,7 @@
 - Some symbolic terms are displayed with richer semantic information, instead of the black box `<symbolic>`.
 - `hevm dapp-test` now supports symbolic execution of test methods that are prefixed with `prove` or `proveFail`
 - The `hevm interactive` alias has been removed, as it is equivalent to `hevm dapp-test --debug`
+- `hevm dapp-test --match` now matches on contract name and file path, as well as test name
 
 ## 0.42.0 - 2020-10-31
 
