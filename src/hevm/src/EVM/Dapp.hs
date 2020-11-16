@@ -15,7 +15,7 @@ import EVM.Types (W256, abiKeccak)
 
 import Data.Aeson (Value)
 import Data.Bifunctor (first)
-import Data.Text (Text, isPrefixOf, pack, unpack, breakOnEnd)
+import Data.Text (Text, isPrefixOf, pack, unpack)
 import Data.Text.Encoding (encodeUtf8)
 import Data.Map (Map)
 import Data.Monoid ((<>))
@@ -26,7 +26,9 @@ import Control.Applicative ((<$>))
 import Control.Arrow ((>>>))
 import Control.Lens
 
-import qualified Data.Map as Map
+import qualified Data.Map        as Map
+import qualified Data.Sequence   as Seq
+import qualified Text.Regex.TDFA as Regex
 
 data DappInfo = DappInfo
   { _dappRoot       :: FilePath
@@ -55,9 +57,7 @@ dappInfo root solcByName sources =
 
   in DappInfo
     { _dappRoot = root
-    , _dappUnitTests = findUnitTests
-      (\a -> "test"  `isPrefixOf` (snd (breakOnEnd a "."))
-          || "prove" `isPrefixOf` (snd (breakOnEnd a "."))) solcs
+    , _dappUnitTests = findAllUnitTests solcs
     , _dappSources = sources
     , _dappSolcByName = solcByName
     , _dappSolcByHash =
@@ -76,23 +76,51 @@ dappInfo root solcByName sources =
     , _dappAstSrcMap = astSrcMap astIds
     }
 
+-- Dapp unit tests are detected by searching within abi methods
+-- that begin with "test" or "prove", that are in a contract with
+-- the "IS_TEST()" abi marker, for a given regular expression.
+--
+-- The regex is matched on the full test method name, including path
+-- and contract, i.e. "path/to/file.sol:TestContract.test_name()".
+--
+-- Tests beginning with "test" are interpreted as concrete tests, whereas
+-- tests beginning with "prove" are interpreted as symbolic tests.
+
 unitTestMarkerAbi :: Word32
 unitTestMarkerAbi = abiKeccak (encodeUtf8 "IS_TEST()")
 
-findUnitTests :: (Text -> Bool) -> ([SolcContract] -> [(Text, [(Test, [AbiType])])])
-findUnitTests matcher =
+findAllUnitTests :: [SolcContract] -> [(Text, [(Test, [AbiType])])]
+findAllUnitTests = findUnitTests ".*:.*\\.(test|prove).*"
+
+mkTest :: Text -> Maybe Test
+mkTest sig
+  | "test" `isPrefixOf` sig = Just (ConcreteTest sig)
+  | "prove" `isPrefixOf` sig = Just (SymbolicTest sig)
+  | otherwise = Nothing
+
+regexMatches :: Text -> Text -> Bool
+regexMatches regexSource =
+  let
+    compOpts =
+      Regex.defaultCompOpt { Regex.lastStarGreedy = True }
+    execOpts =
+      Regex.defaultExecOpt { Regex.captureGroups = False }
+    regex = Regex.makeRegexOpts compOpts execOpts (unpack regexSource)
+  in
+    Regex.matchTest regex . Seq.fromList . unpack
+
+findUnitTests :: Text -> ([SolcContract] -> [(Text, [(Test, [AbiType])])])
+findUnitTests match =
   concatMap $ \c ->
     case preview (abiMap . ix unitTestMarkerAbi) c of
       Nothing -> []
       Just _  ->
-        let testNames = unitTestMethodsFiltered matcher c
-        in ([(view contractName c, testNames) | not (null testNames)])
-
+        let testNames = unitTestMethodsFiltered (regexMatches match) c
+        in [(view contractName c, testNames) | not (null testNames)]
 
 unitTestMethodsFiltered :: (Text -> Bool) -> (SolcContract -> [(Test, [AbiType])])
 unitTestMethodsFiltered matcher c =
   let
-    testName :: (Test, [AbiType]) -> Text
     testName method = (view contractName c) <> "." <> (extractSig (fst method))
   in
     filter (matcher . testName) (unitTestMethods c)
@@ -104,12 +132,6 @@ unitTestMethods =
   >>> map (\f -> (mkTest $ view methodSignature f, snd <$> view methodInputs f))
   >>> filter (isJust . fst)
   >>> fmap (first fromJust)
-
-mkTest :: Text -> Maybe Test
-mkTest sig
-  | "test" `isPrefixOf` sig = Just (ConcreteTest sig)
-  | "prove" `isPrefixOf` sig = Just (SymbolicTest sig)
-  | otherwise = Nothing
 
 extractSig :: Test -> Text
 extractSig (ConcreteTest sig) = sig
