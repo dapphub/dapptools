@@ -38,7 +38,6 @@ import qualified Control.Monad.Operational as Operational
 import EVM
 import qualified EVM.Exec
 import qualified EVM.Fetch as Fetch
-import Data.Text (Text, isPrefixOf)
 
 concatMapM :: Monad m => (a -> m [b]) -> [a] -> m [b]
 concatMapM op = foldr f (pure [])
@@ -79,8 +78,7 @@ ghciTest root path state =
     readSolc path >>=
       \case
         Just (contractMap, _) -> do
-          let unitTests = findUnitTests
-                (\a -> "test" `isPrefixOf` a || "prove" `isPrefixOf` a) (Map.elems contractMap)
+          let unitTests = findAllUnitTests (Map.elems contractMap)
           results <- runSMT $ query $ concatMapM (runUnitTestContract opts contractMap) unitTests
           let (passing, _) = unzip results
           pure passing

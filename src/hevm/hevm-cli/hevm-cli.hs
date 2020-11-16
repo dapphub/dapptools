@@ -78,11 +78,9 @@ import qualified Data.ByteString        as ByteString
 import qualified Data.ByteString.Char8  as Char8
 import qualified Data.ByteString.Lazy   as LazyByteString
 import qualified Data.Map               as Map
-import qualified Data.Sequence          as Seq
 import qualified System.Timeout         as Timeout
 
 import qualified Paths_hevm      as Paths
-import qualified Text.Regex.TDFA as Regex
 
 import Options.Generic as Options
 
@@ -382,8 +380,7 @@ dappTest opts solcFile cache = do
   out <- liftIO $ readSolc solcFile
   case out of
     Just (contractMap, _) -> do
-      let matcher = regexMatches (EVM.UnitTest.match opts)
-          unitTests = findUnitTests matcher $ Map.elems contractMap
+      let unitTests = findUnitTests (EVM.UnitTest.match opts) $ Map.elems contractMap
       results <- concatMapM (runUnitTestContract opts contractMap) unitTests
       let (passing, vms) = unzip results
       case cache of
@@ -399,17 +396,6 @@ dappTest opts solcFile cache = do
       liftIO $ unless (and passing) exitFailure
     Nothing ->
       error ("Failed to read Solidity JSON for `" ++ solcFile ++ "'")
-
-regexMatches :: Text -> Text -> Bool
-regexMatches regexSource =
-  let
-    compOpts =
-      Regex.defaultCompOpt { Regex.lastStarGreedy = True }
-    execOpts =
-      Regex.defaultExecOpt { Regex.captureGroups = False }
-    regex = Regex.makeRegexOpts compOpts execOpts (unpack regexSource)
-  in
-    Regex.matchTest regex . Seq.fromList . unpack
 
 equivalence :: Command Options.Unwrapped -> IO ()
 equivalence cmd =
@@ -573,10 +559,9 @@ dappCoverage opts _ solcFile =
   readSolc solcFile >>=
     \case
       Just (contractMap, sourceCache) -> do
-        let matcher = regexMatches (EVM.UnitTest.match opts)
-            unitTests = findUnitTests matcher $ Map.elems contractMap
-        covs <- mconcat <$> mapM (coverageForUnitTestContract opts contractMap sourceCache) unitTests
-
+        let unitTests = findUnitTests (EVM.UnitTest.match opts) $ Map.elems contractMap
+        covs <- mconcat <$> mapM
+          (coverageForUnitTestContract opts contractMap sourceCache) unitTests
         let
           dapp = dappInfo "." contractMap sourceCache
           f (k, vs) = do
