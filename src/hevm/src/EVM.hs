@@ -301,6 +301,8 @@ data Contract = Contract
   , _balance      :: Word
   , _nonce        :: Word
   , _codehash     :: W256
+  , _opIxMap      :: Vector Int
+  , _codeOps      :: RegularVector.Vector (Int, Op)
   , _external     :: Bool
   , _origStorage  :: Map Word Word
   }
@@ -381,16 +383,6 @@ makeLenses ''VM
 bytecode :: Getter Contract ByteString
 bytecode = contractcode . to f
   where f (InitCode _)    = BS.empty
-        f (RuntimeCode b) = b
-
-opIxMap :: Getter Contract (Vector Int)
-opIxMap = contractcode . to f . to mkOpIxMap
-  where f (InitCode b) = b
-        f (RuntimeCode b) = b
-
-codeOps :: Getter Contract (RegularVector.Vector (Int, Op))
-codeOps = contractcode . to f . to mkCodeOps
-  where f (InitCode b) = b
         f (RuntimeCode b) = b
 
 instance Semigroup Cache where
@@ -489,6 +481,8 @@ initialContract theContractCode = Contract
   , _storage  = Concrete mempty
   , _balance  = 0
   , _nonce    = if creation then 1 else 0
+  , _opIxMap  = mkOpIxMap theCode
+  , _codeOps  = mkCodeOps theCode
   , _external = False
   , _origStorage = mempty
   } where
@@ -2377,13 +2371,15 @@ checkJump x xs = do
   theCode <- use (state . code)
   self <- use (state . codeContract)
   theCodeOps <- use (env . contracts . ix self . codeOps)
+  theOpIxMap <- use (env . contracts . ix self . opIxMap)
   if x < num (BS.length theCode) && BS.index theCode (num x) == 0x5b
     then
-      case RegularVector.find (\(i, op) -> i == num x && op == OpJumpdest) theCodeOps of
-        Nothing ->  vmError BadJumpDestination
-        _ -> do
-             state . stack .= xs
-             state . pc .= num x
+      if OpJumpdest == snd (theCodeOps RegularVector.! (theOpIxMap Vector.! num x))
+      then do
+        state . stack .= xs
+        state . pc .= num x
+      else
+        vmError BadJumpDestination
     else vmError BadJumpDestination
 
 opSize :: Word8 -> Int
