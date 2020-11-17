@@ -73,6 +73,7 @@ import Data.Aeson.Lens hiding (values)
 import qualified Data.Vector as V
 import qualified Data.ByteString.Lazy  as Lazy
 
+import qualified Data.SBV               as SBV
 import qualified Data.ByteString        as ByteString
 import qualified Data.ByteString.Char8  as Char8
 import qualified Data.ByteString.Lazy   as LazyByteString
@@ -125,6 +126,7 @@ data Command w
       , smttimeout    :: w ::: Maybe Integer      <?> "Timeout given to SMT solver in milliseconds (default: 20000)"
       , maxIterations :: w ::: Maybe Integer      <?> "Number of times we may revisit a particular branching point"
       , solver        :: w ::: Maybe Text         <?> "Used SMT solver: z3 (default) or cvc4"
+      , smtdebug      :: w ::: Bool               <?> "Print smt queries sent to the solver"
       }
   | Equivalence -- prove equivalence between two programs
       { codeA         :: w ::: ByteString    <?> "Bytecode of the first program"
@@ -134,6 +136,7 @@ data Command w
       , maxIterations :: w ::: Maybe Integer <?> "Number of times we may revisit a particular branching point"
       , solver        :: w ::: Maybe Text    <?> "Used SMT solver: z3 (default) or cvc4"
       , smtoutput     :: w ::: Bool          <?> "Print verbose smt output"
+      , smtdebug      :: w ::: Bool               <?> "Print smt queries sent to the solver"
       }
   | Exec -- Execute a given program with specified env & calldata
       { code        :: w ::: Maybe ByteString <?> "Program bytecode"
@@ -164,8 +167,8 @@ data Command w
       , dappRoot    :: w ::: Maybe String     <?> "Path to dapp project root directory (default: . )"
       }
   | DappTest -- Run DSTest unit tests
-      { jsonFile    :: w ::: Maybe String             <?> "Filename or path to dapp build output (default: out/*.solc.json)"
-      , dappRoot    :: w ::: Maybe String             <?> "Path to dapp project root directory (default: . )"
+      { jsonFile      :: w ::: Maybe String             <?> "Filename or path to dapp build output (default: out/*.solc.json)"
+      , dappRoot      :: w ::: Maybe String             <?> "Path to dapp project root directory (default: . )"
       , debug         :: w ::: Bool                     <?> "Run interactively"
       , jsontrace     :: w ::: Bool                     <?> "Print json trace output at every step"
       , fuzzRuns      :: w ::: Maybe Int                <?> "Number of times to run fuzz tests"
@@ -179,6 +182,7 @@ data Command w
       , smttimeout    :: w ::: Maybe Integer            <?> "Timeout given to SMT solver in milliseconds (default: 20000)"
       , maxIterations :: w ::: Maybe Integer            <?> "Number of times we may revisit a particular branching point"
       , solver        :: w ::: Maybe Text               <?> "Used SMT solver: z3 (default) or cvc4"
+      , smtdebug      :: w ::: Bool                     <?> "Print smt queries sent to the solver"
       }
   | BcTest -- Run an Ethereum Blockhain/GeneralState test
       { file      :: w ::: String    <?> "Path to .json test file"
@@ -308,7 +312,7 @@ main = do
     DappTest {} ->
       withCurrentDirectory root $ do
         testFile <- findJsonFile (jsonFile cmd)
-        runSMTWithTimeOut (solver cmd) (smttimeout cmd) $ query $ do
+        runSMTWithTimeOut (solver cmd) (smttimeout cmd) (smtdebug cmd) $ query $ do
           testOpts <- unitTestOptions cmd testFile
           case (coverage cmd, optsMode cmd) of
             (False, Run) -> dappTest testOpts testFile (cache cmd)
@@ -416,7 +420,7 @@ equivalence cmd =
        Just sig' -> do method' <- functionAbi sig'
                        return $ Just (view methodSignature method', snd <$> view methodInputs method')
 
-     void . runSMTWithTimeOut (solver cmd) (smttimeout cmd) . query $
+     void . runSMTWithTimeOut (solver cmd) (smttimeout cmd) (smtdebug cmd) . query $
        equivalenceCheck bytecodeA bytecodeB (maxIterations cmd) maybeSignature >>= \case
          Right vm -> do io $ putStrLn "Not equal!"
                         io $ putStrLn "Counterexample:"
@@ -430,18 +434,18 @@ equivalence cmd =
 
 
 -- cvc4 sets timeout via a commandline option instead of smtlib `(set-option)`
-runSMTWithTimeOut :: Maybe Text -> Maybe Integer -> Symbolic a -> IO a
-runSMTWithTimeOut solver maybeTimeout sym
+runSMTWithTimeOut :: Maybe Text -> Maybe Integer -> Bool -> Symbolic a -> IO a
+runSMTWithTimeOut solver maybeTimeout smtdebug sym
   | solver == Just "cvc4" = do
       setEnv "SBV_CVC4_OPTIONS" ("--lang=smt --incremental --interactive --no-interactive-prompt --model-witness-value --tlimit-per=" <> show timeout)
-      a <- runSMTWith cvc4 sym
+      a <- runSMTWith cvc4{SBV.verbose=smtdebug} sym
       setEnv "SBV_CVC4_OPTIONS" ""
       return a
   | solver == Just "z3" = runwithz3
   | solver == Nothing = runwithz3
   | otherwise = error "Unknown solver. Currently supported solvers; z3, cvc4"
  where timeout = fromMaybe 20000 maybeTimeout
-       runwithz3 = runSMTWith z3 $ (setTimeOut timeout) >> sym
+       runwithz3 = runSMTWith z3{SBV.verbose=smtdebug} $ (setTimeOut timeout) >> sym
 
 
 checkForVMErrors :: [EVM.VM] -> [String]
@@ -498,7 +502,7 @@ assert cmd = do
           name = view methodSignature method'
       return $ Just (name,typ)
   if debug cmd then
-    runSMTWithTimeOut (solver cmd) (smttimeout cmd) $ query $ do
+    runSMTWithTimeOut (solver cmd) (smttimeout cmd) (smtdebug cmd) $ query $ do
       preState <- symvmFromCommand cmd
       smtState <- queryState
       io $ void $ EVM.TTY.runFromVM
@@ -508,7 +512,7 @@ assert cmd = do
         preState
 
   else
-    runSMTWithTimeOut (solver cmd) (smttimeout cmd) $ query $ do
+    runSMTWithTimeOut (solver cmd) (smttimeout cmd) (smtdebug cmd) $ query $ do
       preState <- symvmFromCommand cmd
       verify preState (maxIterations cmd) rpcinfo (Just checkAssertions) >>= \case
         Right tree -> do
