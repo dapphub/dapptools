@@ -18,13 +18,13 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v2
-      # v10
+      # v12
       - uses: cachix/install-nix-action@v12
         with:
           # we use the nixpkgs defined in default.nix
           skip_adding_nixpkgs_channel: false
-      # v6
-      - uses: cachix/cachix-action@490a246fbc7f92208d309eeb54383a4d828cedc1
+      # v8
+      - uses: cachix/cachix-action@v8
         with:
           name: dapp
           signingKey: '${{ secrets.CACHIX_SIGNING_KEY }}'
