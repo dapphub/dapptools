@@ -106,7 +106,31 @@ To step through a test in `hevm` interactive debugger, use `dapp debug`.
 dapp --use solc:0.5.12 test
 ```
 
-By default, `dapp test` also recompiles your contracts. 
+`dapp test --match <regex>` will only run tests that match the given
+regular expression. This will be matched against the file path of the
+test file, followed by the contract name and the test method, in the
+form `src/my_test_file.sol:TestContract.test_name()`. For example, to
+only run tests from the contract `ContractA`:
+
+```
+dapp test --match ':ContractA\.'
+```
+
+To run all tests, from all contracts, that contain either `foo` or `bar`
+in the test name:
+
+```
+dapp test --match '(foo|bar)'
+```
+
+To only run tests called 'test_this()' from `TheContract` in the
+`src/test/a.t.sol` file:
+
+```
+dapp test --match 'src/test/a\.t\.sol:TheContract\.test_this\(\)'
+```
+
+By default, `dapp test` also recompiles your contracts.
 To skip this, you can set the environment variable `DAPP_SKIP_BUILD=1`.
 
 ### Alternative install
