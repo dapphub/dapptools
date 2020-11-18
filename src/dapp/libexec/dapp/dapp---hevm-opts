@@ -18,6 +18,9 @@ while [[ $1 ]]; do
       shift; [ -n "$1" ] || fail "--match requires an argument."
       opts+=(--match "$1"); shift
       ;;
+    -vvv)
+      opts+=(--verbose 3); shift
+      ;;
     -vv)
       opts+=(--verbose 2); shift
       ;;

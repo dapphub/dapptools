@@ -6,7 +6,7 @@ module EVM.Dapp where
 import EVM (Trace, traceCodehash, traceOpIx)
 import EVM.ABI (Event, AbiType)
 import EVM.Debug (srcMapCodePos)
-import EVM.Solidity (SolcContract, CodeType (..), SourceCache, SrcMap)
+import EVM.Solidity (SolcContract, CodeType (..), SourceCache, SrcMap, Method)
 import EVM.Solidity (contractName, methodInputs)
 import EVM.Solidity (runtimeCodehash, creationCodehash, abiMap)
 import EVM.Solidity (runtimeSrcmap, creationSrcmap, eventMap)
@@ -36,6 +36,7 @@ data DappInfo = DappInfo
   , _dappSolcByHash :: Map W256 (CodeType, SolcContract)
   , _dappSources    :: SourceCache
   , _dappUnitTests  :: [(Text, [(Test, [AbiType])])]
+  , _dappAbiMap     :: Map Word32 Method
   , _dappEventMap   :: Map W256 Event
   , _dappAstIdMap   :: Map Int Value
   , _dappAstSrcMap  :: SrcMap -> Maybe Value
@@ -68,9 +69,9 @@ dappInfo root solcByName sources =
            (f runtimeCodehash  Runtime)
            (f creationCodehash Creation)
 
-    , _dappEventMap =
-        -- Sum up the event ABI maps from all the contracts.
-        mconcat (map (view eventMap) solcs)
+      -- Sum up the ABI maps from all the contracts.
+    , _dappAbiMap   = mconcat (map (view abiMap) solcs)
+    , _dappEventMap = mconcat (map (view eventMap) solcs)
 
     , _dappAstIdMap  = astIds
     , _dappAstSrcMap = astSrcMap astIds

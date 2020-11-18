@@ -7,7 +7,8 @@ import Prelude hiding (Word)
 
 import EVM (VM, VMResult(..), cheatCode, traceForest, traceData, Error (..), result)
 import EVM (Trace, TraceData (..), Log (..), Query (..), FrameContext (..))
-import EVM.Dapp (DappInfo, dappSolcByHash, dappSolcByName, showTraceLocation, dappEventMap)
+import EVM.Dapp (DappInfo (..), dappSolcByHash, dappAbiMap, dappEventMap)
+import EVM.Dapp (showTraceLocation)
 import EVM.Concrete (Word (..), wordValue)
 import EVM.SymExec
 import EVM.Symbolic (maybeLitWord, len)
@@ -31,7 +32,7 @@ import Data.Monoid ((<>))
 import Data.Text (Text, pack, unpack, intercalate)
 import Data.Text (dropEnd, splitOn)
 import Data.Text.Encoding (decodeUtf8, decodeUtf8')
-import Data.Tree
+import Data.Tree (Tree (Node))
 import Data.Tree.View (showTree)
 import Data.Vector (Vector, fromList)
 
@@ -64,13 +65,9 @@ showWordExact (C _ (W256 w)) = humanizeInteger w
 showWordExplanation :: W256 -> DappInfo -> Text
 showWordExplanation w _ | w > 0xffffffff = showDec Unsigned w
 showWordExplanation w dapp =
-  let
-    fullAbiMap =
-      mconcat (map (view abiMap) (Map.elems (view dappSolcByName dapp)))
-  in
-    case Map.lookup (fromIntegral w) fullAbiMap of
-      Nothing -> showDec Unsigned w
-      Just x  -> "keccak(\"" <> view methodSignature x <> "\")"
+  case Map.lookup (fromIntegral w) (view dappAbiMap dapp) of
+    Nothing -> showDec Unsigned w
+    Just x  -> "keccak(\"" <> view methodSignature x <> "\")"
 
 humanizeInteger :: (Num a, Integral a, Show a) => a -> Text
 humanizeInteger =
@@ -161,10 +158,9 @@ showTrace dapp trace =
   let
     pos =
       case showTraceLocation dapp trace of
-        Left x -> " \x1b[90m" <> x <> "\x1b[0m"
-        Right x -> " \x1b[90m(" <> x <> ")\x1b[0m"
-    fullAbiMap =
-      mconcat (map (view abiMap) (Map.elems (view dappSolcByName dapp)))
+        Left x -> " \x1b[1m" <> x <> "\x1b[0m"
+        Right x -> " \x1b[1m(" <> x <> ")\x1b[0m"
+    fullAbiMap = view dappAbiMap dapp
   in case view traceData trace of
     EventTrace (Log _ bytes topics) ->
       case topics of
@@ -249,7 +245,9 @@ showTrace dapp trace =
             <> pack "::"
             <> case Map.lookup (fromIntegral (fromMaybe 0x00 abi)) fullAbiMap of
                  Just m  ->
-                   view methodName m
+                   "\x1b[1m"
+                   <> view methodName m
+                   <> "\x1b[0m"
                    <> showCall (catMaybes (getAbiTypes (view methodSignature m))) calldata
                  Nothing ->
                    formatSBinary calldata
