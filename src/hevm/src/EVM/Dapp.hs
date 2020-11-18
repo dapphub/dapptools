@@ -6,7 +6,7 @@ module EVM.Dapp where
 import EVM (Trace, traceCodehash, traceOpIx)
 import EVM.ABI (Event, AbiType)
 import EVM.Debug (srcMapCodePos)
-import EVM.Solidity (SolcContract, CodeType (..), SourceCache, SrcMap, Method)
+import EVM.Solidity (SolcContract, CodeType (..), SourceCache (..), SrcMap, Method)
 import EVM.Solidity (contractName, methodInputs)
 import EVM.Solidity (runtimeCodehash, creationCodehash, abiMap)
 import EVM.Solidity (runtimeSrcmap, creationSrcmap, eventMap)
@@ -76,6 +76,9 @@ dappInfo root solcByName sources =
     , _dappAstIdMap  = astIds
     , _dappAstSrcMap = astSrcMap astIds
     }
+
+emptyDapp :: DappInfo
+emptyDapp = dappInfo "" mempty (SourceCache mempty mempty mempty mempty)
 
 -- Dapp unit tests are detected by searching within abi methods
 -- that begin with "test" or "prove", that are in a contract with

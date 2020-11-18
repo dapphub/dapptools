@@ -36,7 +36,7 @@ import EVM.Types hiding (word)
 import EVM.UnitTest (UnitTestOptions, coverageReport, coverageForUnitTestContract)
 import EVM.UnitTest (runUnitTestContract)
 import EVM.UnitTest (getParametersFromEnvironmentVariables, testNumber)
-import EVM.Dapp (findUnitTests, dappInfo, DappInfo)
+import EVM.Dapp (findUnitTests, dappInfo, DappInfo, emptyDapp)
 import EVM.Format (showTraceTree, showBranchTree)
 import EVM.RLP (rlpdecode)
 import qualified EVM.Patricia as Patricia
@@ -445,9 +445,6 @@ checkForVMErrors (vm:vms) =
       ) : checkForVMErrors vms
     _ ->
       checkForVMErrors vms
-
-emptyDapp :: DappInfo
-emptyDapp = dappInfo "" mempty (SourceCache mempty mempty mempty mempty)
 
 getSrcInfo :: Command Options.Unwrapped -> IO DappInfo
 getSrcInfo cmd =
