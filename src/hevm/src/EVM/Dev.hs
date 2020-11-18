@@ -38,8 +38,6 @@ import Control.Monad.Operational (ProgramViewT(..), ProgramView)
 import qualified Control.Monad.Operational as Operational
 
 concatMapM :: Monad m => (a -> m [b]) -> [a] -> m [b]
--- concatMapM op = foldr f (pure [])
-  -- where f x xs = do x <- op x; if null x then xs else do xs <- xs; pure $ x++xs
 concatMapM f xs   =  liftM concat (mapM f xs)
 
 loadDappInfo :: String -> String -> IO DappInfo
