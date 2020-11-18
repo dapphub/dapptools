@@ -184,7 +184,7 @@ data Command w
       { file      :: w ::: String    <?> "Path to .json test file"
       , test      :: w ::: [String]  <?> "Test case filter - only run specified test method(s)"
       , debug     :: w ::: Bool      <?> "Run interactively"
-      , jsontrace :: w ::: Bool             <?> "Print json trace output at every step"
+      , jsontrace :: w ::: Bool      <?> "Print json trace output at every step"
       , diff      :: w ::: Bool      <?> "Print expected vs. actual state on failure"
       , timeout   :: w ::: Maybe Int <?> "Execution timeout (default: 10 sec.)"
       }
