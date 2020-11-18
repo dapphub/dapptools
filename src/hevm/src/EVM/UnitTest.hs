@@ -393,7 +393,7 @@ runUnitTestContract
       case view result vm1 of
         Nothing -> error "internal error: setUp() did not end with a result"
         Just (VMFailure _) -> liftIO $ do
-          Text.putStrLn "\x1b[31m[FAIL]\x1b[0m setUp()"
+          Text.putStrLn "\x1b[31m[BAIL]\x1b[0m setUp() "
           tick "\n"
           tick $ failOutput vm1 opts "setUp()"
           pure [(False, vm1)]
@@ -456,7 +456,14 @@ runOne opts@UnitTestOptions{..} vm testName args = do
           , Right (passOutput vm'' opts testName)
           , vm''
           )
-  else
+  else if bailed then
+        pure
+          ("\x1b[31m[BAIL]\x1b[0m "
+           <> testName <> argInfo
+          , Left (failOutput vm'' opts testName)
+          , vm''
+          )
+      else
         pure
           ("\x1b[31m[FAIL]\x1b[0m "
            <> testName <> argInfo
@@ -625,29 +632,28 @@ indentLines n s =
 
 passOutput :: VM -> UnitTestOptions -> Text -> Text
 passOutput vm UnitTestOptions { .. } testName =
-  case verbose of
-    Just 2 ->
-      mconcat
-        [ "Success: "
-        , fromMaybe "" (stripSuffix "()" testName)
-        , "\n"
-        , indentLines 2 (formatTestLogs (view dappEventMap dapp) (view logs vm))
-        , indentLines 2 (showTraceTree dapp vm)
-        , "\n"
-        ]
-    _ ->
-      ""
+  let v = fromMaybe 0 verbose
+  in if (v > 1) then
+    mconcat
+      [ "Success: "
+      , fromMaybe "" (stripSuffix "()" testName)
+      , "\n"
+      , if (v > 2) then indentLines 2 (showTraceTree dapp vm) else ""
+      , indentLines 2 (formatTestLogs (view dappEventMap dapp) (view logs vm))
+      , "\n"
+      ]
+    else ""
 
 failOutput :: VM -> UnitTestOptions -> Text -> Text
 failOutput vm UnitTestOptions { .. } testName = mconcat
   [ "Failure: "
   , fromMaybe "" (stripSuffix "()" testName)
   , "\n"
-  , indentLines 2 (formatTestLogs (view dappEventMap dapp) (view logs vm))
   , case verbose of
       Just _ -> indentLines 2 (showTraceTree dapp vm)
       _ -> ""
-
+  , indentLines 2 (formatTestLogs (view dappEventMap dapp) (view logs vm))
+  , "\n"
   ]
 
 formatTestLogs :: Map W256 Event -> Seq.Seq Log -> Text
@@ -664,6 +670,9 @@ formatTestLog events (Log _ args (topic:_)) =
     Just t -> case (Map.lookup (wordValue t) events) of
                    Nothing -> Nothing
                    Just (Event name _ _) -> case name of
+                     "logs" ->
+                       Just $ formatSString args
+
                      "log_bytes32" ->
                        Just $ formatSBytes args
 
