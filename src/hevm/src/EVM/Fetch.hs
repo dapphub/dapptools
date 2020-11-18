@@ -9,7 +9,7 @@ import Prelude hiding (Word)
 import EVM.Types    (Addr, W256, hexText)
 import EVM.Concrete (Word, w256)
 import EVM.Symbolic (litWord)
-import EVM          (EVM, Contract, Block, StorageModel, initialContract, nonce, balance, external)
+import EVM          (EVM, Contract, Block, initialContract, nonce, balance, external)
 import qualified EVM.FeeSchedule as FeeSchedule
 
 import qualified EVM

@@ -86,10 +86,8 @@ interpret mode =
 
     eval (action Operational.:>>= k) =
       case action of
-
         -- Stepper wants to keep executing?
         Stepper.Exec -> do
-
           let
             -- When pausing during exec, we should later restart
             -- the exec with the same continuation.
@@ -521,10 +519,14 @@ defaultUnitTestOptions = do
     { oracle            = Fetch.zero
     , verbose           = Nothing
     , maxIter           = Nothing
+    , smtTimeout        = Nothing
+    , smtState          = Nothing
+    , solver            = Nothing
     , match             = ""
     , fuzzRuns          = 100
     , replay            = Nothing
     , vmModifier        = id
+    , dapp              = emptyDapp
     , testParams        = params
     }
 
@@ -545,6 +547,7 @@ initialStateForTest opts@(UnitTestOptions {..}) (contractPath, testName) =
         { _uiVm             = vm0
         , _uiVmNextStep     = script
         , _uiVmSolc         = Just testContract
+        , _uiVmDapp         = Nothing
         , _uiVmStepCount    = 0
         , _uiVmFirstState   = undefined
         , _uiVmFetcher      = oracle

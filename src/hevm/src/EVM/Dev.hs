@@ -12,6 +12,7 @@ import EVM.UnitTest
 import EVM.Concrete
 import EVM.Symbolic
 
+import EVM hiding (path)
 import qualified EVM.Fetch
 import qualified EVM.TTY
 import qualified EVM.Emacs
@@ -31,33 +32,31 @@ import qualified Data.ByteString.Lazy   as LazyByteString
 import qualified Data.ByteString      as BS
 import qualified Data.ByteString.Lazy.Char8 as B
 import qualified Control.Monad.State.Class as State
-import Control.Monad.State.Strict (runState, liftIO, StateT, get, when)
-import Control.Lens
-import Control.Monad.Operational (Program, singleton, ProgramViewT(..), ProgramView)
+import Control.Monad.State.Strict (runState, liftIO, liftM, StateT, get)
+import Control.Lens hiding (op, passing)
+import Control.Monad.Operational (ProgramViewT(..), ProgramView)
 import qualified Control.Monad.Operational as Operational
-import EVM
-import qualified EVM.Exec
-import qualified EVM.Fetch as Fetch
 
 concatMapM :: Monad m => (a -> m [b]) -> [a] -> m [b]
-concatMapM op = foldr f (pure [])
-    where f x xs = do x <- op x; if null x then xs else do xs <- xs; pure $ x++xs
+-- concatMapM op = foldr f (pure [])
+  -- where f x xs = do x <- op x; if null x then xs else do xs <- xs; pure $ x++xs
+concatMapM f xs   =  liftM concat (mapM f xs)
 
 loadDappInfo :: String -> String -> IO DappInfo
 loadDappInfo path file =
   withCurrentDirectory path $
     readSolc file >>=
       \case
-        Just (contractMap, cache) ->
-          pure (dappInfo "." contractMap cache)
+        Just (contractMap, sourcecache) ->
+          pure (dappInfo "." contractMap sourcecache)
         _ ->
           error "nope, sorry"
 
 ghciTest :: String -> String -> Maybe String -> IO [Bool]
-ghciTest root path state =
+ghciTest root path statePath =
   withCurrentDirectory root $ do
     loadFacts <-
-      case state of
+      case statePath of
         Nothing ->
           pure id
         Just repoPath -> do
@@ -69,10 +68,14 @@ ghciTest root path state =
         { oracle = EVM.Fetch.zero
         , verbose = Nothing
         , maxIter = Nothing
+        , smtTimeout = Nothing
+        , smtState = Nothing
+        , solver = Nothing
         , match = ""
         , fuzzRuns = 100
         , replay = Nothing
         , vmModifier = loadFacts
+        , dapp = emptyDapp
         , testParams = params
         }
     readSolc path >>=
@@ -90,9 +93,9 @@ runBCTest :: (String, VMTest.Case) -> IO Bool
 runBCTest (name, x) = do
   let vm0 = VMTest.vmForCase x
   putStr (name ++ " ")
-  result <-
-      execStateT (EVM.Stepper.interpret EVM.Fetch.zero EVM.Stepper.execFully) vm0
-  ok <- VMTest.checkExpectation False x result
+  out <-
+    execStateT (EVM.Stepper.interpret EVM.Fetch.zero EVM.Stepper.execFully) vm0
+  ok <- VMTest.checkExpectation False x out
   putStrLn (if ok then "ok" else "")
   return ok
 
@@ -107,10 +110,10 @@ ghciBCTest file = do
         mapM_ runBCTest (Map.toList allTests)
 
 ghciTty :: String -> String -> Maybe String -> IO ()
-ghciTty root path state =
+ghciTty root path statePath =
   withCurrentDirectory root $ do
     loadFacts <-
-      case state of
+      case statePath of
         Nothing ->
           pure id
         Just repoPath -> do
@@ -121,10 +124,15 @@ ghciTty root path state =
       testOpts = UnitTestOptions
         { oracle = EVM.Fetch.zero
         , verbose = Nothing
+        , maxIter = Nothing
+        , smtTimeout = Nothing
+        , smtState = Nothing
+        , solver = Nothing
         , match = ""
         , fuzzRuns = 100
         , replay = Nothing
         , vmModifier = loadFacts
+        , dapp = emptyDapp
         , testParams = params
         }
     EVM.TTY.main testOpts root path
@@ -191,7 +199,7 @@ vmres vm =
      , gasUsed = gasUsed'
      }
 
-interpretWithTrace :: Fetch.Fetcher -> EVM.Stepper.Stepper a -> StateT VM IO a
+interpretWithTrace :: EVM.Fetch.Fetcher -> EVM.Stepper.Stepper a -> StateT VM IO a
 interpretWithTrace fetcher =
   eval . Operational.view
 

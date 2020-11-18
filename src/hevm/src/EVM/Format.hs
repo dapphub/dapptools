@@ -203,6 +203,9 @@ showTrace dapp trace =
           "fetch storage slot " <> pack (show slot) <> " from " <> pack (show addr) <> pos
         PleaseAskSMT _ _ _ ->
           "ask smt" <> pos
+        PleaseMakeUnique _ _ _ ->
+          "make unique value" <> pos
+
     ErrorTrace e ->
       case e of
         Revert out ->

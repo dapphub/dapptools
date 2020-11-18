@@ -2,7 +2,6 @@ module EVM.Transaction where
 
 import Prelude hiding (Word)
 
-import EVM.Concrete
 import EVM.FeeSchedule
 import EVM.Types (keccak)
 import EVM.Precompiled (execute)
