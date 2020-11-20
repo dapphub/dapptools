@@ -11,8 +11,9 @@ import EVM.Concrete ( wordValue )
 import EVM (VM, VMResult(..), cheatCode, traceForest, traceData, Error (..), result)
 import EVM (Trace, TraceData (..), Log (..), Query (..), FrameContext (..), Storage(..))
 import EVM.SymExec
-import EVM.Symbolic ( len, litWord)
-import EVM.Types (maybeLitWord, Word (..), Whiff(..), SymWord(..), W256 (..), num, Buffer(..), ByteStringS(..))
+import EVM.Symbolic (len, litWord)
+import EVM.Types (maybeLitWord, Word (..), Whiff(..), SymWord(..), W256 (..), num)
+import EVM.Types (Addr, Buffer(..), ByteStringS(..))
 import EVM.ABI (AbiValue (..), Event (..), AbiType (..))
 import EVM.ABI (Indexed (NotIndexed), getAbiSeq, getAbi)
 import EVM.ABI (parseTypeName)
@@ -22,6 +23,7 @@ import EVM.Solidity (methodOutput, methodSignature, methodName)
 import Control.Arrow ((>>>))
 import Control.Lens (view, preview, ix, _2, to, _Just, makeLenses, over, each, (^?!))
 import Data.Binary.Get (runGetOrFail)
+import Data.Bits       (shiftR)
 import Data.ByteString (ByteString)
 import Data.ByteString.Builder (byteStringHex, toLazyByteString)
 import Data.ByteString.Lazy (toStrict, fromStrict)
@@ -35,6 +37,7 @@ import Data.Text.Encoding (decodeUtf8, decodeUtf8')
 import Data.Tree (Tree (Node))
 import Data.Tree.View (showTree)
 import Data.Vector (Vector, fromList)
+import Data.Word (Word32)
 
 import qualified Data.ByteString as BS
 import qualified Data.Char as Char
@@ -161,37 +164,71 @@ showTrace dapp trace =
     fullAbiMap = view dappAbiMap dapp
   in case view traceData trace of
     EventTrace (Log _ bytes topics) ->
-      case topics of
-        [] ->
-          mconcat
+      let logn = mconcat
+            [ "\x1b[36m"
+            , "log" <> (pack (show (length topics))) <> "("
+            , intercalate ", " (map (pack . show) topics)
+            , formatSBinary bytes <> ")"
+            , "\x1b[0m"
+            ] <> pos
+          log0 = mconcat
             [ "\x1b[36m"
             , "log0("
             , formatSBinary bytes
             , ")"
             , "\x1b[0m"
             ] <> pos
-        (topic:_) ->
-          let unknownTopic =                    -- todo: catch ds-note
-                   mconcat
-                     [ "\x1b[36m"
-                     , "log" <> (pack (show (length topics))) <> "("
-                     , formatSBinary bytes <> ", "
-                     , intercalate ", " (map (pack . show) topics) <> ")"
-                     , "\x1b[0m"
-                     ] <> pos
-
-          in case maybeLitWord topic of
-            Just top -> case Map.lookup (wordValue top) (view dappEventMap dapp) of
-                 Just (Event name _ types) ->
-                   mconcat
-                     [ "\x1b[36m"
-                     , name
-                     , showValues [t | (t, NotIndexed) <- types] bytes
-                     -- todo: show indexed
-                     , "\x1b[0m"
-                     ] <> pos
-                 Nothing -> unknownTopic
-            Nothing -> unknownTopic
+          knownTopic name types = mconcat
+            [ "\x1b[36m"
+            , name
+            , showValues [t | (t, NotIndexed) <- types] bytes
+            -- todo: show indexed
+            , "\x1b[0m"
+            ] <> pos
+          lognote sig usr = mconcat
+            [ "\x1b[36m"
+            , "LogNote("
+            , sig, ", "
+            , usr, ", ...)"
+            , "\x1b[0m"
+            ] <> pos
+      in case topics of
+        [] ->
+          log0
+        (t1:_) ->
+          case maybeLitWord t1 of
+            Just topic ->
+              case Map.lookup (wordValue topic) (view dappEventMap dapp) of
+                Just (Event name _ types) ->
+                  knownTopic name types
+                Nothing ->
+                  case topics of
+                    [_, t2, _, _] ->
+                      -- check for ds-note logs.. possibly catching false positives
+                      -- event LogNote(
+                      --     bytes4   indexed  sig,
+                      --     address  indexed  usr,
+                      --     bytes32  indexed  arg1,
+                      --     bytes32  indexed  arg2,
+                      --     bytes             data
+                      -- ) anonymous;
+                      let
+                        sig = fromIntegral $ shiftR (wordValue topic) 224 :: Word32
+                        usr = case maybeLitWord t2 of
+                          Just w ->
+                            pack $ show $ (fromIntegral w :: Addr)
+                          Nothing  ->
+                            "<symbolic>"
+                      in
+                        case Map.lookup sig (view dappAbiMap dapp) of
+                          Just m ->
+                           lognote (view methodSignature m) usr
+                          Nothing ->
+                            logn
+                    _ ->
+                      logn
+            Nothing ->
+              logn
 
     QueryTrace q ->
       case q of
