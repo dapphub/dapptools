@@ -212,7 +212,8 @@ data Frame = Frame
 -- | Call/create info
 data FrameContext
   = CreationContext
-    { creationContextCodehash  :: W256
+    { creationContextAddress   :: Addr
+    , creationContextCodehash  :: W256
     , creationContextReversion :: Map Addr Contract
     , creationContextSubstate  :: SubState
     }
@@ -1995,46 +1996,47 @@ create self this xGas' xValue xs newAddr initCode = do
     modifying (env . contracts . ix self . nonce) succ
     next
   else burn xGas $ do
-        touchAccount self
-        touchAccount newAddr
-        let
-          store = case view (env . storageModel) vm0 of
-            ConcreteS -> Concrete mempty
-            SymbolicS -> Symbolic [] $ sListArray 0 []
-            InitialS -> Symbolic [] $ sListArray 0 []
-          newContract =
-            initialContract (InitCode initCode) & set storage store
-          newContext  =
-            CreationContext { creationContextCodehash  = view codehash newContract
-                            , creationContextReversion = view (env . contracts) vm0
-                            , creationContextSubstate = view (tx . substate) vm0
-                            }
+    touchAccount self
+    touchAccount newAddr
+    let
+      store = case view (env . storageModel) vm0 of
+        ConcreteS -> Concrete mempty
+        SymbolicS -> Symbolic [] $ sListArray 0 []
+        InitialS  -> Symbolic [] $ sListArray 0 []
+      newContract =
+        initialContract (InitCode initCode) & set storage store
+      newContext  =
+        CreationContext { creationContextAddress   = newAddr
+                        , creationContextCodehash  = view codehash newContract
+                        , creationContextReversion = view (env . contracts) vm0
+                        , creationContextSubstate  = view (tx . substate) vm0
+                        }
 
-        zoom (env . contracts) $ do
-          oldAcc <- use (at newAddr)
-          let oldBal = maybe 0 (view balance) oldAcc
+    zoom (env . contracts) $ do
+      oldAcc <- use (at newAddr)
+      let oldBal = maybe 0 (view balance) oldAcc
 
-          assign (at newAddr) (Just (newContract & balance .~ oldBal))
-          modifying (ix self . nonce) succ
+      assign (at newAddr) (Just (newContract & balance .~ oldBal))
+      modifying (ix self . nonce) succ
 
-        transfer self newAddr xValue
+    transfer self newAddr xValue
 
-        pushTrace (FrameTrace newContext)
-        next
-        vm1 <- get
-        pushTo frames $ Frame
-          { _frameContext = newContext
-          , _frameState   = (set stack xs) (view state vm1)
-          }
+    pushTrace (FrameTrace newContext)
+    next
+    vm1 <- get
+    pushTo frames $ Frame
+      { _frameContext = newContext
+      , _frameState   = (set stack xs) (view state vm1)
+      }
 
-        assign state $
-          blankState
-            & set contract   newAddr
-            & set codeContract newAddr
-            & set code       initCode
-            & set callvalue  (litWord xValue)
-            & set caller     (litAddr self)
-            & set gas        xGas'
+    assign state $
+      blankState
+        & set contract   newAddr
+        & set codeContract newAddr
+        & set code       initCode
+        & set callvalue  (litWord xValue)
+        & set caller     (litAddr self)
+        & set gas        xGas'
 
 -- | Replace a contract's code, like when CREATE returns
 -- from the constructor code.
@@ -2166,7 +2168,7 @@ finishFrame how = do
               assign (state . returndata) mempty
               push 0
         -- Or were we creating?
-        CreationContext _ reversion substate' -> do
+        CreationContext _ _ reversion substate' -> do
           creator <- use (state . contract)
           let
             createe = view (state . contract) oldVm

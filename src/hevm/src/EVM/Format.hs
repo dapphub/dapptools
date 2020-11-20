@@ -270,8 +270,11 @@ showTrace dapp trace =
 
     EntryTrace t ->
       t
-    FrameTrace (CreationContext hash _ _ ) ->
-      "create " <> maybeContractName (preview (dappSolcByHash . ix hash . _2) dapp) <> pos
+    FrameTrace (CreationContext addr hash _ _ ) ->
+      "create "
+      <> maybeContractName (preview (dappSolcByHash . ix hash . _2) dapp)
+      <> "@" <> pack (show addr)
+      <> pos
     FrameTrace (CallContext target context _ _ hash abi calldata _ _) ->
       let calltype = if target == context
                      then "call "
