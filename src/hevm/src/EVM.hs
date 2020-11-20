@@ -2102,10 +2102,6 @@ finishFrame how = do
     -- Are there some remaining frames?
     nextFrame : remainingFrames -> do
 
-      -- Pop the top frame.
-      assign frames remainingFrames
-      -- Install the state of the frame to which we shall return.
-      assign state (view frameState nextFrame)
       -- Insert a debug trace.
       insertTrace $
         case how of
@@ -2119,6 +2115,11 @@ finishFrame how = do
             ReturnTrace output (view frameContext nextFrame)
       -- Pop to the previous level of the debug trace stack.
       popTrace
+
+      -- Pop the top frame.
+      assign frames remainingFrames
+      -- Install the state of the frame to which we shall return.
+      assign state (view frameState nextFrame)
 
       -- When entering a call, the gas allowance is counted as burned
       -- in advance; this unburns the remainder and adds it to the
