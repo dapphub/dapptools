@@ -193,7 +193,7 @@ interpret mode =
 keepExecuting :: (?fetcher :: Fetcher
               ,   ?maxIter :: Maybe Integer)
               => StepMode
-              -> Operational.ProgramT Stepper.Action Identity a
+              -> Stepper a
               -> StateT UiVmState IO (Continuation a)
 keepExecuting mode restart = case mode of
   Step 0 -> do
@@ -209,10 +209,10 @@ keepExecuting mode restart = case mode of
 
   StepUntil p -> do
     vm <- use uiVm
-    case p vm of
-      True ->
+    if p vm
+      then
         interpret (Step 0) restart
-      False -> do
+      else do
         -- Run one instruction and recurse
         stepOneOpcode restart
         interpret (StepUntil p) restart
@@ -310,7 +310,9 @@ takeStep
   -> StepMode
   -> EventM n (Next UiState)
 takeStep ui mode =
-  liftIO nxt >>= \case
+  if isJust $ view (uiVm . result) ui
+  then continue (ViewVm ui)
+  else liftIO nxt >>= \case
     (Stopped (), ui') ->
       continue (ViewVm ui')
     (Continue steps, ui') -> do
@@ -319,12 +321,51 @@ takeStep ui mode =
     m = interpret mode (view uiStepper ui)
     nxt = runStateT m ui
 
+backstepUntil
+  :: (?fetcher :: Fetcher
+     ,?maxIter :: Maybe Integer)
+  => (UiVmState -> Pred VM) -> UiVmState -> EventM n (Next UiState)
+backstepUntil pred s =
+  case view uiStep s of
+    0 -> continue (ViewVm s)
+    n -> do
+      s1 <- backstep s
+      let
+        -- find a previous vm that satisfies the predicate
+        snapshots' = Data.Map.filter (pred s1 . fst) (view uiSnapshots s1)
+      case lookupLT n snapshots' of
+        -- If no such vm exists, go to the beginning
+        Nothing ->
+          let
+            (step', (vm', stepper')) = fromJust $ lookupLT (n - 1) (view uiSnapshots s)
+            s2 = s1
+              & set uiVm vm'
+              & set (uiVm . cache) (view (uiVm . cache) s1)
+              & set uiStep step'
+              & set uiStepper stepper'
+          in takeStep s2 (Step 0)
+        -- step until the predicate doesn't hold
+        Just (step', (vm', stepper')) ->
+          let
+            s2 = s1
+              & set uiVm vm'
+              & set (uiVm . cache) (view (uiVm . cache) s1)
+              & set uiStep step'
+              & set uiStepper stepper'
+          in takeStep s2 (StepUntil (not . pred s1))
+
 backstep
   :: (?fetcher :: Fetcher
      ,?maxIter :: Maybe Integer)
   => UiVmState -> EventM n UiVmState
 backstep s = case view uiStep s of
+  -- We're already at the first step; ignore command.
   0 -> return s
+  -- To step backwards, we revert to the previous snapshot
+  -- and execute n - 1 `mod` snapshotInterval steps from there.
+
+  -- We keep the current cache so we don't have to redo
+  -- any blocking queries, and also the memory view.
   n ->
     let
       (step, (vm, stepper)) = fromJust $ lookupLT n (view uiSnapshots s)
@@ -421,9 +462,7 @@ appEvent (ViewVm s) (VtyEvent (V.EvKey (V.KChar ' ') [])) =
 -- todo refactor to zipper step forward
 -- Vm Overview: n - step
 appEvent (ViewVm s) (VtyEvent (V.EvKey (V.KChar 'n') [])) =
-  case view (uiVm . result) s of
-    Just _ -> continue (ViewVm s)
-    _ -> takeStep s (Step 1)
+  takeStep s (Step 1)
 
 -- Vm Overview: N - step
 appEvent (ViewVm s) (VtyEvent (V.EvKey (V.KChar 'N') [])) =
@@ -463,7 +502,7 @@ appEvent st@(ViewVm s) (VtyEvent (V.EvKey (V.KChar 'p') [])) =
     n -> do
       -- To step backwards, we revert to the previous snapshot
       -- and execute n - 1 `mod` snapshotInterval steps from there.
-      --
+
       -- We keep the current cache so we don't have to redo
       -- any blocking queries, and also the memory view.
       let
@@ -477,69 +516,13 @@ appEvent st@(ViewVm s) (VtyEvent (V.EvKey (V.KChar 'p') [])) =
 
       takeStep s1 (Step stepsToTake)
 
--- Vm Overview: P - backstep
+-- Vm Overview: P - backstep to previous source
 appEvent st@(ViewVm s) (VtyEvent (V.EvKey (V.KChar 'P') [])) =
-  case view uiStep s of
-    0 ->
-      -- We're already at the first step; ignore command.
-      continue st
-    n -> do
-      s1 <- backstep s
-      let
-        -- find a vm with a different source location than s1
-        snapshots' = Data.Map.filter (isNextSourcePosition s1 . fst) (view uiSnapshots s1)
-      case lookupLT n snapshots' of
-          -- s2 source position is the first one. Go to the beginning.
-          Nothing ->
-            let
-              (step', (vm', stepper')) = fromJust $ lookupLT (n - 1) (view uiSnapshots s)
-              s2 = s1
-                & set uiVm vm'
-                & set (uiVm . cache) (view (uiVm . cache) s1)
-                & set uiStep step'
-                & set uiStepper stepper'
-            in takeStep s2 (Step 0)
-          -- step until we reach the source location of s1
-          Just (step', (vm', stepper')) ->
-            let
-              s2 = s1
-                & set uiVm vm'
-                & set (uiVm . cache) (view (uiVm . cache) s1)
-                & set uiStep step'
-                & set uiStepper stepper'
-            in takeStep s2 (StepUntil (not . isNextSourcePosition s1))
+  backstepUntil isNextSourcePosition s
 
--- Vm Overview: c-p - backstep
+-- Vm Overview: c-p - backstep to previous source avoiding CALL and CREATE
 appEvent st@(ViewVm s) (VtyEvent (V.EvKey (V.KChar 'p') [V.MCtrl])) =
-  case view uiStep s of
-    0 ->
-      -- We're already at the first step; ignore command.
-      continue st
-    n -> do
-      s1 <- backstep s
-      let
-        -- find a vm with a different source location than s1
-        snapshots' = Data.Map.filter (isNextSourcePositionWithoutEntering s1 . fst) (view uiSnapshots s1)
-      case lookupLT n snapshots' of
-          -- s2 source position is the first one. Go to the beginning.
-          Nothing ->
-            let
-              (step', (vm', stepper')) = fromJust $ lookupLT (n - 1) (view uiSnapshots s)
-              s2 = s1
-                & set uiVm vm'
-                & set (uiVm . cache) (view (uiVm . cache) s1)
-                & set uiStep step'
-                & set uiStepper stepper'
-            in takeStep s2 (Step 0)
-          -- step until we reach the source location of s1
-          Just (step', (vm', stepper')) ->
-            let
-              s2 = s1
-                & set uiVm vm'
-                & set (uiVm . cache) (view (uiVm . cache) s1)
-                & set uiStep step'
-                & set uiStepper stepper'
-            in takeStep s2 (StepUntil (not . isNextSourcePosition s1))
+  backstepUntil isNextSourcePositionWithoutEntering s
 
 -- Vm Overview: 0 - choose no jump
 appEvent (ViewVm s) (VtyEvent (V.EvKey (V.KChar '0') [])) =
@@ -584,12 +567,19 @@ appEvent (ViewPicker s) (VtyEvent e) = do
   continue (ViewPicker s')
 
 -- Page: Down - scroll
-appEvent s (VtyEvent (V.EvKey V.KDown [])) =
-  vScrollBy (viewportScroll TracePane) 1 >> continue s
+appEvent (ViewVm s) (VtyEvent e@(V.EvKey V.KDown [])) =
+  if view uiShowMemory s then
+    vScrollBy (viewportScroll TracePane) 1 >> continue (ViewVm s)
+  else
+    takeStep s
+      (StepUntil (isNewTraceAdded s))
 
 -- Page: Up - scroll
-appEvent s (VtyEvent (V.EvKey V.KUp [])) =
-  vScrollBy (viewportScroll TracePane) (-1) >> continue s
+appEvent (ViewVm s) (VtyEvent (V.EvKey V.KUp [])) =
+  if view uiShowMemory s then
+    vScrollBy (viewportScroll TracePane) (-1) >> continue (ViewVm s)
+  else
+    backstepUntil isNewTraceAdded s
 
 -- Page: C-f - Page down
 appEvent s (VtyEvent (V.EvKey (V.KChar 'f') [V.MCtrl])) =
@@ -810,6 +800,13 @@ stepOneOpcode restart = do
   modifying uiVm (execState exec1)
   modifying uiStep (+ 1)
 
+isNewTraceAdded
+  :: UiVmState -> Pred VM
+isNewTraceAdded ui vm =
+  let
+    currentTraceTree = length <$> traceForest (view uiVm ui)
+    newTraceTree = length <$> traceForest vm
+  in currentTraceTree /= newTraceTree
 
 isNextSourcePosition
   :: UiVmState -> Pred VM
@@ -964,7 +961,7 @@ drawTracePane s =
       <=> renderList
             (\_ x -> txt x)
             False
-            traceList
+            (listMoveTo (length traceList) traceList)
 
 solidityList :: VM -> DappInfo -> List Name (Int, ByteString)
 solidityList vm dapp' =
