@@ -667,8 +667,8 @@ drawHelpView =
         "m      Toggle memory pane\n" <>
         "0      Choose the branch which does not jump \n" <>
         "1      Choose the branch which does jump \n" <>
-        "Down   Scroll memory pane fwds\n" <>
-        "Up     Scroll memory pane back\n" <>
+        "Down   Step to next entry in the callstack / Scroll memory pane\n" <>
+        "Up     Step to previous entry in the callstack / Scroll memory pane\n" <>
         "C-f    Page memory pane fwds\n" <>
         "C-b    Page memory pane back\n\n" <>
         "Enter  Contracts browser"

@@ -44,6 +44,8 @@ Note: some `hevm` commands (`dapp-test`) assume the use of the `ds-test` framewo
   - `C-n`: step to the next source position and don't enter `CALL` or `CREATE`
   - `C-p`: step previous source position without entering
   - `m`: toggle memory view
+  - `Down` : step to next entry in the callstack / Scroll memory pane\n" <>
+  - `Up` : step to previous entry in the callstack / Scroll memory pane\n" <>
   - `h`: show key-binding help
 
 ### `hevm symbolic`
