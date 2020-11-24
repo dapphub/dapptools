@@ -21,6 +21,7 @@ module EVM.Solidity
   , methodOutput
   , abiMap
   , eventMap
+  , storageLayout
   , contractName
   , constructorInputs
   , creationCode
@@ -137,7 +138,7 @@ data SolcContract = SolcContract
   } deriving (Show, Eq, Generic)
 
 data Method = Method
-  { _methodOutput :: Maybe (Text, AbiType)
+  { _methodOutput :: [(Text, AbiType)]
   , _methodInputs :: [(Text, AbiType)]
   , _methodName :: Text
   , _methodSignature :: Text
@@ -342,8 +343,8 @@ readJSON json = do
                     map parseMethodInput
                       (toList (abi ^?! key "inputs" . _Array))
                 , _methodOutput =
-                    fmap parseMethodInput
-                      (abi ^? key "outputs" . _Array . ix 0)
+                    map parseMethodInput
+                      (toList (abi ^?! key "outputs" . _Array))
                 }
             ),
         _eventMap     = Map.fromList $

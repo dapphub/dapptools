@@ -21,7 +21,7 @@ import EVM.Format (showWordExact, showWordExplanation)
 import EVM.Format (contractNamePart, contractPathPart, showTraceTree)
 import EVM.Hexdump (prettyHex)
 import EVM.Op
-import EVM.Solidity
+import EVM.Solidity hiding (storageLayout)
 import EVM.Types hiding (padRight)
 import EVM.UnitTest
 import EVM.StorageLayout

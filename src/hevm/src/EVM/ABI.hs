@@ -193,8 +193,9 @@ getAbi t = label (Text.unpack (abiTypeSolidity t)) $
           >>= label "bytes data" . getBytesWith256BitPadding)
 
     AbiStringType -> do
-      AbiBytesDynamic x <- getAbi AbiBytesDynamicType
-      pure (AbiString x)
+      AbiString <$>
+        (label "string length prefix" getWord256
+          >>= label "string data" . getBytesWith256BitPadding)
 
     AbiArrayType n t' ->
       AbiArray n t' <$> getAbiSeq n (repeat t')
