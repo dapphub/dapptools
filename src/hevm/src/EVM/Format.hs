@@ -15,13 +15,13 @@ import EVM.Symbolic (len, litWord)
 import EVM.Types (maybeLitWord, Word (..), Whiff(..), SymWord(..), W256 (..), num)
 import EVM.Types (Addr, Buffer(..), ByteStringS(..))
 import EVM.ABI (AbiValue (..), Event (..), AbiType (..))
-import EVM.ABI (Indexed (NotIndexed), getAbiSeq, getAbi)
+import EVM.ABI (Indexed (NotIndexed), getAbiSeq)
 import EVM.ABI (parseTypeName)
 import EVM.Solidity (SolcContract(..), contractName, abiMap)
 import EVM.Solidity (methodOutput, methodSignature, methodName)
 
 import Control.Arrow ((>>>))
-import Control.Lens (view, preview, ix, _2, to, _Just, makeLenses, over, each, (^?!))
+import Control.Lens (view, preview, ix, _2, to, makeLenses, over, each, (^?!))
 import Data.Binary.Get (runGetOrFail)
 import Data.Bits       (shiftR)
 import Data.ByteString (ByteString)
@@ -36,7 +36,7 @@ import Data.Text (dropEnd, splitOn)
 import Data.Text.Encoding (decodeUtf8, decodeUtf8')
 import Data.Tree (Tree (Node))
 import Data.Tree.View (showTree)
-import Data.Vector (Vector, fromList)
+import Data.Vector (Vector)
 import Data.Word (Word32)
 
 import qualified Data.ByteString as BS
@@ -80,15 +80,6 @@ humanizeInteger =
   . Text.pack
   . show
 
--- TODO: make polymorphic
-showAbiValues :: Vector AbiValue -> Text
-showAbiValues vs =
-  "(" <> intercalate ", " (toList (fmap showAbiValue vs)) <> ")"
-
-showAbiArray :: Vector AbiValue -> Text
-showAbiArray vs =
-  "[" <> intercalate ", " (toList (fmap showAbiValue vs)) <> "]"
-
 showAbiValue :: AbiValue -> Text
 showAbiValue (AbiUInt _ w) =
   pack $ show w
@@ -103,13 +94,50 @@ showAbiValue (AbiBytes _ bs) =
 showAbiValue (AbiBytesDynamic bs) =
   formatBinary bs
 showAbiValue (AbiString bs) =
-  formatQString bs
+  formatBytes bs
 showAbiValue (AbiArray _ _ xs) =
   showAbiArray xs
 showAbiValue (AbiArrayDynamic _ xs) =
   showAbiArray xs
 showAbiValue (AbiTuple v) =
   showAbiValues v
+
+textAbiValues :: Vector AbiValue -> [Text]
+textAbiValues vs = toList (fmap showAbiValue vs)
+
+textValues :: [AbiType] -> Buffer -> [Text]
+textValues ts (SymbolicBuffer  _) = [pack $ show t | t <- ts]
+textValues ts (ConcreteBuffer bs) =
+  case runGetOrFail (getAbiSeq (length ts) ts) (fromStrict bs) of
+    Right (_, _, xs) -> textAbiValues xs
+    Left (_, _, _)   -> [formatBinary bs]
+
+parenthesise :: [Text] -> Text
+parenthesise ts = "(" <> intercalate ", " ts <> ")"
+
+-- TODO: make polymorphic
+showAbiValues :: Vector AbiValue -> Text
+showAbiValues vs = parenthesise (textAbiValues vs)
+
+showAbiArray :: Vector AbiValue -> Text
+showAbiArray vs =
+  "[" <> intercalate ", " (toList (fmap showAbiValue vs)) <> "]"
+
+showValues :: [AbiType] -> Buffer -> Text
+showValues ts b = parenthesise $ textValues ts b
+
+showValue :: AbiType -> Buffer -> Text
+showValue t b = head $ textValues [t] b
+
+showCall :: [AbiType] -> Buffer -> Text
+showCall ts (SymbolicBuffer bs) = showValues ts $ SymbolicBuffer (drop 4 bs)
+showCall ts (ConcreteBuffer bs) = showValues ts $ ConcreteBuffer (BS.drop 4 bs)
+
+showError :: ByteString -> Text
+showError bs = case BS.take 4 bs of
+  -- Method ID for Error(string)
+  "\b\195y\160" -> showCall [AbiStringType] (ConcreteBuffer bs)
+  _             -> formatBinary bs
 
 isPrintable :: ByteString -> Bool
 isPrintable =
@@ -129,6 +157,7 @@ formatSBytes :: Buffer -> Text
 formatSBytes (SymbolicBuffer b) = "<" <> pack (show (length b)) <> " symbolic bytes>"
 formatSBytes (ConcreteBuffer b) = formatBytes b
 
+-- show a string with "quotes"
 formatQString :: ByteString -> Text
 formatQString = pack . show
 
@@ -248,21 +277,17 @@ showTrace dapp trace =
         _ ->
           "\x1b[91merror\x1b[0m " <> pack (show e) <> pos
 
-    ReturnTrace out (CallContext _ _ _ _ hash (Just abi) _ _ _) ->
-      case getAbiMethodOutput dapp hash abi of
-        Nothing ->
-          "← " <>
-            case Map.lookup (fromIntegral abi) fullAbiMap of
-              Just m  ->
-                case (view methodOutput m) of
-                  Just (_, t) ->
-                    pack (show t) <> " " <> showValue t out
-                  Nothing ->
-                    formatSBinary out
-              Nothing ->
+    ReturnTrace out (CallContext _ _ _ _ _ (Just abi) _ _ _) ->
+      "← " <>
+        case Map.lookup (fromIntegral abi) fullAbiMap of
+          Just m  ->
+            case unzip (view methodOutput m) of
+              ([], []) ->
                 formatSBinary out
-        Just (_, t) ->
-          "← " <> pack (show t) <> " " <> showValue t out
+              (_, ts) ->
+                showValues ts out
+          Nothing ->
+            formatSBinary out
     ReturnTrace out (CallContext {}) ->
       "← " <> formatSBinary out
     ReturnTrace out (CreationContext {}) ->
@@ -308,46 +333,12 @@ showTrace dapp trace =
             <> "\x1b[0m"
             <> pos
 
-getAbiMethodOutput
-  :: DappInfo -> W256 -> Word -> Maybe (Text, AbiType)
-getAbiMethodOutput dapp hash abi =
-  -- Some typical ugly lens code. :'(
-  preview
-    ( dappSolcByHash . ix hash . _2 . abiMap
-    . ix (fromIntegral abi) . methodOutput . _Just
-    )
-    dapp
-
 getAbiTypes :: Text -> [Maybe AbiType]
 getAbiTypes abi = map (parseTypeName mempty) types
   where
     types =
       filter (/= "") $
         splitOn "," (dropEnd 1 (last (splitOn "(" abi)))
-
-showCall :: [AbiType] -> Buffer -> Text
-showCall ts (SymbolicBuffer bs) = showValues ts $ SymbolicBuffer (drop 4 bs)
-showCall ts (ConcreteBuffer bs) = showValues ts $ ConcreteBuffer (BS.drop 4 bs)
-
-showError :: ByteString -> Text
-showError bs = case BS.take 4 bs of
-  -- Method ID for Error(string)
-  "\b\195y\160" -> showCall [AbiStringType] (ConcreteBuffer bs)
-  _             -> formatBinary bs
-
-showValues :: [AbiType] -> Buffer -> Text
-showValues ts (SymbolicBuffer  _) = "symbolic: " <> (pack . show $ AbiTupleType (fromList ts))
-showValues ts (ConcreteBuffer bs) =
-  case runGetOrFail (getAbiSeq (length ts) ts) (fromStrict bs) of
-    Right (_, _, xs) -> showAbiValues xs
-    Left (_, _, _)   -> formatBinary bs
-
-showValue :: AbiType -> Buffer -> Text
-showValue t (SymbolicBuffer _) = "symbolic: " <> (pack $ show t)
-showValue t (ConcreteBuffer bs) =
-  case runGetOrFail (getAbi t) (fromStrict bs) of
-    Right (_, _, x) -> showAbiValue x
-    Left (_, _, _)  -> formatBinary bs
 
 maybeContractName :: Maybe SolcContract -> Text
 maybeContractName =
