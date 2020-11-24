@@ -671,7 +671,7 @@ formatTestLog events (Log _ args (topic:_)) =
                    Nothing -> Nothing
                    Just (Event name _ _) -> case name of
                      "logs" ->
-                       Just $ formatSString args
+                       Just $ formatSBytes args
 
                      "log_bytes32" ->
                        Just $ formatSBytes args
