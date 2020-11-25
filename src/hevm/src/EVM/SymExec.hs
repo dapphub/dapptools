@@ -172,7 +172,7 @@ interpret' fetcher maxIter vm = let
             return (vm, [Node (BranchInfo leftvm (Just whiff)) left, Node (BranchInfo rightvm (Just whiff)) right])
         Just n -> cont $ continue (not n)
 
-    Just _
+    Just x
       -> return (vm, [])
 
 -- | Interpreter which explores all paths at
@@ -336,10 +336,12 @@ equivalenceCheck bytecodeA bytecodeB maxiter signature' = do
 
   smtState <- queryState
   push 1
-  aVMs <- Node (BranchInfo preStateA Nothing) . snd <$> interpret' (Fetch.oracle (Just smtState) Nothing False) maxiter preStateA
+  aVMs <- let f = \(lvm', lcs) -> Node (BranchInfo (if length lcs == 0 then lvm' else preStateA) Nothing) lcs
+          in f <$> interpret' (Fetch.oracle (Just smtState) Nothing False) maxiter preStateA
   pop 1
   push 1
-  bVMs <- Node (BranchInfo preStateB Nothing) . snd <$> interpret' (Fetch.oracle (Just smtState) Nothing False) maxiter preStateB
+  bVMs <- let f = \(lvm', lcs) -> Node (BranchInfo (if length lcs == 0 then lvm' else preStateB) Nothing) lcs
+          in f <$> interpret' (Fetch.oracle (Just smtState) Nothing False) maxiter preStateB
   pop 1
   -- Check each pair of endstates for equality:
   let differingEndStates = uncurry distinct <$> [(a,b) | a <- pruneDeadPaths (leaves aVMs), b <- pruneDeadPaths (leaves bVMs)]
@@ -364,7 +366,7 @@ equivalenceCheck bytecodeA bytecodeB maxiter signature' = do
 
               (Just _, Just _) -> sTrue
 
-              _ -> error "Internal error during symbolic execution (should not be possible)"
+              errormsg -> error $ show errormsg
 
         in sAnd (fst <$> aPath) .&& sAnd (fst <$> bPath) .&& differingResults
   -- If there exists a pair of endstates where this is not the case,
