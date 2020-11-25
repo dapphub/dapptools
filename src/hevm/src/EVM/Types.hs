@@ -13,6 +13,7 @@ import Data.Aeson (FromJSON (..), (.:))
 
 #if MIN_VERSION_aeson(1, 0, 0)
 import Data.Aeson (FromJSONKey (..), FromJSONKeyFunction (..))
+import Data.Aeson
 #endif
 
 import Crypto.Hash
@@ -189,6 +190,9 @@ instance Show W256 where
 
 instance JSON.ToJSON W256 where
   toJSON = JSON.String . Text.pack . show
+
+instance JSON.ToJSON Word where
+  toJSON (C _ x) = toJSON x
 
 instance Read Addr where
   readsPrec _ ('0':'x':s) = readHex s

@@ -339,8 +339,8 @@ prettyvmresult (EVM.VMSuccess (SymbolicBuffer msg)) =
 currentSolc :: DappInfo -> VM -> Maybe SolcContract
 currentSolc dapp vm =
   let
-    this = vm ^?! env . contracts . ix (view (state . contract) vm)
-    h = view codehash this
+    this = vm ^?! EVM.env . EVM.contracts . ix (view (EVM.state . EVM.contract) vm)
+    h = view EVM.codehash this
   in
     preview (dappSolcByHash . ix h . _2) dapp
 
