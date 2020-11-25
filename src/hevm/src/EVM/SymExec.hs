@@ -336,11 +336,11 @@ equivalenceCheck bytecodeA bytecodeB maxiter signature' = do
 
   smtState <- queryState
   push 1
-  aVMs <- let f = \(lvm', lcs) -> Node (BranchInfo (if length lcs == 0 then lvm' else preStateA) Nothing) lcs
+  aVMs <- let f = \(vm', cs) -> Node (BranchInfo (if length cs == 0 then vm' else preStateA) Nothing) cs
           in f <$> interpret' (Fetch.oracle (Just smtState) Nothing False) maxiter preStateA
   pop 1
   push 1
-  bVMs <- let f = \(lvm', lcs) -> Node (BranchInfo (if length lcs == 0 then lvm' else preStateB) Nothing) lcs
+  bVMs <- let f = \(vm', cs) -> Node (BranchInfo (if length cs == 0 then vm' else preStateB) Nothing) cs
           in f <$> interpret' (Fetch.oracle (Just smtState) Nothing False) maxiter preStateB
   pop 1
   -- Check each pair of endstates for equality:
