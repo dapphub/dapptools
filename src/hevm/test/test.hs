@@ -257,8 +257,8 @@ main = defaultMain $ testGroup "hevm"
                   this = view (state . codeContract) prestate
                   Just preC = view (env.contracts . at this) prestate
                   Just postC = view (env.contracts . at this) poststate
-                  Symbolic prestore = _storage preC
-                  Symbolic poststore = _storage postC
+                  Symbolic _ prestore = _storage preC
+                  Symbolic _ poststore = _storage postC
                   prex = readArray prestore 0
                   postx = readArray poststore 0
               in case view result poststate of
@@ -289,7 +289,7 @@ main = defaultMain $ testGroup "hevm"
                   this = view (state . codeContract) prestate
                   (Just preC, Just postC) = both' (view (env.contracts . at this)) (prestate, poststate)
                   --Just postC = view (env.contracts . at this) poststate
-                  (Symbolic prestore, Symbolic poststore) = both' (view storage) (preC, postC)
+                  (Symbolic _ prestore, Symbolic _ poststore) = both' (view storage) (preC, postC)
                   (prex,  prey)  = both' (readArray prestore) (x, y)
                   (postx, posty) = both' (readArray poststore) (x, y)
               in case view result poststate of
@@ -430,7 +430,7 @@ main = defaultMain $ testGroup "hevm"
             case view (state . calldata . _1) vm of
               SymbolicBuffer bs -> BS.pack <$> mapM (getValue.fromSized) bs
               ConcreteBuffer _ -> error "unexpected"
-              
+
           let [AbiUInt 256 x,
                AbiUInt 256 y,
                AbiUInt 256 w,
@@ -506,7 +506,7 @@ main = defaultMain $ testGroup "hevm"
                   & set (state . callvalue) 0
                   & over (env . contracts)
                        (Map.insert aAddr (initialContract (RuntimeCode a) &
-                                           set EVM.storage (Symbolic store)))
+                                           set EVM.storage (EVM.Symbolic [] store)))
             verify vm Nothing Nothing (Just checkAssertions)
           putStrLn $ "found counterexample:"
       ,
