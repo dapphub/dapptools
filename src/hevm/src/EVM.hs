@@ -178,7 +178,7 @@ data Cache = Cache
 -- | A way to specify an initial VM state
 data VMOpts = VMOpts
   { vmoptContract :: Contract
-  , vmoptCalldata :: (Buffer, SWord 256) -- maximum size of uint32 as per eip 1985
+  , vmoptCalldata :: (Buffer, SWord 256)
   , vmoptValue :: SymWord
   , vmoptAddress :: Addr
   , vmoptCaller :: SAddr

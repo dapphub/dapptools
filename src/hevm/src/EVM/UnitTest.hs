@@ -764,7 +764,8 @@ symbolify vm =
   where
     mkSymStorage :: Storage -> Storage
     mkSymStorage (Symbolic _ _) = error "should not happen"
-    mkSymStorage (Concrete s) = let
+    mkSymStorage (Concrete s) =
+      let
         list = [(literal $ toSizzle k, v) | (C _ k, S _ v) <- Map.toList s]
         symlist = [(litWord k, v) | (k, v) <- Map.toList s]
       in Symbolic symlist $ sListArray 0 list

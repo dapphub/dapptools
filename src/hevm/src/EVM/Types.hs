@@ -77,6 +77,58 @@ instance Show SymWord where
       whiff -> show whiff
     Just w'  -> show w'
 
+-- | Custom instances for SymWord, many of which have direct
+-- analogues for concrete words defined in Concrete.hs
+instance EqSymbolic SymWord where
+  (.==) (S _ x) (S _ y) = x .== y
+
+instance Num SymWord where
+  (S a x) + (S b y) = S (InfixBinOp "+" a b) (x + y)
+  (S a x) * (S b y) = S (InfixBinOp "*" a b) (x * y)
+  abs (S a x) = S (UnOp "abs" a) (abs x)
+  signum (S a x) = S (UnOp "signum" a) (signum x)
+  fromInteger x = S (Val (show x)) (fromInteger x)
+  negate (S a x) = S (UnOp "-" a) (negate x)
+
+instance Bits SymWord where
+  (S a x) .&. (S b y) = S (InfixBinOp "&" a b) (x .&. y)
+  (S a x) .|. (S b y) = S (InfixBinOp "|" a b) (x .|. y)
+  (S a x) `xor` (S b y) = S (InfixBinOp "xor" a b) (x `xor` y)
+  complement (S a x) = S (UnOp "~" a) (complement x)
+  shift (S a x) i = S (UnOp ("<<" ++ (show i) ++ " ") a ) (shift x i)
+  rotate (S a x) i = S (UnOp ("rotate " ++ (show i) ++ " ") a) (rotate x i)
+  bitSize (S _ x) = bitSize x
+  bitSizeMaybe (S _ x) = bitSizeMaybe x
+  isSigned (S _ x) = isSigned x
+  testBit (S _ x) i = testBit x i
+  bit i = sw256 (bit i)
+  popCount (S _ x) = popCount x
+
+instance SDivisible SymWord where
+  sQuotRem (S _ x) (S _ y) = let (a, b) = x `sQuotRem` y
+                             in (sw256 a, sw256 b)
+  sDivMod (S _ x) (S _ y) = let (a, b) = x `sDivMod` y
+                             in (sw256 a, sw256 b)
+
+instance Mergeable SymWord where
+  symbolicMerge a b (S wx x) (S _ y) = S wx (symbolicMerge a b x y)
+  select xs (S _ x) b = let ys = fmap (\(S _ y) -> y) xs
+                        in sw256 $ select ys x b
+
+instance Bounded SymWord where
+  minBound = sw256 minBound
+  maxBound = sw256 maxBound
+
+instance Eq SymWord where
+  (S _ x) == (S _ y) = x == y
+
+instance Enum SymWord where
+  toEnum i = sw256 (toEnum i)
+  fromEnum (S _ x) = fromEnum x
+
+instance OrdSymbolic SymWord where
+  (.<) (S _ x) (S _ y) = (.<) x y
+
 
 -- | This type can give insight into the provenance of a term
 data Whiff = Dull
@@ -125,11 +177,9 @@ class FromSizzleBV a where
 maybeLitWord :: SymWord -> Maybe Word
 maybeLitWord (S whiff a) = fmap (C whiff . fromSizzle) (unliteral a)
 
-
 -- We need a 512-bit word for doing ADDMOD and MULMOD with full precision.
 mkUnpackedDoubleWord "Word512" ''Word256 "Int512" ''Int256 ''Word256
   [''Typeable, ''Data, ''Generic]
-
 
 
 -- | convert between (WordN 256) and Word256
@@ -144,7 +194,6 @@ class ToSizzleBV a where
 
    default toSizzle :: (Num (ToSizzle a), Integral a) => (a -> ToSizzle a)
    toSizzle = fromIntegral
-
 
 
 instance (ToSizzleBV W256)
