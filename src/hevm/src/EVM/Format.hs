@@ -436,10 +436,8 @@ showBranchTree srcInfo (Node _ children) =
     treeLines = flattenForest srcInfo (restack (flattenAbi False children))
     doMax treeLine x = max x $ length $ _indent treeLine
     maxIndent = 2 + foldr doMax 0 treeLines
-    showTreeLine bd = let
-      colIndent  = _indent bd
-      colContent = _content bd
-      indentSize = (maxIndent -(length colIndent))
+    showTreeLine (TreeLine colIndent colContent) =
+      let indentSize = maxIndent - length colIndent
       in colIndent <> leftpad indentSize colContent
   in unlines $ showTreeLine <$> treeLines
 
@@ -451,14 +449,14 @@ abiBranching (BranchInfo _ (Just (UnOp "isZero" (InfixBinOp "==" (Val _) (FromCa
 abiBranching (BranchInfo _ (Just (UnOp "isZero" (InfixBinOp ">" (Val _) (FromCalldata _ _))))) = CompareBranching
 abiBranching _ = NoBranching
 
-flattenAbi :: Bool ->               -- have we hit the abi barrier?
+flattenAbi :: Bool ->               -- ^ have we hit the abi barrier?
               [Tree BranchInfo] ->
               [Tree BranchInfo]
 flattenAbi False forest@((Node lbi ls):(Node rbi rs):_) = let
     ff = flattenAbi False
     ft = flattenAbi True
   in case abiBranching lbi of
-      NoBranching       -> map (over branches ff) forest
+      NoBranching       -> over branches ff <$> forest
       ConcreteBranching -> (Node rbi rs) : (ft ls)
       CompareBranching  -> (ft ls) ++ (ft rs)
 flattenAbi True forest@((Node lbi ls):(Node rbi rs):_) = let
@@ -467,22 +465,21 @@ flattenAbi True forest@((Node lbi ls):(Node rbi rs):_) = let
       NoBranching       -> forest
       ConcreteBranching -> (Node rbi rs) : (ft ls)
       CompareBranching  -> (ft ls) ++ (ft rs)
-flattenAbi _ t = t -- should never happen
-
-isAbi :: BranchInfo -> Bool
-isAbi (BranchInfo _ (Just (UnOp "isZero" (InfixBinOp "==" (Val _) (FromCalldata _ _))))) = True
-isAbi _ = False
+flattenAbi _ t = error "should never happen"
 
 abiForest :: [Tree BranchInfo] -> [Tree BranchInfo]
 abiForest [] = []
-abiForest f@((Node bi _):_) = let
-  xx = concatMap (abiForest . view branches) f
-  in if isAbi bi then f else xx
-
+abiForest f@((Node bi _):_) =
+  case abiBranching bi of
+      ConcreteBranching -> f
+      _ -> concatMap (abiForest . view branches) f
 -- TODO - doesn't work correctly, compare to real tree
 restack :: [Tree BranchInfo] -> [Tree BranchInfo]
 restack forest = let
   insertIntoHollow cs [] = cs
-  insertIntoHollow cs f@((Node bi cl):xs) = if isAbi bi then cs else map (over branches (insertIntoHollow cs)) f
+  insertIntoHollow cs f@((Node bi cl):xs) =
+    case abiBranching bi of
+      ConcreteBranching -> cs
+      _ -> over branches (insertIntoHollow cs) <$> f
   forest' = abiForest forest
   in map (\(Node bi cs) -> Node bi (insertIntoHollow cs forest)) forest'

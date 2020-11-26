@@ -168,16 +168,16 @@ clearCode = set contractcode (EVM.RuntimeCode mempty)
 instance FromJSON EVM.Contract where
   parseJSON (JSON.Object v) = do
     code <- (EVM.RuntimeCode <$> (hexText <$> v .: "code"))
-    storage' <- Map.mapKeys EVM.w256 <$> v .: "storage"
+    storage' <- Map.mapKeys w256 <$> v .: "storage"
     balance' <- v .: "balance"
     nonce'   <- v .: "nonce"
     return
       $
       EVM.initialContract code
-       & balance .~ EVM.w256 balance'
-       & nonce   .~ EVM.w256 nonce'
-       & storage .~ EVM.Concrete (fmap (litWord . EVM.w256) storage')
-       & origStorage .~ fmap EVM.w256 storage'
+       & balance .~ w256 balance'
+       & nonce   .~ w256 nonce'
+       & storage .~ EVM.Concrete (fmap (litWord . w256) storage')
+       & origStorage .~ fmap w256 storage'
 
   parseJSON invalid =
     JSON.typeMismatch "Contract" invalid
@@ -267,14 +267,14 @@ fromBlockchainCase' block tx preState postState =
         (EVM.VMOpts
          { vmoptContract      = EVM.initialContract theCode
          , vmoptCalldata      = cd
-         , vmoptValue         = litWord (EVM.w256 $ txValue tx)
+         , vmoptValue         = litWord (w256 $ txValue tx)
          , vmoptAddress       = toAddr
          , vmoptCaller        = litAddr origin
          , vmoptOrigin        = origin
          , vmoptGas           = txGasLimit tx - fromIntegral (txGasCost feeSchedule tx)
          , vmoptGaslimit      = txGasLimit tx
          , vmoptNumber        = blockNumber block
-         , vmoptTimestamp     = litWord $ EVM.w256 $ blockTimestamp block
+         , vmoptTimestamp     = litWord $ w256 $ blockTimestamp block
          , vmoptCoinbase      = blockCoinbase block
          , vmoptDifficulty    = blockDifficulty block
          , vmoptMaxCodeSize   = 24576
@@ -305,9 +305,9 @@ validateTx tx cs = do
   origin        <- sender 1 tx
   originBalance <- (view balance) <$> view (at origin) cs
   originNonce   <- (view nonce)   <$> view (at origin) cs
-  let gasDeposit = EVM.w256 $ (txGasPrice tx) * (txGasLimit tx)
-  if gasDeposit + (EVM.w256 $ txValue tx) <= originBalance
-    && (EVM.w256 $ txNonce tx) == originNonce
+  let gasDeposit = w256 $ (txGasPrice tx) * (txGasLimit tx)
+  if gasDeposit + (w256 $ txValue tx) <= originBalance
+    && (w256 $ txNonce tx) == originNonce
   then Just ()
   else Nothing
 

@@ -66,6 +66,66 @@ data Word = C Whiff W256 --maybe to remove completely in the future
 instance Show Word where
   show (C _ x) = show x
 
+instance Read Word where
+  readsPrec n s =
+    case readsPrec n s of
+      [(x, r)] -> [(C Dull x, r)]
+      _ -> []
+
+w256 :: W256 -> Word
+w256 = C Dull
+
+instance Bits Word where
+  (C _ x) .&. (C _ y) = w256 (x .&. y)
+  (C _ x) .|. (C _ y) = w256 (x .|. y)
+  (C _ x) `xor` (C _ y) = w256 (x `xor` y)
+  complement (C _ x) = w256 (complement x)
+  shift (C _ x) i = w256 (shift x i)
+  rotate (C _ x) i = w256 (rotate x i)
+  bitSize (C _ x) = bitSize x
+  bitSizeMaybe (C _ x) = bitSizeMaybe x
+  isSigned (C _ x) = isSigned x
+  testBit (C _ x) = testBit x
+  bit i = w256 (bit i)
+  popCount (C _ x) = popCount x
+
+instance FiniteBits Word where
+  finiteBitSize (C _ x) = finiteBitSize x
+  countLeadingZeros (C _ x) = countLeadingZeros x
+  countTrailingZeros (C _ x) = countTrailingZeros x
+
+instance Bounded Word where
+  minBound = w256 minBound
+  maxBound = w256 maxBound
+
+instance Eq Word where
+  (C _ x) == (C _ y) = x == y
+
+instance Enum Word where
+  toEnum i = w256 (toEnum i)
+  fromEnum (C _ x) = fromEnum x
+
+instance Integral Word where
+  quotRem (C _ x) (C _ y) =
+    let (a, b) = quotRem x y
+    in (w256 a, w256 b)
+  toInteger (C _ x) = toInteger x
+
+instance Num Word where
+  (C _ x) + (C _ y) = w256 (x + y)
+  (C _ x) * (C _ y) = w256 (x * y)
+  abs (C _ x) = w256 (abs x)
+  signum (C _ x) = w256 (signum x)
+  fromInteger x = w256 (fromInteger x)
+  negate (C _ x) = w256 (negate x)
+
+instance Real Word where
+  toRational (C _ x) = toRational x
+
+instance Ord Word where
+  compare (C _ x) (C _ y) = compare x y
+
+
 -- | Symbolic words of 256 bits, possibly annotated with additional
 --   "insightful" information
 data SymWord = S Whiff (SWord 256)
@@ -76,6 +136,11 @@ instance Show SymWord where
       Dull -> "<symbolic>"
       whiff -> show whiff
     Just w'  -> show w'
+
+-- | Convenience functions transporting between the concrete and symbolic realm
+-- TODO - look for all the occurences of sw256 and replace them with manual construction
+sw256 :: SWord 256 -> SymWord
+sw256 x = S Dull x
 
 -- | Custom instances for SymWord, many of which have direct
 -- analogues for concrete words defined in Concrete.hs

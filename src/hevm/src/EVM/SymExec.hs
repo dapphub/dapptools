@@ -19,7 +19,6 @@ import qualified Control.Monad.Operational as Operational
 import Control.Monad.State.Strict hiding (state)
 import Data.Maybe (catMaybes)
 import EVM.Types
-import EVM.Symbolic (sw256)
 import EVM.Concrete (createAddress)
 import qualified EVM.FeeSchedule as FeeSchedule
 import Data.SBV.Trans.Control
