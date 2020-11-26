@@ -16,12 +16,6 @@ import EVM.Concrete
 import qualified EVM.Concrete as Concrete
 import Data.SBV hiding (runSMT, newArray_, addAxiom, Word)
 
-
--- | Convenience functions transporting between the concrete and symbolic realm
--- TODO - look for all the occurences of sw256 and replace them with manual construction
-sw256 :: SWord 256 -> SymWord
-sw256 x = S Dull x
-
 litWord :: Word -> (SymWord)
 litWord (C whiff a) = S whiff (literal $ toSizzle a)
 
