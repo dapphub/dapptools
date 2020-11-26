@@ -14,14 +14,21 @@ function usage() {
 
 shopt -s extglob
 case $1 in
+  # package spec e.g. solc:0.4.12
   solc:[0-9].+([0-9.]))
-    version=${1#solc:}
-    version=${version//./_}
-    override+=" solc = solc-versions.solc_$version;"
+    solc="solc-${1#solc:}"
+    set +e
+    bin="$(type -p "$solc")"
+    ;;
+  # some other solc binary name
+  solc*)
+    solc="$1"
+    set +e
+    bin="$(type -p "$solc")"
     ;;
   # if there's a '/', interpret as a path
   */*)
-    export DAPP_SOLC="$1"
+    bin="$1"
     ;;
   *)
     echo >&2 "${0##*/}: unrecognized package spec: $1"
@@ -31,12 +38,14 @@ shift
 
 [[ "$#" -gt 0 ]] || usage
 
-if [ -z "$override" ]; then
-
-dapp "$@"
-
+if [[ -z "$bin" ]]; then
+  echo >&2 "${0##*/}: Could not find ${solc} in your path."
+  echo >&2 "${0##*/}: Try \`nix-env -f https://github.com/dapphub/dapptools/archive/master.tar.gz -iA solc-static-versions.$solc\`"
+  echo >&2 "${0##*/}: in your dapptools repo."
+  exit 1
 else
-
-dapp --nix-run "dapp.override {$override}" dapp "$@"
-
+  set -e
+  SOLCBIN="$(realpath -e "${bin}")"
 fi
+
+DAPP_SOLC="$SOLCBIN" dapp "$@"
