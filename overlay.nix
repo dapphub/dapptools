@@ -69,6 +69,18 @@ in rec {
         );
   solc = solc-versions.solc_0_6_7;
 
+  solc-static-versions =
+    let
+      make-solc-drv = _: solc:
+        self.callPackage (
+          import ./nix/solc-static.nix {
+            path    = solc.path;
+            version = solc.version;
+            sha256  = solc.sha256;
+        }) {};
+    in builtins.mapAttrs make-solc-drv
+        (builtins.getAttr super.system (import ./nix/solc-static-versions.nix));
+
   hevm = self.pkgs.haskell.lib.justStaticExecutables self.haskellPackages.hevm;
 
   libff = self.callPackage (import ./nix/libff.nix) {};
