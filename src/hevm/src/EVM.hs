@@ -178,7 +178,7 @@ data Cache = Cache
 -- | A way to specify an initial VM state
 data VMOpts = VMOpts
   { vmoptContract :: Contract
-  , vmoptCalldata :: (Buffer, SWord 32) -- maximum size of uint32 as per eip 1985
+  , vmoptCalldata :: (Buffer, SWord 256) -- maximum size of uint32 as per eip 1985
   , vmoptValue :: SymWord
   , vmoptAddress :: Addr
   , vmoptCaller :: SAddr
@@ -238,7 +238,7 @@ data FrameState = FrameState
   , _stack        :: [SymWord]
   , _memory       :: Buffer
   , _memorySize   :: Int
-  , _calldata     :: (Buffer, (SWord 32))
+  , _calldata     :: (Buffer, (SWord 256))
   , _callvalue    :: SymWord
   , _caller       :: SAddr
   , _gas          :: Word
@@ -751,12 +751,12 @@ exec1 = do
 
         -- op: CALLDATALOAD
         0x35 -> stackOp1 (const g_verylow) $
-          \ind -> uncurry (readSWordWithBoundCalldata ind) (the state calldata)
+          \ind -> uncurry (readSWordWithBound ind) (the state calldata)
 
         -- op: CALLDATASIZE
         0x36 ->
           limitStack 1 . burn g_base $
-            next >> pushSym ((S (Var "Calldatasize")) . zeroExtend . snd $ (the state calldata))
+            next >> pushSym ((S (Var "Calldatasize")) . snd $ (the state calldata))
 
         -- op: CALLDATACOPY
         0x37 ->
