@@ -16,7 +16,7 @@ import EVM.Format
 import EVM.Solidity
 import EVM.SymExec
 import EVM.Types
-import EVM.VMTest
+import EVM.Transaction (initTx)
 import qualified EVM.Fetch
 
 import qualified EVM.FeeSchedule as FeeSchedule
@@ -139,7 +139,7 @@ initializeUnitTest UnitTestOptions { .. } = do
 
     -- Initialize the test contract
     let cd = abiMethod "setUp()" emptyAbi
-    setupCall testParams (ConcreteBuffer cd, literal . num . BS.length $ cd)
+    makeTxCall testParams (ConcreteBuffer cd, literal . num . BS.length $ cd)
     popTrace
     pushTrace (EntryTrace "initialize test")
 
@@ -162,7 +162,7 @@ execTest UnitTestOptions { .. } method args = do
   -- Set up the call to the test method
   Stepper.evm $ do
     let cd = abiMethod method args
-    setupCall testParams (ConcreteBuffer cd, literal . num . BS.length $ cd)
+    makeTxCall testParams (ConcreteBuffer cd, literal . num . BS.length $ cd)
     pushTrace (EntryTrace method)
   -- Try running the test method
   Stepper.execFully >>= \case
@@ -181,7 +181,7 @@ checkFailures UnitTestOptions { .. } method args bailed = do
     Stepper.evm $ do
       popTrace
       let cd = abiMethod "failed()" args
-      setupCall testParams (ConcreteBuffer cd, literal . num . BS.length $ cd)
+      makeTxCall testParams (ConcreteBuffer cd, literal . num . BS.length $ cd)
     res <- Stepper.execFully -- >>= \(ConcreteBuffer bs) -> (Stepper.decode AbiBoolType bs)
     case res of
       Right (ConcreteBuffer r) ->
@@ -604,7 +604,7 @@ execSymTest :: UnitTestOptions -> ABIMethod -> (Buffer, SWord 256) -> Stepper (B
 execSymTest opts@UnitTestOptions{ .. } method cd = do
   -- Set up the call to the test method
   Stepper.evm $ do
-    setupCall testParams cd
+    makeTxCall testParams cd
     pushTrace (EntryTrace method)
   -- Try running the test method
   Stepper.runFully >>= \vm' -> case view result vm' of
@@ -622,7 +622,7 @@ checkSymFailures UnitTestOptions { .. } = do
   Stepper.evm $ do
     popTrace
     let cd = abiMethod "failed()" emptyAbi
-    setupCall testParams (ConcreteBuffer cd, literal . num . BS.length $ cd)
+    makeTxCall testParams (ConcreteBuffer cd, literal . num . BS.length $ cd)
   Stepper.runFully
 
 indentLines :: Int -> Text -> Text
@@ -709,8 +709,8 @@ formatTestLog events (Log _ args (topic:_)) =
 word32Bytes :: Word32 -> ByteString
 word32Bytes x = BS.pack [byteAt x (3 - i) | i <- [0..3]]
 
-setupCall :: TestVMParams -> (Buffer, SWord 256) -> EVM ()
-setupCall TestVMParams{..} cd = do
+makeTxCall :: TestVMParams -> (Buffer, SWord 256) -> EVM ()
+makeTxCall TestVMParams{..} cd = do
   resetState
   assign (tx . isCreate) False
   loadContract testAddress
