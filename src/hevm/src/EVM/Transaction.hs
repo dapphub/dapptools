@@ -2,19 +2,26 @@ module EVM.Transaction where
 
 import Prelude hiding (Word)
 
+import qualified EVM
+import EVM (balance, initialContract)
 import EVM.FeeSchedule
-import EVM.Types (keccak)
 import EVM.Precompiled (execute)
 import EVM.RLP
+import EVM.Symbolic (forceLit)
+import EVM.Types (keccak)
 import EVM.Types
+
+import Control.Lens
 
 import Data.Aeson (FromJSON (..))
 import Data.ByteString (ByteString)
-import Data.Maybe (isNothing)
+import Data.Map (Map)
+import Data.Maybe (fromMaybe, isNothing, isJust)
 
 import qualified Data.Aeson        as JSON
 import qualified Data.Aeson.Types  as JSON
 import qualified Data.ByteString   as BS
+import qualified Data.Map          as Map
 
 data Transaction = Transaction
   { txData     :: ByteString,
@@ -89,3 +96,55 @@ instance FromJSON Transaction where
     return $ Transaction tdata gasLimit gasPrice nonce r s toAddr v value
   parseJSON invalid =
     JSON.typeMismatch "Transaction" invalid
+
+accountAt :: Addr -> Getter (Map Addr EVM.Contract) EVM.Contract
+accountAt a = (at a) . (to $ fromMaybe newAccount)
+
+touchAccount :: Addr -> Map Addr EVM.Contract -> Map Addr EVM.Contract
+touchAccount a = Map.insertWith (flip const) a newAccount
+
+newAccount :: EVM.Contract
+newAccount = initialContract $ EVM.RuntimeCode mempty
+
+-- | Increments origin nonce and pays gas deposit
+setupTx :: Addr -> Addr -> Word -> Word -> Map Addr EVM.Contract -> Map Addr EVM.Contract
+setupTx origin coinbase gasPrice gasLimit prestate =
+  let gasCost = gasPrice * gasLimit
+  in (Map.adjust ((over EVM.nonce   (+ 1))
+               . (over balance (subtract gasCost))) origin)
+    . touchAccount origin
+    . touchAccount coinbase $ prestate
+
+-- | Given a valid tx loaded into the vm state,
+-- subtract gas payment from the origin, increment the nonce
+-- and pay receiving address
+initTx :: EVM.VM -> EVM.VM
+initTx vm = let
+    toAddr   = view (EVM.state . EVM.contract) vm
+    origin   = view (EVM.tx . EVM.origin) vm
+    gasPrice = view (EVM.tx . EVM.gasprice) vm
+    gasLimit = view (EVM.tx . EVM.txgaslimit) vm
+    coinbase = view (EVM.block . EVM.coinbase) vm
+    value    = view (EVM.state . EVM.callvalue) vm
+    toContract = initialContract (EVM.InitCode (view (EVM.state . EVM.code) vm))
+    preState = setupTx origin coinbase gasPrice gasLimit $ view (EVM.env . EVM.contracts) vm
+    oldBalance = view (accountAt toAddr . balance) preState
+    creation = view (EVM.tx . EVM.isCreate) vm
+    initState =
+      (if isJust (maybeLitWord value)
+       then (Map.adjust (over balance (subtract (forceLit value))) origin)
+        . (Map.adjust (over balance (+ (forceLit value))) toAddr)
+       else id)
+      . (if creation
+         then Map.insert toAddr (toContract & balance .~ oldBalance)
+         else touchAccount toAddr)
+      $ preState
+
+    touched = if creation
+              then [origin]
+              else [origin, toAddr]
+
+    in
+      vm & EVM.env . EVM.contracts .~ initState
+         & EVM.tx . EVM.txReversion .~ preState
+         & EVM.tx . EVM.substate . EVM.touchedAccounts .~ touched

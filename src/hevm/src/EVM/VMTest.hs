@@ -32,7 +32,7 @@ import Control.Monad
 import Data.Aeson ((.:), FromJSON (..))
 import Data.Foldable (fold)
 import Data.Map (Map)
-import Data.Maybe (fromMaybe, isNothing, isJust)
+import Data.Maybe (fromMaybe, isNothing)
 import Data.Witherable (Filterable, catMaybes)
 
 import qualified Data.Map          as Map
@@ -64,15 +64,6 @@ data BlockchainCase = BlockchainCase
   , blockchainPost    :: Map Addr EVM.Contract
   , blockchainNetwork :: String
   } deriving Show
-
-accountAt :: Addr -> Getter (Map Addr EVM.Contract) EVM.Contract
-accountAt a = (at a) . (to $ fromMaybe newAccount)
-
-touchAccount :: Addr -> Map Addr EVM.Contract -> Map Addr EVM.Contract
-touchAccount a = Map.insertWith (flip const) a newAccount
-
-newAccount :: EVM.Contract
-newAccount = initialContract $ EVM.RuntimeCode mempty
 
 splitEithers :: (Filterable f) => f (Either a b) -> (f a, f b)
 splitEithers =
@@ -332,46 +323,3 @@ vmForCase x =
       & set (EVM.env . EVM.contracts) (checkContracts x)
   in
     initTx vm
-
--- | Increments origin nonce and pays gas deposit
-setupTx :: Addr -> Addr -> Word -> Word -> Map Addr EVM.Contract -> Map Addr EVM.Contract
-setupTx origin coinbase gasPrice gasLimit prestate =
-  let gasCost = gasPrice * gasLimit
-  in (Map.adjust ((over nonce   (+ 1))
-               . (over balance (subtract gasCost))) origin)
-    . touchAccount origin
-    . touchAccount coinbase $ prestate
-
--- | Given a valid tx loaded into the vm state,
--- subtract gas payment from the origin, increment the nonce
--- and pay receiving address
-initTx :: EVM.VM -> EVM.VM
-initTx vm = let
-    toAddr   = view (EVM.state . EVM.contract) vm
-    origin   = view (EVM.tx . EVM.origin) vm
-    gasPrice = view (EVM.tx . EVM.gasprice) vm
-    gasLimit = view (EVM.tx . EVM.txgaslimit) vm
-    coinbase = view (EVM.block . EVM.coinbase) vm
-    value    = view (EVM.state . EVM.callvalue) vm
-    toContract = initialContract (EVM.InitCode (view (EVM.state . EVM.code) vm))
-    preState = setupTx origin coinbase gasPrice gasLimit $ view (EVM.env . EVM.contracts) vm
-    oldBalance = view (accountAt toAddr . balance) preState
-    creation = view (EVM.tx . EVM.isCreate) vm
-    initState =
-      (if isJust (maybeLitWord value)
-       then (Map.adjust (over balance (subtract (forceLit value))) origin)
-        . (Map.adjust (over balance (+ (forceLit value))) toAddr)
-       else id)
-      . (if creation
-         then Map.insert toAddr (toContract & balance .~ oldBalance)
-         else touchAccount toAddr)
-      $ preState
-
-    touched = if creation
-              then [origin]
-              else [origin, toAddr]
-
-    in
-      vm & EVM.env . EVM.contracts .~ initState
-         & EVM.tx . EVM.txReversion .~ preState
-         & EVM.tx . EVM.substate . EVM.touchedAccounts .~ touched
