@@ -40,7 +40,6 @@ import Data.Binary.Get (runGetOrFail)
 import EVM hiding (Query)
 import EVM.SymExec
 import EVM.Symbolic
-import EVM.Concrete (w256)
 import EVM.ABI
 import EVM.Exec
 import EVM.Patricia as Patricia
