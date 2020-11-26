@@ -65,6 +65,7 @@ writeMemory bs1 (C _ n) (C _ src) (C _ dst) bs0 =
 
 readMemoryWord :: Word -> ByteString -> Word
 readMemoryWord (C _ i) m =
+  if i > (num $ BS.length m) then 0 else
   let
     go !a (-1) = a
     go !a !n = go (a + shiftL (num $ readByteOrZero (num i + n) m)
@@ -88,15 +89,6 @@ setMemoryWord (C _ i) (C _ x) =
 setMemoryByte :: Word -> Word8 -> ByteString -> ByteString
 setMemoryByte (C _ i) x =
   writeMemory (BS.singleton x) 1 0 (num i)
-
-readBlobWord :: Word -> ByteString -> Word
-readBlobWord (C _ i) x =
-  if i > num (BS.length x)
-  then 0
-  else w256 (wordAt (num i) x)
-
-blobSize :: ByteString -> Word
-blobSize x = w256 (num (BS.length x))
 
 keccakBlob :: ByteString -> Word
 keccakBlob x = C (FromKeccak x) (keccak x)

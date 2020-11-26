@@ -152,8 +152,8 @@ select' xs err ind = walk xs ind err
 -- Generates a ridiculously large set of constraints (roughly 25k) when
 -- the index is symbolic, but it still seems (kind of) manageable
 -- for the solvers.
-readSWordWithBound :: SymWord -> Buffer -> SWord 32 -> SymWord
-readSWordWithBound sind@(S whiff ind) (SymbolicBuffer xs) bound = case (num <$> maybeLitWord sind, num <$> fromSized <$> unliteral bound) of
+readSWordWithBound :: SymWord -> Buffer -> SWord 256 -> SymWord
+readSWordWithBound sind@(S whiff ind) (SymbolicBuffer xs) bound = case (num <$> maybeLitWord sind, num <$> fromSizzle <$> unliteral bound) of
   (Just i, Just b) ->
     let bs = truncpad 32 $ drop i (take b xs)
     in S (FromBytes sind (SymbolicBuffer bs)) (fromBytes bs)
@@ -163,30 +163,12 @@ readSWordWithBound sind@(S whiff ind) (SymbolicBuffer xs) bound = case (num <$> 
     in S (FromBytes sind (SymbolicBuffer res)) $ fromBytes $ res
 
 readSWordWithBound sind@(S whiff ind) (ConcreteBuffer xs) bound =
-  case num <$> maybeLitWord sind of
+  case maybeLitWord sind of
     Nothing -> readSWordWithBound sind (SymbolicBuffer (litBytes xs)) bound
     Just x' ->
        -- INVARIANT: bound should always be length xs for concrete bytes
        -- so we should be able to safely ignore it here
-         litWord $ Concrete.readMemoryWord (num x') xs
-
-readSWordWithBoundCalldata :: SymWord -> Buffer -> SWord 32 -> SymWord
-readSWordWithBoundCalldata sind@(S whiff ind) (SymbolicBuffer xs) bound = case (num <$> maybeLitWord sind, num <$> fromSized <$> unliteral bound) of
-  (Just i, Just b) ->
-    let bs = truncpad 32 $ drop i (take b xs)
-    in S (FromCalldata sind (SymbolicBuffer bs)) (fromBytes bs)
-  _ ->
-    let boundedList = [ite (i .<= bound) x 0 | (x, i) <- zip xs [1..]]
-        res = [select' boundedList 0 (ind + j) | j <- [0..31]]
-    in S (FromCalldata sind (SymbolicBuffer res)) $ fromBytes $ res
-
-readSWordWithBoundCalldata sind@(S whiff ind) (ConcreteBuffer xs) bound =
-  case num <$> maybeLitWord sind of
-    Nothing -> readSWordWithBoundCalldata sind (SymbolicBuffer (litBytes xs)) bound
-    Just x' ->
-       -- INVARIANT: bound should always be length xs for concrete bytes
-       -- so we should be able to safely ignore it here
-         litWord $ Concrete.readMemoryWord (num x') xs
+         litWord $ Concrete.readMemoryWord x' xs
 
 -- a whole foldable instance seems overkill, but length is always good to have!
 len :: Buffer -> Int

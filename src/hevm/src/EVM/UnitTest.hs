@@ -589,7 +589,7 @@ symFailure UnitTestOptions {..} testName failures' = mconcat
           _ -> ""
       ]
 
-prettyCalldata :: (Buffer, SWord 32) -> Text -> [AbiType]-> SBV.Query Text
+prettyCalldata :: (Buffer, SWord 256) -> Text -> [AbiType]-> SBV.Query Text
 prettyCalldata (buffer, cdlen) sig types = do
   cdlen' <- num <$> SBV.getValue cdlen
   calldatainput <- case buffer of
@@ -600,7 +600,7 @@ prettyCalldata (buffer, cdlen) sig types = do
                   (AbiTupleType (Vector.fromList types))
                   (BSLazy.fromStrict (BS.drop 4 calldatainput))))
 
-execSymTest :: UnitTestOptions -> ABIMethod -> (Buffer, SWord 32) -> Stepper (Bool, VM)
+execSymTest :: UnitTestOptions -> ABIMethod -> (Buffer, SWord 256) -> Stepper (Bool, VM)
 execSymTest opts@UnitTestOptions{ .. } method cd = do
   -- Set up the call to the test method
   Stepper.evm $ do
@@ -709,7 +709,7 @@ formatTestLog events (Log _ args (topic:_)) =
 word32Bytes :: Word32 -> ByteString
 word32Bytes x = BS.pack [byteAt x (3 - i) | i <- [0..3]]
 
-setupCall :: TestVMParams -> (Buffer, SWord 32) -> EVM ()
+setupCall :: TestVMParams -> (Buffer, SWord 256) -> EVM ()
 setupCall TestVMParams{..} cd = do
   resetState
   assign (tx . isCreate) False
