@@ -8,6 +8,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `dapp test --match` now matches on file path and contract name, as
   well as test name
+- `dapp --use` searches directly for binaries in your path, rather than
+  using `nix run`, giving a significant speed boost.
 
 ## [0.30.0] - 2020-10-31
 
