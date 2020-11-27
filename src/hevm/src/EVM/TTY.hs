@@ -613,7 +613,7 @@ initialUiVmStateForTest opts@UnitTestOptions{..} (theContractName, theTestName) 
   let script = do
         Stepper.evm . pushTrace . EntryTrace $
           "test " <> theTestName <> " (" <> theContractName <> ")"
-        initializeUnitTest opts
+        initializeUnitTest opts testContract
         case test of
           ConcreteTest _ -> do
             let args = case replay of
