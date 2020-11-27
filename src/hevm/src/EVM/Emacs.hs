@@ -539,7 +539,7 @@ initialStateForTest opts@(UnitTestOptions {..}) (contractPath, testName) =
     script = do
       Stepper.evm . pushTrace . EntryTrace $
         "test " <> testName <> " (" <> contractPath <> ")"
-      initializeUnitTest opts
+      initializeUnitTest opts testContract
       void (runUnitTest opts testName (AbiTuple mempty))
     ui0 =
       UiVmState

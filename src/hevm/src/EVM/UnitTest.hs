@@ -45,6 +45,7 @@ import Data.Map           (Map)
 import Data.Maybe         (fromMaybe, catMaybes, fromJust, isJust, fromMaybe, mapMaybe)
 import Data.Monoid        ((<>))
 import Data.Text          (isPrefixOf, stripSuffix, intercalate, Text, pack, unpack)
+import Data.Text.Encoding (encodeUtf8)
 import Data.Word          (Word32)
 import System.Environment (lookupEnv)
 import System.IO          (hFlush, stdout)
@@ -119,8 +120,8 @@ type ABIMethod = Text
 
 -- | Assuming a constructor is loaded, this stepper will run the constructor
 -- to create the test contract, give it an initial balance, and run `setUp()'.
-initializeUnitTest :: UnitTestOptions -> Stepper ()
-initializeUnitTest UnitTestOptions { .. } = do
+initializeUnitTest :: UnitTestOptions -> SolcContract -> Stepper ()
+initializeUnitTest UnitTestOptions { .. } theContract = do
 
   let addr = testAddress testParams
 
@@ -133,15 +134,19 @@ initializeUnitTest UnitTestOptions { .. } = do
   -- Constructor is loaded; run until it returns code
   void Stepper.execFully
 
-  -- Give a balance to the test target
   Stepper.evm $ do
+    -- Give a balance to the test target
     env . contracts . ix addr . balance += w256 (testBalanceCreate testParams)
 
-    -- Initialize the test contract
-    let cd = abiMethod "setUp()" emptyAbi
-    makeTxCall testParams (ConcreteBuffer cd, literal . num . BS.length $ cd)
-    popTrace
-    pushTrace (EntryTrace "initialize test")
+    -- call setUp(), if it exists, to initialize the test contract
+    let theAbi = view abiMap theContract
+        setUp  = abiKeccak (encodeUtf8 "setUp()")
+        cd     = abiMethod "setUp()" emptyAbi
+
+    when (isJust (Map.lookup setUp theAbi)) $ do
+      makeTxCall testParams (ConcreteBuffer cd, literal . num . BS.length $ cd)
+      popTrace
+      pushTrace (EntryTrace "setUp()")
 
   -- Let `setUp()' run to completion
   res <- Stepper.execFully
@@ -343,7 +348,7 @@ coverageForUnitTestContract
       (vm1, cov1) <-
         execStateT
           (interpretWithCoverage opts
-            (Stepper.enter name >> initializeUnitTest opts))
+            (Stepper.enter name >> initializeUnitTest opts theContract))
           (vm0, mempty)
 
       -- Define the thread spawner for test cases
@@ -387,7 +392,7 @@ runUnitTestContract
       vm1 <-
         liftIO $ execStateT
           (EVM.Stepper.interpret oracle
-            (Stepper.enter name >> initializeUnitTest opts))
+            (Stepper.enter name >> initializeUnitTest opts theContract))
           vm0
 
       case view result vm1 of
