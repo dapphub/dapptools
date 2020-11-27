@@ -20,7 +20,7 @@ import EVM.Solidity (SolcContract(..), contractName, abiMap)
 import EVM.Solidity (methodOutput, methodSignature, methodName)
 
 import Control.Arrow ((>>>))
-import Control.Lens (view, preview, ix, _2, to, _Just, makeLenses, over, (^?!))
+import Control.Lens (view, preview, ix, _2, to, _Just, makeLenses, over, each, (^?!))
 import Data.Binary.Get (runGetOrFail)
 import Data.ByteString (ByteString)
 import Data.ByteString.Builder (byteStringHex, toLazyByteString)
@@ -345,7 +345,7 @@ currentSolc dapp vm =
     preview (dappSolcByHash . ix h . _2) dapp
 
 -- TODO: display in an 'act' format
---
+
 -- TreeLine describes a singe line of the tree
 -- it contains the indentation which is prefixed to it
 -- and its content which contains the rest
@@ -355,7 +355,6 @@ data TreeLine = TreeLine {
   }
 
 makeLenses ''TreeLine
-
 
 -- SHOW TREE
 
@@ -371,18 +370,15 @@ flattenTree :: Int -> -- total number of cases
                Int -> -- case index
                Tree [String] ->
                [TreeLine]
-
 -- this case should never happen for our use case, here for generality
--- flattenTree _ _ (Node [] []) = []
 flattenTree _ _ (Node [] _)  = []
 
 flattenTree totalCases i (Node (x:xs) cs) = let
   isLastCase       = i + 1 == totalCases
   indenthead       = showTreeIndentSymbol isLastCase True <> " " <> show i <> " "
   indentchild      = showTreeIndentSymbol isLastCase False <> " "
-  doIndentLine     = over indent $ (<>) indentchild
   in TreeLine indenthead x
-  : ((TreeLine indentchild <$> xs) ++ (doIndentLine <$> flattenForest cs))
+  : ((TreeLine indentchild <$> xs) ++ over (each . indent) ((<>) indentchild) (flattenForest cs))
 
 flattenForest :: [Tree [String]] -> [TreeLine]
 flattenForest forest = concat $ zipWith (flattenTree (length forest)) [0..] forest
@@ -394,8 +390,7 @@ showTree' :: Tree [String] -> String
 showTree' (Node _ children) =
   let
     treeLines = flattenForest children
-    doMax treeLine x = max x $ length $ _indent treeLine
-    maxIndent = 2 + foldr doMax 0 treeLines
+    maxIndent = 2 + maximum (length . _indent <$> treeLines)
     showTreeLine (TreeLine colIndent colContent) =
       let indentSize = maxIndent - length colIndent
       in colIndent <> leftpad indentSize colContent
@@ -408,37 +403,33 @@ showStorage :: [(SymWord, SymWord)] -> [String]
 showStorage = fmap (\(k, v) -> show k <> " => " <> show v)
 
 showLeafInfo :: BranchInfo -> [String]
-showLeafInfo bi@(BranchInfo vm _) = let
+showLeafInfo (BranchInfo vm _) = let
   self    = view (EVM.state . EVM.contract) vm
   updates = case view (EVM.env . EVM.contracts) vm ^?! ix self . EVM.storage of
     Symbolic v _ -> v
     Concrete x -> [(litWord k,v) | (k, v) <- Map.toList x]
   showResult = [prettyvmresult res | Just res <- [view result vm]]
-  in (showResult
+  in showResult
   ++ showStorage updates
-  ++ [""])
+  ++ [""]
 
 showBranchInfoWithAbi :: DappInfo -> BranchInfo -> [String]
-showBranchInfoWithAbi srcInfo bi =
-  let cond = maybe "" show (_branchCondition bi)
-  in case _branchCondition bi of
-    Just (UnOp "isZero" (InfixBinOp "==" (Val x) _)) ->
+showBranchInfoWithAbi srcInfo (BranchInfo _ Nothing) = [""]
+showBranchInfoWithAbi srcInfo (BranchInfo vm (Just x)) =
+  case x of
+    (UnOp "isZero" (InfixBinOp "==" (Val x) _)) ->
       let
-        abimap = view abiMap <$> currentSolc srcInfo (_vm bi)
+        abimap = view abiMap <$> currentSolc srcInfo vm
         method = abimap >>= Map.lookup (read x)
-      in [maybe cond (show . view methodSignature) method]
+      in [maybe x (show . view methodSignature) method]
+    _ -> [""]
 
-    _ -> [cond]
-
-renderTree :: (BranchInfo -> [String])
-           -> (BranchInfo -> [String])
-           -> Tree BranchInfo
+renderTree :: (a -> [String])
+           -> (a -> [String])
+           -> Tree a
            -> Tree [String]
-renderTree showBranch showLeaf (Node bi []) = Node ((showBranch bi) ++ (showLeaf bi)) []
-renderTree showBranch showLeaf (Node bi cs) = Node (showBranch bi) (renderTree showBranch showLeaf <$> cs)
-
-
-
+renderTree showBranch showLeaf (Node b []) = Node (showBranch b ++ showLeaf b) []
+renderTree showBranch showLeaf (Node b cs) = Node (showBranch b) (renderTree showBranch showLeaf <$> cs)
 
 -- EXPERIMENTAL ABI HANDLING
 
