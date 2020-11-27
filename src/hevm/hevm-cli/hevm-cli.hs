@@ -37,7 +37,7 @@ import EVM.UnitTest (UnitTestOptions, coverageReport, coverageForUnitTestContrac
 import EVM.UnitTest (runUnitTestContract)
 import EVM.UnitTest (getParametersFromEnvironmentVariables, testNumber)
 import EVM.Dapp (findUnitTests, dappInfo, DappInfo, emptyDapp)
-import EVM.Format (showTraceTree, showBranchTree)
+import EVM.Format (showTraceTree, showTree', renderTree, showBranchInfoWithAbi, showLeafInfo)
 import EVM.RLP (rlpdecode)
 import qualified EVM.Patricia as Patricia
 import Data.Map (Map)
@@ -474,7 +474,10 @@ assert cmd = do
         when (showTree cmd) $ do
           consistentTree tree >>= \case
             Nothing -> io $ putStrLn "No consistent paths" -- unlikely
-            Just tree' -> io $ setLocaleEncoding utf8 >> putStrLn (showBranchTree srcInfo tree')
+            Just tree' -> let
+              showBranch = showBranchInfoWithAbi srcInfo
+              renderTree' = renderTree showBranch showLeafInfo
+              in io $ setLocaleEncoding utf8 >> putStrLn (showTree' (renderTree' tree'))
 
   maybesig <- case sig cmd of
     Nothing ->
