@@ -142,7 +142,7 @@ data BranchInfo = BranchInfo
 
 doInterpret :: Fetch.Fetcher -> Maybe Integer -> VM -> Query (Tree BranchInfo)
 doInterpret fetcher maxIter vm = let
-      f (vm', cs) = Node (BranchInfo (if length cs == 0 then vm' else vm) Nothing) cs
+      f (vm', cs) = Node (BranchInfo (if null cs then vm' else vm) Nothing) cs
     in f <$> interpret' fetcher maxIter vm
 
 interpret' :: Fetch.Fetcher -> Maybe Integer -> VM -> Query (VM, [(Tree BranchInfo)])

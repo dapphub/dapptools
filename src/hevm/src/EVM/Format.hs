@@ -344,31 +344,34 @@ currentSolc dapp vm =
   in
     preview (dappSolcByHash . ix h . _2) dapp
 
--- TODO: display in an 'act' format
---
--- TreeLine describes a singe line of the tree
--- it contains the indentation which is prefixed to it
--- and its content which contains the rest
-data TreeLine = TreeLine {
-  _indent   :: String,
-  _content  :: String
-  }
-  -- _leafData :: Maybe (VMResult, [(SymWord, SymWord)])
+-- -- TODO: display in an 'act' format
+-- --
+-- -- TreeLine describes a singe line of the tree
+-- -- it contains the indentation which is prefixed to it
+-- -- and its content which contains the rest
+-- data TreeLine = TreeLine {
+--   _indent   :: String,
+--   _content  :: String
+--   }
+--   -- _leafData :: Maybe (VMResult, [(SymWord, SymWord)])
 
-makeLenses ''TreeLine
+-- makeLenses ''TreeLine
 
-showTreeIndentSymbol :: Bool      -- ^ isLastChild
-                     -> Bool      -- ^ isTreeHead
-                     -> String
-showTreeIndentSymbol True  True  = "\x2514"
-showTreeIndentSymbol False True  = "\x251c"
-showTreeIndentSymbol True  False = " "
-showTreeIndentSymbol False False = "\x2502"
-
-
+-- showTreeIndentSymbol :: Bool      -- ^ isLastChild
+--                      -> Bool      -- ^ isTreeHead
+--                      -> String
+-- showTreeIndentSymbol True  True  = "\x2514"
+-- showTreeIndentSymbol False True  = "\x251c"
+-- showTreeIndentSymbol True  False = " "
+-- showTreeIndentSymbol False False = "\x2502"
 
 showStorage :: [(SymWord, SymWord)] -> [String]
 showStorage = fmap (\(k, v) -> show k <> " => " <> show v)
+
+showBranchInfo :: DappInfo -> Tree BranchInfo -> Tree [String]
+showBranchInfo srcInfo (Node x []) = Node [formatBranchInfo srcInfo x] [Node (showLeaf srcInfo x) []]
+showBranchInfo srcInfo (Node x xs) =
+  Node [formatBranchInfo srcInfo x] (showBranchInfo srcInfo <$> xs)
 
 showLeaf :: DappInfo -> BranchInfo -> [String]
 showLeaf srcInfo (BranchInfo vm _) = let
@@ -377,69 +380,72 @@ showLeaf srcInfo (BranchInfo vm _) = let
     Symbolic v _ -> v
     Concrete x -> [(litWord k,v) | (k, v) <- Map.toList x]
   showResult = [prettyvmresult res | Just res <- [view result vm]]
-  in showResult
-  ++ showStorage updates
-  ++ [""]
+  in showResult <> showStorage updates
 
 formatBranchInfo :: DappInfo -> BranchInfo -> String
-formatBranchInfo srcInfo bi =
-  let cond = maybe "" show (_branchCondition bi)
-  in case _branchCondition bi of
+formatBranchInfo srcInfo (BranchInfo vm cond') =
+  let cond = maybe "" show cond'
+  in case cond' of
     -- recover number if branch condition is `isZero(<hexNr> == _)`
     -- TODO this is dirty and dangerous, do this only for a certain tree depth where abi discovery takes place
     --      this could be extended by requiering the second information to be Slice 0:4 of CALLDATALOAD
     -- TODO rewrite this as a multi case rose tree unraveling, make sure n case jump in the debugger is implemented
     Just (UnOp "isZero" (InfixBinOp "==" (Val x) _)) ->
       let
-        abimap = view abiMap <$> currentSolc srcInfo (_vm bi)
+        abimap = view abiMap <$> currentSolc srcInfo vm
         method = abimap >>= Map.lookup (read x)
       in maybe cond (show . view methodSignature) method
 
     _ -> cond
 
 
-flattenTree :: DappInfo ->
-               Int -> -- total number of cases
-               Int -> -- case index
-               Tree BranchInfo ->
-               [TreeLine]
--- leaf case
-flattenTree srcInfo totalCases i (Node bi []) = let
-  bhead = formatBranchInfo srcInfo bi
-  isLastCase       = i + 1 == totalCases
-  indenthead       = showTreeIndentSymbol isLastCase True <> " " <> show i
-  tail = showLeaf srcInfo bi
-  in TreeLine indenthead (bhead)
-  : ((TreeLine (showTreeIndentSymbol isLastCase False <> " ")) <$> tail)
+-- flattenTree :: DappInfo ->
+--                Int -> -- total number of cases
+--                Int -> -- case index
+--                Tree BranchInfo ->
+--                [TreeLine]
+-- -- leaf case
+-- flattenTree srcInfo totalCases i (Node bi []) = let
+--   bhead = formatBranchInfo srcInfo bi
+--   isLastCase       = i + 1 == totalCases
+--   indenthead       = showTreeIndentSymbol isLastCase True <> " " <> show i
+--   tail = showLeaf srcInfo bi
+--   in TreeLine indenthead (bhead)
+--   : ((TreeLine (showTreeIndentSymbol isLastCase False <> " ")) <$> tail)
 
--- branch case
-flattenTree srcInfo totalCases i (Node bi xs) = let
-  bhead            = formatBranchInfo srcInfo bi
-  isLastCase       = i + 1 == totalCases
-  indenthead       = showTreeIndentSymbol isLastCase True <> " " <> show i <> " "
-  indentchild      = showTreeIndentSymbol isLastCase False <> " "
-  forest           = flattenForest srcInfo xs
-  indentLine       = over indent $ (<>) indentchild
-  indentedChildren = map indentLine forest
-  in (TreeLine indenthead bhead)
-  :  indentedChildren
+-- -- branch case
+-- flattenTree srcInfo totalCases i (Node bi xs) = let
+--   bhead            = formatBranchInfo srcInfo bi
+--   isLastCase       = i + 1 == totalCases
+--   indenthead       = showTreeIndentSymbol isLastCase True <> " " <> show i <> " "
+--   indentchild      = showTreeIndentSymbol isLastCase False <> " "
+--   forest           = flattenForest srcInfo xs
+--   indentLine       = over indent $ (<>) indentchild
+--   indentedChildren = map indentLine forest
+--   in (TreeLine indenthead bhead)
+--   :  indentedChildren
 
-flattenForest :: DappInfo -> [Tree BranchInfo] -> [TreeLine]
-flattenForest srcInfo forest = concat $ zipWith (flattenTree srcInfo (length forest)) [0..] forest
+-- flattenForest :: DappInfo -> [Tree BranchInfo] -> [TreeLine]
+-- flattenForest srcInfo forest = concat $ zipWith (flattenTree srcInfo (length forest)) [0..] forest
 
-leftpad :: Int -> String -> String
-leftpad n = (<>) $ replicate n ' '
+-- leftpad :: Int -> String -> String
+-- leftpad n = (<>) $ replicate n ' '
+
+showTree' :: Tree [String] -> String
+showTree' = error ""
 
 showBranchTree :: DappInfo -> Tree BranchInfo -> String
-showBranchTree srcInfo (Node _ children) =
-  let
-    treeLines = flattenForest srcInfo (restack (flattenAbi False children))
-    doMax treeLine x = max x $ length $ _indent treeLine
-    maxIndent = 2 + foldr doMax 0 treeLines
-    showTreeLine (TreeLine colIndent colContent) =
-      let indentSize = maxIndent - length colIndent
-      in colIndent <> leftpad indentSize colContent
-  in unlines $ showTreeLine <$> treeLines
+showBranchTree srcInfo x = --(Node _ children) =
+--  let
+    showTree' (showBranchInfo srcInfo x) --(Node _ children)
+  -- let
+  --   treeLines = flattenForest srcInfo (restack (flattenAbi False children))
+  --   doMax treeLine x = max x $ length $ _indent treeLine
+  --   maxIndent = 2 + foldr doMax 0 treeLines
+  --   showTreeLine (TreeLine colIndent colContent) =
+  --     let indentSize = maxIndent - length colIndent
+  --     in colIndent <> leftpad indentSize colContent
+  -- in unlines $ showTreeLine <$> treeLines
 
 
 data AbiBranching = NoBranching | ConcreteBranching | CompareBranching
