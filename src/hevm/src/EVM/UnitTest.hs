@@ -669,75 +669,67 @@ formatTestLogs events xs =
     [] -> "\n"
     ys -> "\n" <> intercalate "\n" ys <> "\n\n"
 
-
-unindexed :: [(AbiType, Indexed)] -> [AbiType]
-unindexed ts = [t | (t, NotIndexed) <- ts]
-
 -- Here we catch and render some special logs emitted by ds-test,
 -- with the intent to then present them in a separate view to the
 -- regular trace output.
 formatTestLog :: Map W256 Event -> Log -> Maybe Text
 formatTestLog _ (Log _ _ []) = Nothing
 formatTestLog events (Log _ args (topic:_)) =
-  case maybeLitWord topic of
-    Nothing ->
-      Nothing
-    Just t1 ->
-      case (Map.lookup (wordValue t1) events) of
-        Nothing -> Nothing
-        Just (Event name _ types) ->
-          case (name <> parenthesise (abiTypeSolidity <$> (unindexed types))) of
-            "log(string)" -> Just $ unquote $ showValue AbiStringType args
+  case maybeLitWord topic >>= \t1 -> (Map.lookup (wordValue t1) events) of
+    Nothing -> Nothing
+    Just (Event name _ types) ->
+      case (name <> parenthesise (abiTypeSolidity <$> (unindexed types))) of
+        "log(string)" -> Just $ unquote $ showValue AbiStringType args
 
-            -- log_x(x)
-            "log_bytes32(bytes32)" -> log_unnamed
-            "log_address(address)" -> log_unnamed
-            "log_int(int256)"      -> log_unnamed
-            "log_uint(uint256)"    -> log_unnamed
-            "log_bytes(bytes)"     -> log_unnamed
-            "log_string(string)"   -> log_unnamed
+        -- log_named_x(string, x)
+        "log_named_bytes32(string, bytes32)" -> log_named
+        "log_named_address(string, address)" -> log_named
+        "log_named_int(string, int256)"      -> log_named
+        "log_named_uint(string, uint256)"    -> log_named
+        "log_named_bytes(string, bytes)"     -> log_named
+        "log_named_string(string, string)"   -> log_named
 
-            -- log_named_x(string, x)
-            "log_named_bytes32(string, bytes32)" -> log_named
-            "log_named_address(string, address)" -> log_named
-            "log_named_int(string, int256)"      -> log_named
-            "log_named_uint(string, uint256)"    -> log_named
-            "log_named_bytes(string, bytes)"     -> log_named
-            "log_named_string(string, string)"   -> log_named
+        -- log_named_decimal_x(string, uint, x)
+        "log_named_decimal_int(string, int256, uint256)"   -> log_named_decimal
+        "log_named_decimal_uint(string, uint256, uint256)" -> log_named_decimal
 
-            -- log_named_decimal_x(string, uint, x)
-            "log_named_decimal_int(string, int256, uint256)"   -> log_named_decimal
-            "log_named_decimal_uint(string, uint256, uint256)" -> log_named_decimal
+        -- log_x(x)
+        "log_bytes32(bytes32)" -> log_unnamed
+        "log_address(address)" -> log_unnamed
+        "log_int(int256)"      -> log_unnamed
+        "log_uint(uint256)"    -> log_unnamed
+        "log_bytes(bytes)"     -> log_unnamed
+        "log_string(string)"   -> log_unnamed
 
-            -- log_named_x(bytes32, x), as used in older versions of ds-test.
-            -- bytes32 are opportunistically represented as strings in Format.hs
-            "log_named_bytes32(bytes32, bytes32)" -> log_named
-            "log_named_address(bytes32, address)" -> log_named
-            "log_named_int(bytes32, int256)"      -> log_named
-            "log_named_uint(bytes32, uint256)"    -> log_named
+        -- log_named_x(bytes32, x), as used in older versions of ds-test.
+        -- bytes32 are opportunistically represented as strings in Format.hs
+        "log_named_bytes32(bytes32, bytes32)" -> log_named
+        "log_named_address(bytes32, address)" -> log_named
+        "log_named_int(bytes32, int256)"      -> log_named
+        "log_named_uint(bytes32, uint256)"    -> log_named
 
-            _ -> Nothing
+        _ -> Nothing
 
-            where
-              ts = unindexed types
-              unquote = Text.dropAround (\c -> c == '"' || c == '«' || c == '»')
-              log_unnamed =
-                Just $ showValue (head ts) args
-              log_named =
-                let [key, val] = take 2 (textValues ts args)
-                in Just $ unquote key <> ": " <> val
-              showDecimal dec val =
-                pack $ show $ Decimal (num dec) val
-              log_named_decimal =
-                case args of
-                  (ConcreteBuffer b) ->
-                    case toList $ runGet (getAbiSeq (length ts) ts) (BSLazy.fromStrict b) of
-                      [key, (AbiUInt 256 val), (AbiUInt 256 dec)] ->
-                        Just $ (unquote (showAbiValue key)) <> ": " <> showDecimal dec val
-                      [key, (AbiInt 256 val), (AbiUInt 256 dec)] ->
-                        Just $ (unquote (showAbiValue key)) <> ": " <> showDecimal dec val
-                      _ -> Nothing
-                  (SymbolicBuffer _) -> Just "<symbolic decimal>"
+        where
+          ts = unindexed types
+          unquote = Text.dropAround (\c -> c == '"' || c == '«' || c == '»')
+          log_unnamed =
+            Just $ showValue (head ts) args
+          log_named =
+            let [key, val] = take 2 (textValues ts args)
+            in Just $ unquote key <> ": " <> val
+          showDecimal dec val =
+            pack $ show $ Decimal (num dec) val
+          log_named_decimal =
+            case args of
+              (ConcreteBuffer b) ->
+                case toList $ runGet (getAbiSeq (length ts) ts) (BSLazy.fromStrict b) of
+                  [key, (AbiUInt 256 val), (AbiUInt 256 dec)] ->
+                    Just $ (unquote (showAbiValue key)) <> ": " <> showDecimal dec val
+                  [key, (AbiInt 256 val), (AbiUInt 256 dec)] ->
+                    Just $ (unquote (showAbiValue key)) <> ": " <> showDecimal dec val
+                  _ -> Nothing
+              (SymbolicBuffer _) -> Just "<symbolic decimal>"
 
 
 word32Bytes :: Word32 -> ByteString

@@ -188,6 +188,9 @@ showTraceTree dapp =
     >>> concatMap showTree
     >>> pack
 
+unindexed :: [(AbiType, Indexed)] -> [AbiType]
+unindexed ts = [t | (t, NotIndexed) <- ts]
+
 showTrace :: DappInfo -> Trace -> Text
 showTrace dapp trace =
   let
@@ -200,35 +203,26 @@ showTrace dapp trace =
     EventTrace (Log _ bytes topics) ->
       let logn = mconcat
             [ "\x1b[36m"
-            , "log" <> (pack (show (length topics))) <> "("
-            , intercalate ", " (map (pack . show) topics)
-            , formatSBinary bytes <> ")"
-            , "\x1b[0m"
-            ] <> pos
-          log0 = mconcat
-            [ "\x1b[36m"
-            , "log0("
-            , formatSBinary bytes
-            , ")"
+            , "log" <> (pack (show (length topics)))
+            , parenthesise ((map (pack . show) topics) ++ [formatSBinary bytes])
             , "\x1b[0m"
             ] <> pos
           knownTopic name types = mconcat
             [ "\x1b[36m"
             , name
-            , showValues [t | (t, NotIndexed) <- types] bytes
+            , showValues (unindexed types) bytes
             -- todo: show indexed
             , "\x1b[0m"
             ] <> pos
           lognote sig usr = mconcat
             [ "\x1b[36m"
-            , "LogNote("
-            , sig, ", "
-            , usr, ", ...)"
+            , "LogNote"
+            , parenthesise [sig, usr, "..."]
             , "\x1b[0m"
             ] <> pos
       in case topics of
         [] ->
-          log0
+          logn
         (t1:_) ->
           case maybeLitWord t1 of
             Just topic ->
