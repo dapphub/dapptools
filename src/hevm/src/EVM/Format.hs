@@ -1,5 +1,4 @@
 {-# Language DataKinds #-}
-{-# LANGUAGE OverloadedStrings #-}
 {-# Language TemplateHaskell #-}
 module EVM.Format where
 
@@ -90,11 +89,11 @@ showAbiValue (AbiBool b) =
 showAbiValue (AbiAddress w160) =
   pack $ "0x" ++ (showHex w160 "")
 showAbiValue (AbiBytes _ bs) =
-  formatBytes bs
+  formatBytes bs  -- opportunistically decodes recognisable strings
 showAbiValue (AbiBytesDynamic bs) =
   formatBinary bs
 showAbiValue (AbiString bs) =
-  formatBytes bs
+  formatString bs
 showAbiValue (AbiArray _ _ xs) =
   showAbiArray xs
 showAbiValue (AbiArrayDynamic _ xs) =
@@ -139,30 +138,36 @@ showError bs = case BS.take 4 bs of
   "\b\195y\160" -> showCall [AbiStringType] (ConcreteBuffer bs)
   _             -> formatBinary bs
 
+
+-- the conditions under which bytes will be decoded and rendered as a string
 isPrintable :: ByteString -> Bool
 isPrintable =
   decodeUtf8' >>>
-    either (const False)
-      (Text.all (not . Char.isControl))
+    either
+      (const False)
+      (Text.all (\c-> Char.isPrint c && (not . Char.isControl) c))
 
 formatBytes :: ByteString -> Text
 formatBytes b =
   let (s, _) = BS.spanEnd (== 0) b
   in
     if isPrintable s
-    then formatQString s
+    then formatBString s
     else formatBinary b
 
 formatSBytes :: Buffer -> Text
 formatSBytes (SymbolicBuffer b) = "<" <> pack (show (length b)) <> " symbolic bytes>"
 formatSBytes (ConcreteBuffer b) = formatBytes b
 
--- show a string with "quotes"
-formatQString :: ByteString -> Text
-formatQString = pack . show
-
 formatString :: ByteString -> Text
-formatString bs = decodeUtf8 (fst (BS.spanEnd (== 0) bs))
+formatString bs =
+  case decodeUtf8' (fst (BS.spanEnd (== 0) bs)) of
+    Right s -> mconcat ["\"", s, "\""]
+    Left _ -> "❮utf8 decode failed❯: " <> formatBinary bs
+
+-- a string that came from bytes, displayed with special quotes
+formatBString :: ByteString -> Text
+formatBString b = mconcat [ "«",  Text.dropAround (=='"') (formatString b), "»" ]
 
 formatSString :: Buffer -> Text
 formatSString (SymbolicBuffer bs) = "<" <> pack (show (length bs)) <> " symbolic bytes (string)>"
