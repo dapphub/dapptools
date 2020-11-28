@@ -686,95 +686,58 @@ formatTestLog events (Log _ args (topic:_)) =
       case (Map.lookup (wordValue t1) events) of
         Nothing -> Nothing
         Just (Event name _ types) ->
-          case (name, unindexed types) of
-            -- log(string)
-            ("log",  [AbiStringType]) ->
-              Just $ unquote $ showValue AbiStringType args
-            -- logs(bytes)
-            ("logs", [AbiBytesDynamicType]) ->
-              Just $ unquote $ showValue AbiStringType args
+          case (name <> parenthesise (abiTypeSolidity <$> (unindexed types))) of
+            "log(string)" -> Just $ unquote $ showValue AbiStringType args
 
             -- log_x(x)
-            ("log_bytes32", [AbiBytesType 32]) ->
-              log_unnamed (unindexed types) args
-            ("log_address", [AbiAddressType]) ->
-              log_unnamed (unindexed types) args
-            ("log_int",     [AbiIntType  256]) ->
-              log_unnamed (unindexed types) args
-            ("log_uint",    [AbiUIntType 256]) ->
-              log_unnamed (unindexed types) args
-            ("log_bytes",   [AbiBytesDynamicType]) ->
-              log_unnamed (unindexed types) args
-            ("log_string",  [AbiStringType]) ->
-              log_unnamed (unindexed types) args
+            "log_bytes32(bytes32)" -> log_unnamed
+            "log_address(address)" -> log_unnamed
+            "log_int(int256)"      -> log_unnamed
+            "log_uint(uint256)"    -> log_unnamed
+            "log_bytes(bytes)"     -> log_unnamed
+            "log_string(string)"   -> log_unnamed
 
             -- log_named_x(string, x)
-            ("log_named_bytes32", [AbiStringType, AbiBytesType 32]) ->
-              log_named (unindexed types) args
-            ("log_named_address", [AbiStringType, AbiAddressType]) ->
-              log_named (unindexed types) args
-            ("log_named_int",     [AbiStringType, AbiIntType  256]) ->
-              log_named (unindexed types) args
-            ("log_named_uint",    [AbiStringType, AbiUIntType 256]) ->
-              log_named (unindexed types) args
-            ("log_named_bytes",   [AbiStringType, AbiBytesDynamicType]) ->
-              log_named (unindexed types) args
-            ("log_named_string",  [AbiStringType, AbiStringType]) ->
-              log_named (unindexed types) args
+            "log_named_bytes32(string, bytes32)" -> log_named
+            "log_named_address(string, address)" -> log_named
+            "log_named_int(string, int256)"      -> log_named
+            "log_named_uint(string, uint256)"    -> log_named
+            "log_named_bytes(string, bytes)"     -> log_named
+            "log_named_string(string, string)"   -> log_named
 
             -- log_named_decimal_x(string, uint, x)
-            ("log_named_decimal_int",  [AbiStringType, AbiIntType  256, AbiUIntType 256]) ->
-              log_named_decimal (unindexed types) args
-            ("log_named_decimal_uint", [AbiStringType, AbiUIntType 256, AbiUIntType 256]) ->
-              log_named_decimal (unindexed types) args
+            "log_named_decimal_int(string, int256, uint256)"   -> log_named_decimal
+            "log_named_decimal_uint(string, uint256, uint256)" -> log_named_decimal
 
             -- log_named_x(bytes32, x), as used in older versions of ds-test.
-            -- These are a bit low level, but we keep them for compatibility.
-            -- In particular, we ensure that we render bytes32 keys as strings.
-            ("log_named_bytes32", [AbiBytesType 32, AbiBytesType 32]) ->
-              let key = grab 32 args
-                  val = ditch 32 args
-              in Just $ formatSString key <> ": " <> formatSBytes val
-
-            ("log_named_address", [AbiBytesType 32, AbiAddressType]) ->
-              let key = grab 32 args
-                  val = ditch 44 args
-              in Just $ formatSString key <> ": " <> formatSBinary val
-
-            ("log_named_int", [AbiBytesType 32, AbiIntType 256]) ->
-              let key = grab 32 args
-                  val = case maybeLitWord (readMemoryWord 32 args) of
-                    Just c -> showDec Signed (wordValue c)
-                    Nothing -> "<symbolic int>"
-              in Just $ formatSString key <> ": " <> val
-
-            ("log_named_uint", [AbiBytesType 32, AbiUIntType 256]) ->
-              let key = grab 32 args
-                  val = case maybeLitWord (readMemoryWord 32 args) of
-                    Just c -> showDec Unsigned (wordValue c)
-                    Nothing -> "<symbolic uint>"
-              in Just $ formatSString key <> ": " <> val
+            -- bytes32 are opportunistically represented as strings in Format.hs
+            "log_named_bytes32(bytes32, bytes32)" -> log_named
+            "log_named_address(bytes32, address)" -> log_named
+            "log_named_int(bytes32, int256)"      -> log_named
+            "log_named_uint(bytes32, uint256)"    -> log_named
 
             _ -> Nothing
 
             where
-              unquote = Text.dropAround (=='"')
-              log_unnamed (t:_) b =
-                Just $ showValue t b
-              log_unnamed [] _ = Nothing
-              log_named ts b =
-                let [key, val] = take 2 (textValues ts b)
+              ts = unindexed types
+              unquote = Text.dropAround (\c -> c == '"' || c == '«' || c == '»')
+              log_unnamed =
+                Just $ showValue (head ts) args
+              log_named =
+                let [key, val] = take 2 (textValues ts args)
                 in Just $ unquote key <> ": " <> val
               showDecimal dec val =
                 pack $ show $ Decimal (num dec) val
-              log_named_decimal _  (SymbolicBuffer _) = Just "<symbolic decimal>"
-              log_named_decimal ts (ConcreteBuffer b) =
-                case toList $ runGet (getAbiSeq (length ts) ts) (BSLazy.fromStrict b) of
-                  [key, (AbiUInt 256 val), (AbiUInt 256 dec)] ->
-                    Just $ (unquote (showAbiValue key)) <> ": " <> showDecimal dec val
-                  [key, (AbiInt 256 val), (AbiUInt 256 dec)] ->
-                    Just $ (unquote (showAbiValue key)) <> ": " <> showDecimal dec val
-                  _ -> Nothing
+              log_named_decimal =
+                case args of
+                  (ConcreteBuffer b) ->
+                    case toList $ runGet (getAbiSeq (length ts) ts) (BSLazy.fromStrict b) of
+                      [key, (AbiUInt 256 val), (AbiUInt 256 dec)] ->
+                        Just $ (unquote (showAbiValue key)) <> ": " <> showDecimal dec val
+                      [key, (AbiInt 256 val), (AbiUInt 256 dec)] ->
+                        Just $ (unquote (showAbiValue key)) <> ": " <> showDecimal dec val
+                      _ -> Nothing
+                  (SymbolicBuffer _) -> Just "<symbolic decimal>"
 
 
 word32Bytes :: Word32 -> ByteString
