@@ -6,6 +6,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [0.31.0] - 2020-11-29
+
+### Changed
+
 - `dapp test --match` now matches on file path and contract name, as
   well as test name
 - `dapp --use` searches directly for binaries in your path, rather than
