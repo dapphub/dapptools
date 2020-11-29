@@ -270,7 +270,7 @@ initUiVmState vm0 opts script =
 debuggableTests :: UnitTestOptions -> (Text, [(Test, [AbiType])]) -> [(Text, Text)]
 debuggableTests UnitTestOptions{..} (contractname, tests) = case replay of
   Nothing -> [(contractname, extractSig $ fst x) | x <- tests, not $ isFuzzTest x]
-  Just (sig, _) -> [(contractname, extractSig $ fst x) | x <- tests, not $ isFuzzTest x || (extractSig $ fst x) == sig]
+  Just (sig, _) -> [(contractname, extractSig $ fst x) | x <- tests, not (isFuzzTest x) || extractSig (fst x) == sig]
 
 isFuzzTest :: (Test, [AbiType]) -> Bool
 isFuzzTest (SymbolicTest _, _) = False
