@@ -324,14 +324,14 @@ backstepUntil
   :: (?fetcher :: Fetcher
      ,?maxIter :: Maybe Integer)
   => (UiVmState -> Pred VM) -> UiVmState -> EventM n (Next UiState)
-backstepUntil pred s =
+backstepUntil p s =
   case view uiStep s of
     0 -> continue (ViewVm s)
     n -> do
       s1 <- backstep s
       let
         -- find a previous vm that satisfies the predicate
-        snapshots' = Data.Map.filter (pred s1 . fst) (view uiSnapshots s1)
+        snapshots' = Data.Map.filter (p s1 . fst) (view uiSnapshots s1)
       case lookupLT n snapshots' of
         -- If no such vm exists, go to the beginning
         Nothing ->
@@ -351,7 +351,7 @@ backstepUntil pred s =
               & set (uiVm . cache) (view (uiVm . cache) s1)
               & set uiStep step'
               & set uiStepper stepper'
-          in takeStep s2 (StepUntil (not . pred s1))
+          in takeStep s2 (StepUntil (not . p s1))
 
 backstep
   :: (?fetcher :: Fetcher
@@ -516,11 +516,11 @@ appEvent st@(ViewVm s) (VtyEvent (V.EvKey (V.KChar 'p') [])) =
       takeStep s1 (Step stepsToTake)
 
 -- Vm Overview: P - backstep to previous source
-appEvent st@(ViewVm s) (VtyEvent (V.EvKey (V.KChar 'P') [])) =
+appEvent (ViewVm s) (VtyEvent (V.EvKey (V.KChar 'P') [])) =
   backstepUntil isNextSourcePosition s
 
 -- Vm Overview: c-p - backstep to previous source avoiding CALL and CREATE
-appEvent st@(ViewVm s) (VtyEvent (V.EvKey (V.KChar 'p') [V.MCtrl])) =
+appEvent (ViewVm s) (VtyEvent (V.EvKey (V.KChar 'p') [V.MCtrl])) =
   backstepUntil isNextSourcePositionWithoutEntering s
 
 -- Vm Overview: 0 - choose no jump
@@ -566,7 +566,7 @@ appEvent (ViewPicker s) (VtyEvent e) = do
   continue (ViewPicker s')
 
 -- Page: Down - scroll
-appEvent (ViewVm s) (VtyEvent e@(V.EvKey V.KDown [])) =
+appEvent (ViewVm s) (VtyEvent (V.EvKey V.KDown [])) =
   if view uiShowMemory s then
     vScrollBy (viewportScroll TracePane) 1 >> continue (ViewVm s)
   else

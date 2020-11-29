@@ -6,15 +6,14 @@ module EVM.Concrete where
 import Prelude hiding (Word)
 
 import EVM.RLP
-import EVM.Types (w256, Addr, W256 (..), num, word, padRight, word160Bytes, word256Bytes, Buffer, keccak, Whiff(..), Word(..))
+import EVM.Types (w256, Addr, W256 (..), num, word, padRight, word160Bytes, word256Bytes, keccak, Whiff(..), Word(..))
 
 import Control.Lens    ((^?), ix)
-import Data.Bits       (Bits (..), FiniteBits (..), shiftL, shiftR)
+import Data.Bits       (Bits (..), shiftL, shiftR)
 import Data.ByteString (ByteString)
 import Data.Maybe      (fromMaybe)
 import Data.Semigroup  ((<>))
 import Data.Word       (Word8)
-import Data.Aeson
 
 import qualified Data.ByteString as BS
 

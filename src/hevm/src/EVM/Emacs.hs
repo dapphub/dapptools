@@ -21,7 +21,6 @@ import Data.Text (Text, pack, unpack)
 import Data.SBV hiding (Word, output)
 import EVM
 import EVM.ABI
-import EVM.Concrete
 import EVM.Symbolic
 import EVM.Dapp
 import EVM.Debug (srcMapCodePos)

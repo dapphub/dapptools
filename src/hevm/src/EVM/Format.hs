@@ -6,7 +6,7 @@ module EVM.Format where
 import Prelude hiding (Word)
 import Numeric
 import qualified EVM
-import EVM.Dapp (DappInfo (..), dappSolcByHash, dappAbiMap, dappSolcByName, showTraceLocation, dappEventMap)
+import EVM.Dapp (DappInfo (..), dappSolcByHash, dappAbiMap, showTraceLocation, dappEventMap)
 import EVM.Concrete ( wordValue )
 import EVM (VM, VMResult(..), cheatCode, traceForest, traceData, Error (..), result)
 import EVM (Trace, TraceData (..), Log (..), Query (..), FrameContext (..), Storage(..))
@@ -34,7 +34,6 @@ import Data.Text (dropEnd, splitOn)
 import Data.Text.Encoding (decodeUtf8, decodeUtf8')
 import Data.Tree (Tree (Node))
 import Data.Tree.View (showTree)
-import Data.Tree.Lens
 import Data.Vector (Vector, fromList)
 
 import qualified Data.ByteString as BS
@@ -387,6 +386,7 @@ leftpad :: Int -> String -> String
 leftpad n = (<>) $ replicate n ' '
 
 showTree' :: Tree [String] -> String
+showTree' (Node s []) = unlines s
 showTree' (Node _ children) =
   let
     treeLines = flattenForest children
@@ -414,15 +414,15 @@ showLeafInfo (BranchInfo vm _) = let
   ++ [""]
 
 showBranchInfoWithAbi :: DappInfo -> BranchInfo -> [String]
-showBranchInfoWithAbi srcInfo (BranchInfo _ Nothing) = [""]
-showBranchInfoWithAbi srcInfo (BranchInfo vm (Just x)) =
-  case x of
+showBranchInfoWithAbi _ (BranchInfo _ Nothing) = [""]
+showBranchInfoWithAbi srcInfo (BranchInfo vm (Just y)) =
+  case y of
     (UnOp "isZero" (InfixBinOp "==" (Val x) _)) ->
       let
         abimap = view abiMap <$> currentSolc srcInfo vm
         method = abimap >>= Map.lookup (read x)
-      in [maybe x (show . view methodSignature) method]
-    _ -> [""]
+      in [maybe (show y) (show . view methodSignature) method]
+    y' -> [show y']
 
 renderTree :: (a -> [String])
            -> (a -> [String])
