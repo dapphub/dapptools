@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.43.0 - 2020-11-29
+
 ### Added
 
 - A `--show-tree` option to `hevm symbolic` which prints the execution tree explored.
@@ -10,6 +12,15 @@
 - The `hevm interactive` alias has been removed, as it is equivalent to `hevm dapp-test --debug`
 - `hevm dapp-test --match` now matches on contract name and file path, as well as test name
 - Step through the callstack in debug mode using the arrow keys
+
+### Changed
+
+- `dapp-test` trace output now detects ds-note events and shows `LogNote`
+- create addresses are shown with `@<address>` in the trace
+- `DSTest.setUp()` is only run if it exists, rather than failing
+- support new ds-test `log_named_x(string, x)` (previously bytes32 keys)
+- return arguments are fully displayed in the trace (previously only a single word)
+- return/revert trace will now show the correct source position
 
 ## 0.42.0 - 2020-10-31
 
