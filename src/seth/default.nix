@@ -4,7 +4,7 @@
 
 stdenv.mkDerivation rec {
   name = "seth-${version}";
-  version = "0.9.2";
+  version = "0.9.3";
   src = ./.;
 
   nativeBuildInputs = [ nodejs makeWrapper shellcheck ];
