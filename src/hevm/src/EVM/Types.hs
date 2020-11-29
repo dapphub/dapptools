@@ -52,6 +52,11 @@ import qualified Text.Read
 import Data.Data
 
 
+{-# SPECIALIZE num :: Word8 -> W256 #-}
+num :: (Integral a, Num b) => a -> b
+num = fromIntegral
+
+
 data Word = C Whiff W256 --maybe to remove completely in the future
 
 data Sniff
@@ -65,11 +70,11 @@ data Sniff
 
 instance Show Sniff where
   show = \case
-    Oops s -> "Oops" ++ (show s)
-    Slice w w' s -> "[ " ++ show w ++ ".." ++ show w' ++ " ]\n" ++ show s
+    Oops s -> "Oops " ++ (show s)
+    Slice w w' s -> "[ " ++ show w ++ ".." ++ show w' ++ " ]" ++ show s
     FromWord w -> d ["fromWord", show w]
     Write s w1 w2 w3 s2 -> d ["write", show s, show w1, show w2, show w3, show s2]
-    WriteWord w w2 s ->  show w ++ " <- " ++ show w2 ++ "\n" ++ show s
+    WriteWord w w2 s ->  "[" ++ show w ++ " <- " ++ show w2 ++ "]" ++ show s
     Calldata -> "CALLDATA"
     SEmpty -> "SEmpty"
     where
@@ -96,11 +101,11 @@ instance Show Word where
 instance Read Word where
   readsPrec n s =
     case readsPrec n s of
-      [(x, r)] -> [(C Dull x, r)]
+      [(x, r)] -> [(C (Dull "read") x, r)]
       _ -> []
 
 w256 :: W256 -> Word
-w256 = C Dull
+w256 = C (Dull "w256")
 
 instance Bits Word where
   (C _ x) .&. (C _ y) = w256 (x .&. y)
@@ -160,14 +165,9 @@ data SymWord = S Whiff (SWord 256)
 instance Show SymWord where
   show s@(S w _) = case maybeLitWord s of
     Nothing -> case w of
-      Dull -> "<symbolic>"
+      Dull s -> "<symbolic " ++ s ++ " >"
       whiff -> show whiff
     Just w'  -> show w'
-
--- | Convenience functions transporting between the concrete and symbolic realm
--- TODO - look for all the occurences of sw256 and replace them with manual construction
-sw256 :: SWord 256 -> SymWord
-sw256 x = S Dull x
 
 -- | Custom instances for SymWord, many of which have direct
 -- analogues for concrete words defined in Concrete.hs
@@ -177,7 +177,7 @@ instance EqSymbolic SymWord where
 instance Num SymWord where
   (S a x) + (S b y) = S (Add a b) (x + y)
   (S a x) * (S b y) = S (Mul a b) (x * y)
-  abs (S a x) = S Dull (abs x)
+  abs (S a x) = S (Dull "abs") (abs x)
   signum (S a x) = S (Sgn a) (signum x)
   fromInteger x = S (Literal (fromInteger x)) (fromInteger x)
   negate (S a x) = S (Sub (Literal (fromInteger 0)) a) (negate x)
@@ -187,35 +187,35 @@ instance Bits SymWord where
   (S a x) .|. (S b y) = S (Or a b) (x .|. y)
 --  (S a x) `xor` (S b y) = S (InfixBinOp "xor" a b) (x `xor` y)
   complement (S a x) = S (Cmp a) (complement x)
-  shift (S a x) i = S (Sft a i) (shift x i)
+  shift (S a x) i = S (Sft a (Literal (num i))) (shift x i)
   rotate (S a x) i = S (Rot a i) (rotate x i)
   bitSize (S _ x) = bitSize x
   bitSizeMaybe (S _ x) = bitSizeMaybe x
   isSigned (S _ x) = isSigned x
   testBit (S _ x) i = testBit x i
-  bit i = sw256 (bit i)
+  bit i = S (Bit (Literal (num i))) (bit i)
   popCount (S _ x) = popCount x
 
 instance SDivisible SymWord where
-  sQuotRem (S _ x) (S _ y) = let (a, b) = x `sQuotRem` y
-                             in (sw256 a, sw256 b)
-  sDivMod (S _ x) (S _ y) = let (a, b) = x `sDivMod` y
-                             in (sw256 a, sw256 b)
+  sQuotRem (S w1 x) (S w2 y) = let (a, b) = x `sQuotRem` y
+                             in (S (Div w1 w2) a, S (Dull "sQuotRem") b)
+  sDivMod (S w1 x) (S w2 y) = let (a, b) = x `sDivMod` y
+                             in (S (Div w1 w2) a, S (Mod w1 w2) b)
 
 instance Mergeable SymWord where
   symbolicMerge a b (S wx x) (S _ y) = S wx (symbolicMerge a b x y)
   select xs (S _ x) b = let ys = fmap (\(S _ y) -> y) xs
-                        in sw256 $ select ys x b
+                        in S (Dull "select") $ select ys x b
 
 instance Bounded SymWord where
-  minBound = sw256 minBound
-  maxBound = sw256 maxBound
+  minBound = S (Dull "minBound") minBound
+  maxBound = S (Dull "maxBound") maxBound
 
 instance Eq SymWord where
   (S _ x) == (S _ y) = x == y
 
 instance Enum SymWord where
-  toEnum i = sw256 (toEnum i)
+  toEnum i = S (Dull "toEnum") (toEnum i)
   fromEnum (S _ x) = fromEnum x
 
 instance OrdSymbolic SymWord where
@@ -281,7 +281,7 @@ instance Show EthEnv where
 -- typed expressions
 data Whiff =
   --booleans
-  Dull
+  Dull String
   | And  Whiff Whiff
   | Or   Whiff Whiff
   | Impl Whiff Whiff
@@ -298,13 +298,17 @@ data Whiff =
   | Mul  Whiff Whiff
   | Div  Whiff Whiff
   | Mod  Whiff Whiff
+  | Exp  Whiff Whiff
   | Neg  Whiff
+  | Sex  Whiff
   | Sgn  Whiff          -- signum
   | Cmp  Whiff          -- complement
-  | Sft  Whiff Int      -- shift left
+  | Sft  Whiff Whiff    -- shift left
   | Rot  Whiff Int      -- rotate
+  | Bit  Whiff
   | FromKeccak Sniff
   | FromBuffer Whiff Buffer
+  | FromBuff Whiff Sniff
   | FromStorage Whiff
   | Literal W256
   | IsZero Whiff
@@ -315,11 +319,12 @@ data Whiff =
 instance Show Whiff where
   show = \case
     -- booleans
-    Dull -> "<symbolic>"
+    Dull s -> "<symbolic " ++ s ++ " >"
     FromKeccak a -> "keccak(" ++ show a ++ ")"
     FromBuffer at' w -> show w ++ "[" ++ show at' ++ "]"
     IsZero w -> "isZero( " ++ show w ++ " )"
     NonZero w -> "nonZero( " ++ show w ++ " )"
+    Bit a  -> "bit " ++ (show a)
     Or a b -> print2 "or" a b
     Eq a b -> print2 "==" a b
     LT a b -> print2 "<" a b
@@ -339,15 +344,16 @@ instance Show Whiff where
     Mul a b -> print2 "*" a b
     Div a b -> print2 "/" a b
     Mod a b -> print2 "%" a b
---    Exp a b -> print2 "^" a b
+    Exp a b -> print2 "^" a b
     Literal a -> show a
     Envv a -> show a
     Sgn a   -> "sgn(" ++ (show a) ++ ")"
+    Sex a   -> "signextend(" ++ (show a) ++ ")"
     Cmp a   -> "~" ++ (show a)
     Sft a i -> print2 "<<" a (show i)
     Rot a i -> "rot(" ++ (show a) ++ ", " ++ show i ++ ")"
     FromStorage a -> "FromStorage " ++ (show a)
-    Var a -> show a
+    Var a -> a
    where
      print2 sym a b = printf ("( %s " ++ sym ++ " %s )") (show a) (show b)
 
@@ -558,10 +564,6 @@ toWord512 (W256 x) = fromHiAndLo 0 x
 
 fromWord512 :: Word512 -> W256
 fromWord512 x = W256 (loWord x)
-
-{-# SPECIALIZE num :: Word8 -> W256 #-}
-num :: (Integral a, Num b) => a -> b
-num = fromIntegral
 
 padLeft :: Int -> ByteString -> ByteString
 padLeft n xs = BS.replicate (n - BS.length xs) 0 <> xs

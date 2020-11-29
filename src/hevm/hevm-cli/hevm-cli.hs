@@ -780,17 +780,17 @@ symvmFromCommand cmd = do
     (Nothing, Nothing) -> do
       cd <- sbytes256
       len' <- freshVar_
-      return (SymbolicBuffer (Oops "cliCalldata2") cd, len', (len' .<= 256, LT (Var "len") (Literal (fromInteger 256))))
+      return (SymbolicBuffer Calldata cd, len', (len' .<= 256, LT (Var "len") (Literal (fromInteger 256))))
     -- fully concrete calldata
     (Just c, Nothing) ->
       let cd = ConcreteBuffer (Oops "clicalldata3") $ decipher c
-      in return (cd, num (len cd), (sTrue, Dull))
+      in return (cd, num (len cd), (sTrue, (Dull "clicalldata")))
     -- calldata according to given abi with possible specializations from the `arg` list
     (Nothing, Just sig') -> do
       method' <- io $ functionAbi sig'
       let typs = snd <$> view methodInputs method'
       (cd, cdlen) <- symCalldata (view methodSignature method') typs (arg cmd)
-      return (SymbolicBuffer (Oops "cliCalldata4") cd, cdlen, (sTrue, Dull))
+      return (SymbolicBuffer (Oops "cliCalldata4") cd, cdlen, (sTrue, Dull "clicalldata2"))
 
     _ -> error "incompatible options: calldata and abi"
 

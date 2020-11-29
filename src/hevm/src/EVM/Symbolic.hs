@@ -55,26 +55,26 @@ iteWhiff op cond  =
 
 
 sdiv :: SymWord -> SymWord -> SymWord
-sdiv (S _ x) (S _ y) = let sx, sy :: SInt 256
-                           sx = sFromIntegral x
-                           sy = sFromIntegral y
-                       in sw256 $ sFromIntegral (sx `sQuot` sy)
+sdiv (S w1 x) (S w2 y) = let sx, sy :: SInt 256
+                             sx = sFromIntegral x
+                             sy = sFromIntegral y
+                       in S (Div w1 w2) $ sFromIntegral (sx `sQuot` sy)
 
 smod :: SymWord -> SymWord -> SymWord
-smod (S _ x) (S _ y) = let sx, sy :: SInt 256
-                           sx = sFromIntegral x
-                           sy = sFromIntegral y
-                       in sw256 $ ite (y .== 0) 0 (sFromIntegral (sx `sRem` sy))
+smod (S w1 x) (S w2 y) = let sx, sy :: SInt 256
+                             sx = sFromIntegral x
+                             sy = sFromIntegral y
+                       in S (Mod w1 w2) $ ite (y .== 0) 0 (sFromIntegral (sx `sRem` sy))
 
 addmod :: SymWord -> SymWord -> SymWord -> SymWord
 addmod (S _ x) (S _ y) (S _ z) = let to512 :: SWord 256 -> SWord 512
                                      to512 = sFromIntegral
-                                 in sw256 $ sFromIntegral $ ((to512 x) + (to512 y)) `sMod` (to512 z)
+                                 in S (Dull "addmod") $ sFromIntegral $ ((to512 x) + (to512 y)) `sMod` (to512 z)
 
 mulmod :: SymWord -> SymWord -> SymWord -> SymWord
 mulmod (S _ x) (S _ y) (S _ z) = let to512 :: SWord 256 -> SWord 512
                                      to512 = sFromIntegral
-                                 in sw256 $ sFromIntegral $ ((to512 x) * (to512 y)) `sMod` (to512 z)
+                                 in S (Dull "mulmod") $ sFromIntegral $ ((to512 x) * (to512 y)) `sMod` (to512 z)
 
 slt :: SymWord -> SymWord -> SymWord
 slt (S v x) (S w y) =
@@ -93,12 +93,9 @@ shiftRight' (S _ a') b@(S _ b') = case (num <$> unliteral a', b) of
     in S
       (FromBuffer index (SymbolicBuffer (Slice (Literal 0) (Literal $ num off) w) bs))
       (fromBytes bs)
-  _ -> sw256 $ sShiftRight b' a'
+  _ -> S (Dull "shiftRight") $ sShiftRight b' a'
 
 -- | Operations over symbolic memory (list of symbolic bytes)
-swordAt :: Int -> [SWord 8] -> SymWord
-swordAt i bs = sw256 . fromBytes $ truncpad 32 $ drop i bs
-
 readByteOrZero' :: Int -> [SWord 8] -> SWord 8
 readByteOrZero' i bs = fromMaybe 0 (bs ^? ix i)
 
@@ -207,12 +204,3 @@ setMemoryByte i x (ConcreteBuffer wbuff m) = case fromSized <$> unliteral x of
   Nothing -> SymbolicBuffer (Oops "setMemoryByte2") $ setMemoryByte' i x (litBytes m)
   Just x' -> ConcreteBuffer (Oops "setMemoryByte3") $ Concrete.setMemoryByte i x' m
 
-readSWord' :: Word -> [SWord 8] -> SymWord
-readSWord' (C _ i) x =
-  if i > num (length x)
-  then 0
-  else swordAt (num i) x
-
-readSWord :: Word -> Buffer -> SymWord
-readSWord i (SymbolicBuffer wbuff x) = readSWord' i x
-readSWord i (ConcreteBuffer wbuff x) = num $ Concrete.readMemoryWord i x

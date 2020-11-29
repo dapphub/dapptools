@@ -669,11 +669,11 @@ exec1 = do
           (n, x) | otherwise          -> 0xff .&. shiftR x (8 * (31 - num (forceLit n)))
 
         -- op: SHL
-        0x1b -> stackOp2 (const g_verylow) $ \((S _ n), (S _ x)) -> sw256 $ sShiftLeft x n
+        0x1b -> stackOp2 (const g_verylow) $ \((S w1 n), (S w2 x)) -> S (Sft w1 w2) $ sShiftLeft x n
         -- op: SHR
         0x1c -> stackOp2 (const g_verylow) $ uncurry shiftRight'
         -- op: SAR
-        0x1d -> stackOp2 (const g_verylow) $ \((S _ n), (S _ x)) -> sw256 $ sSignedShiftArithRight x n
+        0x1d -> stackOp2 (const g_verylow) $ \((S _ n), (S _ x)) -> S (Dull "SAR") $ sSignedShiftArithRight x n
 
         -- op: SHA3
         -- more accurately refered to as KECCAK
@@ -705,12 +705,12 @@ exec1 = do
 
                       let previousUsed = view (env . keccakUsed) vm
                       env . keccakUsed <>= [(bytes, hash')]
-                      constraints <>= (hash' .> 100, Dull):
+                      constraints <>= (hash' .> 100, Dull "sha3"):
                         (fmap (\(preimage, image) ->
                           -- keccak is a function
                           ((preimage .== bytes .=> image .== hash') .&&
                           -- which is injective
-                          (image .== hash' .=> preimage .== bytes), Dull))
+                          (image .== hash' .=> preimage .== bytes), (Dull "sha3-2")))
                          previousUsed)
 
                       next
@@ -743,7 +743,7 @@ exec1 = do
         -- op: CALLER
         0x33 ->
           limitStack 1 . burn g_base $
-            let toSymWord = sw256 . sFromIntegral . saddressWord160
+            let toSymWord = (S (Var "Caller")) . sFromIntegral . saddressWord160
             in next >> pushSym (toSymWord (the state caller))
 
         -- op: CALLVALUE
@@ -1061,14 +1061,14 @@ exec1 = do
                 if exponent == 0
                 then g_exp
                 else g_exp + g_expbyte * num (ceilDiv (1 + log2 exponent) 8)
-          in stackOp2 cost $ \((S _ x),(S _ y)) -> sw256 $ x .^ y
+          in stackOp2 cost $ \((S w1 x),(S w2 y)) -> S (Exp w1 w2) $ x .^ y
 
         -- op: SIGNEXTEND
         0x0b ->
-          stackOp2 (const g_low) $ \((forceLit -> bytes), w@(S _ x)) ->
+          stackOp2 (const g_low) $ \((forceLit -> bytes), w@(S whiff x)) ->
             if bytes >= 32 then w
             else let n = num bytes * 8 + 7 in
-              sw256 $ ite (sTestBit x n)
+              S (Sex whiff) $ ite (sTestBit x n)
                       (x .|. complement (bit n - 1))
                       (x .&. (bit n - 1))
 
@@ -1882,7 +1882,7 @@ cheatActions =
   Map.fromList
     [ action "warp(uint256)" [AbiUIntType 256] $
         \_ _ [AbiUInt 256 x] ->
-          assign (block . timestamp) (sw256 $ num x),
+          assign (block . timestamp) (S (Dull "wrap") $ num x),
       action "roll(uint256)" [AbiUIntType 256] $
         \_ _ [AbiUInt 256 x] ->
           assign (block . number) (w256 (W256 x)),

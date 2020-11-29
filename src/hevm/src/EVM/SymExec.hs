@@ -107,7 +107,7 @@ abstractVM typesignature concreteArgs x storagemodel = do
     InitialS -> Symbolic [] <$> freshArray_ (Just 0)
     ConcreteS -> return $ Concrete mempty
   c <- SAddr <$> freshVar_
-  value' <- sw256 <$> freshVar_
+  value' <- (S (Var "Value")) <$> freshVar_
   return $ loadSymVM (RuntimeCode x) symstore storagemodel c value' (SymbolicBuffer (Oops "abstractVM") cd', cdlen) & over constraints ((<>) [cdconstraint])
 
 loadSymVM :: ContractCode -> Storage -> StorageModel -> SAddr -> SymWord -> (Buffer, SWord 256) -> VM
@@ -261,7 +261,7 @@ verifyContract :: ByteString -> Maybe (Text, [AbiType]) -> [String] -> StorageMo
 verifyContract theCode signature' concreteArgs storagemodel pre maybepost = do
     preStateRaw <- abstractVM signature' concreteArgs theCode  storagemodel
     -- add the pre condition to the pathconditions to ensure that we are only exploring valid paths
-    let preState = over constraints ((++) [(pre preStateRaw, Dull)]) preStateRaw
+    let preState = over constraints ((++) [(pre preStateRaw, (Dull "verifyContract"))]) preStateRaw
     v <- verify preState Nothing Nothing maybepost
     return (v, preState)
 
