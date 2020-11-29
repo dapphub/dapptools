@@ -44,6 +44,7 @@ import qualified Data.Aeson.Types     as JSON
 import qualified Data.ByteString      as BS
 import qualified Data.Serialize.Get   as Cereal
 import qualified Data.Text            as Text
+import qualified Data.List            as List
 import qualified Data.Text.Encoding   as Text
 import qualified Text.Read
 
@@ -54,19 +55,29 @@ import Data.Data
 data Word = C Whiff W256 --maybe to remove completely in the future
 
 data Sniff
-  = Oops
+  = Oops String
+  | Slice Whiff Whiff Sniff          -- offset size buffer
+  | FromWord Whiff
   | Write Sniff Word Word Word Sniff
   | WriteWord Word Whiff Sniff
-  | Slice Whiff Whiff Sniff
-  | FromWord Whiff
   | Calldata
+  | SEmpty
 
 instance Show Sniff where
   show = \case
-    Oops -> "<symbolic buffer>"
-    Slice w w' s -> show s ++ "[" ++ show w ++ ".." ++ show w' ++ "]"
-    FromWord w -> "buf" ++ show w
+    Oops s -> "Oops" ++ (show s)
+    Slice w w' s -> "[ " ++ show w ++ ".." ++ show w' ++ " ]\n" ++ show s
+    FromWord w -> d ["fromWord", show w]
+    Write s w1 w2 w3 s2 -> d ["write", show s, show w1, show w2, show w3, show s2]
+    WriteWord w w2 s ->  show w ++ " <- " ++ show w2 ++ "\n" ++ show s
     Calldata -> "CALLDATA"
+    SEmpty -> "SEmpty"
+    where
+      join = List.intercalate "\n"
+      split s = Text.unpack <$> (Text.splitOn (Text.pack "\n") (Text.pack s))
+      indent s = ((++) "  ") <$> s
+      dc = (join . indent . split)
+      d cs = "(\n" ++ (join (dc <$> cs)) ++ ")"
 
 
 data Buffer
@@ -292,7 +303,7 @@ data Whiff =
   | Cmp  Whiff          -- complement
   | Sft  Whiff Int      -- shift left
   | Rot  Whiff Int      -- rotate
-  | FromKeccak Whiff
+  | FromKeccak Sniff
   | FromBuffer Whiff Buffer
   | FromStorage Whiff
   | Literal W256
@@ -402,13 +413,13 @@ instance Show Buffer where
 
 
 instance Semigroup Buffer where
-  ConcreteBuffer _ a <> ConcreteBuffer _ b = ConcreteBuffer Oops (a <> b)
-  ConcreteBuffer _ a <> SymbolicBuffer _ b = SymbolicBuffer Oops (litBytes a <> b)
-  SymbolicBuffer _ a <> ConcreteBuffer _ b = SymbolicBuffer Oops (a <> litBytes b)
-  SymbolicBuffer _ a <> SymbolicBuffer _ b = SymbolicBuffer Oops (a <> b)
+  ConcreteBuffer _ a <> ConcreteBuffer _ b = ConcreteBuffer (Oops "C<>C") (a <> b)
+  ConcreteBuffer _ a <> SymbolicBuffer _ b = SymbolicBuffer (Oops "C<>S") (litBytes a <> b)
+  SymbolicBuffer _ a <> ConcreteBuffer _ b = SymbolicBuffer (Oops "S<>C") (a <> litBytes b)
+  SymbolicBuffer _ a <> SymbolicBuffer _ b = SymbolicBuffer (Oops "S<>S") (a <> b)
 
 instance Monoid Buffer where
-  mempty = ConcreteBuffer Oops mempty
+  mempty = ConcreteBuffer SEmpty mempty
 
 instance EqSymbolic Buffer where
   ConcreteBuffer _ a .== ConcreteBuffer _ b = literal (a == b)

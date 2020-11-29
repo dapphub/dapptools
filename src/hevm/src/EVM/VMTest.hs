@@ -297,7 +297,7 @@ fromBlockchainCase' block tx preState postState =
                       else maybe (EVM.RuntimeCode mempty) (view contractcode) toCode
             cd = if isCreate
                  then (mempty, 0)
-                 else (ConcreteBuffer Oops $ txData tx, literal . num . BS.length $ txData tx)
+                 else (ConcreteBuffer (Oops "fromBlockchainCase") $ txData tx, literal . num . BS.length $ txData tx)
 
 
 validateTx :: Transaction -> Map Addr EVM.Contract -> Maybe ()

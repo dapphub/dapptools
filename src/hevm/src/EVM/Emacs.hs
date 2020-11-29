@@ -501,8 +501,9 @@ instance {-# OVERLAPPING #-} SDisplay String where
   sexp x = A (txt x)
 
 instance SDisplay Word where
-  sexp (C (FromKeccak bs) x) =
-    L [A "hash", A (txt x), sexp bs]
+  -- TODO do it for sniff
+  -- sexp (C (FromKeccak bs) x) =
+  --   L [A "hash", A (txt x), sexp bs]
   sexp (C _ x) = A (quoted (txt x))
 
 instance SDisplay ByteString where

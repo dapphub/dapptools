@@ -286,13 +286,13 @@ getAbiTypes abi = map (parseTypeName mempty) types
         splitOn "," (dropEnd 1 (last (splitOn "(" abi)))
 
 showCall :: [AbiType] -> Buffer -> Text
-showCall ts (SymbolicBuffer wbuff bs) = showValues ts $ SymbolicBuffer Oops (drop 4 bs)
-showCall ts (ConcreteBuffer wbuff bs) = showValues ts $ ConcreteBuffer Oops (BS.drop 4 bs)
+showCall ts (SymbolicBuffer wbuff bs) = showValues ts $ SymbolicBuffer (Oops "showCallS") (drop 4 bs)
+showCall ts (ConcreteBuffer wbuff bs) = showValues ts $ ConcreteBuffer (Oops "showCallC") (BS.drop 4 bs)
 
 showError :: ByteString -> Text
 showError bs = case BS.take 4 bs of
   -- Method ID for Error(string)
-  "\b\195y\160" -> showCall [AbiStringType] (ConcreteBuffer Oops bs)
+  "\b\195y\160" -> showCall [AbiStringType] (ConcreteBuffer (Oops "showError") bs)
   _             -> formatBinary bs
 
 showValues :: [AbiType] -> Buffer -> Text

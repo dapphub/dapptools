@@ -60,6 +60,8 @@ import Crypto.Number.ModArithmetic (expFast)
 import Crypto.Hash (Digest, SHA256, RIPEMD160)
 import qualified Crypto.Hash as Crypto
 
+import Debug.Trace
+
 -- * Data types
 
 -- | EVM failure modes
@@ -683,11 +685,11 @@ exec1 = do
                   burn (g_sha3 + g_sha3word * ceilDiv (num xSize) 32) $
                     accessMemoryRange fees xOffset xSize $ do
                       (hash@(S _ hash'), invMap, bytes) <- case readMemory xOffset xSize vm of
-                                         ConcreteBuffer w bs -> do
-                                           pure (litWord $ keccakBlob bs Dull, Map.singleton (keccakBlob bs Dull) bs, litBytes bs)
-                                         SymbolicBuffer w bs -> do
+                                         ConcreteBuffer s bs -> do
+                                           pure (litWord $ keccakBlob bs (Oops "SHA3-1"), Map.singleton (keccakBlob bs (Oops "SHA3-2")) bs, litBytes bs)
+                                         SymbolicBuffer s bs -> do
                                            let hash' = symkeccak' bs
-                                           return (sw256 hash', mempty, bs)
+                                           return (S (FromKeccak s) hash', mempty, bs)
 
                       -- Although we would like to simply assert that the uninterpreted function symkeccak'
                       -- is injective, this proves to cause a lot of concern for our smt solvers, probably
@@ -767,7 +769,7 @@ exec1 = do
                   next
                   assign (state . stack) xs
                   case the state calldata of
-                    (SymbolicBuffer _ cd, cdlen) -> copyBytesToMemory (SymbolicBuffer Oops [ite (i .<= cdlen) x 0 | (x, i) <- zip cd [1..]]) xSize xFrom xTo
+                    (SymbolicBuffer _ cd, cdlen) -> copyBytesToMemory (SymbolicBuffer (Oops "calldatacopy") [ite (i .<= cdlen) x 0 | (x, i) <- zip cd [1..]]) xSize xFrom xTo
                     -- when calldata is concrete,
                     -- the bound should always be equal to the bytestring length
                     (cd, _) -> copyBytesToMemory cd xSize xFrom xTo
@@ -786,7 +788,7 @@ exec1 = do
                 accessUnboundedMemoryRange fees memOffset n $ do
                   next
                   assign (state . stack) xs
-                  copyBytesToMemory (ConcreteBuffer Oops (the state code))
+                  copyBytesToMemory (ConcreteBuffer (Oops "codecopy") (the state code))
                     n codeOffset memOffset
             _ -> underrun
 
@@ -828,7 +830,7 @@ exec1 = do
                       fetchAccount (num extAccount) $ \c -> do
                         next
                         assign (state . stack) xs
-                        copyBytesToMemory (ConcreteBuffer Oops (view bytecode c))
+                        copyBytesToMemory (ConcreteBuffer (Oops "EXTCODECOPY") (view bytecode c))
                           codeSize codeOffset memOffset
             _ -> underrun
 
@@ -1364,16 +1366,16 @@ executePrecompile preCompileAddr gasCap inOffset inSize outOffset outSize xs  = 
               next
             Just output -> do
               assign (state . stack) (1 : xs)
-              assign (state . returndata) (ConcreteBuffer Oops output)
-              copyBytesToMemory (ConcreteBuffer Oops output) outSize 0 outOffset
+              assign (state . returndata) (ConcreteBuffer (Oops "ECRECOVER") output)
+              copyBytesToMemory (ConcreteBuffer (Oops "ECRECOVER2") output) outSize 0 outOffset
               next
 
         -- SHA2-256
         0x2 ->
           let
             hash = case input of
-                     ConcreteBuffer _ input' -> ConcreteBuffer Oops $ BS.pack $ BA.unpack (Crypto.hash input' :: Digest SHA256)
-                     SymbolicBuffer _ input' -> SymbolicBuffer Oops $ symSHA256 input'
+                     ConcreteBuffer _ input' -> ConcreteBuffer (Oops "SHA2-256") $ BS.pack $ BA.unpack (Crypto.hash input' :: Digest SHA256)
+                     SymbolicBuffer _ input' -> SymbolicBuffer (Oops "SHA2-256-2") $ symSHA256 input'
           in do
             assign (state . stack) (1 : xs)
             assign (state . returndata) hash
@@ -1388,7 +1390,7 @@ executePrecompile preCompileAddr gasCap inOffset inSize outOffset outSize xs  = 
           let
             padding = BS.pack $ replicate 12 0
             hash' = BS.pack $ BA.unpack (Crypto.hash input' :: Digest RIPEMD160)
-            hash  = ConcreteBuffer Oops $ padding <> hash'
+            hash  = ConcreteBuffer (Oops "RIPEMD-160") $ padding <> hash'
           in do
             assign (state . stack) (1 : xs)
             assign (state . returndata) hash
@@ -1410,7 +1412,7 @@ executePrecompile preCompileAddr gasCap inOffset inSize outOffset outSize xs  = 
           let
             (lenb, lene, lenm) = parseModexpLength input'
 
-            output = ConcreteBuffer Oops $
+            output = ConcreteBuffer (Oops "MODEXP") $
               case (isZero (96 + lenb + lene) lenm input') of
                  True ->
                    truncpadlit (num lenm) (asBE (0 :: Int))
@@ -1434,7 +1436,7 @@ executePrecompile preCompileAddr gasCap inOffset inSize outOffset outSize xs  = 
            case EVM.Precompiled.execute 0x6 (truncpadlit 128 input') 64 of
           Nothing -> precompileFail
           Just output -> do
-            let truncpaddedOutput = ConcreteBuffer Oops $ truncpadlit 64 output
+            let truncpaddedOutput = ConcreteBuffer (Oops "ECADD") $ truncpadlit 64 output
             assign (state . stack) (1 : xs)
             assign (state . returndata) truncpaddedOutput
             copyBytesToMemory truncpaddedOutput outSize 0 outOffset
@@ -1448,7 +1450,7 @@ executePrecompile preCompileAddr gasCap inOffset inSize outOffset outSize xs  = 
           case EVM.Precompiled.execute 0x7 (truncpadlit 96 input') 64 of
           Nothing -> precompileFail
           Just output -> do
-            let truncpaddedOutput = ConcreteBuffer Oops $ truncpadlit 64 output
+            let truncpaddedOutput = ConcreteBuffer (Oops "ECMUL") $ truncpadlit 64 output
             assign (state . stack) (1 : xs)
             assign (state . returndata) truncpaddedOutput
             copyBytesToMemory truncpaddedOutput outSize 0 outOffset
@@ -1462,7 +1464,7 @@ executePrecompile preCompileAddr gasCap inOffset inSize outOffset outSize xs  = 
           case EVM.Precompiled.execute 0x8 input' 32 of
           Nothing -> precompileFail
           Just output -> do
-            let truncpaddedOutput = ConcreteBuffer Oops $ truncpadlit 32 output
+            let truncpaddedOutput = ConcreteBuffer (Oops "ECPAIRING") $ truncpadlit 32 output
             assign (state . stack) (1 : xs)
             assign (state . returndata) truncpaddedOutput
             copyBytesToMemory truncpaddedOutput outSize 0 outOffset
@@ -1476,7 +1478,7 @@ executePrecompile preCompileAddr gasCap inOffset inSize outOffset outSize xs  = 
           case (BS.length input', 1 >= BS.last input') of
             (213, True) -> case EVM.Precompiled.execute 0x9 input' 64 of
               Just output -> do
-                let truncpaddedOutput = ConcreteBuffer Oops $ truncpadlit 64 output
+                let truncpaddedOutput = ConcreteBuffer (Oops "BLAKE2") $ truncpadlit 64 output
                 assign (state . stack) (1 : xs)
                 assign (state . returndata) truncpaddedOutput
                 copyBytesToMemory truncpaddedOutput outSize 0 outOffset

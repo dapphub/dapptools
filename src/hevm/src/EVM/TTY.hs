@@ -625,7 +625,7 @@ initialUiVmStateForTest opts@UnitTestOptions{..} (theContractName, theTestName) 
             void (runUnitTest opts theTestName args)
           SymbolicTest _ -> do
             Stepper.evm $ modify symbolify
-            void (execSymTest opts theTestName (first (SymbolicBuffer Oops) symArgs))
+            void (execSymTest opts theTestName (first (SymbolicBuffer (Oops "initialVmStateForTest")) symArgs))
   pure $ initUiVmState vm0 opts script
   where
     Just (test, types) = find (\(test',_) -> extractSig test' == theTestName) $ unitTestMethods testContract

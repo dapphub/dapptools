@@ -139,7 +139,7 @@ initializeUnitTest UnitTestOptions { .. } = do
 
     -- Initialize the test contract
     let cd = abiMethod "setUp()" emptyAbi
-    setupCall testParams (ConcreteBuffer Oops cd, literal . num . BS.length $ cd)
+    setupCall testParams (ConcreteBuffer (Oops "") cd, literal . num . BS.length $ cd)
     popTrace
     pushTrace (EntryTrace "initialize test")
 
@@ -162,7 +162,7 @@ execTest UnitTestOptions { .. } method args = do
   -- Set up the call to the test method
   Stepper.evm $ do
     let cd = abiMethod method args
-    setupCall testParams (ConcreteBuffer Oops cd, literal . num . BS.length $ cd)
+    setupCall testParams (ConcreteBuffer (Oops "") cd, literal . num . BS.length $ cd)
     pushTrace (EntryTrace method)
   -- Try running the test method
   Stepper.execFully >>= \case
@@ -181,7 +181,7 @@ checkFailures UnitTestOptions { .. } method args bailed = do
     Stepper.evm $ do
       popTrace
       let cd = abiMethod "failed()" args
-      setupCall testParams (ConcreteBuffer Oops cd, literal . num . BS.length $ cd)
+      setupCall testParams (ConcreteBuffer (Oops "") cd, literal . num . BS.length $ cd)
     res <- Stepper.execFully -- >>= \(ConcreteBuffer bs) -> (Stepper.decode AbiBoolType bs)
     case res of
       Right (ConcreteBuffer _ r) ->
@@ -516,7 +516,7 @@ symRun :: UnitTestOptions -> VM -> Text -> [AbiType] -> SBV.Query (Text, Either 
 symRun opts@UnitTestOptions{..} concreteVm testName types = do
     SBV.resetAssertions
     let vm = symbolify concreteVm
-    cd <- first (SymbolicBuffer Oops) <$> symCalldata testName types []
+    cd <- first (SymbolicBuffer (Oops "")) <$> symCalldata testName types []
     let model = view (env . storageModel) vm
         shouldFail = "proveFail" `isPrefixOf` testName
 
@@ -623,7 +623,7 @@ checkSymFailures UnitTestOptions { .. } = do
   Stepper.evm $ do
     popTrace
     let cd = abiMethod "failed()" emptyAbi
-    setupCall testParams (ConcreteBuffer Oops cd, literal . num . BS.length $ cd)
+    setupCall testParams (ConcreteBuffer (Oops "") cd, literal . num . BS.length $ cd)
   Stepper.runFully
 
 indentLines :: Int -> Text -> Text

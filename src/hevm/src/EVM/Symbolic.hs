@@ -159,20 +159,21 @@ len (SymbolicBuffer _ bs) = length bs
 len (ConcreteBuffer _ bs) = BS.length bs
 
 grab :: Int -> Buffer -> Buffer
-grab n (SymbolicBuffer _ bs) = SymbolicBuffer Oops $ take n bs
-grab n (ConcreteBuffer _ bs) = ConcreteBuffer Oops $ BS.take n bs
+grab n (SymbolicBuffer _ bs) = SymbolicBuffer (Oops "grab1") $ take n bs
+grab n (ConcreteBuffer _ bs) = ConcreteBuffer (Oops "grab2") $ BS.take n bs
 
 ditch :: Int -> Buffer -> Buffer
-ditch n (SymbolicBuffer _ bs) = SymbolicBuffer Oops $ drop n bs
-ditch n (ConcreteBuffer _ bs) = ConcreteBuffer Oops $ BS.drop n bs
+ditch n (SymbolicBuffer _ bs) = SymbolicBuffer (Oops "ditch1") $ drop n bs
+ditch n (ConcreteBuffer _ bs) = ConcreteBuffer (Oops "ditch2") $ BS.drop n bs
 
 readByteOrZero :: Int -> Buffer -> SWord 8
 readByteOrZero i (SymbolicBuffer _ bs) = readByteOrZero' i bs
 readByteOrZero i (ConcreteBuffer _ bs) = num $ Concrete.readByteOrZero i bs
 
+-- TODO  why are those not symwords?
 sliceWithZero :: Int -> Int -> Buffer -> Buffer
-sliceWithZero o s (SymbolicBuffer w m) = SymbolicBuffer w (sliceWithZero' o s m)
-sliceWithZero o s (ConcreteBuffer w m) = ConcreteBuffer w (Concrete.byteStringSliceWithDefaultZeroes o s m)
+sliceWithZero o s (SymbolicBuffer w m) = SymbolicBuffer (Slice (Literal (num o)) (Literal (num s)) w) (sliceWithZero' o s m)
+sliceWithZero o s (ConcreteBuffer w m) = ConcreteBuffer (Slice (Literal (num o)) (Literal (num s)) w) (Concrete.byteStringSliceWithDefaultZeroes o s m)
 
 writeMemory :: Buffer -> Word -> Word -> Word -> Buffer -> Buffer
 writeMemory (ConcreteBuffer w bs1) n src dst (ConcreteBuffer w2 bs0) =
@@ -201,10 +202,10 @@ setMemoryWord i (S wword x) (ConcreteBuffer wbuff z) = case maybeLitWord (S wwor
   Nothing -> SymbolicBuffer (WriteWord i wword wbuff) $ setMemoryWord' i (S wword x) (litBytes z)
 
 setMemoryByte :: Word -> SWord 8 -> Buffer -> Buffer
-setMemoryByte i x (SymbolicBuffer wbuff m) = SymbolicBuffer Oops $ setMemoryByte' i x m
+setMemoryByte i x (SymbolicBuffer wbuff m) = SymbolicBuffer (Oops "setMemoryByte") $ setMemoryByte' i x m
 setMemoryByte i x (ConcreteBuffer wbuff m) = case fromSized <$> unliteral x of
-  Nothing -> SymbolicBuffer Oops $ setMemoryByte' i x (litBytes m)
-  Just x' -> ConcreteBuffer Oops $ Concrete.setMemoryByte i x' m
+  Nothing -> SymbolicBuffer (Oops "setMemoryByte2") $ setMemoryByte' i x (litBytes m)
+  Just x' -> ConcreteBuffer (Oops "setMemoryByte3") $ Concrete.setMemoryByte i x' m
 
 readSWord' :: Word -> [SWord 8] -> SymWord
 readSWord' (C _ i) x =
