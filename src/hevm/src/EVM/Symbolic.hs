@@ -12,7 +12,6 @@ import Control.Lens hiding (op, (:<), (|>), (.>))
 import Data.Maybe                   (fromMaybe, fromJust)
 
 import EVM.Types
-import EVM.Concrete
 import qualified EVM.Concrete as Concrete
 import Data.SBV hiding (runSMT, newArray_, addAxiom, Word)
 
@@ -87,12 +86,12 @@ sgt x'@(S _ x) y'@(S _ y) =
 
 shiftRight' :: SymWord -> SymWord -> SymWord
 shiftRight' (S _ a') b@(S _ b') = case (num <$> unliteral a', b) of
-  (Just n, (S (FromBytes index (SymbolicBuffer a)) _)) | n `mod` 8 == 0 && n <= 256 ->
+  (Just n, (S (FromBytes ind (SymbolicBuffer a)) _)) | n `mod` 8 == 0 && n <= 256 ->
     let bs = replicate (n `div` 8) 0 <> (take ((256 - n) `div` 8) a)
-    in S (FromBytes index (SymbolicBuffer bs)) (fromBytes bs)
-  (Just n, (S (FromCalldata index (SymbolicBuffer a)) _)) | n `mod` 8 == 0 && n <= 256 ->
+    in S (FromBytes ind (SymbolicBuffer bs)) (fromBytes bs)
+  (Just n, (S (FromCalldata ind (SymbolicBuffer a)) _)) | n `mod` 8 == 0 && n <= 256 ->
     let bs = replicate (n `div` 8) 0 <> (take ((256 - n) `div` 8) a)
-    in S (FromCalldata index (SymbolicBuffer bs)) (fromBytes bs)
+    in S (FromCalldata ind (SymbolicBuffer bs)) (fromBytes bs)
   _ -> sw256 $ sShiftRight b' a'
 
 -- | Operations over symbolic memory (list of symbolic bytes)
@@ -147,7 +146,7 @@ select' xs err ind = walk xs ind err
 -- the index is symbolic, but it still seems (kind of) manageable
 -- for the solvers.
 readSWordWithBound :: SymWord -> Buffer -> SWord 256 -> SymWord
-readSWordWithBound sind@(S whiff ind) (SymbolicBuffer xs) bound = case (num <$> maybeLitWord sind, num <$> fromSizzle <$> unliteral bound) of
+readSWordWithBound sind@(S _ ind) (SymbolicBuffer xs) bound = case (num <$> maybeLitWord sind, num <$> fromSizzle <$> unliteral bound) of
   (Just i, Just b) ->
     let bs = truncpad 32 $ drop i (take b xs)
     in S (FromBytes sind (SymbolicBuffer bs)) (fromBytes bs)
@@ -156,7 +155,7 @@ readSWordWithBound sind@(S whiff ind) (SymbolicBuffer xs) bound = case (num <$> 
         res = [select' boundedList 0 (ind + j) | j <- [0..31]]
     in S (FromBytes sind (SymbolicBuffer res)) $ fromBytes $ res
 
-readSWordWithBound sind@(S whiff ind) (ConcreteBuffer xs) bound =
+readSWordWithBound sind (ConcreteBuffer xs) bound =
   case maybeLitWord sind of
     Nothing -> readSWordWithBound sind (SymbolicBuffer (litBytes xs)) bound
     Just x' ->

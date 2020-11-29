@@ -9,7 +9,6 @@ import EVM.Types
 import EVM.Dapp
 import EVM.Solidity
 import EVM.UnitTest
-import EVM.Concrete
 import EVM.Symbolic
 
 import EVM hiding (path)

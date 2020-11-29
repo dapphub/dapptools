@@ -176,7 +176,7 @@ interpret' fetcher maxIter vm = let
             return (vm, [Node (BranchInfo leftvm (Just whiff)) left, Node (BranchInfo rightvm (Just whiff)) right])
         Just n -> cont $ continue (not n)
 
-    Just x
+    Just _
       -> return (vm, [])
 
 -- | Interpreter which explores all paths at
@@ -302,7 +302,6 @@ leaves (Node _ xs) = concatMap leaves xs
 -- or `Left (Tree BranchInfo)`, if the postcondition holds for all endstates.
 verify :: VM -> Maybe Integer -> Maybe (Fetch.BlockNumber, Text) -> Maybe Postcondition -> Query (Either (Tree BranchInfo) (Tree BranchInfo))
 verify preState maxIter rpcinfo maybepost = do
-  let model = view (env . storageModel) preState
   smtState <- queryState
   tree <- doInterpret (Fetch.oracle (Just smtState) rpcinfo False) maxIter preState
   case maybepost of
