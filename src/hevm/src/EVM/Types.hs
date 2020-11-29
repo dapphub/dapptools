@@ -221,31 +221,6 @@ instance Enum SymWord where
 instance OrdSymbolic SymWord where
   (.<) (S _ x) (S _ y) = (.<) x y
 
-
--- | This type can give insight into the provenance of a term
--- data Whiff = Dull
---            | Val String
---            | FromKeccak ByteString
---            | Var String
---            | FromBytes SymWord Buffer
---            | FromCalldata SymWord Buffer
---            | FromStorage Whiff
---            | InfixBinOp String Whiff Whiff
---            | BinOp String Whiff Whiff
---            | UnOp String Whiff
-
--- instance Show Whiff where
---   show Dull = "<symbolic>"
---   show (Val s) = s
---   show (FromKeccak bstr) = "FromKeccak " ++ show bstr
---   show (Var x) = printf "<%s>" x
---   show (FromBytes index buf) = "FromBuffer " ++ (show index) ++ " " ++ show buf
---   show (FromCalldata index buf) = "FromCalldata " ++ (show index) ++ " " ++ show buf
---   show (FromStorage w) = "SREAD(" ++ show w ++ ")"
---   show (InfixBinOp op a b) = printf "(%s %s %s)" (show a) op (show b)
---   show (BinOp op a b) = printf "%s(%s, %s)" op (show a) (show b)
---   show (UnOp op x) = op ++ "(" ++ (show x) ++ ")"
-
 data EthEnv
    = Caller
    | Callvalue
@@ -304,6 +279,7 @@ data Whiff =
   | Sgn  Whiff          -- signum
   | Cmp  Whiff          -- complement
   | Sft  Whiff Whiff    -- shift left
+  | Sar  Whiff Whiff
   | Rot  Whiff Int      -- rotate
   | Bit  Whiff
   | FromKeccak Sniff
@@ -350,6 +326,7 @@ instance Show Whiff where
     Sgn a   -> "sgn(" ++ (show a) ++ ")"
     Sex a   -> "signextend(" ++ (show a) ++ ")"
     Cmp a   -> "~" ++ (show a)
+    Sar a i -> print2 ">sar>" a (show i)
     Sft a i -> print2 "<<" a (show i)
     Rot a i -> "rot(" ++ (show a) ++ ", " ++ show i ++ ")"
     FromStorage a -> "FromStorage " ++ (show a)

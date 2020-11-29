@@ -673,7 +673,7 @@ exec1 = do
         -- op: SHR
         0x1c -> stackOp2 (const g_verylow) $ uncurry shiftRight'
         -- op: SAR
-        0x1d -> stackOp2 (const g_verylow) $ \((S _ n), (S _ x)) -> S (Dull "SAR") $ sSignedShiftArithRight x n
+        0x1d -> stackOp2 (const g_verylow) $ \((S w1 n), (S w2 x)) -> S (Sar w1 w2) $ sSignedShiftArithRight x n
 
         -- op: SHA3
         -- more accurately refered to as KECCAK
