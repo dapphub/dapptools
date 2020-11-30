@@ -12,13 +12,22 @@ function usage() {
 
 [[ "$#" -gt 0 ]] || usage
 
+query() {
+  nix-env -q --installed --out-path --no-name "$1" 2>/dev/null
+}
+
 shopt -s extglob
 case $1 in
   # package spec e.g. solc:0.4.12
   solc:[0-9].+([0-9.]))
     solc="solc-${1#solc:}"
-    set +e
-    bin="$(type -p "$solc")"
+    if store_path=$(query "solc-${1#solc:}"); then
+      bin="$store_path/bin/solc"
+    elif store_path=$(query "solc-static-${1#solc:}"); then
+      bin="$store_path/bin/$solc"
+    else
+      bin=""
+    fi
     ;;
   # some other solc binary name
   solc*)
@@ -39,8 +48,8 @@ shift
 [[ "$#" -gt 0 ]] || usage
 
 if [[ -z "$bin" ]]; then
-  echo >&2 "${0##*/}: Could not find ${solc} in your path."
-  echo >&2 "${0##*/}: Try \`nix-env -f https://github.com/dapphub/dapptools/archive/master.tar.gz -iA solc-static-versions.$solc\`"
+  echo >&2 "${0##*/}: Could not find ${solc} in your path or nix store."
+  echo >&2 "${0##*/}: Try \`nix-env -f https://github.com/dapphub/dapptools/archive/master.tar.gz -iA solc-static-versions.${solc//[-.]/_}\`"
   echo >&2 "${0##*/}: in your dapptools repo."
   exit 1
 else
