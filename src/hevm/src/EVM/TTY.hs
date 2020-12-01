@@ -309,9 +309,7 @@ takeStep
   -> StepMode
   -> EventM n (Next UiState)
 takeStep ui mode =
-  if isJust $ view (uiVm . result) ui
-  then continue (ViewVm ui)
-  else liftIO nxt >>= \case
+  liftIO nxt >>= \case
     (Stopped (), ui') ->
       continue (ViewVm ui')
     (Continue steps, ui') -> do
@@ -461,21 +459,29 @@ appEvent (ViewVm s) (VtyEvent (V.EvKey (V.KChar ' ') [])) =
 -- todo refactor to zipper step forward
 -- Vm Overview: n - step
 appEvent (ViewVm s) (VtyEvent (V.EvKey (V.KChar 'n') [])) =
-  takeStep s (Step 1)
+  if isJust $ view (uiVm . result) s
+  then continue (ViewVm s)
+  else takeStep s (Step 1)
 
 -- Vm Overview: N - step
 appEvent (ViewVm s) (VtyEvent (V.EvKey (V.KChar 'N') [])) =
-  takeStep s
-    (StepUntil (isNextSourcePosition s))
+  if isJust $ view (uiVm . result) s
+  then continue (ViewVm s)
+  else takeStep s
+       (StepUntil (isNextSourcePosition s))
 
 -- Vm Overview: C-n - step
 appEvent (ViewVm s) (VtyEvent (V.EvKey (V.KChar 'n') [V.MCtrl])) =
-  takeStep s
+  if isJust $ view (uiVm . result) s
+  then continue (ViewVm s)
+  else takeStep s
     (StepUntil (isNextSourcePositionWithoutEntering s))
 
 -- Vm Overview: e - step
 appEvent (ViewVm s) (VtyEvent (V.EvKey (V.KChar 'e') [])) =
-  takeStep s
+  if isJust $ view (uiVm . result) s
+  then continue (ViewVm s)
+  else takeStep s
     (StepUntil (isExecutionHalted s))
 
 -- Vm Overview: a - step
@@ -570,8 +576,10 @@ appEvent (ViewVm s) (VtyEvent (V.EvKey V.KDown [])) =
   if view uiShowMemory s then
     vScrollBy (viewportScroll TracePane) 1 >> continue (ViewVm s)
   else
-    takeStep s
-      (StepUntil (isNewTraceAdded s))
+    if isJust $ view (uiVm . result) s
+    then continue (ViewVm s)
+    else takeStep s
+         (StepUntil (isNewTraceAdded s))
 
 -- Page: Up - scroll
 appEvent (ViewVm s) (VtyEvent (V.EvKey V.KUp [])) =
