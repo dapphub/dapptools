@@ -1,0 +1,64 @@
+#!/usr/bin/env python3
+
+import json
+import subprocess
+import os
+import re
+import fnmatch
+
+def exec(cmd) -> str:
+    out=subprocess.run(cmd, stdout=subprocess.PIPE)
+    return out.stdout.decode('utf-8').split('\n')[:-1]
+
+#template = open("../../resources/jsontemplate.json").read()
+
+template = open("/Users/martinlundfall/.dapp/dapptools/src/dapp/resources/jsontemplate.json").read()
+
+# Remove comments from template
+tmpljson = json.loads(re.sub(r'//.*\n', '', template))
+
+# add all files under DAPP_SRC to "sources" of json
+src = os.getenv('DAPP_SRC') if os.getenv('DAPP_SRC') is not None else "./src/"
+
+files = []
+for root, dirnames, filenames in os.walk(src):
+    for filename in fnmatch.filter(filenames, '*.sol'):
+        files.append(os.path.join(root, filename))
+
+tmpljson["sources"]={}
+for file in files:
+    tmpljson["sources"][file]={}
+    tmpljson["sources"][file]["urls"] = [file]
+
+tmpljson["settings"]["remappings"]=exec(['dapp', 'remappings'])
+
+tmpljson["settings"].pop('stopAfter', None)
+tmpljson["settings"].pop('optimizer', None) # TODO: activate by flag
+tmpljson["settings"].pop('evmVersion', None)
+tmpljson["settings"].pop('viaIR', None)
+tmpljson["settings"].pop('debug', None)
+tmpljson["settings"].pop('metadata', None)
+
+# TODO: fix libraries
+tmpljson["settings"]["libraries"]={}
+#tmpljson["settings"]["libraries"]=exec(['dapp','--find-libraries'])
+
+tmpljson["settings"]["outputSelection"]={}
+tmpljson["settings"]["outputSelection"]["*"]={}
+tmpljson["settings"]["outputSelection"]["*"]["*"]=[
+    "evm.bytecode",
+    "abi",
+    "storageLayout",
+    "evm.bytecode.sourceMap",
+    "evm.bytecode.linkReferences",
+    "evm.bytecode.generatedSources",
+    "evm.deployedBytecode.sourceMap",
+    "evm.deployedBytecode.linkReferences",
+    "evm.deployedBytecode.generatedSources"
+    ]
+
+tmpljson["settings"]["outputSelection"]["*"][""] = ["ast"]
+
+tmpljson.pop('modelCheckerSettings', None)
+
+print(json.dumps(tmpljson))
