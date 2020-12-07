@@ -14,6 +14,7 @@ import EVM.Exec
 import qualified EVM.Fetch as Fetch
 import EVM.ABI
 import EVM.Stepper (Stepper)
+import EVM.Solidity (Method)
 import qualified EVM.Stepper as Stepper
 import qualified Control.Monad.Operational as Operational
 import Control.Monad.State.Strict hiding (state)
@@ -26,6 +27,7 @@ import Data.SBV.Trans hiding (distinct, Word)
 import Data.SBV hiding (runSMT, newArray_, addAxiom, distinct, sWord8s, Word)
 import Data.Vector (toList, fromList)
 import Data.Tree
+import Debug.Trace
 
 import Data.ByteString (ByteString, pack)
 import qualified Data.ByteString.Lazy as Lazy
@@ -99,7 +101,7 @@ abstractVM typesignature concreteArgs x storagemodel = do
     case typesignature of
       Nothing -> do cd <- sbytes256
                     len <- freshVar_
-                    return (cd, len, (len .<= 256, LT (Var "calldatalength") (Literal (fromInteger 256))))
+                    return (cd, len, (len .<= 256, LT (Var "calldatalength" 256) (Literal (fromInteger 256))))
       Just (name, typs) -> do (cd, cdlen) <- symCalldata name typs concreteArgs
                               return (cd, cdlen, (sTrue, Literal (fromInteger 1)))
   symstore <- case storagemodel of
@@ -107,7 +109,7 @@ abstractVM typesignature concreteArgs x storagemodel = do
     InitialS -> Symbolic [] <$> freshArray_ (Just 0)
     ConcreteS -> return $ Concrete mempty
   c <- SAddr <$> freshVar_
-  value' <- (S (Var "Value")) <$> freshVar_
+  value' <- (S (Var "Value" 256)) <$> freshVar_
   return $ loadSymVM (RuntimeCode x) symstore storagemodel c value' (SymbolicBuffer (Oops "abstractVM") cd', cdlen) & over constraints ((<>) [cdconstraint])
 
 loadSymVM :: ContractCode -> Storage -> StorageModel -> SAddr -> SymWord -> (Buffer, SWord 256) -> VM
@@ -137,12 +139,16 @@ loadSymVM x initStore model addr callvalue' calldata' =
 
 data BranchInfo = BranchInfo
   { _vm                 :: VM,
-    _branchCondition    :: Maybe Whiff
+    _branchCondition    :: Maybe Whiff,
+    _method             :: Maybe Method
   }
 
 doInterpret :: Fetch.Fetcher -> Maybe Integer -> VM -> Query (Tree BranchInfo)
 doInterpret fetcher maxIter vm = let
-      f (vm', cs) = Node (BranchInfo (if length cs == 0 then vm' else vm) Nothing) cs
+      f (vm', cs) =
+        let
+          tree = Node (BranchInfo (if length cs == 0 then vm' else vm) Nothing Nothing) cs
+        in tree
     in f <$> interpret' fetcher maxIter vm
 
 interpret' :: Fetch.Fetcher -> Maybe Integer -> VM -> Query (VM, [(Tree BranchInfo)])
@@ -173,7 +179,7 @@ interpret' fetcher maxIter vm = let
             push 1
             (rightvm, right) <- interpret' fetcher maxIter rvm
             pop 1
-            return (vm, [Node (BranchInfo leftvm (Just whiff)) left, Node (BranchInfo rightvm (Just whiff)) right])
+            return (vm, [Node (BranchInfo leftvm (Just whiff) Nothing) left, Node (BranchInfo rightvm (Just (IsZero whiff)) Nothing) right])
         Just n -> cont $ continue (not n)
 
     Just _
@@ -281,10 +287,10 @@ consistentPath vm = do
     Unsat -> return Nothing
 
 consistentTree :: Tree BranchInfo -> Query (Maybe (Tree BranchInfo))
-consistentTree (Node (BranchInfo vm w) []) = do
+consistentTree (Node (BranchInfo vm w m) []) = do
   consistentPath vm >>= \case
     Nothing  -> return Nothing
-    Just vm' -> return $ Just $ Node (BranchInfo vm' w) []
+    Just vm' -> return $ Just $ Node (BranchInfo vm' w m) []
 consistentTree (Node b xs) = do
   consistentChildren <- catMaybes <$> forM xs consistentTree
   if null consistentChildren then

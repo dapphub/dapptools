@@ -80,6 +80,7 @@ library
   install-includes:
     ethjet/tinykeccak.h, ethjet/ethjet.h, ethjet/ethjet-ff.h, ethjet/blake2.h
   build-depends:
+    ansi-terminal                     >= 0.11 && < 0.12,
     QuickCheck                        >= 2.13.2 && < 2.15,
     containers                        >= 0.6.0 && < 0.7,
     deepseq                           >= 1.4.4 && < 1.5,

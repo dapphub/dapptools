@@ -11,6 +11,8 @@ import Prelude hiding  (Word, LT, GT)
 
 import Data.Aeson (FromJSON (..), (.:))
 
+import System.Console.ANSI hiding (Dull)
+
 #if MIN_VERSION_aeson(1, 0, 0)
 import Data.Aeson (FromJSONKey (..), FromJSONKeyFunction (..))
 import Data.Aeson
@@ -52,6 +54,20 @@ import qualified Text.Read
 import Data.Data
 
 
+-- COLOR
+cColor :: SGR -> String -> String
+cColor sgr str =
+  let
+    c = setSGRCode [sgr]
+    r = setSGRCode []
+  in c ++ str ++ r
+
+cKeyword :: String -> String
+cKeyword = cColor (SetColor Foreground Vivid Magenta)
+
+cVar :: String -> String
+cVar = cColor (SetColor Foreground Vivid Yellow)
+
 {-# SPECIALIZE num :: Word8 -> W256 #-}
 num :: (Integral a, Num b) => a -> b
 num = fromIntegral
@@ -62,17 +78,16 @@ data Word = C Whiff W256 --maybe to remove completely in the future
 data Sniff
   = Oops String
   | Slice Whiff Whiff Sniff          -- offset size buffer
-  | FromWord Whiff
   | Write Sniff Word Word Word Sniff
-  | WriteWord Word Whiff Sniff
-  | Calldata
+  | WriteWord Whiff Whiff Sniff
+  | Calldata -- TODO remove
   | SEmpty
+  deriving Eq
 
 instance Show Sniff where
   show = \case
     Oops s -> "Oops " ++ (show s)
     Slice w w' s -> "[ " ++ show w ++ ".." ++ show w' ++ " ]" ++ show s
-    FromWord w -> d ["fromWord", show w]
     Write s w1 w2 w3 s2 -> d ["write", show s, show w1, show w2, show w3, show s2]
     WriteWord w w2 s ->  "[" ++ show w ++ " <- " ++ show w2 ++ "]" ++ show s
     Calldata -> "CALLDATA"
@@ -88,6 +103,7 @@ instance Show Sniff where
 data Buffer
   = ConcreteBuffer Sniff ByteString
   | SymbolicBuffer Sniff [SWord 8]
+  deriving Eq
 
 newtype W256 = W256 Word256
   deriving
@@ -279,25 +295,27 @@ data Whiff =
   | Sgn  Whiff          -- signum
   | Cmp  Whiff          -- complement
   | Sft  Whiff Whiff    -- shift left
-  | Sar  Whiff Whiff
+  | Sar  Whiff Whiff    -- shift right
   | Rot  Whiff Int      -- rotate
   | Bit  Whiff
   | FromKeccak Sniff
-  | FromBuffer Whiff Buffer
+  -- | FromBuffer Whiff Buffer
   | FromBuff Whiff Sniff
   | FromStorage Whiff
+  | Pointer1 String Whiff
   | Literal W256
   | IsZero Whiff
   | NonZero Whiff
   | Envv Whiff
-  | Var String
+  | Var String Int
+  deriving Eq
 
 instance Show Whiff where
   show = \case
     -- booleans
     Dull s -> "<symbolic " ++ s ++ " >"
     FromKeccak a -> "keccak(" ++ show a ++ ")"
-    FromBuffer at' w -> show w ++ "[" ++ show at' ++ "]"
+    -- FromBuffer at' w -> show w ++ "[" ++ show at' ++ "]"
     IsZero w -> "isZero( " ++ show w ++ " )"
     NonZero w -> "nonZero( " ++ show w ++ " )"
     Bit a  -> "bit " ++ (show a)
@@ -329,8 +347,10 @@ instance Show Whiff where
     Sar a i -> print2 ">sar>" a (show i)
     Sft a i -> print2 "<<" a (show i)
     Rot a i -> "rot(" ++ (show a) ++ ", " ++ show i ++ ")"
-    FromStorage a -> "FromStorage " ++ (show a)
-    Var a -> a
+    FromStorage a -> "&" ++ (show a)
+    Pointer1 name a -> "*" ++ (cVar name) ++ "[" ++ (show a) ++ "]"
+    FromBuff w s -> "[" ++ (show w) ++ "]" ++ (show s)
+    Var a i -> a ++ ":" ++ show i
    where
      print2 sym a b = printf ("( %s " ++ sym ++ " %s )") (show a) (show b)
 

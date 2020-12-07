@@ -1,9 +1,11 @@
 {-# Language DataKinds #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# Language TemplateHaskell #-}
+{-# LANGUAGE ImplicitParams #-}
 module EVM.Format where
 
-import Prelude hiding (Word)
+import System.Console.ANSI hiding (Dull)
+import Prelude hiding (Word, GT, LT)
 import Numeric
 import qualified EVM
 import EVM.Dapp (DappInfo (..), dappSolcByHash, dappAbiMap, showTraceLocation, dappEventMap)
@@ -16,9 +18,10 @@ import EVM.Types (maybeLitWord, Word (..), Whiff(..), SymWord(..), W256 (..), nu
 import EVM.ABI (AbiValue (..), Event (..), AbiType (..))
 import EVM.ABI (Indexed (NotIndexed), getAbiSeq, getAbi)
 import EVM.ABI (parseTypeName)
-import EVM.Solidity (SolcContract(..), contractName, abiMap)
+import EVM.Solidity (methodName, methodInputs, Method, SolcContract(..), contractName, abiMap, StorageItem(..))
 import EVM.Solidity (methodOutput, methodSignature, methodName)
 
+import Control.Monad (join)
 import Control.Arrow ((>>>))
 import Control.Lens (view, preview, ix, _2, to, _Just, makeLenses, over, each, (^?!))
 import Data.Binary.Get (runGetOrFail)
@@ -35,6 +38,8 @@ import Data.Text.Encoding (decodeUtf8, decodeUtf8')
 import Data.Tree (Tree (Node))
 import Data.Tree.View (showTree)
 import Data.Vector (Vector, fromList)
+
+import Debug.Trace
 
 import qualified Data.ByteString as BS
 import qualified Data.Char as Char
@@ -343,6 +348,24 @@ currentSolc dapp vm =
   in
     preview (dappSolcByHash . ix h . _2) dapp
 
+-- COLOR
+cColor :: SGR -> String -> String
+cColor sgr str =
+  let
+    c = setSGRCode [sgr]
+    r = setSGRCode []
+  in c ++ str ++ r
+
+cKeyword :: String -> String
+cKeyword = cColor (SetColor Foreground Vivid Magenta)
+
+cVar :: String -> String
+cVar = cColor (SetColor Foreground Vivid Yellow)
+
+cParam :: String -> String
+cParam = cColor (SetColor Foreground Vivid Green)
+
+
 -- TODO: display in an 'act' format
 -- TreeLine describes a singe line of the tree
 -- it contains the indentation which is prefixed to it
@@ -399,30 +422,61 @@ showTree' (Node _ children) =
 
 -- RENDER TREE
 
-showStorage :: [(SymWord, SymWord)] -> [String]
-showStorage = fmap (\(k, v) -> show k <> " => " <> show v)
+showStorage :: (?srcInfo :: DappInfo,
+                ?vm :: VM,
+                ?method :: Maybe Method)
+                => [(SymWord, SymWord)]
+                -> [String]
+showStorage = fmap (\(S w x, S v y) -> show (fixW w) <> " => " <> show (fixW v))
 
-showLeafInfo :: BranchInfo -> [String]
-showLeafInfo (BranchInfo vm _) = let
+showLeafInfo :: (?srcInfo :: DappInfo)
+                 => BranchInfo
+                 -> [String]
+showLeafInfo (BranchInfo vm _ m) = let
   self    = view (EVM.state . EVM.contract) vm
   updates = case view (EVM.env . EVM.contracts) vm ^?! ix self . EVM.storage of
     Symbolic v _ -> v
     Concrete x -> [(litWord k,v) | (k, v) <- Map.toList x]
   showResult = [prettyvmresult res | Just res <- [view result vm]]
   in showResult
-  ++ showStorage updates
+  ++ let
+    ?vm = vm
+    ?method = m
+    in showStorage updates
   ++ [""]
 
-showBranchInfoWithAbi :: DappInfo -> BranchInfo -> [String]
-showBranchInfoWithAbi _ (BranchInfo _ Nothing) = [""]
-showBranchInfoWithAbi srcInfo (BranchInfo vm (Just y)) =
-  case y of
-    (IsZero (Eq (Literal x) _)) ->
-      let
-        abimap = view abiMap <$> currentSolc srcInfo vm
-        method = abimap >>= Map.lookup (num x)
-      in [maybe (show x) (show . view methodSignature) method]
-    w -> [show w]
+showPlaneBranchInfo :: (?srcInfo :: DappInfo)
+                    => BranchInfo
+                    -> [String]
+showPlaneBranchInfo (BranchInfo vm Nothing m)  = [""]
+showPlaneBranchInfo (BranchInfo vm (Just w) m) = [show w]
+
+showBranchInfoWithAbi :: (?srcInfo :: DappInfo)
+                 => BranchInfo
+                 -> [String]
+showBranchInfoWithAbi (BranchInfo _ Nothing _) = [""]
+showBranchInfoWithAbi (BranchInfo vm (Just w) Nothing) =
+  let
+    ?vm = vm
+    ?method = Nothing
+    in [(show (fixW w))]
+showBranchInfoWithAbi (BranchInfo vm (Just (IsZero (IsZero (Eq (Literal x) _)))) (Just m)) =
+  let
+    abimap = view abiMap <$> currentSolc ?srcInfo vm
+    method = abimap >>= Map.lookup (num x)
+    mname  = (unpack . view methodName) <$> method
+    formatInput = \(name, t) -> ((cParam (unpack name)) ++ " " ++ (show t))
+    minputs = ((<$>) (pack .formatInput)) <$> (view methodInputs) <$> method
+    str = unpack <$> (intercalate (pack ", ")) <$> minputs
+    interface = ((<>) (cKeyword "interface ")) <$> mname
+    sround = (\str -> "("++str++")") <$> str
+    maybeinterface = (fromMaybe "" interface) ++ (fromMaybe "" sround)
+  in [maybeinterface]
+showBranchInfoWithAbi (BranchInfo vm (Just w) (Just m)) =
+  let
+    ?vm = vm
+    ?method = Just m
+    in [(show (fixW w))]
 
 renderTree :: (a -> [String])
            -> (a -> [String])
@@ -430,3 +484,124 @@ renderTree :: (a -> [String])
            -> Tree [String]
 renderTree showBranch showLeaf (Node b []) = Node (showBranch b ++ showLeaf b) []
 renderTree showBranch showLeaf (Node b cs) = Node (showBranch b) (renderTree showBranch showLeaf <$> cs)
+
+
+
+
+
+simpS :: (?srcInfo :: DappInfo,
+          ?vm :: VM,
+          ?method :: Maybe Method)
+          => Sniff
+          -> Sniff
+simpS r@(Slice (Literal from) (Literal to) (WriteWord (Literal x) w s))
+  | from == x && to == x + 0x20 = WriteWord (Literal from) (simpW w) SEmpty
+  | from == x && x + 0x20 < to  = (WriteWord (Literal x) (simpW w) (simpS (Slice (Literal (from + 0x20)) (Literal to) s)))
+  | from <= x && x + 0x20 == to = (WriteWord (Literal x) (simpW w) (simpS (Slice (Literal from) (Literal (to - 0x20)) s)))
+  | otherwise = Oops (show (x - from))
+simpS Calldata = Calldata
+simpS x = Oops ("simpS" <> show x)
+
+simpW :: (?srcInfo :: DappInfo,
+          ?vm :: VM,
+          ?method :: Maybe Method)
+          => Whiff
+          -> Whiff
+simpW (IsZero (IsZero (IsZero a)))  = simpW (IsZero a)
+simpW (IsZero (IsZero a@(GT x y)))  = simpW a
+simpW (IsZero (IsZero a@(LT x y)))  = simpW a
+simpW (IsZero (IsZero a@(Eq x y)))  = simpW a
+simpW (IsZero (IsZero a@(SLT x y))) = simpW a
+simpW (IsZero (IsZero a@(SGT x y))) = simpW a
+simpW (IsZero (IsZero a@(LEQ x y))) = simpW a
+simpW (IsZero (IsZero a@(GEQ x y))) = simpW a
+simpW (IsZero (Eq x y))             = simpW (NEq x y)
+simpW (IsZero (NEq x y))            = simpW (Eq x y)
+simpW (IsZero (LT x y))             = simpW (GEQ x y)
+simpW (IsZero (GT x y))             = simpW (LEQ x y)
+simpW (IsZero (LEQ x y))            = simpW (GT x y)
+simpW (IsZero (GEQ x y))            = simpW (LT x y)
+simpW (IsZero (Var x a))            = simpW (Eq (Var x a) (Literal 0))
+simpW (IsZero x)                    = IsZero $ simpW x
+simpW (GT x y)                      = GT (simpW x) (simpW y)
+simpW (LT x y)                      = LT (simpW x) (simpW y)
+simpW (GEQ x y)                     = GEQ (simpW x) (simpW y)
+simpW (LEQ x y)                     = LEQ (simpW x) (simpW y)
+simpW (SGT x y)                     = GT (simpW x) (simpW y)
+simpW (SLT x y)                     = LT (simpW x) (simpW y)
+simpW (Eq x y)                      = Eq (simpW x) (simpW y)
+simpW (NEq x y)                     = NEq (simpW x) (simpW y)
+simpW (Pointer1 str x)              = Pointer1 str (simpW x)
+simpW (FromStorage x)               = FromStorage (simpW x)
+-- symbolic storage lookup
+simpW (FromKeccak
+        s@(WriteWord
+          (Literal x)
+          (Literal y)
+          (WriteWord
+            (Literal z)
+            word
+            SEmpty)))
+  | x == 0x20 && z == 0x0 = showStorageSlot storagelist (num y) word
+  | otherwise             = FromKeccak $ simpS s
+  where
+    storagelist = Map.toList $ fromMaybe mempty (fromMaybe Nothing (_storageLayout <$> currentSolc ?srcInfo ?vm))
+simpW (FromKeccak s)                = FromKeccak $ simpS s
+simpW (And (Literal x) (And (Literal x') y))
+  | x == x'                         = simpW (And (Literal x) y)
+  | otherwise                       = (And (Literal x) (simpW (And (Literal x') y)))
+simpW (And (Literal x) (Var str i))
+  | x == 2^i - 1            = (Var str i)
+  | (2 ^ (floor (logBase 2.0 ((num x) + 1.0)))) == (num x) + 1  = (Var str (floor (logBase 2.0 ((num x) + 1.0))))
+  | otherwise               = (And (Literal x) (Var str i))
+
+simpW (And x y)                     = And (simpW x) (simpW y)
+simpW (Add (Literal x) (Literal y)) = (Literal (x+y))
+simpW (Add x (Sub (Literal a) y))
+  | a == 0x0  = (Sub (simpW x) (simpW y))
+  | otherwise = (Add (simpW x) (Sub (Literal a) (simpW y)))
+simpW (Add x y) = (Add (simpW x) (simpW y))
+simpW (Sub (Literal x) (Literal y)) = (Literal (x-y))
+simpW (Sub x y) = (Sub (simpW x) (simpW y))
+simpW (Mul x y)                     = Mul (simpW x) (simpW y)
+simpW (Div x y)                     = Div (simpW x) (simpW y)
+simpW (FromBuff (Literal x) Calldata) =
+  let
+    input = fromMaybe [] $ view methodInputs <$> ?method
+    index = num (((toInteger x) - 4) `div` 32)
+  in if length input > index then Var (cParam $ unpack $ fst (input !! index)) 256 else Dull ("sad" ++ (show index))
+simpW (FromBuff w s) = FromBuff (simpW w) (simpS s)
+simpW x = x
+
+fixW :: (?srcInfo :: DappInfo,
+         ?vm :: VM,
+         ?method :: Maybe Method)
+         => Whiff
+         -> Whiff
+fixW w = let w' = simpW w
+         in if w == w' then w else fixW w'
+
+
+showStorageSlot :: [(Text, StorageItem)] -> Int -> Whiff -> Whiff
+showStorageSlot []      slot w = w
+showStorageSlot ((text, StorageItem t o s):xs) slot w
+  | s == slot   = Pointer1 (unpack text) w
+
+
+
+
+propagateMethod :: Method -> Tree BranchInfo -> Tree BranchInfo
+propagateMethod m (Node (BranchInfo vm whiff _) cs) = (Node (BranchInfo vm whiff (Just m)) (propagateMethod m <$> cs))
+
+propagateData :: (?srcInfo :: DappInfo) => Int -> Tree BranchInfo -> Tree BranchInfo
+propagateData _ n@(Node _ [])    = n
+propagateData _ (Node bi@(BranchInfo _ Nothing _) cs) = (Node bi (zipWith propagateData [0..] cs))
+propagateData 1 n@(Node bi@(BranchInfo vm (Just (IsZero (IsZero (Eq (Literal x) _)))) _) cs) =
+  let
+    abimap = view abiMap <$> currentSolc ?srcInfo vm
+    mmethod = (abimap >>= Map.lookup (num x))
+    mmm = mmethod
+  in case mmm of
+    Nothing -> (Node bi (zipWith propagateData [0..] cs))
+    Just method -> propagateMethod method n
+propagateData _ (Node bi cs) = (Node bi (zipWith propagateData [0..] cs))

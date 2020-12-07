@@ -85,15 +85,7 @@ sgt (S v x) (S w y) =
   iteWhiff (SGT v w) (sFromIntegral x .> (sFromIntegral y :: (SInt 256)))
 
 shiftRight' :: SymWord -> SymWord -> SymWord
-shiftRight' (S _ a') b@(S _ b') = case (num <$> unliteral a', b) of
-  (Just n, (S (FromBuffer index (SymbolicBuffer w a)) _)) | n `mod` 8 == 0 && n <= 256 ->
-    let
-      off = n `div` 8
-      bs = replicate off 0 <> take ((256 - n) `div` 8) a
-    in S
-      (FromBuffer index (SymbolicBuffer (Slice (Literal 0) (Literal $ num off) w) bs))
-      (fromBytes bs)
-  _ -> S (Dull "shiftRight") $ sShiftRight b' a'
+shiftRight' (S w a') (S u b') = S (Sar w u) $ sShiftRight b' a'
 
 -- | Operations over symbolic memory (list of symbolic bytes)
 readByteOrZero' :: Int -> [SWord 8] -> SWord 8
@@ -136,11 +128,11 @@ readSWordWithBound :: SymWord -> Buffer -> SWord 256 -> SymWord
 readSWordWithBound sind@(S whiff ind) (SymbolicBuffer w xs) bound = case (num <$> maybeLitWord sind, num <$> fromSizzle <$> unliteral bound) of
   (Just i, Just b) ->
     let bs = truncpad 32 $ drop i (take b xs)
-    in S (FromBuffer whiff (SymbolicBuffer w bs)) (fromBytes bs)
+    in S (FromBuff whiff w) (fromBytes bs)
   _ ->
     let boundedList = [ite (i .<= bound) x 0 | (x, i) <- zip xs [1..]]
         res = [select' boundedList 0 (ind + j) | j <- [0..31]]
-    in S (FromBuffer whiff (SymbolicBuffer w res)) $ fromBytes $ res
+    in S (FromBuff whiff w) $ fromBytes res
 
 readSWordWithBound sind (ConcreteBuffer w xs) bound =
   case maybeLitWord sind of
@@ -184,7 +176,7 @@ writeMemory (SymbolicBuffer w bs1) n src dst (SymbolicBuffer w2 bs0) =
 
 
 readMemoryWord :: Word -> Buffer -> SymWord
-readMemoryWord (C wfrom i) buff@(SymbolicBuffer wbuff m) = S (FromBuffer wfrom buff) $ fromBytes $ truncpad 32 (drop (num i) m)
+readMemoryWord (C wfrom i) buff@(SymbolicBuffer wbuff m) = S (FromBuff wfrom wbuff) $ fromBytes $ truncpad 32 (drop (num i) m)
 -- TODO - propagate whiff
 readMemoryWord i (ConcreteBuffer _ m) = litWord $ Concrete.readMemoryWord i m
 
@@ -193,10 +185,10 @@ readMemoryWord32 (C wfrom i) (SymbolicBuffer wbuff m) = fromBytes $ truncpad 4 (
 readMemoryWord32 i (ConcreteBuffer wbuff m) = num $ Concrete.readMemoryWord32 i m
 
 setMemoryWord :: Word -> SymWord -> Buffer -> Buffer
-setMemoryWord i (S wword x) (SymbolicBuffer wbuff z) = SymbolicBuffer (WriteWord i wword wbuff) $ setMemoryWord' i (S wword x) z
-setMemoryWord i (S wword x) (ConcreteBuffer wbuff z) = case maybeLitWord (S wword x) of
-  Just x' -> ConcreteBuffer (WriteWord i wword wbuff) $ Concrete.setMemoryWord i x' z
-  Nothing -> SymbolicBuffer (WriteWord i wword wbuff) $ setMemoryWord' i (S wword x) (litBytes z)
+setMemoryWord i@(C _ l) (S wword x) (SymbolicBuffer wbuff z) = SymbolicBuffer (WriteWord (Literal l) wword wbuff) $ setMemoryWord' i (S wword x) z
+setMemoryWord i@(C _ l) (S wword x) (ConcreteBuffer wbuff z) = case maybeLitWord (S wword x) of
+  Just x' -> ConcreteBuffer (WriteWord (Literal l) wword wbuff) $ Concrete.setMemoryWord i x' z
+  Nothing -> SymbolicBuffer (WriteWord (Literal l) wword wbuff) $ setMemoryWord' i (S wword x) (litBytes z)
 
 setMemoryByte :: Word -> SWord 8 -> Buffer -> Buffer
 setMemoryByte i x (SymbolicBuffer wbuff m) = SymbolicBuffer (Oops "setMemoryByte") $ setMemoryByte' i x m

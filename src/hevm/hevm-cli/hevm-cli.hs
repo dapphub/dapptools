@@ -9,6 +9,7 @@
 {-# Language OverloadedStrings #-}
 {-# Language TypeOperators #-}
 {-# Language RecordWildCards #-}
+{-# LANGUAGE ImplicitParams #-}
 
 module Main where
 import Prelude hiding  (Word, LT)
@@ -24,6 +25,7 @@ import qualified EVM.Stepper
 import qualified EVM.TTY
 import qualified EVM.Emacs
 import EVM.Dev (concatMapM, interpretWithTrace)
+import qualified Debug.Trace as Tr
 
 #if MIN_VERSION_aeson(1, 0, 0)
 import qualified EVM.VMTest as VMTest
@@ -38,7 +40,7 @@ import EVM.UnitTest (UnitTestOptions, coverageReport, coverageForUnitTestContrac
 import EVM.UnitTest (runUnitTestContract)
 import EVM.UnitTest (getParametersFromEnvironmentVariables, testNumber)
 import EVM.Dapp (findUnitTests, dappInfo, DappInfo, emptyDapp)
-import EVM.Format (showTraceTree, showTree', renderTree, showBranchInfoWithAbi, showLeafInfo)
+import EVM.Format (propagateData, currentSolc, showTraceTree, showTree', renderTree, showBranchInfoWithAbi, showPlaneBranchInfo, showLeafInfo)
 import EVM.RLP (rlpdecode)
 import qualified EVM.Patricia as Patricia
 import Data.Map (Map)
@@ -470,15 +472,17 @@ assert cmd = do
   srcInfo <- getSrcInfo cmd
   let block'  = maybe EVM.Fetch.Latest EVM.Fetch.BlockNumber (block cmd)
       rpcinfo = (,) block' <$> rpc cmd
-      treeShowing :: Tree BranchInfo -> Query ()
-      treeShowing tree =
-        when (showTree cmd) $ do
+      treeShowing :: EVM.VM -> Tree BranchInfo -> Query ()
+      treeShowing vm tree =
+         when (showTree cmd) $ do
           consistentTree tree >>= \case
             Nothing -> io $ putStrLn "No consistent paths" -- unlikely
             Just tree' -> let
-              showBranch = showBranchInfoWithAbi srcInfo
-              renderTree' = renderTree showBranch showLeafInfo
-              in io $ setLocaleEncoding utf8 >> putStrLn (showTree' (renderTree' tree'))
+              ?srcInfo = srcInfo
+              in let
+                renderTree' = renderTree showBranchInfoWithAbi showLeafInfo
+                tree'' = propagateData 0 tree'
+                in io $ setLocaleEncoding utf8 >> putStrLn (showTree' (renderTree' tree''))
 
   maybesig <- case sig cmd of
     Nothing ->
@@ -505,12 +509,12 @@ assert cmd = do
         Right tree -> do
           io $ putStrLn "Assertion violation found."
           showCounterexample preState maybesig
-          treeShowing tree
+          treeShowing preState tree
           io $ exitWith (ExitFailure 1)
         Left tree -> do
           io $ putStrLn $ "Explored: " <> show (length tree)
                        <> " branches without assertion violations"
-          treeShowing tree
+          treeShowing preState tree
           let vmErrs = checkForVMErrors $ leaves tree
           unless (null vmErrs) $ io $ do
             putStrLn $
@@ -773,14 +777,14 @@ symvmFromCommand cmd = do
                                    )
 
   caller' <- maybe (SAddr <$> freshVar_) (return . litAddr) (caller cmd)
-  ts <- maybe (S (Var "Timestamp") <$> freshVar_) (return . w256lit) (timestamp cmd)
-  callvalue' <- maybe ((S (Var "CallValue")) <$> freshVar_) (return . w256lit) (value cmd)
+  ts <- maybe (S (Var "Timestamp" 256) <$> freshVar_) (return . w256lit) (timestamp cmd)
+  callvalue' <- maybe ((S (Var "CallValue" 256)) <$> freshVar_) (return . w256lit) (value cmd)
   (calldata', cdlen, pathCond) <- case (calldata cmd, sig cmd) of
     -- fully abstract calldata (up to 256 bytes)
     (Nothing, Nothing) -> do
       cd <- sbytes256
       len' <- freshVar_
-      return (SymbolicBuffer Calldata cd, len', (len' .<= 256, LT (Var "len") (Literal (fromInteger 256))))
+      return (SymbolicBuffer Calldata cd, len', (len' .<= 256, LT (Var "len" 256) (Literal (fromInteger 256))))
     -- fully concrete calldata
     (Just c, Nothing) ->
       let cd = ConcreteBuffer (Oops "clicalldata3") $ decipher c

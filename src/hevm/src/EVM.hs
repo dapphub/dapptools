@@ -42,6 +42,7 @@ import Data.Sequence                (Seq)
 import Data.Vector.Storable         (Vector)
 import Data.Foldable                (toList)
 
+import Data.List
 import Data.Tree
 
 import qualified Data.ByteString      as BS
@@ -743,7 +744,7 @@ exec1 = do
         -- op: CALLER
         0x33 ->
           limitStack 1 . burn g_base $
-            let toSymWord = (S (Var "Caller")) . sFromIntegral . saddressWord160
+            let toSymWord = (S (Var "Caller" 160)) . sFromIntegral . saddressWord160
             in next >> pushSym (toSymWord (the state caller))
 
         -- op: CALLVALUE
@@ -758,7 +759,7 @@ exec1 = do
         -- op: CALLDATASIZE
         0x36 ->
           limitStack 1 . burn g_base $
-            next >> pushSym ((S (Var "Calldatasize")) . snd $ (the state calldata))
+            next >> pushSym ((S (Var "Calldatasize" 256)) . snd $ (the state calldata))
 
         -- op: CALLDATACOPY
         0x37 ->
@@ -1600,7 +1601,12 @@ fetchAccount addr continue =
         else continue c
 
 readStorage :: Storage -> SymWord -> Maybe (SymWord)
-readStorage (Symbolic _ s) (S w loc) = Just $ S (FromStorage w) $ readArray s loc
+readStorage (Symbolic ss s) (S w loc) = let
+  val = snd <$> find (\(S ww _, _) -> ww == w) ss
+  whiff = case val of
+    Nothing       -> FromStorage w
+    Just (S ww _) -> ww
+  in Just $ S whiff $ readArray s loc
 readStorage (Concrete s) loc = Map.lookup (forceLit loc) s
 
 writeStorage :: SymWord -> SymWord -> Storage -> Storage
