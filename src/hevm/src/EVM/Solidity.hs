@@ -30,7 +30,6 @@ module EVM.Solidity
   , readSolc
   , readJSON
   , runtimeCode
-  , snippetCache
   , runtimeCodehash
   , creationCodehash
   , runtimeSrcmap
@@ -51,6 +50,7 @@ import EVM.ABI
 import EVM.Types
 
 import Control.Applicative
+import Control.Monad
 import Control.Lens         hiding (Indexed)
 import Data.Aeson           (Value (..))
 import Data.Aeson.Lens
@@ -99,19 +99,15 @@ data SlotType
 
 instance Show SlotType where
  show (StorageValue t) = show t
- show (StorageMapping (s NonEmpty.:| ss) t) =
-      "mapping("
-        <> show s
-        <> " => "
-        <> foldr
-             (\x y ->
-               "mapping("
-                 <> show x
-                 <> " => "
-                 <> y
-                 <> ")")
-             (show t) ss
-        <> ")"
+ show (StorageMapping s t) =
+   foldr
+   (\x y ->
+       "mapping("
+       <> show x
+       <> " => "
+       <> y
+       <> ")")
+   (show t) s
 
 instance Read SlotType where
   readsPrec _ ('m':'a':'p':'p':'i':'n':'g':'(':s) =
@@ -145,8 +141,7 @@ data Method = Method
   } deriving (Show, Eq, Ord, Generic)
 
 data SourceCache = SourceCache
-  { _snippetCache :: Map (Int, Int) ByteString
-  , _sourceFiles  :: Map Int (Text, ByteString)
+  { _sourceFiles  :: Map Int (Text, ByteString)
   , _sourceLines  :: Map Int (Vector ByteString)
   , _sourceAsts   :: Map Text Value
   } deriving (Show, Eq, Generic)
@@ -155,7 +150,7 @@ instance Semigroup SourceCache where
   _ <> _ = error "lol"
 
 instance Monoid SourceCache where
-  mempty = SourceCache mempty mempty mempty mempty
+  mempty = SourceCache mempty mempty mempty
 
 data JumpType = JumpInto | JumpFrom | JumpRegular
   deriving (Show, Eq, Ord, Generic)
@@ -236,8 +231,7 @@ makeSourceCache :: [Text] -> Map Text Value -> IO SourceCache
 makeSourceCache paths asts = do
   xs <- mapM (BS.readFile . Text.unpack) paths
   return $! SourceCache
-    { _snippetCache = mempty
-    , _sourceFiles =
+    { _sourceFiles =
         Map.fromList (zip [0..] (zip paths xs))
     , _sourceLines =
         Map.fromList (zip [0 .. length paths - 1]
@@ -291,16 +285,17 @@ force :: String -> Maybe a -> a
 force s = fromMaybe (error s)
 
 readJSON :: Text -> Maybe (Map Text SolcContract, Map Text Value, [Text])
-readJSON json = do
-  contracts <-
-    f <$> (json ^? key "contracts" . _Object)
-      <*> (fmap (fmap (^. _String)) $ json ^? key "sourceList" . _Array)
+readJSON json = readCombinedJSON json <|> readStdJSON json
+
+readCombinedJSON :: Text -> Maybe (Map Text SolcContract, Map Text Value, [Text])
+readCombinedJSON json = do
+  contracts <- f <$> (json ^? key "contracts" . _Object)
   sources <- toList . fmap (view _String) <$> json ^? key "sourceList" . _Array
   return (contracts, Map.fromList (HMap.toList asts), sources)
   where
     asts = fromMaybe (error "JSON lacks abstract syntax trees.") (json ^? key "sources" . _Object)
-    f x y = Map.fromList . map (g y) . HMap.toList $ x
-    g _ (s, x) =
+    f x = Map.fromList . map g . HMap.toList $ x
+    g (s, x) =
       let
         theRuntimeCode = toCode (x ^?! key "bin-runtime" . _String)
         theCreationCode = toCode (x ^?! key "bin" . _String)
@@ -315,8 +310,7 @@ readJSON json = do
         _creationSrcmap   = force "internal error: srcmap" (makeSrcMaps (x ^?! key "srcmap" . _String)),
         _contractName = s,
         _contractAst =
-          fromMaybe
-            (error "JSON lacks abstract syntax trees.")
+          force "JSON lacks abstract syntax trees."
             (preview (ix (head (Text.split (== ':') s)) . key "AST") asts),
 
         _constructorInputs =
@@ -366,20 +360,29 @@ readJSON json = do
          _storageLayout = mkStorageLayout $ x ^? key "storage-layout" . _String
       })
 
+readStdJSON :: Text -> Maybe (Map Text SolcContract, Map Text Value, [Text])
+readStdJSON json = do
+  contracts <- f <$> (json ^? key "contracts" . _Object)
+  sources <- json ^? key "sources" . _Object
+  let asts = force "JSON lacks abstract syntax trees." . preview (key "ast") <$> sources
+  return (contracts, Map.fromList (HMap.toList asts), HMap.keys sources)
+  where
+ --force "JSON lacks abstract syntax trees." $ json ^? key "sources" . _Object
+    f x = Map.fromList . map g . HMap.toList $ x
+    g (s, x) = _
+
 mkStorageLayout :: Maybe Text -> Maybe (Map Text StorageItem)
 mkStorageLayout Nothing = Nothing
-mkStorageLayout (Just json) = do items <- json ^? key "storage" . _Array
-                                 types <- json ^? key "types"
-                                 Map.fromList <$> mapM
-                                    (\item -> do name <- item ^? key "label" . _String
-                                                 offset <- item ^? key "offset" . _Number >>= toBoundedInteger
-                                                 slot <- item ^? key "slot" . _String
-                                                 typ <- item ^? key "type" . _String
-                                                 slotType <- types ^?! key typ ^? key "label" . _String
-                                                 return (name, StorageItem (read $ Text.unpack slotType) offset (read $ Text.unpack slot))
-
-                                    )
-                                    (Vector.toList items)
+mkStorageLayout (Just json) = do
+  items <- json ^? key "storage" . _Array
+  types <- json ^? key "types"
+  fmap Map.fromList $ (forM (Vector.toList items) $ \item ->
+    do name <- item ^? key "label" . _String
+       offset <- item ^? key "offset" . _Number >>= toBoundedInteger
+       slot <- item ^? key "slot" . _String
+       typ <- item ^? key "type" . _String
+       slotType <- types ^?! key typ ^? key "label" . _String
+       return (name, StorageItem (read $ Text.unpack slotType) offset (read $ Text.unpack slot)))
 
 signature :: AsValue s => s -> Text
 signature abi =
