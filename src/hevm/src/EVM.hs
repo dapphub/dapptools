@@ -85,6 +85,7 @@ data Error
   | UnexpectedSymbolicArg
   | DeadPath
   | NotUnique
+  | SMTTimeout
 deriving instance Show Error
 
 -- | The possible result states of a VM
