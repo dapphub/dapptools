@@ -560,7 +560,8 @@ symRun opts@UnitTestOptions{..} concreteVm testName types = do
               then Right ()
               else Left (vm', prettyCd)
           Unsat -> return $ Right ()
-          Unk -> return $ Left (vm', "SMT Timeout")
+          Unk -> let out = vm' & set result (Just (VMFailure SMTTimeout))
+                 in  return $ Left (out, "unknown")
           DSat _ -> error "Unexpected DSat"
 
     if null $ lefts results
@@ -577,8 +578,10 @@ symFailure UnitTestOptions {..} testName failures' = mconcat
   , intercalate "\n" $ indentLines 2 . mkMsg <$> failures'
   ]
   where
-    showRes vm = let Just res = view result vm
-                 in prettyvmresult res
+    showRes vm = let Just res = view result vm in
+                 case res of
+                   VMFailure _ -> prettyvmresult res
+                   VMSuccess _ -> "DSTest Assertion Violation"
     mkMsg (vm, cd) = pack $ unlines
       ["Counter Example:"
       ,""
