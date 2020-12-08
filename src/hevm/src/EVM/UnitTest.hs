@@ -528,11 +528,7 @@ symRun opts@UnitTestOptions{..} concreteVm testName types = do
 
     -- get all posible postVMs for the test method
     allPaths <- fst <$> runStateT
-        (EVM.SymExec.interpret
-          (EVM.Fetch.oracle smtState Nothing False)
-          maxIter
-          (execSymTest opts testName cd))
-        vm
+        (EVM.SymExec.interpret oracle maxIter (execSymTest opts testName cd)) vm
     results <- forM allPaths $
       -- If the vm execution succeeded, check if the vm is reachable,
       -- and if any ds-test assertions were triggered
