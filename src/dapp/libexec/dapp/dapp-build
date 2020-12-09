@@ -51,8 +51,9 @@ SOLC=${DAPP_SOLC:-solc}
 if [[ ! "$DAPP_BUILD_LEGACY" = 1 ]]; then
     dapp mk-standard-json | "$SOLC" --standard-json  --allow-paths . > "$DAPP_JSON"
     # pipe errors to stderr
-    jq -r '.errors | map(."formattedMessage") | @sh' "$DAPP_JSON" 1>&2
-
+    jq -r '.errors | map(."formattedMessage") | @sh' "$DAPP_JSON" | sed -e "s/' //g" -e "s/'//g" 1>&2
+    # if sources is empty, the compilation failed
+    [[ $(jq -r '.sources' "$DAPP_JSON") = "{}" ]] && exit 1 || exit 0
 else
     IFS=" " read -r -a opts <<<"$SOLC_FLAGS"
     json_opts=--combined-json=abi,bin,bin-runtime,srcmap,srcmap-runtime,ast,metadata
