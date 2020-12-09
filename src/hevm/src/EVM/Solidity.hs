@@ -29,12 +29,13 @@ module EVM.Solidity
   , makeSrcMaps
   , readSolc
   , readJSON
+  , readStdJSON
+  , readCombinedJSON
   , runtimeCode
   , runtimeCodehash
   , creationCodehash
   , runtimeSrcmap
   , creationSrcmap
-  , contractAst
   , sourceFiles
   , sourceLines
   , sourceAsts
@@ -61,6 +62,7 @@ import Data.Foldable
 import Data.Map.Strict      (Map)
 import Data.Maybe
 import Data.List.NonEmpty   (NonEmpty)
+import Data.List            (sort)
 import qualified Data.List.NonEmpty as NonEmpty
 import Data.Semigroup
 import Data.Sequence        (Seq)
@@ -130,7 +132,6 @@ data SolcContract = SolcContract
   , _storageLayout    :: Maybe (Map Text StorageItem)
   , _runtimeSrcmap    :: Seq SrcMap
   , _creationSrcmap   :: Seq SrcMap
-  , _contractAst      :: Value
   } deriving (Show, Eq, Generic)
 
 data Method = Method
@@ -285,7 +286,9 @@ force :: String -> Maybe a -> a
 force s = fromMaybe (error s)
 
 readJSON :: Text -> Maybe (Map Text SolcContract, Map Text Value, [Text])
-readJSON json = readCombinedJSON json <|> readStdJSON json
+readJSON json = case json ^? key "sourceList" of
+  Nothing -> readStdJSON json
+  _ -> readCombinedJSON json
 
 readCombinedJSON :: Text -> Maybe (Map Text SolcContract, Map Text Value, [Text])
 readCombinedJSON json = do
@@ -294,14 +297,14 @@ readCombinedJSON json = do
   return (contracts, Map.fromList (HMap.toList asts), sources)
   where
     asts = fromMaybe (error "JSON lacks abstract syntax trees.") (json ^? key "sources" . _Object)
-    f x = Map.fromList . map g . HMap.toList $ x
-    g (s, x) =
+    f x = Map.fromList . HMap.toList $ HMap.mapWithKey g x
+    g s x =
       let
         theRuntimeCode = toCode (x ^?! key "bin-runtime" . _String)
         theCreationCode = toCode (x ^?! key "bin" . _String)
         abis =
           toList ((x ^?! key "abi" . _String) ^?! _Array)
-      in (s, SolcContract {
+      in SolcContract {
         _runtimeCode      = theRuntimeCode,
         _creationCode     = theCreationCode,
         _runtimeCodehash  = keccak (stripBytecodeMetadata theRuntimeCode),
@@ -309,67 +312,89 @@ readCombinedJSON json = do
         _runtimeSrcmap    = force "internal error: srcmap-runtime" (makeSrcMaps (x ^?! key "srcmap-runtime" . _String)),
         _creationSrcmap   = force "internal error: srcmap" (makeSrcMaps (x ^?! key "srcmap" . _String)),
         _contractName = s,
-        _contractAst =
-          force "JSON lacks abstract syntax trees."
-            (preview (ix (head (Text.split (== ':') s)) . key "AST") asts),
-
-        _constructorInputs =
-          let
-            isConstructor y =
-              "constructor" == y ^?! key "type" . _String
-          in
-            case filter isConstructor abis of
-              [abi] -> map parseMethodInput (toList (abi ^?! key "inputs" . _Array))
-              [] -> [] -- default constructor has zero inputs
-              _  -> error "strange: contract has multiple constructors",
-
-        _abiMap       = Map.fromList $
-          let
-            relevant =
-              filter (\y -> "function" == y ^?! key "type" . _String) abis
-          in flip map relevant $
-            \abi -> (
-              abiKeccak (encodeUtf8 (signature abi)),
-              Method
-                { _methodName = abi ^?! key "name" . _String
-                , _methodSignature = signature abi
-                , _methodInputs =
-                    map parseMethodInput
-                      (toList (abi ^?! key "inputs" . _Array))
-                , _methodOutput =
-                    map parseMethodInput
-                      (toList (abi ^?! key "outputs" . _Array))
-                }
-            ),
-        _eventMap     = Map.fromList $
-          flip map (filter (\y -> "event" == y ^?! key "type" . _String)
-                     . toList $ (x ^?! key "abi" . _String) ^?! _Array) $
-            \abi ->
-              ( keccak (encodeUtf8 (signature abi))
-              , Event
-                  (abi ^?! key "name" . _String)
-                  (case abi ^?! key "anonymous" . _Bool of
-                     True -> Anonymous
-                     False -> NotAnonymous)
-                  (map (\y -> ( force "internal error: type" (parseTypeName' y)
-                              , if y ^?! key "indexed" . _Bool
-                                then Indexed
-                                else NotIndexed ))
-                    (toList $ abi ^?! key "inputs" . _Array))
-              ),
-         _storageLayout = mkStorageLayout $ x ^? key "storage-layout" . _String
-      })
+        _constructorInputs = mkConstructor abis,
+        _abiMap       = mkAbiMap abis,
+        _eventMap     = mkEventMap abis,
+        _storageLayout = mkStorageLayout $ x ^? key "storage-layout" . _String
+      }
 
 readStdJSON :: Text -> Maybe (Map Text SolcContract, Map Text Value, [Text])
 readStdJSON json = do
-  contracts <- f <$> (json ^? key "contracts" . _Object)
+  contracts <- json ^? key "contracts" ._Object
   sources <- json ^? key "sources" . _Object
   let asts = force "JSON lacks abstract syntax trees." . preview (key "ast") <$> sources
-  return (contracts, Map.fromList (HMap.toList asts), HMap.keys sources)
+  return (f contracts, Map.fromList (HMap.toList asts), sort $ HMap.keys sources)
   where
- --force "JSON lacks abstract syntax trees." $ json ^? key "sources" . _Object
-    f x = Map.fromList . map g . HMap.toList $ x
-    g (s, x) = _
+    f :: (AsValue s) => HMap.HashMap Text s -> Map Text SolcContract
+    f x = Map.fromList . (concatMap g) . HMap.toList $ x
+    g (s, x) = h s <$> HMap.toList (view _Object x)
+    h s (c, x) = 
+      let
+        evmstuff = x ^?! key "evm"
+        runtime = evmstuff ^?! key "deployedBytecode"
+        creation =  evmstuff ^?! key "bytecode"
+        theRuntimeCode = toCode $ runtime ^?! key "object" . _String
+        theCreationCode = toCode $ creation ^?! key "object" . _String
+        abis = force ("abi key not found in " <> show x) $
+          toList <$> x ^? key "abi" . _Array
+      in (s <> ":" <> c, SolcContract {
+        _runtimeCode      = theRuntimeCode,
+        _creationCode     = theCreationCode,
+        _runtimeCodehash  = keccak (stripBytecodeMetadata theRuntimeCode),
+        _creationCodehash = keccak (stripBytecodeMetadata theCreationCode),
+        _runtimeSrcmap    = force "internal error: srcmap-runtime" (makeSrcMaps (runtime ^?! key "sourceMap" . _String)),
+        _creationSrcmap   = force "internal error: srcmap" (makeSrcMaps (creation ^?! key "sourceMap" . _String)),
+        _contractName = s <> ":" <> c,
+        _constructorInputs = mkConstructor abis,
+        _abiMap        = mkAbiMap abis,
+        _eventMap      = mkEventMap abis,
+        _storageLayout = mkStorageLayout $ x ^? key "storage-layout" . _String
+      })
+
+mkAbiMap :: [Value] -> Map Word32 Method
+mkAbiMap abis = Map.fromList $
+  let
+    relevant = filter (\y -> "function" == y ^?! key "type" . _String) abis
+    f abi =
+      (abiKeccak (encodeUtf8 (signature abi)),
+       Method { _methodName = abi ^?! key "name" . _String
+              , _methodSignature = signature abi
+              , _methodInputs = map parseMethodInput
+                 (toList (abi ^?! key "inputs" . _Array))
+              , _methodOutput = map parseMethodInput
+                 (toList (abi ^?! key "outputs" . _Array))
+              })
+  in f <$> relevant
+
+mkEventMap :: [Value] -> Map W256 Event
+mkEventMap abis = Map.fromList $
+  let
+    relevant = filter (\y -> "event" == y ^?! key "type" . _String) abis
+    f abi =
+     ( keccak (encodeUtf8 (signature abi))
+     , Event
+       (abi ^?! key "name" . _String)
+       (case abi ^?! key "anonymous" . _Bool of
+         True -> Anonymous
+         False -> NotAnonymous)
+       (map (\y -> ( force "internal error: type" (parseTypeName' y)
+     , if y ^?! key "indexed" . _Bool
+       then Indexed
+       else NotIndexed ))
+       (toList $ abi ^?! key "inputs" . _Array))
+     )
+  in f <$> relevant
+
+mkConstructor :: [Value] -> [(Text, AbiType)]
+mkConstructor abis =
+  let
+    isConstructor y =
+      "constructor" == y ^?! key "type" . _String
+  in
+    case filter isConstructor abis of
+      [abi] -> map parseMethodInput (toList (abi ^?! key "inputs" . _Array))
+      [] -> [] -- default constructor has zero inputs
+      _  -> error "strange: contract has multiple constructors"
 
 mkStorageLayout :: Maybe Text -> Maybe (Map Text StorageItem)
 mkStorageLayout Nothing = Nothing
@@ -481,15 +506,10 @@ astSrcMap astIds =
     tmp =
        Map.fromList
       . mapMaybe
-        (\v ->
-          case preview (key "src" . _String) v of
-            Just src ->
-              case map (readMaybe . Text.unpack) (Text.split (== ':') src) of
-                [Just i, Just n, Just f] ->
-                  Just ((i, n, f), v)
-                _ ->
-                  error "strange formatting of src field"
-            _ ->
-              Nothing)
+        (\v -> do
+          src <- preview (key "src" . _String) v
+          [i, n, f] <- mapM (readMaybe . Text.unpack) (Text.split (== ':') src)
+          return ((i, n, f), v)
+        )
       . Map.elems
       $ astIds

@@ -207,19 +207,21 @@ interpret fetcher maxIter =
         Stepper.Ask (EVM.PleaseChoosePath _ continue) -> do
           vm <- get
           case maxIterationsReached vm maxIter of
-            Nothing -> do push 1
-                          a <- interpret fetcher maxIter (Stepper.evm (continue True) >>= k)
-                          put vm
-                          pop 1
-                          push 1
-                          b <- interpret fetcher maxIter (Stepper.evm (continue False) >>= k)
-                          pop 1
-                          return $ a <> b
-            Just n -> interpret fetcher maxIter (Stepper.evm (continue (not n)) >>= k)
+            Nothing -> do
+              push 1
+              a <- interpret fetcher maxIter (Stepper.evm (continue True) >>= k)
+              put vm
+              pop 1
+              push 1
+              b <- interpret fetcher maxIter (Stepper.evm (continue False) >>= k)
+              pop 1
+              return $ a <> b
+            Just n ->
+              interpret fetcher maxIter (Stepper.evm (continue (not n)) >>= k)
         Stepper.Wait q -> do
-          let performQuery =
-                do m <- liftIO (fetcher q)
-                   interpret fetcher maxIter (Stepper.evm m >>= k)
+          let performQuery = do
+                m <- liftIO (fetcher q)
+                interpret fetcher maxIter (Stepper.evm m >>= k)
 
           case q of
             PleaseAskSMT _ _ continue -> do
