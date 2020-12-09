@@ -364,7 +364,6 @@ prettyvmresult (EVM.VMSuccess (ConcreteBuffer msg)) =
 prettyvmresult (EVM.VMSuccess (SymbolicBuffer msg)) =
   "Return: " <> show (length msg) <> " symbolic bytes"
 
-
 currentSolc :: DappInfo -> VM -> Maybe SolcContract
 currentSolc dapp vm =
   let

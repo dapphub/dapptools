@@ -865,14 +865,6 @@ currentSrcMap dapp vm =
       Just (Runtime, solc) ->
         preview (runtimeSrcmap . ix i) solc
 
-currentSolc :: DappInfo -> VM -> Maybe SolcContract
-currentSolc dapp vm =
-  let
-    Just this = currentContract vm
-    h = view codehash this
-  in
-    preview (dappSolcByHash . ix h . _2) dapp
-
 drawStackPane :: UiVmState -> UiWidget
 drawStackPane ui =
   let
@@ -995,6 +987,8 @@ drawSolidityPane ui =
         Just rows ->
           let
             subrange = lineSubrange rows (srcMapOffset sm, srcMapLength sm)
+            fileName :: Maybe Text
+            fileName = preview (dappSources . sourceFiles . ix (srcMapFile sm) . _1) dapp'
             lineNo =
               (snd . fromJust $
                 (srcMapCodePos
@@ -1002,8 +996,7 @@ drawSolidityPane ui =
                  sm)) - 1
           in vBox
             [ hBorderWithLabel $
-                txt (maybe "<unknown>" contractPathPart
-                      (preview (_Just . contractName) (currentSolc dapp' vm)))
+                txt (fromMaybe "<unknown>" fileName)
                   <+> str (":" ++ show lineNo)
 
                   -- Show the AST node type if present
