@@ -581,7 +581,9 @@ symFailure UnitTestOptions {..} testName failures' = mconcat
     showRes vm = let Just res = view result vm in
                  case res of
                    VMFailure _ -> prettyvmresult res
-                   VMSuccess _ -> "DSTest Assertion Violation"
+                   VMSuccess _ -> if "proveFail" `isPrefixOf` testName
+                                  then "Successful execution"
+                                  else "DSTest Assertion Violation"
     mkMsg (vm, cd) = pack $ unlines
       ["Counter Example:"
       ,""
