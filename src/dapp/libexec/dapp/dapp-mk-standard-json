@@ -5,14 +5,9 @@ import subprocess
 import os
 import re
 import fnmatch
+from pathlib import Path
 
-def exec(cmd) -> str:
-    out=subprocess.run(cmd, stdout=subprocess.PIPE)
-    return out.stdout.decode('utf-8').split('\n')[:-1]
-
-#template = open("../../resources/jsontemplate.json").read()
-
-template = open("/Users/martinlundfall/.dapp/dapptools/src/dapp/resources/jsontemplate.json").read()
+template = open(Path(__file__).parent / "../../resources/jsontemplate.json").read()
 
 # Remove comments from template
 tmpljson = json.loads(re.sub(r'//.*\n', '', template))
@@ -26,22 +21,41 @@ for root, dirnames, filenames in os.walk(src):
         files.append(os.path.join(root, filename))
 
 tmpljson["sources"]={}
-for file in files:
-    tmpljson["sources"][file]={}
-    tmpljson["sources"][file]["urls"] = [file]
+for f in files:
+    tmpljson["sources"][f]={}
+    tmpljson["sources"][f]["urls"] = [f]
 
-tmpljson["settings"]["remappings"]=exec(['dapp', 'remappings'])
+if os.getenv('DAPP_REMAPPINGS') is None:
+    tmpljson["settings"].pop("remappings", None)
+else:
+    tmpljson["settings"]["remappings"] = os.getenv('DAPP_REMAPPINGS').split('\n')
 
 tmpljson["settings"].pop('stopAfter', None)
-tmpljson["settings"].pop('optimizer', None) # TODO: activate by flag
+
+if os.getenv('DAPP_BUILD_OPTIMIZE') == 1:
+    tmpljson["settings"]["optimizer"]["enabled"] = True
+else:
+    tmpljson["settings"].pop('optimizer', None)
+
 tmpljson["settings"].pop('evmVersion', None)
 tmpljson["settings"].pop('viaIR', None)
 tmpljson["settings"].pop('debug', None)
 tmpljson["settings"].pop('metadata', None)
 
-# TODO: fix libraries
-tmpljson["settings"]["libraries"]={}
-#tmpljson["settings"]["libraries"]=exec(['dapp','--find-libraries'])
+# deal with libraries if present
+if os.getenv('DAPP_LIBRARIES') is None or os.getenv('DAPP_LIBRARIES') == "":
+    tmpljson["settings"].pop("libraries", None)
+else:
+    tmpljson["settings"]["libraries"].pop("myFile.sol", None)
+    tmpljson["settings"]["libraries"][""] = {}
+    sender=0x00a329c0648769a73afac7f9381e08fb43dbea72
+    nonce=48576
+    addresses=[]
+    for lib in os.getenv('DAPP_LIBRARIES')[1:].split(' '):
+        print(lib)
+        f,c,addr = lib.split(':')
+        tmpljson["settings"]["libraries"][""][f + ":" + c] = addr
+
 
 tmpljson["settings"]["outputSelection"]={}
 tmpljson["settings"]["outputSelection"]["*"]={}

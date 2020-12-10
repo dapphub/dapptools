@@ -2,13 +2,14 @@
 ### dapp-build -- compile the source code
 ### Usage: dapp build [--extract]
 ###
-###  --extract: After building, write the .abi, .bin and .bin-runtime
-###             files from the solc json into $DAPP_OUT. Beware of contract
-###             name collisions. This is provided for compatibility with older
-###             workflows.
-###  --legacy:  Compile using the `--combined-json` flag. Some options are
-###             missing from this format. This is provided for compatibility with older
-###             workflows.
+###  --extract:  After building, write the .abi, .bin and .bin-runtime
+###              files from the solc json into $DAPP_OUT. Beware of contract
+###              name collisions. This is provided for compatibility with older
+###              workflows.
+###  --optimize: activate the solidity optimizer.
+###  --legacy:   Compile using the `--combined-json` flag. Some options are
+###              missing from this format. This is provided for compatibility with older
+###              workflows.
 set -e
 
 while [[ $# -gt 0 ]]; do
@@ -16,6 +17,9 @@ while [[ $# -gt 0 ]]; do
   case $opt in
     --extract)
       DAPP_BUILD_EXTRACT=1
+      ;;
+    --optimize)
+      DAPP_BUILD_OPTIMIZE=1
       ;;
     --legacy)
       DAPP_BUILD_LEGACY=1
@@ -47,45 +51,58 @@ cd "$DAPP_ROOT"
 # use a custom path is DAPP_SOLC is set
 SOLC=${DAPP_SOLC:-solc}
 
+if [ "$DAPP_LINK_TEST_LIBRARIES" = 1 ]; then
+    sender=0x00a329c0648769a73afac7f9381e08fb43dbea72
+    nonce=48576
+    mapfile -t libraries < <(dapp --find-libraries)
+
+    if [[ ${#libraries[@]} -eq 0 ]]; then exit; fi
+
+    info "building with linked libraries"
+    for lib in "${libraries[@]}"; do
+        address=$(dapp address "$sender" "$nonce")
+        links+=" $lib:$address"
+        ((nonce++))
+    done
+else
+    (set -x; dapp clean)
+fi
+
+remappings=$(dapp remappings)
+
+export DAPP_LIBRARIES=${DAPP_LIBRARIES-"$links"}
+export DAPP_REMAPPINGS=${DAPP_REMAPPINGS-"$remappings"}
+export DAPP_BUILD_OPTIMIZE
+
+mkdir -p "$DAPP_OUT"
 
 if [[ ! "$DAPP_BUILD_LEGACY" = 1 ]]; then
-    dapp mk-standard-json | "$SOLC" --standard-json  --allow-paths . > "$DAPP_JSON"
+
+    if [[ "$DAPP_STANDARD_JSON" ]]; then
+        $<("$DAPP_STANDARD_JSON") | "$SOLC" --standard-json --allow-paths . > "$DAPP_JSON"
+    else
+        dapp mk-standard-json | "$SOLC" --standard-json --allow-paths . > "$DAPP_JSON"
+    fi
+
     # pipe errors to stderr
     jq -r '.errors | map(."formattedMessage") | @sh' "$DAPP_JSON" | sed -e "s/' //g" -e "s/'//g" 1>&2
     # if sources is empty, the compilation failed
     [[ $(jq -r '.sources' "$DAPP_JSON") = "{}" ]] && exit 1 || exit 0
+
 else
+
     IFS=" " read -r -a opts <<<"$SOLC_FLAGS"
     json_opts=--combined-json=abi,bin,bin-runtime,srcmap,srcmap-runtime,ast,metadata
 
     $SOLC --help | grep -q -- --storage-layout && json_opts+=,storage-layout
     $SOLC --help | grep -q -- --overwrite && opts+=(--overwrite)
 
-    remappings=$(dapp remappings)
+    opts+=(--libraries "$links")
+
     if [[ $remappings ]]; then
         while read -r line; do opts+=("$line"); done <<<"$remappings"
     fi
 
-    if [ "$DAPP_LINK_TEST_LIBRARIES" = 1 ]; then
-        DAPP_LINK_TEST_LIBRARIES=0 dapp build
-        sender=0x00a329c0648769a73afac7f9381e08fb43dbea72
-        nonce=48576
-        mapfile -t libraries < <(dapp --find-libraries)
-
-        if [[ ${#libraries[@]} -eq 0 ]]; then exit; fi
-
-        info "rebuilding with linked libraries"
-        for lib in "${libraries[@]}"; do
-            address=$(dapp address "$sender" "$nonce")
-            links+=" $lib:$address"
-            ((nonce++))
-        done
-        opts+=(--libraries "$links")
-    else
-        (set -x; dapp clean)
-    fi
-
-    mkdir -p "$DAPP_OUT"
     mapfile -t files < <(find "${DAPP_SRC}" -name '*.sol')
     (set -x; $SOLC "${opts[@]}" "${json_opts[@]}" /=/ "${files[@]}" > "${DAPP_JSON}")
 
