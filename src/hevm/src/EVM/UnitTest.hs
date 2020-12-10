@@ -585,7 +585,7 @@ symFailure UnitTestOptions {..} testName failures' = mconcat
                                   then "Successful execution"
                                   else "DSTest Assertion Violation"
     mkMsg (vm, cd) = pack $ unlines
-      ["Counter Example:"
+      ["Counterexample:"
       ,""
       ,"  result:   " <> showRes vm
       ,"  calldata: " <> unpack cd
