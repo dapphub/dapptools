@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 cat <<.
-seth 0.9.3
+seth 0.9.4
 Copyright (C) 2016-2020  Daniel Brockman <daniel@dapphub.com>
 License: GNU GPL version 3 or later <https://gnu.org/licenses/gpl>.
 This is free software: you are free to change and redistribute it.

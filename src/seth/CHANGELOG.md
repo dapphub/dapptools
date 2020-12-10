@@ -6,6 +6,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [0.9.4] - 2020-12-10
+
+### Added
+
+- `seth --use` can find solc versions in the nix store even if they are not present on `PATH`
+
+### Fixed
+
+- Correct help text for `seth --use`
+
 ## [0.9.3] - 2020-11-29
 
 - `seth --use` searches directly for binaries in your path, rather than
@@ -19,7 +29,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.9.1] - 2020-08-19
 
 ### Added
-- New commands: 
+- New commands:
   - `seth source <address>` fetches the contract source from etherscan
   - `seth bundle-source <address>` fetches contract source and compiles to combined json
   - `seth run-tx <tx-hash> [--debug, --source <file>, --state <repository>]`,
