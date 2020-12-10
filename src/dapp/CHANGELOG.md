@@ -6,6 +6,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [0.31.1] - 2020-12-10
+
+## Added
+
+- `dapp --use` can find solc versions in the nix store even if they are not present on `PATH`
+
+## Fixed
+
+- Corrected help text for solc version installation
+
 ## [0.31.0] - 2020-11-29
 
 ### Changed

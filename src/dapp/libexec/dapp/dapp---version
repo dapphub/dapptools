@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-echo dapp 0.31.0
+echo dapp 0.31.1
 # use a custom path is DAPP_SOLC is set
 SOLC=${DAPP_SOLC:-solc}
 $SOLC --version
