@@ -583,7 +583,7 @@ symFailure UnitTestOptions {..} testName failures' = mconcat
                    VMFailure _ -> prettyvmresult res
                    VMSuccess _ -> if "proveFail" `isPrefixOf` testName
                                   then "Successful execution"
-                                  else "DSTest Assertion Violation"
+                                  else "Failed: DSTest Assertion Violation"
     mkMsg (vm, cd) = pack $ unlines
       ["Counterexample:"
       ,""
