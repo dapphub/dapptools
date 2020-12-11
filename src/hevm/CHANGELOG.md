@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 0.43.2 - 2020-12-10
+
+### Changed
+
+- The default smttimeout has been increased from 20s to 30s
+
 ## 0.43.1 - 2020-12-10
 
 ### Changed
