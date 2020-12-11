@@ -15,7 +15,7 @@
 ###   --rpc-block <number>      block number (latest if not specified)
 ###
 ### SMT options:
-###   --smttimeout <number>     timeout passed to the smt solver in ms (default 20000)
+###   --smttimeout <number>     timeout passed to the smt solver in ms (default 30000)
 ###   --solver <string>         name of the smt solver to use (either "z3" or "cvc4")
 ###   --max-iterations <number> number of times we may revisit a particular branching point
 set -e
