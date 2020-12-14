@@ -6,6 +6,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## Changed
+
+- `dapp build`, `dapp test`, `dapp --make-library-state`, `dapp create` now use solidity output 
+generated via `--standard-json` instead of `--combined-json`. Building via the old format is
+still possible via `dapp build --legacy`, but is considered deprecated and will be removed in
+future releases.
+
+The standard json used by `dapp build` can be set using the environment variable:
+`DAPP_STANDARD_JSON`, and defaults to the result of `dapp mk-standard-json`.
+
+- `dapp --find-libraries` does no longer require `--extract`: libraries do not need to be
+build to be found.
+
+
+## Added
+- `dapp mk-standard-json` command to generate a standard json for setting Solidity compiler options.
+The settings can be tweaked using the following environment variables:
+   - `DAPP_REMAPPINGS`     (defaults to the result of `dapp remappings`)
+   - `DAPP_LIBRARIES`      (defaults to the result of `dapp --find-libraries`)
+   - `DAPP_BUILD_OPTIMIZE` (defaults to false)
+
+## Removed
+
+- `SOLC_FLAGS`. To modify the compiler settings, use a custom standard json and set 
+the filename as argument to `DAPP_STANDARD_JSON`.
+
+## Fixed
+
+- `dapp create <contract> --verify` now passes the qualified path to `dapp verify-contract`,
+as expected.
+
 ## [0.31.1] - 2020-12-10
 
 ## Added

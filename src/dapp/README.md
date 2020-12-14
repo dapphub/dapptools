@@ -43,7 +43,7 @@ These variables can be set at the prompt or in a `.dapprc` file.
 | `DAPP_SKIP_BUILD`          | n/a                        | Avoid compiling this time             |
 | `DAPP_LINK_TEST_LIBRARIES` | `1` when testing; else `0` | Compile with libraries                |
 | `DAPP_VERIFY_CONTRACT`     | `yes`                      | Attempt Etherscan verification        |
-| `SOLC_FLAGS`               | n/a                        | Compilation flags passed to `solc`    |
+
 
 A global (always loaded) config file is located in `~/.dapprc`.
 A local `.dapprc` can also be defined in your project's root, which overrides variables in the global config.
