@@ -26,10 +26,11 @@ state="$(dapp --make-cache "$state")"
 
 for lib in "${libraries[@]}"; do
   address=$(dapp address "$sender" "$nonce")
-  binpath=$(sed -E "s/.*:(.*)/$DAPP_OUT\\/\\1.bin/" <<<"$lib")
+  # shellcheck disable=SC2140
+  bin=$(jq -r ."contracts".\""${lib/:*/}"\"."${lib/*:/}".evm.bytecode.object "$DAPP_JSON")
   echo >&2 "dapp: Predeploying test library $lib at $address"
   mkdir -p "$state/$address"
-  hevm exec --address "$address" --code "$(cat "$binpath")" > /dev/null --gas 1000000000 --state "$state"
+  hevm exec --address "$address" --code "$bin" > /dev/null --gas 1000000000 --state "$state"
   ((nonce++))
 done
 

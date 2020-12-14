@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Added
+
+- `hevm` now accepts solidity json output built via `--standard-json` as well as `--combined-json`.
+
 ## 0.43.2 - 2020-12-10
 
 ### Changed
