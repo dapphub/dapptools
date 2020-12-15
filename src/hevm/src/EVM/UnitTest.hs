@@ -600,13 +600,10 @@ symFailure UnitTestOptions {..} testName failures' = mconcat
 prettyCalldata :: (Buffer, SWord 256) -> Text -> [AbiType]-> SBV.Query Text
 prettyCalldata (buffer, cdlen) sig types = do
   cdlen' <- num <$> SBV.getValue cdlen
-  calldatainput <- case buffer of
+  cd <- case buffer of
     SymbolicBuffer cd -> mapM (SBV.getValue . fromSized) (take cdlen' cd) <&> BS.pack
     ConcreteBuffer cd -> return $ BS.take cdlen' cd
-  pure $ (head (Text.splitOn "(" sig)) <>
-           (Text.pack $ show (decodeAbiValue
-                  (AbiTupleType (Vector.fromList types))
-                  (BSLazy.fromStrict (BS.drop 4 calldatainput))))
+  pure $ (head (Text.splitOn "(" sig)) <> showCall types (ConcreteBuffer cd)
 
 execSymTest :: UnitTestOptions -> ABIMethod -> (Buffer, SWord 256) -> Stepper (Bool, VM)
 execSymTest opts@UnitTestOptions{ .. } method cd = do
