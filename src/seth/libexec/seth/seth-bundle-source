@@ -41,7 +41,8 @@ esac
 OPT=$(echo "$SRC" | jq '.OptimizationUsed' | seth --show-json)
 if [[ "$OPT" -ne  0 ]]; then
     RUNS=$(echo "$SRC" | jq '.Runs')
-    export SOLC_FLAGS="--optimize optimize-runs=$RUNS"
+    export DAPP_SOLC_OPTIMIZE=true
+    export DAPP_SOLC_OPTIMIZE_RUNS=$RUNS
 fi
 
-seth --use solc:"${SOLC_VERSION}" combined-json "$DIR"/"$NAME".sol
+seth --use solc:"${SOLC_VERSION}" solc "$DIR"/"$NAME".sol

@@ -1,0 +1,33 @@
+#!/usr/bin/env bash
+### seth-solc -- compile a single file using a default --standard-json input
+### Usage: seth solc <source-file>
+###
+### Reads DAPP_SOLC_OPTIMIZE and DAPP_SOLC_OPTIMIZE_RUNS variables.
+###
+
+set -e
+
+SOLC=${DAPP_SOLC:-solc}
+OPTIMIZE=${DAPP_SOLC_OPTIMIZE:-false}
+RUNS=${DAPP_SOLC_OPTIMIZE_RUNS:-0}
+
+JSON="$(jq -n '{}
+  | .language = "Solidity"
+  | .sources[$src]["urls"] = [$src]
+  | .settings.outputSelection["*"]["*"]=[
+      "evm.bytecode",
+      "abi",
+      "storageLayout",
+      "evm.bytecode.sourceMap",
+      "evm.bytecode.linkReferences",
+      "evm.bytecode.generatedSources",
+      "evm.deployedBytecode.sourceMap",
+      "evm.deployedBytecode.linkReferences",
+      "evm.deployedBytecode.generatedSources"
+    ]
+  | .settings.outputSelection["*"][""] = ["ast"]
+  | .settings.optimizer.enabled = $optimize
+  | .settings.optimizer.runs = $runs
+  ' --arg src "$1" --argjson optimize "$OPTIMIZE" --argjson runs "$RUNS")"
+
+([[ $SETH_VERBOSE ]] && set -x; echo "$JSON" | $SOLC --standard-json --allow-paths "$(realpath $1)")
