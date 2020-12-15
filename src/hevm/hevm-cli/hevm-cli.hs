@@ -731,7 +731,7 @@ vmFromCommand cmd = do
         calldata' = ConcreteBuffer $ bytes calldata ""
         codeType = if create cmd then EVM.InitCode else EVM.RuntimeCode
         address' = if create cmd
-              then createAddress origin' (word nonce 0)
+              then addr address (createAddress origin' (word nonce 0))
               else addr address 0xacab
 
         vm0 miner ts blockNum diff c = EVM.makeVm $ EVM.VMOpts
@@ -837,7 +837,7 @@ symvmFromCommand cmd = do
     origin'  = addr origin 0
     codeType = if create cmd then EVM.InitCode else EVM.RuntimeCode
     address' = if create cmd
-          then createAddress origin' (word nonce 0)
+          then addr address (createAddress origin' (word nonce 0))
           else addr address 0xacab
     vm0 miner ts blockNum diff cdlen calldata' callvalue' caller' c = EVM.makeVm $ EVM.VMOpts
       { EVM.vmoptContract      = c

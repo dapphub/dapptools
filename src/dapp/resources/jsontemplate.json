@@ -22,7 +22,8 @@
       // read callback, so any URL supported by the callback can be used.
       "urls":
       [
-        "/tmp/path/to/file.sol"
+        "/tmp/path/to/file.sol",
+        "wow such regex//mastery"
         // If files are used, their directories should be added to the command line via
         // `--allow-paths <path>`.
       ]

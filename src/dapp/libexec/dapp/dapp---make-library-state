@@ -30,7 +30,7 @@ for lib in "${libraries[@]}"; do
   bin=$(jq -r ."contracts".\""${lib/:*/}"\"."${lib/*:/}".evm.bytecode.object "$DAPP_JSON")
   echo >&2 "dapp: Predeploying test library $lib at $address"
   mkdir -p "$state/$address"
-  hevm exec --address "$address" --code "$bin" > /dev/null --gas 1000000000 --state "$state"
+  hevm exec --address "$address" --code "$bin" --create > /dev/null --gas 1000000000 --state "$state"
   ((nonce++))
 done
 

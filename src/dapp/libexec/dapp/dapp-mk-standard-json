@@ -7,10 +7,16 @@ import re
 import fnmatch
 from pathlib import Path
 
-template = open(Path(__file__).parent / "../../resources/jsontemplate.json").read()
+template = open(Path(__file__).parent / "../../resources/jsontemplate.json").read().split('\n')
 
 # Remove comments from template
-tmpljson = json.loads(re.sub(r'^\s*//.*\n', '', template))
+filelines = []
+r = re.compile(r'(?:"(?:[^"\\]|\\.)*"|[^"//])*(//|$)') # dont even think about it
+for line in template:
+    m = r.match(line)
+    filelines.append(line[:m.start(1)])
+
+tmpljson = json.loads('\n'.join(filelines))
 
 # add all files under DAPP_SRC to "sources" of json
 src = os.getenv('DAPP_SRC') if os.getenv('DAPP_SRC') is not None else "./src/"
