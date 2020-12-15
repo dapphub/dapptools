@@ -6,6 +6,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## Changed
+
+- `seth combined-json` was renamed to `seth-solc` and invokes `solc`
+  using the `--standard-json` input.
+
 ## [0.9.4] - 2020-12-10
 
 ### Added
