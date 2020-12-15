@@ -46,6 +46,7 @@ module EVM.ABI
   , emptyAbi
   , encodeAbiValue
   , decodeAbiValue
+  , formatString
   , parseTypeName
   , makeAbiValue
   , parseAbiValue
@@ -62,8 +63,8 @@ import Data.ByteString    (ByteString)
 import Data.DoubleWord    (Word256, Int256, signedWord)
 import Data.Functor       (($>))
 import Data.Monoid        ((<>))
-import Data.Text          (Text, pack)
-import Data.Text.Encoding (encodeUtf8)
+import Data.Text          (Text, pack, unpack)
+import Data.Text.Encoding (encodeUtf8, decodeUtf8')
 import Data.Vector        (Vector)
 import Data.Word          (Word32)
 import Data.List          (intercalate)
@@ -103,13 +104,19 @@ instance Show AbiValue where
   show (AbiBool b)           = if b then "true" else "false"
   show (AbiBytes      _ b)   = show (ByteStringS b)
   show (AbiBytesDynamic b)   = show (ByteStringS b)
-  show (AbiString       s)   = show s
+  show (AbiString       s)   = formatString s
   show (AbiArrayDynamic _ v) =
     "[" ++ intercalate ", " (show <$> Vector.toList v) ++ "]"
   show (AbiArray      _ _ v) =
     "[" ++ intercalate ", " (show <$> Vector.toList v) ++ "]"
   show (AbiTuple v) =
     "(" ++ intercalate ", " (show <$> Vector.toList v) ++ ")"
+
+formatString :: ByteString -> String
+formatString bs =
+  case decodeUtf8' (fst (BS.spanEnd (== 0) bs)) of
+    Right s -> "\"" <> unpack s <> "\""
+    Left _ -> "❮utf8 decode failed❯: " <> (show $ ByteStringS bs)
 
 data AbiType
   = AbiUIntType         Int

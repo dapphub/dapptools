@@ -6,6 +6,11 @@
 
 - `hevm` now accepts solidity json output built via `--standard-json` as well as `--combined-json`.
 
+### Fixed
+
+- If the `--address` flag is present in `hevm exec` or `hevm symbolic`, it overrides the contract address at which a contract will be created.
+- Address pretty printing
+
 ## 0.43.2 - 2020-12-10
 
 ### Changed

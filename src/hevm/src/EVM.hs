@@ -1762,7 +1762,7 @@ notStatic continue = do
 -- calculations and throw if the value won't fit into a uint64
 burn :: Integer -> EVM () -> EVM ()
 burn n' continue =
-  if n' > 2 ^ 64 - 1
+  if n' > (2 :: Integer) ^ (64 :: Integer) - 1
   then vmError IllegalOverflow
   else do
     let n = num n'

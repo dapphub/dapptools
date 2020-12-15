@@ -3,7 +3,6 @@
 module EVM.Format where
 
 import Prelude hiding (Word)
-import Numeric
 import qualified EVM
 import EVM.Dapp (DappInfo (..), dappSolcByHash, dappAbiMap, showTraceLocation, dappEventMap)
 import EVM.Concrete ( wordValue )
@@ -15,7 +14,7 @@ import EVM.Types (maybeLitWord, Word (..), Whiff(..), SymWord(..), W256 (..), nu
 import EVM.Types (Addr, Buffer(..), ByteStringS(..))
 import EVM.ABI (AbiValue (..), Event (..), AbiType (..))
 import EVM.ABI (Indexed (NotIndexed), getAbiSeq)
-import EVM.ABI (parseTypeName)
+import EVM.ABI (parseTypeName, formatString)
 import EVM.Solidity (SolcContract(..), contractName, abiMap)
 import EVM.Solidity (methodOutput, methodSignature, methodName)
 
@@ -79,27 +78,10 @@ humanizeInteger =
   . Text.pack
   . show
 
-showAbiValue :: AbiValue -> Text
-showAbiValue (AbiUInt _ w) =
-  pack $ show w
-showAbiValue (AbiInt _ w) =
-  pack $ show w
-showAbiValue (AbiBool b) =
-  pack $ show b
-showAbiValue (AbiAddress w160) =
-  pack $ "0x" ++ (showHex w160 "")
+showAbiValue ::  AbiValue -> Text
 showAbiValue (AbiBytes _ bs) =
   formatBytes bs  -- opportunistically decodes recognisable strings
-showAbiValue (AbiBytesDynamic bs) =
-  formatBinary bs
-showAbiValue (AbiString bs) =
-  formatString bs
-showAbiValue (AbiArray _ _ xs) =
-  showAbiArray xs
-showAbiValue (AbiArrayDynamic _ xs) =
-  showAbiArray xs
-showAbiValue (AbiTuple v) =
-  showAbiValues v
+showAbiValue v = pack $ show v
 
 textAbiValues :: Vector AbiValue -> [Text]
 textAbiValues vs = toList (fmap showAbiValue vs)
@@ -159,19 +141,13 @@ formatSBytes :: Buffer -> Text
 formatSBytes (SymbolicBuffer b) = "<" <> pack (show (length b)) <> " symbolic bytes>"
 formatSBytes (ConcreteBuffer b) = formatBytes b
 
-formatString :: ByteString -> Text
-formatString bs =
-  case decodeUtf8' (fst (BS.spanEnd (== 0) bs)) of
-    Right s -> mconcat ["\"", s, "\""]
-    Left _ -> "❮utf8 decode failed❯: " <> formatBinary bs
-
 -- a string that came from bytes, displayed with special quotes
 formatBString :: ByteString -> Text
-formatBString b = mconcat [ "«",  Text.dropAround (=='"') (formatString b), "»" ]
+formatBString b = mconcat [ "«",  Text.dropAround (=='"') (pack $ formatString b), "»" ]
 
 formatSString :: Buffer -> Text
 formatSString (SymbolicBuffer bs) = "<" <> pack (show (length bs)) <> " symbolic bytes (string)>"
-formatSString (ConcreteBuffer bs) = formatString bs
+formatSString (ConcreteBuffer bs) = pack $ formatString bs
 
 formatBinary :: ByteString -> Text
 formatBinary =
