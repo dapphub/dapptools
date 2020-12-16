@@ -12,6 +12,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   using the `--standard-json` input.
 - `seth bundle-source` correctly interprets etherscan sources using
   standard json
+- the `--gas-price` argument can optionally accept a `gwei` suffix
+  i.e. `seth call --gas-price 100gwei ...`
 
 ## [0.9.4] - 2020-12-10
 
