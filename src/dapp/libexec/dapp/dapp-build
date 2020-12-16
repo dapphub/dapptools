@@ -11,7 +11,6 @@
 ###              missing from this format. This is provided for compatibility with older
 ###              workflows.
 set -e
-
 while [[ $# -gt 0 ]]; do
   opt=$1; shift
   case $opt in
@@ -68,10 +67,8 @@ else
     (set -x; dapp clean)
 fi
 
-remappings=$(dapp remappings)
-
 export DAPP_LIBRARIES=${DAPP_LIBRARIES-"$links"}
-export DAPP_REMAPPINGS=${DAPP_REMAPPINGS-"$remappings"}
+export DAPP_REMAPPINGS=${DAPP_REMAPPINGS-"$(dapp remappings)"}
 export DAPP_BUILD_OPTIMIZE
 export DAPP_BUILD_EXTRACT
 export -f info
@@ -87,9 +84,10 @@ if [[ -z "$DAPP_BUILD_LEGACY" && -z "$DAPP_BUILD_EXTRACT" ]]; then
     fi
 
     # pipe errors to stderr
-    jq -r '.errors | map(."formattedMessage") | @sh' "$DAPP_JSON" | sed -e "s/' //g" -e "s/'//g" 1>&2
+    jq -r 'if .errors then .errors | map(."formattedMessage") | @sh else empty end' "$DAPP_JSON" \
+        | sed -e "s/' //g" -e "s/'//g" 1>&2
     # if sources is empty, the compilation failed
-    [[ $(jq -r '.sources' "$DAPP_JSON") = "{}" ]] && exit 1 || exit 0
+    [[ $(jq -r '.sources' "$DAPP_JSON") = "null" ]] && exit 1 || exit 0
 
 else
     info "warning: legacy builds are deprecated and might not work with other dapp commands"

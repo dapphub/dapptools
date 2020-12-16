@@ -46,10 +46,6 @@ in rec {
       '' else "");
     };
 
-  dapp2 = {
-    test-hevm = import ./nix/dapp/dapp-test-hevm.nix { pkgs = self.pkgs; };
-  };
-
   solc-versions =
     let
       fetchSolcVersions = { owner, attr }:

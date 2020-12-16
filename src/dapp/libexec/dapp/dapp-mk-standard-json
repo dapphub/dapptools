@@ -31,7 +31,7 @@ for f in files:
     tmpljson["sources"][f]={}
     tmpljson["sources"][f]["urls"] = [f]
 
-if os.getenv('DAPP_REMAPPINGS') is None:
+if os.getenv('DAPP_REMAPPINGS') is None or os.getenv('DAPP_REMAPPINGS') == "":
     tmpljson["settings"].pop("remappings", None)
 else:
     tmpljson["settings"]["remappings"] = os.getenv('DAPP_REMAPPINGS').split('\n')

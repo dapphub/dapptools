@@ -78,7 +78,7 @@ humanizeInteger =
   . Text.pack
   . show
 
-showAbiValue ::  AbiValue -> Text
+showAbiValue :: AbiValue -> Text
 showAbiValue (AbiBytes _ bs) =
   formatBytes bs  -- opportunistically decodes recognisable strings
 showAbiValue v = pack $ show v
