@@ -4,45 +4,38 @@
 ###
 ### Requires an etherscan api key
 ###
-
-# not really sure why this is a list
-# seems like we always just want the first element
 set -e
 
-SRC=$(seth source "$1")
+[[ -z "$1" ]] && seth --fail-usage
 
-SOLC_VERSION=$(echo "$SRC" | jq '.CompilerVersion')
+ETHERSCAN_SRC=$(seth etherscan-source "$1")
+
+SOLC_VERSION=$(jq '.CompilerVersion' <<< "$ETHERSCAN_SRC")
 SOLC_VERSION=${SOLC_VERSION/'"'}
 SOLC_VERSION=${SOLC_VERSION/v}
 SOLC_VERSION=${SOLC_VERSION/+*}
 
-SOURCE=$(echo "$SRC" | jq '.SourceCode' -r)
-
-    
-if [[ "$SETH_DIR" ]]; then
-    DIR="$SETH_DIR"
-else
-    DIR=.
-fi
-
-NAME=$(echo "$SRC" | jq '.ContractName' | seth --show-json)
+SOURCE="$(jq -r '.SourceCode' <<< "$ETHERSCAN_SRC" | tr -d '\r')"
 
 case "$SOURCE" in
-    \{*\})
-        CONTRACTS="$(echo "$SOURCE" | jq 'keys[]')"
-        for i in $CONTRACTS; do
-            clean=$(echo "$i" | tr -d '"')
-            echo "$SOURCE" | tr -d '\r' | jq ."$i".content | seth --show-json > "$DIR"/"$clean"
-        done;;
-        *)
-        echo "$SOURCE" | seth --show-json | tr -d '\r' > "$DIR/$NAME".sol;;
+  \{*\})  # standard-json
+    # for some reason etherscan surrounds the actual json with '{}'
+    SOURCE="${SOURCE/#\{\{/\{}"
+    SOURCE="${SOURCE/%\}\}/\}}"
+    export DAPP_SOLC_JSON="$SOURCE"
+    seth --use solc:"${SOLC_VERSION}" solc
+    ;;
+
+  *)  # flattened file
+    NAME="$(jq -r '.ContractName' <<< "$ETHERSCAN_SRC")"
+    FILE="${SETH_DIR:-.}/${NAME}.sol"
+    echo "$SOURCE" > "$FILE"
+    OPT=$(jq -r '.OptimizationUsed' <<< "$ETHERSCAN_SRC")
+    if [[ "$OPT" -ne  0 ]]; then
+        RUNS=$(jq -r '.Runs' <<< "$ETHERSCAN_SRC")
+        export DAPP_SOLC_OPTIMIZE=true
+        export DAPP_SOLC_OPTIMIZE_RUNS=$RUNS
+    fi
+    seth --use solc:"${SOLC_VERSION}" solc "$FILE"
+    ;;
 esac
-
-OPT=$(echo "$SRC" | jq '.OptimizationUsed' | seth --show-json)
-if [[ "$OPT" -ne  0 ]]; then
-    RUNS=$(echo "$SRC" | jq '.Runs')
-    export DAPP_SOLC_OPTIMIZE=true
-    export DAPP_SOLC_OPTIMIZE_RUNS=$RUNS
-fi
-
-seth --use solc:"${SOLC_VERSION}" solc "$DIR"/"$NAME".sol

@@ -10,6 +10,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `seth combined-json` was renamed to `seth-solc` and invokes `solc`
   using the `--standard-json` input.
+- `seth bundle-source` correctly interprets etherscan sources using
+  standard json
 
 ## [0.9.4] - 2020-12-10
 

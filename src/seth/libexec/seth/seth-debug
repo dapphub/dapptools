@@ -21,6 +21,7 @@ gitopts=(-q --no-verify --no-gpg-sign --allow-empty -m "dapp test")
 
 targetTx=$(seth tx "$1")
 
+# TODO: scary rm -rf
 tidy() {
   [[ "$SRCDIR" ]] && rm -rf "$SRCDIR"
   rm -rf "$state"
@@ -30,8 +31,8 @@ trap tidy SIGINT SIGTERM
 if [[ -z "$SETH_NOSRC" ]]; then
   echo >&2 "${0##*/}: info: fetching contract source from etherscan..."
   SRCDIR=$(TMPDIR=. mktemp -d seth.debug.XXXX -p /tmp)
-  if seth bundle-source "$(<<< "$targetTx" seth --field to)" --dir "$SRCDIR" > "$SRCDIR"/combined.json ; then
-    opts=(--source "$SRCDIR"/combined.json);
+  if seth bundle-source "$(<<< "$targetTx" seth --field to)" --dir "$SRCDIR" > "$SRCDIR"/standard.json ; then
+    opts=(--source "$SRCDIR"/standard.json);
   else
     echo >&2 "${0##*/}: warning: no source available"
   fi
