@@ -476,7 +476,7 @@ assert cmd = do
             Nothing -> io $ putStrLn "No consistent paths" -- unlikely
             Just tree' -> let
               showBranch = showBranchInfoWithAbi srcInfo
-              renderTree' = renderTree showBranch showLeafInfo
+              renderTree' = renderTree showBranch (showLeafInfo srcInfo)
               in io $ setLocaleEncoding utf8 >> putStrLn (showTree' (renderTree' tree'))
 
   maybesig <- case sig cmd of

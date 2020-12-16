@@ -3,7 +3,7 @@
 
 module EVM.Dapp where
 
-import EVM (Trace, traceCodehash, traceOpIx)
+import EVM (Trace, traceCodehash, traceOpIx, Env)
 import EVM.ABI (Event, AbiType)
 import EVM.Debug (srcMapCodePos)
 import EVM.Solidity (SolcContract, CodeType (..), SourceCache (..), SrcMap, Method)
@@ -42,9 +42,15 @@ data DappInfo = DappInfo
   , _dappAstSrcMap  :: SrcMap -> Maybe Value
   }
 
+data DappContext = DappContext
+  { _contextInfo :: DappInfo
+  , _contextEnv  :: Env
+  }
+
 data Test = ConcreteTest Text | SymbolicTest Text
 
 makeLenses ''DappInfo
+makeLenses ''DappContext
 
 instance Show Test where
   show t = unpack $ extractSig t
