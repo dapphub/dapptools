@@ -28,6 +28,14 @@ stdenv.mkDerivation rec {
       ''}
   '';
 
+  # the patching of python shebangs is needed by the python invocations in
+  # src/dapp-tests/integration/tests.sh.
+  # that's also the reason why nodejs is added to nativeBuildInputs
+  postFixup = ''
+    patchShebangs $out/libexec/dapp
+  '';
+
+
   meta = {
     description = "Simple tool for creating Ethereum-based dapps";
     homepage = https://github.com/dapphub/dapptools/src/dapp/;
