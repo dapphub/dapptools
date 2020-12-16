@@ -28,9 +28,11 @@ for lib in "${libraries[@]}"; do
   address=$(dapp address "$sender" "$nonce")
   # shellcheck disable=SC2140
   bin=$(jq -r ."contracts".\""${lib/:*/}"\"."${lib/*:/}".evm.bytecode.object "$DAPP_JSON")
-  echo >&2 "dapp: Predeploying test library $lib at $address"
-  mkdir -p "$state/$address"
-  hevm exec --address "$address" --code "$bin" --create > /dev/null --gas 1000000000 --state "$state"
+  if [[ "$bin" == null ]] ; then
+      echo >&2 "dapp: Predeploying test library $lib at $address"
+      mkdir -p "$state/$address"
+      hevm exec --address "$address" --code "$bin" --create > /dev/null --gas 1000000000 --state "$state"
+  fi
   ((nonce++))
 done
 
