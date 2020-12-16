@@ -78,7 +78,7 @@ export -f info
 
 mkdir -p "$DAPP_OUT"
 
-if [[ ! "$DAPP_BUILD_LEGACY" = 1 && ! "$DAPP_BUILD_EXTRACT" = 1 ]]; then
+if [[ -z "$DAPP_BUILD_LEGACY" && -z "$DAPP_BUILD_EXTRACT" ]]; then
 
     if [[ "$DAPP_STANDARD_JSON" ]]; then
         $<("$DAPP_STANDARD_JSON") | "$SOLC" --standard-json --allow-paths . > "$DAPP_JSON"
