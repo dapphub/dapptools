@@ -4,11 +4,15 @@
 
 ### Added
 
-- `hevm` now accepts solidity json output built via `--standard-json` as well as `--combined-json`.
+- `hevm` now accepts solidity json output built via `--standard-json` as
+  well as `--combined-json`.
+- addresses in the trace output are prefixed with `ContractName@0x...`
+  if there is a corresponding contract and `@0x...` otherwise.
 
 ### Fixed
 
-- If the `--address` flag is present in `hevm exec` or `hevm symbolic`, it overrides the contract address at which a contract will be created.
+- If the `--address` flag is present in `hevm exec` or `hevm symbolic`,
+  it overrides the contract address at which a contract will be created.
 - Address pretty printing
 
 ## 0.43.2 - 2020-12-10

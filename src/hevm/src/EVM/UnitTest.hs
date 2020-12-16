@@ -1,5 +1,6 @@
 {-# Language LambdaCase #-}
 {-# Language DataKinds #-}
+{-# Language ImplicitParams #-}
 
 module EVM.UnitTest where
 
@@ -538,6 +539,7 @@ symRun opts@UnitTestOptions{..} concreteVm testName types = do
       -- report a failure unless the test is supposed to fail.
 
       \(bailed, vm') -> do
+        let ?context = DappContext { _contextInfo = dapp, _contextEnv = vm ^?! EVM.env }
         SBV.resetAssertions
         constrain $ sAnd (fst <$> view EVM.constraints vm')
         unless bailed $
@@ -580,7 +582,9 @@ symFailure UnitTestOptions {..} testName failures' = mconcat
   where
     showRes vm = let Just res = view result vm in
                  case res of
-                   VMFailure _ -> prettyvmresult res
+                   VMFailure _ ->
+                     let ?context = DappContext { _contextInfo = dapp, _contextEnv = vm ^?! EVM.env }
+                     in prettyvmresult res
                    VMSuccess _ -> if "proveFail" `isPrefixOf` testName
                                   then "Successful execution"
                                   else "Failed: DSTest Assertion Violation"
@@ -597,7 +601,7 @@ symFailure UnitTestOptions {..} testName failures' = mconcat
           _ -> ""
       ]
 
-prettyCalldata :: (Buffer, SWord 256) -> Text -> [AbiType]-> SBV.Query Text
+prettyCalldata :: (?context :: DappContext) => (Buffer, SWord 256) -> Text -> [AbiType]-> SBV.Query Text
 prettyCalldata (buffer, cdlen) sig types = do
   cdlen' <- num <$> SBV.getValue cdlen
   cd <- case buffer of
@@ -637,7 +641,8 @@ indentLines n s =
 
 passOutput :: VM -> UnitTestOptions -> Text -> Text
 passOutput vm UnitTestOptions { .. } testName =
-  let v = fromMaybe 0 verbose
+  let ?context = DappContext { _contextInfo = dapp, _contextEnv = vm ^?! EVM.env }
+  in let v = fromMaybe 0 verbose
   in if (v > 1) then
     mconcat
       [ "Success: "
@@ -650,7 +655,9 @@ passOutput vm UnitTestOptions { .. } testName =
     else ""
 
 failOutput :: VM -> UnitTestOptions -> Text -> Text
-failOutput vm UnitTestOptions { .. } testName = mconcat
+failOutput vm UnitTestOptions { .. } testName =
+  let ?context = DappContext { _contextInfo = dapp, _contextEnv = vm ^?! EVM.env }
+  in mconcat
   [ "Failure: "
   , fromMaybe "" (stripSuffix "()" testName)
   , "\n"
@@ -661,7 +668,7 @@ failOutput vm UnitTestOptions { .. } testName = mconcat
   , "\n"
   ]
 
-formatTestLogs :: Map W256 Event -> Seq.Seq Log -> Text
+formatTestLogs :: (?context :: DappContext) => Map W256 Event -> Seq.Seq Log -> Text
 formatTestLogs events xs =
   case catMaybes (toList (fmap (formatTestLog events) xs)) of
     [] -> "\n"
@@ -670,7 +677,7 @@ formatTestLogs events xs =
 -- Here we catch and render some special logs emitted by ds-test,
 -- with the intent to then present them in a separate view to the
 -- regular trace output.
-formatTestLog :: Map W256 Event -> Log -> Maybe Text
+formatTestLog :: (?context :: DappContext) => Map W256 Event -> Log -> Maybe Text
 formatTestLog _ (Log _ _ []) = Nothing
 formatTestLog events (Log _ args (topic:_)) =
   case maybeLitWord topic >>= \t1 -> (Map.lookup (wordValue t1) events) of
