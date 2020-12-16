@@ -321,6 +321,7 @@ readCombinedJSON json = do
 readStdJSON :: Text -> Maybe (Map Text SolcContract, Map Text Value, [Text])
 readStdJSON json = do
   contracts <- json ^? key "contracts" ._Object
+  -- TODO: support the general case of "urls" and "content" in the standard json
   sources <- json ^? key "sources" . _Object
   let asts = force "JSON lacks abstract syntax trees." . preview (key "ast") <$> sources
   return (f contracts, Map.fromList (HMap.toList asts), sort $ HMap.keys sources)

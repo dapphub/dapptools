@@ -85,8 +85,8 @@ else
   if [[ -z "$SETH_CREATE" && -z "$SETH_NOSRC" && "$HEVM_DEBUG" ]]; then
     echo >&2 "${0##*/}: info: fetching contract source from etherscan..."
     SRCDIR=$(TMPDIR=. mktemp -d seth.debug.XXXX)
-    if seth bundle-source "$TO" --dir "$SRCDIR" > "$SRCDIR/combined.json" ; then
-      DAPP_JSON="$SRCDIR/combined.json"
+    if seth bundle-source "$TO" --dir "$SRCDIR" > "$SRCDIR/standard.json" ; then
+      DAPP_JSON="$SRCDIR/standard.json"
     else
       echo >&2 "${0##*/}: warning: no source available"
     fi

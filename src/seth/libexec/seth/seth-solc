@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
 ### seth-solc -- compile a single file using a default --standard-json input
-### Usage: seth solc <source-file>
+### Usage: seth solc [<source-file>]
 ###
 ### The following environment variables can be set:
 ###   - DAPP_SOLC (default `solc`)
 ###   - DAPP_SOLC_OPTIMIZE (default false)
 ###   - DAPP_SOLC_OPTIMIZE_RUNS (default 200)
+###   - DAPP_SOLC_JSON (must be provided if <source-file> not specified)
 ###
 set -e
 
@@ -13,9 +14,23 @@ OPTIMIZE=${DAPP_SOLC_OPTIMIZE:-false}
 RUNS=${DAPP_SOLC_OPTIMIZE_RUNS:-200}
 SOLC=${DAPP_SOLC:-solc}
 
-JSON="$(jq -n '{}
+if [[ -z "$DAPP_SOLC_JSON" && -z "$1" ]]; then
+  seth --fail "must provide either .sol input file or DAPP_SOLC_JSON standard json"
+fi
+
+# default compiler settings, unless provided
+JSON="${DAPP_SOLC_JSON:-$(jq -n '{}
   | .language = "Solidity"
   | .sources[$src]["urls"] = [$src]
+  | .settings.optimizer =
+      if $optimize then {"enabled": $optimize, "runs": $runs}
+      else {"enabled": $optimize}
+      end
+  ' --arg src "$1" --argjson optimize "$OPTIMIZE" --argjson runs "$RUNS")}"
+
+# regardless of the input we override the outputSelection to ensure
+# we have what hevm wants
+JSON="$(<<<"$JSON" jq '.
   | .settings.outputSelection["*"]["*"]=[
       "evm.bytecode",
       "abi",
@@ -28,11 +43,7 @@ JSON="$(jq -n '{}
       "evm.deployedBytecode.generatedSources"
     ]
   | .settings.outputSelection["*"][""] = ["ast"]
-  | .settings.optimizer =
-      if $optimize then {"enabled": $optimize, "runs": $runs}
-      else {"enabled": $optimize}
-      end
-  ' --arg src "$1" --argjson optimize "$OPTIMIZE" --argjson runs "$RUNS")"
+  ')"
 
 ( [[ $SETH_VERBOSE ]] && set -x;
   echo "$JSON" | $SOLC --standard-json --allow-paths "$(realpath $1)" | jq . )
