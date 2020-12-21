@@ -497,8 +497,8 @@ instance Read Boolz where
 
 makeAbiValue :: AbiType -> String -> AbiValue
 makeAbiValue typ str = case readP_to_S (parseAbiValue typ) str of
-  [] -> error "could not parse abi arguments"
-  ((val,_):_) -> val
+  [(val,"")] -> val
+  _ -> error $  "could not parse abi argument: " ++ str ++ " : " ++ show typ
 
 parseAbiValue :: AbiType -> ReadP AbiValue
 parseAbiValue (AbiUIntType n) = do W256 w <- readS_to_P reads
