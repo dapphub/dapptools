@@ -52,6 +52,7 @@ in
         export DAPP_REMAPPINGS="$REMAPPINGS"
         export DAPP_SRC=$src
         export DAPP_OUT=out
+        export DAPP_LINK_TEST_LIBRARIES=1
         mkdir -p lib
         source <(echo "$LIBSCRIPT")
         dapp build
