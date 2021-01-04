@@ -55,14 +55,15 @@ if [ "$DAPP_LINK_TEST_LIBRARIES" = 1 ]; then
     nonce=48576
     mapfile -t libraries < <(dapp --find-libraries)
 
-    if [[ ${#libraries[@]} -eq 0 ]]; then exit; fi
+    if [[ ${#libraries[@]} -gt 0 ]]; then
 
-    info "building with linked libraries"
-    for lib in "${libraries[@]}"; do
-        address=$(dapp address "$sender" "$nonce")
-        links+=" $lib:$address"
-        ((nonce++))
-    done
+        info "building with linked libraries"
+        for lib in "${libraries[@]}"; do
+            address=$(dapp address "$sender" "$nonce")
+            links+=" $lib:$address"
+            ((nonce++))
+        done
+    fi
 else
     (set -x; dapp clean)
 fi
