@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 set -e
-
+set -x
 if [ "$DAPP_VERBOSE" ]; then set -x; fi
 
 # First, to support library linking, we build up a "state directory"
@@ -31,6 +31,13 @@ for lib in "${libraries[@]}"; do
   if [[ "$bin" != null ]] ; then
       echo >&2 "dapp: Predeploying test library $lib at $address"
       mkdir -p "$state/$address"
+      # make sure git commits succeed
+      export GIT_CONFIG_NOSYSTEM=1
+      export GIT_AUTHOR_NAME=hevm
+      export GIT_AUTHOR_EMAIL=hevm@dapphub.com
+      export GIT_COMMITTER_NAME=$GIT_AUTHOR_NAME
+      export GIT_COMMITTER_EMAIL=$GIT_AUTHOR_EMAIL
+
       hevm exec --address "$address" --code "$bin" --create > /dev/null --gas 1000000000 --state "$state"
   fi
   ((nonce++))
