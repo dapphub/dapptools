@@ -66,6 +66,7 @@ tmpljson["settings"]["outputSelection"]={}
 tmpljson["settings"]["outputSelection"]["*"]={}
 tmpljson["settings"]["outputSelection"]["*"]["*"]=[
     "evm.bytecode",
+    "evm.deployedBytecode",
     "abi",
     "storageLayout",
     "evm.bytecode.sourceMap",
