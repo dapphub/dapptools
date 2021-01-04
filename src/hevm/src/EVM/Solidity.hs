@@ -75,6 +75,7 @@ import GHC.Generics         (Generic)
 import Prelude hiding       (readFile, writeFile)
 import System.IO hiding     (readFile, writeFile)
 import System.IO.Temp
+import System.Directory
 import System.Process
 import Text.Read            (readMaybe)
 
@@ -230,7 +231,8 @@ makeSrcMaps = (\case (_, Fe, _) -> Nothing; x -> Just (done x))
 
 makeSourceCache :: [Text] -> Map Text Value -> IO SourceCache
 makeSourceCache paths asts = do
-  xs <- mapM (BS.readFile . Text.unpack) paths
+  xs' <- filterM doesFileExist (Text.unpack <$> paths)
+  xs <- mapM BS.readFile xs'
   return $! SourceCache
     { _sourceFiles =
         Map.fromList (zip [0..] (zip paths xs))
