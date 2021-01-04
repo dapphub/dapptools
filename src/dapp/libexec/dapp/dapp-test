@@ -40,7 +40,6 @@ function clean() { rm -rf "$state"; }
 trap clean EXIT
 
 opts=$(dapp --hevm-opts "$0" "$@")
-# shellcheck disable=SC2068
 # make sure git commits succeed
 export GIT_CONFIG_NOSYSTEM=1
 export GIT_AUTHOR_NAME=hevm
@@ -48,4 +47,5 @@ export GIT_AUTHOR_EMAIL=hevm@dapphub.com
 export GIT_COMMITTER_NAME=$GIT_AUTHOR_NAME
 export GIT_COMMITTER_EMAIL=$GIT_AUTHOR_EMAIL
 
+# shellcheck disable=SC2068
 hevm dapp-test --dapp-root="${DAPP_ROOT}" --json-file="${DAPP_JSON}" --state="$state" ${opts[@]}
