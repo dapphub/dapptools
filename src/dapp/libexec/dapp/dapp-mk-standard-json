@@ -65,6 +65,7 @@ else:
 tmpljson["settings"]["outputSelection"]={}
 tmpljson["settings"]["outputSelection"]["*"]={}
 tmpljson["settings"]["outputSelection"]["*"]["*"]=[
+    "metadata",
     "evm.bytecode",
     "evm.deployedBytecode",
     "abi",
