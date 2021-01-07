@@ -41,8 +41,8 @@ import qualified EVM.Serve as Serve
 import EVM.Solidity
 import EVM.Types hiding (word)
 import EVM.UnitTest (UnitTestOptions, coverageReport, coverageForUnitTestContract)
-import EVM.UnitTest (runUnitTestContract)
-import EVM.UnitTest (getParametersFromEnvironmentVariables, testNumber)
+import EVM.UnitTest (runUnitTestContract, getParametersFromEnvironmentVariables, testNumber)
+import EVM.Transaction
 import EVM.Dapp (findUnitTests, dappInfo, DappInfo, emptyDapp)
 import EVM.Format (showTraceTree, showTree', renderTree, showBranchInfoWithAbi, showLeafInfo)
 import EVM.RLP (rlpdecode)
@@ -789,7 +789,7 @@ vmFromCommand cmd = do
     (_, _, Nothing) ->
       error "must provide at least (rpc + address) or code"
 
-  return $ VMTest.initTx $ withCache (vm0 miner ts blockNum diff contract)
+  return $ initTx $ withCache (vm0 miner ts blockNum diff contract)
     where
         decipher = hexByteString "bytes" . strip0x
         block'   = maybe EVM.Fetch.Latest EVM.Fetch.BlockNumber (block cmd)
@@ -895,7 +895,7 @@ symvmFromCommand cmd = do
     (_, _, Nothing) ->
       error "must provide at least (rpc + address) or code"
 
-  return $ (VMTest.initTx $ withCache $ vm0 miner ts blockNum diff cdlen calldata' callvalue' caller' contract')
+  return $ (initTx $ withCache $ vm0 miner ts blockNum diff cdlen calldata' callvalue' caller' contract')
     & over EVM.constraints (<> [pathCond])
     & set (EVM.env . EVM.contracts . (ix address') . EVM.storage) store
 

@@ -11,7 +11,7 @@ import EVM.Symbolic (forceLit)
 import EVM.Types (keccak)
 import EVM.Types
 
-import Control.Lens
+import Control.Lens hiding (List)
 
 import Data.Aeson (FromJSON (..))
 import Data.ByteString (ByteString)

@@ -15,7 +15,7 @@ import EVM.RLP
 import EVM.Symbolic
 import EVM.Types
 import EVM.Fetch
-import EVM.Stepper
+import qualified EVM.Stepper
 import EVM.UnitTest
 import EVM.Transaction
 
@@ -32,6 +32,7 @@ import qualified Network.Wreq.Session as Session
 import Data.Aeson
 import Control.Applicative
 import Data.ByteString (ByteString)
+import qualified Data.ByteString as BS
 import qualified Data.Map as Map
 import Data.Text (Text, pack, unpack)
 import qualified Data.Aeson.Types  as JSON
@@ -163,7 +164,7 @@ rpcServer url initialVm readVM writeVM request respond = do
               c <- getContract to vm
               c' <- getContract from vm
               let c'' = c' & set EVM.balance 0xffffffffffffffffffff
-                  pre = execState (call from (Just to) (ConcreteBuffer txdata) gas gasPrice value) (vm & over (EVM.env . EVM.contracts) (Map.insert to c . Map.insert from c''))
+                  pre = execState (call from (Just to) (ConcreteBuffer txdata, num $ BS.length txdata) gas gasPrice value) (vm & over (EVM.env . EVM.contracts) (Map.insert to c . Map.insert from c''))
               post <- run' pre
               return $ Number $ num $ view (EVM.state . EVM.gas) post
 
@@ -171,7 +172,7 @@ rpcServer url initialVm readVM writeVM request respond = do
               let Just Eth_call{..} = params r ^? ix 0 . _JSON
               c <- getContract to vm
               c' <- getContract from vm
-              let pre = execState (call from (Just to) (ConcreteBuffer txdata) gas gasPrice value) (vm & over (EVM.env . EVM.contracts) (Map.insert to c . Map.insert from c'))
+              let pre = execState (call from (Just to) (ConcreteBuffer txdata, num $ BS.length txdata) gas gasPrice value) (vm & over (EVM.env . EVM.contracts) (Map.insert to c . Map.insert from c'))
               post <- run' pre
               case view EVM.result post of
                 Nothing ->
@@ -192,7 +193,7 @@ rpcServer url initialVm readVM writeVM request respond = do
                 Just to -> do c <- getContract to vm
                               pure $ Map.insert to c)
               c' <- getContract txfrom vm
-              let pre = execState (call txfrom txToAddr (ConcreteBuffer txData) txGasLimit txGasPrice txValue) (vm & over (EVM.env . EVM.contracts) (tomod . Map.insert txfrom c'))
+              let pre = execState (call txfrom txToAddr (ConcreteBuffer txData, num $ BS.length txData) txGasLimit txGasPrice txValue) (vm & over (EVM.env . EVM.contracts) (tomod . Map.insert txfrom c'))
               post <- run' pre
               writeVM (post & over (EVM.block . EVM.number) (+ 1))
               return $ txt hash
@@ -215,7 +216,7 @@ rpcServer url initialVm readVM writeVM request respond = do
     fwd :: Value -> IO (Maybe Value)
     fwd req = Session.withAPISession $ \s -> fetchWithSession url s req
     run' :: EVM.VM -> IO (EVM.VM)
-    run' = execStateT (interpret fetcher . void $ EVM.Stepper.execFully)
+    run' = execStateT (EVM.Stepper.interpret fetcher . void $ EVM.Stepper.execFully)
     fetcher = http Latest url
     -- TODO: optimize getBalance, getCode and caching
     getContract :: Addr -> EVM.VM -> IO EVM.Contract

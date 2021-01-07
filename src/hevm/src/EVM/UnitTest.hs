@@ -737,11 +737,20 @@ word32Bytes :: Word32 -> ByteString
 word32Bytes x = BS.pack [byteAt x (3 - i) | i <- [0..3]]
 
 makeTxCall :: TestVMParams -> (Buffer, SWord 256) -> EVM ()
-makeTxCall TestVMParams{..} cd = do
+makeTxCall TestVMParams{..} cd =
+  let from = testCaller
+      to = testAddress
+      gas = testGasCall
+      gasPrice = testGasprice
+  in call from (Just to) cd gas gasPrice 0
+
+call :: Addr -> Maybe Addr -> (Buffer, SWord 256) -> W256 -> W256 -> W256 -> EVM ()
+call from to cd txgas gasPrice value = do
   resetState
-  assign (tx . isCreate) (isNothing to)
-  maybe (pure ()) loadContract to
-  when (isJust to) $ assign (state . calldata) (txdata,  literal . num $ len txdata)
+  case to of
+    Just to' -> do loadContract to'
+                   assign (state . calldata) cd
+    Nothing  -> assign (tx . isCreate) True
   assign (state . caller) (litAddr from)
   assign (state . gas) (w256 txgas)
   assign (state . callvalue) (litWord $ w256 value)
