@@ -62,7 +62,6 @@ import Data.Foldable
 import Data.Map.Strict      (Map)
 import Data.Maybe
 import Data.List.NonEmpty   (NonEmpty)
-import Data.List            (sort)
 import qualified Data.List.NonEmpty as NonEmpty
 import Data.Semigroup
 import Data.Sequence        (Seq)
@@ -75,7 +74,6 @@ import GHC.Generics         (Generic)
 import Prelude hiding       (readFile, writeFile)
 import System.IO hiding     (readFile, writeFile)
 import System.IO.Temp
-import System.Directory
 import System.Process
 import Text.Read            (readMaybe)
 
@@ -85,6 +83,7 @@ import qualified Data.HashMap.Strict    as HMap
 import qualified Data.Map.Strict        as Map
 import qualified Data.Text              as Text
 import qualified Data.Vector            as Vector
+import Data.List (sort)
 
 data StorageItem = StorageItem {
   _type   :: SlotType,
@@ -229,13 +228,14 @@ makeSrcMaps = (\case (_, Fe, _) -> Nothing; x -> Just (done x))
 
     go c (xs, state, p)                      = (xs, error ("srcmap: y u " ++ show c ++ " in state" ++ show state ++ "?!?"), p)
 
-makeSourceCache :: [Text] -> Map Text Value -> IO SourceCache
+makeSourceCache :: [(Text, Maybe ByteString)] -> Map Text Value -> IO SourceCache
 makeSourceCache paths asts = do
-  xs' <- filterM doesFileExist (Text.unpack <$> paths)
-  xs <- mapM BS.readFile xs'
+  let f (_,  Just content) = return content
+      f (fp, Nothing) = BS.readFile $ Text.unpack fp
+  xs <- mapM f paths
   return $! SourceCache
     { _sourceFiles =
-        Map.fromList (zip [0..] (zip paths xs))
+        Map.fromList (zip [0..] (zip (fst <$> paths) xs))
     , _sourceLines =
         Map.fromList (zip [0 .. length paths - 1]
                        (map (Vector.fromList . BS.split 0xa) xs))
@@ -287,16 +287,16 @@ functionAbi f = do
 force :: String -> Maybe a -> a
 force s = fromMaybe (error s)
 
-readJSON :: Text -> Maybe (Map Text SolcContract, Map Text Value, [Text])
+readJSON :: Text -> Maybe (Map Text SolcContract, Map Text Value, [(Text, Maybe ByteString)])
 readJSON json = case json ^? key "sourceList" of
   Nothing -> readStdJSON json
   _ -> readCombinedJSON json
 
-readCombinedJSON :: Text -> Maybe (Map Text SolcContract, Map Text Value, [Text])
+readCombinedJSON :: Text -> Maybe (Map Text SolcContract, Map Text Value, [(Text, Maybe ByteString)])
 readCombinedJSON json = do
   contracts <- f <$> (json ^? key "contracts" . _Object)
   sources <- toList . fmap (view _String) <$> json ^? key "sourceList" . _Array
-  return (contracts, Map.fromList (HMap.toList asts), sources)
+  return (contracts, Map.fromList (HMap.toList asts), [ (x, Nothing) | x <- sources])
   where
     asts = fromMaybe (error "JSON lacks abstract syntax trees.") (json ^? key "sources" . _Object)
     f x = Map.fromList . HMap.toList $ HMap.mapWithKey g x
@@ -320,15 +320,17 @@ readCombinedJSON json = do
         _storageLayout = mkStorageLayout $ x ^? key "storage-layout" . _String
       }
 
-readStdJSON :: Text -> Maybe (Map Text SolcContract, Map Text Value, [Text])
+readStdJSON :: Text -> Maybe (Map Text SolcContract, Map Text Value, [(Text, Maybe ByteString)])
 readStdJSON json = do
   contracts <- json ^? key "contracts" ._Object
   -- TODO: support the general case of "urls" and "content" in the standard json
   sources <- json ^? key "sources" . _Object
   let asts = force "JSON lacks abstract syntax trees." . preview (key "ast") <$> sources
-  return (f contracts, Map.fromList (HMap.toList asts), sort $ HMap.keys sources)
+      contractMap = f contracts
+      contents src = (src, encodeUtf8 <$> HMap.lookup src (mconcat $ Map.elems $ snd <$> contractMap))
+  return (fst <$> contractMap, Map.fromList (HMap.toList asts), contents <$> (sort $ HMap.keys sources))
   where
-    f :: (AsValue s) => HMap.HashMap Text s -> Map Text SolcContract
+    f :: (AsValue s) => HMap.HashMap Text s -> (Map Text (SolcContract, (HMap.HashMap Text Text)))
     f x = Map.fromList . (concatMap g) . HMap.toList $ x
     g (s, x) = h s <$> HMap.toList (view _Object x)
     h s (c, x) = 
@@ -338,9 +340,13 @@ readStdJSON json = do
         creation =  evmstuff ^?! key "bytecode"
         theRuntimeCode = toCode $ runtime ^?! key "object" . _String
         theCreationCode = toCode $ creation ^?! key "object" . _String
+        srcContents :: Maybe (HMap.HashMap Text Text)
+        srcContents = do metadata <- x ^? key "metadata" . _String
+                         srcs <- metadata ^? key "sources" . _Object
+                         return $ (view (key "content" . _String)) <$> (HMap.filter (isJust . preview (key "content")) srcs)
         abis = force ("abi key not found in " <> show x) $
           toList <$> x ^? key "abi" . _Array
-      in (s <> ":" <> c, SolcContract {
+      in (s <> ":" <> c, (SolcContract {
         _runtimeCode      = theRuntimeCode,
         _creationCode     = theCreationCode,
         _runtimeCodehash  = keccak (stripBytecodeMetadata theRuntimeCode),
@@ -352,7 +358,7 @@ readStdJSON json = do
         _abiMap        = mkAbiMap abis,
         _eventMap      = mkEventMap abis,
         _storageLayout = mkStorageLayout $ x ^? key "storage-layout" . _String
-      })
+      }, fromMaybe mempty srcContents))
 
 mkAbiMap :: [Value] -> Map Word32 Method
 mkAbiMap abis = Map.fromList $
