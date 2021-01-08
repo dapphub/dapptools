@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
 set -e
-set -x
 if [ "$DAPP_VERBOSE" ]; then set -x; fi
 
 # First, to support library linking, we build up a "state directory"

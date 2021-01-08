@@ -165,13 +165,6 @@ formatSBinary :: Buffer -> Text
 formatSBinary (SymbolicBuffer bs) = "<" <> pack (show (length bs)) <> " symbolic bytes>"
 formatSBinary (ConcreteBuffer bs) = formatBinary bs
 
--- showTraceTree :: DappInfo -> VM -> Text
--- showTraceTree dapp =
-  -- traceForest
-    -- >>> fmap (fmap (unpack . showTrace dapp))
-    -- >>> concatMap showTree
-    -- >>> pack
-
 showTraceTree :: DappInfo -> VM -> Text
 showTraceTree dapp vm =
   let forest = traceForest vm
