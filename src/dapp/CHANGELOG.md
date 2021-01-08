@@ -16,8 +16,8 @@ future releases.
 The standard json used by `dapp build` can be set using the environment variable:
 `DAPP_STANDARD_JSON`, and defaults to the result of `dapp mk-standard-json`.
 
-- `dapp --find-libraries` does no longer require `--extract`: libraries do not need to be
-build to be found.
+- `dapp --find-libraries` no longer requires `--extract`: libraries do not need to be
+built to be found.
 
 
 ## Added
