@@ -2,7 +2,7 @@
 ### dapp-build -- compile the source code
 ### Usage: dapp build [--extract]
 ###
-###  --extract:  After building, write the .abi, .bin and .bin-runtime
+###  --extract:  After building, write the .abi, .bin and .bin-runtime. Implies `--legacy`
 ###              files from the solc json into $DAPP_OUT. Beware of contract
 ###              name collisions. This is provided for compatibility with older
 ###              workflows.
