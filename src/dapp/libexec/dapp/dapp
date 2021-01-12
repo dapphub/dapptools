@@ -6,6 +6,46 @@
 ### Build, test, deploy and transact with Ethereum contracts from the comfort of your command line.
 ###
 
+OPTS="dapp [<options>] <command> [<args>]
+dapp <command> --help
+--
+  Compilation options:
+optimize             activate solidity optimizer
+legacy               compile using the '--combined-json' format
+extract              after building, write the .abi, .bin and .bin-runtime. Implies '--legacy'
+
+  Testing options:
+verbosity=<number>   verbosity of 'dapp test' output (0-3)
+v,verbose            sets verbosity to 1
+fuzz-runs=<number>   number of times to run fuzzing tests
+replay=<string>      rerun a particular test case
+m,match=<string>     only run test methods matching regex
+cache=<string>       use the cache at directory
+
+  RPC options:
+rpc=url              fetch remote state via ETH_RPC_URL
+rpc-url=<string>     fetch remote state via <url>
+rpc-block=<number>   block number (latest if not specified)
+
+  SMT options:
+smttimeout=<number>        timeout passed to the smt solver in ms (default 30000)
+solver=<string>            name of the smt solver to use (either 'z3' or 'cvc4')
+max-iterations=<number>    number of times we may revisit a particular branching point
+
+  Deployment options:
+verify                     verify contract on etherscan
+
+  Dapp testnet options:
+rpc-port=port      change RPC port (default: 8545)
+rpc-addr=address   change RPC address (default: 127.0.0.1)
+chain-id=number    change chain ID (default: 99)
+period=seconds     use a block time instead of instamine
+accounts=number    create multiple accounts (default: 1)
+save=name          after finishing, save snapshot
+load=name          start from a previously saved snapshot
+dir=directory      testnet directory
+"
+
 set -e
 
 export DAPP_SRC=${DAPP_SRC-src}
@@ -31,5 +71,55 @@ elif [[ $DAPP_SOLC_VERSION ]]; then
 elif [[ $1 = -* ]] && command -v "${0##*/}-$1" &>/dev/null; then
   exec "${0##*/}-$1" "${@:2}"
 fi
+
+fail () {
+  echo >&2 "error: $1" && echo >&2
+  exit 1
+}
+
+eval "$(git rev-parse --parseopt -- "$@" <<<"$OPTS" || echo exit $?)"
+
+shopt -s extglob
+
+
+while [[ $1 ]]; do
+  case $1 in
+    --)                shift; break;;
+    --extract)                export DAPP_BUILD_EXTRACT=1;;
+    --optimize)               export DAPP_BUILD_OPTIMIZE=1;;
+    --legacy)                 export DAPP_BUILD_LEGACY=1;;
+
+    -m|--match)        shift; export DAPP_TEST_MATCH=$1;;
+    -v|--verbose)             export DAPP_TEST_VERBOSITY=1;;
+    --verbosity)       shift; export DAPP_TEST_VERBOSITY=$1;;
+    --fuzz-runs)       shift; export DAPP_TEST_FUZZ_RUNS=$1;;
+
+    --smttimeout)      shift; export DAPP_TEST_SMTTIMEOUT=$1;;
+    --solver)          shift; export DAPP_TEST_SOLVER=$1;;
+    --max-iterations)  shift; export DAPP_TEST_MAX_ITERATIONS=$1;;
+
+    --replay)          shift; export DAPP_TEST_REPLAY=$1;;
+    --cache)           shift; export DAPP_TEST_CACHE=$1;;
+    --rpc-url)         shift; export HEVM_RPC=yes; export ETH_RPC_URL=$1;;
+    --rpc-block)       shift; export HEVM_RPC=yes; export DAPP_TEST_NUMBER=$1;;
+    --rpc)             [ -n "$ETH_RPC_URL" ] || fail "ETH_RPC_URL not set.";
+       export HEVM_RPC=yes;;
+
+    --verify)                 export DAPP_VERIFY_CONTRACT=yes;;
+
+    --rpc-port)        shift; export DAPP_TESTNET_RPC_PORT=$1;;
+    --rpc-addr)        shift; export DAPP_TESTNET_RPC_ADDRESS=$1;;
+    --chain-id)        shift; export DAPP_TESTNET_CHAINID=$1;;
+    --period)          shift; export DAPP_TESTNET_PERIOD=$1;;
+    --accounts)        shift; export DAPP_TESTNET_ACCOUNTS=$(($1 - 1));;
+    --save)            shift; export DAPP_TESTNET_SAVE=$1;;
+    --load)            shift; export DAPP_TESTNET_LOAD=$1;;
+    --dir)             shift; export DAPP_TESTNET_gethdir=$1;;
+
+    
+    *) printf "${0##*/}: internal error: %q\\n" "$1"; exit 1
+  esac; shift
+done
+
 
 "${0##*/}-${1-help}" "${@:2}"

@@ -4,18 +4,6 @@
 ###        dapp create <path>:<contractname>
 ### Add --verify and export your ETHERSCAN_API_KEY to auto-verify on Etherscan
 set -e
-for i in "$@"; do
-  case $i in
-    --verify)
-      DAPP_VERIFY_CONTRACT=yes
-      shift
-      ;;
-    *)
-      shift
-      set -- "$@" "$i"
-      ;;
-  esac
-done
 
 [[ -e "${DAPP_JSON}" ]] || {
   echo >&2 "${0##*/}: error: ${DAPP_JSON} file not found. Did you run ``dapp build``?"
