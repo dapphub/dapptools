@@ -68,7 +68,7 @@ if [[ -z "$DAPP_BUILD_LEGACY" && -z "$DAPP_BUILD_EXTRACT" ]]; then
     jq -r 'if .errors then .errors | map(."formattedMessage") | @sh else empty end' "$DAPP_JSON" \
         | sed -e "s/' //g" -e "s/'//g" 1>&2
     # if sources is empty, the compilation failed
-    [[ $(jq -r '.sources' "$DAPP_JSON") = "null" ]] && exit 1 || exit 0
+    [[ $(jq -r '.sources' "$DAPP_JSON") = "null" ||  $(jq -r '.sources' "$DAPP_JSON") = {} ]] && exit 1 || exit 0
 
 else
     info "warning: legacy builds are deprecated and might not work with other dapp commands"
