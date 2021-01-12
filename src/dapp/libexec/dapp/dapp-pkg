@@ -1,4 +1,0 @@
-#!/usr/bin/env bash
-### dapp-pkg -- deprecated
-
-echo "This command has been deprecated. Please check the dapptools README for new install instructions."

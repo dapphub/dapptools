@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-### dapp-help -- print help about dapp(1) or one of its subcommands
+### dapp-help -- print help about dapp or one of its subcommands
 ### Usage: dapp help [<command>]
+###    or: dapp <command> --help
 
 BUGS=https://github.com/dapphub/dapptools/issues
 
 name=dapp
-cmd=${1##*-}
-file=${0%-help}${1+-$cmd}
+file=${0%-*}${1+-$1}
 header=$(perl -ne 'print "$2\n" if /^(\S)\1\1(?: (.*))?/' "$file")
 
 if ! [[ $header ]]; then

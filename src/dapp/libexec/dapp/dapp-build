@@ -11,24 +11,6 @@
 ###              missing from this format. This is provided for compatibility with older
 ###              workflows.
 set -e
-while [[ $# -gt 0 ]]; do
-  opt=$1; shift
-  case $opt in
-    --extract)
-      DAPP_BUILD_EXTRACT=1
-      ;;
-    --optimize)
-      DAPP_BUILD_OPTIMIZE=1
-      ;;
-    --legacy)
-      DAPP_BUILD_LEGACY=1
-      ;;
-    *)
-      info "unknown argument: $opt"
-      exit 1
-      ;;
-  esac
-done
 
 info() {
   while [[ $# -gt 0 ]]; do
@@ -70,8 +52,6 @@ fi
 
 export DAPP_LIBRARIES=${DAPP_LIBRARIES-"$links"}
 export DAPP_REMAPPINGS=${DAPP_REMAPPINGS-"$(dapp remappings)"}
-export DAPP_BUILD_OPTIMIZE
-export DAPP_BUILD_EXTRACT
 export -f info
 
 mkdir -p "$DAPP_OUT"
