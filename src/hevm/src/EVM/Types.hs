@@ -96,7 +96,8 @@ litBytes bs = fmap (toSized . literal) (BS.unpack bs)
 -- | A buffer is a list of bytes, and is used to model EVM memory or calldata.
 -- During concrete execution, this is simply `ByteString`.
 data Buffer
-  = ConcreteBuffer ByteString
+  = ConcreteBuffer  ByteString
+  | StaticSymBuffer [SWord 8]
   | Slice SymWord SymWord Buffer
   | SymbolicBuffer BoundedArray
   | Insert SymWord Buffer Buffer
@@ -123,6 +124,9 @@ data Whiff = Dull
            | UnOp String Whiff
   deriving Show
 
+w256 :: W256 -> Word
+w256 = C Dull
+
 maybeLitWord :: SymWord -> Maybe Word
 maybeLitWord (S whiff a) = fmap (C whiff . fromSizzle) (unliteral a)
 
@@ -143,6 +147,62 @@ instance Show Word where
   show (C (BinOp symbol x y) z) = symbol ++ show x ++ show y  ++ ": " ++ show z
   show (C (UnOp symbol x) z) = symbol ++ show x ++ ": " ++ show z
   show (C whiff x) = show whiff ++ ": " ++ show x
+
+instance Read Word where
+  readsPrec n s =
+    case readsPrec n s of
+      [(x, r)] -> [(C Dull x, r)]
+      _ -> []
+
+instance Bits Word where
+  (C _ x) .&. (C _ y) = w256 (x .&. y)
+  (C _ x) .|. (C _ y) = w256 (x .|. y)
+  (C _ x) `xor` (C _ y) = w256 (x `xor` y)
+  complement (C _ x) = w256 (complement x)
+  shift (C _ x) i = w256 (shift x i)
+  rotate (C _ x) i = w256 (rotate x i)
+  bitSize (C _ x) = bitSize x
+  bitSizeMaybe (C _ x) = bitSizeMaybe x
+  isSigned (C _ x) = isSigned x
+  testBit (C _ x) = testBit x
+  bit i = w256 (bit i)
+  popCount (C _ x) = popCount x
+
+instance FiniteBits Word where
+  finiteBitSize (C _ x) = finiteBitSize x
+  countLeadingZeros (C _ x) = countLeadingZeros x
+  countTrailingZeros (C _ x) = countTrailingZeros x
+
+instance Bounded Word where
+  minBound = w256 minBound
+  maxBound = w256 maxBound
+
+instance Eq Word where
+  (C _ x) == (C _ y) = x == y
+
+instance Enum Word where
+  toEnum i = w256 (toEnum i)
+  fromEnum (C _ x) = fromEnum x
+
+instance Integral Word where
+  quotRem (C _ x) (C _ y) =
+    let (a, b) = quotRem x y
+    in (w256 a, w256 b)
+  toInteger (C _ x) = toInteger x
+
+instance Num Word where
+  (C _ x) + (C _ y) = w256 (x + y)
+  (C _ x) * (C _ y) = w256 (x * y)
+  abs (C _ x) = w256 (abs x)
+  signum (C _ x) = w256 (signum x)
+  fromInteger x = w256 (fromInteger x)
+  negate (C _ x) = w256 (negate x)
+
+instance Real Word where
+  toRational (C _ x) = toRational x
+
+instance Ord Word where
+  compare (C _ x) (C _ y) = compare x y
 
 
 -- dynamize :: Buffer -> SList (WordN 8)
