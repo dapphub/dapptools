@@ -31,6 +31,7 @@ rpc-block=<number>   block number (latest if not specified)
 smttimeout=<number>        timeout passed to the smt solver in ms (default 30000)
 solver=<string>            name of the smt solver to use (either 'z3' or 'cvc4')
 max-iterations=<number>    number of times we may revisit a particular branching point
+smtdebug                   print the SMT queries produced by hevm
 
   Deployment options:
 verify                     verify contract on etherscan
@@ -97,6 +98,7 @@ while [[ $1 ]]; do
     --smttimeout)      shift; export DAPP_TEST_SMTTIMEOUT=$1;;
     --solver)          shift; export DAPP_TEST_SOLVER=$1;;
     --max-iterations)  shift; export DAPP_TEST_MAX_ITERATIONS=$1;;
+    --smtdebug)               export DAPP_TEST_SMTDEBUG=$1;;
 
     --replay)          shift; export DAPP_TEST_REPLAY=$1;;
     --cache)           shift; export DAPP_TEST_CACHE=$1;;
@@ -121,5 +123,13 @@ while [[ $1 ]]; do
   esac; shift
 done
 
+if ! [ -x "$(command -v "${0##*/}-${1-help}")" ]; then
+    # look for approximate matches
+    echo >&2 "'$1' is not a dapp command. See 'dapp help'."
+    echo >&2
+    echo >&2 "Most similar commands:"
+    find "${0%dapp}" -execdir echo {} ';' | agrep -1 "${0##*/}-${1-help}" >&2
+    exit 1
+fi
 
 "${0##*/}-${1-help}" "${@:2}"

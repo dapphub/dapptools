@@ -13,10 +13,12 @@ opts=()
 [[ "$DAPP_TEST_MATCH" ]]          && opts+=(--match "$DAPP_TEST_MATCH")
 [[ "$DAPP_TEST_SOLVER" ]]         && opts+=(--solver "$DAPP_TEST_SOLVER")
 [[ "$DAPP_TEST_REPLAY" ]]         && opts+=(--replay "$DAPP_TEST_REPLAY")
+[[ "$DAPP_TEST_SMTDEBUG" ]]       && opts+=(--smtdebug)
 [[ "$DAPP_TEST_VERBOSITY" ]]      && opts+=(--verbose "$DAPP_TEST_VERBOSITY")
 [[ "$DAPP_TEST_FUZZ_RUNS" ]]      && opts+=(--fuzz-runs "$DAPP_TEST_FUZZ_RUNS")
 [[ "$DAPP_TEST_SMTTIMEOUT" ]]     && opts+=(--smttimeout "$DAPP_TEST_SMTTIMEOUT")
 [[ "$DAPP_TEST_MAX_ITERATIONS" ]] && opts+=(--max-iterations "$DAPP_TEST_MAX_ITERATIONS")
+
 
 
 if [[ "$HEVM_RPC" == "yes" ]]; then

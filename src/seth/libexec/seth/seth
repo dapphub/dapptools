@@ -227,4 +227,13 @@ fi
 [[ -n $ETH_KEYSTORE ]] && export ETH_KEYSTORE
 export ETH_RPC_URL=${ETH_RPC_URL:-${eth_rpc_url:-${ETH_RPC_HOST:-http://127.0.0.1}:${ETH_RPC_PORT:-8545}}}
 
+if ! [ -x "$(command -v "${0##*/}-${1-help}")" ]; then
+    # look for approximate matches
+    echo >&2 "'$1' is not a seth command. See 'seth help'."
+    echo >&2
+    echo >&2 "Most similar commands:"
+    find "${0%seth}" -execdir echo {} ';' | agrep -1 "${0##*/}-${1-help}" >&2
+    exit 1
+fi
+
 "${0##*/}-${1-help}" "${@:2}"
