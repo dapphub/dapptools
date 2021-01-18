@@ -13,11 +13,12 @@ import qualified EVM
 import EVM.Exec
 import qualified EVM.Fetch as Fetch
 import EVM.ABI
+import Debug.Trace
 import EVM.Stepper (Stepper)
 import qualified EVM.Stepper as Stepper
 import qualified Control.Monad.Operational as Operational
 import Control.Monad.State.Strict hiding (state)
-import Data.Maybe (catMaybes)
+import Data.Maybe (catMaybes, fromMaybe)
 import EVM.Types
 import EVM.Concrete (createAddress)
 import qualified EVM.FeeSchedule as FeeSchedule
@@ -99,9 +100,9 @@ abstractVM typesignature concreteArgs x storagemodel = do
     case typesignature of
       Nothing -> do cd <- sbytes256
                     len <- freshVar_
-                    return (cd, len, (len .<= 256, Val "calldatalength < 256"))
+                    return (cd, len, (len .<= 256, Todo "calldatalength < 256" []))
       Just (name, typs) -> do (cd, cdlen) <- symCalldata name typs concreteArgs
-                              return (cd, cdlen, (sTrue, Val "True"))
+                              return (cd, cdlen, (sTrue, Todo "Trivial" []))
   symstore <- case storagemodel of
     SymbolicS -> Symbolic [] <$> freshArray_ Nothing
     InitialS -> Symbolic [] <$> freshArray_ (Just 0)
@@ -154,10 +155,12 @@ interpret' fetcher maxIter vm = let
 
     Just (VMFailure (EVM.Query q@(PleaseAskSMT _ _ continue))) -> let
       codelocation = getCodeLocation vm
-      location = view (iterations . at codelocation) vm
-      in case location of
-        Nothing -> cont $ continue EVM.Unknown
-        Just _ -> io (fetcher q) >>= cont
+      iteration = num $ fromMaybe 0 $ view (iterations . at codelocation) vm
+      -- as an optimization, we skip consulting smt
+      -- if we've been at the location less than 5 times
+      in if iteration < (max (fromMaybe 0 maxIter) 5)
+         then cont $ continue EVM.Unknown
+         else io (fetcher q) >>= cont
 
     Just (VMFailure (EVM.Query q)) -> io (fetcher q) >>= cont
 
@@ -226,14 +229,16 @@ interpret fetcher maxIter =
           case q of
             PleaseAskSMT _ _ continue -> do
               codelocation <- getCodeLocation <$> get
-              iters <- use (iterations . at codelocation)
-              case iters of
-                -- if this is the first time we are branching at this point,
-                -- explore both branches without consulting SMT.
-                -- Exploring too many branches is a lot cheaper than
-                -- consulting our SMT solver.
-                Nothing -> interpret fetcher maxIter (Stepper.evm (continue EVM.Unknown) >>= k)
-                _ -> performQuery
+              iteration <- num <$> fromMaybe 0 <$> use (iterations . at codelocation)
+
+              -- if this is the first time we are branching at this point,
+              -- explore both branches without consulting SMT.
+              -- Exploring too many branches is a lot cheaper than
+              -- consulting our SMT solver.
+              if iteration < (max (fromMaybe 0 maxIter) 5)
+              then interpret fetcher maxIter (Stepper.evm (continue EVM.Unknown) >>= k)
+              else performQuery
+
             _ -> performQuery
 
         Stepper.EVM m ->
@@ -263,7 +268,7 @@ verifyContract :: ByteString -> Maybe (Text, [AbiType]) -> [String] -> StorageMo
 verifyContract theCode signature' concreteArgs storagemodel pre maybepost = do
     preStateRaw <- abstractVM signature' concreteArgs theCode  storagemodel
     -- add the pre condition to the pathconditions to ensure that we are only exploring valid paths
-    let preState = over constraints ((++) [(pre preStateRaw, Dull)]) preStateRaw
+    let preState = over constraints ((++) [(pre preStateRaw, Todo "assumptions" [])]) preStateRaw
     v <- verify preState Nothing Nothing maybepost
     return (v, preState)
 

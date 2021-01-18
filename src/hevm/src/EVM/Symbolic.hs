@@ -19,7 +19,7 @@ litWord :: Word -> (SymWord)
 litWord (C whiff a) = S whiff (literal $ toSizzle a)
 
 w256lit :: W256 -> SymWord
-w256lit x = S (Val (show x)) $ literal $ toSizzle x
+w256lit x = S (Literal x) $ literal $ toSizzle x
 
 litAddr :: Addr -> SAddr
 litAddr = SAddr . literal . toSizzle
@@ -48,23 +48,23 @@ forceBuffer (ConcreteBuffer b) = b
 forceBuffer (SymbolicBuffer b) = forceLitBytes b
 
 -- | Arithmetic operations on SymWord
-iteWhiff :: String -> SBool -> SymWord -> SymWord -> SymWord
-iteWhiff symbol cond (S a _) (S b _) =
+iteWhiff :: Whiff -> SBool -> SymWord
+iteWhiff whiff cond =
   ite cond
-  (S (InfixBinOp symbol a b) 1) (S (UnOp "not" (InfixBinOp symbol a b)) 0)
+  (S whiff 1) (S (IsZero whiff) 0)
 
 
 sdiv :: SymWord -> SymWord -> SymWord
-sdiv (S _ x) (S _ y) = let sx, sy :: SInt 256
+sdiv (S a x) (S b y) = let sx, sy :: SInt 256
                            sx = sFromIntegral x
                            sy = sFromIntegral y
-                       in sw256 $ sFromIntegral (sx `sQuot` sy)
+                       in S (Div a b) (sFromIntegral (sx `sQuot` sy))
 
 smod :: SymWord -> SymWord -> SymWord
-smod (S _ x) (S _ y) = let sx, sy :: SInt 256
+smod (S a x) (S b y) = let sx, sy :: SInt 256
                            sx = sFromIntegral x
                            sy = sFromIntegral y
-                       in sw256 $ ite (y .== 0) 0 (sFromIntegral (sx `sRem` sy))
+                       in S (Mod a b) $ ite (y .== 0) 0 (sFromIntegral (sx `sRem` sy))
 
 addmod :: SymWord -> SymWord -> SymWord -> SymWord
 addmod (S _ x) (S _ y) (S _ z) = let to512 :: SWord 256 -> SWord 512
@@ -77,21 +77,18 @@ mulmod (S _ x) (S _ y) (S _ z) = let to512 :: SWord 256 -> SWord 512
                                  in sw256 $ sFromIntegral $ ((to512 x) * (to512 y)) `sMod` (to512 z)
 
 slt :: SymWord -> SymWord -> SymWord
-slt x'@(S _ x) y'@(S _ y) =
-  iteWhiff "signed<" (sFromIntegral x .< (sFromIntegral y :: (SInt 256))) x' y'
+slt (S xw x) (S yw y) =
+  iteWhiff (SLT xw yw) (sFromIntegral x .< (sFromIntegral y :: (SInt 256)))
 
 sgt :: SymWord -> SymWord -> SymWord
-sgt x'@(S _ x) y'@(S _ y) =
-  iteWhiff "signed>" (sFromIntegral x .> (sFromIntegral y :: (SInt 256))) x' y'
+sgt (S xw x) (S yw y) =
+  iteWhiff (SGT xw yw) (sFromIntegral x .> (sFromIntegral y :: (SInt 256)))
 
 shiftRight' :: SymWord -> SymWord -> SymWord
 shiftRight' (S _ a') b@(S _ b') = case (num <$> unliteral a', b) of
   (Just n, (S (FromBytes ind (SymbolicBuffer a)) _)) | n `mod` 8 == 0 && n <= 256 ->
     let bs = replicate (n `div` 8) 0 <> (take ((256 - n) `div` 8) a)
     in S (FromBytes ind (SymbolicBuffer bs)) (fromBytes bs)
-  (Just n, (S (FromCalldata ind (SymbolicBuffer a)) _)) | n `mod` 8 == 0 && n <= 256 ->
-    let bs = replicate (n `div` 8) 0 <> (take ((256 - n) `div` 8) a)
-    in S (FromCalldata ind (SymbolicBuffer bs)) (fromBytes bs)
   _ -> sw256 $ sShiftRight b' a'
 
 -- | Operations over symbolic memory (list of symbolic bytes)
@@ -142,18 +139,21 @@ select' xs err ind = walk xs ind err
     where walk []     _ acc = acc
           walk (e:es) i acc = walk es (i-1) (ite (i .== 0) e acc)
 
--- Generates a ridiculously large set of constraints (roughly 25k) when
--- the index is symbolic, but it still seems (kind of) manageable
--- for the solvers.
 readSWordWithBound :: SymWord -> Buffer -> SWord 256 -> SymWord
-readSWordWithBound sind@(S _ ind) (SymbolicBuffer xs) bound = case (num <$> maybeLitWord sind, num <$> fromSizzle <$> unliteral bound) of
+readSWordWithBound sind@(S x ind) (SymbolicBuffer xs) bound = case (num <$> maybeLitWord sind, num <$> fromSizzle <$> unliteral bound) of
   (Just i, Just b) ->
     let bs = truncpad 32 $ drop i (take b xs)
-    in S (FromBytes sind (SymbolicBuffer bs)) (fromBytes bs)
+    in S (FromBytes (Literal $ num i) (SymbolicBuffer bs)) (fromBytes bs)
   _ ->
+    -- Generates a ridiculously large set of constraints (roughly 25k) when
+    -- the index is symbolic, but it still seems (kind of) manageable
+    -- for the solvers.
+
+    -- The proper solution here is to use smt arrays instead.
+
     let boundedList = [ite (i .<= bound) x 0 | (x, i) <- zip xs [1..]]
         res = [select' boundedList 0 (ind + j) | j <- [0..31]]
-    in S (FromBytes sind (SymbolicBuffer res)) $ fromBytes $ res
+    in S (FromBytes x (SymbolicBuffer res)) $ fromBytes $ res
 
 readSWordWithBound sind (ConcreteBuffer xs) bound =
   case maybeLitWord sind of

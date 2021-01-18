@@ -436,10 +436,10 @@ showBranchInfoWithAbi :: DappInfo -> BranchInfo -> [String]
 showBranchInfoWithAbi _ (BranchInfo _ Nothing) = [""]
 showBranchInfoWithAbi srcInfo (BranchInfo vm (Just y)) =
   case y of
-    (UnOp "isZero" (InfixBinOp "==" (Val x) _)) ->
+    (IsZero (Eq (Literal x) _)) ->
       let
         abimap = view abiMap <$> currentSolc srcInfo vm
-        method = abimap >>= Map.lookup (read x)
+        method = abimap >>= Map.lookup (num x)
       in [maybe (show y) (show . view methodSignature) method]
     y' -> [show y']
 

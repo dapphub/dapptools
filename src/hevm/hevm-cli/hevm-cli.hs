@@ -424,7 +424,7 @@ runSMTWithTimeOut :: Maybe Text -> Maybe Integer -> Bool -> Symbolic a -> IO a
 runSMTWithTimeOut solver maybeTimeout smtdebug sym
   | solver == Just "cvc4" = do
       setEnv "SBV_CVC4_OPTIONS" ("--lang=smt --incremental --interactive --no-interactive-prompt --model-witness-value --tlimit-per=" <> show timeout)
-      a <- runSMTWith cvc4{SBV.verbose=smtdebug} sym
+      a <- runSMTWith cvc4{SBV.verbose=smtdebug, SBV.transcript=Just "here.smt2"} sym
       setEnv "SBV_CVC4_OPTIONS" ""
       return a
   | solver == Just "z3" = runwithz3
@@ -779,17 +779,17 @@ symvmFromCommand cmd = do
     (Nothing, Nothing) -> do
       cd <- sbytes256
       len' <- freshVar_
-      return (SymbolicBuffer cd, len', (len' .<= 256, Val "len < 256"))
+      return (SymbolicBuffer cd, len', (len' .<= 256, Todo "len < 256" []))
     -- fully concrete calldata
     (Just c, Nothing) ->
       let cd = ConcreteBuffer $ decipher c
-      in return (cd, num (len cd), (sTrue, Dull))
+      in return (cd, num (len cd), (sTrue, Todo "" []))
     -- calldata according to given abi with possible specializations from the `arg` list
     (Nothing, Just sig') -> do
       method' <- io $ functionAbi sig'
       let typs = snd <$> view methodInputs method'
       (cd, cdlen) <- symCalldata (view methodSignature method') typs (arg cmd)
-      return (SymbolicBuffer cd, cdlen, (sTrue, Dull))
+      return (SymbolicBuffer cd, cdlen, (sTrue, Todo "" []))
 
     _ -> error "incompatible options: calldata and abi"
 

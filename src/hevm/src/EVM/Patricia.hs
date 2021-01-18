@@ -5,7 +5,7 @@
 module EVM.Patricia where
 
 import EVM.RLP
-import EVM.Types
+import EVM.Types hiding (Literal)
 
 import Control.Monad.Free
 import Control.Monad.State

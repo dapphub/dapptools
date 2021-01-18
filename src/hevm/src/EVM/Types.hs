@@ -7,7 +7,7 @@
 
 module EVM.Types where
 
-import Prelude hiding  (Word)
+import Prelude hiding  (Word, LT, GT)
 
 import Data.Aeson (FromJSON (..), (.:))
 
@@ -22,6 +22,7 @@ import Data.Kind
 import Data.Monoid ((<>))
 import Data.Bifunctor (first)
 import Data.Char
+import Data.List (intercalate)
 import Data.Bifunctor (bimap)
 import Data.ByteString (ByteString)
 import Data.ByteString.Base16 as BS16
@@ -35,8 +36,6 @@ import Data.Word (Word8)
 import Numeric (readHex, showHex)
 import Options.Generic
 import Control.Arrow ((>>>))
-
-import Text.Printf
 
 import qualified Data.ByteArray       as BA
 import qualified Data.Aeson           as JSON
@@ -69,23 +68,24 @@ instance Show Word where
 instance Read Word where
   readsPrec n s =
     case readsPrec n s of
-      [(x, r)] -> [(C Dull x, r)]
+      [(x, r)] -> [(C (Literal x) x, r)]
       _ -> []
 
 w256 :: W256 -> Word
-w256 = C Dull
+w256 = C (Todo "" [])
 
 instance Bits Word where
-  (C _ x) .&. (C _ y) = w256 (x .&. y)
-  (C _ x) .|. (C _ y) = w256 (x .|. y)
-  (C _ x) `xor` (C _ y) = w256 (x `xor` y)
-  complement (C _ x) = w256 (complement x)
-  shift (C _ x) i = w256 (shift x i)
-  rotate (C _ x) i = w256 (rotate x i)
+  (C a x) .&. (C b y) = C (And a b) (x .&. y)
+  (C a x) .|. (C b y) = C (Or  a b) (x .|. y)
+  (C a x) `xor` (C b y) = C (Todo "xor" [a, b]) (x `xor` y)
+  complement (C a x) = C (Neg a) (complement x)
+  shiftL (C a x) i = C (SHL a i) (shiftL x i)
+  shiftR (C a x) i = C (SHR a i) (shiftR x i)
+  rotate (C a x) i = C (Todo "rotate " [a]) (rotate x i) -- unused.
   bitSize (C _ x) = bitSize x
   bitSizeMaybe (C _ x) = bitSizeMaybe x
   isSigned (C _ x) = isSigned x
-  testBit (C _ x) = testBit x
+  testBit (C _ x) i = testBit x i
   bit i = w256 (bit i)
   popCount (C _ x) = popCount x
 
@@ -112,12 +112,12 @@ instance Integral Word where
   toInteger (C _ x) = toInteger x
 
 instance Num Word where
-  (C _ x) + (C _ y) = w256 (x + y)
-  (C _ x) * (C _ y) = w256 (x * y)
-  abs (C _ x) = w256 (abs x)
-  signum (C _ x) = w256 (signum x)
-  fromInteger x = w256 (fromInteger x)
-  negate (C _ x) = w256 (negate x)
+  (C a x) + (C b y) = C (Add a b) (x + y)
+  (C a x) * (C b y) = C (Mul a b) (x * y)
+  abs (C a x) = C (Todo "abs" [a]) (abs x)
+  signum (C a x) = C (Todo "signum" [a]) (signum x)
+  fromInteger x = C (Literal (fromInteger x)) (fromInteger x)
+  negate (C a x) = C (Sub (Literal 0) a) (negate x)
 
 instance Real Word where
   toRational (C _ x) = toRational x
@@ -131,16 +131,12 @@ instance Ord Word where
 data SymWord = S Whiff (SWord 256)
 
 instance Show SymWord where
-  show s@(S w _) = case maybeLitWord s of
-    Nothing -> case w of
-      Dull -> "<symbolic>"
-      whiff -> show whiff
-    Just w'  -> show w'
+  show s@(S w _) = show w
 
 -- | Convenience functions transporting between the concrete and symbolic realm
 -- TODO - look for all the occurences of sw256 and replace them with manual construction
 sw256 :: SWord 256 -> SymWord
-sw256 x = S Dull x
+sw256 x = S (Todo "?" []) x
 
 -- | Custom instances for SymWord, many of which have direct
 -- analogues for concrete words defined in Concrete.hs
@@ -148,20 +144,21 @@ instance EqSymbolic SymWord where
   (.==) (S _ x) (S _ y) = x .== y
 
 instance Num SymWord where
-  (S a x) + (S b y) = S (InfixBinOp "+" a b) (x + y)
-  (S a x) * (S b y) = S (InfixBinOp "*" a b) (x * y)
-  abs (S a x) = S (UnOp "abs" a) (abs x)
-  signum (S a x) = S (UnOp "signum" a) (signum x)
-  fromInteger x = S (Val (show x)) (fromInteger x)
-  negate (S a x) = S (UnOp "-" a) (negate x)
+  (S a x) + (S b y) = S (Add a b) (x + y)
+  (S a x) * (S b y) = S (Mul a b) (x * y)
+  abs (S a x) = S (Todo "abs" [a]) (abs x)
+  signum (S a x) = S (Todo "signum" [a]) (signum x)
+  fromInteger x = S (Literal (fromInteger x)) (fromInteger x)
+  negate (S a x) = S (Neg a) (negate x)
 
 instance Bits SymWord where
-  (S a x) .&. (S b y) = S (InfixBinOp "&" a b) (x .&. y)
-  (S a x) .|. (S b y) = S (InfixBinOp "|" a b) (x .|. y)
-  (S a x) `xor` (S b y) = S (InfixBinOp "xor" a b) (x `xor` y)
-  complement (S a x) = S (UnOp "~" a) (complement x)
-  shift (S a x) i = S (UnOp ("<<" ++ (show i) ++ " ") a ) (shift x i)
-  rotate (S a x) i = S (UnOp ("rotate " ++ (show i) ++ " ") a) (rotate x i)
+  (S a x) .&. (S b y) = S (And a b) (x .&. y)
+  (S a x) .|. (S b y) = S (Or  a b) (x .|. y)
+  (S a x) `xor` (S b y) = S (Todo "xor" [a, b]) (x `xor` y)
+  complement (S a x) = S (Neg a) (complement x)
+  shiftL (S a x) i = S (SHL a i) (shiftL x i)
+  shiftR (S a x) i = S (SHR a i) (shiftR x i)
+  rotate (S a x) i = S (Todo "rotate " [a]) (rotate x i) -- unused.
   bitSize (S _ x) = bitSize x
   bitSizeMaybe (S _ x) = bitSizeMaybe x
   isSigned (S _ x) = isSigned x
@@ -170,10 +167,10 @@ instance Bits SymWord where
   popCount (S _ x) = popCount x
 
 instance SDivisible SymWord where
-  sQuotRem (S _ x) (S _ y) = let (a, b) = x `sQuotRem` y
-                             in (sw256 a, sw256 b)
-  sDivMod (S _ x) (S _ y) = let (a, b) = x `sDivMod` y
-                             in (sw256 a, sw256 b)
+  sQuotRem (S x' x) (S y' y) = let (a, b) = x `sQuotRem` y
+                               in (S (Div x' y') a, S (Mod x' y') b)
+  sDivMod (S x' x) (S y' y) = let (a, b) = x `sDivMod` y
+                              in (S (Div x' y') a, S (Mod x' y') b)
 
 instance Mergeable SymWord where
   symbolicMerge a b (S wx x) (S _ y) = S wx (symbolicMerge a b x y)
@@ -196,28 +193,90 @@ instance OrdSymbolic SymWord where
 
 
 -- | This type can give insight into the provenance of a term
-data Whiff = Dull
-           | Val String
-           | FromKeccak ByteString
-           | Var String
-           | FromBytes SymWord Buffer
-           | FromCalldata SymWord Buffer
-           | FromStorage Whiff
-           | InfixBinOp String Whiff Whiff
-           | BinOp String Whiff Whiff
-           | UnOp String Whiff
+data Whiff =
+  Todo String [Whiff]
+  -- booleans / bits
+  | And  Whiff Whiff
+  | Or   Whiff Whiff
+  | Eq   Whiff Whiff
+  | LT   Whiff Whiff
+  | GT   Whiff Whiff
+  | SLT  Whiff Whiff
+  | SGT  Whiff Whiff
+  | IsZero Whiff
+  -- bits
+  | SHL Whiff Int
+  | SHR Whiff Int
+  
+  -- integers
+  | Add  Whiff Whiff
+  | Sub  Whiff Whiff
+  | Mul  Whiff Whiff
+  | Div  Whiff Whiff
+  | Mod  Whiff Whiff
+  | Exp  Whiff Whiff
+  | Neg  Whiff
+  | FromKeccak ByteString
+  | FromBytes Whiff Buffer
+  | FromStorage Whiff
+  | Literal W256
+  | Var String
 
 instance Show Whiff where
-  show Dull = "<symbolic>"
-  show (Val s) = s
-  show (FromKeccak bstr) = "FromKeccak " ++ show bstr
-  show (Var x) = printf "<%s>" x
-  show (FromBytes index buf) = "FromBuffer " ++ (show index) ++ " " ++ show buf
-  show (FromCalldata index buf) = "FromCalldata " ++ (show index) ++ " " ++ show buf
-  show (FromStorage w) = "SREAD(" ++ show w ++ ")"
-  show (InfixBinOp op a b) = printf "(%s %s %s)" (show a) op (show b)
-  show (BinOp op a b) = printf "%s(%s, %s)" op (show a) (show b)
-  show (UnOp op x) = op ++ "(" ++ (show x) ++ ")"
+  show w =
+    let
+      infix' s x y = show x ++ s ++ show y
+    in case w of
+      Todo s args -> s ++ "(" ++ (intercalate "," (show <$> args)) ++ ")"
+      And x y     -> infix' " and " x y
+      Or x y      -> infix' " or " x y
+      Eq x y      -> infix' " == " x y
+      LT x y      -> infix' " < " x y
+      GT x y      -> infix' " > " x y
+      SLT x y     -> infix' " s< " x y
+      SGT x y     -> infix' " s> " x y
+      IsZero x    -> "IsZero(" ++ show x ++ ")"
+      SHL x y     -> infix' " << " x y
+      SHR x y     -> infix' " << " x y
+      Add x y     -> infix' " + " x y
+      Sub x y     -> infix' " - " x y
+      Mul x y     -> infix' " * " x y
+      Div x y     -> infix' " / " x y
+      Mod x y     -> infix' " % " x y
+      Exp x y     -> infix' " ** " x y
+      Neg x       -> "not " ++ show x
+      Var v       -> v
+      FromKeccak bstr -> "keccak(" ++ show bstr ++ ")"
+      Literal x -> show x
+      FromBytes index buf -> "FromBuffer " ++ (show index) ++ " " ++ show buf
+      FromStorage l -> "SLOAD(" ++ show l ++ ")"
+
+-- | Reconstruct the smt/sbv value from a whiff
+getValue :: Whiff -> SWord 256
+getValue w = case w of
+  w'@(Todo _ _) -> error $ "unable to get value of " ++ show w'
+  And x y       -> getValue x .&&. getValue y
+  Or x y        -> getValue x .||. getValue y
+  Eq x y        -> ite (getValue x .== getValue y) 1 0
+  LT x y        -> ite (getValue x .< getValue y) 1 0
+  GT x y        -> ite (getValue x .> getValue y) 1 0
+  SLT x y       -> ite (slt (getValue x) (getValue y)) 1 0
+  SGT x y       -> ite (sgt (getValue x) (getValue y)) 1 0
+  IsZero x      -> ite (getValue x .== 0) 1 0
+  SHL x y       -> infix' " << " x y
+  SHR x y       -> infix' " << " x y
+  Add x y       -> infix' " + " x y
+  Sub x y       -> infix' " - " x y
+  Mul x y       -> infix' " * " x y
+  Div x y       -> infix' " / " x y
+  Mod x y       -> infix' " % " x y
+  Exp x y       -> infix' " ** " x y
+  Neg x         -> "not " ++ show x
+  Var v         -> v
+  FromKeccak bstr -> "keccak(" ++ show bstr ++ ")"
+  Literal x -> show x
+  FromBytes index buf -> "FromBuffer " ++ (show index) ++ " " ++ show buf
+  FromStorage l -> "SLOAD(" ++ show l ++ ")"
 
 newtype Addr = Addr { addressWord160 :: Word160 }
   deriving (Num, Integral, Real, Ord, Enum, Eq, Bits, Generic)

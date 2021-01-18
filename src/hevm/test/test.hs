@@ -1,4 +1,5 @@
 {-# Language OverloadedStrings #-}
+{-# Language ScopedTypeVariables #-}
 {-# Language LambdaCase #-}
 {-# Language QuasiQuotes #-}
 {-# Language TypeSynonymInstances #-}
@@ -20,13 +21,14 @@ import Test.Tasty.QuickCheck-- hiding (forAll)
 import Test.Tasty.HUnit
 
 import Control.Monad.State.Strict (execState, runState, when)
-import Control.Lens hiding (List, pre)
+import Control.Lens hiding (List, pre, (.<), (.>))
 
 import qualified Data.Vector as Vector
 import Data.String.Here
 
 import Control.Monad.Fail
 import Debug.Trace
+import Data.SBV.Tools.Overflow
 
 import Data.Binary.Put (runPut)
 import Data.SBV hiding ((===), forAll, sList)
@@ -42,7 +44,7 @@ import EVM.SymExec
 import EVM.Symbolic
 import EVM.ABI
 import EVM.Exec
-import EVM.Patricia as Patricia
+import qualified EVM.Patricia as Patricia
 import EVM.Precompiled
 import EVM.RLP
 import EVM.Solidity
@@ -169,7 +171,7 @@ main = defaultMain $ testGroup "hevm"
 --       withMaxSuccess 100000 $
        Patricia.insertValues [(r, BS.pack[1]), (s, BS.pack[2]), (t, BS.pack[3]),
                               (r, mempty), (s, mempty), (t, mempty)]
-       === (Just $ Literal Patricia.Empty)
+       === (Just $ Patricia.Literal Patricia.Empty)
     ]
 
   , testGroup "Symbolic execution"
@@ -538,7 +540,7 @@ main = defaultMain $ testGroup "hevm"
           let code =
                 [i|
                   contract C {
-                    function kecc(uint x) public {
+                    function kecc(uint x) public pure {
                       if (x == 0) {
                          assert(keccak256(abi.encode(x)) == keccak256(abi.encode(0)));
                       }
@@ -551,6 +553,36 @@ main = defaultMain $ testGroup "hevm"
             let vm = vm0 & set (state . callvalue) 0
             verify vm Nothing Nothing (Just checkAssertions)
           putStrLn $ "found counterexample:"
+
+      , testCase "safemath distributivity (yul)" $ do
+          Left _ <- runSMTWith cvc4 $ query $ do
+            let yulsafeDistributivity = hex "6355a79a6260003560e01c14156016576015601f565b5b60006000fd60a1565b603d602d604435600435607c565b6039602435600435607c565b605d565b6052604b604435602435605d565b600435607c565b141515605a57fe5b5b565b6000828201821115151560705760006000fd5b82820190505b92915050565b6000818384048302146000841417151560955760006000fd5b82820290505b92915050565b"
+            vm <- abstractVM (Just ("distributivity(uint256,uint256,uint256)", [AbiUIntType 256, AbiUIntType 256, AbiUIntType 256])) [] yulsafeDistributivity SymbolicS
+            verify vm Nothing Nothing (Just checkAssertions)
+          putStrLn $ "Proven"
+          
+      , testCase "safemath distributivity (sol)" $ do
+          let code =
+                [i|
+                  contract C {
+                      function distributivity(uint x, uint y, uint z) public {
+                          assert(mul(x, add(y, z)) == add(mul(x, y), mul(x, z)));
+                      }
+                  
+                      function add(uint x, uint y) internal pure returns (uint z) {
+                          require((z = x + y) >= x, "ds-math-add-overflow");
+                      }
+                      function mul(uint x, uint y) internal pure returns (uint z) {
+                          require(y == 0 || (z = x * y) / y == x, "ds-math-mul-overflow");
+                      }
+                 }
+                |]
+          Just c <- solcRuntime "C" code
+
+          Left _ <- runSMTWith z3 $ query $ do
+            vm <- abstractVM (Just ("distributivity(uint256,uint256,uint256)", [AbiUIntType 256, AbiUIntType 256, AbiUIntType 256])) [] c SymbolicS
+            verify vm Nothing Nothing (Just checkAssertions)
+          putStrLn $ "Proven"
 
     ]
   , testGroup "Equivalence checking"
@@ -690,3 +722,105 @@ assertSolidityComputation (SolidityCall s args) x =
      assertEqual (Text.unpack s)
        (fmap Bytes (Just (encodeAbiValue x)))
        (fmap Bytes y)
+
+
+-- | (overflow, result)
+safeAdd256 :: SWord 256 -> SWord 256 -> (SBool, SWord 256)
+safeAdd256 x y =
+  let z = x + y
+  in (z .< x, z)
+
+-- | (overflow, result)
+safeMul256 :: SWord 256 -> SWord 256 -> (SBool, SWord 256)
+safeMul256 x y =
+  let z = x * y
+  in (y .> 0 .&& z `sDiv` y ./= x, z)
+
+-- distributivityRaw :: Query CheckSatResult
+-- distributivityRaw = do
+--   x  <- freshVar_  :: Query (SWord 256)
+--   y <- freshVar_
+--   z <- freshVar_
+--   constrain $ sNot $ x * (y + z) .== x * y + x * z
+--   checkSat
+
+safedistributivity :: Query ()
+safedistributivity = do
+  x <- freshVar_ :: Query (SWord 256)
+  y <- freshVar_
+  z <- freshVar_
+  let (yPzO, yPz) = safeAdd256 y z
+      (lhsO, lhs) = safeMul256 x yPz
+      (xMyO, xMy) = safeMul256 x y
+      (xMzO, xMz) = safeMul256 x z
+      (rhsO, rhs) = safeAdd256 xMy xMz
+  -- assuming no overflow
+  constrain $ sNot $ sOr [yPzO, lhsO, xMyO, xMzO, rhsO]
+  -- is there a counterexample to distributivity?
+  constrain $ sNot $ lhs .== rhs
+  checkSat >>= \case
+    Unsat -> io $ putStrLn "Success!"
+    Sat -> do x' <- getValue x
+              y' <- getValue y
+              z' <- getValue z
+              io $ putStrLn ("x: " <> (show x'))
+              io $ putStrLn ("y: " <> (show y'))
+              io $ putStrLn ("z: " <> (show z'))
+ 
+otherdist :: Query ()
+otherdist = do
+  x <- freshVar_ :: Query (SWord 256)
+  y <- freshVar_
+  z <- freshVar_
+  let ovf1 = uncurry (.&&) $ bvMulO y z
+      ovf2 = uncurry (.||) $ bvAddO x (y + z)
+      ovf3 = uncurry (.||) $ bvMulO x y
+      ovf4 = uncurry (.||) $ bvMulO x z
+      ovf5 = uncurry (.||) $ bvAddO (x * y) (x * z)
+  -- assuming no overflow
+  constrain $ sNot $ sOr [ovf1, ovf2, ovf3, ovf4, ovf5]
+  -- is there a counterexample to distributivity?
+  constrain $ sNot $ x * (y + z) .== x * y + x * z
+  checkSat >>= \case
+    Unsat -> io $ putStrLn "Success!"
+    Sat -> do x' <- getValue x
+              y' <- getValue y
+              z' <- getValue z
+              io $ putStrLn ("x: " <> (show x'))
+              io $ putStrLn ("y: " <> (show y'))
+              io $ putStrLn ("z: " <> (show z'))
+ 
+smaldist :: Query ()
+smaldist = do
+  x <- freshVar_ :: Query (SWord 256)
+  y <- freshVar_
+  constrain $ x .< 2 ^ 128 .&& y .< 2 ^ 128
+  let (ovf, res) = safeMul256 x y
+  constrain $ sNot ovf
+  checkSat >>= \case
+    Unsat -> io $ putStrLn "Success!"
+    Sat -> do x' <- getValue x
+              y' <- getValue y
+              io $ putStrLn ("x: " <> (show x'))
+              io $ putStrLn ("y: " <> (show y'))
+
+smaldist' :: Query ()
+smaldist' = do
+  x <- freshVar_ :: Query (SWord 256)
+  y <- freshVar_
+  constrain $ x .< 2 ^ 128 .&& y .< 2 ^ 128
+  let (und, ovr) = bvMulO x y
+  constrain $ sNot (und .|| ovr)
+  checkSat >>= \case
+    Unsat -> io $ putStrLn "Success!"
+    Sat -> do x' <- getValue x
+              y' <- getValue y
+              io $ putStrLn ("x: " <> (show x'))
+              io $ putStrLn ("y: " <> (show y'))
+
+
+p s = runSMTWith s{verbose=True} $ query $ do
+   q <- freshVar_
+   constrain $ (q :: SInteger) .== 0
+   a :: SArray Integer Integer <- freshArray_ (Just 0)
+   return $ readArray a 3 .== 2
