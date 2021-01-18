@@ -14,6 +14,7 @@
 - If the `--address` flag is present in `hevm exec` or `hevm symbolic`,
   it overrides the contract address at which a contract will be created.
 - Address pretty printing
+- Updated sbv to `8.9.5` to fix "non-const in array declaration" cvc4 issue with ds-test.
 
 ## 0.43.2 - 2020-12-10
 
