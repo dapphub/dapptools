@@ -41,6 +41,9 @@ module EVM.Solidity
   , sourceAsts
   , stripBytecodeMetadata
   , signature
+  , solc
+  , Language(..)
+  , stdjson
   , parseMethodInput
   , lineSubrange
   , astIdMap
@@ -52,11 +55,12 @@ import EVM.Types
 
 import Control.Applicative
 import Control.Monad
-import Control.Lens         hiding (Indexed)
-import Data.Aeson           (Value (..))
+import Control.Lens         hiding (Indexed, (.=))
+import Data.Aeson           (Value (..), ToJSON(..), (.=), object, Array, encode)
 import Data.Aeson.Lens
 import Data.Scientific
 import Data.ByteString      (ByteString)
+import Data.ByteString.Lazy (toStrict)
 import Data.Char            (isDigit)
 import Data.Foldable
 import Data.Map.Strict      (Map)
@@ -66,7 +70,7 @@ import qualified Data.List.NonEmpty as NonEmpty
 import Data.Semigroup
 import Data.Sequence        (Seq)
 import Data.Text            (Text, pack, intercalate)
-import Data.Text.Encoding   (encodeUtf8)
+import Data.Text.Encoding   (encodeUtf8, decodeUtf8)
 import Data.Text.IO         (readFile, writeFile)
 import Data.Vector          (Vector)
 import Data.Word
@@ -459,6 +463,53 @@ solidity' src = withSystemTempFile "hevm.sol" $ \path handle -> do
       ["--combined-json=bin-runtime,bin,srcmap,srcmap-runtime,abi,ast,storage-layout", path]
       ""
   return (x, pack path)
+
+solc :: Language -> Text -> IO Text
+solc lang src =
+  withSystemTempFile "hevm.sol" $ \path handle -> do
+    hClose handle
+    writeFile path (Text.pack $ stdjson lang src)
+    readFile path >>= print
+    Text.pack <$> readProcess
+      "solc"
+      ["--standard-json", path]
+      ""
+
+data Language = Solidity | Yul
+  deriving (Show)
+-- more options later perhaps
+
+data StandardJSON = StandardJSON Language Text
+
+instance ToJSON StandardJSON where
+  toJSON (StandardJSON lang src) =
+    object [ "language" .= show lang
+           , "sources" .= object ["hevm.sol" .=
+                                   object ["content" .= src]]
+           , "settings" .=
+             object [ "outputSelection" .=
+                    object ["*" .= 
+                      object ["*" .= (toJSON
+                              ["metadata" :: String,
+                               "evm.bytecode",
+                               "evm.deployedBytecode",
+                               "abi",
+                               "storageLayout",
+                               "evm.bytecode.sourceMap",
+                               "evm.bytecode.linkReferences",
+                               "evm.bytecode.generatedSources",
+                               "evm.deployedBytecode.sourceMap",
+                               "evm.deployedBytecode.linkReferences",
+                               "evm.deployedBytecode.generatedSources"
+                              ]),
+                              "" .= (toJSON ["ast" :: String])
+                             ]
+                            ]
+                    ]
+           ]
+                               
+stdjson :: Language -> Text -> String
+stdjson lang src = Text.unpack $ decodeUtf8 $ toStrict $ encode $ StandardJSON lang src
 
 -- When doing CREATE and passing constructor arguments, Solidity loads
 -- the argument data via the creation bytecode, since there is no "calldata"

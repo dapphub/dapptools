@@ -13,7 +13,7 @@
 
 module EVM where
 
-import Prelude hiding (log, Word, exponent)
+import Prelude hiding (log, Word, exponent, GT, LT)
 
 import Data.SBV hiding (Word, output, Unknown)
 import Data.Proxy (Proxy(..))
@@ -22,6 +22,7 @@ import EVM.Types
 import EVM.Solidity
 import EVM.Concrete (createAddress, wordValue, keccakBlob, create2Address)
 import EVM.Symbolic
+import Debug.Trace
 import EVM.Op
 import EVM.FeeSchedule (FeeSchedule (..))
 import Options.Generic as Options
@@ -641,18 +642,18 @@ exec1 = do
         0x09 -> stackOp3 (const g_mid) (\(x, y, z) -> mulmod x y z)
 
         -- op: LT
-        0x10 -> stackOp2 (const g_verylow) $ \(x, y) -> iteWhiff "<" (x .< y) x y
+        0x10 -> stackOp2 (const g_verylow) $ \(S a x, S b y) -> iteWhiff (LT a b) (x .< y)
         -- op: GT
-        0x11 -> stackOp2 (const g_verylow) $ \(x, y) -> iteWhiff ">" (x .> y) x y
+        0x11 -> stackOp2 (const g_verylow) $ \(S a x, S b y) -> iteWhiff (GT a b) (x .> y)
         -- op: SLT
         0x12 -> stackOp2 (const g_verylow) $ uncurry slt
         -- op: SGT
         0x13 -> stackOp2 (const g_verylow) $ uncurry sgt
 
         -- op: EQ
-        0x14 -> stackOp2 (const g_verylow) $ \(x, y) -> iteWhiff "==" (x .== y) x y
+        0x14 -> stackOp2 (const g_verylow) $ \(S a x, S b y) -> iteWhiff (Eq a b) (x .== y)
         -- op: ISZERO
-        0x15 -> stackOp1 (const g_verylow) $ \(S a x) -> ite ((S a x) .== 0) (S (UnOp "isZero" a) 1) (S (UnOp "NonZero" a) 0)
+        0x15 -> stackOp1 (const g_verylow) $ \(S a x) -> ite ((S a x) .== 0) (S (IsZero a) 1) (S (IsZero (IsZero a)) 0)
 
         -- op: AND
         0x16 -> stackOp2 (const g_verylow) $ uncurry (.&.)
@@ -705,12 +706,12 @@ exec1 = do
 
                       let previousUsed = view (env . keccakUsed) vm
                       env . keccakUsed <>= [(bytes, hash')]
-                      constraints <>= (hash' .> 100, Dull):
+                      constraints <>= (hash' .> 100, Todo "probabilistic keccak assumption" []):
                         (fmap (\(preimage, image) ->
                           -- keccak is a function
                           ((preimage .== bytes .=> image .== hash') .&&
                           -- which is injective
-                          (image .== hash' .=> preimage .== bytes), Dull))
+                          (image .== hash' .=> preimage .== bytes), Todo "injective keccak assumption" []))
                          previousUsed)
 
                       next
@@ -1033,7 +1034,7 @@ exec1 = do
                   in case maybeLitWord y of
                       Just y' -> jump (0 == y')
                       -- if the jump condition is symbolic, an smt query has to be made.
-                      Nothing -> askSMT (self, the state pc) (0 .== y, UnOp "isZero" w) jump
+                      Nothing -> askSMT (self, the state pc) (0 .== y, IsZero w) jump
             _ -> underrun
 
         -- op: PC
@@ -1548,6 +1549,7 @@ askSMT :: CodeLocation -> (SBool, Whiff) -> (Bool -> EVM ()) -> EVM ()
 askSMT codeloc (condition, whiff) continue = do
   -- We keep track of how many times we have come across this particular
   -- (contract, pc) combination in the `iteration` mapping.
+  traceM $ show whiff
   iteration <- use (iterations . at codeloc . non 0)
 
   -- If we are backstepping, the result of this query should be cached
@@ -1564,7 +1566,7 @@ askSMT codeloc (condition, whiff) continue = do
    where -- Only one path is possible
          choosePath :: BranchCondition -> EVM ()
          choosePath (Case v) = do assign result Nothing
-                                  pushTo constraints $ if v then (condition, whiff) else (sNot condition, UnOp "not" whiff)
+                                  pushTo constraints $ if v then (condition, whiff) else (sNot condition, IsZero whiff)
                                   iteration <- use (iterations . at codeloc . non 0)
                                   assign (cache . path . at (codeloc, iteration)) (Just v)
                                   assign (iterations . at codeloc) (Just (iteration + 1))
