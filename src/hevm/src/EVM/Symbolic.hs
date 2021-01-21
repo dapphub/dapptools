@@ -5,15 +5,17 @@
 
 module EVM.Symbolic where
 
-import Prelude hiding  (Word)
+import Prelude hiding  (Word, LT, GT)
 import qualified Data.ByteString as BS
 import Data.ByteString (ByteString)
 import Control.Lens hiding (op, (:<), (|>), (.>))
 import Data.Maybe                   (fromMaybe, fromJust)
 
 import EVM.Types
+import Debug.Trace
 import qualified EVM.Concrete as Concrete
 import Data.SBV hiding (runSMT, newArray_, addAxiom, Word)
+import Data.SBV.Tools.Overflow
 
 litWord :: Word -> (SymWord)
 litWord (C whiff a) = S whiff (literal $ toSizzle a)
@@ -47,13 +49,6 @@ forceBuffer :: Buffer -> ByteString
 forceBuffer (ConcreteBuffer b) = b
 forceBuffer (SymbolicBuffer b) = forceLitBytes b
 
--- | Arithmetic operations on SymWord
-iteWhiff :: Whiff -> SBool -> SymWord
-iteWhiff whiff cond =
-  ite cond
-  (S whiff 1) (S (IsZero whiff) 0)
-
-
 sdiv :: SymWord -> SymWord -> SymWord
 sdiv (S a x) (S b y) = let sx, sy :: SInt 256
                            sx = sFromIntegral x
@@ -78,18 +73,11 @@ mulmod (S _ x) (S _ y) (S _ z) = let to512 :: SWord 256 -> SWord 512
 
 slt :: SymWord -> SymWord -> SymWord
 slt (S xw x) (S yw y) =
-  iteWhiff (SLT xw yw) (sFromIntegral x .< (sFromIntegral y :: (SInt 256)))
+  iteWhiff (SLT xw yw) (sFromIntegral x .< (sFromIntegral y :: (SInt 256))) x y
 
 sgt :: SymWord -> SymWord -> SymWord
 sgt (S xw x) (S yw y) =
-  iteWhiff (SGT xw yw) (sFromIntegral x .> (sFromIntegral y :: (SInt 256)))
-
-shiftRight' :: SymWord -> SymWord -> SymWord
-shiftRight' (S _ a') b@(S _ b') = case (num <$> unliteral a', b) of
-  (Just n, (S (FromBytes ind (SymbolicBuffer a)) _)) | n `mod` 8 == 0 && n <= 256 ->
-    let bs = replicate (n `div` 8) 0 <> (take ((256 - n) `div` 8) a)
-    in S (FromBytes ind (SymbolicBuffer bs)) (fromBytes bs)
-  _ -> sw256 $ sShiftRight b' a'
+  iteWhiff (SGT xw yw) (sFromIntegral x .> (sFromIntegral y :: (SInt 256))) x y
 
 -- | Operations over symbolic memory (list of symbolic bytes)
 swordAt :: Int -> [SWord 8] -> SymWord
@@ -139,11 +127,11 @@ select' xs err ind = walk xs ind err
     where walk []     _ acc = acc
           walk (e:es) i acc = walk es (i-1) (ite (i .== 0) e acc)
 
-readSWordWithBound :: SymWord -> Buffer -> SWord 256 -> SymWord
-readSWordWithBound sind@(S x ind) (SymbolicBuffer xs) bound = case (num <$> maybeLitWord sind, num <$> fromSizzle <$> unliteral bound) of
+readSWordWithBound :: SymWord -> Buffer -> SymWord -> SymWord
+readSWordWithBound sind@(S x ind) (SymbolicBuffer xs) (S _ bound) = case (num <$> maybeLitWord sind, num <$> fromSizzle <$> unliteral bound) of
   (Just i, Just b) ->
     let bs = truncpad 32 $ drop i (take b xs)
-    in S (FromBytes (Literal $ num i) (SymbolicBuffer bs)) (fromBytes bs)
+    in S (FromBytes (SymbolicBuffer bs)) (fromBytes bs)
   _ ->
     -- Generates a ridiculously large set of constraints (roughly 25k) when
     -- the index is symbolic, but it still seems (kind of) manageable
@@ -153,7 +141,7 @@ readSWordWithBound sind@(S x ind) (SymbolicBuffer xs) bound = case (num <$> mayb
 
     let boundedList = [ite (i .<= bound) x 0 | (x, i) <- zip xs [1..]]
         res = [select' boundedList 0 (ind + j) | j <- [0..31]]
-    in S (FromBytes x (SymbolicBuffer res)) $ fromBytes $ res
+    in S (FromBytes $ SymbolicBuffer res) $ fromBytes $ res
 
 readSWordWithBound sind (ConcreteBuffer xs) bound =
   case maybeLitWord sind of
@@ -217,3 +205,55 @@ setMemoryByte i x (ConcreteBuffer m) = case fromSized <$> unliteral x of
 readSWord :: Word -> Buffer -> SymWord
 readSWord i (SymbolicBuffer x) = readSWord' i x
 readSWord i (ConcreteBuffer x) = num $ Concrete.readMemoryWord i x
+
+rawVal :: SymWord -> SWord 256
+rawVal (S _ v) = v
+
+-- | Reconstruct the smt/sbv value from a whiff
+whiffValue :: Whiff -> SWord 256
+whiffValue w = case w of
+  w'@(Todo _ _) -> error $ "unable to get value of " ++ show w'
+  And x y       -> whiffValue x .&. whiffValue y
+  Or x y        -> whiffValue x .|. whiffValue y
+  Eq x y        -> ite (whiffValue x .== whiffValue y) 1 0
+  LT x y        -> ite (whiffValue x .< whiffValue y) 1 0
+  GT x y        -> ite (whiffValue x .> whiffValue y) 1 0
+  ITE b x y     -> ite (whiffValue b .== 1) (whiffValue x) (whiffValue y)
+  SLT x y       -> rawVal $ slt (S x (whiffValue x)) (S y (whiffValue y))
+  SGT x y       -> rawVal $ sgt (S x (whiffValue x)) (S y (whiffValue y))
+  IsZero x      -> ite (whiffValue x .== 0) 1 0
+  SHL x y       -> sShiftLeft  (whiffValue x) (whiffValue y)
+  SHR x y       -> sShiftRight (whiffValue x) (whiffValue y)
+  Add x y       -> whiffValue x + whiffValue y
+  Sub x y       -> whiffValue x - whiffValue y
+  Mul x y       -> whiffValue x * whiffValue y
+  Div x y       -> whiffValue x `sDiv` whiffValue y
+  Mod x y       -> whiffValue x `sMod` whiffValue y
+  Exp x y       -> whiffValue x .^ whiffValue y
+  Neg x         -> negate $ whiffValue x
+  Var _ w       -> w
+  FromKeccak bstr -> literal $ num $ keccak bstr
+  Literal x -> literal $ num $ x
+  FromBytes buf -> rawVal $ readMemoryWord 0 buf
+  FromStorage ind arr -> readArray arr (whiffValue ind) 
+
+-- | Special cases that have proven useful in practice
+simplifyCondition :: SBool -> Whiff -> SBool
+simplifyCondition b _ = b
+simplifyCondition b (IsZero (Eq x (Div (Mul y z) w))) = trace "ding1" b
+simplifyCondition b v@(IsZero (Eq (Div (Mul y z) w) x)) =
+  trace ("decomposing: " ++ show v) $
+  let x' = whiffValue x
+      y' = whiffValue y
+      z' = whiffValue z
+      w' = whiffValue w
+      (_, overflow) = bvMulO y' z'
+  in
+    ite
+    ((y' .== x' .&& z' .== w') .||
+      (z' .== x' .&& y' .== w'))
+    (overflow .|| w' .== 0)
+    b
+--simplifyCondition b _ = b
+-- simplifyCondition b (IsZero w) = b
+-- simplifyCondition b _ = b

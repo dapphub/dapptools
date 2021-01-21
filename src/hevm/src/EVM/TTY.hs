@@ -617,7 +617,7 @@ initialUiVmStateForTest
   -> IO UiVmState
 initialUiVmStateForTest opts@UnitTestOptions{..} (theContractName, theTestName) = do
   let state' = fromMaybe (error "Internal Error: missing smtState") smtState
-  symArgs <- flip runReaderT state' $ SBV.runQueryT $ symCalldata theTestName types []
+  (buf, len) <- flip runReaderT state' $ SBV.runQueryT $ symCalldata theTestName types []
   let script = do
         Stepper.evm . pushTrace . EntryTrace $
           "test " <> theTestName <> " (" <> theContractName <> ")"
@@ -633,7 +633,7 @@ initialUiVmStateForTest opts@UnitTestOptions{..} (theContractName, theTestName) 
             void (runUnitTest opts theTestName args)
           SymbolicTest _ -> do
             Stepper.evm $ modify symbolify
-            void (execSymTest opts theTestName (first SymbolicBuffer symArgs))
+            void (execSymTest opts theTestName (SymbolicBuffer buf, S (Literal $ num len) (literal $ num len)))
   pure $ initUiVmState vm0 opts script
   where
     Just (test, types) = find (\(test',_) -> extractSig test' == theTestName) $ unitTestMethods testContract

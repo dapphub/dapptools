@@ -22,7 +22,7 @@ import qualified EVM.Flatten
 import qualified EVM.Stepper
 import qualified EVM.TTY
 import qualified EVM.Emacs
-import EVM.Dev (concatMapM, interpretWithTrace)
+import EVM.Dev (interpretWithTrace)
 
 #if MIN_VERSION_aeson(1, 0, 0)
 import qualified EVM.VMTest as VMTest
@@ -736,7 +736,7 @@ vmFromCommand cmd = do
 
         vm0 miner ts blockNum diff c = EVM.makeVm $ EVM.VMOpts
           { EVM.vmoptContract      = c
-          , EVM.vmoptCalldata      = (calldata', literal . num $ len calldata')
+          , EVM.vmoptCalldata      = (calldata', S (Literal $ num $ len calldata') (literal . num $ len calldata'))
           , EVM.vmoptValue         = w256lit value'
           , EVM.vmoptAddress       = address'
           , EVM.vmoptCaller        = litAddr caller'
@@ -772,24 +772,24 @@ symvmFromCommand cmd = do
                                    )
 
   caller' <- maybe (SAddr <$> freshVar_) (return . litAddr) (caller cmd)
-  ts <- maybe (S (Var "Timestamp") <$> freshVar_) (return . w256lit) (timestamp cmd)
-  callvalue' <- maybe ((S (Var "CallValue")) <$> freshVar_) (return . w256lit) (value cmd)
+  ts <- maybe (var "Timestamp" <$> freshVar_) (return . w256lit) (timestamp cmd)
+  callvalue' <- maybe (var "CallValue" <$> freshVar_) (return . w256lit) (value cmd)
   (calldata', cdlen, pathCond) <- case (calldata cmd, sig cmd) of
     -- fully abstract calldata (up to 256 bytes)
     (Nothing, Nothing) -> do
       cd <- sbytes256
       len' <- freshVar_
-      return (SymbolicBuffer cd, len', (len' .<= 256, Todo "len < 256" []))
+      return (SymbolicBuffer cd, var "CALLDATALENGTH" len', (len' .<= 256, Todo "len < 256" []))
     -- fully concrete calldata
     (Just c, Nothing) ->
       let cd = ConcreteBuffer $ decipher c
-      in return (cd, num (len cd), (sTrue, Todo "" []))
+      in return (cd, S (Literal $ num $ len cd) (literal $ num (len cd)), (sTrue, Todo "" []))
     -- calldata according to given abi with possible specializations from the `arg` list
     (Nothing, Just sig') -> do
       method' <- io $ functionAbi sig'
       let typs = snd <$> view methodInputs method'
       (cd, cdlen) <- symCalldata (view methodSignature method') typs (arg cmd)
-      return (SymbolicBuffer cd, cdlen, (sTrue, Todo "" []))
+      return (SymbolicBuffer cd, S (Literal cdlen) (literal $ num cdlen), (sTrue, Todo "" []))
 
     _ -> error "incompatible options: calldata and abi"
 

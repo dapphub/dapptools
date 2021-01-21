@@ -244,7 +244,7 @@ fromBlockchainCase (BlockchainCase blocks preState postState network) =
       []        -> Left NoTxs
       _         -> Left TooManyTxs
     ([_], _) -> Left OldNetwork
-    (_, _)        -> Left TooManyBlocks
+    (_, _)   -> Left TooManyBlocks
 
 fromBlockchainCase' :: Block -> Transaction
                        -> Map Addr EVM.Contract -> Map Addr EVM.Contract
@@ -288,7 +288,8 @@ fromBlockchainCase' block tx preState postState =
                       else maybe (EVM.RuntimeCode mempty) (view contractcode) toCode
             cd = if isCreate
                  then (mempty, 0)
-                 else (ConcreteBuffer $ txData tx, literal . num . BS.length $ txData tx)
+                 else let len = num . BS.length $ txData tx
+                      in (ConcreteBuffer $ txData tx, S (Literal len) (literal $ num len))
 
 
 validateTx :: Transaction -> Map Addr EVM.Contract -> Maybe ()
