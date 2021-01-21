@@ -204,8 +204,8 @@ flatten dapp target = do
       putStrLn (unpack pragma)
       BS.putStr (mconcat sources)
 
--- Construct a new Solidity version pragma for the highest mentioned version
--- given a list of source file ASTs.
+-- | Construct a new Solidity version pragma for the highest mentioned version
+--  given a list of source file ASTs.
 maximalPragma :: [Value] -> Text
 maximalPragma asts = (
     case mapMaybe versions asts of

@@ -66,8 +66,9 @@ readMemoryWord (C _ i) m =
     go !a (-1) = a
     go !a !n = go (a + shiftL (num $ readByteOrZero (num i + n) m)
                               (8 * (31 - n))) (n - 1)
+    w = go (0 :: W256) (31 :: Int)
   in {-# SCC "readMemoryWord" #-}
-    w256 $ go (0 :: W256) (31 :: Int)
+    C (Literal w) w
 
 readMemoryWord32 :: Word -> ByteString -> Word
 readMemoryWord32 (C _ i) m =

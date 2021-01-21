@@ -180,7 +180,7 @@ data Cache = Cache
 -- | A way to specify an initial VM state
 data VMOpts = VMOpts
   { vmoptContract :: Contract
-  , vmoptCalldata :: (Buffer, SWord 256)
+  , vmoptCalldata :: (Buffer, SymWord)
   , vmoptValue :: SymWord
   , vmoptAddress :: Addr
   , vmoptCaller :: SAddr
@@ -241,7 +241,7 @@ data FrameState = FrameState
   , _stack        :: [SymWord]
   , _memory       :: Buffer
   , _memorySize   :: Int
-  , _calldata     :: (Buffer, (SWord 256))
+  , _calldata     :: (Buffer, SymWord)
   , _callvalue    :: SymWord
   , _caller       :: SAddr
   , _gas          :: Word
@@ -529,7 +529,7 @@ exec1 = do
     let ?op = 0x00 -- dummy value
     let
       calldatasize = snd (the state calldata)
-    case unliteral calldatasize of
+    case maybeLitWord calldatasize of
         Nothing -> vmError UnexpectedSymbolicArg
         Just calldatasize' -> do
           copyBytesToMemory (fst $ the state calldata) (num calldatasize') 0 0
@@ -632,7 +632,7 @@ exec1 = do
           stackOp2 (const g_low) (uncurry sdiv)
 
         -- op: MOD
-        0x06 -> stackOp2 (const g_low) $ \(x, y) -> ite (y .== 0) 0 (x `sMod` y)
+        0x06 -> stackOp2 (const g_low) $ \(S a x, S b y) -> S (ITE (IsZero b) (Literal 0) (Mod a b)) (ite (y .== 0) 0 (x `sMod` y))
 
         -- op: SMOD
         0x07 -> stackOp2 (const g_low) $ uncurry smod
@@ -642,18 +642,18 @@ exec1 = do
         0x09 -> stackOp3 (const g_mid) (\(x, y, z) -> mulmod x y z)
 
         -- op: LT
-        0x10 -> stackOp2 (const g_verylow) $ \(S a x, S b y) -> iteWhiff (LT a b) (x .< y)
+        0x10 -> stackOp2 (const g_verylow) $ \(S a x, S b y) -> iteWhiff (LT a b) (x .< y) 1 0
         -- op: GT
-        0x11 -> stackOp2 (const g_verylow) $ \(S a x, S b y) -> iteWhiff (GT a b) (x .> y)
+        0x11 -> stackOp2 (const g_verylow) $ \(S a x, S b y) -> iteWhiff (GT a b) (x .> y) 1 0
         -- op: SLT
         0x12 -> stackOp2 (const g_verylow) $ uncurry slt
         -- op: SGT
         0x13 -> stackOp2 (const g_verylow) $ uncurry sgt
 
         -- op: EQ
-        0x14 -> stackOp2 (const g_verylow) $ \(S a x, S b y) -> iteWhiff (Eq a b) (x .== y)
+        0x14 -> stackOp2 (const g_verylow) $ \(S a x, S b y) -> iteWhiff (Eq a b) (x .== y) 1 0
         -- op: ISZERO
-        0x15 -> stackOp1 (const g_verylow) $ \(S a x) -> ite ((S a x) .== 0) (S (IsZero a) 1) (S (IsZero (IsZero a)) 0)
+        0x15 -> stackOp1 (const g_verylow) $ \(S a x) -> iteWhiff (IsZero a) (x .== 0) 1 0
 
         -- op: AND
         0x16 -> stackOp2 (const g_verylow) $ uncurry (.&.)
@@ -670,9 +670,9 @@ exec1 = do
           (n, x) | otherwise          -> 0xff .&. shiftR x (8 * (31 - num (forceLit n)))
 
         -- op: SHL
-        0x1b -> stackOp2 (const g_verylow) $ \((S _ n), (S _ x)) -> sw256 $ sShiftLeft x n
+        0x1b -> stackOp2 (const g_verylow) $ \((S a n), (S b x)) -> S (SHL b a) $ sShiftLeft x n
         -- op: SHR
-        0x1c -> stackOp2 (const g_verylow) $ uncurry shiftRight'
+        0x1c -> stackOp2 (const g_verylow) $ \((S a n), (S b x)) -> S (SHR b a) $ sShiftRight x n
         -- op: SAR
         0x1d -> stackOp2 (const g_verylow) $ \((S _ n), (S _ x)) -> sw256 $ sSignedShiftArithRight x n
 
@@ -759,7 +759,7 @@ exec1 = do
         -- op: CALLDATASIZE
         0x36 ->
           limitStack 1 . burn g_base $
-            next >> pushSym ((S (Var "Calldatasize")) . snd $ (the state calldata))
+            next >> pushSym (snd $ (the state calldata))
 
         -- op: CALLDATACOPY
         0x37 ->
@@ -770,7 +770,7 @@ exec1 = do
                   next
                   assign (state . stack) xs
                   case the state calldata of
-                    (SymbolicBuffer cd, cdlen) -> copyBytesToMemory (SymbolicBuffer [ite (i .<= cdlen) x 0 | (x, i) <- zip cd [1..]]) xSize xFrom xTo
+                    (SymbolicBuffer cd, (S _ cdlen)) -> copyBytesToMemory (SymbolicBuffer [ite (i .<= cdlen) x 0 | (x, i) <- zip cd [1..]]) xSize xFrom xTo
                     -- when calldata is concrete,
                     -- the bound should always be equal to the bytestring length
                     (cd, _) -> copyBytesToMemory cd xSize xFrom xTo
@@ -1549,7 +1549,7 @@ askSMT :: CodeLocation -> (SBool, Whiff) -> (Bool -> EVM ()) -> EVM ()
 askSMT codeloc (condition, whiff) continue = do
   -- We keep track of how many times we have come across this particular
   -- (contract, pc) combination in the `iteration` mapping.
-  traceM $ show whiff
+--  traceM $ "Pre simplification: " ++ show whiff
   iteration <- use (iterations . at codeloc . non 0)
 
   -- If we are backstepping, the result of this query should be cached
@@ -1561,12 +1561,14 @@ askSMT codeloc (condition, whiff) continue = do
      -- increment the iterations and select appropriate path
      Nothing -> do pathconds <- use constraints
                    assign result . Just . VMFailure . Query $ PleaseAskSMT
-                     condition (fst <$> pathconds) choosePath
+                     condition' (fst <$> pathconds) choosePath
 
-   where -- Only one path is possible
+   where condition' = simplifyCondition condition whiff
+     -- Only one path is possible
+         
          choosePath :: BranchCondition -> EVM ()
          choosePath (Case v) = do assign result Nothing
-                                  pushTo constraints $ if v then (condition, whiff) else (sNot condition, IsZero whiff)
+                                  pushTo constraints $ if v then (condition', whiff) else (sNot condition', IsZero whiff)
                                   iteration <- use (iterations . at codeloc . non 0)
                                   assign (cache . path . at (codeloc, iteration)) (Just v)
                                   assign (iterations . at codeloc) (Just (iteration + 1))
@@ -1601,7 +1603,7 @@ fetchAccount addr continue =
         else continue c
 
 readStorage :: Storage -> SymWord -> Maybe (SymWord)
-readStorage (Symbolic _ s) (S w loc) = Just $ S (FromStorage w) $ readArray s loc
+readStorage (Symbolic _ s) (S w loc) = Just $ S (FromStorage w s) $ readArray s loc
 readStorage (Concrete s) loc = Map.lookup (forceLit loc) s
 
 writeStorage :: SymWord -> SymWord -> Storage -> Storage
@@ -1963,7 +1965,7 @@ delegateCall this gasGiven xTo xContext xValue xInOffset xInSize xOutOffset xOut
                     assign memory mempty
                     assign memorySize 0
                     assign returndata mempty
-                    assign calldata (readMemory (num xInOffset) (num xInSize) vm0, literal (num xInSize))
+                    assign calldata (readMemory (num xInOffset) (num xInSize) vm0, sw256 $ literal (num xInSize))
 
                   continue xTo'
 

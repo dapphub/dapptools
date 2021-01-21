@@ -36,9 +36,6 @@ import Control.Lens hiding (op, passing)
 import Control.Monad.Operational (ProgramViewT(..), ProgramView)
 import qualified Control.Monad.Operational as Operational
 
-concatMapM :: Monad m => (a -> m [b]) -> [a] -> m [b]
-concatMapM f xs   =  liftM concat (mapM f xs)
-
 loadDappInfo :: String -> String -> IO DappInfo
 loadDappInfo path file =
   withCurrentDirectory path $

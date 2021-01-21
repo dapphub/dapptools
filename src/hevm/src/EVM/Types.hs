@@ -28,6 +28,7 @@ import Data.ByteString (ByteString)
 import Data.ByteString.Base16 as BS16
 import Data.ByteString.Builder (byteStringHex, toLazyByteString)
 import Data.ByteString.Lazy (toStrict)
+import Control.Monad.State.Strict (liftM)
 import qualified Data.ByteString.Char8  as Char8
 import Data.DoubleWord
 import Data.DoubleWord.TH
@@ -79,8 +80,8 @@ instance Bits Word where
   (C a x) .|. (C b y) = C (Or  a b) (x .|. y)
   (C a x) `xor` (C b y) = C (Todo "xor" [a, b]) (x `xor` y)
   complement (C a x) = C (Neg a) (complement x)
-  shiftL (C a x) i = C (SHL a i) (shiftL x i)
-  shiftR (C a x) i = C (SHR a i) (shiftR x i)
+  shiftL (C a x) i = C (SHL a (Literal $ fromIntegral i)) (shiftL x i)
+  shiftR (C a x) i = C (SHR a (Literal $ fromIntegral i)) (shiftR x i)
   rotate (C a x) i = C (Todo "rotate " [a]) (rotate x i) -- unused.
   bitSize (C _ x) = bitSize x
   bitSizeMaybe (C _ x) = bitSizeMaybe x
@@ -138,6 +139,9 @@ instance Show SymWord where
 sw256 :: SWord 256 -> SymWord
 sw256 x = S (Todo "?" []) x
 
+var :: String -> SWord 256 -> SymWord
+var name x = S (Var name x) x
+
 -- | Custom instances for SymWord, many of which have direct
 -- analogues for concrete words defined in Concrete.hs
 instance EqSymbolic SymWord where
@@ -156,8 +160,8 @@ instance Bits SymWord where
   (S a x) .|. (S b y) = S (Or  a b) (x .|. y)
   (S a x) `xor` (S b y) = S (Todo "xor" [a, b]) (x `xor` y)
   complement (S a x) = S (Neg a) (complement x)
-  shiftL (S a x) i = S (SHL a i) (shiftL x i)
-  shiftR (S a x) i = S (SHR a i) (shiftR x i)
+  shiftL (S a x) i = S (SHL a (Literal $ fromIntegral i)) (shiftL x i)
+  shiftR (S a x) i = S (SHR a (Literal $ fromIntegral i)) (shiftR x i)
   rotate (S a x) i = S (Todo "rotate " [a]) (rotate x i) -- unused.
   bitSize (S _ x) = bitSize x
   bitSizeMaybe (S _ x) = bitSizeMaybe x
@@ -166,16 +170,22 @@ instance Bits SymWord where
   bit i = sw256 (bit i)
   popCount (S _ x) = popCount x
 
+-- sQuotRem and sDivMod are identical for SWord 256
+-- prove $ \x y -> x `sQuotRem` (y :: SWord 256) .== x `sDivMod` y
+-- Q.E.D.
 instance SDivisible SymWord where
   sQuotRem (S x' x) (S y' y) = let (a, b) = x `sQuotRem` y
                                in (S (Div x' y') a, S (Mod x' y') b)
-  sDivMod (S x' x) (S y' y) = let (a, b) = x `sDivMod` y
-                              in (S (Div x' y') a, S (Mod x' y') b)
+  sDivMod = sQuotRem
 
-instance Mergeable SymWord where
-  symbolicMerge a b (S wx x) (S _ y) = S wx (symbolicMerge a b x y)
-  select xs (S _ x) b = let ys = fmap (\(S _ y) -> y) xs
-                        in sw256 $ select ys x b
+-- instance Mergeable SymWord where
+--   symbolicMerge a b (S x' x) (S y' y) = S (ITE b x' y') (symbolicMerge a b x y)
+--   select xs (S _ x) b = let ys = fmap (\(S _ y) -> y) xs
+--                         in sw256 $ select ys x b
+-- | Instead of supporting a Mergeable instance directly,
+-- we use one which carries the Whiff around:
+iteWhiff :: Whiff -> SBool -> SWord 256 -> SWord 256 -> SymWord
+iteWhiff w b x y = S w (ite b x y)
 
 instance Bounded SymWord where
   minBound = sw256 minBound
@@ -188,8 +198,8 @@ instance Enum SymWord where
   toEnum i = sw256 (toEnum i)
   fromEnum (S _ x) = fromEnum x
 
-instance OrdSymbolic SymWord where
-  (.<) (S _ x) (S _ y) = (.<) x y
+-- instance OrdSymbolic SymWord where
+--   (.<) (S _ x) (S _ y) = (.<) x y
 
 
 -- | This type can give insight into the provenance of a term
@@ -204,9 +214,10 @@ data Whiff =
   | SLT  Whiff Whiff
   | SGT  Whiff Whiff
   | IsZero Whiff
+  | ITE Whiff Whiff Whiff
   -- bits
-  | SHL Whiff Int
-  | SHR Whiff Int
+  | SHL Whiff Whiff
+  | SHR Whiff Whiff
   
   -- integers
   | Add  Whiff Whiff
@@ -217,10 +228,10 @@ data Whiff =
   | Exp  Whiff Whiff
   | Neg  Whiff
   | FromKeccak ByteString
-  | FromBytes Whiff Buffer
-  | FromStorage Whiff
+  | FromBytes Buffer
+  | FromStorage Whiff (SArray (WordN 256) (WordN 256))
   | Literal W256
-  | Var String
+  | Var String (SWord 256)
 
 instance Show Whiff where
   show w =
@@ -230,6 +241,7 @@ instance Show Whiff where
       Todo s args -> s ++ "(" ++ (intercalate "," (show <$> args)) ++ ")"
       And x y     -> infix' " and " x y
       Or x y      -> infix' " or " x y
+      ITE b x y  -> "if " ++ show b ++ " then " ++ show x ++ " else " ++ show y
       Eq x y      -> infix' " == " x y
       LT x y      -> infix' " < " x y
       GT x y      -> infix' " > " x y
@@ -245,38 +257,11 @@ instance Show Whiff where
       Mod x y     -> infix' " % " x y
       Exp x y     -> infix' " ** " x y
       Neg x       -> "not " ++ show x
-      Var v       -> v
+      Var v _     -> v
       FromKeccak bstr -> "keccak(" ++ show bstr ++ ")"
       Literal x -> show x
-      FromBytes index buf -> "FromBuffer " ++ (show index) ++ " " ++ show buf
-      FromStorage l -> "SLOAD(" ++ show l ++ ")"
-
--- | Reconstruct the smt/sbv value from a whiff
-getValue :: Whiff -> SWord 256
-getValue w = case w of
-  w'@(Todo _ _) -> error $ "unable to get value of " ++ show w'
-  And x y       -> getValue x .&&. getValue y
-  Or x y        -> getValue x .||. getValue y
-  Eq x y        -> ite (getValue x .== getValue y) 1 0
-  LT x y        -> ite (getValue x .< getValue y) 1 0
-  GT x y        -> ite (getValue x .> getValue y) 1 0
-  SLT x y       -> ite (slt (getValue x) (getValue y)) 1 0
-  SGT x y       -> ite (sgt (getValue x) (getValue y)) 1 0
-  IsZero x      -> ite (getValue x .== 0) 1 0
-  SHL x y       -> infix' " << " x y
-  SHR x y       -> infix' " << " x y
-  Add x y       -> infix' " + " x y
-  Sub x y       -> infix' " - " x y
-  Mul x y       -> infix' " * " x y
-  Div x y       -> infix' " / " x y
-  Mod x y       -> infix' " % " x y
-  Exp x y       -> infix' " ** " x y
-  Neg x         -> "not " ++ show x
-  Var v         -> v
-  FromKeccak bstr -> "keccak(" ++ show bstr ++ ")"
-  Literal x -> show x
-  FromBytes index buf -> "FromBuffer " ++ (show index) ++ " " ++ show buf
-  FromStorage l -> "SLOAD(" ++ show l ++ ")"
+      FromBytes buf -> "FromBuffer " ++ show buf
+      FromStorage l _ -> "SLOAD(" ++ show l ++ ")"
 
 newtype Addr = Addr { addressWord160 :: Word160 }
   deriving (Num, Integral, Real, Ord, Enum, Eq, Bits, Generic)
@@ -495,10 +480,14 @@ padLeft n xs = BS.replicate (n - BS.length xs) 0 <> xs
 padRight :: Int -> ByteString -> ByteString
 padRight n xs = xs <> BS.replicate (n - BS.length xs) 0
 
+-- | Right padding  / truncating
 truncpad :: Int -> [SWord 8] -> [SWord 8]
 truncpad n xs = if m > n then take n xs
                 else mappend xs (replicate (n - m) 0)
   where m = length xs
+
+padLeft' :: (Num a) => Int -> [a] -> [a]
+padLeft' n xs = replicate (n - length xs) 0 <> xs
 
 word256 :: ByteString -> Word256
 word256 xs = case Cereal.runGet m (padLeft 32 xs) of
@@ -582,3 +571,7 @@ abiKeccak =
     >>> BS.take 4
     >>> BS.unpack
     >>> word32
+
+
+concatMapM :: Monad m => (a -> m [b]) -> [a] -> m [b]
+concatMapM f xs = liftM concat (mapM f xs)

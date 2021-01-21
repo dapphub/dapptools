@@ -144,10 +144,9 @@ initializeUnitTest UnitTestOptions { .. } theContract = do
     -- call setUp(), if it exists, to initialize the test contract
     let theAbi = view abiMap theContract
         setUp  = abiKeccak (encodeUtf8 "setUp()")
-        cd     = abiMethod "setUp()" emptyAbi
 
     when (isJust (Map.lookup setUp theAbi)) $ do
-      makeTxCall testParams (ConcreteBuffer cd, literal . num . BS.length $ cd)
+      abiCall testParams "setUp()" emptyAbi
       popTrace
       pushTrace (EntryTrace "setUp()")
 
@@ -163,14 +162,13 @@ initializeUnitTest UnitTestOptions { .. } theContract = do
 runUnitTest :: UnitTestOptions -> ABIMethod -> AbiValue -> Stepper Bool
 runUnitTest a method args = do
   x <- execTest a method args
-  checkFailures a method args x
+  checkFailures a method x
 
 execTest :: UnitTestOptions -> ABIMethod -> AbiValue -> Stepper Bool
 execTest UnitTestOptions { .. } method args = do
   -- Set up the call to the test method
   Stepper.evm $ do
-    let cd = abiMethod method args
-    makeTxCall testParams (ConcreteBuffer cd, literal . num . BS.length $ cd)
+    abiCall testParams method args
     pushTrace (EntryTrace method)
   -- Try running the test method
   Stepper.execFully >>= \case
@@ -178,8 +176,8 @@ execTest UnitTestOptions { .. } method args = do
     Left e -> Stepper.evm (pushTrace (ErrorTrace e)) >> pure True
     _ -> pure False
 
-checkFailures :: UnitTestOptions -> ABIMethod -> AbiValue -> Bool -> Stepper Bool
-checkFailures UnitTestOptions { .. } method args bailed = do
+checkFailures :: UnitTestOptions -> ABIMethod -> Bool -> Stepper Bool
+checkFailures UnitTestOptions { .. } method bailed = do
    -- Decide whether the test is supposed to fail or succeed
   let shouldFail = "testFail" `isPrefixOf` method
   if bailed then
@@ -188,9 +186,8 @@ checkFailures UnitTestOptions { .. } method args bailed = do
     -- Ask whether any assertions failed
     Stepper.evm $ do
       popTrace
-      let cd = abiMethod "failed()" args
-      makeTxCall testParams (ConcreteBuffer cd, literal . num . BS.length $ cd)
-    res <- Stepper.execFully -- >>= \(ConcreteBuffer bs) -> (Stepper.decode AbiBoolType bs)
+      abiCall testParams "failed()" emptyAbi
+    res <- Stepper.execFully
     case res of
       Right (ConcreteBuffer r) ->
         let AbiBool failed = decodeAbiValue AbiBoolType (BSLazy.fromStrict r)
@@ -452,7 +449,7 @@ runOne opts@UnitTestOptions{..} vm testName args = do
       vm
   (success, vm'') <-
     runStateT
-      (EVM.Stepper.interpret oracle (checkFailures opts testName args bailed)) vm'
+      (EVM.Stepper.interpret oracle (checkFailures opts testName bailed)) vm'
   if success
   then
      let gasSpent = num (testGasCall testParams) - view (state . gas) vm'
@@ -524,12 +521,13 @@ symRun :: UnitTestOptions -> VM -> Text -> [AbiType] -> SBV.Query (Text, Either 
 symRun opts@UnitTestOptions{..} concreteVm testName types = do
     SBV.resetAssertions
     let vm = symbolify concreteVm
-    cd <- first SymbolicBuffer <$> symCalldata testName types []
-    let shouldFail = "proveFail" `isPrefixOf` testName
+    (cd, cdlen) <- symCalldata testName types []
+    let cd' = (SymbolicBuffer cd, S (Literal cdlen) (literal $ num cdlen))
+        shouldFail = "proveFail" `isPrefixOf` testName
 
     -- get all posible postVMs for the test method
     allPaths <- fst <$> runStateT
-        (EVM.SymExec.interpret oracle maxIter (execSymTest opts testName cd)) vm
+        (EVM.SymExec.interpret oracle maxIter (execSymTest opts testName cd')) vm
     results <- forM allPaths $
       -- If the vm execution succeeded, check if the vm is reachable,
       -- and if any ds-test assertions were triggered
@@ -549,7 +547,7 @@ symRun opts@UnitTestOptions{..} concreteVm testName types = do
             _ -> error "unexpected return value"
         checkSat >>= \case
           Sat -> do
-            prettyCd <- prettyCalldata cd testName types
+            prettyCd <- prettyCalldata cd' testName types
             let explorationFailed = case (view result vm') of
                   Just (VMFailure e) -> case e of
                                           NotUnique -> True
@@ -601,15 +599,16 @@ symFailure UnitTestOptions {..} testName failures' = mconcat
           _ -> ""
       ]
 
-prettyCalldata :: (?context :: DappContext) => (Buffer, SWord 256) -> Text -> [AbiType]-> SBV.Query Text
-prettyCalldata (buffer, cdlen) sig types = do
+prettyCalldata :: (?context :: DappContext) => (Buffer, SymWord) -> Text -> [AbiType]-> SBV.Query Text
+prettyCalldata (buffer, cdlen') sig types = do
+  let S _ cdlen = cdlen'
   cdlen' <- num <$> SBV.getValue cdlen
   cd <- case buffer of
     SymbolicBuffer cd -> mapM (SBV.getValue . fromSized) (take cdlen' cd) <&> BS.pack
     ConcreteBuffer cd -> return $ BS.take cdlen' cd
   pure $ (head (Text.splitOn "(" sig)) <> showCall types (ConcreteBuffer cd)
 
-execSymTest :: UnitTestOptions -> ABIMethod -> (Buffer, SWord 256) -> Stepper (Bool, VM)
+execSymTest :: UnitTestOptions -> ABIMethod -> (Buffer, SymWord) -> Stepper (Bool, VM)
 execSymTest opts@UnitTestOptions{ .. } method cd = do
   -- Set up the call to the test method
   Stepper.evm $ do
@@ -630,8 +629,7 @@ checkSymFailures UnitTestOptions { .. } = do
   -- Ask whether any assertions failed
   Stepper.evm $ do
     popTrace
-    let cd = abiMethod "failed()" emptyAbi
-    makeTxCall testParams (ConcreteBuffer cd, literal . num . BS.length $ cd)
+    abiCall testParams "failed()" emptyAbi
   Stepper.runFully
 
 indentLines :: Int -> Text -> Text
@@ -740,7 +738,13 @@ formatTestLog events (Log _ args (topic:_)) =
 word32Bytes :: Word32 -> ByteString
 word32Bytes x = BS.pack [byteAt x (3 - i) | i <- [0..3]]
 
-makeTxCall :: TestVMParams -> (Buffer, SWord 256) -> EVM ()
+abiCall :: TestVMParams -> Text -> AbiValue -> EVM ()
+abiCall params sig args =
+  let cd = abiMethod "setUp()" args
+      len = num . BS.length $ cd
+  in makeTxCall params (ConcreteBuffer cd, S (Literal len) (literal $ num len))
+
+makeTxCall :: TestVMParams -> (Buffer, SymWord) -> EVM ()
 makeTxCall TestVMParams{..} cd = do
   resetState
   assign (tx . isCreate) False

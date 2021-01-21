@@ -44,26 +44,34 @@ sbytes256 = liftA2 (++) sbytes128 sbytes128
 sbytes512 = liftA2 (++) sbytes256 sbytes256
 sbytes1024 = liftA2 (++) sbytes512 sbytes512
 
+mkByte :: Query [SWord 8]
+mkByte = do x <- freshVar_
+            return [x]
+
 -- | Abstract calldata argument generation
--- We don't assume input types are restricted to their proper range here;
--- such assumptions should instead be given as preconditions.
--- This could catch some interesting calldata mismanagement errors.
-symAbiArg :: AbiType -> Query ([SWord 8], SWord 256)
-symAbiArg (AbiUIntType n) | n `mod` 8 == 0 && n <= 256 = do x <- sbytes32
-                                                            return (x, 32)
+symAbiArg :: AbiType -> Query ([SWord 8], W256)
+symAbiArg (AbiUIntType n) | n `mod` 8 == 0 && n <= 256 =
+  do x <- concatMapM (const mkByte) [0..(n `div` 8) - 1]
+     return (padLeft' 32 x, 32)
                           | otherwise = error "bad type"
 
-symAbiArg (AbiIntType n)  | n `mod` 8 == 0 && n <= 256 = do x <- sbytes32
-                                                            return (x, 32)
+symAbiArg (AbiIntType n)  | n `mod` 8 == 0 && n <= 256 =
+  do x <- concatMapM (const mkByte) [0..(n `div` 8) - 1]
+     return (padLeft' 32 x, 32)
+
                           | otherwise = error "bad type"
-symAbiArg AbiBoolType = do x <- sbytes32
-                           return (x, 32)
+symAbiArg AbiBoolType =
+  do x <- mkByte
+     return (padLeft' 32 x, 32)
 
-symAbiArg AbiAddressType = do x <- sbytes32
-                              return (x, 32)
+symAbiArg AbiAddressType =
+  do x <- concatMapM (const mkByte) [0..19]
+     return (padLeft' 32 x, 32)
 
-symAbiArg (AbiBytesType n) | n <= 32 = do x <- sbytes32
-                                          return (x, 32)
+symAbiArg (AbiBytesType n) | n <= 32 =
+  do x <- concatMapM (const mkByte) [0..n - 1]
+     return (padLeft' 32 x, 32)
+
                            | otherwise = error "bad type"
 
 -- TODO: is this encoding correct?
@@ -84,7 +92,7 @@ symAbiArg n =
 -- with concrete arguments.
 -- Any argument given as "<symbolic>" or omitted at the tail of the list are
 -- kept symbolic.
-symCalldata :: Text -> [AbiType] -> [String] -> Query ([SWord 8], SWord 256)
+symCalldata :: Text -> [AbiType] -> [String] -> Query ([SWord 8], W256)
 symCalldata sig typesignature concreteArgs =
   let args = concreteArgs <> replicate (length typesignature - length concreteArgs)  "<symbolic>"
       mkArg typ "<symbolic>" = symAbiArg typ
@@ -100,9 +108,9 @@ abstractVM typesignature concreteArgs x storagemodel = do
     case typesignature of
       Nothing -> do cd <- sbytes256
                     len <- freshVar_
-                    return (cd, len, (len .<= 256, Todo "calldatalength < 256" []))
+                    return (cd, var "calldataLength" len, (len .<= 256, Todo "calldatalength < 256" []))
       Just (name, typs) -> do (cd, cdlen) <- symCalldata name typs concreteArgs
-                              return (cd, cdlen, (sTrue, Todo "Trivial" []))
+                              return (cd, S (Literal cdlen) (literal $ num cdlen), (sTrue, Todo "Trivial" []))
   symstore <- case storagemodel of
     SymbolicS -> Symbolic [] <$> freshArray_ Nothing
     InitialS -> Symbolic [] <$> freshArray_ (Just 0)
@@ -111,7 +119,7 @@ abstractVM typesignature concreteArgs x storagemodel = do
   value' <- sw256 <$> freshVar_
   return $ loadSymVM (RuntimeCode x) symstore storagemodel c value' (SymbolicBuffer cd', cdlen) & over constraints ((<>) [cdconstraint])
 
-loadSymVM :: ContractCode -> Storage -> StorageModel -> SAddr -> SymWord -> (Buffer, SWord 256) -> VM
+loadSymVM :: ContractCode -> Storage -> StorageModel -> SAddr -> SymWord -> (Buffer, SymWord) -> VM
 loadSymVM x initStore model addr callvalue' calldata' =
     (makeVm $ VMOpts
     { vmoptContract = contractWithStore x initStore
@@ -391,7 +399,7 @@ both' f (x, y) = (f x, f y)
 
 showCounterexample :: VM -> Maybe (Text, [AbiType]) -> Query ()
 showCounterexample vm maybesig = do
-  let (calldata', cdlen) = view (EVM.state . EVM.calldata) vm
+  let (calldata', S _ cdlen) = view (EVM.state . EVM.calldata) vm
       S _ cvalue = view (EVM.state . EVM.callvalue) vm
       SAddr caller' = view (EVM.state . EVM.caller) vm
   cdlen' <- num <$> getValue cdlen
