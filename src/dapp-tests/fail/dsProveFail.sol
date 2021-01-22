@@ -38,6 +38,10 @@ contract SolidityTest is DSTest {
         }
     }
 
+    function prove_mul(uint136 x, uint128 y) public {
+        mul(x,y);
+    }
+
     function prove_transfer(uint supply, address usr, uint amt) public {
         token.mint(supply);
 

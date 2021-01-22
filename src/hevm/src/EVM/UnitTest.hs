@@ -522,7 +522,7 @@ symRun opts@UnitTestOptions{..} concreteVm testName types = do
     SBV.resetAssertions
     let vm = symbolify concreteVm
     (cd, cdlen) <- symCalldata testName types []
-    let cd' = (SymbolicBuffer cd, S (Literal cdlen) (literal $ num cdlen))
+    let cd' = (SymbolicBuffer cd, w256lit cdlen)
         shouldFail = "proveFail" `isPrefixOf` testName
 
     -- get all posible postVMs for the test method
@@ -544,11 +544,11 @@ symRun opts@UnitTestOptions{..} concreteVm testName types = do
           case view result vm' of
             Just (VMSuccess (SymbolicBuffer buf)) ->
               constrain $ litBytes (encodeAbiValue $ AbiBool $ not shouldFail) .== buf
-            _ -> error "unexpected return value"
+            r -> error $ "unexpected return value: " ++ show r
         checkSat >>= \case
           Sat -> do
             prettyCd <- prettyCalldata cd' testName types
-            let explorationFailed = case (view result vm') of
+            let explorationFailed = case view result vm' of
                   Just (VMFailure e) -> case e of
                                           NotUnique -> True
                                           UnexpectedSymbolicArg -> True
@@ -740,7 +740,7 @@ word32Bytes x = BS.pack [byteAt x (3 - i) | i <- [0..3]]
 
 abiCall :: TestVMParams -> Text -> AbiValue -> EVM ()
 abiCall params sig args =
-  let cd = abiMethod "setUp()" args
+  let cd = abiMethod sig args
       len = num . BS.length $ cd
   in makeTxCall params (ConcreteBuffer cd, S (Literal len) (literal $ num len))
 

@@ -198,13 +198,19 @@ oracle smtstate info ensureConsistency q = do
           case smtstate of
             Nothing -> return $ continue Nothing
             Just state -> flip runReaderT state $ SBV.runQueryT $ do
-              constrain $ sAnd $ pathconditions <> [val .== val]
+              push 1
+              constrain $ sAnd $ pathconditions <> [val .== val] -- dummy proposition just to make sure `val` is defined when we do `getValue` later.
               checkSat >>= \case
-                Sat -> do val' <- getValue val
-                          checksat (val ./= literal val') >>= \case
-                            Unsat -> pure $ continue $ Just val'
-                            _ -> pure $ continue Nothing
-                _ -> pure $ continue Nothing
+                Sat -> do
+                  val' <- getValue val
+                  s    <- checksat (val ./= literal val')
+                  pop 1
+                  case s of
+                    Unsat -> pure $ continue $ Just val'
+                    _ -> pure $ continue Nothing
+                _ -> do
+                  pop 1
+                  pure $ continue Nothing
 
     EVM.PleaseFetchSlot addr slot continue ->
       case info of

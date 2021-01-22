@@ -50,6 +50,10 @@ import qualified Text.Read
 -- Some stuff for "generic programming", needed to create Word512
 import Data.Data
 
+-- We need a 512-bit word for doing ADDMOD and MULMOD with full precision.
+mkUnpackedDoubleWord "Word512" ''Word256 "Int512" ''Int256 ''Word256
+  [''Typeable, ''Data, ''Generic]
+
 
 data Buffer
   = ConcreteBuffer ByteString
@@ -73,7 +77,7 @@ instance Read Word where
       _ -> []
 
 w256 :: W256 -> Word
-w256 = C (Todo "" [])
+w256 w = C (Literal w) w
 
 instance Bits Word where
   (C a x) .&. (C b y) = C (And a b) (x .&. y)
@@ -126,6 +130,21 @@ instance Real Word where
 instance Ord Word where
   compare (C _ x) (C _ y) = compare x y
 
+newtype ByteStringS = ByteStringS ByteString deriving (Eq)
+
+instance Show ByteStringS where
+  show (ByteStringS x) = ("0x" ++) . Text.unpack . fromBinary $ x
+    where
+      fromBinary =
+        Text.decodeUtf8 . toStrict . toLazyByteString . byteStringHex
+
+instance Read ByteStringS where
+    readsPrec _ ('0':'x':x) = [bimap ByteStringS (Text.unpack . Text.decodeUtf8) bytes]
+       where bytes = BS16.decode (Text.encodeUtf8 (Text.pack x))
+    readsPrec _ _ = []
+
+instance JSON.ToJSON ByteStringS where
+  toJSON = JSON.String . Text.pack . show
 
 -- | Symbolic words of 256 bits, possibly annotated with additional
 --   "insightful" information
@@ -133,11 +152,6 @@ data SymWord = S Whiff (SWord 256)
 
 instance Show SymWord where
   show s@(S w _) = show w
-
--- | Convenience functions transporting between the concrete and symbolic realm
--- TODO - look for all the occurences of sw256 and replace them with manual construction
-sw256 :: SWord 256 -> SymWord
-sw256 x = S (Todo "?" []) x
 
 var :: String -> SWord 256 -> SymWord
 var name x = S (Var name x) x
@@ -167,7 +181,7 @@ instance Bits SymWord where
   bitSizeMaybe (S _ x) = bitSizeMaybe x
   isSigned (S _ x) = isSigned x
   testBit (S _ x) i = testBit x i
-  bit i = sw256 (bit i)
+  bit i = w256lit (bit i)
   popCount (S _ x) = popCount x
 
 -- sQuotRem and sDivMod are identical for SWord 256
@@ -188,14 +202,14 @@ iteWhiff :: Whiff -> SBool -> SWord 256 -> SWord 256 -> SymWord
 iteWhiff w b x y = S w (ite b x y)
 
 instance Bounded SymWord where
-  minBound = sw256 minBound
-  maxBound = sw256 maxBound
+  minBound = w256lit minBound
+  maxBound = w256lit maxBound
 
 instance Eq SymWord where
   (S _ x) == (S _ y) = x == y
 
 instance Enum SymWord where
-  toEnum i = sw256 (toEnum i)
+  toEnum i = w256lit (toEnum i)
   fromEnum (S _ x) = fromEnum x
 
 -- instance OrdSymbolic SymWord where
@@ -218,6 +232,7 @@ data Whiff =
   -- bits
   | SHL Whiff Whiff
   | SHR Whiff Whiff
+  | SAR Whiff Whiff
   
   -- integers
   | Add  Whiff Whiff
@@ -227,7 +242,7 @@ data Whiff =
   | Mod  Whiff Whiff
   | Exp  Whiff Whiff
   | Neg  Whiff
-  | FromKeccak ByteString
+  | FromKeccak Buffer
   | FromBytes Buffer
   | FromStorage Whiff (SArray (WordN 256) (WordN 256))
   | Literal W256
@@ -250,6 +265,7 @@ instance Show Whiff where
       IsZero x    -> "IsZero(" ++ show x ++ ")"
       SHL x y     -> infix' " << " x y
       SHR x y     -> infix' " << " x y
+      SAR x y     -> infix' " a<< " x y
       Add x y     -> infix' " + " x y
       Sub x y     -> infix' " - " x y
       Mul x y     -> infix' " * " x y
@@ -258,7 +274,7 @@ instance Show Whiff where
       Exp x y     -> infix' " ** " x y
       Neg x       -> "not " ++ show x
       Var v _     -> v
-      FromKeccak bstr -> "keccak(" ++ show bstr ++ ")"
+      FromKeccak buf -> "keccak(" ++ show buf ++ ")"
       Literal x -> show x
       FromBytes buf -> "FromBuffer " ++ show buf
       FromStorage l _ -> "SLOAD(" ++ show l ++ ")"
@@ -286,11 +302,6 @@ class FromSizzleBV a where
 maybeLitWord :: SymWord -> Maybe Word
 maybeLitWord (S whiff a) = fmap (C whiff . fromSizzle) (unliteral a)
 
--- We need a 512-bit word for doing ADDMOD and MULMOD with full precision.
-mkUnpackedDoubleWord "Word512" ''Word256 "Int512" ''Int256 ''Word256
-  [''Typeable, ''Data, ''Generic]
-
-
 -- | convert between (WordN 256) and Word256
 type family ToSizzle (t :: Type) :: Type where
     ToSizzle W256 = (WordN 256)
@@ -310,6 +321,8 @@ instance (FromSizzleBV (WordN 256))
 instance (ToSizzleBV Addr)
 instance (FromSizzleBV (WordN 160))
 
+w256lit :: W256 -> SymWord
+w256lit x = S (Literal x) $ literal $ toSizzle x
 
 litBytes :: ByteString -> [SWord 8]
 litBytes bs = fmap (toSized . literal) (BS.unpack bs)
@@ -376,22 +389,6 @@ toChecksumAddress addr = zipWith transform nibbles addr
 
 strip0x :: ByteString -> ByteString
 strip0x bs = if "0x" `Char8.isPrefixOf` bs then Char8.drop 2 bs else bs
-
-newtype ByteStringS = ByteStringS ByteString deriving (Eq)
-
-instance Show ByteStringS where
-  show (ByteStringS x) = ("0x" ++) . Text.unpack . fromBinary $ x
-    where
-      fromBinary =
-        Text.decodeUtf8 . toStrict . toLazyByteString . byteStringHex
-
-instance Read ByteStringS where
-    readsPrec _ ('0':'x':x) = [bimap ByteStringS (Text.unpack . Text.decodeUtf8) bytes]
-       where bytes = BS16.decode (Text.encodeUtf8 (Text.pack x))
-    readsPrec _ _ = []
-
-instance JSON.ToJSON ByteStringS where
-  toJSON = JSON.String . Text.pack . show
 
 instance FromJSON W256 where
   parseJSON v = do
