@@ -116,7 +116,7 @@ abstractVM typesignature concreteArgs x storagemodel = do
     InitialS -> Symbolic [] <$> freshArray_ (Just 0)
     ConcreteS -> return $ Concrete mempty
   c <- SAddr <$> freshVar_
-  value' <- sw256 <$> freshVar_
+  value' <- var "CALLVALUE" <$> freshVar_
   return $ loadSymVM (RuntimeCode x) symstore storagemodel c value' (SymbolicBuffer cd', cdlen) & over constraints ((<>) [cdconstraint])
 
 loadSymVM :: ContractCode -> Storage -> StorageModel -> SAddr -> SymWord -> (Buffer, SymWord) -> VM

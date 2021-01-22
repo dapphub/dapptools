@@ -2,6 +2,7 @@
 {-# Language DataKinds #-}
 {-# Language OverloadedStrings #-}
 {-# Language TypeApplications #-}
+{-# Language ScopedTypeVariables #-}
 
 module EVM.Symbolic where
 
@@ -14,14 +15,14 @@ import Data.Maybe                   (fromMaybe, fromJust)
 import EVM.Types
 import Debug.Trace
 import qualified EVM.Concrete as Concrete
+import qualified Data.ByteArray       as BA
 import Data.SBV hiding (runSMT, newArray_, addAxiom, Word)
 import Data.SBV.Tools.Overflow
+import Crypto.Hash (Digest, SHA256)
+import qualified Crypto.Hash as Crypto
 
-litWord :: Word -> (SymWord)
+litWord :: Word -> SymWord
 litWord (C whiff a) = S whiff (literal $ toSizzle a)
-
-w256lit :: W256 -> SymWord
-w256lit x = S (Literal x) $ literal $ toSizzle x
 
 litAddr :: Addr -> SAddr
 litAddr = SAddr . literal . toSizzle
@@ -62,14 +63,14 @@ smod (S a x) (S b y) = let sx, sy :: SInt 256
                        in S (Mod a b) $ ite (y .== 0) 0 (sFromIntegral (sx `sRem` sy))
 
 addmod :: SymWord -> SymWord -> SymWord -> SymWord
-addmod (S _ x) (S _ y) (S _ z) = let to512 :: SWord 256 -> SWord 512
+addmod (S a x) (S b y) (S c z) = let to512 :: SWord 256 -> SWord 512
                                      to512 = sFromIntegral
-                                 in sw256 $ sFromIntegral $ ((to512 x) + (to512 y)) `sMod` (to512 z)
+                                 in S (Todo "addmod" [a, b, c]) $ sFromIntegral $ ((to512 x) + (to512 y)) `sMod` (to512 z)
 
 mulmod :: SymWord -> SymWord -> SymWord -> SymWord
-mulmod (S _ x) (S _ y) (S _ z) = let to512 :: SWord 256 -> SWord 512
+mulmod (S a x) (S b y) (S c z) = let to512 :: SWord 256 -> SWord 512
                                      to512 = sFromIntegral
-                                 in sw256 $ sFromIntegral $ ((to512 x) * (to512 y)) `sMod` (to512 z)
+                                 in S (Todo "mulmod" [a, b, c]) $ sFromIntegral $ ((to512 x) * (to512 y)) `sMod` (to512 z)
 
 slt :: SymWord -> SymWord -> SymWord
 slt (S xw x) (S yw y) =
@@ -81,7 +82,8 @@ sgt (S xw x) (S yw y) =
 
 -- | Operations over symbolic memory (list of symbolic bytes)
 swordAt :: Int -> [SWord 8] -> SymWord
-swordAt i bs = sw256 . fromBytes $ truncpad 32 $ drop i bs
+swordAt i bs = let bs' = truncpad 32 $ drop i bs
+               in S (FromBytes (SymbolicBuffer bs')) (fromBytes bs')
 
 readByteOrZero' :: Int -> [SWord 8] -> SWord 8
 readByteOrZero' i bs = fromMaybe 0 (bs ^? ix i)
@@ -102,7 +104,9 @@ writeMemory' bs1 (C _ n) (C _ src) (C _ dst) bs0 =
     a <> a' <> c <> b'
 
 readMemoryWord' :: Word -> [SWord 8] -> SymWord
-readMemoryWord' (C _ i) m = sw256 $ fromBytes $ truncpad 32 (drop (num i) m)
+readMemoryWord' (C _ i) m =
+  let bs = truncpad 32 (drop (num i) m)
+  in S (FromBytes (SymbolicBuffer bs)) (fromBytes bs)
 
 readMemoryWord32' :: Word -> [SWord 8] -> SWord 32
 readMemoryWord32' (C _ i) m = fromBytes $ truncpad 4 (drop (num i) m)
@@ -206,6 +210,32 @@ readSWord :: Word -> Buffer -> SymWord
 readSWord i (SymbolicBuffer x) = readSWord' i x
 readSWord i (ConcreteBuffer x) = num $ Concrete.readMemoryWord i x
 
+-- * Uninterpreted functions
+
+symSHA256N :: SInteger -> SInteger -> SWord 256
+symSHA256N = uninterpret "sha256"
+
+symkeccakN :: SInteger -> SInteger -> SWord 256
+symkeccakN = uninterpret "keccak"
+
+toSInt :: [SWord 8] -> SInteger
+toSInt bs = sum $ zipWith (\a (i :: Integer) -> sFromIntegral a * 256 ^ i) bs [0..]
+
+
+-- | Although we'd like to define this directly as an uninterpreted function,
+-- we cannot because [a] is not a symbolic type. We must convert the list into a suitable
+-- symbolic type first. The only important property of this conversion is that it is injective.
+-- We embedd the bytestring as a pair of symbolic integers, this is a fairly easy solution.
+symkeccak' :: [SWord 8] -> SWord 256
+symkeccak' bytes = case length bytes of
+  0 -> literal $ toSizzle $ keccak ""
+  n -> symkeccakN (num n) (toSInt bytes)
+
+symSHA256 :: [SWord 8] -> [SWord 8]
+symSHA256 bytes = case length bytes of
+  0 -> litBytes $ BS.pack $ BA.unpack $ (Crypto.hash BS.empty :: Digest SHA256)
+  n -> toBytes $ symSHA256N (num n) (toSInt bytes)
+
 rawVal :: SymWord -> SWord 256
 rawVal (S _ v) = v
 
@@ -224,6 +254,7 @@ whiffValue w = case w of
   IsZero x      -> ite (whiffValue x .== 0) 1 0
   SHL x y       -> sShiftLeft  (whiffValue x) (whiffValue y)
   SHR x y       -> sShiftRight (whiffValue x) (whiffValue y)
+  SAR x y       -> sSignedShiftArithRight (whiffValue x) (whiffValue y)
   Add x y       -> whiffValue x + whiffValue y
   Sub x y       -> whiffValue x - whiffValue y
   Mul x y       -> whiffValue x * whiffValue y
@@ -232,17 +263,37 @@ whiffValue w = case w of
   Exp x y       -> whiffValue x .^ whiffValue y
   Neg x         -> negate $ whiffValue x
   Var _ w       -> w
-  FromKeccak bstr -> literal $ num $ keccak bstr
+  FromKeccak (ConcreteBuffer bstr) -> literal $ num $ keccak bstr
+  FromKeccak (SymbolicBuffer buf)  -> symkeccak' buf
   Literal x -> literal $ num $ x
   FromBytes buf -> rawVal $ readMemoryWord 0 buf
   FromStorage ind arr -> readArray arr (whiffValue ind) 
 
 -- | Special cases that have proven useful in practice
 simplifyCondition :: SBool -> Whiff -> SBool
-simplifyCondition b _ = b
-simplifyCondition b (IsZero (Eq x (Div (Mul y z) w))) = trace "ding1" b
+simplifyCondition b (IsZero (IsZero (IsZero a))) = whiffValue a .== 0
+
+-- | Addition overflow.
+-- Written as
+--    require (x <= (x + y))
+-- or require (y <= (x + y))
+-- or require (!(y < (x + y)))
+simplifyCondition b v@(IsZero (IsZero (LT (Add x y) z))) =
+--  trace ("simplifying: " ++ show v ++ "\n") $
+  let x' = whiffValue x
+      y' = whiffValue y
+      z' = whiffValue z
+      (_, overflow) = bvAddO x' y'
+  in
+    ite (x' .== z' .||
+         y' .== z')
+    overflow
+    b
+simplifyCondition b (IsZero (IsZero (IsZero a))) = whiffValue a .== 0
+simplifyCondition b (IsZero (Eq x (Div (Mul y z) w))) =
+  simplifyCondition b (IsZero (Eq (Div (Mul y z) w) x))
 simplifyCondition b v@(IsZero (Eq (Div (Mul y z) w) x)) =
-  trace ("decomposing: " ++ show v) $
+--  trace ("simplifying: " ++ show v ++ "\n") $
   let x' = whiffValue x
       y' = whiffValue y
       z' = whiffValue z
@@ -254,6 +305,4 @@ simplifyCondition b v@(IsZero (Eq (Div (Mul y z) w) x)) =
       (z' .== x' .&& y' .== w'))
     (overflow .|| w' .== 0)
     b
---simplifyCondition b _ = b
--- simplifyCondition b (IsZero w) = b
--- simplifyCondition b _ = b
+simplifyCondition b _ = b

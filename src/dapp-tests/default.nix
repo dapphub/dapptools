@@ -110,7 +110,7 @@ let
     shouldFail = shouldFail;
     src = dir;
     dappFlags = "${dappFlags}";
-    deps = [ ds-test ds-token ];
+    deps = [ ds-test ds-token ds-math ];
     checkInputs = with pkgs; [ hevm jq seth dapp solc ];
   };
 in

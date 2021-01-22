@@ -58,8 +58,8 @@ import qualified Data.Vector.Storable.Mutable as Vector
 import qualified Data.Vector as RegularVector
 
 import Crypto.Number.ModArithmetic (expFast)
-import Crypto.Hash (Digest, SHA256, RIPEMD160)
 import qualified Crypto.Hash as Crypto
+import Crypto.Hash (Digest, SHA256, RIPEMD160)
 
 -- * Data types
 
@@ -674,7 +674,7 @@ exec1 = do
         -- op: SHR
         0x1c -> stackOp2 (const g_verylow) $ \((S a n), (S b x)) -> S (SHR b a) $ sShiftRight x n
         -- op: SAR
-        0x1d -> stackOp2 (const g_verylow) $ \((S _ n), (S _ x)) -> sw256 $ sSignedShiftArithRight x n
+        0x1d -> stackOp2 (const g_verylow) $ \((S a n), (S b x)) -> S (SAR b a) $ sSignedShiftArithRight x n
 
         -- op: SHA3
         -- more accurately refered to as KECCAK
@@ -690,7 +690,7 @@ exec1 = do
                                            pure (litWord $ keccakBlob bs, Map.singleton (keccakBlob bs) bs, litBytes bs)
                                          SymbolicBuffer bs -> do
                                            let hash' = symkeccak' bs
-                                           return (sw256 hash', mempty, bs)
+                                           return (S (FromKeccak $ SymbolicBuffer bs) hash', mempty, bs)
 
                       -- Although we would like to simply assert that the uninterpreted function symkeccak'
                       -- is injective, this proves to cause a lot of concern for our smt solvers, probably
@@ -744,7 +744,10 @@ exec1 = do
         -- op: CALLER
         0x33 ->
           limitStack 1 . burn g_base $
-            let toSymWord = sw256 . sFromIntegral . saddressWord160
+            let toSymWord :: SAddr -> SymWord
+                toSymWord (SAddr x) = case unliteral x of
+                  Just s -> litWord $ num s
+                  Nothing -> var "CALLER" $ sFromIntegral x
             in next >> pushSym (toSymWord (the state caller))
 
         -- op: CALLVALUE
@@ -1061,16 +1064,16 @@ exec1 = do
                 if exponent == 0
                 then g_exp
                 else g_exp + g_expbyte * num (ceilDiv (1 + log2 exponent) 8)
-          in stackOp2 cost $ \((S _ x),(S _ y)) -> sw256 $ x .^ y
+          in stackOp2 cost $ \((S a x),(S b y)) -> S (Exp a b) (x .^ y)
 
         -- op: SIGNEXTEND
         0x0b ->
-          stackOp2 (const g_low) $ \((forceLit -> bytes), w@(S _ x)) ->
+          stackOp2 (const g_low) $ \((forceLit -> bytes), w@(S a x)) ->
             if bytes >= 32 then w
             else let n = num bytes * 8 + 7 in
-              sw256 $ ite (sTestBit x n)
-                      (x .|. complement (bit n - 1))
-                      (x .&. (bit n - 1))
+              S (Todo "signextend" [a]) $ ite (sTestBit x n)
+                                          (x .|. complement (bit n - 1))
+                                          (x .&. (bit n - 1))
 
         -- op: CREATE
         0xf0 ->
@@ -1549,7 +1552,6 @@ askSMT :: CodeLocation -> (SBool, Whiff) -> (Bool -> EVM ()) -> EVM ()
 askSMT codeloc (condition, whiff) continue = do
   -- We keep track of how many times we have come across this particular
   -- (contract, pc) combination in the `iteration` mapping.
---  traceM $ "Pre simplification: " ++ show whiff
   iteration <- use (iterations . at codeloc . non 0)
 
   -- If we are backstepping, the result of this query should be cached
@@ -1885,7 +1887,7 @@ cheatActions =
   Map.fromList
     [ action "warp(uint256)" [AbiUIntType 256] $
         \_ _ [AbiUInt 256 x] ->
-          assign (block . timestamp) (sw256 $ num x),
+          assign (block . timestamp) (w256lit $ num x),
       action "roll(uint256)" [AbiUIntType 256] $
         \_ _ [AbiUInt 256 x] ->
           assign (block . number) (w256 (W256 x)),
@@ -1965,7 +1967,7 @@ delegateCall this gasGiven xTo xContext xValue xInOffset xInSize xOutOffset xOut
                     assign memory mempty
                     assign memorySize 0
                     assign returndata mempty
-                    assign calldata (readMemory (num xInOffset) (num xInSize) vm0, sw256 $ literal (num xInSize))
+                    assign calldata (readMemory (num xInOffset) (num xInSize) vm0, w256lit (num xInSize))
 
                   continue xTo'
 
@@ -2641,32 +2643,6 @@ memoryCost FeeSchedule{..} byteCount =
     quadraticCost = div (wordCount * wordCount) 512
   in
     linearCost + quadraticCost
-
--- * Uninterpreted functions
-
-symSHA256N :: SInteger -> SInteger -> SWord 256
-symSHA256N = uninterpret "sha256"
-
-symkeccakN :: SInteger -> SInteger -> SWord 256
-symkeccakN = uninterpret "keccak"
-
-toSInt :: [SWord 8] -> SInteger
-toSInt bs = sum $ zipWith (\a (i :: Integer) -> sFromIntegral a * 256 ^ i) bs [0..]
-
--- | Although we'd like to define this directly as an uninterpreted function,
--- we cannot because [a] is not a symbolic type. We must convert the list into a suitable
--- symbolic type first. The only important property of this conversion is that it is injective.
--- We embedd the bytestring as a pair of symbolic integers, this is a fairly easy solution.
-symkeccak' :: [SWord 8] -> SWord 256
-symkeccak' bytes = case length bytes of
-  0 -> literal $ toSizzle $ keccak ""
-  n -> symkeccakN (num n) (toSInt bytes)
-
-symSHA256 :: [SWord 8] -> [SWord 8]
-symSHA256 bytes = case length bytes of
-  0 -> litBytes $ BS.pack $ BA.unpack $ (Crypto.hash BS.empty :: Digest SHA256)
-  n -> toBytes $ symSHA256N (num n) (toSInt bytes)
-
 
 -- * Arithmetic
 

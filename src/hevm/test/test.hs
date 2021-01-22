@@ -612,7 +612,7 @@ main = defaultMain $ testGroup "hevm"
 runSimpleVM :: ByteString -> ByteString -> Maybe ByteString
 runSimpleVM x ins = case loadVM x of
                       Nothing -> Nothing
-                      Just vm -> let calldata' = (ConcreteBuffer ins, literal . num $ BS.length ins)
+                      Just vm -> let calldata' = (ConcreteBuffer ins, w256lit $ num $ BS.length ins)
                        in case runState (assign (state.calldata) calldata' >> exec) vm of
                             (VMSuccess (ConcreteBuffer bs), _) -> Just bs
                             _ -> Nothing
