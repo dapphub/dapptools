@@ -59,7 +59,7 @@ mkdir -p "$DAPP_OUT"
 if [[ -z "$DAPP_BUILD_LEGACY" && -z "$DAPP_BUILD_EXTRACT" ]]; then
 
     if [[ "$DAPP_STANDARD_JSON" ]]; then
-        "$SOLC" --standard-json --allow-paths . "$DAPP_STANDARD_JSON" > "$DAPP_JSON"
+        "$SOLC" --allow-paths . --standard-json "$DAPP_STANDARD_JSON" > "$DAPP_JSON"
     else
         dapp mk-standard-json | "$SOLC" --standard-json --allow-paths . > "$DAPP_JSON"
     fi
