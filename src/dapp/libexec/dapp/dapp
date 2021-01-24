@@ -56,7 +56,6 @@ export DAPP_LIB=${DAPP_LIB-lib}
 export DAPP_OUT=${DAPP_OUT-out}
 export DAPP_JSON=${DAPP_JSON-${DAPP_OUT}/dapp.sol.json}
 export DAPP_ROOT=${DAPP_ROOT-.}
-export DAPP_LIBRARIES=${DAPP_LIBRARIES-"$links"}
 export DAPP_REMAPPINGS=${DAPP_REMAPPINGS-"$(dapp-remappings)"}
 
 

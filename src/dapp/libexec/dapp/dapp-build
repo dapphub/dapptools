@@ -51,6 +51,7 @@ else
 fi
 
 export -f info
+export DAPP_LIBRARIES=${DAPP_LIBRARIES-"$links"}
 
 mkdir -p "$DAPP_OUT"
 

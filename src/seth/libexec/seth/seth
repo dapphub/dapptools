@@ -189,7 +189,6 @@ done
 keystores=()
 
 if [[ $SETH_CHAIN ]]; then
-  export ETH_LOGS_API=${SETH_LOGS_API:-etherscan}
 
   case "$SETH_CHAIN" in
     ethlive|mainnet)
