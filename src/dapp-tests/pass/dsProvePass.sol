@@ -4,7 +4,7 @@ import "ds-test/test.sol";
 import "ds-token/token.sol";
 import "ds-math/math.sol";
 
-contract SolidityTest is DSTest {
+contract SolidityTest is DSTest, DSMath {
     DSToken token;
 
     function setUp() public {
