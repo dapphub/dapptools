@@ -36,7 +36,6 @@ import Control.Monad.Par.IO (runParIO)
 import qualified Data.ByteString.Lazy as BSLazy
 import qualified Data.SBV.Trans.Control as SBV (Query, getValue, resetAssertions)
 import qualified Data.SBV.Internals as SBV (State)
-import Data.Bifunctor     (first)
 import Data.Binary.Get    (runGet)
 import Data.ByteString    (ByteString)
 import Data.SBV    hiding (verbose)
@@ -213,12 +212,12 @@ srcMapForOpLocation :: DappInfo -> OpLocation -> Maybe SrcMap
 srcMapForOpLocation dapp (OpLocation hash opIx) =
   case preview (dappSolcByHash . ix hash) dapp of
     Nothing -> Nothing
-    Just (codeType, solc) ->
+    Just (codeType, sol) ->
       let
         vec =
           case codeType of
-            Runtime  -> view runtimeSrcmap solc
-            Creation -> view creationSrcmap solc
+            Runtime  -> view runtimeSrcmap sol
+            Creation -> view creationSrcmap sol
       in
         preview (ix opIx) vec
 
@@ -600,8 +599,7 @@ symFailure UnitTestOptions {..} testName failures' = mconcat
       ]
 
 prettyCalldata :: (?context :: DappContext) => (Buffer, SymWord) -> Text -> [AbiType]-> SBV.Query Text
-prettyCalldata (buffer, cdlen') sig types = do
-  let S _ cdlen = cdlen'
+prettyCalldata (buffer, S _ cdlen) sig types = do
   cdlen' <- num <$> SBV.getValue cdlen
   cd <- case buffer of
     SymbolicBuffer cd -> mapM (SBV.getValue . fromSized) (take cdlen' cd) <&> BS.pack
@@ -741,8 +739,8 @@ word32Bytes x = BS.pack [byteAt x (3 - i) | i <- [0..3]]
 abiCall :: TestVMParams -> Text -> AbiValue -> EVM ()
 abiCall params sig args =
   let cd = abiMethod sig args
-      len = num . BS.length $ cd
-  in makeTxCall params (ConcreteBuffer cd, S (Literal len) (literal $ num len))
+      l = num . BS.length $ cd
+  in makeTxCall params (ConcreteBuffer cd, litWord l)
 
 makeTxCall :: TestVMParams -> (Buffer, SymWord) -> EVM ()
 makeTxCall TestVMParams{..} cd = do

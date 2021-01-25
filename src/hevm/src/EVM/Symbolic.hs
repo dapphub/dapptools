@@ -13,7 +13,6 @@ import Control.Lens hiding (op, (:<), (|>), (.>))
 import Data.Maybe                   (fromMaybe, fromJust)
 
 import EVM.Types
-import Debug.Trace
 import qualified EVM.Concrete as Concrete
 import qualified Data.ByteArray       as BA
 import Data.SBV hiding (runSMT, newArray_, addAxiom, Word)
@@ -33,11 +32,10 @@ maybeLitAddr (SAddr a) = fmap fromSizzle (unliteral a)
 maybeLitBytes :: [SWord 8] -> Maybe ByteString
 maybeLitBytes xs = fmap (\x -> BS.pack (fmap fromSized x)) (mapM unliteral xs)
 
--- | Note: these forms are crude and in general,
+-- | Note: the (force*) functions are crude and in general,
 -- the continuation passing style `forceConcrete`
 -- alternatives should be prefered for better error
 -- handling when used during EVM execution
-
 forceLit :: SymWord -> Word
 forceLit (S whiff a) = case unliteral a of
   Just c -> C whiff (fromSizzle c)
@@ -72,15 +70,17 @@ mulmod (S a x) (S b y) (S c z) = let to512 :: SWord 256 -> SWord 512
                                      to512 = sFromIntegral
                                  in S (Todo "mulmod" [a, b, c]) $ sFromIntegral $ ((to512 x) * (to512 y)) `sMod` (to512 z)
 
+-- | Signed less than
 slt :: SymWord -> SymWord -> SymWord
 slt (S xw x) (S yw y) =
   iteWhiff (SLT xw yw) (sFromIntegral x .< (sFromIntegral y :: (SInt 256))) x y
 
+-- | Signed greater than
 sgt :: SymWord -> SymWord -> SymWord
 sgt (S xw x) (S yw y) =
   iteWhiff (SGT xw yw) (sFromIntegral x .> (sFromIntegral y :: (SInt 256))) x y
 
--- | Operations over symbolic memory (list of symbolic bytes)
+-- * Operations over symbolic memory (list of symbolic bytes)
 swordAt :: Int -> [SWord 8] -> SymWord
 swordAt i bs = let bs' = truncpad 32 $ drop i bs
                in S (FromBytes (SymbolicBuffer bs')) (fromBytes bs')
@@ -131,8 +131,9 @@ select' xs err ind = walk xs ind err
     where walk []     _ acc = acc
           walk (e:es) i acc = walk es (i-1) (ite (i .== 0) e acc)
 
+-- | Read 32 bytes from index from a bounded list of bytes.
 readSWordWithBound :: SymWord -> Buffer -> SymWord -> SymWord
-readSWordWithBound sind@(S x ind) (SymbolicBuffer xs) (S _ bound) = case (num <$> maybeLitWord sind, num <$> fromSizzle <$> unliteral bound) of
+readSWordWithBound sind@(S _ ind) (SymbolicBuffer xs) (S _ bound) = case (num <$> maybeLitWord sind, num <$> fromSizzle <$> unliteral bound) of
   (Just i, Just b) ->
     let bs = truncpad 32 $ drop i (take b xs)
     in S (FromBytes (SymbolicBuffer bs)) (fromBytes bs)
@@ -143,9 +144,9 @@ readSWordWithBound sind@(S x ind) (SymbolicBuffer xs) (S _ bound) = case (num <$
 
     -- The proper solution here is to use smt arrays instead.
 
-    let boundedList = [ite (i .<= bound) x 0 | (x, i) <- zip xs [1..]]
+    let boundedList = [ite (i .<= bound) x' 0 | (x', i) <- zip xs [1..]]
         res = [select' boundedList 0 (ind + j) | j <- [0..31]]
-    in S (FromBytes $ SymbolicBuffer res) $ fromBytes $ res
+    in S (FromBytes $ SymbolicBuffer res) $ fromBytes res
 
 readSWordWithBound sind (ConcreteBuffer xs) bound =
   case maybeLitWord sind of
@@ -159,14 +160,6 @@ readSWordWithBound sind (ConcreteBuffer xs) bound =
 len :: Buffer -> Int
 len (SymbolicBuffer bs) = length bs
 len (ConcreteBuffer bs) = BS.length bs
-
-grab :: Int -> Buffer -> Buffer
-grab n (SymbolicBuffer bs) = SymbolicBuffer $ take n bs
-grab n (ConcreteBuffer bs) = ConcreteBuffer $ BS.take n bs
-
-ditch :: Int -> Buffer -> Buffer
-ditch n (SymbolicBuffer bs) = SymbolicBuffer $ drop n bs
-ditch n (ConcreteBuffer bs) = ConcreteBuffer $ BS.drop n bs
 
 readByteOrZero :: Int -> Buffer -> SWord 8
 readByteOrZero i (SymbolicBuffer bs) = readByteOrZero' i bs
@@ -240,6 +233,7 @@ rawVal :: SymWord -> SWord 256
 rawVal (S _ v) = v
 
 -- | Reconstruct the smt/sbv value from a whiff
+-- Should satisfy (rawVal x .== whiffValue x)
 whiffValue :: Whiff -> SWord 256
 whiffValue w = case w of
   w'@(Todo _ _) -> error $ "unable to get value of " ++ show w'
@@ -262,7 +256,7 @@ whiffValue w = case w of
   Mod x y       -> whiffValue x `sMod` whiffValue y
   Exp x y       -> whiffValue x .^ whiffValue y
   Neg x         -> negate $ whiffValue x
-  Var _ w       -> w
+  Var _ v       -> v
   FromKeccak (ConcreteBuffer bstr) -> literal $ num $ keccak bstr
   FromKeccak (SymbolicBuffer buf)  -> symkeccak' buf
   Literal x -> literal $ num $ x
@@ -271,15 +265,24 @@ whiffValue w = case w of
 
 -- | Special cases that have proven useful in practice
 simplifyCondition :: SBool -> Whiff -> SBool
-simplifyCondition b (IsZero (IsZero (IsZero a))) = whiffValue a .== 0
+simplifyCondition _ (IsZero (IsZero (IsZero a))) = whiffValue a .== 0
 
--- | Addition overflow.
+
+
+-- | Overflow safe math can be difficult for smt solvers to deal with,
+-- especially for 256-bit words. When we recognize terms arising from
+-- overflow checks, we translate our queries into a more bespoke form,
+-- outlined in:
+-- Modular Bug-finding for Integer Overflows in the Large:
+-- Sound, Efficient, Bit-precise Static Analysis
+-- www.microsoft.com/en-us/research/wp-content/uploads/2016/02/z3prefix.pdf
+--
+-- Addition overflow.
 -- Written as
 --    require (x <= (x + y))
 -- or require (y <= (x + y))
 -- or require (!(y < (x + y)))
-simplifyCondition b v@(IsZero (IsZero (LT (Add x y) z))) =
---  trace ("simplifying: " ++ show v ++ "\n") $
+simplifyCondition b (IsZero (IsZero (LT (Add x y) z))) =
   let x' = whiffValue x
       y' = whiffValue y
       z' = whiffValue z
@@ -289,11 +292,17 @@ simplifyCondition b v@(IsZero (IsZero (LT (Add x y) z))) =
          y' .== z')
     overflow
     b
-simplifyCondition b (IsZero (IsZero (IsZero a))) = whiffValue a .== 0
+
+-- Multiplication overflow.
+-- Written as
+--    require (y == 0 || x * y / y == x)
+-- or require (y == 0 || x == x * y / y)
+
+-- proveWith cvc4 $ \x y z -> ite (y .== (z :: SWord 8)) (((x * y) `sDiv` z ./= x) .<=> (snd (bvMulO x y) .|| (z .== 0 .&& x .> 0))) (sTrue)
+-- Q.E.D.
 simplifyCondition b (IsZero (Eq x (Div (Mul y z) w))) =
   simplifyCondition b (IsZero (Eq (Div (Mul y z) w) x))
-simplifyCondition b v@(IsZero (Eq (Div (Mul y z) w) x)) =
---  trace ("simplifying: " ++ show v ++ "\n") $
+simplifyCondition b (IsZero (Eq (Div (Mul y z) w) x)) =
   let x' = whiffValue x
       y' = whiffValue y
       z' = whiffValue z
@@ -303,6 +312,6 @@ simplifyCondition b v@(IsZero (Eq (Div (Mul y z) w) x)) =
     ite
     ((y' .== x' .&& z' .== w') .||
       (z' .== x' .&& y' .== w'))
-    (overflow .|| w' .== 0)
+    (overflow .|| (w' .== 0 .&& x' ./= 0))
     b
 simplifyCondition b _ = b

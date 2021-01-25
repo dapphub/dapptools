@@ -56,7 +56,7 @@ import EVM.Types
 import Control.Applicative
 import Control.Monad
 import Control.Lens         hiding (Indexed, (.=))
-import Data.Aeson           (Value (..), ToJSON(..), (.=), object, Array, encode)
+import Data.Aeson           (Value (..), ToJSON(..), (.=), object, encode)
 import Data.Aeson.Lens
 import Data.Scientific
 import Data.ByteString      (ByteString)
@@ -271,20 +271,20 @@ readSolc fp =
 solidity :: Text -> Text -> IO (Maybe ByteString)
 solidity contract src = do
   (json, path) <- solidity' src
-  let Just (solc, _, _) = readJSON json
-  return (solc ^? ix (path <> ":" <> contract) . creationCode)
+  let Just (sol, _, _) = readJSON json
+  return (sol ^? ix (path <> ":" <> contract) . creationCode)
 
 solcRuntime :: Text -> Text -> IO (Maybe ByteString)
 solcRuntime contract src = do
   (json, path) <- solidity' src
-  let Just (solc, _, _) = readJSON json
-  return (solc ^? ix (path <> ":" <> contract) . runtimeCode)
+  let Just (sol, _, _) = readJSON json
+  return (sol ^? ix (path <> ":" <> contract) . runtimeCode)
 
 functionAbi :: Text -> IO Method
 functionAbi f = do
   (json, path) <- solidity' ("contract ABI { function " <> f <> " public {}}")
-  let Just (solc, _, _) = readJSON json
-  case Map.toList $ solc ^?! ix (path <> ":ABI") . abiMap of
+  let Just (sol, _, _) = readJSON json
+  case Map.toList $ sol ^?! ix (path <> ":ABI") . abiMap of
      [(_,b)] -> return b
      _ -> error "hevm internal error: unexpected abi format"
 
@@ -468,8 +468,7 @@ solc :: Language -> Text -> IO Text
 solc lang src =
   withSystemTempFile "hevm.sol" $ \path handle -> do
     hClose handle
-    writeFile path (Text.pack $ stdjson lang src)
-    readFile path >>= print
+    writeFile path (stdjson lang src)
     Text.pack <$> readProcess
       "solc"
       ["--standard-json", path]
@@ -477,9 +476,9 @@ solc lang src =
 
 data Language = Solidity | Yul
   deriving (Show)
--- more options later perhaps
 
 data StandardJSON = StandardJSON Language Text
+-- more options later perhaps
 
 instance ToJSON StandardJSON where
   toJSON (StandardJSON lang src) =
@@ -508,8 +507,8 @@ instance ToJSON StandardJSON where
                     ]
            ]
                                
-stdjson :: Language -> Text -> String
-stdjson lang src = Text.unpack $ decodeUtf8 $ toStrict $ encode $ StandardJSON lang src
+stdjson :: Language -> Text -> Text
+stdjson lang src = decodeUtf8 $ toStrict $ encode $ StandardJSON lang src
 
 -- When doing CREATE and passing constructor arguments, Solidity loads
 -- the argument data via the creation bytecode, since there is no "calldata"

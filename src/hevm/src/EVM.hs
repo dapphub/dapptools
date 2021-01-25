@@ -22,7 +22,6 @@ import EVM.Types
 import EVM.Solidity
 import EVM.Concrete (createAddress, wordValue, keccakBlob, create2Address)
 import EVM.Symbolic
-import Debug.Trace
 import EVM.Op
 import EVM.FeeSchedule (FeeSchedule (..))
 import Options.Generic as Options
@@ -762,7 +761,7 @@ exec1 = do
         -- op: CALLDATASIZE
         0x36 ->
           limitStack 1 . burn g_base $
-            next >> pushSym (snd $ (the state calldata))
+            next >> pushSym (snd (the state calldata))
 
         -- op: CALLDATACOPY
         0x37 ->

@@ -15,7 +15,7 @@ module Main where
 import EVM (StorageModel(..))
 import qualified EVM
 import EVM.Concrete (createAddress,  wordValue)
-import EVM.Symbolic (forceLitBytes, litAddr, len, forceLit)
+import EVM.Symbolic (litWord, forceLitBytes, litAddr, len, forceLit)
 import qualified EVM.FeeSchedule as FeeSchedule
 import qualified EVM.Fetch
 import qualified EVM.Flatten
@@ -421,17 +421,17 @@ equivalence cmd =
 
 -- cvc4 sets timeout via a commandline option instead of smtlib `(set-option)`
 runSMTWithTimeOut :: Maybe Text -> Maybe Integer -> Bool -> Symbolic a -> IO a
-runSMTWithTimeOut solver maybeTimeout smtdebug sym
+runSMTWithTimeOut solver maybeTimeout smtdebug symb
   | solver == Just "cvc4" = do
       setEnv "SBV_CVC4_OPTIONS" ("--lang=smt --incremental --interactive --no-interactive-prompt --model-witness-value --tlimit-per=" <> show timeout)
-      a <- runSMTWith cvc4{SBV.verbose=smtdebug, SBV.transcript=Just "here.smt2"} sym
+      a <- runSMTWith cvc4{SBV.verbose=smtdebug, SBV.transcript=Just "here.smt2"} symb
       setEnv "SBV_CVC4_OPTIONS" ""
       return a
   | solver == Just "z3" = runwithz3
   | solver == Nothing = runwithz3
   | otherwise = error "Unknown solver. Currently supported solvers; z3, cvc4"
  where timeout = fromMaybe 30000 maybeTimeout
-       runwithz3 = runSMTWith z3{SBV.verbose=smtdebug} $ (setTimeOut timeout) >> sym
+       runwithz3 = runSMTWith z3{SBV.verbose=smtdebug} $ (setTimeOut timeout) >> symb
 
 
 checkForVMErrors :: [EVM.VM] -> [String]
@@ -736,7 +736,7 @@ vmFromCommand cmd = do
 
         vm0 miner ts blockNum diff c = EVM.makeVm $ EVM.VMOpts
           { EVM.vmoptContract      = c
-          , EVM.vmoptCalldata      = (calldata', S (Literal $ num $ len calldata') (literal . num $ len calldata'))
+          , EVM.vmoptCalldata      = (calldata', litWord (num $ len calldata'))
           , EVM.vmoptValue         = w256lit value'
           , EVM.vmoptAddress       = address'
           , EVM.vmoptCaller        = litAddr caller'
@@ -783,13 +783,13 @@ symvmFromCommand cmd = do
     -- fully concrete calldata
     (Just c, Nothing) ->
       let cd = ConcreteBuffer $ decipher c
-      in return (cd, S (Literal $ num $ len cd) (literal $ num (len cd)), (sTrue, Todo "" []))
+      in return (cd, litWord (num $ len cd), (sTrue, Todo "" []))
     -- calldata according to given abi with possible specializations from the `arg` list
     (Nothing, Just sig') -> do
       method' <- io $ functionAbi sig'
       let typs = snd <$> view methodInputs method'
       (cd, cdlen) <- symCalldata (view methodSignature method') typs (arg cmd)
-      return (SymbolicBuffer cd, S (Literal cdlen) (literal $ num cdlen), (sTrue, Todo "" []))
+      return (SymbolicBuffer cd, litWord (num cdlen), (sTrue, Todo "" []))
 
     _ -> error "incompatible options: calldata and abi"
 

@@ -42,6 +42,10 @@ contract SolidityTest is DSTest {
         mul(x,y);
     }
 
+    function prove_distributivity(uint120 x, uint120 y, uint120 z) public {
+        assertEq(add(x, mul(y, z)), mul(add(x, y), add(x, z)));
+    }
+
     function prove_transfer(uint supply, address usr, uint amt) public {
         token.mint(supply);
 
