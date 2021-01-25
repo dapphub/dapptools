@@ -73,12 +73,12 @@ mulmod (S a x) (S b y) (S c z) = let to512 :: SWord 256 -> SWord 512
 -- | Signed less than
 slt :: SymWord -> SymWord -> SymWord
 slt (S xw x) (S yw y) =
-  iteWhiff (SLT xw yw) (sFromIntegral x .< (sFromIntegral y :: (SInt 256))) x y
+  iteWhiff (SLT xw yw) (sFromIntegral x .< (sFromIntegral y :: (SInt 256))) 1 0
 
 -- | Signed greater than
 sgt :: SymWord -> SymWord -> SymWord
 sgt (S xw x) (S yw y) =
-  iteWhiff (SGT xw yw) (sFromIntegral x .> (sFromIntegral y :: (SInt 256))) x y
+  iteWhiff (SGT xw yw) (sFromIntegral x .> (sFromIntegral y :: (SInt 256))) 1 0
 
 -- * Operations over symbolic memory (list of symbolic bytes)
 swordAt :: Int -> [SWord 8] -> SymWord
