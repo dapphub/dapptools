@@ -8,16 +8,20 @@
   well as `--combined-json`.
 - addresses in the trace output are prefixed with `ContractName@0x...`
   if there is a corresponding contract and `@0x...` otherwise.
+- More efficient arithmetic overflow checks by translating queries to a more [intelligent form](www.microsoft.com/en-us/research/wp-content/uploads/2016/02/z3prefix.pdf).
 
 ### Fixed
 
 - Symbolic execution now generates calldata arguments restricted to the proper ranges,
 following the semantics of fuzzing.
-- More efficient arithmetic overflow checks by translating queries to a more [intelligent form](www.microsoft.com/en-us/research/wp-content/uploads/2016/02/z3prefix.pdf).
 - If the `--address` flag is present in `hevm exec` or `hevm symbolic`,
   it overrides the contract address at which a contract will be created.
 - Address pretty printing
 - Updated sbv to `8.9.5` to fix "non-const in array declaration" cvc4 issue with ds-test.
+
+### Changed
+
+- Use cvc4 as default smt solver
 
 ## 0.43.2 - 2020-12-10
 
