@@ -11,6 +11,9 @@
 
 ### Fixed
 
+- Symbolic execution now generates calldata arguments restricted to the proper ranges,
+following the semantics of fuzzing.
+- More efficient arithmetic overflow checks by translating queries to a more [intelligent form](www.microsoft.com/en-us/research/wp-content/uploads/2016/02/z3prefix.pdf).
 - If the `--address` flag is present in `hevm exec` or `hevm symbolic`,
   it overrides the contract address at which a contract will be created.
 - Address pretty printing

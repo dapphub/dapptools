@@ -527,7 +527,11 @@ symRun opts@UnitTestOptions{..} concreteVm testName types = do
     -- get all posible postVMs for the test method
     allPaths <- fst <$> runStateT
         (EVM.SymExec.interpret oracle maxIter (execSymTest opts testName cd')) vm
-    results <- forM allPaths $
+    let consistentPaths = flip filter allPaths $
+          \(_, vm') -> case view result vm' of
+            Just (VMFailure DeadPath) -> False
+            _ -> True
+    results <- forM consistentPaths $
       -- If the vm execution succeeded, check if the vm is reachable,
       -- and if any ds-test assertions were triggered
       -- Report a failure depending on the prefix of the test name
@@ -549,9 +553,8 @@ symRun opts@UnitTestOptions{..} concreteVm testName types = do
             prettyCd <- prettyCalldata cd' testName types
             let explorationFailed = case view result vm' of
                   Just (VMFailure e) -> case e of
-                                          NotUnique -> True
+                                          NotUnique _ -> True
                                           UnexpectedSymbolicArg -> True
-                                          DeadPath -> True
                                           _ -> False
                   _ -> False
             return $
@@ -559,8 +562,7 @@ symRun opts@UnitTestOptions{..} concreteVm testName types = do
               then Right ()
               else Left (vm', prettyCd)
           Unsat -> return $ Right ()
-          Unk -> let out = vm' & set result (Just (VMFailure SMTTimeout))
-                 in  return $ Left (out, "unknown")
+          Unk -> return $ Left (vm', "unknown; query timeout")
           DSat _ -> error "Unexpected DSat"
 
     if null $ lefts results

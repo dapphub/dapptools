@@ -84,7 +84,7 @@ data Error
   | PrecompileFailure
   | UnexpectedSymbolicArg
   | DeadPath
-  | NotUnique
+  | NotUnique Whiff
   | SMTTimeout
 deriving instance Show Error
 
@@ -131,7 +131,7 @@ data TraceData
 -- | Queries halt execution until resolved through RPC calls or SMT queries
 data Query where
   PleaseFetchContract :: Addr -> StorageModel -> (Contract -> EVM ()) -> Query
-  PleaseMakeUnique    :: SymVal a => SBV a -> [SBool] -> (Maybe a -> EVM ()) -> Query
+  PleaseMakeUnique    :: SymVal a => SBV a -> [SBool] -> (IsUnique a -> EVM ()) -> Query
   PleaseFetchSlot     :: Addr -> Word -> (Word -> EVM ()) -> Query
   PleaseAskSMT        :: SBool -> [SBool] -> (BranchCondition -> EVM ()) -> Query
 
@@ -167,6 +167,10 @@ type CodeLocation = (Addr, Int)
 
 -- | The possible return values of a SMT query
 data BranchCondition = Case Bool | Unknown | Inconsistent
+  deriving Show
+
+-- | The possible return values of a `is unique` SMT query
+data IsUnique a = Unique a | Multiple | InconsistentU | TimeoutU
   deriving Show
 
 -- | The cache is data that can be persisted for efficiency:
@@ -803,7 +807,7 @@ exec1 = do
         -- op: EXTCODESIZE
         0x3b ->
           case stk of
-            (S _ x':xs) -> makeUnique x' $ \x ->
+            (x':xs) -> makeUnique x' $ \x ->
               if x == num cheatCode
                 then do
                   next
@@ -1535,15 +1539,17 @@ getCodeLocation :: VM -> CodeLocation
 getCodeLocation vm = (view (state . contract) vm, view (state . pc) vm)
 
 -- | Ask the SMT solver to provide a concrete model for val iff a unique model exists
-makeUnique :: SymVal a => SBV a -> (a -> EVM ()) -> EVM ()
-makeUnique val cont = case unliteral val of
+makeUnique :: SymWord -> (Word -> EVM ()) -> EVM ()
+makeUnique sw@(S w val) cont = case maybeLitWord sw of
   Nothing -> do
     conditions <- use constraints
     assign result . Just . VMFailure . Query $ PleaseMakeUnique val (fst <$> conditions) $ \case
-      Just a -> do
+      Unique a -> do
         assign result Nothing
-        cont a
-      Nothing -> vmError NotUnique
+        cont (C w $ fromSizzle a)
+      InconsistentU -> vmError $ DeadPath
+      TimeoutU -> vmError $ SMTTimeout
+      Multiple -> vmError $ NotUnique w
   Just a -> cont a
 
 -- | Construct SMT Query and halt execution until resolved
@@ -1912,9 +1918,9 @@ delegateCall
   => Contract -> Word -> SAddr -> SAddr -> Word -> Word -> Word -> Word -> Word -> [SymWord]
   -> (Addr -> EVM ())
   -> EVM ()
-delegateCall this gasGiven xTo xContext xValue xInOffset xInSize xOutOffset xOutSize xs continue =
-  makeUnique (saddressWord160 xTo) $ \(fromSizzle -> xTo') ->
-    makeUnique (saddressWord160 xContext) $ \(fromSizzle -> xContext') ->
+delegateCall this gasGiven (SAddr xTo) (SAddr xContext) xValue xInOffset xInSize xOutOffset xOutSize xs continue =
+  makeUnique (S (Todo "xTo" []) $ sFromIntegral xTo) $ \(C _ (num -> xTo')) ->
+    makeUnique (S (Todo "xcontext" []) $ sFromIntegral xContext) $ \(C _ (num -> xContext')) ->
       if xTo' > 0 && xTo' <= 9
       then precompiledContract this gasGiven xTo' xContext' xValue xInOffset xInSize xOutOffset xOutSize xs
       else if num xTo' == cheatCode then

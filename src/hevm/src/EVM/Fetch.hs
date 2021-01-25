@@ -8,7 +8,7 @@ import Prelude hiding (Word)
 
 import EVM.Types    (Addr, w256, W256, hexText, Word)
 import EVM.Symbolic (litWord)
-import EVM          (EVM, Contract, Block, initialContract, nonce, balance, external)
+import EVM          (IsUnique(..), EVM, Contract, Block, initialContract, nonce, balance, external)
 import qualified EVM.FeeSchedule as FeeSchedule
 
 import qualified EVM
@@ -196,21 +196,20 @@ oracle smtstate info ensureConsistency q = do
 
     EVM.PleaseMakeUnique val pathconditions continue ->
           case smtstate of
-            Nothing -> return $ continue Nothing
+            Nothing -> return $ continue Multiple
             Just state -> flip runReaderT state $ SBV.runQueryT $ do
-              push 1
               constrain $ sAnd $ pathconditions <> [val .== val] -- dummy proposition just to make sure `val` is defined when we do `getValue` later.
               checkSat >>= \case
                 Sat -> do
                   val' <- getValue val
                   s    <- checksat (val ./= literal val')
-                  pop 1
                   case s of
-                    Unsat -> pure $ continue $ Just val'
-                    _ -> pure $ continue Nothing
-                _ -> do
-                  pop 1
-                  pure $ continue Nothing
+                    Unsat -> pure $ continue $ Unique val'
+                    _ -> pure $ continue Multiple
+                Unsat -> pure $ continue InconsistentU
+                Unk -> pure $ continue TimeoutU
+                DSat _ -> error "unSted DSAT"
+
 
     EVM.PleaseFetchSlot addr slot continue ->
       case info of
