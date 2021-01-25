@@ -37,7 +37,6 @@ import Control.Monad.Trans.Reader
 import Control.Monad.State.Strict hiding (state)
 
 import Data.Aeson.Lens
-import Data.Bifunctor (first)
 import Data.ByteString (ByteString)
 import Data.Maybe (isJust, fromJust, fromMaybe)
 import Data.Map (Map, insert, lookupLT, singleton, filter)
@@ -724,22 +723,22 @@ drawVmBrowser ui =
                   , txt ("Storage: "  <> storageDisplay (view storage c))
                   ]
                 ]
-          Just solc ->
+          Just sol ->
             hBox
               [ borderWithLabel (txt "Contract information") . padBottom Max . padRight (Pad 2) $ vBox
-                  [ txt "Name: " <+> txt (contractNamePart (view contractName solc))
-                  , txt "File: " <+> txt (contractPathPart (view contractName solc))
+                  [ txt "Name: " <+> txt (contractNamePart (view contractName sol))
+                  , txt "File: " <+> txt (contractPathPart (view contractName sol))
                   , txt " "
                   , txt "Constructor inputs:"
-                  , vBox . flip map (view constructorInputs solc) $
+                  , vBox . flip map (view constructorInputs sol) $
                       \(name, abiType) -> txt ("  " <> name <> ": " <> abiTypeSolidity abiType)
                   , txt "Public methods:"
-                  , vBox . flip map (sort (Map.elems (view abiMap solc))) $
+                  , vBox . flip map (sort (Map.elems (view abiMap sol))) $
                       \method -> txt ("  " <> view methodSignature method)
                   , txt ("Storage:" <> storageDisplay (view storage c))
                   ]
               , borderWithLabel (txt "Storage slots") . padBottom Max . padRight Max $ vBox
-                  (map txt (storageLayout dapp' solc))
+                  (map txt (storageLayout dapp' sol))
               ]
       ]
   ]
@@ -860,17 +859,17 @@ currentSrcMap dapp vm =
     case preview (dappSolcByHash . ix h) dapp of
       Nothing ->
         Nothing
-      Just (Creation, solc) ->
-        preview (creationSrcmap . ix i) solc
-      Just (Runtime, solc) ->
-        preview (runtimeSrcmap . ix i) solc
+      Just (Creation, sol) ->
+        preview (creationSrcmap . ix i) sol
+      Just (Runtime, sol) ->
+        preview (runtimeSrcmap . ix i) sol
 
 drawStackPane :: UiVmState -> UiWidget
 drawStackPane ui =
   let
     gasText = showWordExact (view (uiVm . state . gas) ui)
     labelText = txt ("Gas available: " <> gasText <> "; stack:")
-    stackList = list StackPane (Vec.fromList $ zip [1..] (view (uiVm . state . stack) ui)) 2
+    stackList = list StackPane (Vec.fromList $ zip [(1 :: Int)..] (view (uiVm . state . stack) ui)) 2
   in hBorderWithLabel labelText <=>
     renderList
       (\_ (i, x@(S _ w)) ->

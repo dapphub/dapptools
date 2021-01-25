@@ -679,8 +679,9 @@ runStatements stmts args t = do
 
 getStaticAbiArgs :: VM -> [SWord 256]
 getStaticAbiArgs vm =
-  let SymbolicBuffer bs = ditch 4 $ view (state . calldata . _1) vm
-  in fmap (\i -> fromBytes $ take 32 (drop (i*32) bs)) [0..((length bs) `div` 32 - 1)]
+  let SymbolicBuffer bs' = view (state . calldata . _1) vm
+      bs = drop 4 bs'
+  in fmap (\i -> fromBytes $ take 32 (drop (i*32) bs)) [bs..((length bs) `div` 32 - 1)]
 
 -- includes shaving off 4 byte function sig
 decodeAbiValues :: [AbiType] -> ByteString -> [AbiValue]

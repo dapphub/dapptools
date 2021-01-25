@@ -23,8 +23,6 @@ import EVM.Symbolic
 import EVM.Transaction
 import EVM.Types
 
-import Data.SBV hiding (Word)
-
 import Control.Arrow ((***), (&&&))
 import Control.Lens
 import Control.Monad
@@ -288,8 +286,8 @@ fromBlockchainCase' block tx preState postState =
                       else maybe (EVM.RuntimeCode mempty) (view contractcode) toCode
             cd = if isCreate
                  then (mempty, 0)
-                 else let len = num . BS.length $ txData tx
-                      in (ConcreteBuffer $ txData tx, S (Literal len) (literal $ num len))
+                 else let l = num . BS.length $ txData tx
+                      in (ConcreteBuffer $ txData tx, litWord l)
 
 
 validateTx :: Transaction -> Map Addr EVM.Contract -> Maybe ()

@@ -151,7 +151,7 @@ instance JSON.ToJSON ByteStringS where
 data SymWord = S Whiff (SWord 256)
 
 instance Show SymWord where
-  show s@(S w _) = show w
+  show (S w _) = show w
 
 var :: String -> SWord 256 -> SymWord
 var name x = S (Var name x) x
@@ -192,10 +192,6 @@ instance SDivisible SymWord where
                                in (S (Div x' y') a, S (Mod x' y') b)
   sDivMod = sQuotRem
 
--- instance Mergeable SymWord where
---   symbolicMerge a b (S x' x) (S y' y) = S (ITE b x' y') (symbolicMerge a b x y)
---   select xs (S _ x) b = let ys = fmap (\(S _ y) -> y) xs
---                         in sw256 $ select ys x b
 -- | Instead of supporting a Mergeable instance directly,
 -- we use one which carries the Whiff around:
 iteWhiff :: Whiff -> SBool -> SWord 256 -> SWord 256 -> SymWord
@@ -212,11 +208,10 @@ instance Enum SymWord where
   toEnum i = w256lit (toEnum i)
   fromEnum (S _ x) = fromEnum x
 
--- instance OrdSymbolic SymWord where
---   (.<) (S _ x) (S _ y) = (.<) x y
-
-
 -- | This type can give insight into the provenance of a term
+-- which is useful, both for the aesthetic purpose of printing
+-- terms in a richer way, but also do optimizations on the AST
+-- instead of letting the SMT solver do all the heavy lifting.
 data Whiff =
   Todo String [Whiff]
   -- booleans / bits
@@ -286,6 +281,8 @@ newtype SAddr = SAddr { saddressWord160 :: SWord 160 }
   deriving (Num)
 
 -- | Capture the correspondence between sized and fixed-sized BVs
+-- (This is blatant copypasta of `FromSized` from sbv, which just
+-- happens to be defined up to 64 bits)
 type family FromSizzle (t :: Type) :: Type where
    FromSizzle (WordN 256) = W256
    FromSizzle (WordN 160) = Addr
@@ -298,6 +295,8 @@ class FromSizzleBV a where
 
    default fromSizzle :: (Num (FromSizzle a), Integral a) => a -> FromSizzle a
    fromSizzle = fromIntegral
+
+
 
 maybeLitWord :: SymWord -> Maybe Word
 maybeLitWord (S whiff a) = fmap (C whiff . fromSizzle) (unliteral a)

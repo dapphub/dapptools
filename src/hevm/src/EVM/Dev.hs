@@ -31,7 +31,7 @@ import qualified Data.ByteString.Lazy   as LazyByteString
 import qualified Data.ByteString      as BS
 import qualified Data.ByteString.Lazy.Char8 as B
 import qualified Control.Monad.State.Class as State
-import Control.Monad.State.Strict (runState, liftIO, liftM, StateT, get)
+import Control.Monad.State.Strict (runState, liftIO, StateT, get)
 import Control.Lens hiding (op, passing)
 import Control.Monad.Operational (ProgramViewT(..), ProgramView)
 import qualified Control.Monad.Operational as Operational

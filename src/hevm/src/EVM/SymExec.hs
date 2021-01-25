@@ -13,7 +13,6 @@ import qualified EVM
 import EVM.Exec
 import qualified EVM.Fetch as Fetch
 import EVM.ABI
-import Debug.Trace
 import EVM.Stepper (Stepper)
 import qualified EVM.Stepper as Stepper
 import qualified Control.Monad.Operational as Operational
@@ -56,7 +55,7 @@ symAbiArg (AbiUIntType n) | n `mod` 8 == 0 && n <= 256 =
                           | otherwise = error "bad type"
 
 symAbiArg (AbiIntType n)  | n `mod` 8 == 0 && n <= 256 =
-  do x <- concatMapM (const mkByte) [0..(n `div` 8) - 1]
+  do x <- concatMapM (const mkByte) [(0 :: Int) ..(n `div` 8) - 1]
      return (padLeft' 32 x, 32)
 
                           | otherwise = error "bad type"
@@ -65,7 +64,7 @@ symAbiArg AbiBoolType =
      return (padLeft' 32 x, 32)
 
 symAbiArg AbiAddressType =
-  do x <- concatMapM (const mkByte) [0..19]
+  do x <- concatMapM (const mkByte) [(0 :: Int)..19]
      return (padLeft' 32 x, 32)
 
 symAbiArg (AbiBytesType n) | n <= 32 =
@@ -294,6 +293,7 @@ consistentPath vm = do
     Sat -> return $ Just vm
     Unk -> return $ Just vm -- the path may still be consistent
     Unsat -> return Nothing
+    DSat _ -> error "unexpected DSAT"
 
 consistentTree :: Tree BranchInfo -> Query (Maybe (Tree BranchInfo))
 consistentTree (Node (BranchInfo vm w) []) = do
@@ -335,6 +335,7 @@ verify preState maxIter rpcinfo maybepost = do
         Unsat -> do io $ putStrLn "Q.E.D."
                     return $ Left tree
         Sat -> return $ Right tree
+        DSat _ -> error "unexpected DSAT"
 
     Nothing -> do io $ putStrLn "Nothing to check"
                   return $ Left tree
@@ -393,6 +394,7 @@ equivalenceCheck bytecodeA bytecodeB maxiter signature' = do
      Unk -> error "solver said unknown!"
      Sat -> return $ Right preStateA
      Unsat -> return $ Left (leaves aVMs, leaves bVMs)
+     DSat _ -> error "unexpected DSAT"
 
 both' :: (a -> b) -> (a, a) -> (b, b)
 both' f (x, y) = (f x, f y)
@@ -406,7 +408,7 @@ showCounterexample vm maybesig = do
   calldatainput <- case calldata' of
     SymbolicBuffer cd -> mapM (getValue.fromSized) (take cdlen' cd) >>= return . pack
     ConcreteBuffer cd -> return $ BS.take cdlen' cd
-  callvalue' <- num <$> getValue cvalue
+  callvalue' <- getValue cvalue
   caller'' <- num <$> getValue caller'
   io $ do
     putStrLn "Calldata:"
