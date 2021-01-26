@@ -1,6 +1,6 @@
 # hevm changelog
 
-## Unreleased
+## 0.44.0 - 2020-01-26
 
 ### Added
 
