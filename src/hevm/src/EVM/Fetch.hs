@@ -208,7 +208,7 @@ oracle smtstate info ensureConsistency q = do
                     _ -> pure $ continue Multiple
                 Unsat -> pure $ continue InconsistentU
                 Unk -> pure $ continue TimeoutU
-                DSat _ -> error "unSted DSAT"
+                DSat _ -> error "unexpected DSAT"
 
 
     EVM.PleaseFetchSlot addr slot continue ->
