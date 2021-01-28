@@ -47,7 +47,6 @@ in
           '')
           passthru.libPaths;
       buildPhase = ''
-        set -x
         mkdir -p out
         export DAPP_REMAPPINGS="$REMAPPINGS"
         export DAPP_SRC=$src

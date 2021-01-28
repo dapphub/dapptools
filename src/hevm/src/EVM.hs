@@ -27,7 +27,6 @@ import EVM.FeeSchedule (FeeSchedule (..))
 import Options.Generic as Options
 import qualified EVM.Precompiled
 
-import Data.Binary.Get (runGetOrFail)
 import Data.Text (Text)
 import Data.Word (Word8, Word32)
 import Control.Lens hiding (op, (:<), (|>), (.>))
@@ -1572,7 +1571,7 @@ askSMT codeloc (condition, whiff) continue = do
 
    where condition' = simplifyCondition condition whiff
      -- Only one path is possible
-         
+
          choosePath :: BranchCondition -> EVM ()
          choosePath (Case v) = do assign result Nothing
                                   pushTo constraints $ if v then (condition', whiff) else (sNot condition', IsZero whiff)
@@ -1871,46 +1870,81 @@ cheat (inOffset, inSize) (outOffset, outSize) = do
       case Map.lookup abi' cheatActions of
         Nothing ->
           vmError (BadCheatCode (Just abi'))
-        Just (argTypes, action) ->
-          case input of
-            SymbolicBuffer _ -> vmError UnexpectedSymbolicArg
-            ConcreteBuffer input' ->
-              case runGetOrFail
-                     (getAbiSeq (length argTypes) argTypes)
-                     (LS.fromStrict input') of
-                Right ("", _, args) -> do
-                  action outOffset outSize (toList args)
-                  next
-                  push 1
-                _ ->
-                  vmError (BadCheatCode (Just abi'))
+        Just action -> do
+            action outOffset outSize input
+            next
+            push 1
 
-type CheatAction = ([AbiType], Word -> Word -> [AbiValue] -> EVM ())
+type CheatAction = Word -> Word -> Buffer -> EVM ()
 
 cheatActions :: Map Word32 CheatAction
 cheatActions =
   Map.fromList
     [ action "warp(uint256)" [AbiUIntType 256] $
-        \_ _ [AbiUInt 256 x] ->
-          assign (block . timestamp) (w256lit $ num x),
+        \sig argTypes _ _ input -> let
+          arg = do
+            decoded <- decodeBuffer argTypes input
+            case decoded of
+              Left [(AbiUInt 256 x)] -> Just . mkLitNum $ x
+              Right [x] -> Just $ mksym x
+              _ -> Nothing
+        in
+          case arg of
+            Just x  -> assign (block . timestamp) x
+            Nothing -> vmError (BadCheatCode sig),
+
       action "roll(uint256)" [AbiUIntType 256] $
-        \_ _ [AbiUInt 256 x] ->
-          assign (block . number) (w256 (W256 x)),
+        \sig argTypes _ _ input -> let
+          arg = do
+            decoded <- decodeBuffer argTypes input
+            case decoded of
+              Left [(AbiUInt 256 x)] -> Just . mkLitNum $ x
+              Right [x] -> Just $ mksym x
+              _ -> Nothing
+          in
+            case arg of
+              Just x -> forceConcrete x (assign (block . number))
+              Nothing -> vmError (BadCheatCode sig),
+
       action "store(address,bytes32,bytes32)" [AbiAddressType, AbiBytesType 32, AbiBytesType 32] $
-        \_ _ [AbiAddress a, AbiBytes 32 x, AbiBytes 32 y] -> do
-          let slot = w256lit $ word x
-              new  = w256lit $ word y
-          fetchAccount a $ \_ -> do
-            modifying (env . contracts . ix a . storage) (writeStorage slot new),
+        \sig argTypes _ _ input -> let
+          args = do
+            decoded <- decodeBuffer argTypes input
+            case decoded of
+              Left [AbiAddress a, AbiBytes 32 x, AbiBytes 32 y]
+                -> Just ( mkSAddr a, mkLitWord x, mkLitWord y)
+              Right [a, x, y] -> Just (mkSAddr' a, mksym x, mksym y)
+              _ -> Nothing
+        in case args of
+          Just ((SAddr a), slot, new) ->
+            makeUnique (mksym $ sFromIntegral a) $ \(C _ (num -> a')) ->
+              fetchAccount a' $ \_ -> do
+                modifying (env . contracts . ix a' . storage) (writeStorage slot new)
+          _ -> vmError (BadCheatCode sig),
+
       action "load(address,bytes32)" [AbiAddressType, AbiBytesType 32] $
-        \outOffset _ [AbiAddress a, AbiBytes 32 x] -> do
-          let slot = w256lit $ word x
-          accessStorage a slot $ \res -> do
-            assign (state . returndata . word256At 0) res
-            assign (state . memory . word256At outOffset) res
+        \sig argTypes outOffset _ input -> let
+          args = do
+            decoded <- decodeBuffer argTypes input
+            case decoded of
+              Left [AbiAddress a, AbiBytes 32 x] -> Just (mkSAddr a, mkLitWord x)
+              Right [a, x] -> Just (mkSAddr' a, mksym x)
+              _ -> Nothing
+        in case args of
+          Just ((SAddr a), slot) ->
+            makeUnique (mksym $ sFromIntegral a) $ \(C _ (num -> a'))->
+              accessStorage a' slot $ \res -> do
+                assign (state . returndata . word256At 0) res
+                assign (state . memory . word256At outOffset) res
+          _ -> vmError (BadCheatCode sig)
     ]
   where
-    action s ts f = (abiKeccak s, (ts, f))
+    action s tps f = (abiKeccak s, f (Just $ abiKeccak s) tps)
+    mksym x = S (Todo "abidecode" []) x
+    mkSAddr = SAddr . literal . toSizzle
+    mkSAddr' = SAddr . sFromIntegral
+    mkLitWord = w256lit . word
+    mkLitNum = w256lit . num
 
 -- * General call implementation ("delegateCall")
 delegateCall
