@@ -134,6 +134,8 @@ in
       prove-fail-call = fail "proveFail_shouldFail";
       prove-multi = fail "prove_multi";
       prove-smtTimeout = fail "prove_smtTimeout";
+      prove-mul = fail "prove_mul";
+      prove-distributivity = fail "prove_distributivity";
       prove-transfer = fail "prove_transfer";
     };
 
