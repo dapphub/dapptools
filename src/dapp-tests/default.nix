@@ -26,7 +26,7 @@ let
     owner = "dapphub";
     repo = "ds-auth";
     rev = "8035510b0bdfe90de9e29cac2c538f5ce0d89aea";
-    sha256 = "0s63ffz8wi0h6yaripmigrbzd93i3915jsrxq4iqbiam6mkdgrsc";
+    sha256 = "1j7c60vzcg6cwc3d72q2sh6lzfbm04ipzn7nf8mfcli2yyhap6n1";
   } + "/src";
 
   ds-value-src = pkgs.fetchFromGitHub {
