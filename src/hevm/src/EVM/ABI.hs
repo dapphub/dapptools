@@ -47,7 +47,7 @@ module EVM.ABI
   , emptyAbi
   , encodeAbiValue
   , decodeAbiValue
-  , decodeSimpleTypes
+  , decodeStaticArgs
   , formatString
   , parseTypeName
   , makeAbiValue
@@ -540,18 +540,12 @@ listP parser = between (char '[') (char ']') ((do skipSpaces
                                                   skipSpaces
                                                   return a) `sepBy` (char ','))
 
--- TODO: teach this to handle complex types
-decodeSimpleTypes :: [AbiType] -> Buffer -> Maybe ([SWord 256])
-decodeSimpleTypes argTypes buffer
-  | containsComplexTypes argTypes = Nothing
-  | otherwise = let
-     bs = case buffer of
-       ConcreteBuffer b -> litBytes b
-       SymbolicBuffer b -> b
-    in Just $ fmap (\i -> fromBytes $ take 32 (drop (i*32) bs)) [0..((length bs) `div` 32 - 1)]
-
-containsComplexTypes :: [AbiType] -> Bool
-containsComplexTypes = or . fmap (\a -> abiKind a == Dynamic)
+decodeStaticArgs :: Buffer -> [SWord 256]
+decodeStaticArgs buffer = let
+    bs = case buffer of
+      ConcreteBuffer b -> litBytes b
+      SymbolicBuffer b -> b
+  in fmap (\i -> fromBytes $ take 32 (drop (i*32) bs)) [0..((length bs) `div` 32 - 1)]
 
 -- A modification of 'arbitrarySizedBoundedIntegral' quickcheck library
 -- which takes the maxbound explicitly rather than relying on a Bounded instance.

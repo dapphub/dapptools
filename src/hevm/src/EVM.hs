@@ -1880,35 +1880,35 @@ type CheatAction = Word -> Word -> Buffer -> EVM ()
 cheatActions :: Map Word32 CheatAction
 cheatActions =
   Map.fromList
-    [ action "warp(uint256)" [AbiUIntType 256] $
-        \sig argTypes _ _ input -> let
-          args = decodeSimpleTypes argTypes input
+    [ action "warp(uint256)" $
+        \sig _ _ input -> let
+          args = decodeStaticArgs input
         in case args of
-          Just [x]  -> assign (block . timestamp) (mksym x)
+          [x]  -> assign (block . timestamp) (mksym x)
           _ -> vmError (BadCheatCode sig),
 
-      action "roll(uint256)" [AbiUIntType 256] $
-        \sig argTypes _ _ input -> let
-          args = decodeSimpleTypes argTypes input
+      action "roll(uint256)" $
+        \sig _ _ input -> let
+          args = decodeStaticArgs input
         in case args of
-          Just [x] -> forceConcrete (mksym x) (assign (block . number))
+          [x] -> forceConcrete (mksym x) (assign (block . number))
           _ -> vmError (BadCheatCode sig),
 
-      action "store(address,bytes32,bytes32)" [AbiAddressType, AbiBytesType 32, AbiBytesType 32] $
-        \sig argTypes _ _ input -> let
-          args = decodeSimpleTypes argTypes input
+      action "store(address,bytes32,bytes32)" $
+        \sig _ _ input -> let
+          args = decodeStaticArgs input
         in case args of
-          Just [a, slot, new] ->
+          [a, slot, new] ->
             makeUnique (mksym $ sFromIntegral a) $ \(C _ (num -> a')) ->
               fetchAccount a' $ \_ -> do
                 modifying (env . contracts . ix a' . storage) (writeStorage (mksym slot) (mksym new))
           _ -> vmError (BadCheatCode sig),
 
-      action "load(address,bytes32)" [AbiAddressType, AbiBytesType 32] $
-        \sig argTypes outOffset _ input -> let
-          args = decodeSimpleTypes argTypes input
+      action "load(address,bytes32)" $
+        \sig outOffset _ input -> let
+          args = decodeStaticArgs input
         in case args of
-          Just [a, slot] ->
+          [a, slot] ->
             makeUnique (mksym $ sFromIntegral a) $ \(C _ (num -> a'))->
               accessStorage a' (mksym slot) $ \res -> do
                 assign (state . returndata . word256At 0) res
@@ -1916,7 +1916,7 @@ cheatActions =
           _ -> vmError (BadCheatCode sig)
     ]
   where
-    action s tps f = (abiKeccak s, f (Just $ abiKeccak s) tps)
+    action s f = (abiKeccak s, f (Just $ abiKeccak s))
     mksym x = S (Todo "abidecode" []) x
 
 -- * General call implementation ("delegateCall")
