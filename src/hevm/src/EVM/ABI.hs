@@ -47,7 +47,7 @@ module EVM.ABI
   , emptyAbi
   , encodeAbiValue
   , decodeAbiValue
-  , decodeBuffer
+  , decodeSimpleTypes
   , formatString
   , parseTypeName
   , makeAbiValue
@@ -70,7 +70,8 @@ import Data.Text.Encoding (encodeUtf8, decodeUtf8')
 import Data.Vector        (Vector, toList)
 import Data.Word          (Word32)
 import Data.List          (intercalate)
-import Data.SBV           (SWord, fromBytes)
+import Data.SBV           (SWord, fromBytes, sFromIntegral, literal)
+import Data.Maybe
 import GHC.Generics
 
 import Test.QuickCheck hiding ((.&.), label)
@@ -539,29 +540,19 @@ listP parser = between (char '[') (char ']') ((do skipSpaces
                                                   skipSpaces
                                                   return a) `sepBy` (char ','))
 
-
--- TODO: teach this to handle complex types for symbolic buffers
-decodeBuffer :: [AbiType] -> Buffer -> Maybe (Either [AbiValue] [SWord 256])
-decodeBuffer argTypes (ConcreteBuffer b)
-  = case runGetOrFail
-      (getAbiSeq (length argTypes) argTypes)
-      (BSLazy.fromStrict b) of
-    Right ("", _, args) -> Just $ Left $ toList args
-    _ -> Nothing
-decodeBuffer argTypes (SymbolicBuffer b)
+-- TODO: teach this to handle complex types
+decodeSimpleTypes :: [AbiType] -> Buffer -> Maybe ([SWord 256])
+decodeSimpleTypes argTypes buffer
   | containsComplexTypes argTypes = Nothing
-  | otherwise = Just . Right $
-      fmap (\i -> fromBytes $ take 32 (drop (i*32) b)) [0..((length b) `div` 32 - 1)]
+  | otherwise = let
+     bs = case buffer of
+       ConcreteBuffer b -> litBytes b
+       SymbolicBuffer b -> b
+    in Just $ fmap (\i -> fromBytes $ take 32 (drop (i*32) bs)) [0..((length bs) `div` 32 - 1)]
 
 containsComplexTypes :: [AbiType] -> Bool
-containsComplexTypes [] = False
-containsComplexTypes (hd : tl) = case hd of
-  AbiBytesDynamicType -> True
-  AbiStringType -> True
-  AbiArrayDynamicType _ -> True
-  AbiArrayType _ _ -> True
-  AbiTupleType _ -> True
-  _ -> containsComplexTypes tl
+containsComplexTypes = or . fmap (\a -> abiKind a == Dynamic)
+
 -- A modification of 'arbitrarySizedBoundedIntegral' quickcheck library
 -- which takes the maxbound explicitly rather than relying on a Bounded instance.
 -- Essentially a mix between three types of generators:

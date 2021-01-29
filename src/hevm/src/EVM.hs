@@ -1882,58 +1882,35 @@ cheatActions =
   Map.fromList
     [ action "warp(uint256)" [AbiUIntType 256] $
         \sig argTypes _ _ input -> let
-          arg = do
-            decoded <- decodeBuffer argTypes input
-            case decoded of
-              Left [(AbiUInt 256 x)] -> Just . mkLitNum $ x
-              Right [x] -> Just $ mksym x
-              _ -> Nothing
-        in
-          case arg of
-            Just x  -> assign (block . timestamp) x
-            Nothing -> vmError (BadCheatCode sig),
+          args = decodeSimpleTypes argTypes input
+        in case args of
+          Just [x]  -> assign (block . timestamp) (mksym x)
+          _ -> vmError (BadCheatCode sig),
 
       action "roll(uint256)" [AbiUIntType 256] $
         \sig argTypes _ _ input -> let
-          arg = do
-            decoded <- decodeBuffer argTypes input
-            case decoded of
-              Left [(AbiUInt 256 x)] -> Just . mkLitNum $ x
-              Right [x] -> Just $ mksym x
-              _ -> Nothing
-          in
-            case arg of
-              Just x -> forceConcrete x (assign (block . number))
-              Nothing -> vmError (BadCheatCode sig),
+          args = decodeSimpleTypes argTypes input
+        in case args of
+          Just [x] -> forceConcrete (mksym x) (assign (block . number))
+          _ -> vmError (BadCheatCode sig),
 
       action "store(address,bytes32,bytes32)" [AbiAddressType, AbiBytesType 32, AbiBytesType 32] $
         \sig argTypes _ _ input -> let
-          args = do
-            decoded <- decodeBuffer argTypes input
-            case decoded of
-              Left [AbiAddress a, AbiBytes 32 x, AbiBytes 32 y]
-                -> Just ( mkSAddr a, mkLitWord x, mkLitWord y)
-              Right [a, x, y] -> Just (mkSAddr' a, mksym x, mksym y)
-              _ -> Nothing
+          args = decodeSimpleTypes argTypes input
         in case args of
-          Just ((SAddr a), slot, new) ->
+          Just [a, slot, new] ->
             makeUnique (mksym $ sFromIntegral a) $ \(C _ (num -> a')) ->
               fetchAccount a' $ \_ -> do
-                modifying (env . contracts . ix a' . storage) (writeStorage slot new)
+                modifying (env . contracts . ix a' . storage) (writeStorage (mksym slot) (mksym new))
           _ -> vmError (BadCheatCode sig),
 
       action "load(address,bytes32)" [AbiAddressType, AbiBytesType 32] $
         \sig argTypes outOffset _ input -> let
-          args = do
-            decoded <- decodeBuffer argTypes input
-            case decoded of
-              Left [AbiAddress a, AbiBytes 32 x] -> Just (mkSAddr a, mkLitWord x)
-              Right [a, x] -> Just (mkSAddr' a, mksym x)
-              _ -> Nothing
+          args = decodeSimpleTypes argTypes input
         in case args of
-          Just ((SAddr a), slot) ->
+          Just [a, slot] ->
             makeUnique (mksym $ sFromIntegral a) $ \(C _ (num -> a'))->
-              accessStorage a' slot $ \res -> do
+              accessStorage a' (mksym slot) $ \res -> do
                 assign (state . returndata . word256At 0) res
                 assign (state . memory . word256At outOffset) res
           _ -> vmError (BadCheatCode sig)
@@ -1941,10 +1918,6 @@ cheatActions =
   where
     action s tps f = (abiKeccak s, f (Just $ abiKeccak s) tps)
     mksym x = S (Todo "abidecode" []) x
-    mkSAddr = SAddr . literal . toSizzle
-    mkSAddr' = SAddr . sFromIntegral
-    mkLitWord = w256lit . word
-    mkLitNum = w256lit . num
 
 -- * General call implementation ("delegateCall")
 delegateCall
