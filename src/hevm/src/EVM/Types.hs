@@ -228,7 +228,7 @@ data Whiff =
   | SHL Whiff Whiff
   | SHR Whiff Whiff
   | SAR Whiff Whiff
-  
+
   -- integers
   | Add  Whiff Whiff
   | Sub  Whiff Whiff
@@ -295,7 +295,6 @@ class FromSizzleBV a where
 
    default fromSizzle :: (Num (FromSizzle a), Integral a) => a -> FromSizzle a
    fromSizzle = fromIntegral
-
 
 
 maybeLitWord :: SymWord -> Maybe Word

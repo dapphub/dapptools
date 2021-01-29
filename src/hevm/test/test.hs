@@ -560,7 +560,7 @@ main = defaultMain $ testGroup "hevm"
             vm <- abstractVM (Just ("distributivity(uint256,uint256,uint256)", [AbiUIntType 256, AbiUIntType 256, AbiUIntType 256])) [] yulsafeDistributivity SymbolicS
             verify vm Nothing Nothing (Just checkAssertions)
           putStrLn $ "Proven"
-          
+
       , testCase "safemath distributivity (sol)" $ do
           let code =
                 [i|
@@ -568,7 +568,7 @@ main = defaultMain $ testGroup "hevm"
                       function distributivity(uint x, uint y, uint z) public {
                           assert(mul(x, add(y, z)) == add(mul(x, y), mul(x, z)));
                       }
-                  
+
                       function add(uint x, uint y) internal pure returns (uint z) {
                           require((z = x + y) >= x, "ds-math-add-overflow");
                       }
@@ -679,9 +679,11 @@ runStatements stmts args t = do
 
 getStaticAbiArgs :: VM -> [SWord 256]
 getStaticAbiArgs vm =
-  let SymbolicBuffer bs' = view (state . calldata . _1) vm
-      bs = drop 4 bs'
-  in fmap (\i -> fromBytes $ take 32 (drop (i*32) bs)) [0..((length bs) `div` 32 - 1)]
+  let cd = view (state . calldata . _1) vm
+      bs = case cd of
+        ConcreteBuffer bs' -> ConcreteBuffer $ BS.drop 4 bs'
+        SymbolicBuffer bs' -> SymbolicBuffer $ drop 4 bs'
+  in decodeStaticArgs bs
 
 -- includes shaving off 4 byte function sig
 decodeAbiValues :: [AbiType] -> ByteString -> [AbiValue]

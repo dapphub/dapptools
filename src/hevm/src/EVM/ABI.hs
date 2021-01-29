@@ -26,6 +26,7 @@
 -}
 
 {-# Language StrictData #-}
+{-# Language DataKinds #-}
 
 module EVM.ABI
   ( AbiValue (..)
@@ -46,6 +47,7 @@ module EVM.ABI
   , emptyAbi
   , encodeAbiValue
   , decodeAbiValue
+  , decodeStaticArgs
   , formatString
   , parseTypeName
   , makeAbiValue
@@ -56,7 +58,7 @@ module EVM.ABI
 import EVM.Types
 
 import Control.Monad      (replicateM, replicateM_, forM_, void)
-import Data.Binary.Get    (Get, runGet, label, getWord8, getWord32be, skip)
+import Data.Binary.Get    (Get, runGet, runGetOrFail, label, getWord8, getWord32be, skip)
 import Data.Binary.Put    (Put, runPut, putWord8, putWord32be)
 import Data.Bits          (shiftL, shiftR, (.&.))
 import Data.ByteString    (ByteString)
@@ -65,9 +67,11 @@ import Data.Functor       (($>))
 import Data.Monoid        ((<>))
 import Data.Text          (Text, pack, unpack)
 import Data.Text.Encoding (encodeUtf8, decodeUtf8')
-import Data.Vector        (Vector)
+import Data.Vector        (Vector, toList)
 import Data.Word          (Word32)
 import Data.List          (intercalate)
+import Data.SBV           (SWord, fromBytes, sFromIntegral, literal)
+import Data.Maybe
 import GHC.Generics
 
 import Test.QuickCheck hiding ((.&.), label)
@@ -536,6 +540,12 @@ listP parser = between (char '[') (char ']') ((do skipSpaces
                                                   skipSpaces
                                                   return a) `sepBy` (char ','))
 
+decodeStaticArgs :: Buffer -> [SWord 256]
+decodeStaticArgs buffer = let
+    bs = case buffer of
+      ConcreteBuffer b -> litBytes b
+      SymbolicBuffer b -> b
+  in fmap (\i -> fromBytes $ take 32 (drop (i*32) bs)) [0..((length bs) `div` 32 - 1)]
 
 -- A modification of 'arbitrarySizedBoundedIntegral' quickcheck library
 -- which takes the maxbound explicitly rather than relying on a Bounded instance.
