@@ -4,7 +4,7 @@ let
   ds-test-src = pkgs.fetchFromGitHub {
     owner = "dapphub";
     repo = "ds-test";
-    rev = "1ixciazx7w52r5g4za4gpprads83i0rpjx8ax5cyizgpg60i5rgi";
+    rev = "c0b770c04474db28d43ab4b2fdb891bd21887e9e";
     sha256 = "0cdzva82kkvj7ck4yf3ffma2n5rfa7miknjnz6jwgfy416a865m0";
   } + "/src";
 
