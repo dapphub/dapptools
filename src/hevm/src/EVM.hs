@@ -1881,23 +1881,17 @@ cheatActions :: Map Word32 CheatAction
 cheatActions =
   Map.fromList
     [ action "warp(uint256)" $
-        \sig _ _ input -> let
-          args = decodeStaticArgs input
-        in case args of
+        \sig _ _ input -> case decodeStaticArgs input of
           [x]  -> assign (block . timestamp) (mksym x)
           _ -> vmError (BadCheatCode sig),
 
       action "roll(uint256)" $
-        \sig _ _ input -> let
-          args = decodeStaticArgs input
-        in case args of
+        \sig _ _ input -> case decodeStaticArgs input of
           [x] -> forceConcrete (mksym x) (assign (block . number))
           _ -> vmError (BadCheatCode sig),
 
       action "store(address,bytes32,bytes32)" $
-        \sig _ _ input -> let
-          args = decodeStaticArgs input
-        in case args of
+        \sig _ _ input -> case decodeStaticArgs input of
           [a, slot, new] ->
             makeUnique (mksym $ sFromIntegral a) $ \(C _ (num -> a')) ->
               fetchAccount a' $ \_ -> do
@@ -1905,9 +1899,7 @@ cheatActions =
           _ -> vmError (BadCheatCode sig),
 
       action "load(address,bytes32)" $
-        \sig outOffset _ input -> let
-          args = decodeStaticArgs input
-        in case args of
+        \sig outOffset _ input -> case decodeStaticArgs input of
           [a, slot] ->
             makeUnique (mksym $ sFromIntegral a) $ \(C _ (num -> a'))->
               accessStorage a' (mksym slot) $ \res -> do
