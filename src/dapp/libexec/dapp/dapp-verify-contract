@@ -16,8 +16,8 @@ set -e
   exit 1
 }
 
-[[ $1 ]] || dapp verify-contract --help && exit 1
-[[ $2 ]] || dapp verify-contract --help && exit 1
+[[ $1 ]] || (dapp verify-contract --help >&2 && exit 1)
+[[ $2 ]] || (dapp verify-contract --help >&2 && exit 1)
 
 chain=$(seth chain)
 case "$chain" in
