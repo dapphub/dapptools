@@ -22,6 +22,7 @@ following the semantics of fuzzing.
 ### Changed
 
 - Use cvc4 as default smt solver
+- hevm cheatcodes now accept symbolic arguments, allowing e.g. symbolic jumps in time in unit tests
 
 ## 0.43.2 - 2020-12-10
 
