@@ -38,6 +38,9 @@ smtdebug                   print the SMT queries produced by hevm
   Deployment options:
 verify                     verify contract on etherscan
 
+  Contract verifying options:
+async                      don't wait for confirmation
+
   Dapp testnet options:
 rpc-port=port      change RPC port (default: 8545)
 rpc-addr=address   change RPC address (default: 127.0.0.1)
@@ -114,6 +117,8 @@ while [[ $1 ]]; do
        export HEVM_RPC=yes;;
 
     --verify)                 export DAPP_VERIFY_CONTRACT=yes;;
+
+    --async)                  export DAPP_ASYNC=yes;;
 
     --rpc-port)        shift; export DAPP_TESTNET_RPC_PORT=$1;;
     --rpc-addr)        shift; export DAPP_TESTNET_RPC_ADDRESS=$1;;

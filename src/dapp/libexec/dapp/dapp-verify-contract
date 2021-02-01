@@ -1,19 +1,8 @@
 #!/usr/bin/env bash
+### dapp-verify-contract -- verify contract souce on etherscan
+### Usage: dapp verify-contract <path>:<contractname> <address>
+
 set -e
-
-for i in "$@"; do
-  case $i in
-    --async)
-      ASYNC=yes
-      shift
-      ;;
-    *)
-      shift
-      set -- "$@" "$i"
-      ;;
-  esac
-done
-
 
 [[ $ETHERSCAN_API_KEY ]] || {
   cat >&2 <<.
@@ -26,6 +15,9 @@ done
 .
   exit 1
 }
+
+[[ $1 ]] || dapp verify-contract --help && exit 1
+[[ $2 ]] || dapp verify-contract --help && exit 1
 
 chain=$(seth chain)
 case "$chain" in
@@ -46,8 +38,13 @@ path=${1?contractname}
 name=${path#*:}
 address=${2?contractaddress}
 
-contract=$(<"$DAPP_JSON" jq -r ".contracts[\"$path\"]")
-meta=$(<"$DAPP_JSON" jshon -e contracts -e "$path" -e metadata -u)
+# combined-json has a sourceList field
+if [[ $(jq .sourceList "$DAPP_JSON") == null ]]; then
+    contract=$(<"$DAPP_JSON" jq -r ".contracts[\"${path/:*/}\"][\"$name\"]")
+else 
+    contract=$(<"$DAPP_JSON" jq -r ".contracts[\"$path\"]")
+fi
+meta=$(jshon <<<"$contract" -e metadata -u)
 version=$(jshon <<<"$meta" -e compiler -e version -u)
 file=$(jshon <<<"$meta" -e settings -e compilationTarget -k)
 optimized=$(jshon <<<"$meta" -e settings -e optimizer -e enabled -u)
@@ -143,7 +140,7 @@ done
 
 
 
-[[ $ASYNC == yes ]] && exit
+[[ $DAPP_ASYNC == yes ]] && exit
 
 sleep 20
 response=$(curl -fsS "$ETHERSCAN_API_URL" \
