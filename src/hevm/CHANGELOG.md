@@ -1,5 +1,11 @@
 # hevm changelog
 
+## 0.44.1 - 2020-02-02
+
+### Changed
+
+- hevm cheatcodes now accept symbolic arguments, allowing e.g. symbolic jumps in time in unit tests
+
 ## 0.44.0 - 2020-01-26
 
 ### Added
@@ -22,7 +28,6 @@ following the semantics of fuzzing.
 ### Changed
 
 - Use cvc4 as default smt solver
-- hevm cheatcodes now accept symbolic arguments, allowing e.g. symbolic jumps in time in unit tests
 
 ## 0.43.2 - 2020-12-10
 
