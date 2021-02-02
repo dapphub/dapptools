@@ -4,18 +4,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## Unreleased
+## [0.32.1] - 2021-02-02
 
 ### Fixed
 
-- `dapp init` to new architecture
-- `dapp verify-contract` to new architecture
+- `dapp init` works with the new standard-json architecture
+- `dapp verify-contract` works with the new standard-json architecture
 
 ## [0.32.0] - 2021-01-26
 
 ### Changed
 
-- `dapp build`, `dapp test`, `dapp --make-library-state`, `dapp create` now use solidity output 
+- `dapp build`, `dapp test`, `dapp --make-library-state`, `dapp create` now use solidity output
 generated via `--standard-json` instead of `--combined-json`. Building via the old format is
 still possible via `dapp build --legacy`, but is considered deprecated and will be removed in
 future releases.
@@ -36,7 +36,7 @@ The settings can be tweaked using the following environment variables:
 
 ### Removed
 
-- `SOLC_FLAGS`. To modify the compiler settings, use a custom standard json and set 
+- `SOLC_FLAGS`. To modify the compiler settings, use a custom standard json and set
 the filename as argument to `DAPP_STANDARD_JSON`.
 
 ### Fixed
