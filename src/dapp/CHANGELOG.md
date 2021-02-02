@@ -6,6 +6,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+### Added
+
+- support for (non-static) solc 0.7.4 and solc 0.8.1
+
 ### Fixed
 
 - `dapp init` to new architecture
