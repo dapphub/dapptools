@@ -326,7 +326,7 @@ prefixContractAst castr cs bso ast = prefixAstNodes
     -- Is node identifier that is referencing top level defined type
     p' x =
       (nodeIs "Identifier" x || nodeIs "UserDefinedTypeName" x)
-        && (fromJust' "refDec of ident/userdef" $ refDec x) `Map.member` castr
+        && (isJust $ refDec x) && (fromJust' "refDec of ident/userdef" $ refDec x) `Map.member` castr
 
     -- Is node identifier that is referencing a struct nested in a top level
     -- defined contract/interface
