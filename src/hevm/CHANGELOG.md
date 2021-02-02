@@ -5,6 +5,7 @@
 ### Changed
 
 - hevm cheatcodes now accept symbolic arguments, allowing e.g. symbolic jumps in time in unit tests
+- More efficient arithmetic overflow checks by translating queries to a more [intelligent form](www.microsoft.com/en-us/research/wp-content/uploads/2016/02/z3prefix.pdf).
 
 ## 0.44.0 - 2020-01-26
 
@@ -14,7 +15,6 @@
   well as `--combined-json`.
 - addresses in the trace output are prefixed with `ContractName@0x...`
   if there is a corresponding contract and `@0x...` otherwise.
-- More efficient arithmetic overflow checks by translating queries to a more [intelligent form](www.microsoft.com/en-us/research/wp-content/uploads/2016/02/z3prefix.pdf).
 
 ### Fixed
 
