@@ -25,7 +25,7 @@ m,match=<string>     only run test methods matching regex
 cache=<string>       use the cache at directory
 
   RPC options:
-rpc=url              fetch remote state via ETH_RPC_URL
+rpc                  fetch remote state via ETH_RPC_URL
 rpc-url=<string>     fetch remote state via <url>
 rpc-block=<number>   block number (latest if not specified)
 
