@@ -12,7 +12,7 @@ USAGE:
  ethsign [global options] command [command options] [arguments...]
 
 VERSION:
- 0.15
+ 0.16.1
 
 COMMANDS:
   list-accounts, ls  List accounts in keystore and USB wallets
