@@ -6,7 +6,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
-## Changed
+### Added
+
+- Thanks to an upgrade in ethsign, seth is more likely to find your ledger live 
+account without having to set `ETH_HDPATH`.
+
+### Changed
 
 - updated `nixpkgs` to the `20.09` channel
 
@@ -25,7 +30,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - the `--gas-price` argument can optionally accept a `gwei` suffix
   i.e. `seth call --gas-price 100gwei ...`
 
-## [0.9.4] - 2020-12-10
+### [0.9.4] - 2020-12-10
 
 ### Added
 
