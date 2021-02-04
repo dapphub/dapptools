@@ -94,11 +94,27 @@ Scan:
       }
     } else if x.URL().Scheme == "ledger" {
       x.Open("")
+      // if hd-path is given, check that account first
+      if c.String("hd-path") != "" {
+        path, _ := accounts.ParseDerivationPath(c.String("hd-path"))
+        y, err := x.Derive(path, false)
+        if err != nil {
+          return nil, "", nil, cli.NewExitError("ethsign: Ledger needs to be in Ethereum app with browser support off", 1)
+        } else {
+          if y.Address == from {
+            wallet = x
+            acct = &y
+            needPassphrase = false
+            break Scan
+          }
+        }
+      }
+
       for i := range defaultHDPaths {
         for j := 0; j <= c.Int("n"); j++ {
-          pathstr := fmt.Sprintf(defaultHDPaths[i] + "/%d", j)
+          pathstr := fmt.Sprintf(defaultHDPaths[i], j)
           path, _ := accounts.ParseDerivationPath(pathstr)
-          y, err := x.Derive(path, true)
+          y, err := x.Derive(path, false)
           if err != nil {
             return nil, "", nil, cli.NewExitError("ethsign: Ledger needs to be in Ethereum app with browser support off", 1)
           } else {
@@ -174,8 +190,8 @@ func recover(data []byte, sig hexutil.Bytes, noPrefix bool) (common.Address, err
 func main() {
   var defaultHDPaths cli.StringSlice
   defaultHDPaths = []string{
-    "m/44'/60'/0'",   // aka "ledger legacy"
-    "m/44'/60'/0'/0",  // aka "ledger live"
+    "m/44'/60'/0'/%d",   // aka "ledger legacy"
+    "m/44'/60'/%d'/0/0", // aka "ledger live"
   }
 
   var defaultKeyStores cli.StringSlice
@@ -213,11 +229,11 @@ func main() {
           EnvVar: "ETH_KEYSTORE",
           Value: &defaultKeyStores,
         },
-        cli.StringSliceFlag{
-          Name: "hd-paths",
+        cli.StringFlag{
+          Name: "hd-path",
           Usage: "hd derivation path",
           EnvVar: "ETH_HDPATH",
-          Value: &defaultHDPaths,
+          Value: "",
         },
         cli.IntFlag{
           Name: "n",
@@ -234,9 +250,19 @@ func main() {
             }
           } else if x.URL().Scheme == "ledger" {
             x.Open("")
+            // if hd-path is given, check that account first
+            if c.String("hd-path") != "" {
+              path, _ := accounts.ParseDerivationPath(c.String("hd-path"))
+              z, err := x.Derive(path, false)
+              if err != nil {
+                return cli.NewExitError("ethsign: couldn't use Ledger: needs to be in Ethereum app with browser support off", 1)
+              } else {
+                fmt.Printf("%s ledger-%s\n", z.Address.Hex(), path)
+              }
+            }
             for i := range defaultHDPaths {
               for j := 0; j <= c.Int("n"); j++ {
-                pathstr := fmt.Sprintf(defaultHDPaths[i] + "/%d", j)
+                pathstr := fmt.Sprintf(defaultHDPaths[i], j)
                 path, _ := accounts.ParseDerivationPath(pathstr)
                 z, err := x.Derive(path, false)
                 if err != nil {
@@ -264,11 +290,11 @@ func main() {
           EnvVar: "ETH_KEYSTORE",
           Value: &defaultKeyStores,
         },
-        cli.StringSliceFlag{
-          Name: "hd-paths",
+        cli.StringFlag{
+          Name: "hd-path",
           Usage: "hd derivation path",
           EnvVar: "ETH_HDPATH",
-          Value: &defaultHDPaths,
+          Value: "",
         },
         cli.IntFlag{
           Name: "n",
@@ -395,11 +421,11 @@ func main() {
           EnvVar: "ETH_KEYSTORE",
           Value: &defaultKeyStores,
         },
-        cli.StringSliceFlag{
-          Name: "hd-paths",
+        cli.StringFlag{
+          Name: "hd-path",
           Usage: "hd derivation path",
           EnvVar: "ETH_HDPATH",
-          Value: &defaultHDPaths,
+          Value: "",
         },
         cli.IntFlag{
           Name: "n",
