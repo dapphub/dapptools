@@ -20,6 +20,7 @@ COMMANDS:
   message, msg       Sign arbitrary data with header prefix
   verify             Verify signed data by given key
   recover            Recover Ethereum address from signature
+  import             import hexadecimal private key into keystore
   help, h            Show a list of commands or help for one command
 
 ```
