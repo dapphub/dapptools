@@ -294,8 +294,14 @@ sets the block number to `x`.
 - `function store(address c, bytes32 loc, bytes32 val) public`
 sets the slot `loc` of contract `c` to `val`.
 
-- `function load(address c, bytes32 loc) public`
+- `function load(address c, bytes32 loc) public returns (bytes32 val)`
 reads the slot `loc` of contract `c`.
+
+- `function sign(uint sk, bytes memory message) public returns (uint8 v, bytes32 r, bytes32 s)`
+signs the `message` using the private key `sk`
+
+- `function addr(uint sk) public returns (address addr)`
+derives an ethereum address from the private key `sk`
 
 
 ## Contact

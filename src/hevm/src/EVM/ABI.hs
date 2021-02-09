@@ -32,6 +32,7 @@ module EVM.ABI
   ( AbiValue (..)
   , AbiType (..)
   , AbiKind (..)
+  , AbiVals (..)
   , abiKind
   , Event (..)
   , Anonymity (..)
@@ -48,6 +49,7 @@ module EVM.ABI
   , encodeAbiValue
   , decodeAbiValue
   , decodeStaticArgs
+  , decodeBuffer
   , formatString
   , parseTypeName
   , makeAbiValue
@@ -539,6 +541,21 @@ listP parser = between (char '[') (char ']') ((do skipSpaces
                                                   a <- parser
                                                   skipSpaces
                                                   return a) `sepBy` (char ','))
+
+data AbiVals = NoVals | CAbi [AbiValue] | SAbi [SWord 256]
+
+decodeBuffer :: [AbiType] -> Buffer -> AbiVals
+decodeBuffer tps (ConcreteBuffer b)
+  = case runGetOrFail (getAbiSeq (length tps) tps) (BSLazy.fromStrict b) of
+      Right ("", _, args) -> CAbi . toList $ args
+      _ -> NoVals
+decodeBuffer tps b@(SymbolicBuffer _)
+  = if containsDynamic tps
+    then NoVals
+    else SAbi . decodeStaticArgs $ b
+  where
+    isDynamic t = abiKind t == Dynamic
+    containsDynamic = or . fmap isDynamic
 
 decodeStaticArgs :: Buffer -> [SWord 256]
 decodeStaticArgs buffer = let

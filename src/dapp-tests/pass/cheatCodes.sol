@@ -7,6 +7,8 @@ interface Hevm {
     function roll(uint256) external;
     function load(address,bytes32) external returns (bytes32);
     function store(address,bytes32,bytes32) external;
+    function sign(uint256,bytes calldata) external returns (uint8,bytes32,bytes32);
+    function addr(uint256) external returns (address);
 }
 
 contract HasStorage {
@@ -46,5 +48,20 @@ contract CheatCodes is DSTest {
 
     function prove_store_load_symbolic(uint x) public {
         test_store_load_concrete(x);
+    }
+
+    function test_sign_addr_concrete(uint sk, bytes memory message) public {
+        if (sk == 0) return; // invalid key
+
+        (uint8 v, bytes32 r, bytes32 s) = hevm.sign(sk, message);
+
+        address expected = hevm.addr(sk);
+        address actual = ecrecover(keccak256(message), v, r, s);
+
+        assertEq(actual, expected);
+    }
+
+    function testFail_addr_zero_sk() public {
+        hevm.addr(0);
     }
 }
