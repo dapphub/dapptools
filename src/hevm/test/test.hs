@@ -56,10 +56,11 @@ instance MonadFail Query where
 main :: IO ()
 main = defaultMain $ testGroup "hevm"
   [ testGroup "ABI"
-    [ testProperty "Put/get inverse" $ \x ->
-        case runGetOrFail (getAbi (abiValueType x)) (runPut (putAbi x)) of
-          Right ("", _, x') -> x' == x
-          _ -> False
+    [
+      -- testProperty "Put/get inverse" $ \x ->
+      --   case runGetOrFail (getAbi (abiValueType x)) (runPut (putAbi x)) of
+      --     Right ("", _, x') -> x' == x
+      --     _ -> False
     ]
   , testGroup "Solidity expressions"
     [ testCase "Trivial" $
