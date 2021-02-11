@@ -70,6 +70,31 @@ test_hevm_symbolic() {
 
 test_hevm_symbolic
 
+test_custom_solc_json() {
+    TMPDIR=$(mktemp -d)
+
+    # copy source file
+    mkdir -p "$TMPDIR/src"
+    cp factor.sol "$TMPDIR/src"
+
+    # init dapp project
+    cd "$TMPDIR"
+    export GIT_CONFIG_NOSYSTEM=1
+    export GIT_AUTHOR_NAME=dapp
+    export GIT_AUTHOR_EMAIL=dapp@hub.lol
+    export GIT_COMMITTER_NAME=$GIT_AUTHOR_NAME
+    export GIT_COMMITTER_EMAIL=$GIT_AUTHOR_EMAIL
+    dapp init
+
+    # init custom json
+    dapp mk-standard-json > config.json
+
+    # build with custom json
+    DAPP_STANDARD_JSON="config.json" dapp build
+}
+
+test_custom_solc_json
+
 # SETH CALLDATA TESTS
 test_calldata_1() {
     local output
