@@ -61,7 +61,7 @@ if [[ -z "$DAPP_BUILD_LEGACY" && -z "$DAPP_BUILD_EXTRACT" ]]; then
         info "consider using --optimize or a custom standard-json instead."
     fi
     if [[ "$DAPP_STANDARD_JSON" ]]; then
-        "$SOLC" --allow-paths . --standard-json - < "$DAPP_STANDARD_JSON" > "$DAPP_JSON"
+        "$SOLC" --allow-paths . --standard-json < "$DAPP_STANDARD_JSON" > "$DAPP_JSON"
     else
         dapp mk-standard-json | "$SOLC" --standard-json --allow-paths . > "$DAPP_JSON"
     fi
