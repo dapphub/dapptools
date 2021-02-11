@@ -35,7 +35,7 @@ from hypothesis.strategies import binary
 # while geth simply skips the call entirely and moves on
 # to the next opcode in the calling contract.
 
-#@example(bytes.fromhex('60006000601260136014601560166018f4'))
+# @example(bytes.fromhex('60006000601260136014601560166018f4'))
 
 def test_compare_geth_hevm(b):
     code = b.hex()

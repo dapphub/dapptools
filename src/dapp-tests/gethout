@@ -1,0 +1,2 @@
+{"pc":0,"op":45,"gas":"0xfffffffff","gasCost":"0x0","memory":"0x","memSize":0,"stack":[],"returnStack":[],"returnData":"0x","depth":1,"refund":0,"opName":"opcode 0x2d not defined","error":"invalid opcode: opcode 0x2d not defined"}
+{"output":"","gasUsed":"0xfffffffff","time":89633,"error":"invalid opcode: opcode 0x2d not defined"}

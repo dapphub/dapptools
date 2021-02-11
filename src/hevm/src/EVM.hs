@@ -1883,26 +1883,26 @@ type CheatAction = Word -> Word -> Buffer -> EVM ()
 cheatActions :: Map Word32 CheatAction
 cheatActions =
   Map.fromList
-    [ action "warp(uint256)" $
-        \sig _ _ input -> case decodeStaticArgs input of
+    [ action "warp(uint256)" [AbiUIntType 256] $
+        \sig _ _ _ input -> case decodeStaticArgs input of
           [x]  -> assign (block . timestamp) (mksym x)
           _ -> vmError (BadCheatCode sig),
 
-      action "roll(uint256)" $
-        \sig _ _ input -> case decodeStaticArgs input of
+      action "roll(uint256)" [AbiUIntType 256] $
+        \sig _ _ _ input -> case decodeStaticArgs input of
           [x] -> forceConcrete (mksym x) (assign (block . number))
           _ -> vmError (BadCheatCode sig),
 
-      action "store(address,bytes32,bytes32)" $
-        \sig _ _ input -> case decodeStaticArgs input of
+      action "store(address,bytes32,bytes32)" [AbiAddressType, AbiBytesType 32, AbiBytesType 32] $
+        \sig _ _ _ input -> case decodeStaticArgs input of
           [a, slot, new] ->
             makeUnique (mksym $ sFromIntegral a) $ \(C _ (num -> a')) ->
               fetchAccount a' $ \_ -> do
                 modifying (env . contracts . ix a' . storage) (writeStorage (mksym slot) (mksym new))
           _ -> vmError (BadCheatCode sig),
 
-      action "load(address,bytes32)" $
-        \sig outOffset _ input -> case decodeStaticArgs input of
+      action "load(address,bytes32)" [AbiAddressType, AbiBytesType 32] $
+        \sig _ outOffset _ input -> case decodeStaticArgs input of
           [a, slot] ->
             makeUnique (mksym $ sFromIntegral a) $ \(C _ (num -> a'))->
               accessStorage a' (mksym slot) $ \res -> do
@@ -1910,11 +1910,10 @@ cheatActions =
                 assign (state . memory . word256At outOffset) res
           _ -> vmError (BadCheatCode sig),
 
-      action "sign(uint256,bytes32)" $
-        \sig outOffset _ input -> case decodeStaticArgs input of
+      action "sign(uint256,bytes32)" [AbiUIntType 256, AbiBytesType 32] $
+        \sig _ outOffset _ input -> case decodeStaticArgs input of
           [sk, hash] ->
-            forceConcrete (mksym sk) $ \sk' ->
-              forceConcrete (mksym hash) $ \(C _ hash') -> let
+            forceConcrete2 (mksym sk, mksym hash) $ \(sk', (C _ hash')) -> let
                 curve = getCurveByName SEC_p256k1
                 priv = PrivateKey curve (num sk')
                 digest = digestFromByteString (word256Bytes hash')
@@ -1934,8 +1933,8 @@ cheatActions =
                     copyBytesToMemory (ConcreteBuffer encoded) (num . BS.length $ encoded) 0 outOffset
           _ -> vmError (BadCheatCode sig),
 
-      action "addr(uint256)" $
-        \sig outOffset _ input -> case decodeStaticArgs input of
+      action "addr(uint256)" [AbiUIntType 256] $
+        \sig _ outOffset _ input -> case decodeStaticArgs input of
           [sk] -> forceConcrete (mksym sk) $ \sk' -> let
                 curve = getCurveByName SEC_p256k1
                 pubPoint = generateQ curve (num sk')
@@ -1950,11 +1949,31 @@ cheatActions =
                       addr = w256lit . num . word256 . BS.drop 12 . BS.take 32 . keccakBytes $ pub
                     assign (state . returndata . word256At 0) addr
                     assign (state . memory . word256At outOffset) addr
-          _ -> vmError (BadCheatCode sig)
+          _ -> vmError (BadCheatCode sig),
 
+      action "callfrom(address,address,bytes,uint,uint)"
+        [AbiAddressType, AbiAddressType, AbiBytesDynamicType, AbiUIntType 256, AbiUIntType 256] $
+        \sig tps outOffset outSize input -> case decodeBuffer tps input of
+          CAbi [AbiAddress from', AbiAddress target, AbiBytesDynamic calldata, AbiUInt 256 val, AbiUInt 256 gas'] ->
+            let
+              target' = litAddr target
+              value' = num val
+              stk = get (state . stack)
+              caller' = get (env . contracts) from'
+            in
+            delegateCall caller' (num gas') target' target' value' xInOffset xInSize outOffset outSize stk $
+              \callee -> do
+                zoom state $ do
+                  assign callvalue (litWord value')
+                  assign caller (litAddr from')
+                  assign contract callee
+                transfer from' callee value'
+                touchAccount from'
+                touchAccount callee
+          _ -> vmError (BadCheatCode sig)
     ]
   where
-    action s f = (abiKeccak s, f (Just $ abiKeccak s))
+    action s tps f = (abiKeccak s, f (Just $ abiKeccak s) tps)
     mksym x = S (Todo "abidecode" []) x
 
 -- | Hack deterministic signing, totally insecure...

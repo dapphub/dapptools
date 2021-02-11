@@ -24,6 +24,7 @@ dapp_testnet() {
   dapp testnet --dir "$TMPDIR" &
   # give it a few secs to start up
   sleep 90
+  seth ls --keystore "$TMPDIR/8545/keystore"
   read -r ACC BAL <<< "$(seth ls --keystore "$TMPDIR/8545/keystore")"
   # The account has maximum balance
   [[ $(seth --to-hex "$BAL") = $(seth --to-int256 -1) ]] || error
