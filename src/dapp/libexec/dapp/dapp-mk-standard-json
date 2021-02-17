@@ -39,7 +39,7 @@ else:
 tmpljson["settings"].pop('stopAfter', None)
 
 if os.getenv('DAPP_BUILD_OPTIMIZE') == '1':
-    tmpljson["settings"]["optimizer"]["enabled"] = true
+    tmpljson["settings"]["optimizer"]["enabled"] = True
     tmpljson["settings"]["optimizer"]["runs"] = int(os.getenv('DAPP_BUILD_OPTIMIZE_RUNS', '200'))
 else:
     tmpljson["settings"].pop('optimizer', None)
