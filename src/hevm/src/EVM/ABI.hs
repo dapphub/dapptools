@@ -43,7 +43,6 @@ module EVM.ABI
   , genAbiValue
   , abiValueType
   , abiTypeSolidity
-  , abiCalldata
   , abiMethod
   , emptyAbi
   , encodeAbiValue
@@ -66,14 +65,12 @@ import Data.Bits          (shiftL, shiftR, (.&.))
 import Data.ByteString    (ByteString)
 import Data.DoubleWord    (Word256, Int256, signedWord)
 import Data.Functor       (($>))
-import Data.Monoid        ((<>))
 import Data.Text          (Text, pack, unpack)
 import Data.Text.Encoding (encodeUtf8, decodeUtf8')
 import Data.Vector        (Vector, toList)
 import Data.Word          (Word32)
 import Data.List          (intercalate)
-import Data.SBV           (SWord, fromBytes, sFromIntegral, literal)
-import Data.Maybe
+import Data.SBV           (SWord, fromBytes)
 import GHC.Generics
 
 import Test.QuickCheck hiding ((.&.), label)
@@ -278,22 +275,6 @@ putAbiTail x =
     Static  -> pure ()
     Dynamic -> putAbi x
 
-abiValueSize :: AbiValue -> Int
-abiValueSize x =
-  case x of
-    AbiUInt _ _  -> 32
-    AbiInt  _ _  -> 32
-    AbiBytes n _ -> roundTo32Bytes n
-    AbiAddress _ -> 32
-    AbiBool _    -> 32
-    AbiArray _ _ xs -> Vector.sum (Vector.map abiHeadSize xs) +
-                       Vector.sum (Vector.map abiTailSize xs)
-    AbiBytesDynamic xs -> 32 + roundTo32Bytes (BS.length xs)
-    AbiArrayDynamic _ xs -> 32 + Vector.sum (Vector.map abiHeadSize xs) +
-                                Vector.sum (Vector.map abiTailSize xs)
-    AbiString s -> 32 + roundTo32Bytes (BS.length s)
-    AbiTuple v  -> sum (abiValueSize <$> v)
-
 abiTailSize :: AbiValue -> Int
 abiTailSize x =
   case abiKind (abiValueType x) of
@@ -302,13 +283,10 @@ abiTailSize x =
       case x of
         AbiString s -> 32 + roundTo32Bytes (BS.length s)
         AbiBytesDynamic s -> 32 + roundTo32Bytes (BS.length s)
-        AbiArrayDynamic _ xs -> 32 + Vector.sum (Vector.map abiValueSize xs)
-        AbiArray _ _ xs -> Vector.sum (Vector.map abiValueSize xs)
-        AbiTuple v -> sum (headSize <$> v) + sum (abiTailSize <$> v)
+        AbiArrayDynamic _ xs -> 32 + sum ((abiHeadSize <$> xs) <> (abiTailSize <$> xs))
+        AbiArray _ _ xs -> sum ((abiHeadSize <$> xs) <> (abiTailSize <$> xs))
+        AbiTuple v -> sum ((abiHeadSize <$> v) <> (abiTailSize <$> v))
         _ -> error "impossible"
-  where headSize y = if abiKind (abiValueType y) == Static
-                     then abiValueSize y
-                     else 32
 
 abiHeadSize :: AbiValue -> Int
 abiHeadSize x =
@@ -321,25 +299,23 @@ abiHeadSize x =
         AbiBytes n _ -> roundTo32Bytes n
         AbiAddress _ -> 32
         AbiBool _    -> 32
-        AbiArray _ _ xs -> Vector.sum (Vector.map abiHeadSize xs) +
-                           Vector.sum (Vector.map abiTailSize xs)
-        AbiBytesDynamic _ -> 32
-        AbiArrayDynamic _ _ -> 32
-        AbiString _       -> 32
-        AbiTuple v   -> sum (abiHeadSize <$> v) +
-                        sum (abiTailSize <$> v)
+        AbiTuple v   -> sum (abiHeadSize <$> v)
+        AbiArray _ _ xs -> sum (abiHeadSize <$> xs)
+        _ -> error "impossible"
 
 putAbiSeq :: Vector AbiValue -> Put
 putAbiSeq xs =
-  do snd $ Vector.foldl' f (headSize, pure ()) (Vector.zip xs tailSizes)
-     Vector.sequence_ (Vector.map putAbiTail xs)
+  do putHeads headSize $ toList xs
+     Vector.sequence_ (putAbiTail <$> xs)
   where
     headSize = Vector.sum $ Vector.map abiHeadSize xs
-    tailSizes = Vector.map abiTailSize xs
-    f (i, m) (x, j) =
+    putHeads _ [] = pure ()
+    putHeads offset (x:xs') =
       case abiKind (abiValueType x) of
-        Static -> (i, m >> putAbi x)
-        Dynamic -> (i + j, m >> putAbi (AbiUInt 256 (fromIntegral i)))
+        Static -> do putAbi x
+                     putHeads offset xs'
+        Dynamic -> do putAbi (AbiUInt 256 (fromIntegral offset))
+                      putHeads (offset + abiTailSize x) xs'
 
 encodeAbiValue :: AbiValue -> BS.ByteString
 encodeAbiValue = BSLazy.toStrict . runPut . putAbi
@@ -354,11 +330,6 @@ abiMethod :: Text -> AbiValue -> BS.ByteString
 abiMethod s args = BSLazy.toStrict . runPut $ do
   putWord32be (abiKeccak (encodeUtf8 s))
   putAbi args
-
-abiCalldata :: Text -> Vector AbiValue -> BS.ByteString
-abiCalldata s xs = BSLazy.toStrict . runPut $ do
-  putWord32be (abiKeccak (encodeUtf8 s))
-  putAbiSeq xs
 
 parseTypeName :: Vector AbiType -> Text -> Maybe AbiType
 parseTypeName = P.parseMaybe . typeWithArraySuffix
@@ -431,7 +402,7 @@ genAbiValue = \case
    AbiIntType n ->
      do a <- genUInt n
         let AbiUInt _ x = a
-        pure $ AbiInt n (signedWord x)
+        pure $ AbiInt n (signedWord (x - 2^(n-1)))
    AbiAddressType ->
      (\(AbiUInt _ x) -> AbiAddress (fromIntegral x)) <$> genUInt 20
    AbiBoolType ->
@@ -455,22 +426,19 @@ genAbiValue = \case
     genUInt n = AbiUInt n <$> arbitraryIntegralWithMax (2^n-1)
 
 instance Arbitrary AbiType where
-  arbitrary = sized $ \n -> oneof $ -- prevent empty tuples
+  arbitrary = oneof $ -- doesn't create any tuples
     [ (AbiUIntType . (* 8)) <$> choose (1, 32)
     , (AbiIntType . (* 8)) <$> choose (1, 32)
     , pure AbiAddressType
     , pure AbiBoolType
-    , AbiBytesType . getPositive <$> arbitrary
+    , AbiBytesType <$> choose (1,32)
     , pure AbiBytesDynamicType
     , pure AbiStringType
     , AbiArrayDynamicType <$> scale (`div` 2) arbitrary
     , AbiArrayType
         <$> (getPositive <$> arbitrary)
         <*> scale (`div` 2) arbitrary
-    ] <>
-    [AbiTupleType
-        <$> scale (`div` 2) (Vector.fromList <$> arbitrary)
-        | n /= 0]
+    ]
 
 instance Arbitrary AbiValue where
   arbitrary = arbitrary >>= genAbiValue
