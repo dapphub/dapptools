@@ -10,9 +10,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - updated `nixpkgs` to the `20.09` channel
 
+### Fixed
+
+- `seth calldata` returns correct abiencoding
+
 ## [0.10.0] - 2021-01-26
 
-## Changed
+### Changed
 
 - `seth combined-json` was renamed to `seth-solc` and invokes `solc`
   using the `--standard-json` input.
