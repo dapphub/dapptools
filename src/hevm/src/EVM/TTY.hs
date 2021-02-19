@@ -40,7 +40,6 @@ import Data.Aeson.Lens
 import Data.ByteString (ByteString)
 import Data.Maybe (isJust, fromJust, fromMaybe)
 import Data.Map (Map, insert, lookupLT, singleton, filter)
-import Data.Monoid ((<>))
 import Data.Text (Text, pack)
 import Data.Text.Encoding (decodeUtf8)
 import Data.List (sort, find)

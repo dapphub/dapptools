@@ -1,4 +1,5 @@
 {-# Language OverloadedStrings #-}
+{-# Language ViewPatterns #-}
 {-# Language ScopedTypeVariables #-}
 {-# Language LambdaCase #-}
 {-# Language QuasiQuotes #-}
@@ -17,10 +18,10 @@ import Prelude hiding (fail)
 
 import qualified Data.Text as Text
 import qualified Data.ByteString as BS
-import qualified Data.ByteString.Lazy as BS (fromStrict)
+import qualified Data.ByteString.Lazy as BS (fromStrict, toStrict)
 import qualified Data.ByteString.Base16 as Hex
 import Test.Tasty
-import Test.Tasty.QuickCheck-- hiding (forAll)
+import Test.Tasty.QuickCheck
 import Test.Tasty.HUnit
 
 import Control.Monad.State.Strict (execState, runState)
@@ -72,6 +73,17 @@ main = defaultMain $ testGroup "hevm"
     , testCase "keccak256()" $
         SolidityCall "x = uint(keccak256(abi.encodePacked(a)));"
           [AbiString ""] ===> AbiUInt 256 0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470
+
+    , testProperty "abi encoding vs. solidity" $ forAll (arbitrary >>= genAbiValue) $
+      \y -> ioProperty $ do
+          traceM ("encoding: " ++ (show y) ++ " : " ++ show (abiValueType y))
+          Just encoded <- runStatements [i| x = abi.encode(a);|]
+            [y] AbiBytesDynamicType
+          let AbiTuple (Vector.toList -> [solidityEncoded]) = decodeAbiValue (AbiTupleType $ Vector.fromList [AbiBytesDynamicType]) (BS.fromStrict encoded)
+          let hevmEncoded = encodeAbiValue (AbiTuple $ Vector.fromList [y])
+          -- traceM ("encoded (solidity): " ++ show solidityEncoded)
+          -- traceM ("encoded (hevm): " ++ show (AbiBytesDynamic hevmEncoded))
+          assertEqual "abi encoding mismatch" solidityEncoded (AbiBytesDynamic hevmEncoded)
     ]
 
   , testGroup "Precompiled contracts"
@@ -635,6 +647,7 @@ hex s =
 singleContract :: Text -> Text -> IO (Maybe ByteString)
 singleContract x s =
   solidity x [i|
+    pragma experimental ABIEncoderV2;
     contract ${x} { ${s} }
   |]
 
@@ -669,10 +682,10 @@ runStatements stmts args t = do
                     (map (abiTypeSolidity . abiValueType) args) <> ")"
 
   runFunction [i|
-    function foo(${params}) public pure returns (${abiTypeSolidity t} x) {
+    function foo(${params}) public pure returns (${abiTypeSolidity t} ${defaultDataLocation t} x) {
       ${stmts}
     }
-  |] (abiCalldata s (Vector.fromList args))
+  |] (abiMethod s (AbiTuple $ Vector.fromList args))
 
 getStaticAbiArgs :: VM -> [SWord 256]
 getStaticAbiArgs vm =
