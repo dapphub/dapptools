@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 ### dapp-verify-contract -- verify contract souce on etherscan
-### Usage: dapp verify-contract <path>:<contractname> <address>
+### Usage: dapp verify-contract <path>:<contractname> <address> [constructorArgs]
 
 set -e
 
@@ -153,4 +153,10 @@ result=$(jshon <<<"$response" -e result -u)
   echo >&2 "$result"
   echo >&2 "Go to $ETHERSCAN_URL/$2#code"
   exit 0
+}
+
+[[ $status = 0 ]] && {
+  echo >&2 "Failure"
+  echo >&2 "$result"
+  exit 1
 }
