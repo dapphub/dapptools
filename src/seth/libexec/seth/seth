@@ -12,6 +12,7 @@
 ###    --rpc-url=<url>            JSON-RPC URL (overrides host and port)
 ###    --rpc-accounts             use JSON-RPC node for accounts and signing
 ###    -C, --chain=<chain>        remote node configuration preset
+###    --chain-id=<id>            chain id (defaults to rpc)
 ###    --keystore=<dir>           local keystore directory
 ###
 ### Transaction options:
@@ -65,6 +66,7 @@ rpc-port=port        JSON-RPC port (default: \`8545')
 rpc-url=url          JSON-RPC URL (overrides host and port)
 rpc-accounts         use JSON-RPC node for accounts and signing
 C,chain=chain        remote node configuration preset
+chain-id=id          chain id (defaults to rpc)
 keystore=dir         local keystore directory
 
   Transaction options:
@@ -147,6 +149,7 @@ while [[ $1 ]]; do
     --keystore)      shift; export ETH_KEYSTORE=$1;;
 
     -C|--chain)      shift; export SETH_CHAIN=$1;;
+    --chain-id)      shift; export ETH_CHAINID=$1;;
 
     -B|--block)      shift; export ETH_BLOCK=$1;;
     -F|--from)       shift; export ETH_FROM=$(seth --to-address $1);;
