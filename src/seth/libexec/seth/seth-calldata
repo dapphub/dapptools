@@ -15,7 +15,8 @@ if [[ $1 =~ ^([^\(]+)\( ]]; then
   shift
   args=()
   for arg; do
-    [[ $arg = @* ]] && arg=$(seth lookup "$arg")
+    [[ $arg = @*  ]] && arg=$(seth lookup "$arg")
+    [[ $arg = 0x* ]] && arg=$(seth --to-hexdata "$arg")
     args+=(--arg "$arg")
   done
   calldata=$(

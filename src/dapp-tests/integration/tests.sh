@@ -224,6 +224,30 @@ test_calldata_19() {
 }
 test_calldata_19
 
+test_calldata_20() {
+    local output
+    output=$(seth calldata 0xcafe:0x4001)
+
+    [[ $output = "0xcafe4001" ]] || error
+}
+test_calldata_20
+
+test_calldata_21() {
+    local output
+    output=$(seth calldata 'f(bytes4)' 0xcafe:0x4001)
+
+    [[ $output = "0x215f04e1cafe400100000000000000000000000000000000000000000000000000000000" ]] || error
+}
+test_calldata_21
+
+test_calldata_21() {
+    local output
+    output=$(seth calldata 'f(bytes)' 0xcafe:0x4001)
+
+    [[ $output = "0xd45754f800000000000000000000000000000000000000000000000000000000000000200000000000000000000000000000000000000000000000000000000000000004cafe400100000000000000000000000000000000000000000000000000000000" ]] || error
+}
+test_calldata_21
+
 test_keccak_1() {
   local output
   output=$(seth keccak 0xcafe)
