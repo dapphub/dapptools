@@ -542,7 +542,7 @@ listP parser = between (char '[') (char ']') ((do skipSpaces
                                                   skipSpaces
                                                   return a) `sepBy` (char ','))
 
-data AbiVals = NoVals | CAbi [AbiValue] | SAbi [SWord 256]
+data AbiVals = NoVals | CAbi [AbiValue] | SAbi [SymWord]
 
 decodeBuffer :: [AbiType] -> Buffer -> AbiVals
 decodeBuffer tps (ConcreteBuffer b)
@@ -557,12 +557,13 @@ decodeBuffer tps b@(SymbolicBuffer _)
     isDynamic t = abiKind t == Dynamic
     containsDynamic = or . fmap isDynamic
 
-decodeStaticArgs :: Buffer -> [SWord 256]
+decodeStaticArgs :: Buffer -> [SymWord]
 decodeStaticArgs buffer = let
     bs = case buffer of
       ConcreteBuffer b -> litBytes b
       SymbolicBuffer b -> b
-  in fmap (\i -> fromBytes $ take 32 (drop (i*32) bs)) [0..((length bs) `div` 32 - 1)]
+  in fmap (\i -> S (FromBytes buffer) $
+            fromBytes $ take 32 (drop (i*32) bs)) [0..((length bs) `div` 32 - 1)]
 
 -- A modification of 'arbitrarySizedBoundedIntegral' quickcheck library
 -- which takes the maxbound explicitly rather than relying on a Bounded instance.

@@ -1885,27 +1885,27 @@ cheatActions =
   Map.fromList
     [ action "warp(uint256)" $
         \sig _ _ input -> case decodeStaticArgs input of
-          [x]  -> assign (block . timestamp) (mksym x)
+          [x]  -> assign (block . timestamp) x
           _ -> vmError (BadCheatCode sig),
 
       action "roll(uint256)" $
         \sig _ _ input -> case decodeStaticArgs input of
-          [x] -> forceConcrete (mksym x) (assign (block . number))
+          [x] -> forceConcrete x (assign (block . number))
           _ -> vmError (BadCheatCode sig),
 
       action "store(address,bytes32,bytes32)" $
         \sig _ _ input -> case decodeStaticArgs input of
           [a, slot, new] ->
-            makeUnique (mksym $ sFromIntegral a) $ \(C _ (num -> a')) ->
+            makeUnique a $ \(C _ (num -> a')) ->
               fetchAccount a' $ \_ -> do
-                modifying (env . contracts . ix a' . storage) (writeStorage (mksym slot) (mksym new))
+                modifying (env . contracts . ix a' . storage) (writeStorage slot new)
           _ -> vmError (BadCheatCode sig),
 
       action "load(address,bytes32)" $
         \sig outOffset _ input -> case decodeStaticArgs input of
           [a, slot] ->
-            makeUnique (mksym $ sFromIntegral a) $ \(C _ (num -> a'))->
-              accessStorage a' (mksym slot) $ \res -> do
+            makeUnique a $ \(C _ (num -> a'))->
+              accessStorage a' slot $ \res -> do
                 assign (state . returndata . word256At 0) res
                 assign (state . memory . word256At outOffset) res
           _ -> vmError (BadCheatCode sig),
@@ -1913,8 +1913,8 @@ cheatActions =
       action "sign(uint256,bytes32)" $
         \sig outOffset _ input -> case decodeStaticArgs input of
           [sk, hash] ->
-            forceConcrete (mksym sk) $ \sk' ->
-              forceConcrete (mksym hash) $ \(C _ hash') -> let
+            forceConcrete sk $ \sk' ->
+              forceConcrete hash $ \(C _ hash') -> let
                 curve = getCurveByName SEC_p256k1
                 priv = PrivateKey curve (num sk')
                 digest = digestFromByteString (word256Bytes hash')
@@ -1936,7 +1936,7 @@ cheatActions =
 
       action "addr(uint256)" $
         \sig outOffset _ input -> case decodeStaticArgs input of
-          [sk] -> forceConcrete (mksym sk) $ \sk' -> let
+          [sk] -> forceConcrete sk $ \sk' -> let
                 curve = getCurveByName SEC_p256k1
                 pubPoint = generateQ curve (num sk')
                 encodeInt = encodeAbiValue . AbiUInt 256 . fromInteger
@@ -1955,7 +1955,6 @@ cheatActions =
     ]
   where
     action s f = (abiKeccak s, f (Just $ abiKeccak s))
-    mksym x = S (Todo "abidecode" []) x
 
 -- | Hack deterministic signing, totally insecure...
 ethsign :: PrivateKey -> Digest Crypto.Keccak_256 -> Signature
