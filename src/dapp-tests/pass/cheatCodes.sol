@@ -62,6 +62,16 @@ contract CheatCodes is DSTest {
         test_sign_addr_digest(sk, keccak256(message));
     }
 
+    function testFail_sign_addr(uint sk, bytes32 digest) public {
+        uint badKey = sk + 1;
+
+        (uint8 v, bytes32 r, bytes32 s) = hevm.sign(badKey, digest);
+        address expected = hevm.addr(sk);
+        address actual = ecrecover(digest, v, r, s);
+
+        assertEq(actual, expected);
+    }
+
     function testFail_addr_zero_sk() public {
         hevm.addr(0);
     }
