@@ -1927,8 +1927,8 @@ cheatActions =
                         encoded = encodeAbiValue $
                           AbiTuple (RegularVector.fromList
                             [ AbiUInt 8 v
-                            , AbiBytes 32 (encodeAbiValue . AbiUInt 256 . fromInteger $ sign_r s)
-                            , AbiBytes 32 (encodeAbiValue . AbiUInt 256 . fromInteger $ sign_s s)
+                            , AbiBytes 32 (word256Bytes . fromInteger $ sign_r s)
+                            , AbiBytes 32 (word256Bytes . fromInteger $ sign_s s)
                             ])
                     assign (state . returndata) (ConcreteBuffer encoded)
                     copyBytesToMemory (ConcreteBuffer encoded) (num . BS.length $ encoded) 0 outOffset
