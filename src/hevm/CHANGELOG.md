@@ -7,6 +7,10 @@
 - Two new cheatcodes were added: `sign(uint sk, bytes message)` and `addr(uint sk)`. Taken together
   these should allow for much more ergonomic testing of code that handles signed messages.
 
+## Changed
+
+- updated `nixpkgs` to the `20.09` channel
+
 ## 0.44.1 - 2020-02-02
 
 ### Changed
