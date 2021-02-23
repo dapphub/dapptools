@@ -57,7 +57,10 @@ import qualified Data.Vector as RegularVector
 
 import Crypto.Number.ModArithmetic (expFast)
 import qualified Crypto.Hash as Crypto
-import Crypto.Hash (Digest, SHA256, RIPEMD160)
+import Crypto.Hash (Digest, SHA256, RIPEMD160, digestFromByteString)
+import Crypto.PubKey.ECC.ECDSA (signDigestWith, PrivateKey(..), Signature(..))
+import Crypto.PubKey.ECC.Types (getCurveByName, CurveName(..), Point(..))
+import Crypto.PubKey.ECC.Generate (generateQ)
 
 -- * Data types
 
@@ -1882,34 +1885,84 @@ cheatActions =
   Map.fromList
     [ action "warp(uint256)" $
         \sig _ _ input -> case decodeStaticArgs input of
-          [x]  -> assign (block . timestamp) (mksym x)
+          [x]  -> assign (block . timestamp) x
           _ -> vmError (BadCheatCode sig),
 
       action "roll(uint256)" $
         \sig _ _ input -> case decodeStaticArgs input of
-          [x] -> forceConcrete (mksym x) (assign (block . number))
+          [x] -> forceConcrete x (assign (block . number))
           _ -> vmError (BadCheatCode sig),
 
       action "store(address,bytes32,bytes32)" $
         \sig _ _ input -> case decodeStaticArgs input of
           [a, slot, new] ->
-            makeUnique (mksym $ sFromIntegral a) $ \(C _ (num -> a')) ->
+            makeUnique a $ \(C _ (num -> a')) ->
               fetchAccount a' $ \_ -> do
-                modifying (env . contracts . ix a' . storage) (writeStorage (mksym slot) (mksym new))
+                modifying (env . contracts . ix a' . storage) (writeStorage slot new)
           _ -> vmError (BadCheatCode sig),
 
       action "load(address,bytes32)" $
         \sig outOffset _ input -> case decodeStaticArgs input of
           [a, slot] ->
-            makeUnique (mksym $ sFromIntegral a) $ \(C _ (num -> a'))->
-              accessStorage a' (mksym slot) $ \res -> do
+            makeUnique a $ \(C _ (num -> a'))->
+              accessStorage a' slot $ \res -> do
                 assign (state . returndata . word256At 0) res
                 assign (state . memory . word256At outOffset) res
+          _ -> vmError (BadCheatCode sig),
+
+      action "sign(uint256,bytes32)" $
+        \sig outOffset _ input -> case decodeStaticArgs input of
+          [sk, hash] ->
+            forceConcrete sk $ \sk' ->
+              forceConcrete hash $ \(C _ hash') -> let
+                curve = getCurveByName SEC_p256k1
+                priv = PrivateKey curve (num sk')
+                digest = digestFromByteString (word256Bytes hash')
+              in do
+                case digest of
+                  Nothing -> vmError (BadCheatCode sig)
+                  Just digest' -> do
+                    let s = ethsign priv digest'
+                        v = if (sign_s s) % 2 == 0 then 27 else 28
+                        encoded = encodeAbiValue $
+                          AbiTuple (RegularVector.fromList
+                            [ AbiUInt 8 v
+                            , AbiBytes 32 (word256Bytes . fromInteger $ sign_r s)
+                            , AbiBytes 32 (word256Bytes . fromInteger $ sign_s s)
+                            ])
+                    assign (state . returndata) (ConcreteBuffer encoded)
+                    copyBytesToMemory (ConcreteBuffer encoded) (num . BS.length $ encoded) 0 outOffset
+          _ -> vmError (BadCheatCode sig),
+
+      action "addr(uint256)" $
+        \sig outOffset _ input -> case decodeStaticArgs input of
+          [sk] -> forceConcrete sk $ \sk' -> let
+                curve = getCurveByName SEC_p256k1
+                pubPoint = generateQ curve (num sk')
+                encodeInt = encodeAbiValue . AbiUInt 256 . fromInteger
+              in do
+                case pubPoint of
+                  PointO -> do vmError (BadCheatCode sig)
+                  Point x y -> do
+                    -- See yellow paper #286
+                    let
+                      pub = BS.concat [ encodeInt x, encodeInt y ]
+                      addr = w256lit . num . word256 . BS.drop 12 . BS.take 32 . keccakBytes $ pub
+                    assign (state . returndata . word256At 0) addr
+                    assign (state . memory . word256At outOffset) addr
           _ -> vmError (BadCheatCode sig)
+
     ]
   where
     action s f = (abiKeccak s, f (Just $ abiKeccak s))
-    mksym x = S (Todo "abidecode" []) x
+
+-- | Hack deterministic signing, totally insecure...
+ethsign :: PrivateKey -> Digest Crypto.Keccak_256 -> Signature
+ethsign sk digest = go 420
+  where
+    go k = case signDigestWith k sk digest of
+       Nothing  -> go (k + 1)
+       Just sig -> sig
 
 -- * General call implementation ("delegateCall")
 delegateCall

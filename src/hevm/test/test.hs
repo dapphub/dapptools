@@ -7,6 +7,9 @@
 {-# Language GeneralizedNewtypeDeriving #-}
 {-# Language DataKinds #-}
 {-# Language StandaloneDeriving #-}
+
+module Main where
+
 import Data.Text (Text)
 import Data.ByteString (ByteString)
 
@@ -20,28 +23,22 @@ import Test.Tasty
 import Test.Tasty.QuickCheck-- hiding (forAll)
 import Test.Tasty.HUnit
 
-import Control.Monad.State.Strict (execState, runState, when)
-import Control.Lens hiding (List, pre, (.<), (.>))
+import Control.Monad.State.Strict (execState, runState)
+import Control.Lens hiding (List, pre, (.>))
 
 import qualified Data.Vector as Vector
 import Data.String.Here
 
 import Control.Monad.Fail
-import Debug.Trace
-import Data.SBV.Tools.Overflow
 
 import Data.Binary.Put (runPut)
 import Data.SBV hiding ((===), forAll, sList)
 import Data.SBV.Control
-import Data.SBV.Trans (sList)
-import Data.SBV.List (implode)
-import qualified Data.SBV.List as SL
 import qualified Data.Map as Map
 import Data.Binary.Get (runGetOrFail)
 
 import EVM hiding (Query)
 import EVM.SymExec
-import EVM.Symbolic
 import EVM.ABI
 import EVM.Exec
 import qualified EVM.Patricia as Patricia
@@ -683,7 +680,8 @@ getStaticAbiArgs vm =
       bs = case cd of
         ConcreteBuffer bs' -> ConcreteBuffer $ BS.drop 4 bs'
         SymbolicBuffer bs' -> SymbolicBuffer $ drop 4 bs'
-  in decodeStaticArgs bs
+      args = decodeStaticArgs bs
+  in fmap (\(S _ v) -> v) args
 
 -- includes shaving off 4 byte function sig
 decodeAbiValues :: [AbiType] -> ByteString -> [AbiValue]

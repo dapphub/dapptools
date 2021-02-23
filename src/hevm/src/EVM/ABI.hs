@@ -32,6 +32,7 @@ module EVM.ABI
   ( AbiValue (..)
   , AbiType (..)
   , AbiKind (..)
+  , AbiVals (..)
   , abiKind
   , Event (..)
   , Anonymity (..)
@@ -48,6 +49,7 @@ module EVM.ABI
   , encodeAbiValue
   , decodeAbiValue
   , decodeStaticArgs
+  , decodeBuffer
   , formatString
   , parseTypeName
   , makeAbiValue
@@ -540,12 +542,28 @@ listP parser = between (char '[') (char ']') ((do skipSpaces
                                                   skipSpaces
                                                   return a) `sepBy` (char ','))
 
-decodeStaticArgs :: Buffer -> [SWord 256]
+data AbiVals = NoVals | CAbi [AbiValue] | SAbi [SymWord]
+
+decodeBuffer :: [AbiType] -> Buffer -> AbiVals
+decodeBuffer tps (ConcreteBuffer b)
+  = case runGetOrFail (getAbiSeq (length tps) tps) (BSLazy.fromStrict b) of
+      Right ("", _, args) -> CAbi . toList $ args
+      _ -> NoVals
+decodeBuffer tps b@(SymbolicBuffer _)
+  = if containsDynamic tps
+    then NoVals
+    else SAbi . decodeStaticArgs $ b
+  where
+    isDynamic t = abiKind t == Dynamic
+    containsDynamic = or . fmap isDynamic
+
+decodeStaticArgs :: Buffer -> [SymWord]
 decodeStaticArgs buffer = let
     bs = case buffer of
       ConcreteBuffer b -> litBytes b
       SymbolicBuffer b -> b
-  in fmap (\i -> fromBytes $ take 32 (drop (i*32) bs)) [0..((length bs) `div` 32 - 1)]
+  in fmap (\i -> S (FromBytes buffer) $
+            fromBytes $ take 32 (drop (i*32) bs)) [0..((length bs) `div` 32 - 1)]
 
 -- A modification of 'arbitrarySizedBoundedIntegral' quickcheck library
 -- which takes the maxbound explicitly rather than relying on a Bounded instance.

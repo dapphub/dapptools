@@ -104,7 +104,7 @@ library
     filepath                          >= 1.4.2 && < 1.5,
     vty                               >= 5.25.1 && < 5.31,
     cereal                            >= 0.5.8 && < 0.6,
-    cryptonite                        >= 0.25 && < 0.28,
+    cryptonite                        >= 0.27 && < 0.29,
     memory                            >= 0.14.18 && < 0.16,
     data-dword                        >= 0.3.1 && < 0.4,
     fgl                               >= 5.7.0 && < 5.8,

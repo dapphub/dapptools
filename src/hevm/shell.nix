@@ -9,6 +9,7 @@ let
     ];
     buildInputs = with pkgs.haskellPackages; [
       cabal-install
+      haskell-language-server
     ];
     withHoogle = true;
   };

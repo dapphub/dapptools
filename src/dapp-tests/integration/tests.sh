@@ -31,14 +31,14 @@ dapp_testnet() {
   # Deploy a simple contract:
   solc --bin --bin-runtime stateful.sol -o "$TMPDIR"
 
-  A_ADDR=$(seth send --create "$(<"$TMPDIR"/A.bin)" "constructor(uint y)" 1 --from "$ACC" --keystore "$TMPDIR"/8545/keystore --password /dev/null --gas 0xffffffff)
+  A_ADDR=$(seth send --create "$(<"$TMPDIR"/A.bin)" "constructor(uint y)" 1 --from "$ACC" --keystore "$TMPDIR"/8545/keystore --password /dev/null --gas 0xffffff)
 
   # Compare deployed code with what solc gives us
   [[ $(seth code "$A_ADDR") = 0x"$(cat "$TMPDIR"/A.bin-runtime)" ]] || error
 
   # And with what hevm gives us
   EXTRA_CALLDATA=$(seth --to-uint256 1)
-  HEVM_RET=$(hevm exec --code "$(<"$TMPDIR"/A.bin)""${EXTRA_CALLDATA/0x/}" --gas 0xffffffff)
+  HEVM_RET=$(hevm exec --code "$(<"$TMPDIR"/A.bin)""${EXTRA_CALLDATA/0x/}" --gas 0xffffff)
 
   [[ $(seth code "$A_ADDR") = "$HEVM_RET" ]] || error
 
