@@ -676,7 +676,10 @@ func (w *Wallet) SignData(account accounts.Account, mimeType string, data []byte
 }
 
 func (w *Wallet) SignTypedMessage(account accounts.Account, domainHash []byte, messageHash []byte) ([]byte, error) {
-	return w.signHash(account, crypto.Keccak256(domainHash, messageHash))
+  payload := [2]byte{25, 1}
+  payload = append(payload, domainHash...)
+  payload = append(payload, messageHash...)
+	return w.signHash(account, crypto.Keccak256(payload))
 }
 
 func (w *Wallet) signHash(account accounts.Account, hash []byte) ([]byte, error) {

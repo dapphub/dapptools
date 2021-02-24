@@ -567,8 +567,6 @@ func main() {
           return cli.NewExitError(err, 1)
         }
 
-        signature[64] += 27 // Transform V from 0/1 to 27/28 according to the yellow paper
-
         fmt.Println(hexutil.Encode(signature))
 
         return nil

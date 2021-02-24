@@ -148,5 +148,8 @@ func (w *keystoreWallet) SignTxWithPassphrase(account accounts.Account, passphra
 }
 
 func (w *keystoreWallet) SignTypedMessage(account accounts.Account, domainHash []byte, messageHash []byte) ([]byte, error) {
-	return w.keystore.SignHash(account, crypto.Keccak256(domainHash, messageHash))
+  payload := [2]byte{25, 1}
+  payload = append(payload, domainHash...)
+  payload = append(payload, messageHash...)
+	return w.keystore.SignHash(account, crypto.Keccak256(payload))
 }
