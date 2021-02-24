@@ -4,13 +4,12 @@ import (
   "github.com/ethereum/go-ethereum/common"
   "github.com/ethereum/go-ethereum/common/math"
   "github.com/ethereum/go-ethereum/common/hexutil"
-  "github.com/ethereum/go-ethereum/accounts"
-  "github.com/ethereum/go-ethereum/accounts/keystore"
-  "github.com/ethereum/go-ethereum/accounts/usbwallet"
   "github.com/ethereum/go-ethereum/core/types"
   "github.com/ethereum/go-ethereum/crypto"
   "github.com/ethereum/go-ethereum/rlp"
-
+  "github.com/dapphub/ethsign/accounts/usbwallet"
+  "github.com/dapphub/ethsign/accounts/keystore"
+  "github.com/dapphub/ethsign/accounts"
   "os"
   "fmt"
   "io/ioutil"
@@ -114,7 +113,7 @@ Scan:
         for j := 0; j <= c.Int("n"); j++ {
           pathstr := fmt.Sprintf(defaultHDPaths[i], j)
           path, _ := accounts.ParseDerivationPath(pathstr)
-          y, err := x.Derive(path, false)
+          y, err := x.Derive(path, true)
           if err != nil {
             return nil, "", nil, cli.NewExitError("ethsign: Ledger needs to be in Ethereum app with browser support off", 1)
           } else {
@@ -395,6 +394,7 @@ func main() {
 
         signed, err := wallet.SignTxWithPassphrase(*acct, passphrase, tx, chainID)
         if err != nil {
+          fmt.Println(err)
           return cli.NewExitError("ethsign: failed to sign tx", 1)
         }
 
@@ -481,6 +481,88 @@ func main() {
           msg = []byte(fmt.Sprintf("\x19Ethereum Signed Message:\n%d%s", len(data), data))
         }
         signature, err := wallet.SignDataWithPassphrase(*acct, passphrase, "", msg)
+        if err != nil {
+          return cli.NewExitError(err, 1)
+        }
+
+        signature[64] += 27 // Transform V from 0/1 to 27/28 according to the yellow paper
+
+        fmt.Println(hexutil.Encode(signature))
+
+        return nil
+      },
+    },
+
+    cli.Command{
+      Name:    "typedMessage",
+      Aliases: []string{"eip712"},
+      Usage:   "sign typed message (EIP-712) data",
+      Flags: []cli.Flag{
+        cli.StringSliceFlag{
+          Name:   "key-store",
+          Usage:  "path to key store",
+          EnvVar: "ETH_KEYSTORE",
+          Value: &defaultKeyStores,
+        },
+        cli.StringFlag{
+          Name: "hd-path",
+          Usage: "hd derivation path",
+          EnvVar: "ETH_HDPATH",
+          Value: "",
+        },
+        cli.IntFlag{
+          Name: "n",
+          Usage: "maximum ledger index",
+          Value: 5,
+        },
+        cli.StringFlag{
+          Name:   "from",
+          Usage:  "address of signing account",
+          EnvVar: "ETH_FROM",
+        },
+        cli.StringFlag{
+          Name:  "passphrase-file",
+          Usage: "path to file containing account passphrase",
+        },
+        cli.StringFlag{
+          Name:  "domainHash",
+          Usage: "domainHash of the message",
+        },
+        cli.StringFlag{
+          Name:  "messageHash",
+          Usage: "messageHash to sign",
+        },
+      },
+      Action: func(c *cli.Context) error {
+        requireds := []string{
+          "from", "domainHash", "messageHash",
+        }
+
+        for _, required := range requireds {
+          if c.String(required) == "" {
+            return cli.NewExitError("ethsign: missing required parameter --"+required, 1)
+          }
+        }
+
+        from := common.HexToAddress(c.String("from"))
+
+        domainHashString := c.String("domainHash")
+        messageHashString := c.String("messageHash")
+        if !strings.HasPrefix(domainHashString, "0x") {
+          domainHashString = "0x" + domainHashString
+        }
+        if !strings.HasPrefix(messageHashString, "0x") {
+          messageHashString = "0x" + messageHashString
+        }
+        domainHash := hexutil.MustDecode(domainHashString)
+        messageHash := hexutil.MustDecode(messageHashString)
+
+        acct, _, wallet, err := getWalletData(c, defaultHDPaths, defaultKeyStores, from)
+        if err !=nil {
+          return err
+        }
+
+        signature, err := wallet.SignTypedMessage(*acct, domainHash, messageHash)
         if err != nil {
           return cli.NewExitError(err, 1)
         }
