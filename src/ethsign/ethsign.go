@@ -190,8 +190,8 @@ func recover(data []byte, sig hexutil.Bytes, noPrefix bool) (common.Address, err
 func main() {
   var defaultHDPaths cli.StringSlice
   defaultHDPaths = []string{
-    "m/44'/60'/0'/%d",   // aka "ledger legacy"
     "m/44'/60'/%d'/0/0", // aka "ledger live"
+    "m/44'/60'/0'/%d",   // aka "ledger legacy"
   }
 
   var defaultKeyStores cli.StringSlice
