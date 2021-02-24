@@ -15,7 +15,7 @@
 ### Changed
 
 - updated `nixpkgs` to the `20.09` channel
-- Arbitrary instance of AbiType can no longer a tuple
+- Arbitrary instance of AbiType can no longer generate a tuple
 
 ## 0.44.1 - 2020-02-02
 
