@@ -74,13 +74,24 @@ main = defaultMain $ testGroup "hevm"
         SolidityCall "x = uint(keccak256(abi.encodePacked(a)));"
           [AbiString ""] ===> AbiUInt 256 0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470
 
-    , testProperty "abi encoding vs. solidity" $ forAll (arbitrary >>= genAbiValue) $
+    , testProperty "abi encoding vs. solidity" $ withMaxSuccess 20 $ forAll (arbitrary >>= genAbiValue) $
       \y -> ioProperty $ do
-          traceM ("encoding: " ++ (show y) ++ " : " ++ show (abiValueType y))
+          -- traceM ("encoding: " ++ (show y) ++ " : " ++ show (abiValueType y))
           Just encoded <- runStatements [i| x = abi.encode(a);|]
             [y] AbiBytesDynamicType
           let AbiTuple (Vector.toList -> [solidityEncoded]) = decodeAbiValue (AbiTupleType $ Vector.fromList [AbiBytesDynamicType]) (BS.fromStrict encoded)
           let hevmEncoded = encodeAbiValue (AbiTuple $ Vector.fromList [y])
+          -- traceM ("encoded (solidity): " ++ show solidityEncoded)
+          -- traceM ("encoded (hevm): " ++ show (AbiBytesDynamic hevmEncoded))
+          assertEqual "abi encoding mismatch" solidityEncoded (AbiBytesDynamic hevmEncoded)
+
+    , testProperty "abi encoding vs. solidity (2 args)" $ withMaxSuccess 20 $ forAll (arbitrary >>= bothM genAbiValue) $
+      \(x', y') -> ioProperty $ do
+          -- traceM ("encoding: " ++ (show x') ++ ", " ++ (show y')  ++ " : " ++ show (abiValueType x') ++ ", " ++ show (abiValueType y'))
+          Just encoded <- runStatements [i| x = abi.encode(a, b);|]
+            [x', y'] AbiBytesDynamicType
+          let AbiTuple (Vector.toList -> [solidityEncoded]) = decodeAbiValue (AbiTupleType $ Vector.fromList [AbiBytesDynamicType]) (BS.fromStrict encoded)
+          let hevmEncoded = encodeAbiValue (AbiTuple $ Vector.fromList [x',y'])
           -- traceM ("encoded (solidity): " ++ show solidityEncoded)
           -- traceM ("encoded (hevm): " ++ show (AbiBytesDynamic hevmEncoded))
           assertEqual "abi encoding mismatch" solidityEncoded (AbiBytesDynamic hevmEncoded)
@@ -736,3 +747,10 @@ assertSolidityComputation (SolidityCall s args) x =
      assertEqual (Text.unpack s)
        (fmap Bytes (Just (encodeAbiValue x)))
        (fmap Bytes y)
+
+bothM :: (Monad m) => (a -> m b) -> (a, a) -> m (b, b)
+bothM f (a, a') = do
+  b  <- f a
+  b' <- f a'
+  return (b, b')
+  
