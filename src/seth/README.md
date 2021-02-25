@@ -54,6 +54,7 @@ Contents
       * [Reading from contracts](#reading-from-contracts)
       * [Transacting with contracts](#transacting-with-contracts)
       * [Using Strings](#using-strings)
+      * [Using Arrays](#using-arrays)
   * [Commands](#commands)
       * [`seth --abi-decode`]
       * [`seth --from-ascii`]
@@ -309,6 +310,17 @@ Strings can be used by enclosing them in double quotes within single quotes.
     $ export RESULT=$(seth calldata "f(string)" '"Hello World"')
     $ seth --calldata-decode "f(string)" $RESULT
     Hello World
+    
+### Using arrays
+
+Arrays can be used by enclosing them in single or double quotes. Arrays 
+surrounded in single quotes will be inerpreted literally - you won't be able 
+to use variables (`$FOO`) in them.
+
+    $ export AMOUNT=$(seth --to-wei 5 ether)
+    $ export TEST=$(seth calldata "f(uint256[])" "[$AMOUNT]"
+    $ seth --calldata-decode "f(uint256[])" $TEST
+    5000000000000000000
 
 <br />
 
