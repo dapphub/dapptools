@@ -114,7 +114,7 @@ Scan:
         for j := 0; j <= c.Int("n"); j++ {
           pathstr := fmt.Sprintf(defaultHDPaths[i], j)
           path, _ := accounts.ParseDerivationPath(pathstr)
-          y, err := x.Derive(path, false)
+          y, err := x.Derive(path, true)
           if err != nil {
             return nil, "", nil, cli.NewExitError("ethsign: Ledger needs to be in Ethereum app with browser support off", 1)
           } else {
