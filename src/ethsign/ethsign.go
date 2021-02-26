@@ -7,9 +7,9 @@ import (
   "github.com/ethereum/go-ethereum/core/types"
   "github.com/ethereum/go-ethereum/crypto"
   "github.com/ethereum/go-ethereum/rlp"
-  "github.com/dapphub/ethsign/accounts/usbwallet"
-  "github.com/dapphub/ethsign/accounts/keystore"
-  "github.com/dapphub/ethsign/accounts"
+  "github.com/dapphub/ethsign/usbwallet"
+  "github.com/ethereum/go-ethereum/accounts/keystore"
+  "github.com/ethereum/go-ethereum/accounts"
   "os"
   "fmt"
   "io/ioutil"
@@ -480,92 +480,12 @@ func main() {
         } else {
           msg = []byte(fmt.Sprintf("\x19Ethereum Signed Message:\n%d%s", len(data), data))
         }
-        signature, err := wallet.SignDataWithPassphrase(*acct, passphrase, "", msg)
+        signature, err := wallet.SignDataWithPassphrase(*acct, passphrase, accounts.MimetypeTypedData, msg)
         if err != nil {
           return cli.NewExitError(err, 1)
         }
 
         signature[64] += 27 // Transform V from 0/1 to 27/28 according to the yellow paper
-
-        fmt.Println(hexutil.Encode(signature))
-
-        return nil
-      },
-    },
-
-    cli.Command{
-      Name:    "typedMessage",
-      Aliases: []string{"eip712"},
-      Usage:   "sign typed message (EIP-712) data",
-      Flags: []cli.Flag{
-        cli.StringSliceFlag{
-          Name:   "key-store",
-          Usage:  "path to key store",
-          EnvVar: "ETH_KEYSTORE",
-          Value: &defaultKeyStores,
-        },
-        cli.StringFlag{
-          Name: "hd-path",
-          Usage: "hd derivation path",
-          EnvVar: "ETH_HDPATH",
-          Value: "",
-        },
-        cli.IntFlag{
-          Name: "n",
-          Usage: "maximum ledger index",
-          Value: 5,
-        },
-        cli.StringFlag{
-          Name:   "from",
-          Usage:  "address of signing account",
-          EnvVar: "ETH_FROM",
-        },
-        cli.StringFlag{
-          Name:  "passphrase-file",
-          Usage: "path to file containing account passphrase",
-        },
-        cli.StringFlag{
-          Name:  "domainHash",
-          Usage: "domainHash of the message",
-        },
-        cli.StringFlag{
-          Name:  "messageHash",
-          Usage: "messageHash to sign",
-        },
-      },
-      Action: func(c *cli.Context) error {
-        requireds := []string{
-          "from", "domainHash", "messageHash",
-        }
-
-        for _, required := range requireds {
-          if c.String(required) == "" {
-            return cli.NewExitError("ethsign: missing required parameter --"+required, 1)
-          }
-        }
-
-        from := common.HexToAddress(c.String("from"))
-
-        domainHashString := c.String("domainHash")
-        messageHashString := c.String("messageHash")
-        if !strings.HasPrefix(domainHashString, "0x") {
-          domainHashString = "0x" + domainHashString
-        }
-        if !strings.HasPrefix(messageHashString, "0x") {
-          messageHashString = "0x" + messageHashString
-        }
-        domainHash := hexutil.MustDecode(domainHashString)
-        messageHash := hexutil.MustDecode(messageHashString)
-
-        acct, _, wallet, err := getWalletData(c, defaultHDPaths, defaultKeyStores, from)
-        if err !=nil {
-          return err
-        }
-
-        signature, err := wallet.SignTypedMessage(*acct, domainHash, messageHash)
-        if err != nil {
-          return cli.NewExitError(err, 1)
-        }
 
         fmt.Println(hexutil.Encode(signature))
 

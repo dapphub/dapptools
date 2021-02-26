@@ -27,8 +27,8 @@ import (
 	"io"
 	"math/big"
 
-	"github.com/dapphub/ethsign/accounts"
-	"github.com/dapphub/ethsign/accounts/usbwallet/trezor"
+	"github.com/ethereum/go-ethereum/accounts"
+	"github.com/ethereum/go-ethereum/accounts/usbwallet/trezor"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/core/types"
@@ -183,6 +183,10 @@ func (w *trezorDriver) SignTx(path accounts.DerivationPath, tx *types.Transactio
 		return common.Address{}, nil, accounts.ErrWalletClosed
 	}
 	return w.trezorSign(path, tx, chainID)
+}
+
+func (w *trezorDriver) SignTypedMessage(path accounts.DerivationPath, domainHash []byte, messageHash []byte) ([]byte, error) {
+	return nil, accounts.ErrNotSupported
 }
 
 // trezorDerive sends a derivation request to the Trezor device and returns the
