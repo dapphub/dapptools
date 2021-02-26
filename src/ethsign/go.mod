@@ -2,7 +2,6 @@ module github.com/dapphub/ethsign
 
 go 1.13
 
-
 require (
   github.com/ethereum/go-ethereum v1.9.10
   github.com/Azure/azure-pipeline-go v0.2.2 // indirect
@@ -70,4 +69,3 @@ require (
 	gopkg.in/urfave/cli.v1 v1.20.0
   gotest.tools v2.2.0+incompatible // indirect
 )
-

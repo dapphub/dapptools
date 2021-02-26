@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - Lookup both ledger live path and legacy ledger paths by default
+- Support for 712 signing for ledger
 
 ### Changed
 
