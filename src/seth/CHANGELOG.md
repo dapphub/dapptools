@@ -30,7 +30,7 @@ account without having to set `ETH_HDPATH`.
 - the `--gas-price` argument can optionally accept a `gwei` suffix
   i.e. `seth call --gas-price 100gwei ...`
 
-### [0.9.4] - 2020-12-10
+## [0.9.4] - 2020-12-10
 
 ### Added
 
