@@ -26,11 +26,13 @@
 -}
 
 {-# Language StrictData #-}
+{-# Language DataKinds #-}
 
 module EVM.ABI
   ( AbiValue (..)
   , AbiType (..)
   , AbiKind (..)
+  , AbiVals (..)
   , abiKind
   , Event (..)
   , Anonymity (..)
@@ -41,11 +43,13 @@ module EVM.ABI
   , genAbiValue
   , abiValueType
   , abiTypeSolidity
-  , abiCalldata
   , abiMethod
   , emptyAbi
   , encodeAbiValue
   , decodeAbiValue
+  , decodeStaticArgs
+  , decodeBuffer
+  , formatString
   , parseTypeName
   , makeAbiValue
   , parseAbiValue
@@ -55,18 +59,18 @@ module EVM.ABI
 import EVM.Types
 
 import Control.Monad      (replicateM, replicateM_, forM_, void)
-import Data.Binary.Get    (Get, runGet, label, getWord8, getWord32be, skip)
+import Data.Binary.Get    (Get, runGet, runGetOrFail, label, getWord8, getWord32be, skip)
 import Data.Binary.Put    (Put, runPut, putWord8, putWord32be)
 import Data.Bits          (shiftL, shiftR, (.&.))
 import Data.ByteString    (ByteString)
 import Data.DoubleWord    (Word256, Int256, signedWord)
 import Data.Functor       (($>))
-import Data.Monoid        ((<>))
-import Data.Text          (Text, pack)
-import Data.Text.Encoding (encodeUtf8)
-import Data.Vector        (Vector)
+import Data.Text          (Text, pack, unpack)
+import Data.Text.Encoding (encodeUtf8, decodeUtf8')
+import Data.Vector        (Vector, toList)
 import Data.Word          (Word32)
 import Data.List          (intercalate)
+import Data.SBV           (SWord, fromBytes)
 import GHC.Generics
 
 import Test.QuickCheck hiding ((.&.), label)
@@ -103,13 +107,19 @@ instance Show AbiValue where
   show (AbiBool b)           = if b then "true" else "false"
   show (AbiBytes      _ b)   = show (ByteStringS b)
   show (AbiBytesDynamic b)   = show (ByteStringS b)
-  show (AbiString       s)   = show s
+  show (AbiString       s)   = formatString s
   show (AbiArrayDynamic _ v) =
     "[" ++ intercalate ", " (show <$> Vector.toList v) ++ "]"
   show (AbiArray      _ _ v) =
     "[" ++ intercalate ", " (show <$> Vector.toList v) ++ "]"
   show (AbiTuple v) =
     "(" ++ intercalate ", " (show <$> Vector.toList v) ++ ")"
+
+formatString :: ByteString -> String
+formatString bs =
+  case decodeUtf8' (fst (BS.spanEnd (== 0) bs)) of
+    Right s -> "\"" <> unpack s <> "\""
+    Left _ -> "❮utf8 decode failed❯: " <> (show $ ByteStringS bs)
 
 data AbiType
   = AbiUIntType         Int
@@ -193,8 +203,9 @@ getAbi t = label (Text.unpack (abiTypeSolidity t)) $
           >>= label "bytes data" . getBytesWith256BitPadding)
 
     AbiStringType -> do
-      AbiBytesDynamic x <- getAbi AbiBytesDynamicType
-      pure (AbiString x)
+      AbiString <$>
+        (label "string length prefix" getWord256
+          >>= label "string data" . getBytesWith256BitPadding)
 
     AbiArrayType n t' ->
       AbiArray n t' <$> getAbiSeq n (repeat t')
@@ -264,22 +275,6 @@ putAbiTail x =
     Static  -> pure ()
     Dynamic -> putAbi x
 
-abiValueSize :: AbiValue -> Int
-abiValueSize x =
-  case x of
-    AbiUInt _ _  -> 32
-    AbiInt  _ _  -> 32
-    AbiBytes n _ -> roundTo32Bytes n
-    AbiAddress _ -> 32
-    AbiBool _    -> 32
-    AbiArray _ _ xs -> Vector.sum (Vector.map abiHeadSize xs) +
-                       Vector.sum (Vector.map abiTailSize xs)
-    AbiBytesDynamic xs -> 32 + roundTo32Bytes (BS.length xs)
-    AbiArrayDynamic _ xs -> 32 + Vector.sum (Vector.map abiHeadSize xs) +
-                                Vector.sum (Vector.map abiTailSize xs)
-    AbiString s -> 32 + roundTo32Bytes (BS.length s)
-    AbiTuple v  -> sum (abiValueSize <$> v)
-
 abiTailSize :: AbiValue -> Int
 abiTailSize x =
   case abiKind (abiValueType x) of
@@ -288,13 +283,10 @@ abiTailSize x =
       case x of
         AbiString s -> 32 + roundTo32Bytes (BS.length s)
         AbiBytesDynamic s -> 32 + roundTo32Bytes (BS.length s)
-        AbiArrayDynamic _ xs -> 32 + Vector.sum (Vector.map abiValueSize xs)
-        AbiArray _ _ xs -> Vector.sum (Vector.map abiValueSize xs)
-        AbiTuple v -> sum (headSize <$> v) + sum (abiTailSize <$> v)
+        AbiArrayDynamic _ xs -> 32 + sum ((abiHeadSize <$> xs) <> (abiTailSize <$> xs))
+        AbiArray _ _ xs -> sum ((abiHeadSize <$> xs) <> (abiTailSize <$> xs))
+        AbiTuple v -> sum ((abiHeadSize <$> v) <> (abiTailSize <$> v))
         _ -> error "impossible"
-  where headSize y = if abiKind (abiValueType y) == Static
-                     then abiValueSize y
-                     else 32
 
 abiHeadSize :: AbiValue -> Int
 abiHeadSize x =
@@ -307,25 +299,23 @@ abiHeadSize x =
         AbiBytes n _ -> roundTo32Bytes n
         AbiAddress _ -> 32
         AbiBool _    -> 32
-        AbiArray _ _ xs -> Vector.sum (Vector.map abiHeadSize xs) +
-                           Vector.sum (Vector.map abiTailSize xs)
-        AbiBytesDynamic _ -> 32
-        AbiArrayDynamic _ _ -> 32
-        AbiString _       -> 32
-        AbiTuple v   -> sum (abiHeadSize <$> v) +
-                        sum (abiTailSize <$> v)
+        AbiTuple v   -> sum (abiHeadSize <$> v)
+        AbiArray _ _ xs -> sum (abiHeadSize <$> xs)
+        _ -> error "impossible"
 
 putAbiSeq :: Vector AbiValue -> Put
 putAbiSeq xs =
-  do snd $ Vector.foldl' f (headSize, pure ()) (Vector.zip xs tailSizes)
-     Vector.sequence_ (Vector.map putAbiTail xs)
+  do putHeads headSize $ toList xs
+     Vector.sequence_ (putAbiTail <$> xs)
   where
     headSize = Vector.sum $ Vector.map abiHeadSize xs
-    tailSizes = Vector.map abiTailSize xs
-    f (i, m) (x, j) =
+    putHeads _ [] = pure ()
+    putHeads offset (x:xs') =
       case abiKind (abiValueType x) of
-        Static -> (i, m >> putAbi x)
-        Dynamic -> (i + j, m >> putAbi (AbiUInt 256 (fromIntegral i)))
+        Static -> do putAbi x
+                     putHeads offset xs'
+        Dynamic -> do putAbi (AbiUInt 256 (fromIntegral offset))
+                      putHeads (offset + abiTailSize x) xs'
 
 encodeAbiValue :: AbiValue -> BS.ByteString
 encodeAbiValue = BSLazy.toStrict . runPut . putAbi
@@ -340,11 +330,6 @@ abiMethod :: Text -> AbiValue -> BS.ByteString
 abiMethod s args = BSLazy.toStrict . runPut $ do
   putWord32be (abiKeccak (encodeUtf8 s))
   putAbi args
-
-abiCalldata :: Text -> Vector AbiValue -> BS.ByteString
-abiCalldata s xs = BSLazy.toStrict . runPut $ do
-  putWord32be (abiKeccak (encodeUtf8 s))
-  putAbiSeq xs
 
 parseTypeName :: Vector AbiType -> Text -> Maybe AbiType
 parseTypeName = P.parseMaybe . typeWithArraySuffix
@@ -417,7 +402,7 @@ genAbiValue = \case
    AbiIntType n ->
      do a <- genUInt n
         let AbiUInt _ x = a
-        pure $ AbiInt n (signedWord x)
+        pure $ AbiInt n (signedWord (x - 2^(n-1)))
    AbiAddressType ->
      (\(AbiUInt _ x) -> AbiAddress (fromIntegral x)) <$> genUInt 20
    AbiBoolType ->
@@ -441,22 +426,19 @@ genAbiValue = \case
     genUInt n = AbiUInt n <$> arbitraryIntegralWithMax (2^n-1)
 
 instance Arbitrary AbiType where
-  arbitrary = sized $ \n -> oneof $ -- prevent empty tuples
+  arbitrary = oneof $ -- doesn't create any tuples
     [ (AbiUIntType . (* 8)) <$> choose (1, 32)
     , (AbiIntType . (* 8)) <$> choose (1, 32)
     , pure AbiAddressType
     , pure AbiBoolType
-    , AbiBytesType . getPositive <$> arbitrary
+    , AbiBytesType <$> choose (1,32)
     , pure AbiBytesDynamicType
     , pure AbiStringType
     , AbiArrayDynamicType <$> scale (`div` 2) arbitrary
     , AbiArrayType
         <$> (getPositive <$> arbitrary)
         <*> scale (`div` 2) arbitrary
-    ] <>
-    [AbiTupleType
-        <$> scale (`div` 2) (Vector.fromList <$> arbitrary)
-        | n /= 0]
+    ]
 
 instance Arbitrary AbiValue where
   arbitrary = arbitrary >>= genAbiValue
@@ -496,17 +478,17 @@ instance Read Boolz where
 
 makeAbiValue :: AbiType -> String -> AbiValue
 makeAbiValue typ str = case readP_to_S (parseAbiValue typ) str of
-  [] -> error "could not parse abi arguments"
-  ((val,_):_) -> val
+  [(val,"")] -> val
+  _ -> error $  "could not parse abi argument: " ++ str ++ " : " ++ show typ
 
 parseAbiValue :: AbiType -> ReadP AbiValue
-parseAbiValue (AbiUIntType n) = do W256 w256 <- readS_to_P reads
-                                   return $ AbiUInt n w256
-parseAbiValue (AbiIntType n) = do W256 w256 <- readS_to_P reads
-                                  return $ AbiInt n (num w256)
+parseAbiValue (AbiUIntType n) = do W256 w <- readS_to_P reads
+                                   return $ AbiUInt n w
+parseAbiValue (AbiIntType n) = do W256 w <- readS_to_P reads
+                                  return $ AbiInt n (num w)
 parseAbiValue AbiAddressType = AbiAddress <$> readS_to_P reads
-parseAbiValue AbiBoolType = (do W256 w256 <- readS_to_P reads
-                                return $ AbiBool (w256 /= 0))
+parseAbiValue AbiBoolType = (do W256 w <- readS_to_P reads
+                                return $ AbiBool (w /= 0))
                             <|> (do Boolz b <- readS_to_P reads
                                     return $ AbiBool b)
 parseAbiValue (AbiBytesType n) = AbiBytes n <$> do ByteStringS bytes <- readS_to_P reads
@@ -528,6 +510,28 @@ listP parser = between (char '[') (char ']') ((do skipSpaces
                                                   skipSpaces
                                                   return a) `sepBy` (char ','))
 
+data AbiVals = NoVals | CAbi [AbiValue] | SAbi [SymWord]
+
+decodeBuffer :: [AbiType] -> Buffer -> AbiVals
+decodeBuffer tps (ConcreteBuffer _ b)
+  = case runGetOrFail (getAbiSeq (length tps) tps) (BSLazy.fromStrict b) of
+      Right ("", _, args) -> CAbi . toList $ args
+      _ -> NoVals
+decodeBuffer tps b@(SymbolicBuffer _ _)
+  = if containsDynamic tps
+    then NoVals
+    else SAbi . decodeStaticArgs $ b
+  where
+    isDynamic t = abiKind t == Dynamic
+    containsDynamic = or . fmap isDynamic
+
+decodeStaticArgs :: Buffer -> [SymWord]
+decodeStaticArgs buffer = let
+    bs = case buffer of
+      ConcreteBuffer _ b -> litBytes b
+      SymbolicBuffer _ b -> b
+  in fmap (\i -> S (Todo "decodeStaticArgs" []) $
+            fromBytes $ take 32 (drop (i*32) bs)) [0..((length bs) `div` 32 - 1)]
 
 -- A modification of 'arbitrarySizedBoundedIntegral' quickcheck library
 -- which takes the maxbound explicitly rather than relying on a Bounded instance.

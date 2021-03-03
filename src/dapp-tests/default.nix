@@ -4,49 +4,49 @@ let
   ds-test-src = pkgs.fetchFromGitHub {
     owner = "dapphub";
     repo = "ds-test";
-    rev = "eb7148d43c1ca6f9890361e2e2378364af2430ba";
-    sha256 = "1phnqjkbcqg18mh62c8jq0v8fcwxs8yc4sa6dca4y8pq2k35938k";
+    rev = "c0b770c04474db28d43ab4b2fdb891bd21887e9e";
+    sha256 = "0cdzva82kkvj7ck4yf3ffma2n5rfa7miknjnz6jwgfy416a865m0";
   } + "/src";
 
   ds-token-src = pkgs.fetchFromGitHub {
     owner = "dapphub";
     repo = "ds-token";
-    rev = "8b752565a433f7326d38499c0c01cc7d9058721e";
+    rev = "6eb8a5010aad2980645c34c49cbfc1e9aea12c32";
     sha256 = "1rk0vg8gql8rmd399m2v9y86m2g1q8mbcrv97bx0p1wf8k983vym";
   } + "/src";
 
   ds-math-src = pkgs.fetchFromGitHub {
     owner = "dapphub";
     repo = "ds-math";
-    rev = "d0ef6d6a5f1de54a16e5ebb7af4d62bb9632de3e";
+    rev = "fa45427c0e0bb487335ae99a2e39564b3983a355";
     sha256 = "1giimmhlm2gxd7v794nbhykj61pv8ib60jv80ykx5smxh9lf4irr";
   } + "/src";
 
   ds-auth-src = pkgs.fetchFromGitHub {
     owner = "dapphub";
     repo = "ds-auth";
-    rev = "434bf463b255ecc2157b9c671139f6c617795ebf";
-    sha256 = "0lf5kzb9gd2d132bnz4xn8z6fgrq4pmg9fknhj6hig0c3g41a7sy";
+    rev = "8035510b0bdfe90de9e29cac2c538f5ce0d89aea";
+    sha256 = "1j7c60vzcg6cwc3d72q2sh6lzfbm04ipzn7nf8mfcli2yyhap6n1";
   } + "/src";
 
   ds-value-src = pkgs.fetchFromGitHub {
     owner = "dapphub";
     repo = "ds-value";
-    rev = "f3dc6c8656727b74a5469ec2d4cd6851c9db8999";
+    rev = "2e3d06ba1e96dc531f14d0749fa92146b7390ed8";
     sha256 = "1by3q3ndfmpgijckjhbyw4vvbzykg66v8yrl5awvpb76i8z3l8hf";
   } + "/src";
 
   ds-thing-src = pkgs.fetchFromGitHub {
     owner = "dapphub";
     repo = "ds-thing";
-    rev = "f37879a41e817f54db43728cb39178cd99311289";
+    rev = "baf65c78908c846f4e45bb585ee5714551c1492d";
     sha256 = "173hvha10nb9l3p66dv4i1h737knkrvm34y5j5cvmq4g7y8vaa6d";
   } + "/src";
 
   ds-note-src = pkgs.fetchFromGitHub {
     owner = "dapphub";
     repo = "ds-note";
-    rev = "c673c9d1a1464e973db4489221e22dc5b9b02319";
+    rev = "4f2ad380e41e664802c4cb3a34f139ac08700bd8";
     sha256 = "0a9qc04s6hwz2fiwhl4psfga4wnwi6s33fvpcaq3y0gagrrmjidn";
   } + "/src";
 
@@ -105,12 +105,12 @@ let
     deps = [ ds-test ds-thing ];
   };
 
-  runTest = { dir, shouldFail, name, hevmFlags?"" }: pkgs.buildDappPackage {
+  runTest = { dir, shouldFail, name, dappFlags?"" }: pkgs.buildDappPackage {
     name = name;
     shouldFail = shouldFail;
     src = dir;
-    hevmFlags = "${hevmFlags}";
-    deps = [ ds-test ds-token ];
+    dappFlags = "${dappFlags}";
+    deps = [ ds-test ds-token ds-math ];
     checkInputs = with pkgs; [ hevm jq seth dapp solc ];
   };
 in
@@ -119,7 +119,7 @@ in
       dir = ./pass;
       name = "dappTestsShouldPass";
       shouldFail = false;
-      hevmFlags = "--max-iterations 50";
+      dappFlags = "--max-iterations 50";
     };
 
     shouldFail = let
@@ -127,13 +127,15 @@ in
         dir = ./fail;
         shouldFail = true;
         name = "dappTestsShouldFail-${match}";
-        hevmFlags = "--match ${match}";
+        dappFlags = "--match ${match}";
       };
     in pkgs.recurseIntoAttrs {
       prove-add = fail "prove_add";
       prove-fail-call = fail "proveFail_shouldFail";
       prove-multi = fail "prove_multi";
       prove-smtTimeout = fail "prove_smtTimeout";
+      prove-mul = fail "prove_mul";
+      prove-distributivity = fail "prove_distributivity";
       prove-transfer = fail "prove_transfer";
     };
 

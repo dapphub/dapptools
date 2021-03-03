@@ -6,6 +6,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+### Added
+
+- Thanks to an upgrade in ethsign, seth is more likely to find your ledger live 
+account without having to set `ETH_HDPATH`.
+
+### Changed
+
+- updated `nixpkgs` to the `20.09` channel
+
+### Fixed
+
+- `seth calldata` returns correct abiencoding
+
+## [0.10.0] - 2021-01-26
+
+### Changed
+
+- `seth combined-json` was renamed to `seth-solc` and invokes `solc`
+  using the `--standard-json` input.
+- `seth bundle-source` correctly interprets etherscan sources using
+  standard json
+- the `--gas-price` argument can optionally accept a `gwei` suffix
+  i.e. `seth call --gas-price 100gwei ...`
+
+## [0.9.4] - 2020-12-10
+
+### Added
+
+- `seth --use` can find solc versions in the nix store even if they are not present on `PATH`
+
+### Fixed
+
+- Correct help text for `seth --use`
+
+## [0.9.3] - 2020-11-29
+
 - `seth --use` searches directly for binaries in your path, rather than
   using `nix run`, giving a significant speed boost.
 
@@ -17,7 +53,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.9.1] - 2020-08-19
 
 ### Added
-- New commands: 
+- New commands:
   - `seth source <address>` fetches the contract source from etherscan
   - `seth bundle-source <address>` fetches contract source and compiles to combined json
   - `seth run-tx <tx-hash> [--debug, --source <file>, --state <repository>]`,

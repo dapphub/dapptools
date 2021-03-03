@@ -31,14 +31,14 @@ dapp_testnet() {
   # Deploy a simple contract:
   solc --bin --bin-runtime stateful.sol -o "$TMPDIR"
 
-  A_ADDR=$(seth send --create "$(<"$TMPDIR"/A.bin)" "constructor(uint y)" 1 --from "$ACC" --keystore "$TMPDIR"/8545/keystore --password /dev/null --gas 0xffffffff)
+  A_ADDR=$(seth send --create "$(<"$TMPDIR"/A.bin)" "constructor(uint y)" 1 --from "$ACC" --keystore "$TMPDIR"/8545/keystore --password /dev/null --gas 0xffffff)
 
   # Compare deployed code with what solc gives us
   [[ $(seth code "$A_ADDR") = 0x"$(cat "$TMPDIR"/A.bin-runtime)" ]] || error
 
   # And with what hevm gives us
   EXTRA_CALLDATA=$(seth --to-uint256 1)
-  HEVM_RET=$(hevm exec --code "$(<"$TMPDIR"/A.bin)""${EXTRA_CALLDATA/0x/}" --gas 0xffffffff)
+  HEVM_RET=$(hevm exec --code "$(<"$TMPDIR"/A.bin)""${EXTRA_CALLDATA/0x/}" --gas 0xffffff)
 
   [[ $(seth code "$A_ADDR") = "$HEVM_RET" ]] || error
 
@@ -69,6 +69,31 @@ test_hevm_symbolic() {
 }
 
 test_hevm_symbolic
+
+test_custom_solc_json() {
+    TMPDIR=$(mktemp -d)
+
+    # copy source file
+    mkdir -p "$TMPDIR/src"
+    cp factor.sol "$TMPDIR/src"
+
+    # init dapp project
+    cd "$TMPDIR"
+    export GIT_CONFIG_NOSYSTEM=1
+    export GIT_AUTHOR_NAME=dapp
+    export GIT_AUTHOR_EMAIL=dapp@hub.lol
+    export GIT_COMMITTER_NAME=$GIT_AUTHOR_NAME
+    export GIT_COMMITTER_EMAIL=$GIT_AUTHOR_EMAIL
+    dapp init
+
+    # init custom json
+    dapp mk-standard-json > config.json
+
+    # build with custom json
+    DAPP_STANDARD_JSON="config.json" dapp build
+}
+
+test_custom_solc_json
 
 # SETH CALLDATA TESTS
 test_calldata_1() {

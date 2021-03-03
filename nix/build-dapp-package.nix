@@ -19,28 +19,26 @@ in
   {
     name
   , src
+  , dapp ? pkgs.dapp
   , deps ? []
   , solc ? pkgs.solc
-  , test-hevm ? pkgs.dapp2.test-hevm
-  , solcFlags ? ""
   , shouldFail ? false
-  , hevmFlags ? ""
+  , dappFlags ? ""
   , doCheck ? true
-  , extract ? false
   , ... }@args:
     pkgs.stdenv.mkDerivation ( rec {
-      inherit doCheck extract;
+      inherit doCheck;
 
-      buildInputs = [ pkgs.jq solc test-hevm ];
+      buildInputs = [ pkgs.jq solc dapp ];
       passthru = {
         remappings = remappings deps;
         libPaths = libPaths deps;
       };
 
-      REMAPPINGS =
-        pkgs.lib.mapAttrsToList
+      REMAPPINGS = pkgs.lib.concatStringsSep "\n"
+        (pkgs.lib.mapAttrsToList
           (k: v: k + "=" + v)
-          passthru.remappings;
+          passthru.remappings);
 
       LIBSCRIPT =
         pkgs.lib.mapAttrsToList
@@ -48,37 +46,19 @@ in
             ln -s ${v} lib/${k}
           '')
           passthru.libPaths;
-
       buildPhase = ''
-        opts=(--combined-json=abi,bin,bin-runtime,srcmap,srcmap-runtime,ast,metadata --overwrite)
-
         mkdir -p out
-
-        mapfile -t files < <(find "$src" -name '*.sol')
-        json_file="out/dapp.sol.json"
-        (set -x; ${solc}/bin/solc $REMAPPINGS "''${opts[@]}" $solcFlags "''${files[@]}" > "$json_file")
-
+        export DAPP_REMAPPINGS="$REMAPPINGS"
+        export DAPP_SRC=$src
+        export DAPP_OUT=out
+        export DAPP_LINK_TEST_LIBRARIES=1
         mkdir -p lib
         source <(echo "$LIBSCRIPT")
-
-        if [ "$extract" == 1 ]; then
-          mapfile -t contracts < <(<"$json_file" jq '.contracts|keys[]' -r | sort -u -t: -k2 | sort)
-          data=$(<"$json_file" jq '.contracts' -r)
-          total=''${#contracts[@]}
-          echo "Extracting build data... [Total: $total]"
-          for path in "''${contracts[@]}"; do
-            fileName="''${path#*:}"
-            contract=$(echo "$data" | jq '.["'"$path"'"]')
-            echo "$contract" | jq '.["abi"]' -r > "out/$fileName.abi"
-            echo "$contract" | jq '.["bin"]' -r > "out/$fileName.bin"
-            echo "$contract" | jq '.["bin-runtime"]' -r > "out/$fileName.bin-runtime"
-            echo "$contract" | jq '.["metadata"]' -r > "out/$fileName.metadata"
-          done
-        fi
+        dapp build
       '';
 
       checkPhase = let
-        cmd = "DAPP_OUT=out dapp2-test-hevm $hevmFlags";
+        cmd = "DAPP_SKIP_BUILD=1 dapp test $dappFlags";
       in
         if shouldFail
           then "${cmd} && exit 1 || echo 0"

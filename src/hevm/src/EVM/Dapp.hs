@@ -3,21 +3,21 @@
 
 module EVM.Dapp where
 
-import EVM (Trace, traceCodehash, traceOpIx)
+import EVM (Trace, traceCodehash, traceOpIx, Env)
 import EVM.ABI (Event, AbiType)
 import EVM.Debug (srcMapCodePos)
 import EVM.Solidity (SolcContract, CodeType (..), SourceCache (..), SrcMap, Method)
 import EVM.Solidity (contractName, methodInputs)
 import EVM.Solidity (runtimeCodehash, creationCodehash, abiMap)
-import EVM.Solidity (runtimeSrcmap, creationSrcmap, eventMap)
-import EVM.Solidity (methodSignature, contractAst, astIdMap, astSrcMap)
+import EVM.Solidity (runtimeSrcmap, sourceAsts, creationSrcmap, eventMap)
+import EVM.Solidity (methodSignature, astIdMap, astSrcMap)
 import EVM.Types (W256, abiKeccak)
 
 import Data.Aeson (Value)
 import Data.Bifunctor (first)
 import Data.Text (Text, isPrefixOf, pack, unpack)
 import Data.Text.Encoding (encodeUtf8)
-import Data.Map (Map)
+import Data.Map (Map, toList)
 import Data.Monoid ((<>))
 import Data.Maybe (isJust, fromJust)
 import Data.Word (Word32)
@@ -42,9 +42,15 @@ data DappInfo = DappInfo
   , _dappAstSrcMap  :: SrcMap -> Maybe Value
   }
 
+data DappContext = DappContext
+  { _contextInfo :: DappInfo
+  , _contextEnv  :: Env
+  }
+
 data Test = ConcreteTest Text | SymbolicTest Text
 
 makeLenses ''DappInfo
+makeLenses ''DappContext
 
 instance Show Test where
   show t = unpack $ extractSig t
@@ -54,7 +60,7 @@ dappInfo
 dappInfo root solcByName sources =
   let
     solcs = Map.elems solcByName
-    astIds = astIdMap (map (view contractAst) solcs)
+    astIds = astIdMap $ snd <$> toList (view sourceAsts sources)
 
   in DappInfo
     { _dappRoot = root
@@ -78,7 +84,7 @@ dappInfo root solcByName sources =
     }
 
 emptyDapp :: DappInfo
-emptyDapp = dappInfo "" mempty (SourceCache mempty mempty mempty mempty)
+emptyDapp = dappInfo "" mempty (SourceCache mempty mempty mempty)
 
 -- Dapp unit tests are detected by searching within abi methods
 -- that begin with "test" or "prove", that are in a contract with

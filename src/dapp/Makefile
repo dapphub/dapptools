@@ -1,7 +1,7 @@
 default: test
 
 SHELL = bash
-dirs = {bin,libexec}
+dirs = {bin,libexec,resources}
 prefix ?= /usr/local
 
 dirs:; mkdir -p $(prefix)/$(dirs)

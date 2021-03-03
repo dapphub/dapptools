@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-### seth-source -- fetch the contract source from etherscan
-### Usage: seth source <address> [<options>]
+### seth-etherscan-source -- fetch the contract source from etherscan
+### Usage: seth etherscan-source <address> [<options>]
 ###
-### Requires an etherscan api key
+### Requires an etherscan api key assigned to ETHERSCAN_API_KEY
 set -e
 [[ $ETHERSCAN_API_KEY ]] || {
   cat >&2 <<.
@@ -15,6 +15,8 @@ set -e
 .
   exit 1
 }
+
+[[ -z "$1" ]] && seth --fail-usage
 
 ADDR=$(seth --to-address "$1")
 

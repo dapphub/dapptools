@@ -1,0 +1,86 @@
+#!/usr/bin/env python3
+
+import json
+import subprocess
+import os
+import re
+import fnmatch
+from pathlib import Path
+
+template = open(Path(__file__).parent / "../../resources/jsontemplate.json").read().split('\n')
+
+# Remove comments from template
+filelines = []
+r = re.compile(r'(?:"(?:[^"\\]|\\.)*"|[^"//])*(//|$)') # dont even think about it
+for line in template:
+    m = r.match(line)
+    filelines.append(line[:m.start(1)])
+
+tmpljson = json.loads('\n'.join(filelines))
+
+# add all files under DAPP_SRC to "sources" of json
+src = os.getenv('DAPP_SRC') if os.getenv('DAPP_SRC') is not None else "./src/"
+
+files = []
+for root, dirnames, filenames in os.walk(src):
+    for filename in fnmatch.filter(filenames, '*.sol'):
+        files.append(os.path.join(root, filename))
+
+tmpljson["sources"]={}
+for f in files:
+    tmpljson["sources"][f]={}
+    tmpljson["sources"][f]["urls"] = [f]
+
+if os.getenv('DAPP_REMAPPINGS') is None or os.getenv('DAPP_REMAPPINGS') == "":
+    tmpljson["settings"].pop("remappings", None)
+else:
+    tmpljson["settings"]["remappings"] = os.getenv('DAPP_REMAPPINGS').split('\n')
+
+tmpljson["settings"].pop('stopAfter', None)
+
+if os.getenv('DAPP_BUILD_OPTIMIZE') == '1':
+    tmpljson["settings"]["optimizer"]["enabled"] = True
+    tmpljson["settings"]["optimizer"]["runs"] = int(os.getenv('DAPP_BUILD_OPTIMIZE_RUNS', '200'))
+else:
+    tmpljson["settings"].pop('optimizer', None)
+
+tmpljson["settings"].pop('evmVersion', None)
+tmpljson["settings"].pop('viaIR', None)
+tmpljson["settings"].pop('debug', None)
+tmpljson["settings"].pop('metadata', None)
+
+# deal with libraries if present
+if os.getenv('DAPP_LIBRARIES') is None or os.getenv('DAPP_LIBRARIES') == "":
+    tmpljson["settings"].pop("libraries", None)
+else:
+    tmpljson["settings"]["libraries"].pop("myFile.sol", None)
+    tmpljson["settings"]["libraries"][""] = {}
+    sender=0x00a329c0648769a73afac7f9381e08fb43dbea72
+    nonce=48576
+    addresses=[]
+    for lib in os.getenv('DAPP_LIBRARIES')[1:].split(' '):
+        f,c,addr = lib.split(':')
+        tmpljson["settings"]["libraries"][""][f + ":" + c] = addr
+
+
+tmpljson["settings"]["outputSelection"]={}
+tmpljson["settings"]["outputSelection"]["*"]={}
+tmpljson["settings"]["outputSelection"]["*"]["*"]=[
+    "metadata",
+    "evm.bytecode",
+    "evm.deployedBytecode",
+    "abi",
+    "storageLayout",
+    "evm.bytecode.sourceMap",
+    "evm.bytecode.linkReferences",
+    "evm.bytecode.generatedSources",
+    "evm.deployedBytecode.sourceMap",
+    "evm.deployedBytecode.linkReferences",
+    "evm.deployedBytecode.generatedSources"
+    ]
+
+tmpljson["settings"]["outputSelection"]["*"][""] = ["ast"]
+
+tmpljson.pop('modelCheckerSettings', None)
+
+print(json.dumps(tmpljson))

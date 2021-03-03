@@ -2,8 +2,9 @@ pragma solidity ^0.6.7;
 
 import "ds-test/test.sol";
 import "ds-token/token.sol";
+import "ds-math/math.sol";
 
-contract SolidityTest is DSTest {
+contract SolidityTest is DSTest, DSMath {
     DSToken token;
 
     function setUp() public {
@@ -36,6 +37,14 @@ contract SolidityTest is DSTest {
         } else {
             assertTrue(true);
         }
+    }
+
+    function prove_mul(uint136 x, uint128 y) public {
+        mul(x,y);
+    }
+
+    function prove_distributivity(uint120 x, uint120 y, uint120 z) public {
+        assertEq(add(x, mul(y, z)), mul(add(x, y), add(x, z)));
     }
 
     function prove_transfer(uint supply, address usr, uint amt) public {

@@ -4,11 +4,10 @@
 ### Perform a `transfer' or (if <source> is given) `transferFrom' operation.
 set -e
 [ $# = 3 ] || [ $# = 4 ] || token transfer --usage
-amount=$(token --parse "$3")
 if [ $# = 3 ]; then
   sig="transfer(address,uint)(bool)"
-  seth send "$1" "$sig" "$2" "$amount"
+  seth send "$1" "$sig" "$2" "$3"
 else
   sig="transferFrom(address,address,uint)(bool)"
-  seth send "$1" "$sig" "$4" "$2" "$amount"
+  seth send "$1" "$sig" "$4" "$2" "$3"
 fi

@@ -1,4 +1,6 @@
 {-# Language OverloadedStrings #-}
+{-# Language ViewPatterns #-}
+{-# Language ScopedTypeVariables #-}
 {-# Language LambdaCase #-}
 {-# Language QuasiQuotes #-}
 {-# Language TypeSynonymInstances #-}
@@ -6,6 +8,9 @@
 {-# Language GeneralizedNewtypeDeriving #-}
 {-# Language DataKinds #-}
 {-# Language StandaloneDeriving #-}
+
+module Main where
+
 import Data.Text (Text)
 import Data.ByteString (ByteString)
 
@@ -13,36 +18,31 @@ import Prelude hiding (fail)
 
 import qualified Data.Text as Text
 import qualified Data.ByteString as BS
-import qualified Data.ByteString.Lazy as BS (fromStrict)
+import qualified Data.ByteString.Lazy as BS (fromStrict, toStrict)
 import qualified Data.ByteString.Base16 as Hex
 import Test.Tasty
-import Test.Tasty.QuickCheck-- hiding (forAll)
+import Test.Tasty.QuickCheck
 import Test.Tasty.HUnit
 
-import Control.Monad.State.Strict (execState, runState, when)
-import Control.Lens hiding (List, pre)
+import Control.Monad.State.Strict (execState, runState)
+import Control.Lens hiding (List, pre, (.>))
 
 import qualified Data.Vector as Vector
 import Data.String.Here
 
 import Control.Monad.Fail
-import Debug.Trace
 
 import Data.Binary.Put (runPut)
 import Data.SBV hiding ((===), forAll, sList)
 import Data.SBV.Control
-import Data.SBV.Trans (sList)
-import Data.SBV.List (implode)
-import qualified Data.SBV.List as SL
 import qualified Data.Map as Map
 import Data.Binary.Get (runGetOrFail)
 
 import EVM hiding (Query)
 import EVM.SymExec
-import EVM.Symbolic
 import EVM.ABI
 import EVM.Exec
-import EVM.Patricia as Patricia
+import qualified EVM.Patricia as Patricia
 import EVM.Precompiled
 import EVM.RLP
 import EVM.Solidity
@@ -73,6 +73,28 @@ main = defaultMain $ testGroup "hevm"
     , testCase "keccak256()" $
         SolidityCall "x = uint(keccak256(abi.encodePacked(a)));"
           [AbiString ""] ===> AbiUInt 256 0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470
+
+    , testProperty "abi encoding vs. solidity" $ withMaxSuccess 20 $ forAll (arbitrary >>= genAbiValue) $
+      \y -> ioProperty $ do
+          -- traceM ("encoding: " ++ (show y) ++ " : " ++ show (abiValueType y))
+          Just encoded <- runStatements [i| x = abi.encode(a);|]
+            [y] AbiBytesDynamicType
+          let AbiTuple (Vector.toList -> [solidityEncoded]) = decodeAbiValue (AbiTupleType $ Vector.fromList [AbiBytesDynamicType]) (BS.fromStrict encoded)
+          let hevmEncoded = encodeAbiValue (AbiTuple $ Vector.fromList [y])
+          -- traceM ("encoded (solidity): " ++ show solidityEncoded)
+          -- traceM ("encoded (hevm): " ++ show (AbiBytesDynamic hevmEncoded))
+          assertEqual "abi encoding mismatch" solidityEncoded (AbiBytesDynamic hevmEncoded)
+
+    , testProperty "abi encoding vs. solidity (2 args)" $ withMaxSuccess 20 $ forAll (arbitrary >>= bothM genAbiValue) $
+      \(x', y') -> ioProperty $ do
+          -- traceM ("encoding: " ++ (show x') ++ ", " ++ (show y')  ++ " : " ++ show (abiValueType x') ++ ", " ++ show (abiValueType y'))
+          Just encoded <- runStatements [i| x = abi.encode(a, b);|]
+            [x', y'] AbiBytesDynamicType
+          let AbiTuple (Vector.toList -> [solidityEncoded]) = decodeAbiValue (AbiTupleType $ Vector.fromList [AbiBytesDynamicType]) (BS.fromStrict encoded)
+          let hevmEncoded = encodeAbiValue (AbiTuple $ Vector.fromList [x',y'])
+          -- traceM ("encoded (solidity): " ++ show solidityEncoded)
+          -- traceM ("encoded (hevm): " ++ show (AbiBytesDynamic hevmEncoded))
+          assertEqual "abi encoding mismatch" solidityEncoded (AbiBytesDynamic hevmEncoded)
     ]
 
   , testGroup "Precompiled contracts"
@@ -169,7 +191,7 @@ main = defaultMain $ testGroup "hevm"
 --       withMaxSuccess 100000 $
        Patricia.insertValues [(r, BS.pack[1]), (s, BS.pack[2]), (t, BS.pack[3]),
                               (r, mempty), (s, mempty), (t, mempty)]
-       === (Just $ Literal Patricia.Empty)
+       === (Just $ Patricia.Literal Patricia.Empty)
     ]
 
   , testGroup "Symbolic execution"
@@ -538,7 +560,7 @@ main = defaultMain $ testGroup "hevm"
           let code =
                 [i|
                   contract C {
-                    function kecc(uint x) public {
+                    function kecc(uint x) public pure {
                       if (x == 0) {
                          assert(keccak256(abi.encode(x)) == keccak256(abi.encode(0)));
                       }
@@ -551,6 +573,36 @@ main = defaultMain $ testGroup "hevm"
             let vm = vm0 & set (state . callvalue) 0
             verify vm Nothing Nothing (Just checkAssertions)
           putStrLn $ "found counterexample:"
+
+      , testCase "safemath distributivity (yul)" $ do
+          Left _ <- runSMTWith cvc4 $ query $ do
+            let yulsafeDistributivity = hex "6355a79a6260003560e01c14156016576015601f565b5b60006000fd60a1565b603d602d604435600435607c565b6039602435600435607c565b605d565b6052604b604435602435605d565b600435607c565b141515605a57fe5b5b565b6000828201821115151560705760006000fd5b82820190505b92915050565b6000818384048302146000841417151560955760006000fd5b82820290505b92915050565b"
+            vm <- abstractVM (Just ("distributivity(uint256,uint256,uint256)", [AbiUIntType 256, AbiUIntType 256, AbiUIntType 256])) [] yulsafeDistributivity SymbolicS
+            verify vm Nothing Nothing (Just checkAssertions)
+          putStrLn $ "Proven"
+
+      , testCase "safemath distributivity (sol)" $ do
+          let code =
+                [i|
+                  contract C {
+                      function distributivity(uint x, uint y, uint z) public {
+                          assert(mul(x, add(y, z)) == add(mul(x, y), mul(x, z)));
+                      }
+
+                      function add(uint x, uint y) internal pure returns (uint z) {
+                          require((z = x + y) >= x, "ds-math-add-overflow");
+                      }
+                      function mul(uint x, uint y) internal pure returns (uint z) {
+                          require(y == 0 || (z = x * y) / y == x, "ds-math-mul-overflow");
+                      }
+                 }
+                |]
+          Just c <- solcRuntime "C" code
+
+          Left _ <- runSMTWith z3 $ query $ do
+            vm <- abstractVM (Just ("distributivity(uint256,uint256,uint256)", [AbiUIntType 256, AbiUIntType 256, AbiUIntType 256])) [] c SymbolicS
+            verify vm Nothing Nothing (Just checkAssertions)
+          putStrLn $ "Proven"
 
     ]
   , testGroup "Equivalence checking"
@@ -580,7 +632,7 @@ main = defaultMain $ testGroup "hevm"
 runSimpleVM :: ByteString -> ByteString -> Maybe ByteString
 runSimpleVM x ins = case loadVM x of
                       Nothing -> Nothing
-                      Just vm -> let calldata' = (ConcreteBuffer ins, literal . num $ BS.length ins)
+                      Just vm -> let calldata' = (ConcreteBuffer ins, w256lit $ num $ BS.length ins)
                        in case runState (assign (state.calldata) calldata' >> exec) vm of
                             (VMSuccess (ConcreteBuffer bs), _) -> Just bs
                             _ -> Nothing
@@ -606,6 +658,7 @@ hex s =
 singleContract :: Text -> Text -> IO (Maybe ByteString)
 singleContract x s =
   solidity x [i|
+    pragma experimental ABIEncoderV2;
     contract ${x} { ${s} }
   |]
 
@@ -640,15 +693,19 @@ runStatements stmts args t = do
                     (map (abiTypeSolidity . abiValueType) args) <> ")"
 
   runFunction [i|
-    function foo(${params}) public pure returns (${abiTypeSolidity t} x) {
+    function foo(${params}) public pure returns (${abiTypeSolidity t} ${defaultDataLocation t} x) {
       ${stmts}
     }
-  |] (abiCalldata s (Vector.fromList args))
+  |] (abiMethod s (AbiTuple $ Vector.fromList args))
 
 getStaticAbiArgs :: VM -> [SWord 256]
 getStaticAbiArgs vm =
-  let SymbolicBuffer bs = ditch 4 $ view (state . calldata . _1) vm
-  in fmap (\i -> fromBytes $ take 32 (drop (i*32) bs)) [0..((length bs) `div` 32 - 1)]
+  let cd = view (state . calldata . _1) vm
+      bs = case cd of
+        ConcreteBuffer bs' -> ConcreteBuffer $ BS.drop 4 bs'
+        SymbolicBuffer bs' -> SymbolicBuffer $ drop 4 bs'
+      args = decodeStaticArgs bs
+  in fmap (\(S _ v) -> v) args
 
 -- includes shaving off 4 byte function sig
 decodeAbiValues :: [AbiType] -> ByteString -> [AbiValue]
@@ -690,3 +747,10 @@ assertSolidityComputation (SolidityCall s args) x =
      assertEqual (Text.unpack s)
        (fmap Bytes (Just (encodeAbiValue x)))
        (fmap Bytes y)
+
+bothM :: (Monad m) => (a -> m b) -> (a, a) -> m (b, b)
+bothM f (a, a') = do
+  b  <- f a
+  b' <- f a'
+  return (b, b')
+  

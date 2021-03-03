@@ -46,10 +46,6 @@ in rec {
       '' else "");
     };
 
-  dapp2 = {
-    test-hevm = import ./nix/dapp/dapp-test-hevm.nix { pkgs = self.pkgs; };
-  };
-
   solc-versions =
     let
       fetchSolcVersions = { owner, attr }:
@@ -84,10 +80,6 @@ in rec {
   hevm = self.pkgs.haskell.lib.justStaticExecutables self.haskellPackages.hevm;
 
   libff = self.callPackage (import ./nix/libff.nix) {};
-
-  cvc4 = self.callPackage (import ./nix/cvc4.nix) {};
-
-  z3 = self.callPackage (import ./nix/z3.nix) {};
 
   jays = (
     self.pkgs.haskell.lib.justStaticExecutables

@@ -1,4 +1,0 @@
-#!/usr/bin/env bash
-set -e
-x=$(seth --to-hex "$1")
-printf %64s "${x#0x}" | tr ' ' 0

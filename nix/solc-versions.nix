@@ -33,10 +33,11 @@ rec {
     solc_0_5_11 = { rev = "917ce8e48f79bf15364968f66177b48ad2a82580"; sha256 = "15hhzh5v6jgmiqpd7rg6svl8ixy81v2q4f3rw36vh9xg2yqgbi9l"; };
     solc_0_5_12 = { rev = "a795e561f7623dada24e03a6e4d77c0a5b87dfca"; sha256 = "071gqqnila977zg3xlx3zbl0xpkm6v0916dz5z58681yw15lf4xj"; };
     solc_0_5_15 = { rev = "1101ef4daeff8a3df3c479bb170cef97f839371a"; sha256 = "18ycihiy1jk81np8h2z50xbsqgja7s21w74pnmgfk8bav6p2fflb"; };
+    solc_0_7_4  = { rev = "4ceb20b49b73286203a37e7dba76aad27b4ce401"; sha256 = "0ar9xfp8brszcg6klrqjhkdz3kaj31l1y5s4fxjv9jy4w87q3gjs"; };
   };
 
   # some versions do not compile on macOS
-  x86_64-darwin = removeAttrs x86_64-linux [ "solc_0_4_6" "solc_0_4_8" "solc_0_4_11" "solc_0_4_12" "solc_0_4_24" ];
+  x86_64-darwin = removeAttrs x86_64-linux [ "solc_0_4_6" "solc_0_4_8" "solc_0_4_11" "solc_0_4_12" "solc_0_4_24" "solc_0_7_4" ];
 
   # these versions have not been upstreamed on NixOS/nixpkgs yet, and come from our fork at dapptools/nixpkgs
   unreleased_x86_64-linux = {
@@ -47,7 +48,8 @@ rec {
     solc_0_6_7  = { rev = "b777e1388590b62caa6b31c9258c3ac75e31675e"; sha256 = "0qk0ggl8ac5m2wmcqva9ryvn3fmjj85333mnkb6688fksqmdbphs"; };
     solc_0_6_8  = { rev = "9d68154c4128d6abb435083c527f4b4570a0c4cb"; sha256 = "0pm3x1nwxlbk04hhp15azr2c34rhawalji8g730p1i01i9icq3lz"; };
     solc_0_6_12  ={ rev = "d8136afba5e0442b5bd5f4c83a670e6696f6f350"; sha256 = "01v6vzq57c5l8i79cmhxvf50hi9r75mbqggd0wand9sjzz9q72fi"; };
+    solc_0_8_1   ={ rev = "a8d654271e4ca5109083892906325765cf988808"; sha256 = "1c5fsj8j9x14fprnjicayhlak6hj401kqjj92q2hrg3k90gziq92"; };
   };
 
-  unreleased_x86_64-darwin = removeAttrs unreleased_x86_64-linux [ "solc_0_4_18" "solc_0_6_12" ];
+  unreleased_x86_64-darwin = removeAttrs unreleased_x86_64-linux [ "solc_0_4_18" "solc_0_6_12" "solc_0_8_1" ];
 }

@@ -43,7 +43,10 @@ These variables can be set at the prompt or in a `.dapprc` file.
 | `DAPP_SKIP_BUILD`          | n/a                        | Avoid compiling this time             |
 | `DAPP_LINK_TEST_LIBRARIES` | `1` when testing; else `0` | Compile with libraries                |
 | `DAPP_VERIFY_CONTRACT`     | `yes`                      | Attempt Etherscan verification        |
-| `SOLC_FLAGS`               | n/a                        | Compilation flags passed to `solc`    |
+| `DAPP_STANDARD_JSON`       | $(dapp mk-standard-json)   | Solidity compilation options          | 
+| `DAPP_REMAPPINGS`          | $(dapp remappings)         | Solidity remappings                   | 
+| `DAPP_BUILD_OPTIMIZE`      | no                         | Activate Solidity optimizer           | 
+| `DAPP_BUILD_OPTIMIZE_RUNS` | 200                        | Set the optimizer runs                | 
 
 A global (always loaded) config file is located in `~/.dapprc`.
 A local `.dapprc` can also be defined in your project's root, which overrides variables in the global config.

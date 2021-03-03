@@ -1,20 +1,9 @@
 #!/usr/bin/env bash
 ### dapp-create -- deploy a compiled contract (--verify on Etherscan)
-### Usage: dapp create <name>
+### Usage: dapp create <contractname> or
+###        dapp create <path>:<contractname>
 ### Add --verify and export your ETHERSCAN_API_KEY to auto-verify on Etherscan
 set -e
-for i in "$@"; do
-  case $i in
-    --verify)
-      DAPP_VERIFY_CONTRACT=yes
-      shift
-      ;;
-    *)
-      shift
-      set -- "$@" "$i"
-      ;;
-  esac
-done
 
 [[ -e "${DAPP_JSON}" ]] || {
   echo >&2 "${0##*/}: error: ${DAPP_JSON} file not found. Did you run ``dapp build``?"
@@ -29,9 +18,9 @@ name=()
 
 for path in "${contracts[@]}"; do
   if [ -z "${1##*:*}" ]; then
-    [[ "$path" = "$1" ]] && name+=("$path")
+    [[ "$path" = "${1/:*/}" ]] && [[ -n "$(jq .contracts.\""$path"\".\""${1#*:}"\"[]? "$DAPP_JSON")" ]] && name+=("$path")
   else
-    [[ "${path#*:}" = "$1" ]] && name+=("$path")
+    [[ -n "$(jq .contracts.\""$path"\".\""$1"\"[]? "$DAPP_JSON")" ]] && name+=("$path")
   fi
 done
 
@@ -46,16 +35,16 @@ done
   exit 1
 }
 
-contract=$(<"$DAPP_JSON" jq '.contracts[''"'"${name[0]}"'"'']')
-abi=$(jq '.["abi"]' -r <<< "$contract")
-bin=$(jq '.["bin"]' -r <<< "$contract")
+contract=$(<"$DAPP_JSON" jq .contracts.\""${name[0]}"\".\""${1#*:}"\")
+abi=$(jq .abi -r <<< "$contract")
+bin=$(jq .evm.bytecode.object -r <<< "$contract")
 type=$(seth --abi-constructor <<< "$abi")
 address=$(set -x; seth send --create "$bin" "${type/constructor/${1#*:}}" "${@:2}")
 
 [[ $DAPP_VERIFY_CONTRACT ]] && {
   echo >&2 "Verifying contract at $address"
   sleep 5 # give etherscan some time to process the block
-  dapp verify-contract "$1" "$address" "${@:2}"
+  dapp verify-contract "$path":"${1#*:}" "$address" "${@:2}"
 }
 
 seth --to-checksum-address "$address"

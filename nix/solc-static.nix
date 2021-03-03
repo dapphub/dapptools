@@ -1,6 +1,6 @@
 {path, version, sha256}:
 
-{stdenv, fetchurl, lib}:
+{stdenv, fetchurl, lib, pkgs, autoPatchelfHook}:
 
 stdenv.mkDerivation rec {
   pname = "solc-static";
@@ -19,6 +19,9 @@ stdenv.mkDerivation rec {
     url = "https://binaries.soliditylang.org/${platform}/${path}";
     sha256 = "${sha256}";
   };
+
+  nativeBuildInputs = [ autoPatchelfHook ];
+  buildInputs = [ pkgs.z3.lib ];
 
   installPhase = ''
     mkdir -p $out/bin

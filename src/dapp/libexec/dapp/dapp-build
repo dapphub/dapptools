@@ -2,24 +2,15 @@
 ### dapp-build -- compile the source code
 ### Usage: dapp build [--extract]
 ###
-###  --extract: After building, write the .abi, .bin and .bin-runtime
-###             files from the solc json into $DAPP_OUT. Beware of contract
-###             name collisions. This is provided for compatibility with older
-###             workflows.
+###  --extract:  After building, write the .abi, .bin and .bin-runtime. Implies `--legacy`
+###              files from the solc json into $DAPP_OUT. Beware of contract
+###              name collisions. This is provided for compatibility with older
+###              workflows.
+###  --optimize: activate the solidity optimizer.
+###  --legacy:   Compile using the `--combined-json` flag. Some options are
+###              missing from this format. This is provided for compatibility with older
+###              workflows.
 set -e
-
-while [[ $# -gt 0 ]]; do
-  opt=$1; shift
-  case $opt in
-    --extract)
-      DAPP_BUILD_EXTRACT=1
-      ;;
-    *)
-      info "unknown argument: $opt"
-      exit 1
-      ;;
-  esac
-done
 
 info() {
   while [[ $# -gt 0 ]]; do
@@ -38,58 +29,50 @@ info() {
 
 cd "$DAPP_ROOT"
 
-IFS=" " read -r -a opts <<<"$SOLC_FLAGS"
-json_opts=--combined-json=abi,bin,bin-runtime,srcmap,srcmap-runtime,ast,metadata
-
 # use a custom path is DAPP_SOLC is set
-SOLC=${DAPP_SOLC:-solc}
-
-$SOLC --help | grep -q -- --storage-layout && json_opts+=,storage-layout
-$SOLC --help | grep -q -- --overwrite && opts+=(--overwrite)
-
-remappings=$(dapp remappings)
-if [[ $remappings ]]; then
-  while read -r line; do opts+=("$line"); done <<<"$remappings"
-fi
+export SOLC=${DAPP_SOLC:-solc}
 
 if [ "$DAPP_LINK_TEST_LIBRARIES" = 1 ]; then
-  DAPP_LINK_TEST_LIBRARIES=0 dapp build
-  sender=0x00a329c0648769a73afac7f9381e08fb43dbea72
-  nonce=48576
-  mapfile -t libraries < <(dapp --find-libraries)
+    sender=0x00a329c0648769a73afac7f9381e08fb43dbea72
+    nonce=48576
+    mapfile -t libraries < <(dapp --find-libraries)
 
-  if [[ ${#libraries[@]} -eq 0 ]]; then exit; fi
+    if [[ ${#libraries[@]} -gt 0 ]]; then
 
-  info "rebuilding with linked libraries"
-  for lib in "${libraries[@]}"; do
-    address=$(dapp address "$sender" "$nonce")
-    links+=" $lib:$address"
-    ((nonce++))
-  done
-  opts+=(--libraries "$links")
+        info "building with linked libraries"
+        for lib in "${libraries[@]}"; do
+            address=$(dapp address "$sender" "$nonce")
+            links+=" $lib:$address"
+            ((nonce++))
+        done
+    fi
 else
-  (set -x; dapp clean)
+    (set -x; dapp clean)
 fi
 
-mkdir -p "$DAPP_OUT"
-mapfile -t files < <(find "${DAPP_SRC}" -name '*.sol')
-(set -x; $SOLC "${opts[@]}" "${json_opts[@]}" /=/ "${files[@]}" > "${DAPP_JSON}")
+export -f info
+export DAPP_LIBRARIES=${DAPP_LIBRARIES-"$links"}
 
-if [ "$DAPP_BUILD_EXTRACT" ]; then
-  mapfile -t contracts < <(<"$DAPP_JSON" jq '.contracts|keys[]' -r | sort -u -t: -k2 | sort)
-  data=$(<"$DAPP_JSON" jq '.contracts' -r)
-  count=1
-  total=${#contracts[@]}
-  for path in "${contracts[@]}"; do
-    info -ne "Extracting build data... [$count/$total]\\r"
-    ((count++))
-    name="${path#*:}"
-    contract=$(echo "$data" | jq '.[''"'"$path"'"'']')
-    echo "$contract" | jq '.["abi"]' -r > "$DAPP_OUT/$name.abi"
-    echo "$contract" | jq '.["bin"]' -r > "$DAPP_OUT/$name.bin"
-    echo "$contract" | jq '.["bin-runtime"]' -r > "$DAPP_OUT/$name.bin-runtime"
-    echo "$contract" | jq '.["metadata"]' -r > "$DAPP_OUT/$name.metadata"
-  done
-  echo
-  info "warning: --extract is slow and may have filename collisions. All build data can be found in $DAPP_JSON.\\n"
+mkdir -p "$DAPP_OUT"
+
+if [[ -z "$DAPP_BUILD_LEGACY" && -z "$DAPP_BUILD_EXTRACT" ]]; then
+    if [[ "$SOLC_FLAGS" ]]; then
+        info "warning: SOLC_FLAGS are only recognized using '--legacy'"
+        info "consider using --optimize or a custom standard-json instead."
+    fi
+    if [[ "$DAPP_STANDARD_JSON" ]]; then
+        "$SOLC" --allow-paths . --standard-json < "$DAPP_STANDARD_JSON" > "$DAPP_JSON"
+    else
+        dapp mk-standard-json | "$SOLC" --standard-json --allow-paths . > "$DAPP_JSON"
+    fi
+
+    # pipe errors to stderr
+    jq -r 'if .errors then .errors | map(."formattedMessage") | @sh else empty end' "$DAPP_JSON" \
+        | sed -e "s/' //g" -e "s/'//g" 1>&2
+    # if sources is empty, the compilation failed
+    [[ $(jq -r '.sources' "$DAPP_JSON") = "null" ||  $(jq -r '.sources' "$DAPP_JSON") = {} ]] && exit 1 || exit 0
+
+else
+    info "warning: legacy builds are deprecated and might not work with other dapp commands"
+    dapp build-legacy
 fi

@@ -6,6 +6,68 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## Changed
+
+- updated `nixpkgs` to the `20.09` channel
+
+## [0.32.1] - 2021-02-02
+
+### Added
+
+- support for (non-static) solc 0.7.4 and solc 0.8.1
+
+### Fixed
+
+- `dapp init` works with the new standard-json architecture
+- `dapp verify-contract` works with the new standard-json architecture
+
+## [0.32.0] - 2021-01-26
+
+### Changed
+
+- `dapp build`, `dapp test`, `dapp --make-library-state`, `dapp create` now use solidity output
+generated via `--standard-json` instead of `--combined-json`. Building via the old format is
+still possible via `dapp build --legacy`, but is considered deprecated and will be removed in
+future releases.
+
+The standard json used by `dapp build` can be set using the environment variable:
+`DAPP_STANDARD_JSON`, and defaults to the result of `dapp mk-standard-json`.
+
+- `dapp --find-libraries` no longer requires `--extract`: libraries do not need to be
+built to be found.
+
+
+### Added
+- `dapp mk-standard-json` command to generate a standard json for setting Solidity compiler options.
+The settings can be tweaked using the following environment variables:
+   - `DAPP_REMAPPINGS`     (defaults to the result of `dapp remappings`)
+   - `DAPP_LIBRARIES`      (defaults to the result of `dapp --find-libraries`)
+   - `DAPP_BUILD_OPTIMIZE` (defaults to false)
+
+### Removed
+
+- `SOLC_FLAGS`. To modify the compiler settings, use a custom standard json and set
+the filename as argument to `DAPP_STANDARD_JSON`.
+
+### Fixed
+
+- `dapp create <contract> --verify` now passes the qualified path to `dapp verify-contract`,
+as expected.
+
+## [0.31.1] - 2020-12-10
+
+## Added
+
+- `dapp --use` can find solc versions in the nix store even if they are not present on `PATH`
+
+## Fixed
+
+- Corrected help text for solc version installation
+
+## [0.31.0] - 2020-11-29
+
+### Changed
+
 - `dapp test --match` now matches on file path and contract name, as
   well as test name
 - `dapp --use` searches directly for binaries in your path, rather than

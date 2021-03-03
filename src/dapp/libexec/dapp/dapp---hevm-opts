@@ -9,67 +9,17 @@ fail () {
 }
 
 opts=()
+[[ "$DAPP_TEST_CACHE" ]]          && opts+=(--cache "$DAPP_TEST_CACHE")
+[[ "$DAPP_TEST_MATCH" ]]          && opts+=(--match "$DAPP_TEST_MATCH")
+[[ "$DAPP_TEST_SOLVER" ]]         && opts+=(--solver "$DAPP_TEST_SOLVER")
+[[ "$DAPP_TEST_REPLAY" ]]         && opts+=(--replay "$DAPP_TEST_REPLAY")
+[[ "$DAPP_TEST_SMTDEBUG" ]]       && opts+=(--smtdebug)
+[[ "$DAPP_TEST_VERBOSITY" ]]      && opts+=(--verbose "$DAPP_TEST_VERBOSITY")
+[[ "$DAPP_TEST_FUZZ_RUNS" ]]      && opts+=(--fuzz-runs "$DAPP_TEST_FUZZ_RUNS")
+[[ "$DAPP_TEST_SMTTIMEOUT" ]]     && opts+=(--smttimeout "$DAPP_TEST_SMTTIMEOUT")
+[[ "$DAPP_TEST_MAX_ITERATIONS" ]] && opts+=(--max-iterations "$DAPP_TEST_MAX_ITERATIONS")
 
-while [[ $1 ]]; do
-  case $1 in
-    --)
-      shift; break;;
-    -m|--match)
-      shift; [ -n "$1" ] || fail "--match requires an argument."
-      opts+=(--match "$1"); shift
-      ;;
-    -vvv)
-      opts+=(--verbose 3); shift
-      ;;
-    -vv)
-      opts+=(--verbose 2); shift
-      ;;
-    -v|--verbose)
-      opts+=(--verbose 1); shift
-      ;;
-    --fuzz-runs)
-      shift; [ -n "$1" ] || fail "--fuzz-runs requires an argument."
-      opts+=(--fuzz-runs "$1"); shift
-      ;;
-    --smttimeout)
-      shift; [ -n "$1" ] || fail "--smttimeout requires an argument."
-      opts+=(--smttimeout "$1"); shift
-      ;;
-    --solver)
-      shift; [ -n "$1" ] || fail "--solver requires an argument."
-      opts+=(--solver "$1"); shift
-      ;;
-    --max-iterations)
-      shift; [ -n "$1" ] || fail "--max-iterations requires an argument."
-      opts+=(--max-iterations "$1"); shift
-      ;;
-    --replay)
-      shift; [ -n "$1" ] || fail "--replay requires an argument."
-      opts+=(--replay "$1"); shift
-      ;;
-    --rpc-url)
-      shift; [ -n "$1" ] || fail "--rpc-url requires an argument."
-      HEVM_RPC=yes
-      export ETH_RPC_URL=$1; shift
-      ;;
-    --rpc-block)
-      shift; [ -n "$1" ] || fail "--rpc-block requires an argument."
-      HEVM_RPC=yes
-      export DAPP_TEST_NUMBER=$1; shift
-      ;;
-    --rpc)
-      [ -n "$ETH_RPC_URL" ] || fail "ETH_RPC_URL not set."
-      shift; HEVM_RPC=yes
-      ;;
-    --cache)
-      shift; [ -n "$1" ] || fail "--cache requires a path to a cache dir"
-      opts+=(--cache "$1"); shift
-      ;;
-    *)
-      fail "unknown argument: $1"
-      ;;
-  esac
-done
+
 
 if [[ "$HEVM_RPC" == "yes" ]]; then
   number=${DAPP_TEST_NUMBER:-latest}

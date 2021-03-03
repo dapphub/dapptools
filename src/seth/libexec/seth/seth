@@ -134,6 +134,8 @@ eval "$(git rev-parse --parseopt -- "$@" <<<"$OPTS" || echo exit $?)"
 # To be reviewed in the future. It should be set depending on the chain:
 export SETH_STATUS=yes
 
+shopt -s extglob
+
 while [[ $1 ]]; do
   case $1 in
     --)              shift; break;;
@@ -147,9 +149,10 @@ while [[ $1 ]]; do
     -C|--chain)      shift; export SETH_CHAIN=$1;;
 
     -B|--block)      shift; export ETH_BLOCK=$1;;
-    -F|--from)       shift; export ETH_FROM=$1;;
+    -F|--from)       shift; export ETH_FROM=$(seth --to-address $1);;
     -G|--gas)        shift; export ETH_GAS=$1;;
-    -P|--gas-price)  shift; export ETH_GAS_PRICE=$1;;
+    -P|--gas-price)  shift;
+      export ETH_GAS_PRICE=$(seth --to-wei ${1%gwei} ${1##*([0-9])});;
     -N|--nonce)      shift; export ETH_NONCE=$1;;
     -V|--value)      shift; export ETH_VALUE=$1;;
     -S|--password)   shift; export ETH_PASSWORD=$1;;
@@ -186,7 +189,6 @@ done
 keystores=()
 
 if [[ $SETH_CHAIN ]]; then
-  export ETH_LOGS_API=${SETH_LOGS_API:-etherscan}
 
   case "$SETH_CHAIN" in
     ethlive|mainnet)
@@ -223,5 +225,14 @@ fi
 
 [[ -n $ETH_KEYSTORE ]] && export ETH_KEYSTORE
 export ETH_RPC_URL=${ETH_RPC_URL:-${eth_rpc_url:-${ETH_RPC_HOST:-http://127.0.0.1}:${ETH_RPC_PORT:-8545}}}
+
+if ! [ -x "$(command -v "${0##*/}-${1-help}")" ]; then
+    # look for approximate matches
+    echo >&2 "'$1' is not a seth command. See 'seth help'."
+    echo >&2
+    echo >&2 "Most similar commands:"
+    find "${0%seth}" -execdir echo {} ';' | agrep -1 "${0##*/}-${1-help}" >&2
+    exit 1
+fi
 
 "${0##*/}-${1-help}" "${@:2}"

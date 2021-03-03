@@ -4,6 +4,5 @@
 ### Note: <amount> must be an integer representing wei (or equivalent).
 set -e
 [ $# = 3 ] || token approve --usage
-amount=$(token --parse "$3")
 sig="approve(address,uint)(bool)"
-seth send "$1" "$sig" "$2" "$amount"
+seth send "$1" "$sig" "$2" "$3"

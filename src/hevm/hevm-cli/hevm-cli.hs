@@ -17,15 +17,14 @@ import Prelude hiding  (Word, LT)
 import EVM (StorageModel(..))
 import qualified EVM
 import EVM.Concrete (createAddress,  wordValue)
-import EVM.Symbolic (forceLitBytes, litAddr, w256lit, len, forceLit)
+import EVM.Symbolic (litWord, forceLitBytes, litAddr, len, forceLit)
 import qualified EVM.FeeSchedule as FeeSchedule
 import qualified EVM.Fetch
 import qualified EVM.Flatten
 import qualified EVM.Stepper
 import qualified EVM.TTY
 import qualified EVM.Emacs
-import EVM.Dev (concatMapM, interpretWithTrace)
-import qualified Debug.Trace as Tr
+import EVM.Dev (interpretWithTrace)
 
 #if MIN_VERSION_aeson(1, 0, 0)
 import qualified EVM.VMTest as VMTest
@@ -124,7 +123,7 @@ data Command w
       , debug         :: w ::: Bool               <?> "Run interactively"
       , getModels     :: w ::: Bool               <?> "Print example testcase for each execution path"
       , showTree      :: w ::: Bool               <?> "Print branches explored in tree view"
-      , smttimeout    :: w ::: Maybe Integer      <?> "Timeout given to SMT solver in milliseconds (default: 20000)"
+      , smttimeout    :: w ::: Maybe Integer      <?> "Timeout given to SMT solver in milliseconds (default: 30000)"
       , maxIterations :: w ::: Maybe Integer      <?> "Number of times we may revisit a particular branching point"
       , solver        :: w ::: Maybe Text         <?> "Used SMT solver: z3 (default) or cvc4"
       , smtdebug      :: w ::: Bool               <?> "Print smt queries sent to the solver"
@@ -133,7 +132,7 @@ data Command w
       { codeA         :: w ::: ByteString    <?> "Bytecode of the first program"
       , codeB         :: w ::: ByteString    <?> "Bytecode of the second program"
       , sig           :: w ::: Maybe Text    <?> "Signature of types to decode / encode"
-      , smttimeout    :: w ::: Maybe Integer <?> "Timeout given to SMT solver in milliseconds (default: 20000)"
+      , smttimeout    :: w ::: Maybe Integer <?> "Timeout given to SMT solver in milliseconds (default: 30000)"
       , maxIterations :: w ::: Maybe Integer <?> "Number of times we may revisit a particular branching point"
       , solver        :: w ::: Maybe Text    <?> "Used SMT solver: z3 (default) or cvc4"
       , smtoutput     :: w ::: Bool          <?> "Print verbose smt output"
@@ -180,7 +179,7 @@ data Command w
       , state         :: w ::: Maybe String             <?> "Path to state repository"
       , cache         :: w ::: Maybe String             <?> "Path to rpc cache repository"
       , match         :: w ::: Maybe String             <?> "Test case filter - only run methods matching regex"
-      , smttimeout    :: w ::: Maybe Integer            <?> "Timeout given to SMT solver in milliseconds (default: 20000)"
+      , smttimeout    :: w ::: Maybe Integer            <?> "Timeout given to SMT solver in milliseconds (default: 30000)"
       , maxIterations :: w ::: Maybe Integer            <?> "Number of times we may revisit a particular branching point"
       , solver        :: w ::: Maybe Text               <?> "Used SMT solver: z3 (default) or cvc4"
       , smtdebug      :: w ::: Bool                     <?> "Print smt queries sent to the solver"
@@ -424,17 +423,19 @@ equivalence cmd =
 
 -- cvc4 sets timeout via a commandline option instead of smtlib `(set-option)`
 runSMTWithTimeOut :: Maybe Text -> Maybe Integer -> Bool -> Symbolic a -> IO a
-runSMTWithTimeOut solver maybeTimeout smtdebug sym
-  | solver == Just "cvc4" = do
-      setEnv "SBV_CVC4_OPTIONS" ("--lang=smt --incremental --interactive --no-interactive-prompt --model-witness-value --tlimit-per=" <> show timeout)
-      a <- runSMTWith cvc4{SBV.verbose=smtdebug} sym
-      setEnv "SBV_CVC4_OPTIONS" ""
-      return a
+runSMTWithTimeOut solver maybeTimeout smtdebug symb
+  | solver == Just "cvc4" = runwithcvc4
   | solver == Just "z3" = runwithz3
-  | solver == Nothing = runwithz3
+  | solver == Nothing = runwithcvc4
   | otherwise = error "Unknown solver. Currently supported solvers; z3, cvc4"
- where timeout = fromMaybe 20000 maybeTimeout
-       runwithz3 = runSMTWith z3{SBV.verbose=smtdebug} $ (setTimeOut timeout) >> sym
+ where timeout = fromMaybe 30000 maybeTimeout
+       runwithz3 = runSMTWith z3{SBV.verbose=smtdebug} $ (setTimeOut timeout) >> symb
+       runwithcvc4 = do
+         setEnv "SBV_CVC4_OPTIONS" ("--lang=smt --incremental --interactive --no-interactive-prompt --model-witness-value --tlimit-per=" <> show timeout)
+         a <- runSMTWith cvc4{SBV.verbose=smtdebug} symb
+         setEnv "SBV_CVC4_OPTIONS" ""
+         return a
+
 
 
 checkForVMErrors :: [EVM.VM] -> [String]
@@ -736,12 +737,12 @@ vmFromCommand cmd = do
         calldata' = ConcreteBuffer (Oops "cliCalldata") $ bytes calldata ""
         codeType = if create cmd then EVM.InitCode else EVM.RuntimeCode
         address' = if create cmd
-              then createAddress origin' (word nonce 0)
+              then addr address (createAddress origin' (word nonce 0))
               else addr address 0xacab
 
         vm0 miner ts blockNum diff c = EVM.makeVm $ EVM.VMOpts
           { EVM.vmoptContract      = c
-          , EVM.vmoptCalldata      = (calldata', literal . num $ len calldata')
+          , EVM.vmoptCalldata      = (calldata', litWord (num $ len calldata'))
           , EVM.vmoptValue         = w256lit value'
           , EVM.vmoptAddress       = address'
           , EVM.vmoptCaller        = litAddr caller'
@@ -777,25 +778,24 @@ symvmFromCommand cmd = do
                                    )
 
   caller' <- maybe (SAddr <$> freshVar_) (return . litAddr) (caller cmd)
-  ts <- maybe (S (Var "Timestamp" 256) <$> freshVar_) (return . w256lit) (timestamp cmd)
-  callvalue' <- maybe ((S (Var "CallValue" 256)) <$> freshVar_) (return . w256lit) (value cmd)
+  ts <- maybe (var "Timestamp" <$> freshVar_) (return . w256lit) (timestamp cmd)
+  callvalue' <- maybe (var "CallValue" <$> freshVar_) (return . w256lit) (value cmd)
   (calldata', cdlen, pathCond) <- case (calldata cmd, sig cmd) of
     -- fully abstract calldata (up to 256 bytes)
     (Nothing, Nothing) -> do
       cd <- sbytes256
       len' <- freshVar_
-      return (SymbolicBuffer Calldata cd, len', (len' .<= 256, LT (Var "len" 256) (Literal (fromInteger 256))))
+      return (SymbolicBuffer Calldata cd, var "CALLDATALENGTH" len', (len' .<= 256, Todo "len < 256" []))
     -- fully concrete calldata
     (Just c, Nothing) ->
       let cd = ConcreteBuffer (Oops "clicalldata3") $ decipher c
-      in return (cd, num (len cd), (sTrue, (Dull "clicalldata")))
+      in return (cd, litWord (num $ len cd), (sTrue, Todo "" []))
     -- calldata according to given abi with possible specializations from the `arg` list
     (Nothing, Just sig') -> do
       method' <- io $ functionAbi sig'
       let typs = snd <$> view methodInputs method'
       (cd, cdlen) <- symCalldata (view methodSignature method') typs (arg cmd)
-      return (SymbolicBuffer (Oops "cliCalldata4") cd, cdlen, (sTrue, Dull "clicalldata2"))
-
+      return (SymbolicBuffer (Oops "cliCalldata4") cd, litWord (num cdlen), (sTrue, Todo "" []))
     _ -> error "incompatible options: calldata and abi"
 
   store <- case storageModel cmd of
@@ -842,7 +842,7 @@ symvmFromCommand cmd = do
     origin'  = addr origin 0
     codeType = if create cmd then EVM.InitCode else EVM.RuntimeCode
     address' = if create cmd
-          then createAddress origin' (word nonce 0)
+          then addr address (createAddress origin' (word nonce 0))
           else addr address 0xacab
     vm0 miner ts blockNum diff cdlen calldata' callvalue' caller' c = EVM.makeVm $ EVM.VMOpts
       { EVM.vmoptContract      = c

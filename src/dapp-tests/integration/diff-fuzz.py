@@ -1,12 +1,15 @@
 import json
 import os
 
-from hypothesis import given, example, settings, note, target
+from hypothesis import given, example, settings, note, target, Phase
 from hypothesis.strategies import binary
 
 
 
-@settings(max_examples=0, deadline=1000)
+@settings(
+    deadline=1000,
+    phases=[Phase.explicit, Phase.reuse]
+)
 @given(binary(min_size=1))
 # these are meant without the prefix
 @example(bytes.fromhex('60016000036000f3'))
@@ -75,5 +78,5 @@ def test_compare_geth_hevm(b):
     note(hevmres)
     assert gethres['output'] == hevmres['output']
     assert gethres['gasUsed'] == hevmres['gasUsed']
-        
+
 test_compare_geth_hevm()
