@@ -493,72 +493,61 @@ assert cmd = do
       let typ = snd <$> view methodInputs method'
           name = view methodSignature method'
       return $ Just (name,typ)
-  if debug cmd then
-    runSMTWithTimeOut (solver cmd) (smttimeout cmd) (smtdebug cmd) $ query $ do
-      preState <- symvmFromCommand cmd
-      smtState <- queryState
-      io $ void $ EVM.TTY.runFromVM
-        (maxIterations cmd)
-        srcInfo
-        (EVM.Fetch.oracle (Just smtState) rpcinfo True)
-        preState
-
-  else
-    runSMTWithTimeOut (solver cmd) (smttimeout cmd) (smtdebug cmd) $ query $ do
-      preState <- symvmFromCommand cmd
-      verify preState (maxIterations cmd) rpcinfo (Just checkAssertions) >>= \case
-        Right tree -> do
-          io $ putStrLn "Assertion violation found."
-          showCounterexample preState maybesig
-          treeShowing preState tree
-          io $ exitWith (ExitFailure 1)
-        Left tree -> do
-          io $ putStrLn $ "Explored: " <> show (length tree)
-                       <> " branches without assertion violations"
-          treeShowing preState tree
-          let vmErrs = checkForVMErrors $ leaves tree
-          unless (null vmErrs) $ io $ do
-            putStrLn $
-              "However, "
-              <> show (length vmErrs)
-              <> " branch(es) errored while exploring:"
-            print vmErrs
-          -- When `--get-models` is passed, we print example vm info for each path
-          when (getModels cmd) $
-            forM_ (zip [(1:: Integer)..] (leaves tree)) $ \(i, postVM) -> do
-              resetAssertions
-              constrain (sAnd (fst <$> view EVM.constraints postVM))
-              io $ putStrLn $
-                "-- Branch (" <> show i <> "/" <> show (length tree) <> ") --"
-              checkSat >>= \case
-                DSat _ -> error "assert: unexpected SMT result"
-                Unk -> io $ do putStrLn "Timed out"
+  runSMTWithTimeOut (solver cmd) (smttimeout cmd) (smtdebug cmd) $ query $ do
+    preState <- symvmFromCommand cmd
+    verify preState (maxIterations cmd) rpcinfo (Just checkAssertions) >>= \case
+      Right tree -> do
+        io $ putStrLn "Assertion violation found."
+        showCounterexample preState maybesig
+        treeShowing preState tree
+        io $ exitWith (ExitFailure 1)
+      Left tree -> do
+        io $ putStrLn $ "Explored: " <> show (length tree)
+                     <> " branches without assertion violations"
+        treeShowing preState tree
+        let vmErrs = checkForVMErrors $ leaves tree
+        unless (null vmErrs) $ io $ do
+          putStrLn $
+            "However, "
+            <> show (length vmErrs)
+            <> " branch(es) errored while exploring:"
+          print vmErrs
+        -- When `--get-models` is passed, we print example vm info for each path
+        when (getModels cmd) $
+          forM_ (zip [(1:: Integer)..] (leaves tree)) $ \(i, postVM) -> do
+            resetAssertions
+            constrain (sAnd (fst <$> view EVM.constraints postVM))
+            io $ putStrLn $
+              "-- Branch (" <> show i <> "/" <> show (length tree) <> ") --"
+            checkSat >>= \case
+              DSat _ -> error "assert: unexpected SMT result"
+              Unk -> io $ do putStrLn "Timed out"
+                             print $ view EVM.result postVM
+              Unsat -> io $ do putStrLn "Inconsistent path conditions: dead path"
                                print $ view EVM.result postVM
-                Unsat -> io $ do putStrLn "Inconsistent path conditions: dead path"
-                                 print $ view EVM.result postVM
-                Sat -> do
-                  showCounterexample preState maybesig
-                  io $ putStrLn "-- Pathconditions --"
-                  io $ print $ snd <$> view EVM.constraints postVM
-                  case view EVM.result postVM of
-                    Nothing ->
-                      error "internal error; no EVM result"
-                    Just (EVM.VMFailure (EVM.Revert "")) -> io . putStrLn $
-                      "Reverted"
-                    Just (EVM.VMFailure (EVM.Revert msg)) -> io . putStrLn $
-                      "Reverted: " <> show (ByteStringS msg)
-                    Just (EVM.VMFailure err) -> io . putStrLn $
-                      "Failed: " <> show err
-                    Just (EVM.VMSuccess (ConcreteBuffer _ msg)) ->
-                      if ByteString.null msg
-                      then io $ putStrLn
-                        "Stopped"
-                      else io $ putStrLn $
-                        "Returned: " <> show (ByteStringS msg)
-                    Just (EVM.VMSuccess (SymbolicBuffer _ msg)) -> do
-                      out <- mapM (getValue.fromSized) msg
-                      io . putStrLn $
-                        "Returned: " <> show (ByteStringS (ByteString.pack out))
+              Sat -> do
+                showCounterexample preState maybesig
+                io $ putStrLn "-- Pathconditions --"
+                io $ print $ snd <$> view EVM.constraints postVM
+                case view EVM.result postVM of
+                  Nothing ->
+                    error "internal error; no EVM result"
+                  Just (EVM.VMFailure (EVM.Revert "")) -> io . putStrLn $
+                    "Reverted"
+                  Just (EVM.VMFailure (EVM.Revert msg)) -> io . putStrLn $
+                    "Reverted: " <> show (ByteStringS msg)
+                  Just (EVM.VMFailure err) -> io . putStrLn $
+                    "Failed: " <> show err
+                  Just (EVM.VMSuccess (ConcreteBuffer _ msg)) ->
+                    if ByteString.null msg
+                    then io $ putStrLn
+                      "Stopped"
+                    else io $ putStrLn $
+                      "Returned: " <> show (ByteStringS msg)
+                  Just (EVM.VMSuccess (SymbolicBuffer _ msg)) -> do
+                    out <- mapM (getValue.fromSized) msg
+                    io . putStrLn $
+                      "Returned: " <> show (ByteStringS (ByteString.pack out))
 
 dappCoverage :: UnitTestOptions -> Mode -> String -> IO ()
 dappCoverage opts _ solcFile =

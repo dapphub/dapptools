@@ -134,10 +134,10 @@ select' xs err ind = walk xs ind err
 
 -- | Read 32 bytes from index from a bounded list of bytes.
 readSWordWithBound :: SymWord -> Buffer -> SymWord -> SymWord
-readSWordWithBound sind@(S _ ind) (SymbolicBuffer _ xs) (S _ bound) = case (num <$> maybeLitWord sind, num <$> fromSizzle <$> unliteral bound) of
+readSWordWithBound sind@(S whiff ind) (SymbolicBuffer sniff xs) (S _ bound) = case (num <$> maybeLitWord sind, num <$> fromSizzle <$> unliteral bound) of
   (Just i, Just b) ->
     let bs = truncpad 32 $ drop i (take b xs)
-    in S (Todo "readSWordWithBounds" []) (fromBytes bs)
+    in S (FromStorage whiff sniff) (fromBytes bs)
 
   _ ->
     -- Generates a ridiculously large set of constraints (roughly 25k) when
@@ -148,7 +148,7 @@ readSWordWithBound sind@(S _ ind) (SymbolicBuffer _ xs) (S _ bound) = case (num 
 
     let boundedList = [ite (i .<= bound) x' 0 | (x', i) <- zip xs [1..]]
         res = [select' boundedList 0 (ind + j) | j <- [0..31]]
-    in S (Todo "readSWordWithBounds" []) $ fromBytes res
+    in S (FromStorage whiff sniff) $ fromBytes res
 
 readSWordWithBound sind (ConcreteBuffer w xs) bound =
   case maybeLitWord sind of
@@ -247,38 +247,38 @@ rawVal (S _ v) = v
 
 -- | Reconstruct the smt/sbv value from a whiff
 -- Should satisfy (rawVal x .== whiffValue x)
-whiffValue :: Whiff -> SWord 256
-whiffValue w = case w of
-  w'@(Todo _ _) -> error $ "unable to get value of " ++ show w'
-  And x y       -> whiffValue x .&. whiffValue y
-  Or x y        -> whiffValue x .|. whiffValue y
-  Eq x y        -> ite (whiffValue x .== whiffValue y) 1 0
-  LT x y        -> ite (whiffValue x .< whiffValue y) 1 0
-  GT x y        -> ite (whiffValue x .> whiffValue y) 1 0
-  ITE b x y     -> ite (whiffValue b .== 1) (whiffValue x) (whiffValue y)
-  SLT x y       -> rawVal $ slt (S x (whiffValue x)) (S y (whiffValue y))
-  SGT x y       -> rawVal $ sgt (S x (whiffValue x)) (S y (whiffValue y))
-  IsZero x      -> ite (whiffValue x .== 0) 1 0
-  SHL x y       -> sShiftLeft  (whiffValue x) (whiffValue y)
-  SHR x y       -> sShiftRight (whiffValue x) (whiffValue y)
-  SAR x y       -> sSignedShiftArithRight (whiffValue x) (whiffValue y)
-  Add x y       -> whiffValue x + whiffValue y
-  Sub x y       -> whiffValue x - whiffValue y
-  Mul x y       -> whiffValue x * whiffValue y
-  Div x y       -> whiffValue x `sDiv` whiffValue y
-  Mod x y       -> whiffValue x `sMod` whiffValue y
-  Exp x y       -> whiffValue x .^ whiffValue y
-  Neg x         -> negate $ whiffValue x
-  -- Var _ v       -> v
-  -- FromKeccak (ConcreteBuffer _ bstr) -> literal $ num $ keccak bstr
-  -- FromKeccak (SymbolicBuffer _ buf)  -> symkeccak' buf
-  Literal x -> literal $ num $ x
+-- whiffValue :: Whiff -> SWord 256
+-- whiffValue w = case w of
+--   w'@(Todo _ _) -> error $ "unable to get value of " ++ show w'
+--   And x y       -> whiffValue x .&. whiffValue y
+--   Or x y        -> whiffValue x .|. whiffValue y
+--   Eq x y        -> ite (whiffValue x .== whiffValue y) 1 0
+--   LT x y        -> ite (whiffValue x .< whiffValue y) 1 0
+--   GT x y        -> ite (whiffValue x .> whiffValue y) 1 0
+--   ITE b x y     -> ite (whiffValue b .== 1) (whiffValue x) (whiffValue y)
+--   SLT x y       -> rawVal $ slt (S x (whiffValue x)) (S y (whiffValue y))
+--   SGT x y       -> rawVal $ sgt (S x (whiffValue x)) (S y (whiffValue y))
+--   IsZero x      -> ite (whiffValue x .== 0) 1 0
+--   SHL x y       -> sShiftLeft  (whiffValue x) (whiffValue y)
+--   SHR x y       -> sShiftRight (whiffValue x) (whiffValue y)
+--   SAR x y       -> sSignedShiftArithRight (whiffValue x) (whiffValue y)
+--   Add x y       -> whiffValue x + whiffValue y
+--   Sub x y       -> whiffValue x - whiffValue y
+--   Mul x y       -> whiffValue x * whiffValue y
+--   Div x y       -> whiffValue x `sDiv` whiffValue y
+--   Mod x y       -> whiffValue x `sMod` whiffValue y
+--   Exp x y       -> whiffValue x .^ whiffValue y
+--   Neg x         -> negate $ whiffValue x
+--   -- Var _ v       -> v
+--   -- FromKeccak (ConcreteBuffer _ bstr) -> literal $ num $ keccak bstr
+--   -- FromKeccak (SymbolicBuffer _ buf)  -> symkeccak' buf
+--   Literal x -> literal $ num $ x
   -- FromBytes buf -> rawVal $ readMemoryWord 0 buf
   -- FromStorage ind arr -> readArray arr (whiffValue ind)
 
 -- | Special cases that have proven useful in practice
-simplifyCondition :: SBool -> Whiff -> SBool
-simplifyCondition _ (IsZero (IsZero (IsZero a))) = whiffValue a .== 0
+-- simplifyCondition :: SBool -> Whiff -> SBool
+-- simplifyCondition _ (IsZero (IsZero (IsZero a))) = whiffValue a .== 0
 
 
 
@@ -295,16 +295,16 @@ simplifyCondition _ (IsZero (IsZero (IsZero a))) = whiffValue a .== 0
 --    require (x <= (x + y))
 -- or require (y <= (x + y))
 -- or require (!(y < (x + y)))
-simplifyCondition b (IsZero (IsZero (LT (Add x y) z))) =
-  let x' = whiffValue x
-      y' = whiffValue y
-      z' = whiffValue z
-      (_, overflow) = bvAddO x' y'
-  in
-    ite (x' .== z' .||
-         y' .== z')
-    overflow
-    b
+-- simplifyCondition b (IsZero (IsZero (LT (Add x y) z))) =
+--   let x' = whiffValue x
+--       y' = whiffValue y
+--       z' = whiffValue z
+--       (_, overflow) = bvAddO x' y'
+--   in
+--     ite (x' .== z' .||
+--          y' .== z')
+--     overflow
+--     b
 
 -- Multiplication overflow.
 -- Written as
@@ -313,18 +313,18 @@ simplifyCondition b (IsZero (IsZero (LT (Add x y) z))) =
 
 -- proveWith cvc4 $ \x y z -> ite (y .== (z :: SWord 8)) (((x * y) `sDiv` z ./= x) .<=> (snd (bvMulO x y) .|| (z .== 0 .&& x .> 0))) (sTrue)
 -- Q.E.D.
-simplifyCondition b (IsZero (Eq x (Div (Mul y z) w))) =
-  simplifyCondition b (IsZero (Eq (Div (Mul y z) w) x))
-simplifyCondition b (IsZero (Eq (Div (Mul y z) w) x)) =
-  let x' = whiffValue x
-      y' = whiffValue y
-      z' = whiffValue z
-      w' = whiffValue w
-      (_, overflow) = bvMulO y' z'
-  in
-    ite
-    ((y' .== x' .&& z' .== w') .||
-      (z' .== x' .&& y' .== w'))
-    (overflow .|| (w' .== 0 .&& x' ./= 0))
-    b
-simplifyCondition b _ = b
+-- simplifyCondition b (IsZero (Eq x (Div (Mul y z) w))) =
+--   simplifyCondition b (IsZero (Eq (Div (Mul y z) w) x))
+-- simplifyCondition b (IsZero (Eq (Div (Mul y z) w) x)) =
+--   let x' = whiffValue x
+--       y' = whiffValue y
+--       z' = whiffValue z
+--       w' = whiffValue w
+--       (_, overflow) = bvMulO y' z'
+--   in
+--     ite
+--     ((y' .== x' .&& z' .== w') .||
+--       (z' .== x' .&& y' .== w'))
+--     (overflow .|| (w' .== 0 .&& x' ./= 0))
+--     b
+-- simplifyCondition b _ = b

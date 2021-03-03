@@ -1574,22 +1574,21 @@ askSMT codeloc (condition, whiff) continue = do
      -- increment the iterations and select appropriate path
      Nothing -> do pathconds <- use constraints
                    assign result . Just . VMFailure . Query $ PleaseAskSMT
-                     condition' (fst <$> pathconds) choosePath
+                     condition (fst <$> pathconds) choosePath
 
-   where condition' = simplifyCondition condition whiff
+   where
      -- Only one path is possible
-
-         choosePath :: BranchCondition -> EVM ()
-         choosePath (Case v) = do assign result Nothing
-                                  pushTo constraints $ if v then (condition', whiff) else (sNot condition', IsZero whiff)
-                                  iteration <- use (iterations . at codeloc . non 0)
-                                  assign (cache . path . at (codeloc, iteration)) (Just v)
-                                  assign (iterations . at codeloc) (Just (iteration + 1))
-                                  continue v
-         -- Both paths are possible; we ask for more input
-         choosePath Unknown = assign result . Just . VMFailure . Choose . PleaseChoosePath whiff $ choosePath . Case
-         -- None of the paths are possible; fail this branch
-         choosePath Inconsistent = vmError DeadPath
+     choosePath :: BranchCondition -> EVM ()
+     choosePath (Case v) = do assign result Nothing
+                              pushTo constraints $ if v then (condition, whiff) else (sNot condition, IsZero whiff)
+                              iteration <- use (iterations . at codeloc . non 0)
+                              assign (cache . path . at (codeloc, iteration)) (Just v)
+                              assign (iterations . at codeloc) (Just (iteration + 1))
+                              continue v
+     -- Both paths are possible; we ask for more input
+     choosePath Unknown = assign result . Just . VMFailure . Choose . PleaseChoosePath whiff $ choosePath . Case
+     -- None of the paths are possible; fail this branch
+     choosePath Inconsistent = vmError DeadPath
 
 -- | Construct RPC Query and halt execution until resolved
 fetchAccount :: Addr -> (Contract -> EVM ()) -> EVM ()

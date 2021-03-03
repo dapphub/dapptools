@@ -326,8 +326,8 @@ data Whiff =
   | Sex  Whiff
   | Sgn  Whiff          -- signum
   | Cmp  Whiff          -- complement
-  | Sft  Whiff Whiff    -- shift left
-  | Sar  Whiff Whiff    -- shift right
+  -- | Sft  Whiff Whiff    -- shift left
+  -- | Sar  Whiff Whiff    -- shift right
   | Bit  Whiff
   | FromKeccak Sniff
   -- | FromBuffer Whiff Buffer
@@ -335,7 +335,6 @@ data Whiff =
   | FromStorage Whiff Sniff
   | Pointer1 String Whiff
   | Literal W256
-  | Envv Whiff
   | Var String Int
   deriving Eq
 
@@ -373,9 +372,9 @@ instance Show Whiff where
       Var v _     -> v
       FromKeccak buf -> "keccak(" ++ show buf ++ ")"
       Literal x -> show x
-      FromStorage l _ -> "SLOAD(" ++ show l ++ ")"
+      FromStorage l s -> "SLOAD(" ++ show l ++ ")" ++ show s
       Pointer1 name a -> "*" ++ (cVar name) ++ "[" ++ (show a) ++ "]"
-      FromBuff w s -> "[" ++ (show w) ++ "]" ++ (show s)
+      FromBuff location buffer -> (show buffer) ++ "[" ++ (show location) ++ "]"
 
 
 newtype Addr = Addr { addressWord160 :: Word160 }
