@@ -10,7 +10,7 @@ module EVM.Flatten (flatten) where
 -- This module is mostly independent from the rest of Hevm,
 -- using only the source code metadata support modules.
 
-import EVM.Dapp (DappInfo, dappSources)
+import EVM.Dapp (DappInfo, dappSources, regexMatches)
 import EVM.Solidity (sourceAsts)
 import EVM.Demand (demand)
 
@@ -35,12 +35,11 @@ import qualified Data.SemVer as SemVer
 import Control.Monad (forM)
 import Data.ByteString (ByteString)
 import Data.Foldable (foldl', toList)
-import Data.List (sort, nub)
+import Data.List (sort, nub, (\\))
 import Data.Map (Map, (!), (!?))
 import Data.Maybe (mapMaybe, isJust, catMaybes, fromMaybe)
-import Data.Monoid ((<>))
 import Data.Text (Text, unpack, pack, intercalate)
-import Data.Text.Encoding (encodeUtf8)
+import Data.Text.Encoding (encodeUtf8, decodeUtf8)
 import Text.Read (readMaybe)
 
 import qualified Data.Map as Map
@@ -179,6 +178,8 @@ flatten dapp target = do
         pragma :: Text
         pragma = maximalPragma (Map.elems (Map.filterWithKey (\k _ -> k `elem` ordered) asts))
 
+        license :: Text
+        license = joinLicenses (Map.elems (Map.filterWithKey (\k _ -> k `elem` ordered) asts))
       -- Read the source files in order and strip unwanted directives.
       -- Also add an informative comment with the original source file path.
       sources <-
@@ -191,8 +192,9 @@ flatten dapp target = do
                 (prefixContractAst
                   contractsAndStructsToRename
                   contractStructs
-                  (stripImportsAndPragmas (src, 0) (asts ! path))
-                  (asts ! path)), "\n"
+                  (stripImportsAndPragmas (stripLicense src) (asts ! path))
+                  (asts ! path))
+            , "\n"
             ]
 
       -- Force all evaluation before any printing happens, to avoid
@@ -201,15 +203,22 @@ flatten dapp target = do
 
       -- Finally print the whole concatenation.
       putStrLn $ "// hevm: flattened sources of " <> unpack target
+      putStrLn (unpack license)
       putStrLn (unpack pragma)
       BS.putStr (mconcat sources)
+
+joinLicenses :: [Value] -> Text
+joinLicenses asts =
+  case nub $ mapMaybe (\ast -> getAttribute "license" ast >>= preview _String) asts of
+    [] -> ""
+    x -> "// SPDX-License-Identifier: " <> intercalate " AND " x
 
 -- | Construct a new Solidity version pragma for the highest mentioned version
 --  given a list of source file ASTs.
 maximalPragma :: [Value] -> Text
 maximalPragma asts = (
     case mapMaybe versions asts of
-      [] -> error "no Solidity version pragmas in any source files"
+      [] -> "" -- allow for no pragma 
       xs ->
         "pragma solidity "
           <> pack (show (rangeIntersection xs))
@@ -283,6 +292,15 @@ nodeIs t x = isSourceNode && hasRightName
       Just t == preview (key "name" . _String) x
       || Just t == preview (key "nodeType" . _String) x
 
+-- | Removes all lines containing "SPDX-License-Identifier"
+stripLicense :: ByteString -> (ByteString, Int)
+stripLicense bs =
+  (encodeUtf8 $ Text.unlines (lines' \\ licenseLines), - sum (((1 +) . Text.length) <$> licenseLines))
+  where lines' = Text.lines $ decodeUtf8 bs
+        licenseLines = filter (regexMatches "SPDX-License-Identifier") lines'
+
+-- | (bytes, offset) where offset is added or incremeneted as text is
+-- inserted or removed from the source file
 stripImportsAndPragmas :: (ByteString, Int) -> Value -> (ByteString, Int)
 stripImportsAndPragmas bso ast = stripAstNodes bso ast p
   where
