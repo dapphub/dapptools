@@ -13,7 +13,7 @@ base for deploy scripts, integration tests, and bots.
 :money_with_wings: If you love **open source finance**, Seth is a
 sci-fi future where you can manage funds from the command line.
 
-**New:** Seth supports signing transactions with [Ledger Nano S]
+seth supports signing transactions with [Ledger Nano S]
 hardware wallets—even if you use a remote RPC node like Infura's.
 
 > "One indicator I look for in a healthy open source project is how
@@ -69,12 +69,15 @@ Contents
       * [`seth age`]
       * [`seth balance`]
       * [`seth block`]
+      * [`seth bundle-source`]
       * [`seth call`]
       * [`seth calldata`]
       * [`seth chain`]
       * [`seth chain-id`]
       * [`seth code`]
+      * [`seth debug`]
       * [`seth estimate`]
+      * [`seth etherscan-source`]
       * [`seth events`]
       * [`seth gas-price`]
       * [`seth help`]
@@ -85,6 +88,7 @@ Contents
       * [`seth nonce`]
       * [`seth publish`]
       * [`seth receipt`]
+      * [`seth run-tx`]
       * [`seth send`]
       * [`seth sign`]
       * [`seth storage`]
@@ -418,6 +422,16 @@ If `<field>` is given, print only the value of that field.
 
 The `<block>` may be either a block hash or a block number.
 
+### `seth bundle-source`
+
+Fetch a contract source from etherscan and compile it
+with the appropriate Solidity version. Useful to
+provide source maps in calls to `seth run-tx` or `hevm exec --debug --rpc`.
+
+    seth bundle-source <address>
+
+Requires the `ETHERSCAN_API_KEY` environment variable to be set.
+
 ### `seth call`
 
 Call a contract without updating the blockchain.
@@ -494,6 +508,19 @@ Print the bytecode of a contract.
 
 If `<block>` is not given, the default is `latest`.
 
+### `seth debug`
+
+Step through a transaction in the interactive debugger.
+Executes all prior transactions in the block to ensure correct
+state. This may take a while.
+If you are in a hurry or don't expect the relevant state to be changed
+by other transactions in the block, use `seth run-tx` instead.
+
+    seth debug <txhash> [<options>]
+
+Unless `--no-src` is given, seth will try to fetch the source code for
+the target of the transaction for better debugging xp.
+
 ### `seth estimate`
 
 Estimate how much gas a transaction is likely to use, using the RPC
@@ -505,6 +532,16 @@ node's gas estimation.
     seth estimate [<options>] --create <code> <data>
 
 Options are similar to [`seth send`], but no transaction is published.
+
+### `seth etherscan-source`
+
+Fetch the source of a contract from etherscan. Requires etherscan api key.
+
+    seth etherscan-source <address> [<options>
+
+Returns a json with source and options. For just the source, try:
+
+`seth etherscan-source <address> | jq .SourceCode -r`
 
 ### `seth events`
 
@@ -593,6 +630,19 @@ is specified.
 
 Unless `--async` is given, wait indefinitely for the receipt
 to appear.
+
+### `seth run-tx`
+
+Execute a transaction using `hevm`.
+
+    seth run-tx <tx-hash> [<options>]
+
+With `--state dir`, load and save state from `dir`
+With `--trace`, run in headless mode and print the call trace of the transaction.
+With `--debug`, execute with hevm's interactive debugger
+Use `--source=<filename>` to pass source information for a more illuminating experience.
+Source files can be fetched remotely via `seth bundle-source`,
+but you can use the output of `dapp build` here.
 
 ### `seth send`
 
