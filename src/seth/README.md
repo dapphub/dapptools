@@ -13,7 +13,7 @@ base for deploy scripts, integration tests, and bots.
 :money_with_wings: If you love **open source finance**, Seth is a
 sci-fi future where you can manage funds from the command line.
 
-seth supports signing transactions with [Ledger Nano S]
+seth supports signing transactions with [Ledger Nano S] or Trezor
 hardware wallets—even if you use a remote RPC node like Infura's.
 
 > "One indicator I look for in a healthy open source project is how
@@ -196,8 +196,8 @@ When you use a sending address that belongs to the hardware wallet,
 Seth will automatically use it for signing transactions.
 
 **Note:** Seth currently only looks for the first four addresses
-derived from your seed phrase.  If the sending address is not one of
-those, Seth will not be able to sign transactions.
+derived from your seed phrase. You may customize the hd derivation path
+by setting the `ETH_HDPATH` variable.
 
 ### Your address
 
@@ -250,18 +250,18 @@ also useful.
 
 ### Checking ether balances
 
-Now you can use [`seth balance`] to see how much is in the donation
+You can use [`seth balance`] to see how much is in the donation
 fund:
 
     $ seth balance 0xfB6916095ca1df60bB79Ce92cE3Ea74c37c5d359
-    2963.72865500027557173E+18
+    4595456374254502385669
 
 You can use [`seth ls`] to check the ether balances of your own
 accounts:
 
     $ seth ls
-    0xCC41D9831E4857B4F16914A356306fBeA734183A    0.24E+18
-    0xD9ceccea2BEE9a367d78658aBbB2Fe979b3877Ef    0.03409E+18
+    0xCC41D9831E4857B4F16914A356306fBeA734183A    2412312951251268
+    0xD9ceccea2BEE9a367d78658aBbB2Fe979b3877Ef    142109
 
 ### Reading from contracts
 
@@ -272,15 +272,15 @@ For example, you can read the total supply of the [MakerDAO]
 governance token using the ERC20 ABI:
 
     $ MKR_TOKEN=0x9f8F72aA9304c8B593d555F12eF6589cC3A579A2
-    $ seth call $MKR_TOKEN "totalSupply()"
-    0x00000000000000000000000000000000000000000000d3c21bcecceda1000000
+    $ seth call $MKR_TOKEN "totalSupply()(uint)"
+    995238778286468792512963
 
 If the ABI function has parameters, you can supply them as additional
 arguments; for example, to check the balance of the MakerDAO fund:
 
     $ MKR_FUND=0x7Bb0b08587b8a6B8945e09F1Baca426558B0f06a
-    $ seth call $MKR_TOKEN "balanceOf(address)" $MKR_FUND
-    0x0000000000000000000000000000000000000000000050d7e9ff54cf2725f61b
+    $ seth call $MKR_TOKEN "balanceOf(address)(uint)" $MKR_FUND
+    0
 
 (See also [`token`] for a more convenient way to use ERC20 tokens.)
 
@@ -426,7 +426,7 @@ The `<block>` may be either a block hash or a block number.
 
 Fetch a contract source from etherscan and compile it
 with the appropriate Solidity version. Useful to
-provide source maps in calls to `seth run-tx` or `hevm exec --debug --rpc`.
+provide source maps in calls to [`seth run-tx`] or [`hevm exec --debug --rpc`](../hevm/README.md#hevm-exec).
 
     seth bundle-source <address>
 
@@ -514,7 +514,7 @@ Step through a transaction in the interactive debugger.
 Executes all prior transactions in the block to ensure correct
 state. This may take a while.
 If you are in a hurry or don't expect the relevant state to be changed
-by other transactions in the block, use `seth run-tx` instead.
+by other transactions in the block, use [`seth run-tx`] instead.
 
     seth debug <txhash> [<options>]
 
@@ -641,8 +641,8 @@ With `--state dir`, load and save state from `dir`
 With `--trace`, run in headless mode and print the call trace of the transaction.
 With `--debug`, execute with hevm's interactive debugger
 Use `--source=<filename>` to pass source information for a more illuminating experience.
-Source files can be fetched remotely via `seth bundle-source`,
-but you can use the output of `dapp build` here.
+Source files can be fetched remotely via [`seth bundle-source`],
+but you can use the output of [`dapp build`](../dapp/README.md#dapp-build) here.
 
 ### `seth send`
 
@@ -716,18 +716,22 @@ Show all fields unless `<field>` is given.
 [`seth --to-uint256`]: #seth---to-uint256
 [`seth --to-bytes32`]: #seth---to-bytes32
 [`seth --to-address`]: #seth---to-address
+[`seth --calldata-decode`]: #seth---calldata-decode
 [`seth gas-price`]: #seth-gas-price
 [`seth abi`]: #seth-abi
 [`seth age`]: #seth-age
 [`seth balance`]: #seth-balance
 [`seth balance`]: #seth-balance
 [`seth block`]: #seth-block
+[`seth bundle-source`]: #seth-bundle-source
 [`seth call`]: #seth-call
 [`seth calldata`]: #seth-calldata
 [`seth chain`]: #seth-chain
 [`seth chain-id`]: #seth-chain-id
 [`seth code`]: #seth-code
+[`seth debug`]: #seth-debug
 [`seth estimate`]: #seth-estimate
+[`seth etherscan-source`]: #seth-etherscan-source
 [`seth events`]: #seth-events
 [`seth help`]: #seth-help
 [`seth keccak`]: #seth-keccak
@@ -738,6 +742,7 @@ Show all fields unless `<field>` is given.
 [`seth nonce`]: #seth-nonce
 [`seth publish`]: #seth-publish
 [`seth receipt`]: #seth-receipt
+[`seth run-tx`]: #seth-run-tx
 [`seth send`]: #seth-send
 [`seth sign`]: #seth-sign
 [`seth storage`]: #seth-storage
