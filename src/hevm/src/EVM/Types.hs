@@ -9,17 +9,11 @@ module EVM.Types where
 
 import Prelude hiding  (Word, LT, GT)
 
-import Data.Aeson (FromJSON (..), (.:))
-
-#if MIN_VERSION_aeson(1, 0, 0)
 import Data.Aeson (FromJSONKey (..), FromJSONKeyFunction (..))
 import Data.Aeson
-#endif
-
 import Crypto.Hash
 import Data.SBV hiding (Word)
 import Data.Kind
-import Data.Monoid ((<>))
 import Data.Bifunctor (first)
 import Data.Char
 import Data.List (intercalate)
@@ -33,7 +27,6 @@ import qualified Data.ByteString.Char8  as Char8
 import Data.DoubleWord
 import Data.DoubleWord.TH
 import Data.Maybe (fromMaybe)
-import Data.Word (Word8)
 import Numeric (readHex, showHex)
 import Options.Generic
 import Control.Arrow ((>>>))

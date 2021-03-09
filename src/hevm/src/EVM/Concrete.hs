@@ -12,7 +12,6 @@ import Control.Lens    ((^?), ix)
 import Data.Bits       (Bits (..), shiftL, shiftR)
 import Data.ByteString (ByteString)
 import Data.Maybe      (fromMaybe)
-import Data.Semigroup  ((<>))
 import Data.Word       (Word8)
 
 import qualified Data.ByteString as BS
