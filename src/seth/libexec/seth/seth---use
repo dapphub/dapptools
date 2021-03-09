@@ -5,7 +5,7 @@ function usage() {
   echo >&2 "Usage: seth --use <spec> <subcommand>..."
   echo >&2 "Example:"
   echo >&2
-  echo >&2 "  $ seth --use solc:0.4.11 seth combined-json"
+  echo >&2 "  $ seth --use solc:0.4.11 combined-json"
   echo >&2
   exit 1
 }
@@ -49,8 +49,9 @@ shift
 
 if [[ -z "$bin" ]]; then
   echo >&2 "${0##*/}: Could not find ${solc} in your path or nix store."
-  echo >&2 "${0##*/}: Try \`nix-env -f https://github.com/dapphub/dapptools/archive/master.tar.gz -iA solc-static-versions.${solc//[-.]/_}\`"
-  exit 1
+  echo >&2 "Temporarily installing ${solc}..."
+  echo >&2 "Tip: run \`nix-env -f https://github.com/dapphub/dapptools/archive/master.tar.gz -iA solc-static-versions.${solc//[-.]/_}\` for a lasting installation of this version."
+  seth --nix-run "seth.override {solc = solc-versions.${solc//[-.]/_};}" seth "$@"
 else
   set -e
   SOLCBIN="$(realpath -e "${bin}")"
