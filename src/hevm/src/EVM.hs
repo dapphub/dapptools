@@ -27,7 +27,6 @@ import EVM.FeeSchedule (FeeSchedule (..))
 import Options.Generic as Options
 import qualified EVM.Precompiled
 
-import Data.Text (Text)
 import Data.Word (Word8, Word32)
 import Control.Lens hiding (op, (:<), (|>), (.>))
 import Control.Monad.State.Strict hiding (state)

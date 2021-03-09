@@ -12,7 +12,6 @@ import Control.Monad.State
 import Data.ByteString (ByteString)
 import Data.Foldable (toList)
 import Data.List (stripPrefix)
-import Data.Monoid ((<>))
 import Data.Sequence (Seq)
 
 import qualified Data.ByteString as BS
