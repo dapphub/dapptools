@@ -2,15 +2,16 @@
 
 Hello!
 
-This repository contains the source code for several Ethereum tools
+`dapptools` is a suite of Ethereum focused CLI tools following the unix design philosophy,
+favoring composability, configurability and extensibility.
+
+This repository contains the source code for several programs
 hand-crafted and maintained by DappHub, along with dependency management, courtesy of Nix.
 
-Contents:
-
-- [Dapp](./src/dapp) - all you need Ethereum development tool. Build, test, debug & deploy solidity contracts.
-- [Seth](./src/seth) - Ethereum CLI. Query contracts, send transactions, follow logs, slice & dice data.
-- [Hevm](./src/hevm) - Ethereum evaluator. Fully complient Haskell EVM implementation.
-- [Ethsign](./src/ethsign) - sign Ethereum transactions from a local keystore.
+- [dapp](./src/dapp) - all you need Ethereum development tool. Build, test, fuzz, debug & deploy solidity contracts.
+- [seth](./src/seth) - Ethereum CLI. Query contracts, send transactions, follow logs, slice & dice data.
+- [hevm](./src/hevm) - Testing oriented EVM implementation. Debug, fuzz, or symbolically execute code against local or mainnet state.
+- [ethsign](./src/ethsign) - sign Ethereum transactions from a local keystore or hardware wallet.
 
 ## Installation
 
@@ -30,33 +31,61 @@ Then install dapptools:
 curl https://dapp.tools/install | sh
 ```
 
-### Installing custom solc versions
+This installs the `dapp`, `solc`, `seth` and `hevm` executables. 
 
-You can specify a custom `solc` version to run within `dapp` with `dapp --use
-solc:x.y.z test`, but you can also install any supported `solc` "standalone"
-(i.e. add it to your `$PATH`) with:
-
-```
-nix-env -iA solc-versions.solc_x_y_z \
-  -if https://github.com/dapphub/dapptools/tarball/master
+You can also install an individual tool with 
+```sh
+nix-env -iA <tool> -f $(curl -sS https://api.github.com/repos/dapphub/dapptools/releases/latest | jq -r .tarball_url)
 ```
 
-*(NOTE: if you haven't installed dapptools with the one-line installer, you'll
-have to manually pass substituters in the command above, or configure Cachix
-manually, to avoid compilation)*
+If you instead want to build from `master`, change the url to `https://github.com/dapphub/dapptools/archive/master.tar.gz`.
 
-For a list of the supported `solc` versions, check
-[`./nix/solc-versions.nix`](./nix/solc-versions.nix).
+## Getting started
 
-Versions of `solc` that haven't yet landed in nixpkgs can be found under the
-`unreleased` key: `solc-versions.unreleased.solc_x_y_z`.
+For more information about the tools, consult the individual README pages:
 
-*(NOTE: not all versions are supported on macOS platforms.)*
+[seth](./src/seth/README.md)
+[dapp](./src/dapp/README.md)
+[hevm](./src/dapp/README.md)
+[ethsign](./src/ethsign/README.md)
 
-### Contributing
+or use the `--help` flag for any tool.
 
-Instructions for adding new versions of `solc` can be found at
-[`nix/solc-updates.md`](./nix/solc-updates.md)
+We're also happy to answer any questions at https://dapphub.chat/.
+
+## Examples
+
+Deploy a Hello world contract and call it:
+```sh
+export ETH_RPC_URL=https://mainnet.infura.io/v3/$YOUR_API_KEY
+export ETH_FROM=$YOUR_ADDRESS
+echo 'contract Hello { function hi() public pure returns(string memory) {return "Hello, World!";}}' | solc --bin -o . --overwrite -
+HELLO=$(seth send --create $(<Hello.bin))
+seth call $HELLO "hi()(string)"
+```
+
+Debug the first transaction of the latest block in the interactive debugger:
+```sh
+export ETH_RPC_URL=https://mainnet.infura.io/v3/$YOUR_API_KEY
+seth run-tx $(seth block latest transactions | jq .'[0]' -r) --debug
+```
+
+If Vitaliks next transaction were a contract deployment, calculate the address it would be deployed at:
+```
+export ETH_RPC_URL=https://mainnet.infura.io/v3/$YOUR_API_KEY
+dapp address 0xab5801a7d398351b8be11c439e05c5b3259aec9b $(seth nonce 0xab5801a7d398351b8be11c439e05c5b3259aec9b)
+```
+
+Symbolically explore the possible execution paths of a call to `dai.transfer(address,uint)`:
+```sh
+seth bundle-source 0x6b175474e89094c44da98b954eedeac495271d0f > daisrc.json && \
+hevm symbolic --address 0x6b175474e89094c44da98b954eedeac495271d0f --rpc $ETH_RPC_URL  --debug --sig "transfer(address,uint256)" --json-file daisrc.json
+```
+
+## Contributing
+
+Contributions are always welcome! You may be interested in about the 
+[ARCHITECTURE.md](./ARCHITECTURE.md) of this repository.
 
 ---
 [![built with nix](https://builtwithnix.org/badge.svg)](https://builtwithnix.org)
