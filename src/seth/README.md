@@ -40,7 +40,6 @@ Contents
 ------------------------------------------------------------------------
 
   * [Installing](#installing)
-      * [Upgrading](#upgrading)
   * [Configuration](#configuration)
       * [Example `.sethrc` file](#example-sethrc-file)
       * [Connecting to the blockchain](#connecting-to-the-blockchain)
@@ -675,6 +674,16 @@ With `--status` (which excludes `--async`), check the status field of
 the transaction receipt and exit with an error code if the transaction
 failed.  This is a post-Byzantium feature and will soon become the
 default behavior.
+
+### `seth sign`
+
+    seth sign <data>
+
+Sign hexdata with the `'\x19Ethereum Signed Message:\n'` prefix using the `$ETH_FROM` 
+account.
+
+See [`ethsign`](../ethsign/README.md) for more signing and key management options.
+
 
 ### `seth storage`
 
