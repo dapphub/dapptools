@@ -17,6 +17,7 @@ import EVM.Format
 import EVM.Solidity
 import EVM.SymExec
 import EVM.Types
+import EVM.Expr
 import EVM.Transaction (initTx)
 import qualified EVM.Fetch
 
@@ -802,8 +803,8 @@ symbolify vm =
     mkSymStorage (Concrete s) =
       let
         list = [(literal $ toSizzle k, v) | (C _ k, S _ v) <- Map.toList s]
-        symlist = [(litWord k, v) | (k, v) <- Map.toList s]
-      in Symbolic symlist $ sListArray 0 list
+        -- symlist = [(litWord k, v) | (k, v) <- Map.toList s]
+      in Symbolic (Todo "UnitTest>symbolify symbolic storage" []) $ sListArray 0 list
 
 getParametersFromEnvironmentVariables :: Maybe Text -> IO TestVMParams
 getParametersFromEnvironmentVariables rpc = do

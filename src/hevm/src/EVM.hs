@@ -19,6 +19,7 @@ import Data.SBV hiding (Word, output, Unknown)
 import Data.Proxy (Proxy(..))
 import EVM.ABI
 import EVM.Types
+import EVM.Expr
 import EVM.Solidity
 import EVM.Concrete (createAddress, wordValue, keccakBlob, create2Address)
 import EVM.Symbolic
@@ -65,6 +66,7 @@ import Crypto.PubKey.ECC.Generate (generateQ)
 
 import Debug.Trace
 
+
 -- * Data types
 
 -- | EVM failure modes
@@ -89,7 +91,7 @@ data Error
   | PrecompileFailure
   | UnexpectedSymbolicArg
   | DeadPath
-  | NotUnique Whiff
+  | NotUnique Expr
   | SMTTimeout
 deriving instance Show Error
 
@@ -112,7 +114,7 @@ data VM = VM
   , _traces         :: Zipper.TreePos Zipper.Empty Trace
   , _cache          :: Cache
   , _burned         :: Word
-  , _constraints    :: [(SBool, Whiff)]
+  , _constraints    :: [(SBool, Expr)]
   , _iterations     :: Map CodeLocation Int
   }
   deriving (Show)
@@ -141,7 +143,7 @@ data Query where
   PleaseAskSMT        :: SBool -> [SBool] -> (BranchCondition -> EVM ()) -> Query
 
 data Choose where
-  PleaseChoosePath    :: Whiff -> (Bool -> EVM ()) -> Choose
+  PleaseChoosePath    :: Expr -> (Bool -> EVM ()) -> Choose
 
 instance Show Query where
   showsPrec _ = \case
@@ -293,7 +295,7 @@ data ContractCode
 -- depending on what type of execution we are doing
 data Storage
   = Concrete (Map Word SymWord)
-  | Symbolic [(SymWord, SymWord)] (SArray (WordN 256) (WordN 256))
+  | Symbolic Expr (SArray (WordN 256) (WordN 256))
   deriving (Show)
 
 -- to allow for Eq Contract (which useful for debugging vmtests)
@@ -650,18 +652,18 @@ exec1 = do
         0x09 -> stackOp3 (const g_mid) (\(x, y, z) -> mulmod x y z)
 
         -- op: LT
-        0x10 -> stackOp2 (const g_verylow) $ \(S a x, S b y) -> iteWhiff (LT a b) (x .< y) 1 0
+        0x10 -> stackOp2 (const g_verylow) $ \(S a x, S b y) -> iteExpr (LT a b) (x .< y) 1 0
         -- op: GT
-        0x11 -> stackOp2 (const g_verylow) $ \(S a x, S b y) -> iteWhiff (GT a b) (x .> y) 1 0
+        0x11 -> stackOp2 (const g_verylow) $ \(S a x, S b y) -> iteExpr (GT a b) (x .> y) 1 0
         -- op: SLT
         0x12 -> stackOp2 (const g_verylow) $ uncurry slt
         -- op: SGT
         0x13 -> stackOp2 (const g_verylow) $ uncurry sgt
 
         -- op: EQ
-        0x14 -> stackOp2 (const g_verylow) $ \(S a x, S b y) -> iteWhiff (Eq a b) (x .== y) 1 0
+        0x14 -> stackOp2 (const g_verylow) $ \(S a x, S b y) -> iteExpr (Eq a b) (x .== y) 1 0
         -- op: ISZERO
-        0x15 -> stackOp1 (const g_verylow) $ \(S a x) -> iteWhiff (IsZero a) (x .== 0) 1 0
+        0x15 -> stackOp1 (const g_verylow) $ \(S a x) -> iteExpr (IsZero a) (x .== 0) 1 0
 
         -- op: AND
         0x16 -> stackOp2 (const g_verylow) $ uncurry (.&.)
@@ -1559,7 +1561,7 @@ makeUnique sw@(S w val) cont = case maybeLitWord sw of
   Just a -> cont a
 
 -- | Construct SMT Query and halt execution until resolved
-askSMT :: CodeLocation -> (SBool, Whiff) -> (Bool -> EVM ()) -> EVM ()
+askSMT :: CodeLocation -> (SBool, Expr) -> (Bool -> EVM ()) -> EVM ()
 askSMT codeloc (condition, whiff) continue = do
   -- We keep track of how many times we have come across this particular
   -- (contract, pc) combination in the `iteration` mapping.
@@ -1615,11 +1617,11 @@ fetchAccount addr continue =
         else continue c
 
 readStorage :: Storage -> SymWord -> Maybe (SymWord)
-readStorage (Symbolic _ s) (S w loc) = Just $ S (Todo "fromStorage" []) $ readArray s loc
+readStorage (Symbolic a s) (S b loc) = Just $ S (FromStorage a b) $ readArray s loc
 readStorage (Concrete s) loc = Map.lookup (forceLit loc) s
 
 writeStorage :: SymWord -> SymWord -> Storage -> Storage
-writeStorage k@(S _ loc) v@(S _ val) (Symbolic xs s) = Symbolic ((k,v):xs) (writeArray s loc val)
+writeStorage (S a loc) (S b val) (Symbolic xs s) = Symbolic (addStorageMap xs a b) (writeArray s loc val)
 writeStorage loc val (Concrete s) = Concrete (Map.insert (forceLit loc) val s)
 
 accessStorage
@@ -2068,8 +2070,8 @@ create self this xGas' xValue xs newAddr initCode = do
     let
       store = case view (env . storageModel) vm0 of
         ConcreteS -> Concrete mempty
-        SymbolicS -> Symbolic [] $ sListArray 0 []
-        InitialS  -> Symbolic [] $ sListArray 0 []
+        SymbolicS -> Symbolic UStorage $ sListArray 0 []
+        InitialS  -> Symbolic UStorage $ sListArray 0 []
       newContract =
         initialContract (InitCode initCode) & set storage store
       newContext  =

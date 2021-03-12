@@ -61,6 +61,8 @@ library
     EVM.TTY,
     EVM.TTYCenteredList,
     EVM.Types,
+    EVM.Expr,
+    EVM.ExprSimp,
     EVM.UnitTest,
     EVM.VMTest
   other-modules:

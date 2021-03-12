@@ -1,7 +1,6 @@
 {-# Language DataKinds #-}
 {-# Language ImplicitParams #-}
 {-# Language TemplateHaskell #-}
-{-# LANGUAGE ImplicitParams #-}
 module EVM.Format where
 
 import System.Console.ANSI hiding (Dull)
@@ -15,8 +14,8 @@ import EVM (VM, VMResult(..), cheatCode, traceForest, traceData, Error (..), res
 import EVM (Trace, TraceData (..), Log (..), Query (..), FrameContext (..), Storage(..))
 import EVM.SymExec
 import EVM.Symbolic (len, litWord)
-import EVM.Types (maybeLitWord, Word (..), Whiff(..), SymWord(..), W256 (..), num, Addr, Buffer(..), ByteStringS(..), Sniff(..))
-import EVM.Types (maybeLitWord, Word (..), Whiff(..), SymWord(..), W256 (..), num)
+import EVM.Types (maybeLitWord, Word (..), SymWord(..), W256 (..), num, Addr, Buffer(..), ByteStringS(..))
+import EVM.Expr
 import EVM.ABI (AbiValue (..), Event (..), AbiType (..))
 import EVM.ABI (Indexed (NotIndexed), getAbiSeq, getAbi)
 import EVM.ABI (parseTypeName, formatString)
@@ -448,6 +447,7 @@ showStorage :: (?srcInfo :: DappInfo,
 
 showStorage = fmap (\(S w x, S v y) -> show (fixW w) <> " => " <> show (fixW v))
 
+-- TODO addapt to expr
 showLeafInfo :: (?srcInfo :: DappInfo)
                  => BranchInfo
                  -> [String]
@@ -457,13 +457,13 @@ showLeafInfo (BranchInfo vm _ m) = let
   self    = view (EVM.state . EVM.contract) vm
   updates = case view (EVM.env . EVM.contracts) vm ^?! ix self . EVM.storage of
     Symbolic v _ -> v
-    Concrete x -> [(litWord k,v) | (k, v) <- Map.toList x]
+    Concrete _ -> (Todo "showLeafInfo>Concrete storage to expr" [])
   showResult = [prettyvmresult res | Just res <- [view result vm]]
   in showResult
   ++ let
     ?vm = vm
     ?method = m
-    in showStorage updates
+    in showStorage []
   ++ [""]
 
 
@@ -514,8 +514,8 @@ renderTree showBranch showLeaf (Node b cs) = Node (showBranch b) (renderTree sho
 simpS :: (?srcInfo :: DappInfo,
           ?vm :: VM,
           ?method :: Maybe Method)
-          => Sniff
-          -> Sniff
+          => Expr
+          -> Expr
 simpS r@(Slice (Literal from) (Literal to) (WriteWord (Literal x) w s))
   | from == x && to == x + 0x20 = WriteWord (Literal from) (simpW w) SEmpty
   | from == x && x + 0x20 < to  = (WriteWord (Literal x) (simpW w) (simpS (Slice (Literal (from + 0x20)) (Literal to) s)))
@@ -527,8 +527,8 @@ simpS x = Oops ("simpS" <> show x)
 simpW :: (?srcInfo :: DappInfo,
           ?vm :: VM,
           ?method :: Maybe Method)
-          => Whiff
-          -> Whiff
+          => Expr
+          -> Expr
 simpW (IsZero (IsZero (IsZero a)))  = simpW (IsZero a)
 simpW (IsZero (IsZero a@(GT x y)))  = simpW a
 simpW (IsZero (IsZero a@(LT x y)))  = simpW a
@@ -543,7 +543,7 @@ simpW (IsZero (IsZero a@(SGT x y))) = simpW a
 -- simpW (IsZero (GT x y))             = simpW (LEQ x y)
 -- simpW (IsZero (LEQ x y))            = simpW (GT x y)
 -- simpW (IsZero (GEQ x y))            = simpW (LT x y)
-simpW (IsZero (Var x a))            = simpW (Eq (Var x a) (Literal 0))
+simpW (IsZero (Var x))              = simpW (Eq (Var x) (Literal 0))
 simpW (IsZero x)                    = IsZero $ simpW x
 simpW (GT x y)                      = GT (simpW x) (simpW y)
 simpW (LT x y)                      = LT (simpW x) (simpW y)
@@ -572,10 +572,10 @@ simpW (FromKeccak s)                = FromKeccak $ simpS s
 simpW (And (Literal x) (And (Literal x') y))
   | x == x'                         = simpW (And (Literal x) y)
   | otherwise                       = (And (Literal x) (simpW (And (Literal x') y)))
-simpW (And (Literal x) (Var str i))
-  | x == 2^i - 1            = (Var str i)
-  | (2 ^ (floor (logBase 2.0 ((num x) + 1.0)))) == (num x) + 1  = (Var str (floor (logBase 2.0 ((num x) + 1.0))))
-  | otherwise               = (And (Literal x) (Var str i))
+-- simpW (And (Literal x) (Var str i))
+--   | x == 2^i - 1            = (Var str i)
+--   | (2 ^ (floor (logBase 2.0 ((num x) + 1.0)))) == (num x) + 1  = (Var str (floor (logBase 2.0 ((num x) + 1.0))))
+--   | otherwise               = (And (Literal x) (Var str i))
 
 simpW (And x y)                     = And (simpW x) (simpW y)
 simpW (Add (Literal x) (Literal y)) = (Literal (x+y))
@@ -591,20 +591,20 @@ simpW (FromBuff (Literal x) Calldata) =
   let
     input = fromMaybe [] $ view methodInputs <$> ?method
     index = num (((toInteger x) - 4) `div` 32)
-  in if length input > index then Var (cParam $ unpack $ fst (input !! index)) 256 else Todo ("sad" ++ (show index)) []
+  in if length input > index then Var (cParam $ unpack $ fst (input !! index)) else Todo ("sad" ++ (show index)) []
 simpW (FromBuff w s) = FromBuff (simpW w) (simpS s)
 simpW x = x
 
 fixW :: (?srcInfo :: DappInfo,
          ?vm :: VM,
          ?method :: Maybe Method)
-         => Whiff
-         -> Whiff
+         => Expr
+         -> Expr
 fixW w = let w' = simpW w
          in if w == w' then w else fixW w'
 
 
-showStorageSlot :: [(Text, StorageItem)] -> Int -> Whiff -> Whiff
+showStorageSlot :: [(Text, StorageItem)] -> Int -> Expr -> Expr
 showStorageSlot []      slot w = w
 showStorageSlot ((text, StorageItem t o s):xs) slot w
   | s == slot   = Pointer1 (unpack text) w

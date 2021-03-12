@@ -22,6 +22,7 @@ import qualified EVM.FeeSchedule
 import EVM.Symbolic
 import EVM.Transaction
 import EVM.Types
+import EVM.Expr
 
 import Control.Arrow ((***), (&&&))
 import Control.Lens

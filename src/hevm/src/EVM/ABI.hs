@@ -57,6 +57,7 @@ module EVM.ABI
   ) where
 
 import EVM.Types
+import EVM.Expr
 
 import Control.Monad      (replicateM, replicateM_, forM_, void)
 import Data.Binary.Get    (Get, runGet, runGetOrFail, label, getWord8, getWord32be, skip)

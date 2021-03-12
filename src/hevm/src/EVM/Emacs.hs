@@ -30,6 +30,7 @@ import EVM.Solidity
 import EVM.Stepper (Stepper)
 import EVM.TTY (currentSrcMap)
 import EVM.Types
+import EVM.Expr
 import EVM.UnitTest
 import Prelude hiding (Word)
 import System.Directory
@@ -457,7 +458,7 @@ instance SDisplay (SymWord) where
 instance SDisplay (SWord 8) where
   sexp x = A (txt (txt x))
 
-instance SDisplay Whiff where
+instance SDisplay Expr where
   sexp x = A (pack (show x))
 
 -- no idea what's going on here

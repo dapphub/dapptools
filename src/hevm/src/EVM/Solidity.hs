@@ -321,7 +321,7 @@ readCombinedJSON json = do
         _constructorInputs = mkConstructor abis,
         _abiMap       = mkAbiMap abis,
         _eventMap     = mkEventMap abis,
-        _storageLayout = mkStorageLayout $ x ^? key "storage-layout" . _String
+        _storageLayout = mkStorageLayout $ x ^? key "storage-layout"
       }
 
 readStdJSON :: Text -> Maybe (Map Text SolcContract, Map Text Value, [(Text, Maybe ByteString)])
@@ -337,7 +337,7 @@ readStdJSON json = do
     f :: (AsValue s) => HMap.HashMap Text s -> (Map Text (SolcContract, (HMap.HashMap Text Text)))
     f x = Map.fromList . (concatMap g) . HMap.toList $ x
     g (s, x) = h s <$> HMap.toList (view _Object x)
-    h s (c, x) = 
+    h s (c, x) =
       let
         evmstuff = x ^?! key "evm"
         runtime = evmstuff ^?! key "deployedBytecode"
@@ -350,6 +350,8 @@ readStdJSON json = do
                          return $ (view (key "content" . _String)) <$> (HMap.filter (isJust . preview (key "content")) srcs)
         abis = force ("abi key not found in " <> show x) $
           toList <$> x ^? key "abi" . _Array
+        lol = x ^? key "storageLayout"
+        lol2 = x ^? key "storageLayout" . _String
       in (s <> ":" <> c, (SolcContract {
         _runtimeCode      = theRuntimeCode,
         _creationCode     = theCreationCode,
@@ -361,7 +363,7 @@ readStdJSON json = do
         _constructorInputs = mkConstructor abis,
         _abiMap        = mkAbiMap abis,
         _eventMap      = mkEventMap abis,
-        _storageLayout = mkStorageLayout $ x ^? key "storage-layout" . _String
+        _storageLayout = mkStorageLayout $ x ^? key "storageLayout"
       }, fromMaybe mempty srcContents))
 
 mkAbiMap :: [Value] -> Map Word32 Method
@@ -409,7 +411,7 @@ mkConstructor abis =
       [] -> [] -- default constructor has zero inputs
       _  -> error "strange: contract has multiple constructors"
 
-mkStorageLayout :: Maybe Text -> Maybe (Map Text StorageItem)
+mkStorageLayout :: Maybe Value -> Maybe (Map Text StorageItem)
 mkStorageLayout Nothing = Nothing
 mkStorageLayout (Just json) = do
   items <- json ^? key "storage" . _Array
@@ -487,7 +489,7 @@ instance ToJSON StandardJSON where
                                    object ["content" .= src]]
            , "settings" .=
              object [ "outputSelection" .=
-                    object ["*" .= 
+                    object ["*" .=
                       object ["*" .= (toJSON
                               ["metadata" :: String,
                                "evm.bytecode",
@@ -506,7 +508,7 @@ instance ToJSON StandardJSON where
                             ]
                     ]
            ]
-                               
+
 stdjson :: Language -> Text -> Text
 stdjson lang src = decodeUtf8 $ toStrict $ encode $ StandardJSON lang src
 

@@ -20,6 +20,7 @@ import qualified Control.Monad.Operational as Operational
 import Control.Monad.State.Strict hiding (state)
 import Data.Maybe (catMaybes, fromMaybe)
 import EVM.Types
+import EVM.Expr
 import EVM.Concrete (createAddress)
 import qualified EVM.FeeSchedule as FeeSchedule
 import Data.SBV.Trans.Control
@@ -110,11 +111,11 @@ abstractVM typesignature concreteArgs x storagemodel = do
       Nothing -> do cd <- sbytes256
                     len <- freshVar_
                     return (cd, var "calldataLength" len, (len .<= 256, Todo "calldatalength < 256" []))
-      Just (name, typs) -> do (cd, cdlen) <- symCalldata name typs concreteArgs
-                              return (cd, S (Literal cdlen) (literal $ num cdlen), (sTrue, Todo "Trivial" []))
+      Just (name, typs) -> do (cd, cdlen@(W256 cdlenw)) <- symCalldata name typs concreteArgs
+                              return (cd, S (Literal cdlenw) (literal $ num cdlen), (sTrue, Todo "Trivial" []))
   symstore <- case storagemodel of
-    SymbolicS -> Symbolic [] <$> freshArray_ Nothing
-    InitialS -> Symbolic [] <$> freshArray_ (Just 0)
+    SymbolicS -> Symbolic UStorage <$> freshArray_ Nothing
+    InitialS -> Symbolic UStorage <$> freshArray_ (Just 0)
     ConcreteS -> return $ Concrete mempty
   c <- SAddr <$> freshVar_
   value' <- var "CALLVALUE" <$> freshVar_
@@ -147,17 +148,58 @@ loadSymVM x initStore model addr callvalue' calldata' =
 
 data BranchInfo = BranchInfo
   { _vm                 :: VM,
-    _branchCondition    :: Maybe Whiff,
+    _branchCondition    :: Maybe Expr,
     _method             :: Maybe Method
   }
 
 doInterpret :: Fetch.Fetcher -> Maybe Integer -> VM -> Query (Tree BranchInfo)
 doInterpret fetcher maxIter vm = let
-      f (vm', cs) =
-        let
-          tree = Node (BranchInfo (if length cs == 0 then vm' else vm) Nothing Nothing) cs
-        in tree
+    f (vm', cs) = Node (BranchInfo (if length cs == 0 then vm' else vm) Nothing Nothing) cs
     in f <$> interpret' fetcher maxIter vm
+
+
+interpret'' :: Fetch.Fetcher -> Maybe Integer -> VM -> Query Expr
+interpret'' fetcher maxIter vm = let
+  cont s = interpret'' fetcher maxIter $ execState s vm
+  in case view EVM.result vm of
+
+    Nothing -> cont exec1
+
+    Just (VMFailure (EVM.Query q@(PleaseAskSMT _ _ continue))) -> let
+      codelocation = getCodeLocation vm
+      iteration = num $ fromMaybe 0 $ view (iterations . at codelocation) vm
+      -- as an optimization, we skip consulting smt
+      -- if we've been at the location less than 5 times
+      in if iteration < (max (fromMaybe 0 maxIter) 5)
+         then cont $ continue EVM.Unknown
+         else io (fetcher q) >>= cont
+
+    Just (VMFailure (EVM.Query q)) -> io (fetcher q) >>= cont
+
+    Just (VMFailure (Choose (EVM.PleaseChoosePath whiff continue)))
+      -> case maxIterationsReached vm maxIter of
+        Nothing -> let
+          vm_true_case  = execState (continue True) vm
+          vm_false_case = execState (continue False) vm
+          in do
+            push 1
+            expr_true_case <- interpret'' fetcher maxIter vm_true_case
+            pop 1
+            push 1
+            expr_false_case <- interpret'' fetcher maxIter vm_false_case
+            pop 1
+            return $ ITE whiff expr_true_case expr_false_case
+        Just n -> cont $ continue (not n)
+    Just (VMFailure (UnrecognizedOpcode 254))
+      -> return $ Bottom
+    Just (VMFailure (Revert _))
+      -> return $ Bottom
+    Just (VMFailure err)
+      -> return $ Todo ("VMFailure error" ++ (show err)) []
+    Just (VMSuccess (ConcreteBuffer expr _))
+      -> return expr
+    Just (VMSuccess (SymbolicBuffer expr _))
+      -> return expr
 
 interpret' :: Fetch.Fetcher -> Maybe Integer -> VM -> Query (VM, [(Tree BranchInfo)])
 interpret' fetcher maxIter vm = let
@@ -269,22 +311,22 @@ maxIterationsReached vm (Just maxIter) =
 type Precondition = VM -> SBool
 type Postcondition = (VM, VM) -> SBool
 
-checkAssert :: ByteString -> Maybe (Text, [AbiType]) -> [String] -> Query (Either (Tree BranchInfo) (Tree BranchInfo), VM)
-checkAssert c signature' concreteArgs = verifyContract c signature' concreteArgs SymbolicS (const sTrue) (Just checkAssertions)
+-- checkAssert :: ByteString -> Maybe (Text, [AbiType]) -> [String] -> Query (Either (Tree BranchInfo) (Tree BranchInfo), VM)
+-- checkAssert c signature' concreteArgs = verifyContract c signature' concreteArgs SymbolicS (const sTrue) (Just checkAssertions)
 
 checkAssertions :: Postcondition
 checkAssertions (_, out) = case view result out of
   Just (EVM.VMFailure (EVM.UnrecognizedOpcode 254)) -> sFalse
   _ -> sTrue
 
-verifyContract :: ByteString -> Maybe (Text, [AbiType]) -> [String] -> StorageModel -> Precondition -> Maybe Postcondition -> Query (Either (Tree BranchInfo) (Tree BranchInfo), VM)
-verifyContract theCode signature' concreteArgs storagemodel pre maybepost = do
-    preStateRaw <- abstractVM signature' concreteArgs theCode  storagemodel
-    -- add the pre condition to the pathconditions to ensure that we are only exploring valid paths
-    let preState = over constraints ((++) [(pre preStateRaw, Todo "assumptions" [])]) preStateRaw
-    v <- verify preState Nothing Nothing maybepost
-    return (v, preState)
-
+-- verifyContract :: ByteString -> Maybe (Text, [AbiType]) -> [String] -> StorageModel -> Precondition -> Maybe Postcondition -> Query (Either (Tree BranchInfo) (Tree BranchInfo), VM)
+-- verifyContract theCode signature' concreteArgs storagemodel pre maybepost = do
+--     preStateRaw <- abstractVM signature' concreteArgs theCode  storagemodel
+--     -- add the pre condition to the pathconditions to ensure that we are only exploring valid paths
+--     let preState = over constraints ((++) [(pre preStateRaw, Todo "assumptions" [])]) preStateRaw
+--     v <- verify preState Nothing Nothing maybepost
+--     return (v, preState)
+--
 pruneDeadPaths :: [VM] -> [VM]
 pruneDeadPaths =
   filter $ \vm -> case view result vm of
@@ -321,30 +363,31 @@ leaves (Node _ xs) = concatMap leaves xs
 -- | Symbolically execute the VM and check all endstates against the postcondition, if available.
 -- Returns `Right (Tree BranchInfo)` if the postcondition can be violated, or
 -- or `Left (Tree BranchInfo)`, if the postcondition holds for all endstates.
-verify :: VM -> Maybe Integer -> Maybe (Fetch.BlockNumber, Text) -> Maybe Postcondition -> Query (Either (Tree BranchInfo) (Tree BranchInfo))
+verify :: VM -> Maybe Integer -> Maybe (Fetch.BlockNumber, Text) -> Maybe Postcondition -> Query (Either Expr Expr)
 verify preState maxIter rpcinfo maybepost = do
   smtState <- queryState
-  tree <- doInterpret (Fetch.oracle (Just smtState) rpcinfo False) maxIter preState
-  case maybepost of
-    (Just post) -> do
-      let livePaths = pruneDeadPaths $ leaves tree
-      -- can also do these queries individually (even concurrently!). Could save time and report multiple violations
-          postC = sOr $ fmap (\postState -> (sAnd (fst <$> view constraints postState)) .&& sNot (post (preState, postState))) livePaths
-      -- is there any path which can possibly violate
-      -- the postcondition?
-      resetAssertions
-      constrain postC
-      io $ putStrLn "checking postcondition..."
-      checkSat >>= \case
-        Unk -> do io $ putStrLn "postcondition query timed out"
-                  return $ Left tree
-        Unsat -> do io $ putStrLn "Q.E.D."
-                    return $ Left tree
-        Sat -> return $ Right tree
-        DSat _ -> error "unexpected DSAT"
-
-    Nothing -> do io $ putStrLn "Nothing to check"
-                  return $ Left tree
+  tree <- interpret'' (Fetch.oracle (Just smtState) rpcinfo False) maxIter preState
+  return $ Left tree
+  -- case maybepost of
+  --   (Just post) -> do
+  --     let livePaths = pruneDeadPaths $ leaves tree
+  --     -- can also do these queries individually (even concurrently!). Could save time and report multiple violations
+  --         postC = sOr $ fmap (\postState -> (sAnd (fst <$> view constraints postState)) .&& sNot (post (preState, postState))) livePaths
+  --     -- is there any path which can possibly violate
+  --     -- the postcondition?
+  --     resetAssertions
+  --     constrain postC
+  --     io $ putStrLn "checking postcondition..."
+  --     checkSat >>= \case
+  --       Unk -> do io $ putStrLn "postcondition query timed out"
+  --                 return $ Left tree
+  --       Unsat -> do io $ putStrLn "Q.E.D."
+  --                   return $ Left tree
+  --       Sat -> return $ Right tree
+  --       DSat _ -> error "unexpected DSAT"
+  --
+  --   Nothing -> do io $ putStrLn "Nothing to check"
+  --                 return $ Left tree
 
 -- | Compares two contract runtimes for trace equivalence by running two VMs and comparing the end states.
 equivalenceCheck :: ByteString -> ByteString -> Maybe Integer -> Maybe (Text, [AbiType]) -> Query (Either ([VM], [VM]) VM)

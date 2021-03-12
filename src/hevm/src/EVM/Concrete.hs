@@ -14,6 +14,8 @@ import Data.Maybe      (fromMaybe)
 import Data.Semigroup  ((<>))
 import Data.Word       (Word8)
 
+import EVM.Expr
+
 import qualified Data.ByteString as BS
 
 wordAt :: Int -> ByteString -> W256
@@ -65,9 +67,9 @@ readMemoryWord (C _ i) m =
     go !a (-1) = a
     go !a !n = go (a + shiftL (num $ readByteOrZero (num i + n) m)
                               (8 * (31 - n))) (n - 1)
-    w = go (0 :: W256) (31 :: Int)
+    w@(W256 x) = go (0 :: W256) (31 :: Int)
   in {-# SCC "readMemoryWord" #-}
-    C (Literal w) w
+    C (Literal x) w
 
 readMemoryWord32 :: Word -> ByteString -> Word
 readMemoryWord32 (C _ i) m =
@@ -86,7 +88,7 @@ setMemoryByte :: Word -> Word8 -> ByteString -> ByteString
 setMemoryByte (C _ i) x =
   writeMemory (BS.singleton x) 1 0 (num i)
 
-keccakBlob :: ByteString -> Sniff -> Word
+keccakBlob :: ByteString -> Expr -> Word
 keccakBlob x s = C (FromKeccak s) (keccak x)
 
 -- Copied from the standard library just to get specialization.

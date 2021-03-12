@@ -53,6 +53,8 @@ import qualified Text.Read
 -- Some stuff for "generic programming", needed to create Word512
 import Data.Data
 
+import EVM.Expr
+
 -- We need a 512-bit word for doing ADDMOD and MULMOD with full precision.
 mkUnpackedDoubleWord "Word512" ''Word256 "Int512" ''Int256 ''Word256
   [''Typeable, ''Data, ''Generic]
@@ -77,36 +79,14 @@ num :: (Integral a, Num b) => a -> b
 num = fromIntegral
 
 
-data Word = C Whiff W256 --maybe to remove completely in the future
+data Word = C Expr W256 --maybe to remove completely in the future
 
-data Sniff
-  = Oops String
-  | Slice Whiff Whiff Sniff          -- offset size buffer
-  | Write Sniff Word Word Word Sniff
-  | WriteWord Whiff Whiff Sniff
-  | Calldata -- TODO remove
-  | SEmpty
-  deriving Eq
-
-instance Show Sniff where
-  show = \case
-    Oops s -> "Oops " ++ (show s)
-    Slice w w' s -> "[ " ++ show w ++ ".." ++ show w' ++ " ]" ++ show s
-    Write s w1 w2 w3 s2 -> d ["write", show s, show w1, show w2, show w3, show s2]
-    WriteWord w w2 s ->  "[" ++ show w ++ " <- " ++ show w2 ++ "]" ++ show s
-    Calldata -> "CALLDATA"
-    SEmpty -> "SEmpty"
-    where
-      join = List.intercalate "\n"
-      split s = Text.unpack <$> (Text.splitOn (Text.pack "\n") (Text.pack s))
-      indent s = ((++) "  ") <$> s
-      dc = (join . indent . split)
-      d cs = "(\n" ++ (join (dc <$> cs)) ++ ")"
-
+whiff :: Word -> Expr
+whiff (C w _) = w
 
 data Buffer
-  = ConcreteBuffer Sniff ByteString
-  | SymbolicBuffer Sniff [SWord 8]
+  = ConcreteBuffer Expr ByteString
+  | SymbolicBuffer Expr [SWord 8]
   deriving Eq
 
 newtype W256 = W256 Word256
@@ -121,11 +101,11 @@ instance Show Word where
 instance Read Word where
   readsPrec n s =
     case readsPrec n s of
-      [(x, r)] -> [(C (Literal x) x, r)]
+      [(x, r)] -> [(w256 x, r)]
       _ -> []
 
 w256 :: W256 -> Word
-w256 w = C (Literal w) w
+w256 x@(W256 w) = C (Literal w) x
 
 instance Bits Word where
   (C a x) .&. (C b y) = C (And a b) (x .&. y)
@@ -196,13 +176,13 @@ instance JSON.ToJSON ByteStringS where
 
 -- | Symbolic words of 256 bits, possibly annotated with additional
 --   "insightful" information
-data SymWord = S Whiff (SWord 256)
+data SymWord = S Expr (SWord 256)
 
 instance Show SymWord where
   show s@(S w _) = show w
 
 var :: String -> SWord 256 -> SymWord
-var name x = S (Var name 0) x
+var name x = S (Var name) x
 -- TODO
 
 -- | Custom instances for SymWord, many of which have direct
@@ -242,9 +222,9 @@ instance SDivisible SymWord where
   sDivMod = sQuotRem
 
 -- | Instead of supporting a Mergeable instance directly,
--- we use one which carries the Whiff around:
-iteWhiff :: Whiff -> SBool -> SWord 256 -> SWord 256 -> SymWord
-iteWhiff w b x y = S w (ite b x y)
+-- we use one which carries the Expr around:
+iteExpr :: Expr -> SBool -> SWord 256 -> SWord 256 -> SymWord
+iteExpr w b x y = S w (ite b x y)
 
 instance Bounded SymWord where
   minBound = S (Todo "minBound" []) minBound
@@ -290,91 +270,54 @@ instance Show EthEnv where
     This -> "THIS"
     Nonce -> "NONCE"
 
--- | This type can give insight into the provenance of a term
--- which is useful, both for the aesthetic purpose of printing
--- terms in a richer way, but also do optimizations on the AST
--- instead of letting the SMT solver do all the heavy lifting.
-data Whiff =
-  Todo String [Whiff]
-
-  --booleans
-  | And  Whiff Whiff
-  | Or   Whiff Whiff
-  | Impl Whiff Whiff
-  | Eq   Whiff Whiff
-  | LT   Whiff Whiff
-  | GT   Whiff Whiff
-  | SLT  Whiff Whiff
-  | SGT  Whiff Whiff
-  | IsZero Whiff
-  | ITE Whiff Whiff Whiff
-
-  -- bits
-  | SHL Whiff Whiff
-  | SHR Whiff Whiff
-  | SAR Whiff Whiff
-
-  -- integers
-  | Add  Whiff Whiff
-  | Sub  Whiff Whiff
-  | Mul  Whiff Whiff
-  | Div  Whiff Whiff
-  | Mod  Whiff Whiff
-  | Exp  Whiff Whiff
-  | Neg  Whiff
-
-  | Sex  Whiff
-  | Sgn  Whiff          -- signum
-  | Cmp  Whiff          -- complement
-  -- | Sft  Whiff Whiff    -- shift left
-  -- | Sar  Whiff Whiff    -- shift right
-  | Bit  Whiff
-  | FromKeccak Sniff
-  -- | FromBuffer Whiff Buffer
-  | FromBuff Whiff Sniff
-  | FromStorage Whiff Sniff
-  | Pointer1 String Whiff
-  | Literal W256
-  | Var String Int
-  deriving Eq
-
-
-instance Show Whiff where
-  show w =
-    let
-      infix' s x y = show x ++ s ++ show y
-    in case w of
-      Todo s args -> s ++ "(" ++ (intercalate "," (show <$> args)) ++ ")"
-      And x y     -> infix' " and " x y
-      Or x y      -> infix' " or " x y
-      ITE b x y  -> "if " ++ show b ++ " then " ++ show x ++ " else " ++ show y
-      Eq x y      -> infix' " == " x y
-      LT x y      -> infix' " < " x y
-      GT x y      -> infix' " > " x y
-      SLT x y     -> infix' " s< " x y
-      SGT x y     -> infix' " s> " x y
-      IsZero x    -> "IsZero(" ++ show x ++ ")"
-      SHL x y     -> infix' " << " x y
-      SHR x y     -> infix' " << " x y
-      SAR x y     -> infix' " a<< " x y
-      Add x y     -> infix' " + " x y
-      Sub x y     -> infix' " - " x y
-      Mul x y     -> infix' " * " x y
-      Div x y     -> infix' " / " x y
-      Mod x y     -> infix' " % " x y
-      Exp x y     -> infix' " ** " x y
-      Bit a  -> "bit " ++ (show a)
-      Impl a b    -> infix' " => " a b
-      Sgn a   -> "sgn(" ++ (show a) ++ ")"
-      Sex a   -> "signextend(" ++ (show a) ++ ")"
-      Cmp a   -> "~" ++ (show a)
-      Neg x       -> "not " ++ show x
-      Var v _     -> v
-      FromKeccak buf -> "keccak(" ++ show buf ++ ")"
-      Literal x -> show x
-      FromStorage l s -> "SLOAD(" ++ show l ++ ")" ++ show s
-      Pointer1 name a -> "*" ++ (cVar name) ++ "[" ++ (show a) ++ "]"
-      FromBuff location buffer -> (show buffer) ++ "[" ++ (show location) ++ "]"
+-- instance Show Expr where
+--   show w =
+--     let
+--       infix' s x y = show x ++ s ++ show y
+--     in case w of
+--       Todo s args -> s ++ "(" ++ (intercalate "," (show <$> args)) ++ ")"
+--       And x y     -> infix' " and " x y
+--       Or x y      -> infix' " or " x y
+--       ITE b x y  -> "if " ++ show b ++ " then " ++ show x ++ " else " ++ show y
+--       Eq x y      -> infix' " == " x y
+--       LT x y      -> infix' " < " x y
+--       GT x y      -> infix' " > " x y
+--       SLT x y     -> infix' " s< " x y
+--       SGT x y     -> infix' " s> " x y
+--       IsZero x    -> "IsZero(" ++ show x ++ ")"
+--       SHL x y     -> infix' " << " x y
+--       SHR x y     -> infix' " << " x y
+--       SAR x y     -> infix' " a<< " x y
+--       Add x y     -> infix' " + " x y
+--       Sub x y     -> infix' " - " x y
+--       Mul x y     -> infix' " * " x y
+--       Div x y     -> infix' " / " x y
+--       Mod x y     -> infix' " % " x y
+--       Exp x y     -> infix' " ** " x y
+--       Bit a  -> "bit " ++ (show a)
+--       Impl a b    -> infix' " => " a b
+--       Sgn a   -> "sgn(" ++ (show a) ++ ")"
+--       Sex a   -> "signextend(" ++ (show a) ++ ")"
+--       Cmp a   -> "~" ++ (show a)
+--       Neg x       -> "not " ++ show x
+--       Var v _     -> v
+--       FromKeccak buf -> "keccak(" ++ show buf ++ ")"
+--       Literal x -> show x
+--       FromStorage l s -> "SLOAD(" ++ show l ++ ")" ++ show s
+--       Pointer1 name a -> "*" ++ (cVar name) ++ "[" ++ (show a) ++ "]"
+--       FromBuff location buffer -> (show buffer) ++ "[" ++ (show location) ++ "]"
+--       Oops s -> "Oops " ++ (show s)
+--       Slice w w' s -> "[ " ++ show w ++ ".." ++ show w' ++ " ]" ++ show s
+--       Write s w1 w2 w3 s2 -> d ["write", show s, show w1, show w2, show w3, show s2]
+--       WriteWord w w2 s ->  "[" ++ show w ++ " <- " ++ show w2 ++ "]" ++ show s
+--       Calldata -> "CALLDATA"
+--       SEmpty -> "SEmpty"
+--       where
+--         join = List.intercalate "\n"
+--         split s = Text.unpack <$> (Text.splitOn (Text.pack "\n") (Text.pack s))
+--         indent s = ((++) "  ") <$> s
+--         dc = (join . indent . split)
+--         d cs = "(\n" ++ (join (dc <$> cs)) ++ ")"
 
 
 newtype Addr = Addr { addressWord160 :: Word160 }
@@ -423,7 +366,7 @@ instance (ToSizzleBV Addr)
 instance (FromSizzleBV (WordN 160))
 
 w256lit :: W256 -> SymWord
-w256lit x = S (Literal x) $ literal $ toSizzle x
+w256lit x@(W256 w) = S (Literal w) $ literal $ toSizzle x
 
 litBytes :: ByteString -> [SWord 8]
 litBytes bs = fmap (toSized . literal) (BS.unpack bs)

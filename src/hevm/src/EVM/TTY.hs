@@ -23,6 +23,7 @@ import EVM.Hexdump (prettyHex)
 import EVM.Op
 import EVM.Solidity hiding (storageLayout)
 import EVM.Types hiding (padRight)
+import EVM.Expr
 import EVM.UnitTest
 import EVM.StorageLayout
 

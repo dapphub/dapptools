@@ -13,6 +13,7 @@ import Control.Lens hiding (op, (:<), (|>), (.>))
 import Data.Maybe                   (fromMaybe, fromJust)
 
 import EVM.Types
+import EVM.Expr
 import qualified EVM.Concrete as Concrete
 import qualified Data.ByteArray       as BA
 import Data.SBV hiding (runSMT, newArray_, addAxiom, Word)
@@ -74,12 +75,12 @@ mulmod (S a x) (S b y) (S c z) = let to512 :: SWord 256 -> SWord 512
 -- | Signed less than
 slt :: SymWord -> SymWord -> SymWord
 slt (S xw x) (S yw y) =
-  iteWhiff (SLT xw yw) (sFromIntegral x .< (sFromIntegral y :: (SInt 256))) 1 0
+  iteExpr (SLT xw yw) (sFromIntegral x .< (sFromIntegral y :: (SInt 256))) 1 0
 
 -- | Signed greater than
 sgt :: SymWord -> SymWord -> SymWord
 sgt (S xw x) (S yw y) =
-  iteWhiff (SGT xw yw) (sFromIntegral x .> (sFromIntegral y :: (SInt 256))) 1 0
+  iteExpr (SGT xw yw) (sFromIntegral x .> (sFromIntegral y :: (SInt 256))) 1 0
 
 -- * Operations over symbolic memory (list of symbolic bytes)
 swordAt :: Int -> [SWord 8] -> SymWord
@@ -182,13 +183,13 @@ sliceWithZero o s (ConcreteBuffer w m) = ConcreteBuffer (Slice (Literal (num o))
 
 writeMemory :: Buffer -> Word -> Word -> Word -> Buffer -> Buffer
 writeMemory (ConcreteBuffer w bs1) n src dst (ConcreteBuffer w2 bs0) =
-  ConcreteBuffer (Write w n src dst w2) (Concrete.writeMemory bs1 n src dst bs0)
+  ConcreteBuffer (Write w (whiff n) (whiff src) (whiff dst) w2) (Concrete.writeMemory bs1 n src dst bs0)
 writeMemory (ConcreteBuffer w bs1) n src dst (SymbolicBuffer w2 bs0) =
-  SymbolicBuffer (Write w n src dst w2) (writeMemory' (litBytes bs1) n src dst bs0)
+  SymbolicBuffer (Write w (whiff n) (whiff src) (whiff dst) w2) (writeMemory' (litBytes bs1) n src dst bs0)
 writeMemory (SymbolicBuffer w bs1) n src dst (ConcreteBuffer w2 bs0) =
-  SymbolicBuffer (Write w n src dst w2) (writeMemory' bs1 n src dst (litBytes bs0))
+  SymbolicBuffer (Write w (whiff n) (whiff src) (whiff dst) w2) (writeMemory' bs1 n src dst (litBytes bs0))
 writeMemory (SymbolicBuffer w bs1) n src dst (SymbolicBuffer w2 bs0) =
-  SymbolicBuffer (Write w n src dst w2) (writeMemory' bs1 n src dst bs0)
+  SymbolicBuffer (Write w (whiff n) (whiff src) (whiff dst) w2) (writeMemory' bs1 n src dst bs0)
 
 
 readMemoryWord :: Word -> Buffer -> SymWord
@@ -201,8 +202,8 @@ readMemoryWord32 (C wfrom i) (SymbolicBuffer wbuff m) = fromBytes $ truncpad 4 (
 readMemoryWord32 i (ConcreteBuffer wbuff m) = num $ Concrete.readMemoryWord32 i m
 
 setMemoryWord :: Word -> SymWord -> Buffer -> Buffer
-setMemoryWord i@(C _ l) (S wword x) (SymbolicBuffer wbuff z) = SymbolicBuffer (WriteWord (Literal l) wword wbuff) $ setMemoryWord' i (S wword x) z
-setMemoryWord i@(C _ l) (S wword x) (ConcreteBuffer wbuff z) = case maybeLitWord (S wword x) of
+setMemoryWord i@(C _ (W256 l)) (S wword x) (SymbolicBuffer wbuff z) = SymbolicBuffer (WriteWord (Literal l) wword wbuff) $ setMemoryWord' i (S wword x) z
+setMemoryWord i@(C _ (W256 l)) (S wword x) (ConcreteBuffer wbuff z) = case maybeLitWord (S wword x) of
   Just x' -> ConcreteBuffer (WriteWord (Literal l) wword wbuff) $ Concrete.setMemoryWord i x' z
   Nothing -> SymbolicBuffer (WriteWord (Literal l) wword wbuff) $ setMemoryWord' i (S wword x) (litBytes z)
 
@@ -247,7 +248,7 @@ rawVal (S _ v) = v
 
 -- | Reconstruct the smt/sbv value from a whiff
 -- Should satisfy (rawVal x .== whiffValue x)
--- whiffValue :: Whiff -> SWord 256
+-- whiffValue :: Expr -> SWord 256
 -- whiffValue w = case w of
 --   w'@(Todo _ _) -> error $ "unable to get value of " ++ show w'
 --   And x y       -> whiffValue x .&. whiffValue y
@@ -277,7 +278,7 @@ rawVal (S _ v) = v
   -- FromStorage ind arr -> readArray arr (whiffValue ind)
 
 -- | Special cases that have proven useful in practice
--- simplifyCondition :: SBool -> Whiff -> SBool
+-- simplifyCondition :: SBool -> Expr -> SBool
 -- simplifyCondition _ (IsZero (IsZero (IsZero a))) = whiffValue a .== 0
 
 

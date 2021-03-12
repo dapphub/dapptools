@@ -35,6 +35,8 @@ import EVM.Debug
 import EVM.ABI
 import EVM.Solidity
 import EVM.Types hiding (word)
+import EVM.Expr
+import EVM.ExprSimp
 import EVM.UnitTest (UnitTestOptions, coverageReport, coverageForUnitTestContract)
 import EVM.UnitTest (runUnitTestContract)
 import EVM.UnitTest (getParametersFromEnvironmentVariables, testNumber)
@@ -85,6 +87,8 @@ import qualified System.Timeout         as Timeout
 import qualified Paths_hevm      as Paths
 
 import Options.Generic as Options
+
+import qualified Debug.Trace as T
 
 -- This record defines the program's command-line options
 -- automatically via the `optparse-generic` package.
@@ -458,9 +462,9 @@ getSrcInfo cmd =
       pure emptyDapp
     Just json -> readSolc json >>= \case
       Nothing ->
-        pure emptyDapp
+       pure emptyDapp
       Just (contractMap, sourceCache) ->
-        pure $ dappInfo root contractMap sourceCache
+       pure $ dappInfo root contractMap sourceCache
 
 -- Although it is tempting to fully abstract calldata and give any hints about
 -- the nature of the signature doing so results in significant time spent in
@@ -473,17 +477,26 @@ assert cmd = do
   srcInfo <- getSrcInfo cmd
   let block'  = maybe EVM.Fetch.Latest EVM.Fetch.BlockNumber (block cmd)
       rpcinfo = (,) block' <$> rpc cmd
-      treeShowing :: EVM.VM -> Tree BranchInfo -> Query ()
-      treeShowing vm tree =
-         when (showTree cmd) $ do
-          consistentTree tree >>= \case
-            Nothing -> io $ putStrLn "No consistent paths" -- unlikely
-            Just tree' -> let
-              ?srcInfo = srcInfo
+      treeShowing :: EVM.VM -> Expr -> Query ()
+      treeShowing vm expr =
+         when (showTree cmd) $ let
+          strg = _storageLayout <$> currentSolc srcInfo vm
+          storagelist   = Map.toList $ fromMaybe mempty (fromMaybe Nothing strg)
+          aaaaa         = intercalate " ; " $ (unpack . fst) <$> storagelist
+          -- do
+          -- consistentTree tree >>= \case
+          --   Nothing -> io $ putStrLn "No consistent paths" -- unlikely
+          --   Just tree' ->
               in let
-                renderTree' = renderTree showBranchInfoWithAbi showLeafInfo
-                tree'' = propagateData 0 tree'
-                in io $ setLocaleEncoding utf8 >> putStrLn (showTree' (renderTree' tree''))
+                ?ctx = ExprContext (mkIsKnownStorageSlot storagelist) (mkSimpStorage storagelist)
+              in let
+                -- simplify and enrich our expr with context :)
+                expr' = toExpr $ fixExpr (fromExpr expr)
+                -- renderTree' = renderTree showBranchInfoWithAbi showLeafInfo
+                -- tree'' = propagateData 0 tree
+                -- expr = tree2expr expr
+                in io $ setLocaleEncoding utf8 >> putStrLn (show expr')
+                -- in io $ setLocaleEncoding utf8 >> putStrLn (showTree' (renderTree' tree''))
 
   maybesig <- case sig cmd of
     Nothing ->
@@ -496,58 +509,53 @@ assert cmd = do
   runSMTWithTimeOut (solver cmd) (smttimeout cmd) (smtdebug cmd) $ query $ do
     preState <- symvmFromCommand cmd
     verify preState (maxIterations cmd) rpcinfo (Just checkAssertions) >>= \case
-      Right tree -> do
-        io $ putStrLn "Assertion violation found."
-        showCounterexample preState maybesig
-        treeShowing preState tree
+      Right expr -> do
         io $ exitWith (ExitFailure 1)
-      Left tree -> do
-        io $ putStrLn $ "Explored: " <> show (length tree)
-                     <> " branches without assertion violations"
-        treeShowing preState tree
-        let vmErrs = checkForVMErrors $ leaves tree
-        unless (null vmErrs) $ io $ do
-          putStrLn $
-            "However, "
-            <> show (length vmErrs)
-            <> " branch(es) errored while exploring:"
-          print vmErrs
-        -- When `--get-models` is passed, we print example vm info for each path
-        when (getModels cmd) $
-          forM_ (zip [(1:: Integer)..] (leaves tree)) $ \(i, postVM) -> do
-            resetAssertions
-            constrain (sAnd (fst <$> view EVM.constraints postVM))
-            io $ putStrLn $
-              "-- Branch (" <> show i <> "/" <> show (length tree) <> ") --"
-            checkSat >>= \case
-              DSat _ -> error "assert: unexpected SMT result"
-              Unk -> io $ do putStrLn "Timed out"
-                             print $ view EVM.result postVM
-              Unsat -> io $ do putStrLn "Inconsistent path conditions: dead path"
-                               print $ view EVM.result postVM
-              Sat -> do
-                showCounterexample preState maybesig
-                io $ putStrLn "-- Pathconditions --"
-                io $ print $ snd <$> view EVM.constraints postVM
-                case view EVM.result postVM of
-                  Nothing ->
-                    error "internal error; no EVM result"
-                  Just (EVM.VMFailure (EVM.Revert "")) -> io . putStrLn $
-                    "Reverted"
-                  Just (EVM.VMFailure (EVM.Revert msg)) -> io . putStrLn $
-                    "Reverted: " <> show (ByteStringS msg)
-                  Just (EVM.VMFailure err) -> io . putStrLn $
-                    "Failed: " <> show err
-                  Just (EVM.VMSuccess (ConcreteBuffer _ msg)) ->
-                    if ByteString.null msg
-                    then io $ putStrLn
-                      "Stopped"
-                    else io $ putStrLn $
-                      "Returned: " <> show (ByteStringS msg)
-                  Just (EVM.VMSuccess (SymbolicBuffer _ msg)) -> do
-                    out <- mapM (getValue.fromSized) msg
-                    io . putStrLn $
-                      "Returned: " <> show (ByteStringS (ByteString.pack out))
+      Left expr -> do
+        treeShowing preState expr
+        -- let vmErrs = checkForVMErrors $ leaves tree
+        -- unless (null vmErrs) $ io $ do
+        --   putStrLn $
+        --     "However, "
+        --     <> show (length vmErrs)
+        --     <> " branch(es) errored while exploring:"
+        --   print vmErrs
+        -- -- When `--get-models` is passed, we print example vm info for each path
+        -- when (getModels cmd) $
+        --   forM_ (zip [(1:: Integer)..] (leaves tree)) $ \(i, postVM) -> do
+        --     resetAssertions
+        --     constrain (sAnd (fst <$> view EVM.constraints postVM))
+        --     io $ putStrLn $
+        --       "-- Branch (" <> show i <> "/" <> show (length tree) <> ") --"
+        --     checkSat >>= \case
+        --       DSat _ -> error "assert: unexpected SMT result"
+        --       Unk -> io $ do putStrLn "Timed out"
+        --                      print $ view EVM.result postVM
+        --       Unsat -> io $ do putStrLn "Inconsistent path conditions: dead path"
+        --                        print $ view EVM.result postVM
+        --       Sat -> do
+        --         showCounterexample preState maybesig
+        --         io $ putStrLn "-- Pathconditions --"
+        --         io $ print $ snd <$> view EVM.constraints postVM
+        --         case view EVM.result postVM of
+        --           Nothing ->
+        --             error "internal error; no EVM result"
+        --           Just (EVM.VMFailure (EVM.Revert "")) -> io . putStrLn $
+        --             "Reverted"
+        --           Just (EVM.VMFailure (EVM.Revert msg)) -> io . putStrLn $
+        --             "Reverted: " <> show (ByteStringS msg)
+        --           Just (EVM.VMFailure err) -> io . putStrLn $
+        --             "Failed: " <> show err
+        --           Just (EVM.VMSuccess (ConcreteBuffer _ msg)) ->
+        --             if ByteString.null msg
+        --             then io $ putStrLn
+        --               "Stopped"
+        --             else io $ putStrLn $
+        --               "Returned: " <> show (ByteStringS msg)
+        --           Just (EVM.VMSuccess (SymbolicBuffer _ msg)) -> do
+        --             out <- mapM (getValue.fromSized) msg
+        --             io . putStrLn $
+        --               "Returned: " <> show (ByteStringS (ByteString.pack out))
 
 dappCoverage :: UnitTestOptions -> Mode -> String -> IO ()
 dappCoverage opts _ solcFile =
@@ -792,10 +800,10 @@ symvmFromCommand cmd = do
     -- ConcreteS cannot (instead values can be fetched from rpc!)
     -- Initial defaults to 0 for uninitialized storage slots,
     -- whereas the values of SymbolicS are unconstrained.
-    Just InitialS  -> EVM.Symbolic [] <$> freshArray_ (Just 0)
+    Just InitialS  -> EVM.Symbolic UStorage <$> freshArray_ (Just 0)
     Just ConcreteS -> return (EVM.Concrete mempty)
-    Just SymbolicS -> EVM.Symbolic [] <$> freshArray_ Nothing
-    Nothing -> EVM.Symbolic [] <$> freshArray_ (if create cmd then (Just 0) else Nothing)
+    Just SymbolicS -> EVM.Symbolic UStorage <$> freshArray_ Nothing
+    Nothing -> EVM.Symbolic UStorage <$> freshArray_ (if create cmd then (Just 0) else Nothing)
 
   withCache <- io $ applyCache (state cmd, cache cmd)
 
