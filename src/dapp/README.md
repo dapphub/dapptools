@@ -10,15 +10,29 @@ that isn't available in `rpc`, such as [fuzz testing](#dapp-test-flags), symboli
 <!-- DON'T EDIT THIS SECTION, INSTEAD RE-RUN doctoc TO UPDATE -->
 **Table of Contents**
 
-- [Dapp *](#dapp-)
-  - [Usage](#usage)
-  - [Configuration](#configuration)
-  - [Installation](#installation)
-  - [Using custom solc versions](#using-custom-solc-versions)
-  - [Using dapp test](#using-dapp-test)
-    - [`dapp test` flags:](#dapp-test-flags)
-    - [Alternative install](#alternative-install)
-    - [Docker](#docker)
+- [Installing](#installing)
+- [Basic usage: a tutorial](#basic-usage-a-tutorial)
+  - [Building](#building)
+  - [Unit testing](#unit-testing)
+  - [Property based testing](#property-based-testing)
+  - [Symbolically executed tests](#symbolically-executed-tests)
+  - [Testing against RPC state](#testing-against-rpc-state)
+  - [Deployment](#deployment)
+- [Configuration](#configuration)
+  - [solc version](#solc-version)
+- [Commands](#commands)
+  - [`dapp init`](#dapp-init)
+  - [`dapp build`](#dapp-build)
+  - [`dapp test`](#dapp-test)
+  - [`dapp debug`](#dapp-debug)
+  - [`dapp create`](#dapp-create)
+  - [`dapp address`](#dapp-address)
+  - [`dapp install`](#dapp-install)
+  - [`dapp update`](#dapp-update)
+  - [`dapp upgrade`](#dapp-upgrade)
+  - [`dapp testnet`](#dapp-testnet)
+  - [`dapp verify-contract`](#dapp-verify-contract)
+  - [`dapp mk-standard-json`](#dapp-mk-standard-json)
 
 <!-- END doctoc generated TOC please keep comment here to allow auto update -->
 
@@ -142,7 +156,7 @@ function test_withdraw(uint96 amount) public {
 }
 ```
 
-### Symbolically execution tests
+### Symbolically executed tests
 
 While property based testing runs each function repeatedly with new input values, symbolic execution tries leaves these 
 values symbolic and tries to explore each possible execution path. This gives a stronger guarantee and is powerful than
@@ -175,8 +189,56 @@ which demonstrates that if we give the password `42`, it is possible to withdraw
 
 For more reading on property based testing and symbolic execution, see [this tutorial on the Ethereum Foundation blog](https://fv.ethereum.org/2020/12/11/symbolic-execution-with-ds-test/).
 
+### Testing against RPC state
+
+You can test how your contract interacts with already deployed contracts by 
+letting the testing state be fetched from rpc with the `--rpc` flag.
+
+Running `dapp test` with the `--rpc` flag enabled will cause every state fetching operation
+(such as SLOAD, EXTCODESIZE, CALL*, etc.) to request the state from `$ETH_RPC_URL`.
+
+For example, if you want to try out wrapping ETH you could define WETH in the `setUp()` function:
+```solidity
+import "ds-test/test.sol";
+
+interface WETH {
+    function balanceOf(address) external returns (uint);
+    function deposit() external payable;
+}
+
+contract WethTest is DSTest {
+    WETH weth;
+    function setUp() public {
+        weth = WETH(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2);
+    }
+
+    function testWrap() public {
+        assertEq(weth.balanceOf(address(this)), 0);
+        weth.deposit{value :1 ether}();
+        assertEq(weth.balanceOf(address(this)), 1 ether);
+    }
+}
+```
+
+With `ETH_RPC_URL` set, you can run `dapp test --rpc` on this test or `dapp debug --rpc` to step through 
+the `testWrap` function in the interactive debugger.
+
+It is often useful to modify the state for testing purposes, for example to grant the testing contract 
+with a balance of a particular token. This can be done using [`hevm cheat codes`](../hevm/README.md#cheat-codes).
+
+### Deployment
+
+To deploy a contract, you can use `dapp create`:
+
+```solidity
+dapp create Dapptutorial [<constructorArgs>] [<options>]
+```
+
+The `--verify` flag verifies the contract on etherscan (requires `ETHERSCAN_API_KEY`).
+
 ## Configuration
 
+The commands of `dapp` can be customized with environment variables or flags.
 These variables can be set at the prompt or in a `.dapprc` file.
 
 | Variable                   | Default                    | Synopsis                                                                                                                                   |
@@ -200,24 +262,24 @@ These variables can be set at the prompt or in a `.dapprc` file.
 A global (always loaded) config file is located in `~/.dapprc`.
 A local `.dapprc` can also be defined in your project's root, which overrides variables in the global config.
 
-## Installation
+### solc version
 
-`dapp` is distrubuted as part of the [Dapp tools suite](../../README.md).
+You can specify a custom `solc` version to run within `dapp` with `dapp --use <arg>`.
+If the argument is of the form `solc:x.y.z`, the appropriate solc version
+will temporarily installed. 
+If the argument contains a `/`, it is interpreted as a path to a solc 
+binary to be used.
 
-## Using custom solc versions
-
-You can specify a custom `solc` version to run within `dapp` with `dapp --use
-solc:x.y.z test`, but you can also install any supported `solc` "standalone"
-(i.e. add it to your `$PATH`) with:
-
-```
+You can install any supported `solc` "standalone" (i.e. add it to your `$PATH`) with:
+```sh
 nix-env -iA solc-versions.solc_x_y_z \
   -if https://github.com/dapphub/dapptools/tarball/master
 ```
-
-*(NOTE: if you haven't installed dapptools with the one-line installer, you'll
-have to manually pass substituters in the command above, or configure Cachix
-manually, to avoid compilation)*
+or
+```sh
+nix-env -iA solc-static-versions.solc_x_y_z \
+  -if https://github.com/dapphub/dapptools/tarball/master
+```
 
 For a list of the supported `solc` versions, check
 [`./nix/solc-versions.nix`](./nix/solc-versions.nix).
@@ -227,7 +289,61 @@ Versions of `solc` that haven't yet landed in nixpkgs can be found under the
 
 *(NOTE: not all versions are supported on macOS platforms.)*
 
-## Using dapp test
+## Commands
+
+### `dapp init`
+
+    dapp-init -- bootstrap a new dapp
+    Usage: dapp init
+
+Initializes the current directory to the default `dapp` structure,
+installing `ds-test` and creating two boilerplate contracts in the `src` directory.
+
+### `dapp build`
+
+    dapp-build -- compile the source code
+    Usage: dapp build [--extract]
+
+    --extract:  After building, write the .abi, .bin and .bin-runtime. Implies `--legacy`
+        files from the solc json into $DAPP_OUT. Beware of contract
+        name collisions. This is provided for compatibility with older
+        workflows.
+    --optimize: activate the solidity optimizer.
+    --legacy:   Compile using the `--combined-json` flag. Some options are
+        missing from this format. This is provided for compatibility with older
+        workflows.
+
+Compiles the contracts in the `src` directory. 
+The compiler options of the build are generated by the [`dapp mk-standard-json`](#dapp-mk-standard-json) command,
+which infers most options from the project structure. For more customizability, you can define your own configuration json
+by setting the file to the environment variable `DAPP_STANDARD_JSON`.
+
+By default, `dapp build` uses [`dapp remappings`](#dapp-remappings) to resolve Solidity import paths.
+
+You can override this with the `DAPP_REMAPPINGS` environment variable.
+
+### `dapp test`
+
+    Usage: dapp test [<options>]
+  
+    Options:
+        -v, --verbose             trace ouput for failing tests
+        -vv                       trace output for all tests including passes
+        --verbosity <number>      sets the verbosity to <number>
+        --fuzz-runs <number>      number of times to run fuzzing tests
+        --replay <string>         rerun a particular test case
+        -m, --match <string>      only run test methods matching regex
+
+    RPC options:
+        --rpc                     fetch remote state via ETH_RPC_URL
+        --rpc-url <url>           fetch remote state via <url>
+        --rpc-block <number>      block number (latest if not specified)
+
+    SMT options:
+        --smttimeout <number>     timeout passed to the smt solver in ms (default 30000)
+        --solver <string>         name of the smt solver to use (either "z3" or "cvc4")
+        --max-iterations <number> number of times we may revisit a particular branching point during symbolic execution
+
 
 dapp tests are written in Solidity using the `ds-test` module. To install it, run
 ```sh
@@ -236,35 +352,15 @@ dapp install ds-test
 
 Every contract which inherits from `DSTest` will be treated as a test contract, and will be assumed to have a public `setUp()` function, which will be run before every test.
 
-To write a test function, simply prefix the function name by `test`.
+Every function prefixed with `test` is expected to succeed, while functions 
+prefixed by `testFail` are expected to fail.
 
-Example:
-```sol
-import "ds-test/test.sol";
+Functions prefixed with `prove` are run symbolically, expecting success while functions
+prefixed `proveFail` are run symbolically expecting failure.
 
-contract A {
-  function isEven(uint x) returns (bool) {
-    return x % 2 == 0;
-  }
-}
+The `-v` flag prints call traces for failing tests, `-vv` for all tests.
 
-contract C is DSTest {
-  A a;
-  function setUp() public {
-    a = new A();
-  }
-  function test_isEven() external {
-    assertTrue(a.isEven(4));
-  }
-}
-```
-
-Run `dapp test` to run the test suite.
-
-
-### `dapp test` flags:
-
-If you provide `--rpc-url`, state will be fetched via rpc. Local changes take priority.
+If you provide `--rpc`, state will be fetched via rpc. Local changes take priority.
 
 You can configure the testing environment using [hevm specific environment variables](https://github.com/dapphub/dapptools/tree/master/src/hevm#environment-variables).
 
@@ -274,12 +370,7 @@ If your test function takes arguments, they will be randomly instantiated and th
 
 The number of times run is configurable using `--fuzz-runs`.
 
-To step through a test in `hevm` interactive debugger, use `dapp debug`.
-
-`dapp --use` allows for configuration of the solidity version.
-```
-dapp --use solc:0.5.12 test
-```
+To step through a test in `hevm` interactive debugger, use [`dapp debug`](#dapp-debug).
 
 `dapp test --match <regex>` will only run tests that match the given
 regular expression. This will be matched against the file path of the
@@ -308,27 +399,85 @@ dapp test --match 'src/test/a\.t\.sol:TheContract\.test_this\(\)'
 By default, `dapp test` also recompiles your contracts.
 To skip this, you can set the environment variable `DAPP_SKIP_BUILD=1`.
 
-### Alternative install
-If you don't want to use Nix, we provide an alternative installation mechanism using `make` below.
+If you have any libraries in `DAPP_SRC` or `DAPP_LIB` with nonzero bytecode,
+they will be deployed locally and linked to by any contracts referring to them.
+This can be skipped by setting `DAPP_LINK_TEST_LIBRARIES=0`.
 
-Please make sure you have:
+### `dapp debug`
 
-* [`solc`](https://solidity.readthedocs.io/en/develop/installing-solidity.html)
-* Bash 4
+    dapp-debug -- run unit tests interactively (hevm)
+    Usage: dapp debug [<options>]
+    
+    Options:
+       --rpc                 fetch remote state via ETH_RPC_URL
+       --rpc-url=<url>       fetch remote state via <url>
+       --rpc-block=<number>  block number (latest if not specified)
 
-and then run:
+Enters the interactive debugger. See the [hevm README](../hevm/README.md#interactive-debugger-key-bindings)
+for key bindings for navigation.
 
-```
-   make link                  install dapp(1) into /usr/local
-   make uninstall             uninstall dapp(1) from /usr/local
-```
+### `dapp create`
+
+    dapp-create -- deploy a compiled contract (--verify on Etherscan)
+    Usage: dapp create <contractname> or
+        dapp create <path>:<contractname>
+    Add --verify and export your ETHERSCAN_API_KEY to auto-verify on Etherscan
 
 
-### Docker
+### `dapp address`
 
-The provided `Dockerfile` is based on the `node` image.
+    dapp-address -- determine address of newly generated contract
+    Usage: dapp address <sender> <nonce>
 
-```
-docker build -t dapp .                build the Docker image
-docker run -it -v `pwd`:/src dapp     run `dapp test' on the current directory
-```
+### `dapp install`
+
+    dapp-install -- install a smart contract library
+    Usage: dapp install <lib>
+    <lib> may be:
+    - a Dapphub repo (ds-foo)
+    - the URL of a Dapphub repo (https://github.com/dapphub/ds-foo)
+    - a path to a repo in another Github org (org-name/repo-name)
+
+If the project you want to install does not follow the typical `dapp` project structure,
+you may need to configure the `DAPP_REMAPPINGS` environment variable to be able to find
+it. For an example, see [this repo](https://github.com/dapp-org/radicle-contracts-tests/).
+
+### `dapp update`
+
+    dapp-update -- fetch all upstream lib changes
+    Usage: dapp update [<lib>]
+
+Updates a project submodule in the `lib` subdirectory.
+
+
+### `dapp upgrade`
+
+    dapp-upgrade -- pull & commit all upstream lib changes
+    Usage: dapp upgrade [<lib>]
+
+### `dapp testnet`
+
+Spins up a geth testnet.
+
+### `dapp verify-contract`
+
+    dapp-verify-contract -- verify contract souce on etherscan
+    Usage: dapp verify-contract <path>:<contractname> <address> [constructorArgs]
+
+Requires `ETHERSCAN_API_KEY` to be set.
+
+`seth chain` will be used to determine on which network the contract is to be verified.
+
+Automatically run when the `--verify` flag is passed to `dapp create`.
+
+### `dapp mk-standard-json`
+
+Generates a Solidity settings input json using the structure of the current directory.
+
+The following environment variables can be used to override settings:
+
+- `DAPP_SRC`
+- `DAPP_REMAPPINGS`
+- `DAPP_BUILD_OPTIMIZE`
+- `DAPP_BUILD_OPTIMIZE_RUNS`
+- `DAPP_LIBRARIES`
