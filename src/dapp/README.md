@@ -129,7 +129,7 @@ or enter the interactive debugger by running `dapp debug`.
 Now lets try something more interesting - property based testing and symbolically executed tests.
 
 We can generailize our `test_withdraw` function to not use the hardcoded `1 ether`, but instead take
-the value a parameter:
+the value as a parameter:
 ```solidity
 function test_withdraw(uint amount) public {
     address(dapptutorial).transfer(amount);
@@ -158,8 +158,8 @@ function test_withdraw(uint96 amount) public {
 
 ### Symbolically executed tests
 
-While property based testing runs each function repeatedly with new input values, symbolic execution tries leaves these 
-values symbolic and tries to explore each possible execution path. This gives a stronger guarantee and is powerful than
+While property based testing runs each function repeatedly with new input values, symbolic execution leaves these 
+values symbolic and tries to explore each possible execution path. This gives a stronger guarantee and is more powerful than
 property based testing, but is also more difficult, especially for complicated functions.
 
 Continuing with our vault example, imagine that we forgot the password and did not have the source available. 
@@ -350,7 +350,7 @@ dapp tests are written in Solidity using the `ds-test` module. To install it, ru
 dapp install ds-test
 ```
 
-Every contract which inherits from `DSTest` will be treated as a test contract, and will be assumed to have a public `setUp()` function, which will be run before every test.
+Every contract which inherits from `DSTest` will be treated as a test contract, if it has a `setUp()` function, it will be run before every test.
 
 Every function prefixed with `test` is expected to succeed, while functions 
 prefixed by `testFail` are expected to fail.
