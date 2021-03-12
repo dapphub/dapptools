@@ -39,15 +39,15 @@
 ###   Contract verifying options:
 ### async                      don't wait for confirmation
 
-  Dapp testnet options:
-rpc-port=port      change RPC port (default: 8545)
-rpc-addr=address   change RPC address (default: 127.0.0.1)
-chain-id=number    change chain ID (default: 99)
-period=seconds     use a block time instead of instamine
-accounts=number    create multiple accounts (default: 1)
-save=name          after finishing, save snapshot
-load=name          start from a previously saved snapshot
-dir=directory      testnet directory
+###   Dapp testnet options:
+### rpc-port=port      change RPC port (default: 8545)
+### rpc-addr=address   change RPC address (default: 127.0.0.1)
+### chain-id=number    change chain ID (default: 99)
+### period=seconds     use a block time instead of instamine
+### accounts=number    create multiple accounts (default: 1)
+### save=name          after finishing, save snapshot
+### load=name          start from a previously saved snapshot
+### dir=directory      testnet directory
 
 
 OPTS="dapp [<options>] <command> [<args>]
