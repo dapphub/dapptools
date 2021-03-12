@@ -308,16 +308,16 @@ transactions, exit codes, and so on.
 
 ### Using strings
 
-Strings can be used by enclosing them in double quotes within single quotes. 
+Strings can be used by enclosing them in double quotes within single quotes.
 
     $ export RESULT=$(seth calldata "f(string)" '"Hello World"')
     $ seth --calldata-decode "f(string)" $RESULT
     Hello World
-    
+
 ### Using arrays
 
-Arrays can be used by enclosing them in single or double quotes. Arrays 
-surrounded in single quotes will be inerpreted literally - you won't be able 
+Arrays can be used by enclosing them in single or double quotes. Arrays
+surrounded in single quotes will be inerpreted literally - you won't be able
 to use variables (`$FOO`) in them.
 
     $ export AMOUNT=$(seth --to-wei 5 ether)
@@ -679,7 +679,7 @@ default behavior.
 
     seth sign <data>
 
-Sign hexdata with the `'\x19Ethereum Signed Message:\n'` prefix using the `$ETH_FROM` 
+Sign hexdata with the `'\x19Ethereum Signed Message:\n'` prefix using the `$ETH_FROM`
 account.
 
 See [`ethsign`](../ethsign/README.md) for more signing and key management options.
