@@ -8,7 +8,7 @@ favoring composability, configurability and extensibility.
 This repository contains the source code for several programs
 hand-crafted and maintained by DappHub, along with dependency management, courtesy of Nix.
 
-- [dapp](./src/dapp) - all you need Ethereum development tool. Build, test, fuzz, debug & deploy solidity contracts.
+- [dapp](./src/dapp) - all you need Ethereum development tool. Build, test, fuzz, formally verify, debug & deploy solidity contracts.
 - [seth](./src/seth) - Ethereum CLI. Query contracts, send transactions, follow logs, slice & dice data.
 - [hevm](./src/hevm) - Testing oriented EVM implementation. Debug, fuzz, or symbolically execute code against local or mainnet state.
 - [ethsign](./src/ethsign) - sign Ethereum transactions from a local keystore or hardware wallet.
@@ -31,7 +31,7 @@ Then install dapptools:
 curl https://dapp.tools/install | sh
 ```
 
-This installs the `dapp`, `solc`, `seth` and `hevm` executables. 
+This configures the dapphub binary cache and installs the `dapp`, `solc`, `seth` and `hevm` executables. 
 
 You can also install an individual tool with 
 ```sh
@@ -84,8 +84,8 @@ hevm symbolic --address 0x6b175474e89094c44da98b954eedeac495271d0f --rpc $ETH_RP
 
 ## Contributing
 
-Contributions are always welcome! You may be interested in about the 
-[ARCHITECTURE.md](./ARCHITECTURE.md) of this repository.
+Contributions are always welcome! You may be interested in the 
+[architecture](./ARCHITECTURE.md) of this repository.
 
 ---
 [![built with nix](https://builtwithnix.org/badge.svg)](https://builtwithnix.org)
