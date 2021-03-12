@@ -71,7 +71,10 @@ data Expr =
 
   -- sniff
   | Oops String
-  | Slice Expr Expr Expr          -- offset size buffer
+  | Slice
+    Expr            -- from
+    Expr            -- size
+    Expr            -- buffer
   | Write Expr Expr Expr Expr Expr
 
   -- writes a word to an existing buffer

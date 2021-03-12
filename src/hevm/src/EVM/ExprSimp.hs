@@ -31,6 +31,8 @@ data ExprContext = ExprContext
 --     index = num (((toInteger x) - 4) `div` 32)
 --   in if length input > index then Var (cParam $ unpack $ fst (input !! index)) else Todo ("sad" ++ (show index)) []
 
+
+-- (writeword x y (writeword z _ SEmpty))
 mkIsKnownStorageSlot :: [(Text, StorageItem)] -> ExprC -> Bool
 mkIsKnownStorageSlot
   is
@@ -103,41 +105,68 @@ fixExpr w =
         else fixExpr w'
 
 simpExpr :: (?ctx :: ExprContext) => ExprC -> ExprC
+
+-- (keccak (writeword 0x0 (and 0xffffffffffffffffffffffffffffffffffffffff (sload 0x4 CALLDATA)) (writeword 0x20 0x0 SEmpty)))
 simpExpr e@(EC "FromKeccak" [s])
   | (isKnownStorageSlot ?ctx) s     = (simpStorage ?ctx) s
   | otherwise = EC "FromKeccak" ([simpExpr s])
 simpExpr (EC "And" [(ECLiteral x), expr@(EC "And" [(ECLiteral x'), _])])
   | x == x'                         = simpExpr expr
   | otherwise                       = (EC "And" [(ECLiteral x), (simpExpr expr)])
-
+simpExpr (EC "WriteWord"
+  [ ECLiteral x
+  , w
+  , EC "WriteWord"
+    [ ECLiteral y
+    , u
+    , s ]])
+  | x < y
+  = (EC "WriteWord"
+    [ ECLiteral y
+    , u
+    , simpExpr $ EC "WriteWord"
+      [ ECLiteral x
+      , w
+      , s ]])
+  | x == y
+  = (EC "WriteWord"
+  [ ECLiteral x
+  , w
+  , simpExpr s ])
+  | otherwise
+  = (EC "WriteWord"
+  [ ECLiteral x
+  , w
+  , simpExpr $ EC "WriteWord"
+    [ ECLiteral y
+    , u
+    , s ]])
 simpExpr (EC "Slice"
   [ ECLiteral from
-  , ECLiteral to
-  , EC "WriteWord" [ECLiteral x, w, s]
-  ])
-  | from == x && to == x + 0x20
-  = EC "WriteWord"
-    [ ECLiteral from
-    , simpExpr w
-    , EC "SEmpty" []]
-  | from == x && x + 0x20 < to
-  = EC "WriteWord"
+  , ECLiteral size
+  , EC "WriteWord"
     [ ECLiteral x
-    , simpExpr w
-    , simpExpr (
-      EC "Slice"
-        [ ECLiteral (from + 0x20)
-        , ECLiteral to
-        , s])]
-  | from <= x && x + 0x20 == to
+    , w
+    , s]])
+  -- within
+  | from <= x && x <= from + size - 0x20
   = EC "WriteWord"
-    [ ECLiteral x
-    , simpExpr w
-    , simpExpr (EC "Slice"
+    [ ECLiteral (x - from)
+    , w
+    , EC "Slice"
       [ ECLiteral from
-      , ECLiteral (to - 0x20)
-      , s])]
-  | otherwise = ECOops $ show (x - from)
+      , ECLiteral size
+      , s ]]
+  -- outside
+  | otherwise
+  = EC "Slice"
+    [ ECLiteral from
+    , ECLiteral size
+    , s ]
+-- TODO - fill with zeros
+simpExpr (EC "Slice" [_, _, EC "SEmpty" []]) = EC "SEmpty" []
+-- TODO - buffer sort by write positions
+--        and filter collisions
 
 -- fold default cases
 simpExpr (EC t cs)                  = EC t (simpExpr <$> cs)

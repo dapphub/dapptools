@@ -520,7 +520,7 @@ simpS r@(Slice (Literal from) (Literal to) (WriteWord (Literal x) w s))
   | from == x && to == x + 0x20 = WriteWord (Literal from) (simpW w) SEmpty
   | from == x && x + 0x20 < to  = (WriteWord (Literal x) (simpW w) (simpS (Slice (Literal (from + 0x20)) (Literal to) s)))
   | from <= x && x + 0x20 == to = (WriteWord (Literal x) (simpW w) (simpS (Slice (Literal from) (Literal (to - 0x20)) s)))
-  | otherwise = Oops (show (x - from))
+  | otherwise = Oops ("simpS" ++ (show (x - from)))
 simpS Calldata = Calldata
 simpS x = Oops ("simpS" <> show x)
 
@@ -568,6 +568,7 @@ simpW (FromKeccak
   | otherwise             = FromKeccak $ simpS s
   where
     storagelist = Map.toList $ fromMaybe mempty (fromMaybe Nothing (_storageLayout <$> currentSolc ?srcInfo ?vm))
+
 simpW (FromKeccak s)                = FromKeccak $ simpS s
 simpW (And (Literal x) (And (Literal x') y))
   | x == x'                         = simpW (And (Literal x) y)
