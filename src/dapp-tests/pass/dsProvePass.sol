@@ -5,7 +5,7 @@ import "ds-token/token.sol";
 import "ds-math/math.sol";
 
 contract ConstructorArg {
-    address a immutable;
+    address immutable a;
     constructor(address _a) {
         a = _a;
     }

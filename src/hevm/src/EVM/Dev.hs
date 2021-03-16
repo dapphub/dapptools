@@ -162,7 +162,8 @@ getOp vm =
       xs = case code' of
         ConcreteBuffer xs' -> ConcreteBuffer (BS.drop i xs')
         SymbolicBuffer xs' -> SymbolicBuffer (drop i xs')
-  in case xs of
+  in if len xs == 0 then 0
+  else case xs of
        ConcreteBuffer b -> BS.index b 0
        SymbolicBuffer b -> fromSized $ fromMaybe (error "unexpected symbolic code") (unliteral (b !! 0))
 
