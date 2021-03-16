@@ -2448,7 +2448,7 @@ checkJump x xs = do
   self <- use (state . codeContract)
   theCodeOps <- use (env . contracts . ix self . codeOps)
   theOpIxMap <- use (env . contracts . ix self . opIxMap)
-  if x < num (len theCode) && EVM.Symbolic.index (num x) theCode == 0x5b
+  if x < num (len theCode) && 0x5b == (fromMaybe (error "tried to jump to symbolic code location") $ unliteral $ EVM.Symbolic.index (num x) theCode)
     then
       if OpJumpdest == snd (theCodeOps RegularVector.! (theOpIxMap Vector.! num x))
       then do

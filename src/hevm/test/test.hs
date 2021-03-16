@@ -526,7 +526,7 @@ main = defaultMain $ testGroup "hevm"
             let vm = vm0
                   & set (state . callvalue) 0
                   & over (env . contracts)
-                       (Map.insert aAddr (initialContract (RuntimeCode a) &
+                       (Map.insert aAddr (initialContract (RuntimeCode $ ConcreteBuffer a) &
                                            set EVM.storage (EVM.Symbolic [] store)))
             verify vm Nothing Nothing (Just checkAssertions)
           putStrLn $ "found counterexample:"
@@ -642,7 +642,7 @@ loadVM x =
     case runState exec (vmForEthrunCreation x) of
        (VMSuccess (ConcreteBuffer targetCode), vm1) -> do
          let target = view (state . contract) vm1
-             vm2 = execState (replaceCodeOfSelf (RuntimeCode targetCode)) vm1
+             vm2 = execState (replaceCodeOfSelf (RuntimeCode (ConcreteBuffer targetCode))) vm1
          return $ snd $ flip runState vm2
                 (do resetState
                     assign (state . gas) 0xffffffffffffffff -- kludge
