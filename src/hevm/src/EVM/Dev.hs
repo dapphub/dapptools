@@ -24,6 +24,7 @@ import Data.SBV hiding (Word)
 import qualified Data.Aeson           as JSON
 import Options.Generic
 import Data.SBV.Trans.Control
+import Data.Maybe (fromMaybe)
 import Control.Monad.State.Strict (execStateT)
 
 import qualified Data.Map as Map
@@ -156,10 +157,14 @@ data VMTraceResult =
 
 getOp :: VM -> Word8
 getOp vm =
-  if BS.length (view (state . code) vm) <= view (state . EVM.pc) vm
-  then 0
-  else fromIntegral $ BS.index (view (state . code) vm) (view (state . EVM.pc) vm)
-
+  let i  = vm ^. state . EVM.pc
+      code' = vm ^. state . code
+      xs = case code' of
+        ConcreteBuffer xs' -> ConcreteBuffer (BS.drop i xs')
+        SymbolicBuffer xs' -> SymbolicBuffer (drop i xs')
+  in case xs of
+       ConcreteBuffer b -> BS.index b 0
+       SymbolicBuffer b -> fromSized $ fromMaybe (error "unexpected symbolic code") (unliteral (b !! 0))
 
 vmtrace :: VM -> VMTrace
 vmtrace vm =

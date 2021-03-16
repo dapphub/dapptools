@@ -156,7 +156,7 @@ clearCode = set contractcode (EVM.RuntimeCode mempty)
 
 instance FromJSON EVM.Contract where
   parseJSON (JSON.Object v) = do
-    code <- (EVM.RuntimeCode <$> (hexText <$> v .: "code"))
+    code <- (EVM.RuntimeCode . ConcreteBuffer <$> (hexText <$> v .: "code"))
     storage' <- Map.mapKeys w256 <$> v .: "storage"
     balance' <- v .: "balance"
     nonce'   <- v .: "nonce"
@@ -282,7 +282,7 @@ fromBlockchainCase' block tx preState postState =
             feeSchedule = EVM.FeeSchedule.istanbul
             toCode = Map.lookup toAddr preState
             theCode = if isCreate
-                      then EVM.InitCode (txData tx)
+                      then EVM.InitCode (ConcreteBuffer (txData tx))
                       else maybe (EVM.RuntimeCode mempty) (view contractcode) toCode
             cd = if isCreate
                  then (mempty, 0)

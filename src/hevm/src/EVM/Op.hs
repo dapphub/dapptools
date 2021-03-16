@@ -3,7 +3,7 @@ module EVM.Op
   , opString
   ) where
 
-import EVM.Types (W256)
+import EVM.Types (SymWord)
 import Data.Word (Word8)
 import Numeric (showHex)
 
@@ -83,7 +83,7 @@ data Op
   | OpDup !Word8
   | OpSwap !Word8
   | OpLog !Word8
-  | OpPush !W256
+  | OpPush !SymWord
   | OpUnknown Word8
   deriving (Show, Eq)
 

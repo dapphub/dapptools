@@ -203,6 +203,10 @@ readSWord :: Word -> Buffer -> SymWord
 readSWord i (SymbolicBuffer x) = readSWord' i x
 readSWord i (ConcreteBuffer x) = num $ Concrete.readMemoryWord i x
 
+index :: Int -> Buffer -> SWord8
+index x (ConcreteBuffer b) = literal $ BS.index b x
+index x (SymbolicBuffer b) = fromSized $ b !! x
+
 -- * Uninterpreted functions
 
 symSHA256N :: SInteger -> SInteger -> SWord 256
