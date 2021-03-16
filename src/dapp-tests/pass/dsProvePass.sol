@@ -4,6 +4,13 @@ import "ds-test/test.sol";
 import "ds-token/token.sol";
 import "ds-math/math.sol";
 
+contract ConstructorArg {
+    address a immutable;
+    constructor(address _a) {
+        a = _a;
+    }
+}
+
 contract SolidityTest is DSTest, DSMath {
     DSToken token;
 
@@ -26,6 +33,11 @@ contract SolidityTest is DSTest, DSMath {
         token.mint(supply);
         uint actual = token.totalSupply();
         assertEq(supply, actual);
+    }
+
+    function prove_constructorArgs(address b) public {
+        ConstructorArg c = new ConstructorArg(b);
+        assertEq(b, c.a());
     }
 
     function proveFail_revertSmoke() public {
@@ -77,4 +89,3 @@ contract SolidityTest is DSTest, DSMath {
         assertTrue(counter < 100);
     }
 }
-
