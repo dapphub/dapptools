@@ -6,7 +6,7 @@ module EVM.Fetch where
 
 import Prelude hiding (Word)
 
-import EVM.Types    (Addr, w256, W256, hexText, Word)
+import EVM.Types    (Addr, w256, W256, hexText, Word, Buffer(..))
 import EVM.Symbolic (litWord)
 import EVM          (IsUnique(..), EVM, Contract, Block, initialContract, nonce, balance, external)
 import qualified EVM.FeeSchedule as FeeSchedule
@@ -123,7 +123,7 @@ fetchContractWithSession n url addr sess = runMaybeT $ do
   theBalance <- MaybeT $ fetch (QueryBalance addr)
 
   return $
-    initialContract (EVM.RuntimeCode theCode)
+    initialContract (EVM.RuntimeCode (ConcreteBuffer theCode))
       & set nonce    (w256 theNonce)
       & set balance  (w256 theBalance)
       & set external True

@@ -54,14 +54,14 @@ import Control.Monad.State.Strict (execStateT, liftIO)
 import Data.ByteString            (ByteString)
 import Data.List                  (intercalate, isSuffixOf)
 import Data.Tree
-import Data.Text                  (Text, unpack, pack)
+import Data.Text                  (unpack, pack)
 import Data.Text.Encoding         (encodeUtf8)
 import Data.Text.IO               (hPutStr)
 import Data.Maybe                 (fromMaybe, fromJust)
 import Data.Version               (showVersion)
 import Data.SBV hiding (Word, solver, verbose, name)
 import Data.SBV.Control hiding (Version, timeout, create)
-import System.IO                  (hFlush, stdout, stderr, utf8)
+import System.IO                  (hFlush, stdout, stderr)
 import System.Directory           (withCurrentDirectory, listDirectory)
 import System.Exit                (exitFailure, exitWith, ExitCode(..))
 import System.Environment         (setEnv)
@@ -731,7 +731,7 @@ vmFromCommand cmd = do
         caller'  = addr caller 0
         origin'  = addr origin 0
         calldata' = ConcreteBuffer $ bytes calldata ""
-        codeType = if create cmd then EVM.InitCode else EVM.RuntimeCode
+        codeType = (if create cmd then EVM.InitCode else EVM.RuntimeCode) . ConcreteBuffer
         address' = if create cmd
               then addr address (createAddress origin' (word nonce 0))
               else addr address 0xacab
@@ -837,7 +837,7 @@ symvmFromCommand cmd = do
     decipher = hexByteString "bytes" . strip0x
     block'   = maybe EVM.Fetch.Latest EVM.Fetch.BlockNumber (block cmd)
     origin'  = addr origin 0
-    codeType = if create cmd then EVM.InitCode else EVM.RuntimeCode
+    codeType = (if create cmd then EVM.InitCode else EVM.RuntimeCode) . ConcreteBuffer
     address' = if create cmd
           then addr address (createAddress origin' (word nonce 0))
           else addr address 0xacab

@@ -25,7 +25,6 @@ import EVM.Symbolic
 import EVM.Dapp
 import EVM.Debug (srcMapCodePos)
 import EVM.Fetch (Fetcher)
-import EVM.Op
 import EVM.Solidity
 import EVM.Stepper (Stepper)
 import EVM.TTY (currentSrcMap)
@@ -38,7 +37,6 @@ import qualified Control.Monad.Operational as Operational
 import qualified Data.List as List
 import qualified Data.Map as Map
 import qualified Data.Set as Set
-import qualified Data.Vector as Vector
 import qualified EVM.Fetch as Fetch
 import qualified EVM.Stepper as Stepper
 
@@ -301,7 +299,7 @@ atFileLine dapp wantedFileName wantedLineNumber vm =
             currentFileName == wantedFileName &&
               currentLineNumber == wantedLineNumber
 
-codeByHash :: W256 -> VM -> Maybe ByteString
+codeByHash :: W256 -> VM -> Maybe Buffer
 codeByHash h vm = do
   let cs = view (env . contracts) vm
   c <- List.find (\c -> h == (view codehash c)) (Map.elems cs)
@@ -310,9 +308,6 @@ codeByHash h vm = do
 allHashes :: VM -> Set W256
 allHashes vm = let cs = view (env . contracts) vm
   in Set.fromList ((view codehash) <$> Map.elems cs)
-
-prettifyCode :: ByteString -> String
-prettifyCode b = List.intercalate "\n" (opString <$> (Vector.toList (EVM.mkCodeOps b)))
 
 outputVm :: Console ()
 outputVm = do
@@ -324,7 +319,6 @@ outputVm = do
         output $
         L [ A "step"
           , L [A ("vm" :: Text), sexp (view uiVm s)]
-          , L [A ("newCodes" :: Text), sexp ((fmap prettifyCode) <$> sendCodes)]
           ]
   fromMaybe noMap $ do
     dapp <- view uiVmDapp s
@@ -339,7 +333,6 @@ outputVm = do
             , A (txt (srcMapLength sm))
             , A (txt (srcMapJump sm))
             ]
-        , L [A ("newCodes" :: Text), sexp ((fmap prettifyCode) <$> sendCodes)]
         ]
 
 

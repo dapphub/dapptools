@@ -38,7 +38,7 @@ module EVM.Facts
 import EVM          (VM, Contract, Cache)
 import EVM.Symbolic (litWord, forceLit)
 import EVM          (balance, nonce, storage, bytecode, env, contracts, contract, state, cache, fetched)
-import EVM.Types    (Addr, Word, SymWord)
+import EVM.Types    (Addr, Word, SymWord, Buffer(..))
 
 import qualified EVM
 
@@ -112,11 +112,20 @@ instance AsASCII ByteString where
       _       -> Nothing
 
 contractFacts :: Addr -> Contract -> [Fact]
-contractFacts a x = storageFacts a x ++
-  [ BalanceFact a (view balance x)
-  , NonceFact   a (view nonce x)
-  , CodeFact    a (view bytecode x)
-  ]
+contractFacts a x = case view bytecode x of
+  ConcreteBuffer b -> 
+    storageFacts a x ++
+    [ BalanceFact a (view balance x)
+    , NonceFact   a (view nonce x)
+    , CodeFact    a b
+    ]
+  SymbolicBuffer b ->
+    -- here simply ignore storing the bytecode
+    storageFacts a x ++
+    [ BalanceFact a (view balance x)
+    , NonceFact   a (view nonce x)
+    ]
+
 
 storageFacts :: Addr -> Contract -> [Fact]
 storageFacts a x = case view storage x of
@@ -151,7 +160,7 @@ apply1 :: VM -> Fact -> VM
 apply1 vm fact =
   case fact of
     CodeFact    {..} -> flip execState vm $ do
-      assign (env . contracts . at addr) (Just (EVM.initialContract (EVM.RuntimeCode blob)))
+      assign (env . contracts . at addr) (Just (EVM.initialContract (EVM.RuntimeCode (ConcreteBuffer blob))))
       when (view (state . contract) vm == addr) $ EVM.loadContract addr
     StorageFact {..} ->
       vm & over (env . contracts . ix addr . storage) (EVM.writeStorage (litWord which) (litWord what))
@@ -164,7 +173,7 @@ apply2 :: VM -> Fact -> VM
 apply2 vm fact =
   case fact of
     CodeFact    {..} -> flip execState vm $ do
-      assign (cache . fetched . at addr) (Just (EVM.initialContract (EVM.RuntimeCode blob)))
+      assign (cache . fetched . at addr) (Just (EVM.initialContract (EVM.RuntimeCode (ConcreteBuffer blob))))
       when (view (state . contract) vm == addr) $ EVM.loadContract addr
     StorageFact {..} ->
       vm & over (cache . fetched . ix addr . storage) (EVM.writeStorage (litWord which) (litWord what))

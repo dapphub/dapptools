@@ -47,7 +47,6 @@ import Data.Map           (Map)
 import Data.Maybe         (fromMaybe, catMaybes, fromJust, isJust, fromMaybe, mapMaybe)
 import Data.Text          (isPrefixOf, stripSuffix, intercalate, Text, pack, unpack)
 import Data.Text.Encoding (encodeUtf8)
-import Data.Word          (Word32)
 import System.Environment (lookupEnv)
 import System.IO          (hFlush, stdout)
 
@@ -762,7 +761,7 @@ initialUnitTestVm (UnitTestOptions {..}) theContract =
   let
     TestVMParams {..} = testParams
     vm = makeVm $ VMOpts
-           { vmoptContract = initialContract (InitCode (view creationCode theContract))
+           { vmoptContract = initialContract (InitCode (ConcreteBuffer (view creationCode theContract)))
            , vmoptCalldata = (mempty, 0)
            , vmoptValue = 0
            , vmoptAddress = testAddress
