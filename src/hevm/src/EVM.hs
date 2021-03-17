@@ -574,7 +574,7 @@ exec1 = do
           let !n = num x - 0x60 + 1
               !xs = case the state code of
                       ConcreteBuffer b -> w256lit $ word $ padRight n $ BS.take n (BS.drop (1 + the state pc) b)
-                      SymbolicBuffer b -> readSWord' 0 $ take n $ drop (1 + the state pc) b
+                      SymbolicBuffer b -> readSWord' 0 $ padLeft' 32 $ take n $ drop (1 + the state pc) b
           limitStack 1 $
             burn g_verylow $ do
               next
@@ -1674,7 +1674,9 @@ accountExists addr vm =
 -- EIP 161
 accountEmpty :: Contract -> Bool
 accountEmpty c =
-  (view contractcode c == RuntimeCode mempty)
+  case view contractcode c of
+    RuntimeCode b -> len b == 0
+    _ -> False
   && (view nonce c == 0)
   && (view balance c == 0)
 
@@ -2044,7 +2046,9 @@ delegateCall this gasGiven (SAddr xTo) (SAddr xContext) xValue xInOffset xInSize
 -- EIP 684
 collision :: Maybe Contract -> Bool
 collision c' = case c' of
-  Just c -> (view contractcode c /= RuntimeCode mempty) || (view nonce c /= 0)
+  Just c -> (view nonce c /= 0) || case view contractcode c of
+    RuntimeCode b -> len b == 0
+    _ -> False
   Nothing -> False
 
 create :: (?op :: Word8)
@@ -2476,7 +2480,7 @@ mkOpIxMap xs = Vector.create $ Vector.new (len xs) >>= \v ->
       in m >> return v
     SymbolicBuffer xs' ->
       let (_, _, _, m) =
-            foldl (go' v) (0, 0, 0, return ()) xs'
+            foldl (go' v) (0, 0, 0, return ()) (stripBytecodeMetadataSym xs')
       in m >> return v
       
   where
@@ -2493,7 +2497,9 @@ mkOpIxMap xs = Vector.create $ Vector.new (len xs) >>= \v ->
     -- symbolic case
     go' v (0, !i, !j, !m) x = case unliteral x of
       Just x' -> if x' >= 0x60 && x' <= 0x7f
+        -- start of PUSH op --
                  then (x' - 0x60 + 1, i + 1, j,     m >> Vector.write v i j)
+        -- other data --
                  else (0,             i + 1, j + 1, m >> Vector.write v i j)
       _ -> error "cannot analyze symbolic code"
                               
@@ -2645,7 +2651,7 @@ mkCodeOps (ConcreteBuffer bytes) = RegularVector.fromList . toList $ go 0 bytes
         Just (x, xs') ->
           let j = opSize x
           in (i, readOp x (ConcreteBuffer xs')) Seq.<| go (i + j) (BS.drop j xs)
-mkCodeOps (SymbolicBuffer bytes) = RegularVector.fromList . toList $ go' 0 bytes
+mkCodeOps (SymbolicBuffer bytes) = RegularVector.fromList . toList $ go' 0 (stripBytecodeMetadataSym bytes)
   where
     go' !i !xs =
       case uncons xs of

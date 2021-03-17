@@ -1,4 +1,5 @@
 {-# Language DeriveAnyClass #-}
+{-# Language DataKinds #-}
 {-# Language StrictData #-}
 {-# Language TemplateHaskell #-}
 {-# Language OverloadedStrings #-}
@@ -40,6 +41,7 @@ module EVM.Solidity
   , sourceLines
   , sourceAsts
   , stripBytecodeMetadata
+  , stripBytecodeMetadataSym
   , signature
   , solc
   , Language(..)
@@ -52,6 +54,7 @@ module EVM.Solidity
 
 import EVM.ABI
 import EVM.Types
+import Data.SBV
 
 import Control.Applicative
 import Control.Monad
@@ -87,7 +90,7 @@ import qualified Data.HashMap.Strict    as HMap
 import qualified Data.Map.Strict        as Map
 import qualified Data.Text              as Text
 import qualified Data.Vector            as Vector
-import Data.List (sort)
+import Data.List (sort, isPrefixOf, isInfixOf, elemIndex, tails, findIndex)
 
 data StorageItem = StorageItem {
   _type   :: SlotType,
@@ -510,7 +513,7 @@ instance ToJSON StandardJSON where
 stdjson :: Language -> Text -> Text
 stdjson lang src = decodeUtf8 $ toStrict $ encode $ StandardJSON lang src
 
--- When doing CREATE and passing constructor arguments, Solidity loads
+-- | When doing CREATE and passing constructor arguments, Solidity loads
 -- the argument data via the creation bytecode, since there is no "calldata"
 -- for CREATE.
 --
@@ -528,6 +531,22 @@ stripBytecodeMetadata bs =
     case find ((/= mempty) . snd) stripCandidates of
       Nothing -> bs
       Just (b, _) -> b
+
+stripBytecodeMetadataSym :: [SWord 8] -> [SWord 8]
+stripBytecodeMetadataSym b =
+  let
+    concretes :: [Maybe Word8]
+    concretes = (fmap fromSized) <$> unliteral <$> b
+    bzzrs :: [[Maybe Word8]]
+    bzzrs = fmap (Just) <$> BS.unpack <$> knownBzzrPrefixes
+    candidates = (flip Data.List.isInfixOf concretes) <$> bzzrs
+  in case elemIndex True candidates of
+    Nothing -> b
+    Just i -> let Just ind = infixIndex (bzzrs !! i) concretes
+              in take ind b
+
+infixIndex :: (Eq a) => [a] -> [a] -> Maybe Int
+infixIndex needle haystack = findIndex (isPrefixOf needle) (tails haystack)
 
 knownBzzrPrefixes :: [ByteString]
 knownBzzrPrefixes = [
