@@ -27,6 +27,8 @@ import Control.Arrow ((***), (&&&))
 import Control.Lens
 import Control.Monad
 
+import GHC.Stack
+
 import Data.Aeson ((.:), FromJSON (..))
 import Data.Foldable (fold)
 import Data.Map (Map)
@@ -103,10 +105,10 @@ checkStateFail diff x vm (okState, okMoney, okNonce, okData, okCode) = do
     printContracts actual
   return okState
 
-checkExpectation :: Bool -> Case -> EVM.VM -> IO Bool
+checkExpectation :: HasCallStack => Bool -> Case -> EVM.VM -> IO Bool
 checkExpectation diff x vm = do
   let expectation = testExpectation x
-  let (okState, b2, b3, b4, b5) = checkExpectedContracts vm $ expectation
+      (okState, b2, b3, b4, b5) = checkExpectedContracts vm $ expectation
   unless okState $ void $ checkStateFail
     diff x vm (okState, b2, b3, b4, b5)
   return okState
@@ -118,9 +120,17 @@ checkExpectation diff x vm = do
         padNewAccounts cs'' ks = (fold [Map.insertWith (\_ x -> x) k nullAccount | k <- ks]) cs''
         padded_cs' = padNewAccounts cs' (Map.keys cs)
         padded_cs  = padNewAccounts cs  (Map.keys cs')
-    in padded_cs == padded_cs'
+    in and $ zipWith (===) (Map.elems padded_cs) (Map.elems padded_cs')
 
-checkExpectedContracts :: EVM.VM -> Map Addr EVM.Contract -> (Bool, Bool, Bool, Bool, Bool)
+(===) :: EVM.Contract -> EVM.Contract -> Bool
+a === b = codeEqual && storageEqual && (view balance a == view balance b) && (view nonce a == view nonce b)
+  where
+    storageEqual = view storage a == view storage b
+    codeEqual = case (view contractcode a, view contractcode b) of
+      (EVM.RuntimeCode (ConcreteBuffer a'), EVM.RuntimeCode (ConcreteBuffer b')) -> a' == b'
+      _ -> error "unexpected code"
+
+checkExpectedContracts :: HasCallStack => EVM.VM -> Map Addr EVM.Contract -> (Bool, Bool, Bool, Bool, Bool)
 checkExpectedContracts vm expected =
   let cs = vm ^. EVM.env . EVM.contracts . to (fmap (clearZeroStorage.clearOrigStorage))
       expectedCs = clearOrigStorage <$> expected
@@ -310,7 +320,7 @@ checkTx tx prestate = do
       toAddr      = fromMaybe (EVM.createAddress origin senderNonce) (txToAddr tx)
       prevCode    = view (accountAt toAddr . contractcode) prestate
       prevNonce   = view (accountAt toAddr . nonce) prestate
-  if isCreate && ((prevCode /= EVM.RuntimeCode mempty) || (prevNonce /= 0))
+  if isCreate && ((case prevCode of {EVM.RuntimeCode b -> len b == 0; _ -> False}) || (prevNonce /= 0))
   then mzero
   else
     return $ prestate

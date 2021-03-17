@@ -283,13 +283,6 @@ data ContractCode
   | RuntimeCode Buffer  -- ^ "Instance" code, after contract creation
   deriving (Show)
 
-instance Eq ContractCode where
-  InitCode (ConcreteBuffer a) == InitCode (ConcreteBuffer b) = a == b
-  RuntimeCode (ConcreteBuffer a) == RuntimeCode (ConcreteBuffer b) = a == b
-  InitCode _ == RuntimeCode _ = False
-  RuntimeCode _ == InitCode _ = False
-  _ == _ = error "cannot compare symbolic values"
-
 -- | A contract can either have concrete or symbolic storage
 -- depending on what type of execution we are doing
 data Storage
@@ -320,7 +313,6 @@ data Contract = Contract
   }
 
 deriving instance Show Contract
-deriving instance Eq Contract
 
 -- | When doing symbolic execution, we have three different
 -- ways to model the storage of contracts. This determines
