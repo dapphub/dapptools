@@ -47,6 +47,7 @@ import qualified EVM.Facts.Git as Git
 import qualified EVM.UnitTest
 
 import GHC.IO.Encoding
+import GHC.Stack
 import Control.Concurrent.Async   (async, waitCatch)
 import Control.Lens hiding (pre, passing)
 import Control.Monad              (void, when, forM_, unless)
@@ -865,7 +866,7 @@ symvmFromCommand cmd = do
     word f def = fromMaybe def (f cmd)
     addr f def = fromMaybe def (f cmd)
 
-launchTest :: Command Options.Unwrapped ->  IO ()
+launchTest :: HasCallStack => Command Options.Unwrapped ->  IO ()
 launchTest cmd = do
 #if MIN_VERSION_aeson(1, 0, 0)
   parsed <- VMTest.parseBCSuite <$> LazyByteString.readFile (file cmd)
@@ -885,7 +886,7 @@ launchTest cmd = do
 #endif
 
 #if MIN_VERSION_aeson(1, 0, 0)
-runVMTest :: Bool -> Mode -> Maybe Int -> (String, VMTest.Case) -> IO Bool
+runVMTest :: HasCallStack => Bool -> Mode -> Maybe Int -> (String, VMTest.Case) -> IO Bool
 runVMTest diffmode mode timelimit (name, x) =
  do
   let vm0 = VMTest.vmForCase x

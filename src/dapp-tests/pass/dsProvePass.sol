@@ -6,7 +6,7 @@ import "ds-math/math.sol";
 
 contract ConstructorArg {
     address immutable public a;
-    constructor(address _a) {
+    constructor(address _a) public {
         a = _a;
     }
 }
