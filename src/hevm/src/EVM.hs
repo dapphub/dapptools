@@ -2039,8 +2039,8 @@ delegateCall this gasGiven (SAddr xTo) (SAddr xContext) xValue xInOffset xInSize
 collision :: Maybe Contract -> Bool
 collision c' = case c' of
   Just c -> (view nonce c /= 0) || case view contractcode c of
-    RuntimeCode b -> len b == 0
-    _ -> False
+    RuntimeCode b -> len b /= 0
+    _ -> True
   Nothing -> False
 
 create :: (?op :: Word8)
@@ -2474,7 +2474,7 @@ mkOpIxMap xs = Vector.create $ Vector.new (len xs) >>= \v ->
       let (_, _, _, m) =
             foldl (go' v) (0, 0, 0, return ()) (stripBytecodeMetadataSym xs')
       in m >> return v
-      
+
   where
     -- concrete case
     go v (0, !i, !j, !m) x | x >= 0x60 && x <= 0x7f =
@@ -2494,7 +2494,7 @@ mkOpIxMap xs = Vector.create $ Vector.new (len xs) >>= \v ->
         -- other data --
                  else (0,             i + 1, j + 1, m >> Vector.write v i j)
       _ -> error "cannot analyze symbolic code"
-                              
+
       {- Start of PUSH op. -} (x - 0x60 + 1, i + 1, j,     m >> Vector.write v i j)
     go' v (1, !i, !j, !m) _ =
       {- End of PUSH op. -}   (0,            i + 1, j + 1, m >> Vector.write v i j)
