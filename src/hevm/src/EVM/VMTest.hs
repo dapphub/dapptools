@@ -320,7 +320,7 @@ checkTx tx prestate = do
       toAddr      = fromMaybe (EVM.createAddress origin senderNonce) (txToAddr tx)
       prevCode    = view (accountAt toAddr . contractcode) prestate
       prevNonce   = view (accountAt toAddr . nonce) prestate
-  if isCreate && ((case prevCode of {EVM.RuntimeCode b -> len b == 0; _ -> False}) || (prevNonce /= 0))
+  if isCreate && ((case prevCode of {EVM.RuntimeCode b -> len b /= 0; _ -> True}) || (prevNonce /= 0))
   then mzero
   else
     return $ prestate
