@@ -1,8 +1,8 @@
-{ lib, stdenv, makeWrapper, coreutils, perl, seth, glibcLocales }:
+{ lib, stdenv, makeWrapper, coreutils, perl, seth, ethsign, glibcLocales }:
 
 stdenv.mkDerivation rec {
   name = "token-${version}";
-  version = "0.5.2";
+  version = "0.5.3";
   src = ./.;
 
   nativeBuildInputs = [makeWrapper];
@@ -11,7 +11,7 @@ stdenv.mkDerivation rec {
 
   postInstall =
     let
-      path = lib.makeBinPath [ coreutils perl seth ];
+      path = lib.makeBinPath [ coreutils perl seth ethsign ];
     in
       ''
         wrapProgram "$out/bin/token" \
