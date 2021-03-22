@@ -6,6 +6,7 @@
 
 - Two new cheatcodes were added: `sign(uint sk, bytes message)` and `addr(uint sk)`. Taken together
   these should allow for much more ergonomic testing of code that handles signed messages.
+- Symbolic execution can deal with partially symbolic bytecode, allowing for symbolic constructor arguments to be given in tests.
 
 ### Fixed
 
