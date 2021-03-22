@@ -480,7 +480,7 @@ func main() {
         } else {
           msg = []byte(fmt.Sprintf("\x19Ethereum Signed Message:\n%d%s", len(data), data))
         }
-        signature, err := wallet.SignDataWithPassphrase(*acct, passphrase, "", msg)
+        signature, err := wallet.SignDataWithPassphrase(*acct, passphrase, accounts.MimetypeTypedData, msg)
         if err != nil {
           return cli.NewExitError(err, 1)
         }
