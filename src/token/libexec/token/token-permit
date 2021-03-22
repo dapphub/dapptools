@@ -63,7 +63,13 @@ fi
 
 MESSAGE=$(echo "$DOMAIN_SEPARATOR$(seth keccak "$PERMIT_TYPEHASH"$(echo "$PAYLOAD"|sed 's/0x//g'))"|sed 's/0x//g')
 
-SIG=$(ethsign msg --passphrase-file $ETH_PASSWORD --no-prefix --data "0x1901$MESSAGE")
+OPTS=""
+if [ $ETH_PASSWORD ]; then
+    OPTS="--passphrase-file $ETH_PASSWORD"
+fi
+
+
+SIG=$(ethsign msg $OPTS --no-prefix --data "0x1901$MESSAGE")
 SIG_V=$((0x$(echo "$SIG" | cut -c 131-132)))
 SIG_R=$(echo "$SIG" | cut -c 1-66)
 SIG_S="0x$(echo "$SIG" | cut -c 67-130)"
