@@ -566,7 +566,7 @@ exec1 = do
           let !n = num x - 0x60 + 1
               !xs = case the state code of
                       ConcreteBuffer b -> w256lit $ word $ padRight n $ BS.take n (BS.drop (1 + the state pc) b)
-                      SymbolicBuffer b -> readSWord' 0 $ take n $ drop (1 + the state pc) b
+                      SymbolicBuffer b -> readSWord' 0 $ padLeft' 32 $ take n $ drop (1 + the state pc) b
           limitStack 1 $
             burn g_verylow $ do
               next
