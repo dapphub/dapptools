@@ -1,17 +1,15 @@
 #!/usr/bin/env bash
 ### dapp-verify-contract -- verify contract souce on etherscan
 ### Usage: dapp verify-contract <path>:<contractname> <address> [constructorArgs]
+### Option: --multiple for standard-json multi-file verification
 
 set -e
 
 [[ $ETHERSCAN_API_KEY ]] || {
   cat >&2 <<.
-
   You need an Etherscan Api Key to verify contracts.
   Create one at https://etherscan.io/myapikey
-
   Then export it with \`export ETHERSCAN_API_KEY=xxxxxxxx'
-
 .
   exit 1
 }
@@ -41,7 +39,7 @@ address=${2?contractaddress}
 # combined-json has a sourceList field
 if [[ $(jq .sourceList "$DAPP_JSON") == null ]]; then
     contract=$(<"$DAPP_JSON" jq -r ".contracts[\"${path/:*/}\"][\"$name\"]")
-else 
+else
     contract=$(<"$DAPP_JSON" jq -r ".contracts[\"$path\"]")
 fi
 meta=$(jshon <<<"$contract" -e metadata -u)
@@ -88,41 +86,76 @@ else
   optimized=0
 fi
 
-params=(
+if  [[ $1 = "--multiple" ]]; then
+
+  # Standard Input JSON
+  inputJSON=$(dapp mk-standard-json)
+
+  params=(
   "module=contract" "action=verifysourcecode"
   "contractname=$name" "contractaddress=$address"
+  "sourcecode=$inputJSON" "codeformat=solidity-standard-json-input"
   "optimizationUsed=$optimized" "runs=$runs"
   "apikey=$ETHERSCAN_API_KEY"
-)
+  )
 
-source=$(hevm flatten --source-file "$file" --json-file "$DAPP_JSON" --dapp-root "$DAPP_ROOT")
+  query=$(printf "&%s" "${params[@]}")
 
-source=$(cat <<.
-// Verified using https://dapp.tools
+  count=0
+  while [ $count -lt 5 ]; do
+    sleep 10
 
-$source
-.
-)
+    response=$(curl -fsS "$ETHERSCAN_API_URL" -d "$query" \
+    --data-urlencode "compilerversion=$version" \
+    --data-urlencode "constructorArguements=$constructorArguments" -X POST)
+    # NOTE: the Arguements typo is in etherscan's API
 
-query=$(printf "&%s" "${params[@]}")
+    status=$(jshon <<<"$response" -e status -u)
+    guid=$(jshon <<<"$response" -e result -u)
+    message=$(jshon <<<"$response" -e message -u)
+    count=$((count + 1))
 
-count=0
-while [ $count -lt 5 ]; do
-  sleep 10
+    [[ $status = 1 ]] && break;
+  done
 
-  response=$(curl -fsS "$ETHERSCAN_API_URL" -d "$query" \
-  --data-urlencode "compilerversion=$version" \
-  --data-urlencode "sourceCode@"<(echo "$source") \
-  --data-urlencode "constructorArguements=$constructorArguments" -X POST)
-  # NOTE: the Arguements typo is in etherscan's API
+else
 
-  status=$(jshon <<<"$response" -e status -u)
-  guid=$(jshon <<<"$response" -e result -u)
-  message=$(jshon <<<"$response" -e message -u)
-  count=$((count + 1))
+  params=(
+    "module=contract" "action=verifysourcecode"
+    "contractname=$name" "contractaddress=$address"
+    "optimizationUsed=$optimized" "runs=$runs"
+    "apikey=$ETHERSCAN_API_KEY"
+  )
 
-  [[ $status = 1 ]] && break;
-done
+  source=$(hevm flatten --source-file "$file" --json-file "$DAPP_JSON" --dapp-root "$DAPP_ROOT")
+
+  source=$(cat <<.
+  // Verified using https://dapp.tools
+  $source
+  .
+  )
+
+  query=$(printf "&%s" "${params[@]}")
+
+  count=0
+  while [ $count -lt 5 ]; do
+    sleep 10
+
+    response=$(curl -fsS "$ETHERSCAN_API_URL" -d "$query" \
+    --data-urlencode "compilerversion=$version" \
+    --data-urlencode "sourceCode@"<(echo "$source") \
+    --data-urlencode "constructorArguements=$constructorArguments" -X POST)
+    # NOTE: the Arguements typo is in etherscan's API
+
+    status=$(jshon <<<"$response" -e status -u)
+    guid=$(jshon <<<"$response" -e result -u)
+    message=$(jshon <<<"$response" -e message -u)
+    count=$((count + 1))
+
+    [[ $status = 1 ]] && break;
+  done
+
+fi
 
 [[ $status = 0 && $message = "Contract source code already verified" ]] && {
   echo >&2 "Contract source code already verified."
