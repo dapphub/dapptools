@@ -129,7 +129,11 @@ else
 
   source=$(hevm flatten --source-file "$file" --json-file "$DAPP_JSON" --dapp-root "$DAPP_ROOT")
 
-  source=$(cat <<<.  //Verified using https://dapp.tools "$source".)
+  source=$(cat <<.
+  //Verified using https://dapp.tools
+  "$source"
+.
+  )
 
   query=$(printf "&%s" "${params[@]}")
 
