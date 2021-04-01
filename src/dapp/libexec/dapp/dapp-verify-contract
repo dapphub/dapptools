@@ -34,7 +34,7 @@ esac
 
 path=${1?contractname}
 name=${path#*:}
-contractName=$(basename $path)
+contractName=$(basename "$path")
 address=${2?contractaddress}
 
 # combined-json has a sourceList field
