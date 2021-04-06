@@ -104,7 +104,7 @@ parseBlock j = do
   number     <- readText <$> j ^? key "number" . _String
   difficulty <- readText <$> j ^? key "difficulty" . _String
   -- default codesize, default gas limit, default feescedule
-  return $ EVM.Block coinbase timestamp number difficulty 0xffffffff 0xffffffff FeeSchedule.istanbul
+  return $ EVM.Block coinbase timestamp number difficulty 0xffffffff 0xffffffff FeeSchedule.berlin
 
 fetchWithSession :: Text -> Session -> Value -> IO (Maybe Value)
 fetchWithSession url sess x = do
