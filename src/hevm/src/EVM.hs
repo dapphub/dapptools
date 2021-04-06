@@ -431,7 +431,7 @@ makeVm o = VM
     , _origin = vmoptOrigin o
     , _toAddr = vmoptAddress o
     , _value = vmoptValue o
-    , _substate = SubState mempty mempty mempty mempty mempty 
+    , _substate = SubState mempty mempty mempty mempty mempty
     , _isCreate = vmoptCreate o
     , _txReversion = Map.fromList
       [(vmoptAddress o, vmoptContract o)]
@@ -1012,7 +1012,7 @@ exec1 = do
                                  _ -> g_sset
 
                     acc <- accessStorageForGas self x
-                    let cold_storage_cost = if acc then g_warm_storage_read else g_cold_sload
+                    let cold_storage_cost = if acc then 0 else g_cold_sload
                     burn (storage_cost + cold_storage_cost) $ do
                       next
                       assign (state . stack) xs
@@ -1877,7 +1877,7 @@ accessAccountForGas addr = do
   accessedAddrs <- use (tx . substate . accessedAddresses)
   let accessed = member addr accessedAddrs
   assign (tx . substate . accessedAddresses) (insert addr accessedAddrs)
-  return accessed 
+  return accessed
 
 -- returns a wrapped boolean- if true, this address has been touched before in the txn (warm gas cost as in EIP 2929)
 -- otherwise cold
@@ -2733,7 +2733,7 @@ concreteModexpGasFee input = num $ max 200 ((multiplicationComplexity * iterCoun
         ez = isZero (96 + lenb) lene input
         e' = w256 $ word $ LS.toStrict $
           lazySlice (96 + lenb) (min 32 lene) input
-        nwords = ceiling $ (num $ max lenb lenm) / 8
+        nwords = ceiling $ num (max lenb lenm) / 8
         multiplicationComplexity = nwords * nwords
         iterCount' | lene <= 32 && ez = 0
                    | lene <= 32 = num (log2 e')
