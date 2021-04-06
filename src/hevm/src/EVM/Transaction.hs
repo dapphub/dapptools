@@ -16,6 +16,7 @@ import Control.Lens
 import Data.Aeson (FromJSON (..))
 import Data.ByteString (ByteString)
 import Data.Map (Map)
+import Data.Set (fromList)
 import Data.Maybe (fromMaybe, isNothing, isJust)
 
 import qualified Data.Aeson        as JSON
@@ -143,8 +144,10 @@ initTx vm = let
     touched = if creation
               then [origin]
               else [origin, toAddr]
+    accessed = fromList $ [origin, toAddr] ++ [1..9]
 
     in
       vm & EVM.env . EVM.contracts .~ initState
          & EVM.tx . EVM.txReversion .~ preState
          & EVM.tx . EVM.substate . EVM.touchedAccounts .~ touched
+         & EVM.tx . EVM.substate . EVM.accessedAddresses .~ accessed

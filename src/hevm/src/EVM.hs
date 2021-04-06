@@ -33,6 +33,7 @@ import Control.Monad.State.Strict hiding (state)
 import Data.ByteString              (ByteString)
 import Data.ByteString.Lazy         (fromStrict)
 import Data.Map.Strict              (Map)
+import Data.Set                     (Set, insert, member)
 import Data.Maybe                   (fromMaybe)
 import Data.Sequence                (Seq)
 import Data.Vector.Storable         (Vector)
@@ -269,6 +270,8 @@ data TxState = TxState
 data SubState = SubState
   { _selfdestructs   :: [Addr]
   , _touchedAccounts :: [Addr]
+  , _accessedAddresses :: Set Addr
+  , _accessedStorageKeys :: Set (Addr, Word)
   , _refunds         :: [(Addr, Integer)]
   -- in principle we should include logs here, but do not for now
   }
@@ -428,7 +431,7 @@ makeVm o = VM
     , _origin = vmoptOrigin o
     , _toAddr = vmoptAddress o
     , _value = vmoptValue o
-    , _substate = SubState mempty mempty mempty
+    , _substate = SubState mempty mempty mempty mempty mempty 
     , _isCreate = vmoptCreate o
     , _txReversion = Map.fromList
       [(vmoptAddress o, vmoptContract o)]
@@ -731,8 +734,10 @@ exec1 = do
         -- op: BALANCE
         0x31 ->
           case stk of
-            (x':xs) -> forceConcrete x' $ \x ->
-              burn g_balance $
+            (x':xs) -> forceConcrete x' $ \x -> do
+              acc <- accessAccountForGas (num x)
+              let cost = if acc then g_warm_storage_read else g_cold_account_access
+              burn cost $
                 fetchAccount (num x) $ \c -> do
                   next
                   assign (state . stack) xs
@@ -814,8 +819,10 @@ exec1 = do
                   next
                   assign (state . stack) xs
                   push (w256 1)
-                else
-                  burn g_extcode $
+                else do
+                  acc <- accessAccountForGas (num x)
+                  let cost = if acc then g_warm_storage_read else g_cold_account_access
+                  burn cost $
                     fetchAccount (num x) $ \c -> do
                       next
                       assign (state . stack) xs
@@ -832,8 +839,10 @@ exec1 = do
               : codeSize'
               : xs ) ->
               forceConcrete4 (extAccount', memOffset', codeOffset', codeSize') $
-                \(extAccount, memOffset, codeOffset, codeSize) ->
-                  burn (g_extcode + g_copy * ceilDiv (num codeSize) 32) $
+                \(extAccount, memOffset, codeOffset, codeSize) -> do
+                  acc <- accessAccountForGas (num extAccount)
+                  let cost = if acc then g_warm_storage_read else g_cold_account_access
+                  burn cost $
                     accessUnboundedMemoryRange fees memOffset codeSize $
                       fetchAccount (num extAccount) $ \c -> do
                         next
@@ -864,8 +873,10 @@ exec1 = do
         -- op: EXTCODEHASH
         0x3f ->
           case stk of
-            (x':xs) -> forceConcrete x' $ \x ->
-              burn g_extcodehash $ do
+            (x':xs) -> forceConcrete x' $ \x -> do
+              acc <- accessAccountForGas (num x)
+              let cost = if acc then g_warm_storage_read else g_cold_account_access
+              burn cost $ do
                 next
                 assign (state . stack) xs
                 fetchAccount (num x) $ \c ->
@@ -966,8 +977,10 @@ exec1 = do
         -- op: SLOAD
         0x54 ->
           case stk of
-            (x:xs) ->
-              burn g_sload $
+            (x:xs) -> do
+              acc <- accessStorageForGas self x
+              let cost = if acc then g_warm_storage_read else g_cold_sload
+              burn cost $
                 accessStorage self x $ \y -> do
                   next
                   assign (state . stack) (y:xs)
@@ -987,7 +1000,7 @@ exec1 = do
                     let original = case view storage this of
                                   Concrete _ -> fromMaybe 0 (Map.lookup (forceLit x) (view origStorage this))
                                   Symbolic _ _ -> 0 -- we don't use this value anywhere anyway
-                        cost = case (maybeLitWord current, maybeLitWord new) of
+                        storage_cost = case (maybeLitWord current, maybeLitWord new) of
                                  (Just current', Just new') ->
                                     if (current' == new') then g_sload
                                     else if (current' == original) && (original == 0) then g_sset
@@ -998,7 +1011,9 @@ exec1 = do
                                  -- assume worst case scenario
                                  _ -> g_sset
 
-                    burn cost $ do
+                    acc <- accessStorageForGas self x
+                    let cold_storage_cost = if acc then g_warm_storage_read else g_cold_sload
+                    burn (storage_cost + cold_storage_cost) $ do
                       next
                       assign (state . stack) xs
                       modifying (env . contracts . ix self . storage)
@@ -1245,14 +1260,15 @@ exec1 = do
           notStatic $
           case stk of
             [] -> underrun
-            (xTo':_) -> forceConcrete xTo' $ \(num -> xTo) ->
-              let
-                funds = view balance this
-                recipientExists = accountExists xTo vm
-                c_new = if not recipientExists && funds /= 0
-                        then num g_selfdestruct_newaccount
-                        else 0
-              in burn (g_selfdestruct + c_new) $ do
+            (xTo':_) -> forceConcrete xTo' $ \(num -> xTo) -> do
+              acc <- accessAccountForGas (num xTo)
+              let cost = if acc then g_warm_storage_read else 0
+              let funds = view balance this
+              let recipientExists = accountExists xTo vm
+              let c_new = if not recipientExists && funds /= 0
+                          then num g_selfdestruct_newaccount
+                          else 0
+              burn (g_selfdestruct + c_new + cost) $ do
                    destructs <- use (tx . substate . selfdestructs)
                    unless (elem self destructs) $ refund r_selfdestruct
                    selfdestruct self
@@ -1297,7 +1313,7 @@ callChecks this xGas xContext xValue xInOffset xInSize xOutOffset xOutSize xs co
     accessMemoryRange fees xOutOffset xOutSize $ do
       availableGas <- use (state . gas)
       let recipientExists = accountExists xContext vm
-          (cost, gas') = costOfCall fees recipientExists xValue availableGas xGas
+      (cost, gas') <- costOfCall fees recipientExists xValue availableGas xGas xContext
       burn (cost - gas') $ do
         if xValue > view balance this
         then do
@@ -1678,7 +1694,7 @@ finalize :: EVM ()
 finalize = do
   let
     revertContracts  = use (tx . txReversion) >>= assign (env . contracts)
-    revertSubstate   = assign (tx . substate) (SubState mempty mempty mempty)
+    revertSubstate   = assign (tx . substate) (SubState mempty mempty mempty mempty mempty)
 
   use result >>= \case
     Nothing ->
@@ -1853,6 +1869,27 @@ touchAccount = pushTo ((tx . substate) . touchedAccounts)
 
 selfdestruct :: Addr -> EVM()
 selfdestruct = pushTo ((tx . substate) . selfdestructs)
+
+-- returns a wrapped boolean- if true, this address has been touched before in the txn (warm gas cost as in EIP 2929)
+-- otherwise cold
+accessAccountForGas :: Addr -> EVM Bool
+accessAccountForGas addr = do
+  accessedAddrs <- use (tx . substate . accessedAddresses)
+  let accessed = member addr accessedAddrs
+  assign (tx . substate . accessedAddresses) (insert addr accessedAddrs)
+  return accessed 
+
+-- returns a wrapped boolean- if true, this address has been touched before in the txn (warm gas cost as in EIP 2929)
+-- otherwise cold
+accessStorageForGas :: Addr -> SymWord -> EVM Bool
+accessStorageForGas addr key = do
+  accessedStrkeys <- use (tx . substate . accessedStorageKeys)
+  case maybeLitWord key of
+    Just litword -> do
+      let accessed = member (addr, litword) accessedStrkeys
+      assign (tx . substate . accessedStorageKeys) (insert (addr, litword) accessedStrkeys)
+      return accessed
+    _ -> return False
 
 -- * Cheat codes
 
@@ -2660,27 +2697,23 @@ mkCodeOps (SymbolicBuffer bytes) = RegularVector.fromList . toList $ go' 0 (stri
 -- Gas cost function for CALL, transliterated from the Yellow Paper.
 costOfCall
   :: FeeSchedule Integer
-  -> Bool -> Word -> Word -> Word
-  -> (Integer, Integer)
-costOfCall (FeeSchedule {..}) recipientExists xValue availableGas' xGas' =
-  (c_gascap + c_extra, c_callgas)
-  where
-    availableGas = num availableGas'
-    xGas = num xGas'
-    c_extra =
-      num g_call + c_xfer + c_new
-    c_xfer =
-      if xValue /= 0  then num g_callvalue              else 0
-    c_callgas =
-      if xValue /= 0  then c_gascap + num g_callstipend else c_gascap
-    c_new =
-      if not recipientExists && xValue /= 0
-      then num g_newaccount
-      else 0
-    c_gascap =
-      if availableGas >= c_extra
-      then min xGas (allButOne64th (availableGas - c_extra))
-      else xGas
+  -> Bool -> Word -> Word -> Word -> Addr
+  -> EVM (Integer, Integer)
+costOfCall (FeeSchedule {..}) recipientExists xValue availableGas' xGas' target = do
+  acc <- accessAccountForGas target
+  let call_base_gas = if acc then g_warm_storage_read else g_cold_account_access
+  let availableGas = num availableGas'
+  let xGas = num xGas'
+  let c_new = if not recipientExists && xValue /= 0
+            then num g_newaccount
+            else 0
+  let c_xfer = if xValue /= 0  then num g_callvalue else 0
+  let c_extra = num call_base_gas + c_xfer + c_new
+  let c_gascap =  if availableGas >= c_extra
+                  then min xGas (allButOne64th (availableGas - c_extra))
+                  else xGas
+  let c_callgas = if xValue /= 0  then c_gascap + num g_callstipend else c_gascap
+  return (c_gascap + c_extra, c_callgas)
 
 -- Gas cost of create, including hash cost if needed
 costOfCreate
