@@ -46,7 +46,7 @@ h1, h2 { text-align: center; margin-top: 2rem  }
 <h1>hevm consensus test report</h1>
 <p>$(date +%Y-%m-%d)</p>
 <p>$(echo "$npass passed, $nbal bad-balance, $nnon bad-nonce, $nstr bad-storage, $nfail failed, $nskip skipped, $ntime timeout")</p>
-(Test suite: <span class=GeneralStateTests</span>GeneralStateTests</span> for Istanbul)
+(Test suite: <span class=GeneralStateTests</span>GeneralStateTests</span> for Berlin)
 </header>
 <h2>Failed tests</h2>
 <table id=failed>

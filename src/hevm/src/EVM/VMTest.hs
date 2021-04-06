@@ -247,7 +247,7 @@ errorFatal _ = False
 fromBlockchainCase :: BlockchainCase -> Either BlockchainError Case
 fromBlockchainCase (BlockchainCase blocks preState postState network) =
   case (blocks, network) of
-    ([block], "Istanbul") -> case blockTxs block of
+    ([block], "Berlin") -> case blockTxs block of
       [tx] -> fromBlockchainCase' block tx preState postState
       []        -> Left NoTxs
       _         -> Left TooManyTxs
@@ -289,7 +289,7 @@ fromBlockchainCase' block tx preState postState =
           where
             toAddr = fromMaybe (EVM.createAddress origin senderNonce) (txToAddr tx)
             senderNonce = EVM.wordValue $ view (accountAt origin . nonce) preState
-            feeSchedule = EVM.FeeSchedule.istanbul
+            feeSchedule = EVM.FeeSchedule.berlin
             toCode = Map.lookup toAddr preState
             theCode = if isCreate
                       then EVM.InitCode (ConcreteBuffer (txData tx))

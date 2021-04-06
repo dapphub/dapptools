@@ -158,3 +158,6 @@ eip2200 fees = fees
 
 istanbul :: Num n => FeeSchedule n
 istanbul = eip1108 . eip1884 . eip2028 . eip2200 $ metropolis
+
+berlin :: Num n => FeeSchedule n
+berlin = istanbul

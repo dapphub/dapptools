@@ -1517,6 +1517,7 @@ parseModexpLength input =
       lenm = w256 $ word $ LS.toStrict $ lazySlice 64 96 input
   in (lenb, lene, lenm)
 
+--- checks if a range of ByteString bs starting at offset and length size is all zeros.
 isZero :: Word -> Word -> ByteString -> Bool
 isZero offset size bs =
   LS.all (== 0) $
@@ -2693,6 +2694,20 @@ costOfCreate (FeeSchedule {..}) availableGas' hashSize =
     hashCost   = g_sha3word * ceilDiv (num hashSize) 32
     initGas    = allButOne64th (availableGas - createCost)
 
+concreteModexpGasFee :: ByteString -> Integer
+concreteModexpGasFee input = num $ max 200 ((multiplicationComplexity * iterCount) `div` 3)
+  where (lenb, lene, lenm) = parseModexpLength input
+        ez = isZero (96 + lenb) lene input
+        e' = w256 $ word $ LS.toStrict $
+          lazySlice (96 + lenb) (min 32 lene) input
+        nwords = ceiling $ (num $ max lenb lenm) / 8
+        multiplicationComplexity = nwords * nwords
+        iterCount' | lene <= 32 && ez = 0
+                   | lene <= 32 = num (log2 e')
+                   | e' == 0 = 8 * (lene - 32)
+                   | otherwise = num (log2 e') + 8 * (lene - 32)
+        iterCount = max iterCount' 1
+
 -- Gas cost of precompiles
 costOfPrecompile :: FeeSchedule Integer -> Addr -> Buffer -> Integer
 costOfPrecompile (FeeSchedule {..}) precompileAddr input =
@@ -2706,24 +2721,10 @@ costOfPrecompile (FeeSchedule {..}) precompileAddr input =
     -- IDENTITY
     0x4 -> num $ (((len input + 31) `div` 32) * 3) + 15
     -- MODEXP
-    0x5 -> num $ (f (num (max lenm lenb)) * num (max lene' 1)) `div` (num g_quaddivisor)
+    0x5 -> concreteModexpGasFee input'
       where input' = case input of
-              SymbolicBuffer _ -> error "unsupported: symbolic MODEXP gas cost calc"
-              ConcreteBuffer b -> b
-            (lenb, lene, lenm) = parseModexpLength input'
-            lene' | lene <= 32 && ez = 0
-                  | lene <= 32 = num (log2 e')
-                  | e' == 0 = 8 * (lene - 32)
-                  | otherwise = num (log2 e') + 8 * (lene - 32)
-
-            ez = isZero (96 + lenb) lene input'
-            e' = w256 $ word $ LS.toStrict $
-                   lazySlice (96 + lenb) (min 32 lene) input'
-
-            f :: Integer -> Integer
-            f x | x <= 64 = x * x
-                | x <= 1024 = (x * x) `div` 4 + 96 * x - 3072
-                | otherwise = (x * x) `div` 16 + 480 * x - 199680
+               SymbolicBuffer _ -> error "unsupported: symbolic MODEXP gas cost calc"
+               ConcreteBuffer b -> b
     -- ECADD
     0x6 -> g_ecadd
     -- ECMUL
