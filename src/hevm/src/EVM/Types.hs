@@ -364,7 +364,7 @@ instance Show Addr where
   showsPrec _ addr next =
     let hex = showHex addr next
         str = replicate (40 - length hex) '0' ++ hex
-    in "0x" ++ toChecksumAddress str
+    in "0x" ++ toChecksumAddress str ++ drop 40 str
 
 instance Show SAddr where
   show (SAddr a) = case unliteral a of
@@ -442,9 +442,6 @@ readNull x = fromMaybe x . Text.Read.readMaybe
 wordField :: JSON.Object -> Text -> JSON.Parser W256
 wordField x f = ((readNull 0) . Text.unpack)
                   <$> (x .: f)
-
-wordFieldMaybe :: JSON.Object -> Text -> JSON.Parser (Maybe W256)
-wordFieldMaybe x f = Text.Read.readMaybe . Text.unpack <$> (x .: f)
 
 addrField :: JSON.Object -> Text -> JSON.Parser Addr
 addrField x f = (read . Text.unpack) <$> (x .: f)

@@ -3,6 +3,7 @@
 
 module EVM.VMTest
   ( Case
+  , BlockchainCase
 #if MIN_VERSION_aeson(1, 0, 0)
   , parseBCSuite
 #endif
@@ -221,7 +222,7 @@ parseBCSuite x = case (JSON.eitherDecode' x) :: Either String (Map String Blockc
                        filteredCases = Map.filter keepError allCases
                        (erroredCases, parsedCases) = splitEithers filteredCases
     in if Map.size erroredCases > 0
-    then Left ("errored case: " ++ (show $ (Map.elems erroredCases) !! 0))
+    then Left ("errored case: " ++ (show erroredCases))
     else if Map.size parsedCases == 0
     then Left "No cases to check."
     else Right parsedCases
