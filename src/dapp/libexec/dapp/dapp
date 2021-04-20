@@ -161,6 +161,7 @@ while [[ $1 ]]; do
        export HEVM_RPC=yes;;
 
     --verify)                 export DAPP_VERIFY_CONTRACT=yes;;
+    --verify-multiple)        export DAPP_VERIFY_CONTRACT_MULTIPLE=yes;;
 
     --async)                  export DAPP_ASYNC=yes;;
 
