@@ -29,6 +29,10 @@ data AccessListEntry = AccessListEntry {
   accessStorageKeys :: [W256]
 } deriving Show
 
+data TxType = LegacyTransaction
+            | AccessListTransaction
+  deriving Show
+
 data Transaction = Transaction {
     txData     :: ByteString,
     txGasLimit :: W256,
@@ -39,7 +43,7 @@ data Transaction = Transaction {
     txToAddr   :: Maybe Addr,
     txV        :: W256,
     txValue    :: W256,
-    txType     :: Maybe W256,
+    txType     :: TxType,
     txAccessList :: [AccessListEntry]
 } deriving Show
 
@@ -55,20 +59,19 @@ ecrec v r s e = num . word <$> EVM.Precompiled.execute 1 input 32
   where input = BS.concat (word256Bytes <$> [e, v, r, s])
 
 sender :: Int -> Transaction -> Maybe Addr
-sender chainId tx = hash >>= (ecrec v' (txR tx) (txS tx))
-  where hash = keccak <$> signingData chainId tx
+sender chainId tx = ecrec v' (txR tx) (txS tx) hash
+  where hash = keccak (signingData chainId tx)
         v    = txV tx
         v'   = if v == 27 || v == 28 then v
                else 28 - mod v 2
 
-signingData :: Int -> Transaction -> Maybe ByteString
+signingData :: Int -> Transaction -> ByteString
 signingData chainId tx =
   case txType tx of
-    Nothing -> (if v == (chainId * 2 + 35) || v == (chainId * 2 + 36)
-      then Just eip155Data
-      else Just normalData)
-    Just 0x01 -> Just eip2930Data
-    _ -> Nothing
+    LegacyTransaction -> (if v == (chainId * 2 + 35) || v == (chainId * 2 + 36)
+      then eip155Data
+      else normalData)
+    AccessListTransaction -> eip2930Data
   where v          = fromIntegral (txV tx)
         to'        = case txToAddr tx of
           Just a  -> BS $ word160Bytes a
@@ -149,9 +152,9 @@ instance FromJSON Transaction where
     case txType of
       Just 0x01 -> do
         accessListEntries <- (val JSON..: "accessList") >>= parseJSONList
-        return $ Transaction tdata gasLimit gasPrice nonce r s toAddr v value txType accessListEntries
+        return $ Transaction tdata gasLimit gasPrice nonce r s toAddr v value AccessListTransaction accessListEntries
       Just _ -> fail "unrecognized custom transaction type"
-      Nothing -> return $ Transaction tdata gasLimit gasPrice nonce r s toAddr v value Nothing []
+      Nothing -> return $ Transaction tdata gasLimit gasPrice nonce r s toAddr v value LegacyTransaction []
   parseJSON invalid =
     JSON.typeMismatch "Transaction" invalid
 
