@@ -116,25 +116,6 @@ EOF
   "apikey=$ETHERSCAN_API_KEY"
   )
 
-  query=$(printf "&%s" "${params[@]}")
-
-  count=0
-  while [ $count -lt 5 ]; do
-    sleep 10
-
-    response=$(curl -fsS "$ETHERSCAN_API_URL" -d "$query" \
-    --data-urlencode "compilerversion=$version" \
-    --data-urlencode "constructorArguements=$constructorArguments" -X POST)
-    # NOTE: the Arguements typo is in etherscan's API
-
-    status=$(jshon <<<"$response" -e status -u)
-    guid=$(jshon <<<"$response" -e result -u)
-    message=$(jshon <<<"$response" -e message -u)
-    count=$((count + 1))
-
-    [[ $status = 1 ]] && break;
-  done
-
 else
 
   params=(
@@ -152,27 +133,34 @@ else
 .
   )
 
-  query=$(printf "&%s" "${params[@]}")
+fi
 
-  count=0
-  while [ $count -lt 5 ]; do
-    sleep 10
+query=$(printf "&%s" "${params[@]}")
 
+count=0
+while [ $count -lt 5 ]; do
+  sleep 10
+
+  if  [[ $1 = "--multiple" ]]; then
+    response=$(curl -fsS "$ETHERSCAN_API_URL" -d "$query" \
+    --data-urlencode "compilerversion=$version" \
+    --data-urlencode "constructorArguements=$constructorArguments" -X POST)
+    # NOTE: the Arguements typo is in etherscan's API
+  else
     response=$(curl -fsS "$ETHERSCAN_API_URL" -d "$query" \
     --data-urlencode "compilerversion=$version" \
     --data-urlencode "sourceCode@"<(echo "$source") \
     --data-urlencode "constructorArguements=$constructorArguments" -X POST)
     # NOTE: the Arguements typo is in etherscan's API
+  fi
 
-    status=$(jshon <<<"$response" -e status -u)
-    guid=$(jshon <<<"$response" -e result -u)
-    message=$(jshon <<<"$response" -e message -u)
-    count=$((count + 1))
+  status=$(jshon <<<"$response" -e status -u)
+  guid=$(jshon <<<"$response" -e result -u)
+  message=$(jshon <<<"$response" -e message -u)
+  count=$((count + 1))
 
-    [[ $status = 1 ]] && break;
-  done
-
-fi
+  [[ $status = 1 ]] && break;
+done
 
 [[ $status = 0 && $message = "Contract source code already verified" ]] && {
   echo >&2 "Contract source code already verified."
