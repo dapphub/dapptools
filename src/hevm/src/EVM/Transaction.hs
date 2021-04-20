@@ -31,7 +31,7 @@ data AccessListEntry = AccessListEntry {
 
 data TxType = LegacyTransaction
             | AccessListTransaction
-  deriving Show
+  deriving (Show, Eq)
 
 data Transaction = Transaction {
     txData     :: ByteString,
@@ -62,7 +62,7 @@ sender :: Int -> Transaction -> Maybe Addr
 sender chainId tx = ecrec v' (txR tx) (txS tx) hash
   where hash = keccak (signingData chainId tx)
         v    = txV tx
-        v'   = if v == 27 || v == 28 then v
+        v'   = if v == 27 || v == 28 || txType tx /= LegacyTransaction then v
                else 28 - mod v 2
 
 signingData :: Int -> Transaction -> ByteString
@@ -77,10 +77,10 @@ signingData chainId tx =
           Just a  -> BS $ word160Bytes a
           Nothing -> BS mempty
         accessList = txAccessList tx
-        rlpAccessList = BS.concat $ map (\accessEntry ->
-          rlpList [BS $ word160Bytes (accessAddress accessEntry), 
-          BS $ rlpList $ map rlpWord256 $ accessStorageKeys accessEntry
-          ]) accessList
+        rlpAccessList = EVM.RLP.List $ map (\accessEntry ->
+          EVM.RLP.List [BS $ word160Bytes (accessAddress accessEntry), 
+                EVM.RLP.List $ map rlpWord256 $ accessStorageKeys accessEntry]
+          ) accessList
         normalData = rlpList [rlpWord256 (txNonce tx),
                               rlpWord256 (txGasPrice tx),
                               rlpWord256 (txGasLimit tx),
@@ -96,7 +96,8 @@ signingData chainId tx =
                               rlpWord256 (fromIntegral chainId),
                               rlpWord256 0x0,
                               rlpWord256 0x0]
-        eip2930Data = cons 0x01 $ rlpList [
+        eip2930Data = rlpList [
+          BS $ BS.pack [1],
           rlpWord256 (fromIntegral chainId),
           rlpWord256 (txNonce tx),
           rlpWord256 (txGasPrice tx),
@@ -104,7 +105,7 @@ signingData chainId tx =
           to', 
           rlpWord256 (txValue tx),
           BS (txData tx),
-          BS rlpAccessList]
+          rlpAccessList]
 
 accessListPrice :: FeeSchedule Integer -> [AccessListEntry] -> Integer
 accessListPrice fs al =
@@ -147,7 +148,7 @@ instance FromJSON Transaction where
     toAddr   <- addrFieldMaybe val "to"
     v        <- wordField val "v"
     value    <- wordField val "value"
-    txType   <- wordFieldMaybe val "type"
+    txType   <- fmap read <$> (val JSON..:? "type")
     --let legacyTxn = Transaction tdata gasLimit gasPrice nonce r s toAddr v value
     case txType of
       Just 0x01 -> do
