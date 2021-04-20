@@ -210,6 +210,14 @@ if [[ $SETH_CHAIN ]]; then
         ~/{.local/share,Library/Application\ Support}/io.parity.ethereum/keys/"$SETH_CHAIN"/
       )
       ;;
+    bsctest)
+      eth_rpc_url=https://data-seed-prebsc-2-s1.binance.org:8545/
+      export ETHERSCAN_API_URL=https://api-testnet.bscscan.com/api
+      ;;
+    bsc)
+      eth_rpc_url=https://bsc-dataseed3.binance.org/
+      export ETHERSCAN_API_URL=https://api.bscscan.com/api
+      ;;
     *)
       echo >&2 "${0##*/}: error: unknown chain: \\'$SETH_CHAIN'"
       exit 1

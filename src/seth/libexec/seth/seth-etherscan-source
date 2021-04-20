@@ -29,6 +29,12 @@ case "$chain" in
   ropsten|kovan|rinkeby|goerli)
     URL="${ETHERSCAN_API_URL:-https://api-$chain.etherscan.io}"
     ;;
+  bsctest)
+    URL="${ETHERSCAN_API_URL:-https://api-testnet.bscscan.com}"
+    ;;
+  bsc)
+    URL="${ETHERSCAN_API_URL:-https://api.bscscan.com}"
+    ;;
   *)
     echo >&2 "Source fetching only works on mainnet, ropsten, kovan, rinkeby, and goerli."
     exit 1
