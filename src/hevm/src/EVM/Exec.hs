@@ -40,6 +40,7 @@ vmForEthrunCreation creationCode =
     , vmoptChainId = 1
     , vmoptCreate = False
     , vmoptStorageModel = ConcreteS
+    , vmoptTxAccessList = mempty  -- TODO is this right 
     }) & set (env . contracts . at ethrunAddress)
              (Just (initialContract (RuntimeCode mempty)))
 

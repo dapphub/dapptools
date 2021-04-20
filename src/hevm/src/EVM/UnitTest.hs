@@ -780,6 +780,7 @@ initialUnitTestVm (UnitTestOptions {..}) theContract =
            , vmoptChainId = testChainId
            , vmoptCreate = True
            , vmoptStorageModel = ConcreteS -- TODO: support RPC
+           , vmoptTxAccessList = mempty -- TODO: support unit test access lists???
            }
     creator =
       initialContract (RuntimeCode mempty)

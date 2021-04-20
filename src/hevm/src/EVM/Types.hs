@@ -443,6 +443,9 @@ wordField :: JSON.Object -> Text -> JSON.Parser W256
 wordField x f = ((readNull 0) . Text.unpack)
                   <$> (x .: f)
 
+wordFieldMaybe :: JSON.Object -> Text -> JSON.Parser (Maybe W256)
+wordFieldMaybe x f = Text.Read.readMaybe . Text.unpack <$> (x .: f)
+
 addrField :: JSON.Object -> Text -> JSON.Parser Addr
 addrField x f = (read . Text.unpack) <$> (x .: f)
 

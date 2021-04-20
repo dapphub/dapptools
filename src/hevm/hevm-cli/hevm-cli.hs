@@ -757,6 +757,7 @@ vmFromCommand cmd = do
           , EVM.vmoptChainId       = word chainid 1
           , EVM.vmoptCreate        = create cmd
           , EVM.vmoptStorageModel  = ConcreteS
+          , EVM.vmoptTxAccessList  = mempty -- TODO: support me soon        
           }
         word f def = fromMaybe def (f cmd)
         addr f def = fromMaybe def (f cmd)
@@ -862,6 +863,7 @@ symvmFromCommand cmd = do
       , EVM.vmoptChainId       = word chainid 1
       , EVM.vmoptCreate        = create cmd
       , EVM.vmoptStorageModel  = fromMaybe SymbolicS (storageModel cmd)
+      , EVM.vmoptTxAccessList  = mempty
       }
     word f def = fromMaybe def (f cmd)
     addr f def = fromMaybe def (f cmd)
