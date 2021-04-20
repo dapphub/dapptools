@@ -48,6 +48,8 @@ data FeeSchedule n = FeeSchedule
   , g_cold_sload :: n
   , g_cold_account_access :: n
   , g_warm_storage_read :: n
+  , g_access_list_address :: n
+  , g_access_list_storage_key :: n
   } deriving Show
 
 -- For the purposes of this module, we define an EIP as just a fee
@@ -121,6 +123,8 @@ homestead = FeeSchedule
   , g_cold_sload = 2100
   , g_cold_account_access = 2600
   , g_warm_storage_read = 100
+  , g_access_list_address = 2400
+  , g_access_list_storage_key = 1900
   }
 
 metropolis :: Num n => FeeSchedule n

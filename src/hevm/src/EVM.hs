@@ -201,6 +201,7 @@ data VMOpts = VMOpts
   , vmoptChainId :: W256
   , vmoptCreate :: Bool
   , vmoptStorageModel :: StorageModel
+  , vmoptTxAccessList :: Map Addr [W256]
   } deriving Show
 
 -- | A log entry
@@ -255,14 +256,15 @@ data FrameState = FrameState
 
 -- | The state that spans a whole transaction
 data TxState = TxState
-  { _gasprice        :: Word
-  , _txgaslimit      :: Word
-  , _origin          :: Addr
-  , _toAddr          :: Addr
-  , _value           :: SymWord
-  , _substate        :: SubState
-  , _isCreate        :: Bool
-  , _txReversion     :: Map Addr Contract
+  { _gasprice            :: Word
+  , _txgaslimit          :: Word
+  , _origin              :: Addr
+  , _toAddr              :: Addr
+  , _value               :: SymWord
+  , _substate            :: SubState
+  , _accessList :: Map Addr [W256]
+  , _isCreate            :: Bool
+  , _txReversion         :: Map Addr Contract
   }
   deriving (Show)
 
@@ -271,7 +273,7 @@ data SubState = SubState
   { _selfdestructs   :: [Addr]
   , _touchedAccounts :: [Addr]
   , _accessedAddresses :: Set Addr
-  , _accessedStorageKeys :: Set (Addr, Word)
+  , _accessedStorageKeys :: Set (Addr, W256)
   , _refunds         :: [(Addr, Integer)]
   -- in principle we should include logs here, but do not for now
   }
@@ -432,6 +434,7 @@ makeVm o = VM
     , _toAddr = vmoptAddress o
     , _value = vmoptValue o
     , _substate = SubState mempty mempty mempty mempty mempty
+    , _accessList = vmoptTxAccessList o
     , _isCreate = vmoptCreate o
     , _txReversion = Map.fromList
       [(vmoptAddress o, vmoptContract o)]
@@ -1886,8 +1889,9 @@ accessStorageForGas addr key = do
   accessedStrkeys <- use (tx . substate . accessedStorageKeys)
   case maybeLitWord key of
     Just litword -> do
-      let accessed = member (addr, litword) accessedStrkeys
-      assign (tx . substate . accessedStorageKeys) (insert (addr, litword) accessedStrkeys)
+      let litword256 = wordValue litword
+      let accessed = member (addr, litword256) accessedStrkeys
+      assign (tx . substate . accessedStorageKeys) (insert (addr, litword256) accessedStrkeys)
       return accessed
     _ -> return False
 

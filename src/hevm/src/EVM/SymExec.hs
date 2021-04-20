@@ -120,7 +120,7 @@ abstractVM typesignature concreteArgs x storagemodel = do
 
 loadSymVM :: ContractCode -> Storage -> StorageModel -> SAddr -> SymWord -> (Buffer, SymWord) -> VM
 loadSymVM x initStore model addr callvalue' calldata' =
-    (makeVm $ VMOpts
+  (makeVm $ VMOpts
     { vmoptContract = contractWithStore x initStore
     , vmoptCalldata = calldata'
     , vmoptValue = callvalue'
@@ -140,6 +140,7 @@ loadSymVM x initStore model addr callvalue' calldata' =
     , vmoptChainId = 1
     , vmoptCreate = False
     , vmoptStorageModel = model
+    , vmoptTxAccessList = mempty
     }) & set (env . contracts . at (createAddress ethrunAddress 1))
              (Just (contractWithStore x initStore))
 

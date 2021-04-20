@@ -258,8 +258,8 @@ fromBlockchainCase' :: Block -> Transaction
                        -> Map Addr EVM.Contract -> Map Addr EVM.Contract
                        -> Either BlockchainError Case
 fromBlockchainCase' block tx preState postState =
-  let isCreate = isNothing (txToAddr tx)
-  in case (sender 1 tx, checkTx tx preState) of
+  let isCreate = isNothing (txToAddr tx) in
+  case (sender 1 tx, checkTx tx preState) of
       (Nothing, _) -> Left SignatureUnverified
       (_, Nothing) -> Left (if isCreate then FailedCreate else InvalidTx)
       (Just origin, Just checkState) -> Right $ Case
@@ -283,6 +283,7 @@ fromBlockchainCase' block tx preState postState =
          , vmoptChainId       = 1
          , vmoptCreate        = isCreate
          , vmoptStorageModel  = EVM.ConcreteS
+         , vmoptTxAccessList  = txAccessMap tx
          })
         checkState
         postState
