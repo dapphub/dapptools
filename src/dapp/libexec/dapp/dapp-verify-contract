@@ -92,7 +92,7 @@ else
   optimized=0
 fi
 
-if  [[ $1 = "--multiple" ]]; then
+if  [[ $DAPP_VERIFY_CONTRACT_MULTIPLE == yes ]]; then
 
   # Standard Input JSON
 
@@ -141,7 +141,7 @@ count=0
 while [ $count -lt 5 ]; do
   sleep 10
 
-  if  [[ $1 = "--multiple" ]]; then
+  if  [[ $DAPP_VERIFY_CONTRACT_MULTIPLE == yes ]]; then
     response=$(curl -fsS "$ETHERSCAN_API_URL" -d "$query" \
     --data-urlencode "compilerversion=$version" \
     --data-urlencode "constructorArguements=$constructorArguments" -X POST)
