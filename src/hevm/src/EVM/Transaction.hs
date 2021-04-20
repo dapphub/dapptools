@@ -40,14 +40,14 @@ data Transaction = Transaction {
     txV        :: W256,
     txValue    :: W256,
     txType     :: Maybe W256,
-    txAccessList :: Maybe [AccessListEntry]
+    txAccessList :: [AccessListEntry]
 } deriving Show
 
 -- utility function for getting a more useful representation of accesslistentries
 -- duplicates only matter for gas computation
 -- ugly! could use a review....
 txAccessMap :: Transaction -> Map Addr [W256]
-txAccessMap tx = maybe mempty ((Map.fromListWith (++)) . makeTups) $ txAccessList tx
+txAccessMap tx = ((Map.fromListWith (++)) . makeTups) $ txAccessList tx
   where makeTups = map (\ale -> (accessAddress ale, accessStorageKeys ale))
 
 ecrec :: W256 -> W256 -> W256 -> W256 -> Maybe Addr
@@ -73,7 +73,7 @@ signingData chainId tx =
         to'        = case txToAddr tx of
           Just a  -> BS $ word160Bytes a
           Nothing -> BS mempty
-        accessList = (maybe [] id) . txAccessList $ tx
+        accessList = txAccessList tx
         rlpAccessList = BS.concat $ map (\accessEntry ->
           rlpList [BS $ word160Bytes (accessAddress accessEntry), 
           BS $ rlpList $ map rlpWord256 $ accessStorageKeys accessEntry
@@ -103,11 +103,9 @@ signingData chainId tx =
           BS (txData tx),
           BS rlpAccessList]
 
-accessListPrice :: FeeSchedule Integer -> Maybe [AccessListEntry] -> Integer
-accessListPrice fs maybeAL =
-  case maybeAL of
-    Nothing -> 0
-    Just al -> sum (map 
+accessListPrice :: FeeSchedule Integer -> [AccessListEntry] -> Integer
+accessListPrice fs al =
+    sum (map 
       (\ale -> 
         g_access_list_address fs + 
         (g_access_list_storage_key fs * (toInteger . length) (accessStorageKeys ale))) 
@@ -151,9 +149,9 @@ instance FromJSON Transaction where
     case txType of
       Just 0x01 -> do
         accessListEntries <- (val JSON..: "accessList") >>= parseJSONList
-        return $ Transaction tdata gasLimit gasPrice nonce r s toAddr v value txType (Just accessListEntries)
+        return $ Transaction tdata gasLimit gasPrice nonce r s toAddr v value txType accessListEntries
       Just _ -> fail "unrecognized custom transaction type"
-      Nothing -> return $ Transaction tdata gasLimit gasPrice nonce r s toAddr v value Nothing Nothing
+      Nothing -> return $ Transaction tdata gasLimit gasPrice nonce r s toAddr v value Nothing []
   parseJSON invalid =
     JSON.typeMismatch "Transaction" invalid
 

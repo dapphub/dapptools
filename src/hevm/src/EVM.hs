@@ -262,7 +262,7 @@ data TxState = TxState
   , _toAddr              :: Addr
   , _value               :: SymWord
   , _substate            :: SubState
-  , _accessList :: Map Addr [W256]
+  , _accessList          :: Map Addr [W256]
   , _isCreate            :: Bool
   , _txReversion         :: Map Addr Contract
   }
@@ -2706,17 +2706,17 @@ costOfCall
 costOfCall (FeeSchedule {..}) recipientExists xValue availableGas' xGas' target = do
   acc <- accessAccountForGas target
   let call_base_gas = if acc then g_warm_storage_read else g_cold_account_access
-  let availableGas = num availableGas'
-  let xGas = num xGas'
-  let c_new = if not recipientExists && xValue /= 0
+      availableGas = num availableGas'
+      xGas = num xGas'
+      c_new = if not recipientExists && xValue /= 0
             then num g_newaccount
             else 0
-  let c_xfer = if xValue /= 0  then num g_callvalue else 0
-  let c_extra = num call_base_gas + c_xfer + c_new
-  let c_gascap =  if availableGas >= c_extra
+      c_xfer = if xValue /= 0  then num g_callvalue else 0
+      c_extra = num call_base_gas + c_xfer + c_new
+      c_gascap =  if availableGas >= c_extra
                   then min xGas (allButOne64th (availableGas - c_extra))
                   else xGas
-  let c_callgas = if xValue /= 0  then c_gascap + num g_callstipend else c_gascap
+      c_callgas = if xValue /= 0  then c_gascap + num g_callstipend else c_gascap
   return (c_gascap + c_extra, c_callgas)
 
 -- Gas cost of create, including hash cost if needed
