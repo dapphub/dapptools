@@ -35,6 +35,7 @@
 ###
 ###   Deployment options:
 ### verify                     verify contract on etherscan
+### verify-multiple            multifile verification on etherscan
 ###
 ###   Contract verifying options:
 ### async                      don't wait for confirmation
