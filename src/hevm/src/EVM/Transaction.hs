@@ -198,16 +198,6 @@ initTx vm = let
          else touchAccount toAddr)
       $ preState
 
-    touched = if creation
-              then [origin]
-              else [origin, toAddr]
-    accesslist = view (EVM.tx . EVM.accessList) vm
-    accessedaddrs = fromList $ [origin, toAddr] ++ [1..9] ++ (keys accesslist)
-    accessedstoragekeys = fromList $ foldMap (uncurry (map . (,))) (Map.toList accesslist)
-
     in
       vm & EVM.env . EVM.contracts .~ initState
          & EVM.tx . EVM.txReversion .~ preState
-         & EVM.tx . EVM.substate . EVM.touchedAccounts .~ touched
-         & EVM.tx . EVM.substate . EVM.accessedAddresses .~ accessedaddrs
-         & EVM.tx . EVM.substate . EVM.accessedStorageKeys .~ accessedstoragekeys
