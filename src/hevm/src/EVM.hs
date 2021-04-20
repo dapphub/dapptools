@@ -33,7 +33,7 @@ import Control.Monad.State.Strict hiding (state)
 import Data.ByteString              (ByteString)
 import Data.ByteString.Lazy         (fromStrict)
 import Data.Map.Strict              (Map)
-import Data.Set                     (Set, insert, member)
+import Data.Set                     (Set, insert, member, fromList)
 import Data.Maybe                   (fromMaybe)
 import Data.Sequence                (Seq)
 import Data.Vector.Storable         (Vector)
@@ -262,7 +262,6 @@ data TxState = TxState
   , _toAddr              :: Addr
   , _value               :: SymWord
   , _substate            :: SubState
-  , _accessList          :: Map Addr [W256]
   , _isCreate            :: Bool
   , _txReversion         :: Map Addr Contract
   }
@@ -424,7 +423,15 @@ currentContract vm =
 -- * Data constructors
 
 makeVm :: VMOpts -> VM
-makeVm o = VM
+makeVm o = 
+  let txaccessList = vmoptTxAccessList o
+      txorigin = vmoptOrigin o
+      txtoAddr = vmoptAddress o
+      initialAccessedAddrs = fromList $ [txorigin, txtoAddr] ++ [1..9] ++ (Map.keys txaccessList)
+      initialAccessedStorageKeys = fromList $ foldMap (uncurry (map . (,))) (Map.toList txaccessList)
+      touched = if vmoptCreate o then [txorigin] else [txorigin, txtoAddr]
+  in 
+  VM
   { _result = Nothing
   , _frames = mempty
   , _tx = TxState
@@ -433,8 +440,8 @@ makeVm o = VM
     , _origin = vmoptOrigin o
     , _toAddr = vmoptAddress o
     , _value = vmoptValue o
-    , _substate = SubState mempty mempty mempty mempty mempty
-    , _accessList = vmoptTxAccessList o
+    , _substate = SubState mempty touched initialAccessedAddrs initialAccessedStorageKeys mempty
+    --, _accessList = txaccessList
     , _isCreate = vmoptCreate o
     , _txReversion = Map.fromList
       [(vmoptAddress o, vmoptContract o)]
