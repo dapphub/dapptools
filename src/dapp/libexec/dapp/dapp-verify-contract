@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 ### dapp-verify-contract -- verify contract souce on etherscan
 ### Usage: dapp verify-contract <path>:<contractname> <address> [constructorArgs]
-### Option: --multiple for standard-json multi-file verification
 
 set -e
 
