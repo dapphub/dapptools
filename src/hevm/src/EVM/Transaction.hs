@@ -62,15 +62,15 @@ sender :: Int -> Transaction -> Maybe Addr
 sender chainId tx = ecrec v' (txR tx) (txS tx) hash
   where hash = keccak (signingData chainId tx)
         v    = txV tx
-        v'   = if v == 27 || v == 28 || txType tx /= LegacyTransaction then v
-               else 28 - mod v 2
+        v'   = if v == 27 || v == 28 then v
+               else 27 + v
 
 signingData :: Int -> Transaction -> ByteString
 signingData chainId tx =
   case txType tx of
-    LegacyTransaction -> (if v == (chainId * 2 + 35) || v == (chainId * 2 + 36)
+    LegacyTransaction -> if v == (chainId * 2 + 35) || v == (chainId * 2 + 36)
       then eip155Data
-      else normalData)
+      else normalData
     AccessListTransaction -> eip2930Data
   where v          = fromIntegral (txV tx)
         to'        = case txToAddr tx of
@@ -79,7 +79,7 @@ signingData chainId tx =
         accessList = txAccessList tx
         rlpAccessList = EVM.RLP.List $ map (\accessEntry ->
           EVM.RLP.List [BS $ word160Bytes (accessAddress accessEntry), 
-                EVM.RLP.List $ map rlpWord256 $ accessStorageKeys accessEntry]
+                        EVM.RLP.List $ map rlpWordFull $ accessStorageKeys accessEntry]
           ) accessList
         normalData = rlpList [rlpWord256 (txNonce tx),
                               rlpWord256 (txGasPrice tx),
@@ -96,8 +96,7 @@ signingData chainId tx =
                               rlpWord256 (fromIntegral chainId),
                               rlpWord256 0x0,
                               rlpWord256 0x0]
-        eip2930Data = rlpList [
-          BS $ BS.pack [1],
+        eip2930Data = cons 0x01 $ rlpList [
           rlpWord256 (fromIntegral chainId),
           rlpWord256 (txNonce tx),
           rlpWord256 (txGasPrice tx),
@@ -151,6 +150,7 @@ instance FromJSON Transaction where
     txType   <- fmap read <$> (val JSON..:? "type")
     --let legacyTxn = Transaction tdata gasLimit gasPrice nonce r s toAddr v value
     case txType of
+      Just 0x00 -> return $ Transaction tdata gasLimit gasPrice nonce r s toAddr v value LegacyTransaction []
       Just 0x01 -> do
         accessListEntries <- (val JSON..: "accessList") >>= parseJSONList
         return $ Transaction tdata gasLimit gasPrice nonce r s toAddr v value AccessListTransaction accessListEntries
