@@ -1312,18 +1312,18 @@ transfer xFrom xTo xValue =
 -- | Checks a *CALL for failure; OOG, too many callframes, memory access etc.
 callChecks
   :: (?op :: Word8)
-  => Contract -> Word -> Addr -> Word -> Word -> Word -> Word -> Word -> [SymWord]
+  => Contract -> Word -> Addr -> Addr -> Word -> Word -> Word -> Word -> Word -> [SymWord]
    -- continuation with gas available for call
   -> (Integer -> EVM ())
   -> EVM ()
-callChecks this xGas xContext xValue xInOffset xInSize xOutOffset xOutSize xs continue = do
+callChecks this xGas xContext xTo xValue xInOffset xInSize xOutOffset xOutSize xs continue = do
   vm <- get
   let fees = view (block . schedule) vm
   accessMemoryRange fees xInOffset xInSize $
     accessMemoryRange fees xOutOffset xOutSize $ do
       availableGas <- use (state . gas)
       let recipientExists = accountExists xContext vm
-      (cost, gas') <- costOfCall fees recipientExists xValue availableGas xGas xContext
+      (cost, gas') <- costOfCall fees recipientExists xValue availableGas xGas xTo
       burn (cost - gas') $ do
         if xValue > view balance this
         then do
@@ -1350,7 +1350,7 @@ precompiledContract
   -> [SymWord]
   -> EVM ()
 precompiledContract this xGas precompileAddr recipient xValue inOffset inSize outOffset outSize xs =
-  callChecks this xGas recipient xValue inOffset inSize outOffset outSize xs $ \gas' ->
+  callChecks this xGas recipient precompileAddr xValue inOffset inSize outOffset outSize xs $ \gas' ->
   do
     executePrecompile precompileAddr gas' inOffset inSize outOffset outSize xs
     self <- use (state . contract)
@@ -2034,7 +2034,7 @@ delegateCall this gasGiven (SAddr xTo) (SAddr xContext) xValue xInOffset xInSize
           assign (state . stack) xs
           cheat (xInOffset, xInSize) (xOutOffset, xOutSize)
       else
-        callChecks this gasGiven xContext' xValue xInOffset xInSize xOutOffset xOutSize xs $
+        callChecks this gasGiven xContext' xTo' xValue xInOffset xInSize xOutOffset xOutSize xs $
         \xGas -> do
           vm0 <- get
           fetchAccount xTo' . const $
