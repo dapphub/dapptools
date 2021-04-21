@@ -1272,10 +1272,10 @@ exec1 = do
             [] -> underrun
             (xTo':_) -> forceConcrete xTo' $ \(num -> xTo) -> do
               acc <- accessAccountForGas (num xTo)
-              let cost = if acc then g_warm_storage_read else 0
-              let funds = view balance this
-              let recipientExists = accountExists xTo vm
-              let c_new = if not recipientExists && funds /= 0
+              let cost = if acc then 0 else g_cold_account_access
+                  funds = view balance this
+                  recipientExists = accountExists xTo vm
+                  c_new = if not recipientExists && funds /= 0
                           then num g_selfdestruct_newaccount
                           else 0
               burn (g_selfdestruct + c_new + cost) $ do
