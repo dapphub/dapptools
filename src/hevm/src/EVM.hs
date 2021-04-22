@@ -40,6 +40,7 @@ import Data.Vector.Storable         (Vector)
 import Data.Foldable                (toList)
 
 import Data.Tree
+import Data.List (find)
 
 import qualified Data.ByteString      as BS
 import qualified Data.ByteString.Lazy as LS
@@ -1117,6 +1118,7 @@ exec1 = do
                   let
                     newAddr = createAddress self (wordValue (view nonce this))
                     (cost, gas') = costOfCreate fees availableGas 0
+                  _ <- accessAccountForGas newAddr
                   burn (cost - gas') $
                     let initCode = readMemory (num xOffset) (num xSize) vm
                     in create self this (num gas') xValue xs newAddr initCode
@@ -1234,11 +1236,12 @@ exec1 = do
                 accessMemoryRange fees xOffset xSize $ do
                   availableGas <- use (state . gas)
 
-                  forceConcreteBuffer (readMemory (num xOffset) (num xSize) vm) $ \initCode ->
+                  forceConcreteBuffer (readMemory (num xOffset) (num xSize) vm) $ \initCode -> do
                    let
                     newAddr  = create2Address self (num xSalt) initCode
                     (cost, gas') = costOfCreate fees availableGas xSize
-                   in burn (cost - gas') $
+                   _ <- accessAccountForGas newAddr
+                   burn (cost - gas') $
                     create self this (num gas') xValue xs newAddr (ConcreteBuffer initCode)
             _ -> underrun
 
@@ -1365,7 +1368,6 @@ precompiledContract this xGas precompileAddr recipient xValue inOffset inSize ou
           transfer self recipient xValue
           touchAccount self
           touchAccount recipient
-          touchAccount precompileAddr
         _ -> vmError UnexpectedSymbolicArg
       _ -> underrun
 
@@ -2019,6 +2021,7 @@ ethsign sk digest = go 420
        Just sig -> sig
 
 -- * General call implementation ("delegateCall")
+-- note that the continuation is ignored in the precompile case
 delegateCall
   :: (?op :: Word8)
   => Contract -> Word -> SAddr -> SAddr -> Word -> Word -> Word -> Word -> Word -> [SymWord]
@@ -2260,9 +2263,19 @@ finishFrame how = do
         -- Were we calling?
         CallContext _ _ (num -> outOffset) (num -> outSize) _ _ _ reversion substate' -> do
 
+          -- Excerpt K.1. from the yellow paper:
+          -- K.1. Deletion of an Account Despite Out-of-gas.
+          -- At block 2675119, in the transaction 0xcf416c536ec1a19ed1fb89e4ec7ffb3cf73aa413b3aa9b77d60e4fd81a4296ba,
+          -- an account at address 0x03 was called and an out-of-gas occurred during the call.
+          -- Against the equation (197), this added 0x03 in the set of touched addresses, and this transaction turned σ[0x03] into ∅.
+
+          -- In other words, we special case address 0x03 and keep it in the set of touched accounts during revert
+          touched <- use (tx . substate . touchedAccounts)
+          
           let
+            substate'' = over touchedAccounts (maybe id cons (find ((==) 3) touched)) substate'
             revertContracts = assign (env . contracts) reversion
-            revertSubstate  = assign (tx . substate) substate'
+            revertSubstate  = assign (tx . substate) substate''
 
           case how of
             -- Case 1: Returning from a call?
