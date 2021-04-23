@@ -876,7 +876,7 @@ exec1 = do
                   accessUnboundedMemoryRange fees xTo xSize $ do
                     next
                     assign (state . stack) xs
-                    if len (the state returndata) < num xFrom + num xSize
+                    if num (len (the state returndata)) < xFrom + xSize || xFrom + xSize < xFrom
                     then vmError InvalidMemoryAccess
                     else copyBytesToMemory (the state returndata) xSize xFrom xTo
             _ -> underrun
