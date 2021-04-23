@@ -853,7 +853,7 @@ exec1 = do
                 \(extAccount, memOffset, codeOffset, codeSize) -> do
                   acc <- accessAccountForGas (num extAccount)
                   let cost = if acc then g_warm_storage_read else g_cold_account_access
-                  burn cost $
+                  burn (cost + g_copy * ceilDiv (num codeSize) 32) $
                     accessUnboundedMemoryRange fees memOffset codeSize $
                       fetchAccount (num extAccount) $ \c -> do
                         next
