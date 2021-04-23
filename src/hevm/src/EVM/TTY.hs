@@ -849,19 +849,17 @@ isExecutionHalted :: UiVmState -> Pred VM
 isExecutionHalted _ vm = isJust (view result vm)
 
 currentSrcMap :: DappInfo -> VM -> Maybe SrcMap
-currentSrcMap dapp vm =
+currentSrcMap dapp vm = do
+  this <- currentContract vm
   let
-    Just this = currentContract vm
     i = (view opIxMap this) SVec.! (view (state . pc) vm)
     h = view codehash this
-  in
-    case preview (dappSolcByHash . ix h) dapp of
-      Nothing ->
-        Nothing
-      Just (Creation, sol) ->
-        preview (creationSrcmap . ix i) sol
-      Just (Runtime, sol) ->
-        preview (runtimeSrcmap . ix i) sol
+  srcmap <- preview (dappSolcByHash . ix h) dapp
+  case srcmap of
+    (Creation, sol) ->
+      preview (creationSrcmap . ix i) sol
+    (Runtime, sol) ->
+      preview (runtimeSrcmap . ix i) sol
 
 drawStackPane :: UiVmState -> UiWidget
 drawStackPane ui =
@@ -910,7 +908,7 @@ drawBytecodePane ui =
                     else withDefAttr boldAttr (opWidget x))
       False
       (move $ list BytecodePane
-        (view codeOps (fromJust (currentContract vm)))
+        (maybe mempty (view codeOps) (currentContract vm))
         1)
 
 
