@@ -66,9 +66,9 @@ octets :: W256 -> ByteString
 octets x =
   BS.pack $ dropWhile (== 0) [fromIntegral (shiftR x (8 * i)) | i <- reverse [0..31]]
 
-octetsFull :: W256 -> ByteString
-octetsFull x =
-  BS.pack $ [fromIntegral (shiftR x (8 * i)) | i <- reverse [0..31]]
+octetsFull :: Int -> W256 -> ByteString
+octetsFull n x =
+  BS.pack $ [fromIntegral (shiftR x (8 * i)) | i <- reverse [0..n]]
 
 octets160 :: Addr -> ByteString
 octets160 x =
@@ -79,7 +79,10 @@ rlpWord256 0 = BS mempty
 rlpWord256 n = BS $ octets n
 
 rlpWordFull :: W256 -> RLP
-rlpWordFull = BS . octetsFull
+rlpWordFull = BS . octetsFull 31
+
+rlpAddrFull :: Addr -> RLP
+rlpAddrFull = BS . octetsFull 19 . num
 
 rlpWord160 :: Addr -> RLP
 rlpWord160 0 = BS mempty
