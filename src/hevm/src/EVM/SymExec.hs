@@ -345,8 +345,8 @@ verify preState maxIter rpcinfo maybepost = do
 equivalenceCheck :: ByteString -> ByteString -> Maybe Integer -> Maybe (Text, [AbiType]) -> Query (Either ([VM], [VM]) VM)
 equivalenceCheck bytecodeA bytecodeB maxiter signature' = do
   let 
-    bytecodeA' = if isEmpty bytecodeA then BS.pack [0] else bytecodeA
-    bytecodeB' = if isEmpty bytecodeB then BS.pack [0] else bytecodeB
+    bytecodeA' = if BS.null bytecodeA then BS.pack [0] else bytecodeA
+    bytecodeB' = if BS.null bytecodeB then BS.pack [0] else bytecodeB
   preStateA <- abstractVM signature' [] bytecodeA' SymbolicS
 
   let preself = preStateA ^. state . contract
