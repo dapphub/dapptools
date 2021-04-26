@@ -9,7 +9,7 @@ let
     owner = "ethereum";
     repo = "tests";
     rev = "644967e345bbc6642fab613e1b1737abbe131f78";
-    sha256 = "1c76xri5qhbqmd088k3s1wldkys5qrsqyx2a2m1903an41w5bz5f";
+    sha256 = "1525yzmc5wig5pkz904k2rqz11ygiql8mzb6djym9w87bymfvzm9";
   };
 
   # run all General State Tests, skipping tests that deal with "anomalies on the main network"
