@@ -8,7 +8,7 @@ let
   ethereum-test-suite = x: x.fetchFromGitHub {
     owner = "ethereum";
     repo = "tests";
-    rev = "6af0621522dd0274525457741291d391c10002be";
+    rev = "644967e345bbc6642fab613e1b1737abbe131f78";
     sha256 = "1c76xri5qhbqmd088k3s1wldkys5qrsqyx2a2m1903an41w5bz5f";
   };
 
@@ -20,7 +20,7 @@ let
     export PATH=${x.pkgs.hevm}/bin:${x.pkgs.jq}/bin:$PATH
     ${x.pkgs.hevm}/bin/hevm compliance \
       --tests ${ethereum-test-suite x} \
-      --skip "(RevertPrecompiledTouch_storage|Create2Recursive|Create1000|recursiveCreateReturn|randomStatetest647|multiOwnedRemoveOwner|walletRemoveOwnerRemovePending|static_Call50000|Return5000)" \
+      --skip "(Create2Recursive|Create1000|recursiveCreateReturn|underflowTest|static_Call50000|Return5000)" \
       --timeout 20 \
       --html > $out/index.html
   # Disable obsolete VMTests - gas expectations broken by Istanbul
