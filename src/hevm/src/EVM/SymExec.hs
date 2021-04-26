@@ -344,7 +344,10 @@ verify preState maxIter rpcinfo maybepost = do
 -- | Compares two contract runtimes for trace equivalence by running two VMs and comparing the end states.
 equivalenceCheck :: ByteString -> ByteString -> Maybe Integer -> Maybe (Text, [AbiType]) -> Query (Either ([VM], [VM]) VM)
 equivalenceCheck bytecodeA bytecodeB maxiter signature' = do
-  preStateA <- abstractVM signature' [] bytecodeA SymbolicS
+  let 
+    bytecodeA' = if isEmpty bytecodeA then BS.pack [0] else bytecodeA
+    bytecodeB' = if isEmpty bytecodeB then BS.pack [0] else bytecodeB
+  preStateA <- abstractVM signature' [] bytecodeA' SymbolicS
 
   let preself = preStateA ^. state . contract
       precaller = preStateA ^. state . caller
@@ -352,7 +355,7 @@ equivalenceCheck bytecodeA bytecodeB maxiter signature' = do
       prestorage = preStateA ^?! env . contracts . ix preself . storage
       (calldata', cdlen) = view (state . calldata) preStateA
       pathconds = view constraints preStateA
-      preStateB = loadSymVM (RuntimeCode (ConcreteBuffer bytecodeB)) prestorage SymbolicS precaller callvalue' (calldata', cdlen) & set constraints pathconds
+      preStateB = loadSymVM (RuntimeCode (ConcreteBuffer bytecodeB')) prestorage SymbolicS precaller callvalue' (calldata', cdlen) & set constraints pathconds
 
   smtState <- queryState
   push 1
