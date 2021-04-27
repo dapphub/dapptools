@@ -63,12 +63,12 @@ smod (S a x) (S b y) = let sx, sy :: SInt 256
 addmod :: SymWord -> SymWord -> SymWord -> SymWord
 addmod (S a x) (S b y) (S c z) = let to512 :: SWord 256 -> SWord 512
                                      to512 = sFromIntegral
-                                 in S (Todo "addmod" [a, b, c]) $ sFromIntegral $ ((to512 x) + (to512 y)) `sMod` (to512 z)
+                                 in  S (Todo "addmod" [a, b, c]) $ ite (z .== 0) 0 $ sFromIntegral $ ((to512 x) + (to512 y)) `sMod` (to512 z)
 
 mulmod :: SymWord -> SymWord -> SymWord -> SymWord
 mulmod (S a x) (S b y) (S c z) = let to512 :: SWord 256 -> SWord 512
                                      to512 = sFromIntegral
-                                 in S (Todo "mulmod" [a, b, c]) $ sFromIntegral $ ((to512 x) * (to512 y)) `sMod` (to512 z)
+                                 in S (Todo "mulmod" [a, b, c]) $ ite (z .== 0) 0 $ sFromIntegral $ ((to512 x) * (to512 y)) `sMod` (to512 z)
 
 -- | Signed less than
 slt :: SymWord -> SymWord -> SymWord
