@@ -82,14 +82,28 @@ shopt -s nocasematch
 {
   cd "$tests"
   for x in BlockchainTests/GeneralStateTests/*/*; do
-    if [[ $x =~ .*$match.* ]] && [[ -n $skip && $x =~ .*$skip.* ]]; then
-      for job in $(<$x jq '.|keys[]' -r); do
-        echo -n "$job " ; echo "skip"
+    if [ -d $x ]; then
+      for y in $x/*; do
+        if [[ $y =~ .*$match.* ]] && [[ -n $skip && $y =~ .*$skip.* ]]; then
+          for job in $(<$y jq '.|keys[]' -r); do
+            echo -n "$job " ; echo "skip"
+          done
+        elif [[ $y =~ .*$match.* ]]; then
+          set +e
+          "$HEVM" bc-test --file $y --timeout $timeout 2>&1
+          set -e
+        fi
       done
-    elif [[ $x =~ .*$match.* ]]; then
-      set +e
-      "$HEVM" bc-test --file $x --timeout $timeout 2>&1
-      set -e
+    else
+      if [[ $x =~ .*$match.* ]] && [[ -n $skip && $x =~ .*$skip.* ]]; then
+        for job in $(<$x jq '.|keys[]' -r); do
+          echo -n "$job " ; echo "skip"
+        done
+      elif [[ $x =~ .*$match.* ]]; then
+        set +e
+        "$HEVM" bc-test --file $x --timeout $timeout 2>&1
+        set -e
+      fi
     fi
   done
 } | {
