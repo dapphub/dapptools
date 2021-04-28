@@ -745,10 +745,8 @@ exec1 = do
         -- op: BALANCE
         0x31 ->
           case stk of
-            (x':xs) -> forceConcrete x' $ \x -> do
-              acc <- accessAccountForGas (num x)
-              let cost = if acc then g_warm_storage_read else g_cold_account_access
-              burn cost $
+            (x':xs) -> forceConcrete x' $ \x ->
+              accessAndBurn (num x) $
                 fetchAccount (num x) $ \c -> do
                   next
                   assign (state . stack) xs
@@ -830,10 +828,8 @@ exec1 = do
                   next
                   assign (state . stack) xs
                   push (w256 1)
-                else do
-                  acc <- accessAccountForGas (num x)
-                  let cost = if acc then g_warm_storage_read else g_cold_account_access
-                  burn cost $
+                else
+                  accessAndBurn (num x) $
                     fetchAccount (num x) $ \c -> do
                       next
                       assign (state . stack) xs
@@ -884,10 +880,8 @@ exec1 = do
         -- op: EXTCODEHASH
         0x3f ->
           case stk of
-            (x':xs) -> forceConcrete x' $ \x -> do
-              acc <- accessAccountForGas (num x)
-              let cost = if acc then g_warm_storage_read else g_cold_account_access
-              burn cost $ do
+            (x':xs) -> forceConcrete x' $ \x ->
+              accessAndBurn (num x) $ do
                 next
                 assign (state . stack) xs
                 fetchAccount (num x) $ \c ->
@@ -1882,7 +1876,14 @@ touchAccount = pushTo ((tx . substate) . touchedAccounts)
 selfdestruct :: Addr -> EVM()
 selfdestruct = pushTo ((tx . substate) . selfdestructs)
 
--- returns a wrapped boolean- if true, this address has been touched before in the txn (warm gas cost as in EIP 2929)
+accessAndBurn :: Addr -> EVM () -> EVM ()
+accessAndBurn x cont = do
+  FeeSchedule {..} <- use ( block . schedule )
+  acc <- accessAccountForGas x
+  let cost = if acc then g_warm_storage_read else g_cold_account_access
+  burn cost cont
+
+-- | returns a wrapped boolean- if true, this address has been touched before in the txn (warm gas cost as in EIP 2929)
 -- otherwise cold
 accessAccountForGas :: Addr -> EVM Bool
 accessAccountForGas addr = do
