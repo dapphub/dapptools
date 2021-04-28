@@ -2756,7 +2756,7 @@ concreteModexpGasFee input = num $ max 200 ((multiplicationComplexity * iterCoun
   where (lenb, lene, lenm) = parseModexpLength input
         ez = isZero (96 + lenb) lene input
         e' = w256 $ word $ LS.toStrict $
-          lazySlice (96 + lenb) (min 32 lene) input
+          lazySlice (96 + lenb) lene input
         nwords = ceiling $ num (max lenb lenm) / 8
         multiplicationComplexity = nwords * nwords
         iterCount' | lene <= 32 && ez = 0
