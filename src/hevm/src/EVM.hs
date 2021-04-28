@@ -1446,16 +1446,15 @@ executePrecompile preCompileAddr gasCap inOffset inSize outOffset outSize xs  = 
             (lenb, lene, lenm) = parseModexpLength input'
 
             output = ConcreteBuffer $
-              case (isZero (96 + lenb + lene) lenm input') of
-                 True ->
-                   truncpadlit (num lenm) (asBE (0 :: Int))
-                 False ->
-                   let
-                     b = asInteger $ lazySlice 96 lenb input'
-                     e = asInteger $ lazySlice (96 + lenb) lene input'
-                     m = asInteger $ lazySlice (96 + lenb + lene) lenm input'
-                   in
-                     padLeft (num lenm) (asBE (expFast b e m))
+              if (isZero 96 lenb input' && not (isZero (96 + lenb) lene input')) || isZero (96 + lenb + lene) lenm input'
+              then truncpadlit (num lenm) (asBE (0 :: Int))
+              else
+                let
+                  b = asInteger $ lazySlice 96 lenb input'
+                  e = asInteger $ lazySlice (96 + lenb) lene input'
+                  m = asInteger $ lazySlice (96 + lenb + lene) lenm input'
+                in
+                  padLeft (num lenm) (asBE (expFast b e m))
           in do
             assign (state . stack) (1 : xs)
             assign (state . returndata) output
