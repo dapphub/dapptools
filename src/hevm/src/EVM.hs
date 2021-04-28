@@ -1446,7 +1446,7 @@ executePrecompile preCompileAddr gasCap inOffset inSize outOffset outSize xs  = 
             (lenb, lene, lenm) = parseModexpLength input'
 
             output = ConcreteBuffer $
-              if (isZero 96 lenb input' && not (isZero (96 + lenb) lene input')) || isZero (96 + lenb + lene) lenm input'
+              if isZero (96 + lenb + lene) lenm input'
               then truncpadlit (num lenm) (asBE (0 :: Int))
               else
                 let
@@ -2756,7 +2756,7 @@ concreteModexpGasFee input = max 200 ((multiplicationComplexity * iterCount) `di
   where (lenb, lene, lenm) = parseModexpLength input
         ez = isZero (96 + lenb) lene input
         e' = w256 $ word $ LS.toStrict $
-          lazySlice (96 + lenb) lene input
+          lazySlice (96 + lenb) (min 32 lene) input
         nwords :: Integer
         nwords = ceilDiv (num $ max lenb lenm) 8
         multiplicationComplexity = nwords * nwords
