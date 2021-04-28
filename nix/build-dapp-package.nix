@@ -58,7 +58,7 @@ in
       '';
 
       checkPhase = let
-        cmd = "DAPP_SKIP_BUILD=1 dapp test $dappFlags";
+        cmd = "DAPP_SKIP_BUILD=1 dapp test ${dappFlags}";
       in
         if shouldFail
           then "${cmd} && exit 1 || echo 0"
