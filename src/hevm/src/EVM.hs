@@ -2752,17 +2752,19 @@ costOfCreate (FeeSchedule {..}) availableGas' hashSize =
     initGas    = allButOne64th (availableGas - createCost)
 
 concreteModexpGasFee :: ByteString -> Integer
-concreteModexpGasFee input = num $ max 200 ((multiplicationComplexity * iterCount) `div` 3)
+concreteModexpGasFee input = max 200 ((multiplicationComplexity * iterCount) `div` 3)
   where (lenb, lene, lenm) = parseModexpLength input
         ez = isZero (96 + lenb) lene input
         e' = w256 $ word $ LS.toStrict $
           lazySlice (96 + lenb) lene input
-        nwords = ceiling $ num (max lenb lenm) / 8
+        nwords :: Integer
+        nwords = ceilDiv (num $ max lenb lenm) 8
         multiplicationComplexity = nwords * nwords
+        iterCount' :: Integer
         iterCount' | lene <= 32 && ez = 0
                    | lene <= 32 = num (log2 e')
-                   | e' == 0 = 8 * (lene - 32)
-                   | otherwise = num (log2 e') + 8 * (lene - 32)
+                   | e' == 0 = 8 * (num lene - 32)
+                   | otherwise = num (log2 e') + 8 * (num lene - 32)
         iterCount = max iterCount' 1
 
 -- Gas cost of precompiles
