@@ -143,7 +143,7 @@ in
       dir = dss-src;
       name = "dss";
       shouldFail = false;
-      dappFlags = "--match '[^dai].t.sol'"; # avoids dai.t.sol tests.
+      dappFlags = "--match [^dai].t.sol"; # avoids dai.t.sol tests.
       # Can be switched on again if dss gets updated.
     };
   }
