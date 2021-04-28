@@ -1,5 +1,18 @@
 # hevm changelog
 
+## 0.46.0 - unreleased
+
+### Added
+
+- Updated to Berlin! Conformant with GeneralStateTests at commit hash `644967e345bbc6642fab613e1b1737abbe131f78`.
+
+### Fixed
+
+- ADDMOD and MULMOD by zero yields zero.
+- Address calculation for newly created contracts.
+- Accomodated for the notorious "anomolies on the main network" (see yellow paper Appendix K for trivia)
+- A hevm crash when debugging a SELFDESTRUCT contract.
+
 ## 0.45.0 - 2021-03-22
 
 ### Added
