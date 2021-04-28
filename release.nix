@@ -12,9 +12,8 @@ let
     sha256 = "1525yzmc5wig5pkz904k2rqz11ygiql8mzb6djym9w87bymfvzm9";
   };
 
-  # run all General State Tests, skipping tests that deal with "anomalies on the main network"
-  # (see section K.1 of https://ethereum.github.io/yellowpaper/paper.pdf), and some performance
-  # heavy ones.
+  # run all General State Tests, skipping performance heavy tests and the ones missing
+  # postState.
   hevmCompliance = x: x.runCommand "hevm-compliance" {} ''
     mkdir "$out"
     export PATH=${x.pkgs.hevm}/bin:${x.pkgs.jq}/bin:$PATH
