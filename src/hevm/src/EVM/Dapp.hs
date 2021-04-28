@@ -18,11 +18,9 @@ import Data.Bifunctor (first)
 import Data.Text (Text, isPrefixOf, pack, unpack)
 import Data.Text.Encoding (encodeUtf8)
 import Data.Map (Map, toList)
-import Data.Monoid ((<>))
 import Data.Maybe (isJust, fromJust)
 import Data.Word (Word32)
 
-import Control.Applicative ((<$>))
 import Control.Arrow ((>>>))
 import Control.Lens
 
