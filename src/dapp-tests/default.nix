@@ -110,7 +110,7 @@ let
     shouldFail = shouldFail;
     src = dir;
     dappFlags = "${dappFlags}";
-    deps = [ ds-test ds-token ds-math ];
+    deps = [ ds-test ds-token ds-math ds-value ];
     checkInputs = with pkgs; [ hevm jq seth dapp solc ];
   };
 in
@@ -139,10 +139,11 @@ in
       prove-transfer = fail "prove_transfer";
     };
 
-    dss = pkgs.buildDappPackage {
-      src = dss-src;
+    dss = runTest {
+      dir = dss-src;
       name = "dss";
-      doCheck = false; # TODO: switch me on when dai tests are updated.
-      deps = [ ds-test ds-token ds-value ];
+      shouldFail = false;
+      dappFlags = "--match '[^dai].t.sol'"; # avoids dai.t.sol tests.
+      # Can be switched on again if dss gets updated.
     };
   }
