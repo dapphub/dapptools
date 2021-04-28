@@ -1891,7 +1891,7 @@ accessAccountForGas addr = do
   assign (tx . substate . accessedAddresses) (insert addr accessedAddrs)
   return accessed
 
--- returns a wrapped boolean- if true, this address has been touched before in the txn (warm gas cost as in EIP 2929)
+-- | returns a wrapped boolean- if true, this slot has been touched before in the txn (warm gas cost as in EIP 2929)
 -- otherwise cold
 accessStorageForGas :: Addr -> SymWord -> EVM Bool
 accessStorageForGas addr key = do
