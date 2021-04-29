@@ -18,8 +18,8 @@ extra-deps:
 - cryptonite-0.28@sha256:b6c75e62b4c655d4cb1bcbb80d01430d136aac32bd6962c86c84738935cc8f9d,18195
 - github: dmjio/semver-range
   commit: d8d9db892ddb6ae267c9bcbc4f6602668433f12a
-- github: leventerkok/sbv # 8.7.5
-  commit: 91637c043d206530bc64d7eac88d2f80e8db0b85
+- github: leventerkok/sbv # 8.14
+  commit: 7eda0cc522a01ffaf64ca18ed661fce5a2ed76a4
 flags: {}
 extra-package-dbs: []
 image:
