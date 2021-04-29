@@ -79,7 +79,7 @@ jobs:
 
       - name: Build and install hevm
         run: |
-          cd src/hevm && stack install --ghc-options="-Werror" --extra-include-dirs=$HOME/.local/include --extra-lib-dirs=$HOME/.local/lib && cd ../..
+          cd src/hevm && stack install --extra-include-dirs=$HOME/.local/include --extra-lib-dirs=$HOME/.local/lib && cd ../..
 
       - name: Test
         if: runner.os == 'Linux'
