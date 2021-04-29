@@ -89,7 +89,7 @@ jobs:
 
           for VER in "0.4.25" "0.5.7" ; do
             cp "$HOME/.local/bin/solc-$VER" "$HOME/.local/bin/solc"
-            cd src/hevm && stack test --ghc-options="-Werror" --extra-include-dirs=$HOME/.local/include --extra-lib-dirs=$HOME/.local/lib && cd ../..
+            cd src/hevm && stack test --extra-include-dirs=$HOME/.local/include --extra-lib-dirs=$HOME/.local/lib && cd ../..
           done
 
       - name: Amend and compress binaries (macOS)
