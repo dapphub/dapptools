@@ -60,11 +60,11 @@ jobs:
           path: ~/.cabal
           key: ${{ runner.os }}-cabal-v3
 
-      # - name: Build Binaries
-      #   run: |
-      #     .github/scripts/install-solc.sh
-      #   env:
-      #     HOST_OS: ${{ runner.os }}
+      - name: Build Binaries
+        run: |
+          .github/scripts/install-solc.sh
+        env:
+          HOST_OS: ${{ runner.os }}
 
       - name: Build Libraries
         run: |
@@ -75,11 +75,11 @@ jobs:
 
       - name: Build Dependencies
         run: |
-          stack build --ghc-options="-Werror" --extra-include-dirs=$HOME/.local/include --extra-lib-dirs=$HOME/.local/lib --only-dependencies
+          stack build src/hevm --ghc-options="-Werror" --extra-include-dirs=$HOME/.local/include --extra-lib-dirs=$HOME/.local/lib --only-dependencies
 
       - name: Build and install hevm
         run: |
-          stack install --ghc-options="-Werror" --extra-include-dirs=$HOME/.local/include --extra-lib-dirs=$HOME/.local/lib
+          stack install src/hevm --ghc-options="-Werror" --extra-include-dirs=$HOME/.local/include --extra-lib-dirs=$HOME/.local/lib
 
       - name: Test
         if: runner.os == 'Linux'
