@@ -99,7 +99,7 @@ jobs:
 
       - name: Compress binary (Linux)
         if: runner.os == 'Linux'
-        run: GZIP=-9 tar -czf echidna-test.tar.gz $HOME/.local/bin/echidna-test
+        run: GZIP=-9 tar -czf hevm.tar.gz $HOME/.local/bin/hevm
 
       - name: Upload artifact
         uses: actions/upload-artifact@v1
