@@ -68,6 +68,11 @@ in self-hs: super-hs:
       nativeBuildInputs = attrs.nativeBuildInputs ++ [pkgs.makeWrapper];
       configureFlags = attrs.configureFlags ++ [
           "--ghc-option=-O2"
-          ];
+      ] ++
+      (if stdenv.isDarwin then [] else [
+          "--extra-lib-dirs=${pkgs.gmp6.override { withStatic = true; }}/lib"
+          "--extra-lib-dirs=${pkgs.zlib.static}/lib"
+          "--extra-lib-dirs=${pkgs.libffi.overrideAttrs (old: { dontDisableStatic = true; })}/lib"
+      ]);
     }));
   }
