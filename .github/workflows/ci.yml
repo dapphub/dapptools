@@ -81,7 +81,7 @@ jobs:
 
       - name: Build and install hevm
         run: |
-          cd src/hevm && stack install --extra-include-dirs=$HOME/.local/include --extra-lib-dirs=$HOME/.local/lib && cd ../..
+          nix-build -A hevm
 
       # tests are mysteriously failing with cvc4
       # - name: Test
@@ -99,7 +99,7 @@ jobs:
 
       - name: Compress binary (Linux)
         if: runner.os == 'Linux'
-        run: GZIP=-9 tar -czf hevm.tar.gz $HOME/.local/bin/hevm
+        run: GZIP=-9 tar -czf hevm.tar.gz result/bin/hevm
 
       - name: Upload artifact
         uses: actions/upload-artifact@v1
