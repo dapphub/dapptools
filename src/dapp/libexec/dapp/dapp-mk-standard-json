@@ -29,7 +29,10 @@ for root, dirnames, filenames in os.walk(src):
 tmpljson["sources"]={}
 for f in files:
     tmpljson["sources"][f]={}
-    tmpljson["sources"][f]["urls"] = [f]
+    if os.getenv('DAPP_VERIFY_CONTRACT_MULTIPLE') == "yes":
+        tmpljson["sources"][f]["content"] = [f.read()]
+    else
+        tmpljson["sources"][f]["urls"] = [f]
 
 if os.getenv('DAPP_REMAPPINGS') is None or os.getenv('DAPP_REMAPPINGS') == "":
     tmpljson["settings"].pop("remappings", None)
