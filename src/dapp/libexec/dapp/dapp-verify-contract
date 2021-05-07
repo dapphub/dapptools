@@ -44,11 +44,6 @@ else
 fi
 meta=$(jshon <<<"$contract" -e metadata -u)
 version=$(jshon <<<"$meta" -e compiler -e version -u)
-sources=$(jshon <<<"$meta" -e sources)
-language=$(jshon <<<"$meta" -e language)
-remappings=$(jshon <<<"$meta" -e settings -e remappings)
-optimizer=$(jshon <<<"$meta" -e settings -e optimizer)
-evmVersion=$(jshon <<<"meta" -e settings -e evmVersion)
 file=$(jshon <<<"$meta" -e settings -e compilationTarget -k)
 optimized=$(jshon <<<"$meta" -e settings -e optimizer -e enabled -u)
 runs=$(jshon <<<"$meta" -e settings -e optimizer -e runs -u)
@@ -95,18 +90,7 @@ if  [[ $DAPP_VERIFY_CONTRACT_MULTIPLE == yes ]]; then
 
   # Standard Input JSON
 
-  inputJSON=$(cat <<-EOF
-  {
-    "language": "$language",
-    "sources": "$sources",
-    "settings": {
-      "remappings": "$remappings",
-      "optimizer": "$optimizer",
-      "evmVersion": "$evmVersion"
-    }
-  }
-EOF
-  )
+  inputJSON=$(dapp mk-standard-json)
 
   params=(
   "module=contract" "action=verifysourcecode"
