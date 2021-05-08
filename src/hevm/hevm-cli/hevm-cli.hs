@@ -482,20 +482,26 @@ assert cmd = do
          when (showTree cmd) $ let
           strg = _storageLayout <$> currentSolc srcInfo vm
           storagelist   = Map.toList $ fromMaybe mempty (fromMaybe Nothing strg)
-          aaaaa         = intercalate " ; " $ (unpack . fst) <$> storagelist
+          abimap = fromMaybe mempty $ view abiMap <$> currentSolc srcInfo vm
+          -- aaaaa         = intercalate " ; " $ (unpack . fst) <$> storagelist
           -- do
           -- consistentTree tree >>= \case
           --   Nothing -> io $ putStrLn "No consistent paths" -- unlikely
           --   Just tree' ->
               in let
-                ?ctx = ExprContext (mkIsKnownStorageSlot storagelist) (mkSimpStorage storagelist)
+                ?ctx = ExprContext
+                  (mkIsKnownStorageSlot storagelist)
+                  (mkSimpStorage storagelist)
+                  abimap
+                  Nothing
               in let
                 -- simplify and enrich our expr with context :)
-                expr' = toExpr $ fixExpr (fromExpr expr)
+                expr' = inferExpr (fromExpr expr)
+                expr'' = fixExpr expr'
                 -- renderTree' = renderTree showBranchInfoWithAbi showLeafInfo
                 -- tree'' = propagateData 0 tree
                 -- expr = tree2expr expr
-                in io $ setLocaleEncoding utf8 >> putStrLn (show expr')
+                in io $ setLocaleEncoding utf8 >> putStrLn (show expr'')
                 -- in io $ setLocaleEncoding utf8 >> putStrLn (showTree' (renderTree' tree''))
 
   maybesig <- case sig cmd of
@@ -731,7 +737,7 @@ vmFromCommand cmd = do
         value'   = word value 0
         caller'  = addr caller 0
         origin'  = addr origin 0
-        calldata' = ConcreteBuffer (Oops "cliCalldata") $ bytes calldata ""
+        calldata' = ConcreteBuffer (Todo "cliCalldata" []) $ bytes calldata ""
         codeType = if create cmd then EVM.InitCode else EVM.RuntimeCode
         address' = if create cmd
               then addr address (createAddress origin' (word nonce 0))
@@ -785,14 +791,14 @@ symvmFromCommand cmd = do
       return (SymbolicBuffer Calldata cd, var "CALLDATALENGTH" len', (len' .<= 256, Todo "len < 256" []))
     -- fully concrete calldata
     (Just c, Nothing) ->
-      let cd = ConcreteBuffer (Oops "clicalldata3") $ decipher c
+      let cd = ConcreteBuffer (Todo "clicalldata3" []) $ decipher c
       in return (cd, litWord (num $ len cd), (sTrue, Todo "" []))
     -- calldata according to given abi with possible specializations from the `arg` list
     (Nothing, Just sig') -> do
       method' <- io $ functionAbi sig'
       let typs = snd <$> view methodInputs method'
       (cd, cdlen) <- symCalldata (view methodSignature method') typs (arg cmd)
-      return (SymbolicBuffer (Oops "cliCalldata4") cd, litWord (num cdlen), (sTrue, Todo "" []))
+      return (SymbolicBuffer (Todo "cliCalldata4" []) cd, litWord (num cdlen), (sTrue, Todo "" []))
     _ -> error "incompatible options: calldata and abi"
 
   store <- case storageModel cmd of

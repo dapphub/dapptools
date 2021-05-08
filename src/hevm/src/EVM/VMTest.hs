@@ -288,7 +288,7 @@ fromBlockchainCase' block tx preState postState =
             cd = if isCreate
                  then (mempty, 0)
                  else let l = num . BS.length $ txData tx
-                      in (ConcreteBuffer (Oops "fromBlockchainCase") $ txData tx, litWord l)
+                      in (ConcreteBuffer (Todo "fromBlockchainCase" []) $ txData tx, litWord l)
 
 
 validateTx :: Transaction -> Map Addr EVM.Contract -> Maybe ()

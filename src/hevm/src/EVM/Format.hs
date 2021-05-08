@@ -15,7 +15,7 @@ import EVM (Trace, TraceData (..), Log (..), Query (..), FrameContext (..), Stor
 import EVM.SymExec
 import EVM.Symbolic (len, litWord)
 import EVM.Types (maybeLitWord, Word (..), SymWord(..), W256 (..), num, Addr, Buffer(..), ByteStringS(..))
-import EVM.Expr
+import EVM.Expr hiding (indent)
 import EVM.ABI (AbiValue (..), Event (..), AbiType (..))
 import EVM.ABI (Indexed (NotIndexed), getAbiSeq, getAbi)
 import EVM.ABI (parseTypeName, formatString)
@@ -124,13 +124,13 @@ showValue :: (?context :: DappContext) => AbiType -> Buffer -> Text
 showValue t b = head $ textValues [t] b
 
 showCall :: (?context :: DappContext) => [AbiType] -> Buffer -> Text
-showCall ts (SymbolicBuffer _ bs) = showValues ts $ SymbolicBuffer (Oops "showCall") (drop 4 bs)
-showCall ts (ConcreteBuffer _ bs) = showValues ts $ ConcreteBuffer (Oops "showCall") (BS.drop 4 bs)
+showCall ts (SymbolicBuffer _ bs) = showValues ts $ SymbolicBuffer (Todo "showCall" []) (drop 4 bs)
+showCall ts (ConcreteBuffer _ bs) = showValues ts $ ConcreteBuffer (Todo "showCall" []) (BS.drop 4 bs)
 
 showError :: (?context :: DappContext) => ByteString -> Text
 showError bs = case BS.take 4 bs of
   -- Method ID for Error(string)
-  "\b\195y\160" -> showCall [AbiStringType] (ConcreteBuffer (Oops "showError") bs)
+  "\b\195y\160" -> showCall [AbiStringType] (ConcreteBuffer (Todo "showError" []) bs)
   _             -> formatBinary bs
 
 
@@ -516,13 +516,13 @@ simpS :: (?srcInfo :: DappInfo,
           ?method :: Maybe Method)
           => Expr
           -> Expr
-simpS r@(Slice (Literal from) (Literal to) (WriteWord (Literal x) w s))
-  | from == x && to == x + 0x20 = WriteWord (Literal from) (simpW w) SEmpty
-  | from == x && x + 0x20 < to  = (WriteWord (Literal x) (simpW w) (simpS (Slice (Literal (from + 0x20)) (Literal to) s)))
-  | from <= x && x + 0x20 == to = (WriteWord (Literal x) (simpW w) (simpS (Slice (Literal from) (Literal (to - 0x20)) s)))
-  | otherwise = Oops ("simpS" ++ (show (x - from)))
+-- simpS r@(Slice (Literal from) (Literal to) (WriteWord (Literal x) w s))
+--   | from == x && to == x + 0x20 = WriteWord (Literal from) (simpW w) SEmpty
+--   | from == x && x + 0x20 < to  = (WriteWord (Literal x) (simpW w) (simpS (Slice (Literal (from + 0x20)) (Literal to) s)))
+--   | from <= x && x + 0x20 == to = (WriteWord (Literal x) (simpW w) (simpS (Slice (Literal from) (Literal (to - 0x20)) s)))
+--   | otherwise = Oops ("simpS" ++ (show (x - from)))
 simpS Calldata = Calldata
-simpS x = Oops ("simpS" <> show x)
+-- simpS x = wOops ("simpS" <> show x)
 
 simpW :: (?srcInfo :: DappInfo,
           ?vm :: VM,
@@ -554,7 +554,6 @@ simpW (SLT x y)                     = LT (simpW x) (simpW y)
 simpW (Eq x y)                      = Eq (simpW x) (simpW y)
 -- simpW (NEq x y)                     = NEq (simpW x) (simpW y)
 simpW (Pointer1 str x)              = Pointer1 str (simpW x)
-simpW (FromStorage x y)             = FromStorage (simpW x) (simpS y)
 -- symbolic storage lookup
 simpW (FromKeccak
         s@(WriteWord
@@ -588,12 +587,12 @@ simpW (Sub (Literal x) (Literal y)) = (Literal (x-y))
 simpW (Sub x y) = (Sub (simpW x) (simpW y))
 simpW (Mul x y)                     = Mul (simpW x) (simpW y)
 simpW (Div x y)                     = Div (simpW x) (simpW y)
-simpW (FromBuff (Literal x) Calldata) =
-  let
-    input = fromMaybe [] $ view methodInputs <$> ?method
-    index = num (((toInteger x) - 4) `div` 32)
-  in if length input > index then Var (cParam $ unpack $ fst (input !! index)) else Todo ("sad" ++ (show index)) []
-simpW (FromBuff w s) = FromBuff (simpW w) (simpS s)
+-- simpW (FromBuff (Literal x) Calldata) =
+--   let
+--     input = fromMaybe [] $ view methodInputs <$> ?method
+--     index = num (((toInteger x) - 4) `div` 32)
+--   in if length input > index then Var (cParam $ unpack $ fst (input !! index)) else Todo ("sad" ++ (show index)) []
+-- simpW (FromBuff w s) = FromBuff (simpW w) (simpS s)
 simpW x = x
 
 fixW :: (?srcInfo :: DappInfo,

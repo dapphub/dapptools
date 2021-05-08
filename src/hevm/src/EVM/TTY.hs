@@ -632,7 +632,7 @@ initialUiVmStateForTest opts@UnitTestOptions{..} (theContractName, theTestName) 
             void (runUnitTest opts theTestName args)
           SymbolicTest _ -> do
             Stepper.evm $ modify symbolify
-            void (execSymTest opts theTestName (SymbolicBuffer (Oops "initialUiVmStateForTest") buf, w256lit len)) -- S (Literal $ num len) (literal $ num len)))
+            void (execSymTest opts theTestName (SymbolicBuffer (Todo "initialUiVmStateForTest" []) buf, w256lit len)) -- S (Literal $ num len) (literal $ num len)))
             -- (Oops "initialVmStateForTest")
   pure $ initUiVmState vm0 opts script
   where

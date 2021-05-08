@@ -14,7 +14,7 @@ import EVM.Exec
 import qualified EVM.Fetch as Fetch
 import EVM.ABI
 import EVM.Stepper (Stepper)
-import EVM.Solidity (Method)
+import EVM.Solidity (Method, SolcContract(..))
 import qualified EVM.Stepper as Stepper
 import qualified Control.Monad.Operational as Operational
 import Control.Monad.State.Strict hiding (state)
@@ -28,6 +28,7 @@ import Data.SBV.Trans hiding (distinct, Word)
 import Data.SBV hiding (runSMT, newArray_, addAxiom, distinct, sWord8s, Word)
 import Data.Vector (toList, fromList)
 import Data.Tree
+import qualified Data.Map as Map
 import Debug.Trace
 
 import Data.ByteString (ByteString, pack)
@@ -119,7 +120,7 @@ abstractVM typesignature concreteArgs x storagemodel = do
     ConcreteS -> return $ Concrete mempty
   c <- SAddr <$> freshVar_
   value' <- var "CALLVALUE" <$> freshVar_
-  return $ loadSymVM (RuntimeCode x) symstore storagemodel c value' (SymbolicBuffer (Oops "abstractVM") cd', cdlen) & over constraints ((<>) [cdconstraint])
+  return $ loadSymVM (RuntimeCode x) symstore storagemodel c value' (SymbolicBuffer (Todo "abstractVM" []) cd', cdlen) & over constraints ((<>) [cdconstraint])
 
 loadSymVM :: ContractCode -> Storage -> StorageModel -> SAddr -> SymWord -> (Buffer, SymWord) -> VM
 loadSymVM x initStore model addr callvalue' calldata' =
@@ -197,9 +198,21 @@ interpret'' fetcher maxIter vm = let
     Just (VMFailure err)
       -> return $ Todo ("VMFailure error" ++ (show err)) []
     Just (VMSuccess (ConcreteBuffer expr _))
-      -> return expr
+      -> mkReturn expr
     Just (VMSuccess (SymbolicBuffer expr _))
-      -> return expr
+      -> mkReturn expr
+    where
+    mkReturn expr =
+      let
+        myaddr = view (state . contract) vm
+        allcontracts = view (env . contracts) vm
+        mycontract = Map.lookup myaddr allcontracts
+        mystorage = _storage <$> mycontract
+        mkStorageList str = case str of
+          Concrete _ -> Bottom -- TODO wrong type
+          Symbolic symstrexpr  _-> symstrexpr
+        strexpr = fromMaybe Bottom $ mkStorageList <$> mystorage
+      in return (Return expr strexpr)
 
 interpret' :: Fetch.Fetcher -> Maybe Integer -> VM -> Query (VM, [(Tree BranchInfo)])
 interpret' fetcher maxIter vm = let
@@ -311,22 +324,22 @@ maxIterationsReached vm (Just maxIter) =
 type Precondition = VM -> SBool
 type Postcondition = (VM, VM) -> SBool
 
--- checkAssert :: ByteString -> Maybe (Text, [AbiType]) -> [String] -> Query (Either (Tree BranchInfo) (Tree BranchInfo), VM)
--- checkAssert c signature' concreteArgs = verifyContract c signature' concreteArgs SymbolicS (const sTrue) (Just checkAssertions)
+checkAssert :: ByteString -> Maybe (Text, [AbiType]) -> [String] -> Query (Either Expr Expr, VM)
+checkAssert c signature' concreteArgs = verifyContract c signature' concreteArgs SymbolicS (const sTrue) (Just checkAssertions)
 
 checkAssertions :: Postcondition
 checkAssertions (_, out) = case view result out of
   Just (EVM.VMFailure (EVM.UnrecognizedOpcode 254)) -> sFalse
   _ -> sTrue
 
--- verifyContract :: ByteString -> Maybe (Text, [AbiType]) -> [String] -> StorageModel -> Precondition -> Maybe Postcondition -> Query (Either (Tree BranchInfo) (Tree BranchInfo), VM)
--- verifyContract theCode signature' concreteArgs storagemodel pre maybepost = do
---     preStateRaw <- abstractVM signature' concreteArgs theCode  storagemodel
---     -- add the pre condition to the pathconditions to ensure that we are only exploring valid paths
---     let preState = over constraints ((++) [(pre preStateRaw, Todo "assumptions" [])]) preStateRaw
---     v <- verify preState Nothing Nothing maybepost
---     return (v, preState)
---
+verifyContract :: ByteString -> Maybe (Text, [AbiType]) -> [String] -> StorageModel -> Precondition -> Maybe Postcondition -> Query (Either Expr Expr, VM)
+verifyContract theCode signature' concreteArgs storagemodel pre maybepost = do
+    preStateRaw <- abstractVM signature' concreteArgs theCode  storagemodel
+    -- add the pre condition to the pathconditions to ensure that we are only exploring valid paths
+    let preState = over constraints ((++) [(pre preStateRaw, Todo "assumptions" [])]) preStateRaw
+    v <- verify preState Nothing Nothing maybepost
+    return (v, preState)
+
 pruneDeadPaths :: [VM] -> [VM]
 pruneDeadPaths =
   filter $ \vm -> case view result vm of

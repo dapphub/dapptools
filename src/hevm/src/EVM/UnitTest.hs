@@ -522,7 +522,7 @@ symRun opts@UnitTestOptions{..} concreteVm testName types = do
     SBV.resetAssertions
     let vm = symbolify concreteVm
     (cd, cdlen) <- symCalldata testName types []
-    let cd' = (SymbolicBuffer (Oops "symRun") cd, w256lit cdlen)
+    let cd' = (SymbolicBuffer (Todo "symRun" []) cd, w256lit cdlen)
         shouldFail = "proveFail" `isPrefixOf` testName
 
     -- get all posible postVMs for the test method
@@ -607,7 +607,7 @@ prettyCalldata (buffer, S _ cdlen) sig types = do
   cd <- case buffer of
     SymbolicBuffer _ cd -> mapM (SBV.getValue . fromSized) (take cdlen' cd) <&> BS.pack
     ConcreteBuffer _ cd -> return $ BS.take cdlen' cd
-  pure $ (head (Text.splitOn "(" sig)) <> showCall types (ConcreteBuffer (Oops "prettyCalldata") cd)
+  pure $ (head (Text.splitOn "(" sig)) <> showCall types (ConcreteBuffer (Todo "prettyCalldata" []) cd)
 
 execSymTest :: UnitTestOptions -> ABIMethod -> (Buffer, SymWord) -> Stepper (Bool, VM)
 execSymTest opts@UnitTestOptions{ .. } method cd = do
@@ -743,7 +743,7 @@ abiCall :: TestVMParams -> Text -> AbiValue -> EVM ()
 abiCall params sig args =
   let cd = abiMethod sig args
       l = num . BS.length $ cd
-  in makeTxCall params (ConcreteBuffer (Oops "abiCall") cd, litWord l)
+  in makeTxCall params (ConcreteBuffer (Todo "abiCall" []) cd, litWord l)
 
 makeTxCall :: TestVMParams -> (Buffer, SymWord) -> EVM ()
 makeTxCall TestVMParams{..} cd = do

@@ -149,6 +149,46 @@ library
     TypeFamilies,
     ViewPatterns
 
+executable xp
+  hs-source-dirs:      xp
+  main-is:             xp.hs
+  default-language:    Haskell2010
+  build-depends:
+    QuickCheck,
+    megaparsec,
+    aeson,
+    ansi-wl-pprint,
+    async,
+    base,
+    base16-bytestring,
+    binary,
+    brick,
+    bytestring,
+    containers,
+    cryptonite,
+    data-dword,
+    deepseq,
+    directory,
+    filepath,
+    free,
+    hevm,
+    lens,
+    lens-aeson,
+    memory,
+    mtl,
+    optparse-generic,
+    operational,
+    process,
+    quickcheck-text,
+    regex-tdfa,
+    sbv,
+    temporary,
+    text,
+    text-format,
+    unordered-containers,
+    vector,
+    vty
+
 executable hevm
   default-language:
     Haskell2010
@@ -206,6 +246,40 @@ test-suite test
     exitcode-stdio-1.0
   hs-source-dirs:
     test
+  main-is:
+    test.hs
+  extra-libraries:
+    secp256k1
+  build-depends:
+    HUnit >= 1.6,
+    QuickCheck,
+    base,
+    base16-bytestring,
+    binary,
+    containers,
+    bytestring,
+    free,
+    here,
+    hevm,
+    lens,
+    mtl,
+    tasty >= 1.0,
+    tasty-hunit >= 0.10,
+    tasty-quickcheck >= 0.9,
+    text,
+    vector,
+    sbv
+
+
+test-suite xptest
+  default-language:
+    Haskell2010
+  ghc-options:
+    -Wall
+  type:
+    exitcode-stdio-1.0
+  hs-source-dirs:
+    xp
   main-is:
     test.hs
   extra-libraries:

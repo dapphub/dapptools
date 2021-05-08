@@ -270,56 +270,6 @@ instance Show EthEnv where
     This -> "THIS"
     Nonce -> "NONCE"
 
--- instance Show Expr where
---   show w =
---     let
---       infix' s x y = show x ++ s ++ show y
---     in case w of
---       Todo s args -> s ++ "(" ++ (intercalate "," (show <$> args)) ++ ")"
---       And x y     -> infix' " and " x y
---       Or x y      -> infix' " or " x y
---       ITE b x y  -> "if " ++ show b ++ " then " ++ show x ++ " else " ++ show y
---       Eq x y      -> infix' " == " x y
---       LT x y      -> infix' " < " x y
---       GT x y      -> infix' " > " x y
---       SLT x y     -> infix' " s< " x y
---       SGT x y     -> infix' " s> " x y
---       IsZero x    -> "IsZero(" ++ show x ++ ")"
---       SHL x y     -> infix' " << " x y
---       SHR x y     -> infix' " << " x y
---       SAR x y     -> infix' " a<< " x y
---       Add x y     -> infix' " + " x y
---       Sub x y     -> infix' " - " x y
---       Mul x y     -> infix' " * " x y
---       Div x y     -> infix' " / " x y
---       Mod x y     -> infix' " % " x y
---       Exp x y     -> infix' " ** " x y
---       Bit a  -> "bit " ++ (show a)
---       Impl a b    -> infix' " => " a b
---       Sgn a   -> "sgn(" ++ (show a) ++ ")"
---       Sex a   -> "signextend(" ++ (show a) ++ ")"
---       Cmp a   -> "~" ++ (show a)
---       Neg x       -> "not " ++ show x
---       Var v _     -> v
---       FromKeccak buf -> "keccak(" ++ show buf ++ ")"
---       Literal x -> show x
---       FromStorage l s -> "SLOAD(" ++ show l ++ ")" ++ show s
---       Pointer1 name a -> "*" ++ (cVar name) ++ "[" ++ (show a) ++ "]"
---       FromBuff location buffer -> (show buffer) ++ "[" ++ (show location) ++ "]"
---       Oops s -> "Oops " ++ (show s)
---       Slice w w' s -> "[ " ++ show w ++ ".." ++ show w' ++ " ]" ++ show s
---       Write s w1 w2 w3 s2 -> d ["write", show s, show w1, show w2, show w3, show s2]
---       WriteWord w w2 s ->  "[" ++ show w ++ " <- " ++ show w2 ++ "]" ++ show s
---       Calldata -> "CALLDATA"
---       SEmpty -> "SEmpty"
---       where
---         join = List.intercalate "\n"
---         split s = Text.unpack <$> (Text.splitOn (Text.pack "\n") (Text.pack s))
---         indent s = ((++) "  ") <$> s
---         dc = (join . indent . split)
---         d cs = "(\n" ++ (join (dc <$> cs)) ++ ")"
-
-
 newtype Addr = Addr { addressWord160 :: Word160 }
   deriving (Num, Integral, Real, Ord, Enum, Eq, Bits, Generic)
 
@@ -381,10 +331,10 @@ instance Show Buffer where
 
 
 instance Semigroup Buffer where
-  ConcreteBuffer _ a <> ConcreteBuffer _ b = ConcreteBuffer (Oops "C<>C") (a <> b)
-  ConcreteBuffer _ a <> SymbolicBuffer _ b = SymbolicBuffer (Oops "C<>S") (litBytes a <> b)
-  SymbolicBuffer _ a <> ConcreteBuffer _ b = SymbolicBuffer (Oops "S<>C") (a <> litBytes b)
-  SymbolicBuffer _ a <> SymbolicBuffer _ b = SymbolicBuffer (Oops "S<>S") (a <> b)
+  ConcreteBuffer _ a <> ConcreteBuffer _ b = ConcreteBuffer (Todo "C<>C" []) (a <> b)
+  ConcreteBuffer _ a <> SymbolicBuffer _ b = SymbolicBuffer (Todo "C<>S" []) (litBytes a <> b)
+  SymbolicBuffer _ a <> ConcreteBuffer _ b = SymbolicBuffer (Todo "S<>C" []) (a <> litBytes b)
+  SymbolicBuffer _ a <> SymbolicBuffer _ b = SymbolicBuffer (Todo "S<>S" []) (a <> b)
 
 instance Monoid Buffer where
   mempty = ConcreteBuffer SEmpty mempty

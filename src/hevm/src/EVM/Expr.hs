@@ -2,6 +2,16 @@
 {-# LANGUAGE RecordWildCards   #-}
 {-# Language ImplicitParams #-}
 
+-- TODO test nested mappings
+-- loops
+
+-- rename FromKeccak to keccak
+-- Isn't return returning an Buffer * Storage instead of a function?
+-- change this!
+--
+-- reduce everything to a logical formula:
+-- e.g. ite c a b ==> (or (imp c a) (imp (not c) b))
+
 module EVM.Expr where
 
 import Prelude hiding  (Word, LT, GT)
@@ -14,7 +24,7 @@ import Text.Megaparsec.Char
 -- import Text.Megaparsec.Debug
 import Data.Void
 import Numeric (showHex)
-import Data.Text (Text, pack)
+import Data.Text (Text, unpack, pack, splitOn)
 import Test.QuickCheck
 import qualified Text.Megaparsec.Char.Lexer as L
 -- import qualified Data.Text as T
@@ -27,12 +37,13 @@ type Parser = Parsec Void Text
 -- instead of letting the SMT solver do all the heavy lifting.
 data Expr =
     Todo String [Expr]
-  | Lambda Expr Expr
+  | Lambda
+    Expr
+    Expr
 
   --booleans
   | And  Expr Expr
   | Or   Expr Expr
-  | Impl Expr Expr
   | Eq   Expr Expr
   | LT   Expr Expr
   | GT   Expr Expr
@@ -57,143 +68,197 @@ data Expr =
 
   | Sex  Expr
   | Sgn  Expr          -- signum
-  | Cmp  Expr          -- complement
   -- | Sft  Expr Expr    -- shift left
   -- | Sar  Expr Expr    -- shift right
   | Bit  Expr
   | FromKeccak Expr
-  -- | FromBuffer Expr Buffer
-  | FromBuff Expr Expr
-  | FromStorage Expr Expr
   | Pointer1 String Expr
   | Literal Word256
   | Var String
+  | Sig String Word256
 
   -- sniff
-  | Oops String
   | Slice
     Expr            -- from
     Expr            -- size
     Expr            -- buffer
-  | Write Expr Expr Expr Expr Expr
+  | Write
+    Expr
+    Expr
+    Expr
+    Expr
+    Expr
 
   -- writes a word to an existing buffer
   -- used in memory
+  | ReadWord
+      Expr          -- position to read from
+      Expr          -- existing buffer
+      -- Expr          -- length of the buffer
   | WriteWord
       Expr          -- position to write to
       Expr          -- word that is written
       Expr          -- existing buffer
+  | WriteStorage
+      Expr          -- key
+      Expr          -- value
+      Expr          -- previous storage
+  | ReadStorage
+      Expr          -- key
+      Expr          -- storage
   | Calldata        -- Unknown Calldata
   | SEmpty          -- Unknown Buffer
   | UStorage        -- Unknown Storage
   | Bottom
+  | Return
+    Expr            -- return buffer
+    Expr            -- storage deltas
   deriving Eq
+
+data ECType
+  = ECTUnknown
+  | ECTBool
+  | ECTWord Int
+  | ECTFunction ECType ECType
+  | ECTAnd ECType ECType
+  | ECTBuffer
+  | ECTStorage
+  | ECTError
+  deriving (Eq, Ord)
+
+instance Show ECType where
+  show ECTUnknown   = "Unknown"
+  show ECTBool      = "Bool"
+  show (ECTWord i)  = "W" ++ (show i)
+  show (ECTAnd a b) = "(" ++ (show a) ++ " * " ++ (show b)  ++ ")"
+  show (ECTFunction a b) = (show a) ++ " -> " ++ (show b)
+  show ECTBuffer    = "Buffer"
+  show ECTStorage   = "Storage"
+  show ECTError     = "Error"
 
 -- compact representation for easyper folding and simplification
 data ExprC
   = EC
-  String            -- name
-  [ExprC]           -- children
+  String              -- name
+  ECType              -- Type
+  [ ExprC ]           -- children
   | ECTodo String [ExprC]
   | ECLiteral Word256
   | ECPointer1 String ExprC
-  | ECVar String
-  | ECOops String
-  deriving (Eq, Show)
+  | ECVar String ECType
+  | ECSig String Word256
+  deriving (Eq)
+
+indent :: String -> String
+indent x = intercalate "\n" $ map ((++) "  ") $ map unpack $ splitOn (pack "\n") (pack x)
+
+instance Show ExprC where
+  show (ECTodo str cs)       = "todo \"" ++ str ++  "\"\n[" ++ (intercalate "\n," (indent <$> show <$> cs)) ++ "\n]"
+  show (ECLiteral x)         = "0x" ++ (showHex x "")
+  show (ECPointer1 str expr) = "ptr:W256 \"" ++ str ++ "\" [\n" ++ (show expr) ++ "\n]"
+  show (ECVar str t)         = "var:" ++ (show t) ++ " " ++ str
+  show (ECSig str sig)       = "sig:W256 \"" ++ str ++ "\" 0x" ++ (showHex sig "")
+  show (EC str t cs)         = str ++ ":" ++ (show t) ++ "\n[" ++ (intercalate "\n," (indent <$> show <$> cs)) ++ "\n]"
 
 
 fromExpr :: Expr -> ExprC
 fromExpr (Todo str as)       = ECTodo str (fromExpr <$> as)
 fromExpr (Literal n)         = ECLiteral n
 fromExpr (Pointer1 str a)    = ECPointer1 str (fromExpr a)
-fromExpr (Var w)             = ECVar w
-fromExpr (Oops str)          = ECOops str
-fromExpr (Lambda a b)        = EC "Lambda"     (fromExpr <$> [ a, b ])
-fromExpr (And  a b)          = EC "And"        (fromExpr <$> [ a, b ])
-fromExpr (Or   a b)          = EC "Or"         (fromExpr <$> [ a, b ])
-fromExpr (Impl a b)          = EC "Impl"       (fromExpr <$> [ a, b ])
-fromExpr (Eq   a b)          = EC "Eq"         (fromExpr <$> [ a, b ])
-fromExpr (LT   a b)          = EC "LT"         (fromExpr <$> [ a, b ])
-fromExpr (GT   a b)          = EC "GT"         (fromExpr <$> [ a, b ])
-fromExpr (SLT  a b)          = EC "SLT"        (fromExpr <$> [ a, b ])
-fromExpr (SGT  a b)          = EC "SGT"        (fromExpr <$> [ a, b ])
-fromExpr (SHL  a b)          = EC "SHL"        (fromExpr <$> [ a, b ])
-fromExpr (SHR  a b)          = EC "SHR"        (fromExpr <$> [ a, b ])
-fromExpr (SAR  a b)          = EC "SAR"        (fromExpr <$> [ a, b ])
-fromExpr (Add  a b)          = EC "Add"        (fromExpr <$> [ a, b ])
-fromExpr (Sub  a b)          = EC "Sub"        (fromExpr <$> [ a, b ])
-fromExpr (Mul  a b)          = EC "Mul"        (fromExpr <$> [ a, b ])
-fromExpr (Div  a b)          = EC "Div"        (fromExpr <$> [ a, b ])
-fromExpr (Mod  a b)          = EC "Mod"        (fromExpr <$> [ a, b ])
-fromExpr (Exp  a b)          = EC "Exp"        (fromExpr <$> [ a, b ])
-fromExpr (FromBuff a b)      = EC "FromBuff"   (fromExpr <$> [ a, b ])
-fromExpr (FromStorage a b)   = EC "FromStorage"(fromExpr <$> [ a, b ])
-fromExpr (IsZero a)          = EC "IsZero"     (fromExpr <$> [ a ])
-fromExpr (Neg  a)            = EC "Neg"        (fromExpr <$> [ a ])
-fromExpr (Sex  a)            = EC "Sex"        (fromExpr <$> [ a ])
-fromExpr (Sgn  a)            = EC "Sgn"        (fromExpr <$> [ a ])
-fromExpr (Cmp  a)            = EC "Cmp"        (fromExpr <$> [ a ])
-fromExpr (Bit  a)            = EC "Bit"        (fromExpr <$> [ a ])
-fromExpr (FromKeccak a)      = EC "FromKeccak" (fromExpr <$> [ a ])
-fromExpr (ITE c a b)         = EC "ITE"        (fromExpr <$> [ a, b, c ])
-fromExpr (Slice a b c)       = EC "Slice"      (fromExpr <$> [ a, b, c ])
-fromExpr (WriteWord a b c)   = EC "WriteWord"  (fromExpr <$> [ a, b, c ])
-fromExpr (Write a b c d e)   = EC "Write"      (fromExpr <$> [ a, b, c, d, e ])
-fromExpr (Calldata)          = EC "Calldata"   []
-fromExpr (SEmpty)            = EC "SEmpty"     []
-fromExpr (UStorage)          = EC "UStorage"   []
-fromExpr (Bottom)            = EC "Bottom"     []
+fromExpr (Var w)             = ECVar w (ECTWord 256)
+fromExpr (Sig w s)           = ECSig w s
+fromExpr (Lambda a b)        = EC "Lambda"      ECTUnknown (fromExpr <$> [ a, b ])
+fromExpr (And  a b)          = EC "And"         ECTUnknown (fromExpr <$> [ a, b ])
+fromExpr (Or   a b)          = EC "Or"          ECTUnknown (fromExpr <$> [ a, b ])
+fromExpr (Eq   a b)          = EC "Eq"          ECTBool (fromExpr <$> [ a, b ])
+fromExpr (LT   a b)          = EC "LT"          ECTBool (fromExpr <$> [ a, b ])
+fromExpr (GT   a b)          = EC "GT"          ECTBool (fromExpr <$> [ a, b ])
+fromExpr (SLT  a b)          = EC "SLT"         ECTBool (fromExpr <$> [ a, b ])
+fromExpr (SGT  a b)          = EC "SGT"         ECTBool (fromExpr <$> [ a, b ])
+fromExpr (SHL  a b)          = EC "SHL"         ECTUnknown (fromExpr <$> [ a, b ])
+fromExpr (SHR  a b)          = EC "SHR"         ECTUnknown (fromExpr <$> [ a, b ])
+fromExpr (SAR  a b)          = EC "SAR"         ECTUnknown (fromExpr <$> [ a, b ])
+fromExpr (Add  a b)          = EC "Add"         ECTUnknown (fromExpr <$> [ a, b ])
+fromExpr (Sub  a b)          = EC "Sub"         ECTUnknown (fromExpr <$> [ a, b ])
+fromExpr (Mul  a b)          = EC "Mul"         ECTUnknown (fromExpr <$> [ a, b ])
+fromExpr (Div  a b)          = EC "Div"         ECTUnknown (fromExpr <$> [ a, b ])
+fromExpr (Mod  a b)          = EC "Mod"         ECTUnknown (fromExpr <$> [ a, b ])
+fromExpr (Exp  a b)          = EC "Exp"         ECTUnknown (fromExpr <$> [ a, b ])
+fromExpr (Return a b)        = EC "Return"      ECTUnknown (fromExpr <$> [ a, b ])
+fromExpr (IsZero a)          = EC "IsZero"      ECTBool    (fromExpr <$> [ a ])
+fromExpr (Neg  a)            = EC "Neg"         ECTUnknown (fromExpr <$> [ a ])
+fromExpr (Sex  a)            = EC "Sex"         ECTUnknown (fromExpr <$> [ a ])
+fromExpr (Sgn  a)            = EC "Sgn"         ECTUnknown (fromExpr <$> [ a ])
+fromExpr (Bit  a)            = EC "Bit"         ECTUnknown (fromExpr <$> [ a ])
+fromExpr (FromKeccak a)      = EC "FromKeccak"  (ECTWord 256) (fromExpr <$> [ a ])
+fromExpr (ITE c a b)         = EC "ITE"         ECTUnknown (fromExpr <$> [ c, a, b ])
+fromExpr (Slice a b c)       = EC "Slice"       ECTBuffer  (fromExpr <$> [ a, b, c ])
+fromExpr (ReadWord a b)      = EC "ReadWord"    (ECTWord 256) (fromExpr <$> [ a, b ])
+fromExpr (WriteWord a b c)   = EC "WriteWord"   ECTBuffer  (fromExpr <$> [ a, b, c ])
+fromExpr (ReadStorage a b)   = EC "ReadStorage" (ECTWord 256) (fromExpr <$> [ a, b ])
+fromExpr (WriteStorage a b c)= EC "WriteStorage"ECTStorage (fromExpr <$> [ a, b, c ])
+fromExpr (Write a b c d e)   = EC "Write"       ECTBuffer  (fromExpr <$> [ a, b, c, d, e ])
+fromExpr (Calldata)          = EC "Calldata"    ECTBuffer  []
+fromExpr (SEmpty)            = EC "SEmpty"      ECTBuffer  []
+fromExpr (UStorage)          = EC "UStorage"    ECTStorage []
+fromExpr (Bottom)            = EC "Bottom"      ECTUnknown []
 
 
 toExpr :: ExprC -> Expr
-toExpr (ECTodo str as)                    = (Todo str (toExpr <$> as))
-toExpr (ECLiteral n)                      = (Literal n)
-toExpr (ECPointer1 str a)                 = (Pointer1 str (toExpr a))
-toExpr (ECVar w)                          = (Var w)
-toExpr (ECOops str)                       = (Oops str)
-toExpr (EC "Lambda"     [ a, b ])         = (Lambda (toExpr a) (toExpr b))
-toExpr (EC "And"        [ a, b ])         = (And  (toExpr a) (toExpr b))
-toExpr (EC "Or"         [ a, b ])         = (Or   (toExpr a) (toExpr b))
-toExpr (EC "Impl"       [ a, b ])         = (Impl (toExpr a) (toExpr b))
-toExpr (EC "Eq"         [ a, b ])         = (Eq   (toExpr a) (toExpr b))
-toExpr (EC "LT"         [ a, b ])         = (LT   (toExpr a) (toExpr b))
-toExpr (EC "GT"         [ a, b ])         = (GT   (toExpr a) (toExpr b))
-toExpr (EC "SLT"        [ a, b ])         = (SLT  (toExpr a) (toExpr b))
-toExpr (EC "SGT"        [ a, b ])         = (SGT  (toExpr a) (toExpr b))
-toExpr (EC "SHL"        [ a, b ])         = (SHL  (toExpr a) (toExpr b))
-toExpr (EC "SHR"        [ a, b ])         = (SHR  (toExpr a) (toExpr b))
-toExpr (EC "SAR"        [ a, b ])         = (SAR  (toExpr a) (toExpr b))
-toExpr (EC "Add"        [ a, b ])         = (Add  (toExpr a) (toExpr b))
-toExpr (EC "Sub"        [ a, b ])         = (Sub  (toExpr a) (toExpr b))
-toExpr (EC "Mul"        [ a, b ])         = (Mul  (toExpr a) (toExpr b))
-toExpr (EC "Div"        [ a, b ])         = (Div  (toExpr a) (toExpr b))
-toExpr (EC "Mod"        [ a, b ])         = (Mod  (toExpr a) (toExpr b))
-toExpr (EC "Exp"        [ a, b ])         = (Exp  (toExpr a) (toExpr b))
-toExpr (EC "FromBuff"   [ a, b ])         = (FromBuff    (toExpr a) (toExpr b))
-toExpr (EC "FromStorage"[ a, b ])         = (FromStorage (toExpr a) (toExpr b))
-toExpr (EC "IsZero"     [ a ])            = (IsZero (toExpr a))
-toExpr (EC "Neg"        [ a ])            = (Neg (toExpr a))
-toExpr (EC "Sex"        [ a ])            = (Sex (toExpr a))
-toExpr (EC "Sgn"        [ a ])            = (Sgn (toExpr a))
-toExpr (EC "Cmp"        [ a ])            = (Cmp (toExpr a))
-toExpr (EC "Bit"        [ a ])            = (Bit (toExpr a))
-toExpr (EC "FromKeccak" [ a ])            = (FromKeccak (toExpr a))
-toExpr (EC "ITE"        [ a, b, c ])      = (ITE (toExpr c) (toExpr a) (toExpr b))
-toExpr (EC "Slice"      [ a, b, c ])      = (Slice (toExpr a) (toExpr b) (toExpr c))
-toExpr (EC "WriteWord"  [ a, b, c ])      = (WriteWord (toExpr a) (toExpr b) (toExpr c))
-toExpr (EC "Write"      [ a, b, c, d, e ])= (Write (toExpr a) (toExpr b) (toExpr c) (toExpr d) (toExpr e))
-toExpr (EC "Calldata"   [])               = (Calldata)
-toExpr (EC "SEmpty"     [])               = (SEmpty)
-toExpr (EC "UStorage"   [])               = (UStorage)
-toExpr (EC "Bottom"     [])               = (Bottom)
+toExpr (ECTodo str as)                        = (Todo str (toExpr <$> as))
+toExpr (ECLiteral n)                          = (Literal n)
+toExpr (ECPointer1 str a)                     = (Pointer1 str (toExpr a))
+toExpr (ECVar w _)                            = (Var w)
+toExpr (ECSig w s)                            = (Sig w s)
+toExpr (EC "Lambda"       _ [ a, b ])         = (Lambda (toExpr a) (toExpr b))
+toExpr (EC "And"          _ [ a, b ])         = (And  (toExpr a) (toExpr b))
+toExpr (EC "Or"           _ [ a, b ])         = (Or   (toExpr a) (toExpr b))
+toExpr (EC "Eq"           _ [ a, b ])         = (Eq   (toExpr a) (toExpr b))
+toExpr (EC "LT"           _ [ a, b ])         = (LT   (toExpr a) (toExpr b))
+toExpr (EC "GT"           _ [ a, b ])         = (GT   (toExpr a) (toExpr b))
+toExpr (EC "SLT"          _ [ a, b ])         = (SLT  (toExpr a) (toExpr b))
+toExpr (EC "SGT"          _ [ a, b ])         = (SGT  (toExpr a) (toExpr b))
+toExpr (EC "SHL"          _ [ a, b ])         = (SHL  (toExpr a) (toExpr b))
+toExpr (EC "SHR"          _ [ a, b ])         = (SHR  (toExpr a) (toExpr b))
+toExpr (EC "SAR"          _ [ a, b ])         = (SAR  (toExpr a) (toExpr b))
+toExpr (EC "Add"          _ [ a, b ])         = (Add  (toExpr a) (toExpr b))
+toExpr (EC "Sub"          _ [ a, b ])         = (Sub  (toExpr a) (toExpr b))
+toExpr (EC "Mul"          _ [ a, b ])         = (Mul  (toExpr a) (toExpr b))
+toExpr (EC "Div"          _ [ a, b ])         = (Div  (toExpr a) (toExpr b))
+toExpr (EC "Mod"          _ [ a, b ])         = (Mod  (toExpr a) (toExpr b))
+toExpr (EC "Exp"          _ [ a, b ])         = (Exp  (toExpr a) (toExpr b))
+toExpr (EC "ReadStorage"  _ [ a, b ])         = (ReadStorage (toExpr a) (toExpr b))
+toExpr (EC "ReadWord"     _ [ a, b ])         = (ReadWord (toExpr a) (toExpr b))
+toExpr (EC "Return"       _ [ a, b ])         = (Return (toExpr a) (toExpr b))
+toExpr (EC "IsZero"       _ [ a ])            = (IsZero (toExpr a))
+toExpr (EC "Neg"          _ [ a ])            = (Neg (toExpr a))
+toExpr (EC "Sex"          _ [ a ])            = (Sex (toExpr a))
+toExpr (EC "Sgn"          _ [ a ])            = (Sgn (toExpr a))
+toExpr (EC "Bit"          _ [ a ])            = (Bit (toExpr a))
+toExpr (EC "FromKeccak"   _ [ a ])            = (FromKeccak (toExpr a))
+toExpr (EC "ITE"          _ [ c, a, b ])      = (ITE (toExpr c) (toExpr a) (toExpr b))
+toExpr (EC "Slice"        _ [ a, b, c ])      = (Slice (toExpr a) (toExpr b) (toExpr c))
+toExpr (EC "WriteWord"    _ [ a, b, c ])      = (WriteWord (toExpr a) (toExpr b) (toExpr c))
+toExpr (EC "WriteStorage" _ [ a, b, c ])      = (WriteStorage (toExpr a) (toExpr b) (toExpr c))
+toExpr (EC "Write"        _ [ a, b, c, d, e ])= (Write (toExpr a) (toExpr b) (toExpr c) (toExpr d) (toExpr e))
+toExpr (EC "Calldata"     _ [])               = (Calldata)
+toExpr (EC "SEmpty"       _ [])               = (SEmpty)
+toExpr (EC "UStorage"     _ [])               = (UStorage)
+toExpr (EC "Bottom"       _ [])               = (Bottom)
+-- error handling
+toExpr (EC unknown _ children)
+  = error $ "toExpr: unknown '" ++ unknown ++ "' token with children: " ++ (show children)
 toExpr _ = error "compact form shouldn't be written by humans"
 
+exprType :: ExprC -> ECType
+exprType (ECTodo _ _)     = ECTUnknown
+exprType (ECLiteral _)    = ECTWord 256
+exprType (ECPointer1 _ _) = ECTWord 256
+exprType (ECVar _ t)      = t
+exprType (ECSig _ _)      = ECTWord 32
+exprType (EC _ tt _)      = tt
 
--- Test to and from
--- quickcheck passes this, yay
--- test this with `quickCheck prop_ExprConversionIsomorphism`
-prop_ExprConversionIsomorphism :: Expr -> Bool
-prop_ExprConversionIsomorphism e = toExpr (fromExpr e) == e
+
 
 
 
@@ -203,9 +268,10 @@ addStorageMap :: Expr -- storage map to add to
               -> Expr -- key
               -> Expr -- value
               -> Expr -- resulting new map
-addStorageMap m k v = (Lambda
-  (Var "new_name_needed")
-  (ITE (Eq (Var "new_name_needed") k) v m))
+addStorageMap m k v = (WriteStorage k v m)
+-- (Lambda
+--   (Var "new_name_needed")
+--   (ITE (Eq (Var "new_name_needed") k) v m))
 
 
 ---------------------------------------------------------- format
@@ -213,10 +279,9 @@ addStorageMap m k v = (Lambda
 instance Show Expr where
   show w =
     let
-      sexpr s xs = "(" ++ s ++ " " ++ intercalate " " (show <$> xs) ++ ")"
+      sexpr s xs = "(" ++ s ++ "\n" ++ intercalate "\n" (show <$> xs) ++ ")"
       wstr s = "\"" ++ s ++ "\""
     in case w of
-      Var v           -> v
       Literal x       -> "0x" ++ (showHex x "")
       Lambda x y      -> sexpr "lambda" [x, y]
       Todo s args     -> sexpr ("todo " ++ (wstr s)) args
@@ -225,6 +290,9 @@ instance Show Expr where
       ITE b x y       -> sexpr "if"     [b, x, y]
       Slice a b s     -> sexpr "slice"  [a, b, s]
       WriteWord a b s -> sexpr "writeword" [a, b, s]
+      WriteStorage a b s -> sexpr "store" [a, b, s]
+      ReadWord a b    -> sexpr "readword" [a, b]
+      ReadStorage a b -> sexpr "read"   [a, b]
       And x y         -> sexpr "and"    [x, y]
       Or x y          -> sexpr "or"     [x, y]
       Eq x y          -> sexpr "=="     [x, y]
@@ -241,17 +309,15 @@ instance Show Expr where
       Mul x y         -> sexpr "*"      [x, y]
       Div x y         -> sexpr "/"      [x, y]
       Mod x y         -> sexpr "%"      [x, y]
-      Impl a b        -> sexpr "=>"     [a, b]
-      FromStorage l s -> sexpr "sload"  [l, s]
-      FromBuff l s    -> sexpr "fbuff"  [l, s]
+      Return b s      -> sexpr "return" [b, s]
       IsZero x        -> sexpr "IsZero" [x]
+      Var v           -> sexpr "var"    [v]
+      Sig v s         -> sexpr "sig"    [v, showHex s ""]
       Bit a           -> sexpr "bit"    [a]
       Sgn a           -> sexpr "sgn"    [a]
       Sex a           -> sexpr "signextend" [a]
-      Cmp a           -> sexpr "~"      [a]
       Neg a           -> sexpr "not"    [a]
       FromKeccak buf  -> sexpr "keccak" [buf]
-      Oops s          -> sexpr "Oops"   [s]
       Calldata        -> "CALLDATA"
       SEmpty          -> "SEmpty"
       UStorage        -> "UStorage"
@@ -264,9 +330,9 @@ instance Show Expr where
 genExpr :: Int -> Gen Expr
 genExpr n
   | n == 0 = oneof $
-    [ liftM Oops as
+    [
     -- , liftM Literal (arbitrar
-    , pure Calldata -- TODO remove
+      pure Calldata -- TODO remove
     , pure SEmpty
     , pure Bottom
     , pure UStorage
@@ -274,12 +340,14 @@ genExpr n
   | n>0 = oneof $
     [ liftM5 Write a a a a a
     , liftM3 WriteWord a a a
+    , liftM3 WriteStorage a a a
     , liftM3 Slice a a a
     , liftM3 ITE a a a
     , liftM2 Todo as (pure [])
+    , liftM2 ReadWord a a
+    , liftM2 ReadStorage a a
     , liftM2 And a a
     , liftM2 Or a a
-    , liftM2 Impl a a
     , liftM2 Eq a a
     , liftM2 LT a a
     , liftM2 GT a a
@@ -294,18 +362,18 @@ genExpr n
     , liftM2 Div a a
     , liftM2 Mod a a
     , liftM2 Exp a a
-    , liftM2 FromBuff a a
-    , liftM2 FromStorage a a
+    , liftM2 Lambda a a
+    , liftM2 Return a a
     , liftM2 Pointer1 as a
+    -- , liftM2 Sig as arbitrary
     , liftM Var as
     , liftM IsZero a
     , liftM Neg a
     , liftM Sex a
     , liftM Sgn a
-    , liftM Cmp a
     , liftM Bit a
     , liftM FromKeccak a
-    , liftM Oops as ]
+    ]
   | otherwise = error "should never be the case"
     where a = genExpr (n `div` 2)
           as :: Gen String
@@ -334,9 +402,22 @@ pLiteral = do
   lit <- L.hexadecimal
   return $ Literal lit
 
+
+pSig :: Parser Expr
+pSig = do
+  _ <- string "sig"
+  space
+  name <- stringLiteral
+  space
+  _ <- string "0x"
+  lit <- L.hexadecimal
+  return $ Sig name lit
+
 pVar :: Parser Expr
 pVar = do
-  name <- ((:) <$> letterChar <*> many alphaNumChar <?> "variable")
+  _ <- string "var"
+  space
+  name <- stringLiteral
   return $ Var name
 
 pTreToken :: Parser Expr
@@ -345,6 +426,7 @@ pTreToken = do
     [ ITE       <$ string "if"
     , Slice     <$ string "slice"
     , WriteWord <$ string "writeword"
+    , WriteStorage <$ string "store"
     ]
   c <- pScheme
   x <- pScheme
@@ -364,8 +446,7 @@ pWrite = do
 pBinToken :: Parser Expr
 pBinToken = do
   t <- choice
-    [ Impl <$ string "=>"
-    , And  <$ string "and"
+    [ And  <$ string "and"
     , Or   <$ string "or"
     , Eq   <$ string "=="
     , LT   <$ string "<"
@@ -381,8 +462,10 @@ pBinToken = do
     , Mul  <$ string "*"
     , Div  <$ string "/"
     , Mod  <$ string "%"
-    , FromBuff <$ string "fbuff"
-    , FromStorage <$ string "sload"
+    , Return      <$ string "return"
+    , ReadWord    <$ string "readword"
+    , ReadStorage <$ string "read"
+    , Lambda      <$ string "lambda"
     ]
   a <- pScheme
   b <- pScheme
@@ -396,7 +479,6 @@ pUnToken = do
     , Sgn        <$ string "sgn"
     , IsZero     <$ string "IsZero"
     , Sex        <$ string "signextend"
-    , Cmp        <$ string "~"
     , FromKeccak <$ string "keccak"
     , Neg        <$ string "not"]
   a <- pScheme
@@ -409,13 +491,6 @@ pZToken = choice
   , UStorage <$ string "UStorage"
   , Bottom   <$ string "Bottom"]
 
-
-pOops :: Parser Expr
-pOops = do
-  _ <- string "Oops"
-  space
-  name <- stringLiteral
-  return $ Oops name
 
 pTodo :: Parser Expr
 pTodo = do
@@ -430,19 +505,19 @@ pTodo = do
 pKey :: Parser Expr
 pKey = choice
   [ pTodo
-  , pOops
   , pUnToken
   , pBinToken
   , pTreToken
   , pWrite
   , pPtr
+  , pVar
+  , pSig
   ]
 
 pSpecial :: Parser Expr
 pSpecial = choice
   [ pLiteral
   , pZToken
-  , pVar
   ]
 
 pS :: Parser Expr
@@ -464,14 +539,3 @@ pScheme = do
   space
   return (expr)
 
-
-
-
--- Test
--- quickcheck passes this, yay
--- test this with `quickCheck prop_ExprParsePrintIsomorphism`
-prop_ExprParsePrintIsomorphism :: Expr -> Bool
-prop_ExprParsePrintIsomorphism e =
-  case parse pScheme "" (pack $ show e) of
-    Left _   -> False
-    Right e' -> e == e'
