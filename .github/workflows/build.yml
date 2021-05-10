@@ -35,6 +35,7 @@ jobs:
       - run: nix-build release.nix -A dapphub.${{ matrix.os_attr }}.stable.hevm --out-link hevm
 
       - name: Upload artifact
+        if: runner.os == 'Linux'
         uses: actions/upload-artifact@v1
         with:
           name: hevm-${{ runner.os }}
