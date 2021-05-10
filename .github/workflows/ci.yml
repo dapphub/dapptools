@@ -10,14 +10,13 @@ jobs:
     strategy:
       matrix:
         os:
-          - ubuntu-latest
           - macos-latest
         include:
           - os: ubuntu-latest
             apt-get: autoconf automake libtool
           - os: macos-latest
             brew: automake
-         
+
     steps:
       - name: Workaround for actions/cache#403
         if: runner.os == 'macOS'
@@ -81,25 +80,20 @@ jobs:
 
       - name: Build and install hevm
         run: |
-          nix-build -A hevm
+          cd src/hevm && stack install --extra-include-dirs=$HOME/.local/include --extra-lib-dirs=$HOME/.local/lib && cd ../..
 
-      # tests are mysteriously failing with cvc4
-      # - name: Test
-      #   if: runner.os == 'Linux'
-      #   run: |
-      #     export LD_LIBRARY_PATH="${LD_LIBRARY_PATH}:$HOME/.local/lib"
-      #     export PATH="${PATH}:$HOME/.local/bin"
+      - name: Test
+        if: runner.os == 'macOS'
+        run: |
+          export LD_LIBRARY_PATH="${LD_LIBRARY_PATH}:$HOME/.local/lib"
+          export PATH="${PATH}:$HOME/.local/bin"
 
-      #     cp "$HOME/.local/bin/solc-0.6.12" "$HOME/.local/bin/solc"
-      #     cd src/hevm && stack test --extra-include-dirs=$HOME/.local/include --extra-lib-dirs=$HOME/.local/lib && cd ../..
+          cp "$HOME/.local/bin/solc-0.6.12" "$HOME/.local/bin/solc"
+          cd src/hevm && stack test --extra-include-dirs=$HOME/.local/include --extra-lib-dirs=$HOME/.local/lib && cd ../..
 
       - name: Amend and compress binaries (macOS)
         if: runner.os == 'macOS'
         run: .github/scripts/build-macos-release.sh
-
-      - name: Compress binary (Linux)
-        if: runner.os == 'Linux'
-        run: GZIP=-9 tar -czf hevm.tar.gz result/bin/hevm
 
       - name: Upload artifact
         uses: actions/upload-artifact@v1
