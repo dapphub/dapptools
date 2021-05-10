@@ -24,7 +24,6 @@ in self-hs: super-hs:
     restless-git = dontCheck "restless-git" (./src/restless-git);
     wreq = pkgs.haskell.lib.doJailbreak super-hs.wreq;
 
-    # we use a pretty bleeding edge sbv version
     sbv = sbv_prepatch.overrideAttrs (attrs: {
       postPatch = ''
       sed -i -e 's|"z3"|"${pkgs.z3}/bin/z3"|' Data/SBV/Provers/Z3.hs
@@ -70,7 +69,11 @@ in self-hs: super-hs:
           "--ghc-option=-O2"
       ] ++
       (if stdenv.isDarwin then [] else [
-          "--extra-lib-dirs=${pkgs.gmp6.override { withStatic = true; }}/lib"
+          "--enable-executable-static"
+          "--extra-lib-dirs=${pkgs.gmp.override { withStatic = true; }}/lib"
+          "--extra-lib-dirs=${pkgs.glibc.static}/lib"
+          "--extra-lib-dirs=${pkgs.libff}/lib"
+          "--extra-lib-dirs=${pkgs.ncurses.override {enableStatic = true; }}/lib"
           "--extra-lib-dirs=${pkgs.zlib.static}/lib"
           "--extra-lib-dirs=${pkgs.libffi.overrideAttrs (old: { dontDisableStatic = true; })}/lib"
       ]);
