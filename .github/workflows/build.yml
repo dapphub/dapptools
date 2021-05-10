@@ -39,4 +39,4 @@ jobs:
         uses: actions/upload-artifact@v1
         with:
           name: hevm-${{ runner.os }}
-          path: ./hevm/bin/hevm
+          path: ./hevm/bin/.hevm-wrapped
