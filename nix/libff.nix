@@ -1,28 +1,34 @@
-{ stdenv, fetchFromGitHub, cmake, boost, gmp, openssl, pkgconfig }:
+{ lib, stdenv, fetchFromGitHub, cmake, boost, gmp, openssl, pkg-config }:
 
 stdenv.mkDerivation rec {
-  name = "libff-${version}";
-  version = "0.20181030";
+  pname = "libff";
+  version = "1.0.0";
+
   src = fetchFromGitHub {
     owner = "scipr-lab";
     repo = "libff";
-    rev = "f2067162520f91438b44e71a2cab2362f1c3cab4";
-    sha256 = "0bkkw7g6jmz2xx6rci8pj0w7bf6m0ss9clazxgd4mcizb8pb9siv";
+    rev = "v${version}";
+    sha256 = "0dczi829497vqlmn6n4fgi89bc2h9f13gx30av5z2h6ikik7crgn";
     fetchSubmodules = true;
   };
 
-  patches = [./libff.patch];
+  cmakeFlags = [ "-DWITH_PROCPS=Off" ];
 
-  cmakeFlags = [ "-DCURVE=ALT_BN128" "-DPERFORMANCE=Off" "-DWITH_PROCPS=Off" "-DUSE_PT_COMPRESSION=Off" ];
-  preConfigure = ''cmakeFlags="$cmakeFlags"'';
+  # CMake is hardcoded to always build static library which causes linker
+  # failure for Haskell applications depending on haskellPackages.hevm on macOS.
+  postPatch = lib.optionalString stdenv.isDarwin ''
+    substituteInPlace libff/CMakeLists.txt --replace "STATIC" "SHARED"
+  '';
 
-  nativeBuildInputs = [cmake pkgconfig];
-  buildInputs = [boost gmp openssl];
-  enableParallelBuilding = true;
+  nativeBuildInputs = [ cmake pkg-config ];
+  buildInputs = [ boost gmp openssl ];
 
-  meta = with stdenv.lib; {
+  meta = with lib; {
     description = "C++ library for Finite Fields and Elliptic Curves";
-    homepage = https://github.com/scipr-lab/libff;
+    changelog = "https://github.com/scipr-lab/libff/blob/develop/CHANGELOG.md";
+    homepage = "https://github.com/scipr-lab/libff";
     license = licenses.mit;
+    platforms = platforms.unix;
+    maintainers = with maintainers; [ arturcygan ];
   };
 }
