@@ -17,7 +17,7 @@ in self-hs: super-hs:
       (builtins.fetchGit {
         url = "https://github.com/LeventErkok/sbv";
         rev = "b64905e2698c320ac14ffbad53325d33081839fb";
-      }) 
+      })
       {inherit (pkgs) z3;});
 
   in {
@@ -26,7 +26,7 @@ in self-hs: super-hs:
 
     sbv = sbv_prepatch.overrideAttrs (attrs: {
       postPatch =
-        if wrapped
+        if
         then
           ''
              sed -i -e 's|"z3"|"${pkgs.z3}/bin/z3"|' Data/SBV/Provers/Z3.hs
@@ -38,6 +38,18 @@ in self-hs: super-hs:
       ];
     });
 
+
+    # This package is somewhat unmaintained and doesn't compile with GHC 8.4,
+    # so we have to use a GitHub fork that fixes it.
+    semver-range = super-hs.semver-range.overrideAttrs (attrs: {
+      src = pkgs.fetchFromGitHub {
+        owner = "dmjio";
+        repo = "semver-range";
+        rev = "patch-1";
+        sha256 = "1l20hni4v4k6alxj867z00625pa5hkf0h5sdaj1mjc237k5v78j9";
+      };
+      meta.broken = false;
+    });
 
     hevm = pkgs.haskell.lib.dontHaddock ((
       self-hs.callCabal2nix "hevm" (./src/hevm) {
