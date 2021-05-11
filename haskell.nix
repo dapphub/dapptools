@@ -26,7 +26,7 @@ in self-hs: super-hs:
 
     sbv = sbv_prepatch.overrideAttrs (attrs: {
       postPatch =
-        if
+        if wrapped
         then
           ''
              sed -i -e 's|"z3"|"${pkgs.z3}/bin/z3"|' Data/SBV/Provers/Z3.hs
