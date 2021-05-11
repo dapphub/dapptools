@@ -7,9 +7,17 @@ let
 in rec {
   dapptoolsSrc = self.callPackage (import ./nix/dapptools-src.nix) {};
 
-  haskellPackages = super.haskellPackages.override (old: {
+  haskellPackages =
+    super.haskellPackages.override (old: {
     overrides = lib.composeExtensions (old.overrides or (_: _: {})) (
-      import ./haskell.nix { inherit lib; pkgs = self; }
+      import ./haskell.nix { inherit lib; pkgs = self;}
+    );
+  });
+
+  unwrappedHaskellPackages =
+    super.haskellPackages.override (old: {
+    overrides = lib.composeExtensions (old.overrides or (_: _: {})) (
+      import ./haskell.nix { inherit lib; pkgs = self; wrapped = false;}
     );
   });
 
@@ -77,7 +85,11 @@ in rec {
     in builtins.mapAttrs make-solc-drv
         (builtins.getAttr super.system (import ./nix/solc-static-versions.nix));
 
+  # uses solc, z3 and cvc4 from nix
   hevm = self.pkgs.haskell.lib.justStaticExecutables self.haskellPackages.hevm;
+
+  # uses solc, z3 and cvc4 from PATH
+  hevmUnwrapped = self.pkgs.haskell.lib.justStaticExecutables self.unwrappedHaskellPackages.hevm;
 
   libff = self.callPackage (import ./nix/libff.nix) {};
 

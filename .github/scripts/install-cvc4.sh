@@ -20,5 +20,5 @@ fetch_cvc4_linux() {
 }
 
 if [ "$HOST_OS" = "Linux" ]; then
-    travis_retry fetch_cvc4_linux "1.7"
+    travis_retry fetch_cvc4_linux "1.8"
 fi
