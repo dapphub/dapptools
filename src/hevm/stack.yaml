@@ -16,6 +16,8 @@ extra-deps:
 - Unixutils-1.54.1
 - witherable-0.3.5
 - cryptonite-0.28@sha256:b6c75e62b4c655d4cb1bcbb80d01430d136aac32bd6962c86c84738935cc8f9d,18195
+- github: dmjio/semver-range
+  commit: d8d9db892ddb6ae267c9bcbc4f6602668433f12a
 - github: leventerkok/sbv # 8.9
   commit: b64905e2698c320ac14ffbad53325d33081839fb
 flags: {}
