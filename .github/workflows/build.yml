@@ -32,7 +32,7 @@ jobs:
       - name: run hevm symbolic tests
         run: nix-build -j 1 -A hevm-tests
       - run: nix-build release.nix -A dapphub.${{ matrix.os_attr }}.stable
-      - run: nix-shell -p cvc4 z3 --command 'nix-build -A hevmUnwrapped --out-link hevm'
+      - run: nix-build -A hevmUnwrapped --out-link hevm
 
       - name: Upload artifact
         if: runner.os == 'Linux'
