@@ -71,7 +71,7 @@ in self-hs: super-hs:
         else "";
 
       enableSeparateDataOutput = true;
-      buildInputs = attrs.buildInputs ++ [pkgs.solc];
+      buildInputs = attrs.buildInputs ++ [pkgs.solc] ++ if wrapped then [] else [pkgs.z3, pkgs.cvc4] ;
       nativeBuildInputs = attrs.nativeBuildInputs ++ [pkgs.makeWrapper];
       configureFlags = attrs.configureFlags ++ [
           "--ghc-option=-O2"
