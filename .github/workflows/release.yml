@@ -9,11 +9,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       # v12
-      - name: build linux static hevm
-        uses: cachix/install-nix-action@v12
+      - uses: cachix/install-nix-action@v12
         with:
           nix_path: nixpkgs=channel:nixos-unstable
-        run: nix-build -A hevmUnwrapped --out-link hevm
+      - run: nix-build -A hevmUnwrapped --out-link hevm
 
       - name: Upload artifact
         uses: actions/upload-artifact@v1
