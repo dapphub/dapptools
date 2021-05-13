@@ -1,8 +1,9 @@
-name: CI
+name: macOS Binary
 
 on:
   push:
-  pull_request:
+    tags:
+      - '[a-z]+/[0-9]+.[0-9]+.[0-9]+'
 
 jobs:
   test:
