@@ -1,6 +1,5 @@
 #!/bin/bash
 
-# Adapted from https://github.com/commercialhaskell/stack
 
 set -eux
 
