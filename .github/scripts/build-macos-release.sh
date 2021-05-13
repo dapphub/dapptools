@@ -18,7 +18,7 @@ fix_path()
 }
 
 
-BUILD="$(mktemp -d)/hevm"
+BUILD="$(mktemp -t hevm.XXXX)"
 mkdir -p "$BUILD"
 cp "$HOME/.local/bin/hevm" "$BUILD"
 

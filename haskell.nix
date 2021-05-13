@@ -25,14 +25,11 @@ in self-hs: super-hs:
     wreq = pkgs.haskell.lib.doJailbreak super-hs.wreq;
 
     sbv = sbv_prepatch.overrideAttrs (attrs: {
-      postPatch =
-        if wrapped
-        then
+      postPatch = stdenv.lib.optionalString wrapped
           ''
              sed -i -e 's|"z3"|"${pkgs.z3}/bin/z3"|' Data/SBV/Provers/Z3.hs
              sed -i -e 's|"cvc4"|"${pkgs.cvc4}/bin/cvc4"|' Data/SBV/Provers/CVC4.hs
-          ''
-        else "";
+          '';
       configureFlags = attrs.configureFlags ++ [
         "--ghc-option=-O2"
       ];
