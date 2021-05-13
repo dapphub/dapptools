@@ -12,12 +12,25 @@ travis_retry() {
 }
 
 fetch_solc_linux() {
-  VER="$1"
+  VER="$1"p
   if [ ! -f "$HOME/.local/bin/solc-$VER" ]; then
     rm -Rf solc-static-linux
     wget "https://github.com/ethereum/solidity/releases/download/v$VER/solc-static-linux"
     chmod +x solc-static-linux
     mv solc-static-linux "$HOME/.local/bin/solc-$VER"
+    echo "Downloaded solc $VER"
+  else
+    echo "Skipped solc $VER, already present"
+  fi
+}
+
+fetch_solc_macos() {
+  VER="$1"p
+  if [ ! -f "$HOME/.local/bin/solc-$VER" ]; then
+    rm -Rf solc-macos
+    wget "https://github.com/ethereum/solidity/releases/download/v$VER/solc-macos"
+    chmod +x solc-macos
+    mv solc-macos "$HOME/.local/bin/solc-$VER"
     echo "Downloaded solc $VER"
   else
     echo "Skipped solc $VER, already present"
@@ -33,8 +46,14 @@ fetch_all_solc_linux() {
 
 if [ "$HOST_OS" = "Linux" ]; then
   if [ "${SOLC_VER:-}" == "" ]; then
-    travis_retry fetch_all_solc_linux
+    travis_retry fetch_solc_linux "0.6.12"
   else
     travis_retry fetch_solc_linux "$SOLC_VER"
+  fi
+else
+  if [ "${SOLC_VER:-}" == "" ]; then
+    travis_retry fetch_solc_macos "0.6.12"
+  else
+    travis_retry fetch_solc_macos "$SOLC_VER"
   fi
 fi
