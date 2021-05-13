@@ -40,6 +40,13 @@ nix-env -iA <tool> -f $(curl -sS https://api.github.com/repos/dapphub/dapptools/
 
 If you instead want to build from `master`, change the url to `https://github.com/dapphub/dapptools/archive/master.tar.gz`.
 
+### Prebuilt hevm binary
+
+Static binaries for linux and macos of hevm are available for each release at https://github.com/dapphub/dapptools/releases.
+
+Most functionality is available out of the box, but for symbolic execution you will need
+[`solc`](https://github.com/ethereum/solidity) and ([`z3`](https://github.com/Z3Prover/z3/) or [`cvc4`](https://github.com/CVC4/CVC4) (or both)).
+
 ## Getting started
 
 For more information about the tools, consult the individual README pages:

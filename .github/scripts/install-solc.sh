@@ -12,7 +12,7 @@ travis_retry() {
 }
 
 fetch_solc_linux() {
-  VER="$1"p
+  VER="$1"
   if [ ! -f "$HOME/.local/bin/solc-$VER" ]; then
     rm -Rf solc-static-linux
     wget "https://github.com/ethereum/solidity/releases/download/v$VER/solc-static-linux"
@@ -25,7 +25,7 @@ fetch_solc_linux() {
 }
 
 fetch_solc_macos() {
-  VER="$1"p
+  VER="$1"
   if [ ! -f "$HOME/.local/bin/solc-$VER" ]; then
     rm -Rf solc-macos
     wget "https://github.com/ethereum/solidity/releases/download/v$VER/solc-macos"
