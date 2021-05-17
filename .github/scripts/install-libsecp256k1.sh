@@ -9,7 +9,7 @@ if [ -f $HOME/.local/lib/libsecp256k1.a ]; then
   exit 0
 fi
 
-gitRef="1086fda4c1975d0cad8d3cad96794a64ec12dca4"
+gitRef="f54c6c5083307b18224c953cf5870ea7ffce070b"
 curl -LO "https://github.com/bitcoin-core/secp256k1/archive/$gitRef.zip"
 
 unzip "$gitRef.zip"
