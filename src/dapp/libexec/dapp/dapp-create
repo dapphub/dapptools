@@ -41,7 +41,7 @@ bin=$(jq .evm.bytecode.object -r <<< "$contract")
 type=$(seth --abi-constructor <<< "$abi")
 address=$(set -x; seth send --create "$bin" "${type/constructor/${1#*:}}" "${@:2}")
 
-[[ $DAPP_VERIFY_CONTRACT ]] && {
+[[ $DAPP_VERIFY_CONTRACT || $DAPP_VERIFY_CONTRACT_MULTIPLE ]] && {
   echo >&2 "Verifying contract at $address"
   sleep 5 # give etherscan some time to process the block
   dapp verify-contract "$path":"${1#*:}" "$address" "${@:2}"
