@@ -17,8 +17,7 @@ fix_path()
     cp -n "$OLD" "$(dirname "$BINARY")/$(basename "$NEW")" || true
 }
 
-
-BUILD="$(mktemp -t hevm.XXXX)"
+BUILD="$(mktemp -d)/hevm"
 mkdir -p "$BUILD"
 cp "$HOME/.local/bin/hevm" "$BUILD"
 
