@@ -10,6 +10,7 @@ jobs:
     steps:
       # v12
       - uses: cachix/install-nix-action@v12
+      - uses: actions/checkout@v2
       - run: nix-build -A hevmUnwrapped --out-link hevm
 
       - name: Upload artifact
@@ -18,7 +19,6 @@ jobs:
           name: hevm-linux
           path: ./hevm/bin/hevm
 
-      - uses: actions/checkout@v2
       - uses: actions/create-release@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
