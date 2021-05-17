@@ -478,7 +478,7 @@ assert cmd = do
   let block'  = maybe EVM.Fetch.Latest EVM.Fetch.BlockNumber (block cmd)
       rpcinfo = (,) block' <$> rpc cmd
       treeShowing :: EVM.VM -> Expr -> Query ()
-      treeShowing vm expr =
+      treeShowing vm expr = 
          when (showTree cmd) $ let
           strg = _storageLayout <$> currentSolc srcInfo vm
           storagelist   = Map.toList $ fromMaybe mempty (fromMaybe Nothing strg)
@@ -501,17 +501,17 @@ assert cmd = do
                 -- renderTree' = renderTree showBranchInfoWithAbi showLeafInfo
                 -- tree'' = propagateData 0 tree
                 -- expr = tree2expr expr
-                in io $ setLocaleEncoding utf8 >> putStrLn (show expr'')
+                in io $ setLocaleEncoding utf8 >> putStrLn (show expr)
                 -- in io $ setLocaleEncoding utf8 >> putStrLn (showTree' (renderTree' tree''))
 
-  maybesig <- case sig cmd of
-    Nothing ->
-      return Nothing
-    Just sig' -> do
-      method' <- functionAbi sig'
-      let typ = snd <$> view methodInputs method'
-          name = view methodSignature method'
-      return $ Just (name,typ)
+  -- maybesig <- case sig cmd of
+  --   Nothing ->
+  --     return Nothing
+  --   Just sig' -> do
+  --     method' <- functionAbi sig'
+  --     let typ = snd <$> view methodInputs method'
+  --         name = view methodSignature method'
+  --     return $ Just (name,typ)
   runSMTWithTimeOut (solver cmd) (smttimeout cmd) (smtdebug cmd) $ query $ do
     preState <- symvmFromCommand cmd
     verify preState (maxIterations cmd) rpcinfo (Just checkAssertions) >>= \case

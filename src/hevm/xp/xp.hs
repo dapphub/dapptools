@@ -16,6 +16,9 @@ data Command
   = ToEC {
     exprString :: String
     }
+  | Interpret {
+
+  }
   | Unify {
     exprA :: String,
     exprB :: String

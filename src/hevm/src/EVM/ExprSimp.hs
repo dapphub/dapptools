@@ -275,8 +275,8 @@ mkSimpStorage
 -- simplify untill nothing changes anymore
 
 fixExpr :: (?ctx :: ExprContext) => ExprC -> ExprC
-fixExpr w =
-  let w' = simpExpr w
+fixExpr w = 
+  let w' = simpExpr w 
    in if w == w'
         then w
         else fixExpr w'
@@ -408,8 +408,10 @@ simpExpr (EC "Add" ta [ECLiteral x, ECLiteral y])
 -- TODO - what if a slice doesn't slice by word chunks but in between
 -- TODO - buffer sort by write positions
 --        and filter collisions
-simpExpr (EC "ITE" tt [c, a@(EC "Bottom" _ _), b])
-  = (EC "ITE" tt [ EC "IsZero" ECTBool [c], b, a ])
+--
+--  TODO - the 'other part' can also be a Bottom
+-- simpExpr (EC "ITE" tt [c, a@(EC "Bottom" _ _), b])
+--   = trace "s5" $ (EC "ITE" tt [ EC "IsZero" ECTBool [c], b, a ])
 simpExpr (EC "ITE" _
   [ c
   , EC "ITE" tt

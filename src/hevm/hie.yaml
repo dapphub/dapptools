@@ -1,10 +1,19 @@
 cradle:
   cabal:
-    - path: "./src"
+    - path: "src"
       component: "lib:hevm"
-    - path: "./xp"
-      component: "exe:xp"
-    - path: "./hevm-cli"
-      component: "exe:hevm"
-    - path: "./test"
-      component: "test:test"
+
+    - path: "xp/xp.hs"
+      component: "hevm:exe:xp"
+
+    - path: "hevm-cli/hevm-cli.hs"
+      component: "hevm:exe:hevm"
+
+    - path: "hevm-cli/Paths_hevm.hs"
+      component: "hevm:exe:hevm"
+
+    - path: "test"
+      component: "hevm:test:test"
+
+    - path: "xp"
+      component: "hevm:test:xptest"

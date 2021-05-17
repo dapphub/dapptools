@@ -11,47 +11,17 @@
 
 module Main where
 
-import Data.Text (Text)
-import Data.ByteString (ByteString)
+import Data.Text (pack)
 
 import Prelude hiding (fail)
 
-import qualified Data.Text as Text
-import qualified Data.ByteString as BS
-import qualified Data.ByteString.Lazy as BS (fromStrict, toStrict)
-import qualified Data.ByteString.Base16 as Hex
+import Text.Megaparsec hiding (State)
+
 import Test.Tasty
 import Test.Tasty.QuickCheck
-import Test.Tasty.HUnit
 
-import Control.Monad.State.Strict (execState, runState)
-import Control.Lens hiding (List, pre, (.>))
-
-import qualified Data.Vector as Vector
-import Data.String.Here
-
-import Control.Monad.Fail
-
-import Data.Binary.Put (runPut)
-import Data.SBV hiding ((===), forAll, sList)
-import Data.SBV.Control
-import qualified Data.Map as Map
-import Data.Binary.Get (runGetOrFail)
-
-import EVM hiding (Query)
-import EVM.SymExec
-import EVM.ABI
-import EVM.Exec
-import qualified EVM.Patricia as Patricia
-import EVM.Precompiled
-import EVM.RLP
-import EVM.Solidity
-import EVM.Types
 import EVM.Expr
-import EVM.ExprSimp
 
-instance MonadFail Query where
-    fail = io . fail
 
 main :: IO ()
 main = defaultMain tests

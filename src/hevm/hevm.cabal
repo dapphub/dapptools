@@ -287,6 +287,7 @@ test-suite xptest
   build-depends:
     HUnit >= 1.6,
     QuickCheck,
+    megaparsec,
     base,
     base16-bytestring,
     binary,

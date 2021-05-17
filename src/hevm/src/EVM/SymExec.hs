@@ -160,37 +160,39 @@ doInterpret fetcher maxIter vm = let
 
 
 interpret'' :: Fetch.Fetcher -> Maybe Integer -> VM -> Query Expr
-interpret'' fetcher maxIter vm = let
-  cont s = interpret'' fetcher maxIter $ execState s vm
+interpret'' _ Nothing _ = return Bottom
+interpret'' _ (Just 0) _ = return Bottom
+interpret'' fetcher (Just maxIter) vm =  let
+  cont s = interpret'' fetcher (Just maxIter) $ execState s vm
   in case view EVM.result vm of
 
     Nothing -> cont exec1
 
-    Just (VMFailure (EVM.Query q@(PleaseAskSMT _ _ continue))) -> let
-      codelocation = getCodeLocation vm
-      iteration = num $ fromMaybe 0 $ view (iterations . at codelocation) vm
-      -- as an optimization, we skip consulting smt
-      -- if we've been at the location less than 5 times
-      in if iteration < (max (fromMaybe 0 maxIter) 5)
-         then cont $ continue EVM.Unknown
-         else io (fetcher q) >>= cont
+    Just (VMFailure (EVM.Query q@(PleaseAskSMT _ _ continue))) -> cont $ continue EVM.Unknown
+      -- let
+      -- codelocation = getCodeLocation vm
+      -- iteration = num $ fromMaybe 0 $ view (iterations . at codelocation) vm
+      -- -- as an optimization, we skip consulting smt
+      -- -- if we've been at the location less than 5 times
+      -- in if iteration < (max (fromMaybe 0 maxIter) 5)
+      --    then cont $ continue EVM.Unknown
+      --    else io (fetcher q) >>= cont
 
     Just (VMFailure (EVM.Query q)) -> io (fetcher q) >>= cont
 
-    Just (VMFailure (Choose (EVM.PleaseChoosePath whiff continue)))
-      -> case maxIterationsReached vm maxIter of
-        Nothing -> let
+    Just (VMFailure (Choose (EVM.PleaseChoosePath w continue)))
+      -> let
           vm_true_case  = execState (continue True) vm
           vm_false_case = execState (continue False) vm
           in do
             push 1
-            expr_true_case <- interpret'' fetcher maxIter vm_true_case
+            expr_true_case <- interpret'' fetcher (Just $ maxIter - 1) vm_true_case
             pop 1
             push 1
-            expr_false_case <- interpret'' fetcher maxIter vm_false_case
+            expr_false_case <- interpret'' fetcher (Just $ maxIter - 1) vm_false_case
             pop 1
-            return $ ITE whiff expr_true_case expr_false_case
-        Just n -> cont $ continue (not n)
+            return $ ITE w expr_true_case expr_false_case
+
     Just (VMFailure (UnrecognizedOpcode 254))
       -> return $ Bottom
     Just (VMFailure (Revert _))
