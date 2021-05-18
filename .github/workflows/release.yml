@@ -2,7 +2,6 @@ name: "Release"
 on:
   workflow_run:
     workflows: ["macOS Binary"]
-    branches: [master]
     types:
       - completed
 jobs:
