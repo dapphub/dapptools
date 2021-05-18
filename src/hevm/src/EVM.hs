@@ -114,9 +114,9 @@ data VM = VM
   deriving (Show)
 
 data Trace = Trace
-  { _traceCodehash :: W256
-  , _traceOpIx     :: Maybe Int
-  , _traceData     :: TraceData
+  { _traceCode :: ContractCode
+  , _traceOpIx :: Int
+  , _traceData :: TraceData
   }
   deriving (Show)
 
@@ -287,6 +287,18 @@ data ContractCode
   = InitCode Buffer     -- ^ "Constructor" code, during contract creation
   | RuntimeCode Buffer  -- ^ "Instance" code, after contract creation
   deriving (Show)
+
+-- runtime err when used for symbolic code
+instance Eq ContractCode where
+  (InitCode x) == (InitCode y) = forceBuffer x == forceBuffer y
+  (RuntimeCode x) == (RuntimeCode y) = forceBuffer x == forceBuffer y
+  _ == _ = False
+
+-- runtime err when used for symbolic code
+instance Ord ContractCode where
+  compare x y = compare (forceBuffer (buf x)) (forceBuffer (buf y))
+    where buf (InitCode z) = z
+          buf (RuntimeCode z) = z
 
 -- | A contract can either have concrete or symbolic storage
 -- depending on what type of execution we are doing
@@ -2408,8 +2420,8 @@ withTraceLocation x = do
       currentContract vm
   pure Trace
     { _traceData = x
-    , _traceCodehash = view codehash this
-    , _traceOpIx = (view opIxMap this) Vector.!? (view (state . pc) vm)
+    , _traceCode = view contractcode this
+    , _traceOpIx = (view opIxMap this) Vector.! (view (state . pc) vm)
     }
 
 pushTrace :: TraceData -> EVM ()

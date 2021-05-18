@@ -202,22 +202,12 @@ tick x = Text.putStr x >> hFlush stdout
 
 -- | This is like an unresolved source mapping.
 data OpLocation = OpLocation
-  { srcCodehash :: !W256
-  , srcOpIx     :: !Int
-  } deriving (Eq, Ord, Show)
+  { srcCode :: ContractCode
+  , srcOpIx :: Int
+  } deriving (Show, Eq, Ord)
 
 srcMapForOpLocation :: DappInfo -> OpLocation -> Maybe SrcMap
-srcMapForOpLocation dapp (OpLocation hash opIx) =
-  case preview (dappSolcByHash . ix hash) dapp of
-    Nothing -> Nothing
-    Just (codeType, sol) ->
-      let
-        vec =
-          case codeType of
-            Runtime  -> view runtimeSrcmap sol
-            Creation -> view creationSrcmap sol
-      in
-        preview (ix opIx) vec
+srcMapForOpLocation dapp (OpLocation hash opIx) = srcMap dapp hash opIx
 
 type CoverageState = (VM, MultiSet OpLocation)
 
@@ -228,7 +218,7 @@ currentOpLocation vm =
       error "internal error: why no contract?"
     Just c ->
       OpLocation
-        (view codehash c)
+        (view contractcode c)
         (fromMaybe (error "internal error: op ix") (vmOpIx vm))
 
 execWithCoverage :: StateT CoverageState IO VMResult
@@ -301,15 +291,12 @@ coverageReport dapp cov =
     srcMapCov :: MultiSet (Text, Int)
     srcMapCov = MultiSet.mapMaybe (srcMapCodePos sources) cov
 
-    -- linesByName :: Map Text (Vector ByteString)
+    linesByName :: Map Text (Vector ByteString)
     linesByName =
-      ( Map.fromList
-      . map
-          (\(k, v) ->
-             (fst (fromJust (Map.lookup k (view sourceFiles sources))), v))
-      . Map.toList
-      $ view sourceLines sources
-      )
+      Map.fromList $ zipWith
+          (\(name, _) lines -> (name, lines))
+          (view sourceFiles sources)
+          (view sourceLines sources)
 
     f :: Text -> Vector ByteString -> Vector (Int, ByteString)
     f name =

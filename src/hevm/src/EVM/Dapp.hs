@@ -3,27 +3,28 @@
 
 module EVM.Dapp where
 
-import EVM (Trace, traceCodehash, traceOpIx, Env)
+import EVM (Trace, traceCode, traceOpIx, Env, ContractCode(..))
 import EVM.ABI (Event, AbiType)
 import EVM.Debug (srcMapCodePos)
-import EVM.Solidity (SolcContract, CodeType (..), SourceCache (..), SrcMap, Method)
-import EVM.Solidity (contractName, methodInputs)
-import EVM.Solidity (runtimeCodehash, creationCodehash, abiMap)
-import EVM.Solidity (runtimeSrcmap, sourceAsts, creationSrcmap, eventMap)
-import EVM.Solidity (methodSignature, astIdMap, astSrcMap)
-import EVM.Types (W256, abiKeccak)
+import EVM.Solidity
+import EVM.Types (W256, abiKeccak, keccak, Buffer(..))
+import EVM.Concrete
 
+import Data.ByteString (ByteString)
+import qualified Data.ByteString as BS
 import Data.Aeson (Value)
 import Data.Bifunctor (first)
 import Data.Text (Text, isPrefixOf, pack, unpack)
 import Data.Text.Encoding (encodeUtf8)
-import Data.Map (Map, toList)
+import Data.Map (Map, toList, elems)
+import Data.List (sort)
 import Data.Maybe (isJust, fromJust)
 import Data.Word (Word32)
 
 import Control.Arrow ((>>>))
 import Control.Lens
 
+import Data.List (find)
 import qualified Data.Map        as Map
 import qualified Data.Sequence   as Seq
 import qualified Text.Regex.TDFA as Regex
@@ -32,6 +33,7 @@ data DappInfo = DappInfo
   { _dappRoot       :: FilePath
   , _dappSolcByName :: Map Text SolcContract
   , _dappSolcByHash :: Map W256 (CodeType, SolcContract)
+  , _dappSolcByCode :: [(Code, SolcContract)] -- for contracts with `immutable` vars.
   , _dappSources    :: SourceCache
   , _dappUnitTests  :: [(Text, [(Test, [AbiType])])]
   , _dappAbiMap     :: Map Word32 Method
@@ -39,6 +41,14 @@ data DappInfo = DappInfo
   , _dappAstIdMap   :: Map Int Value
   , _dappAstSrcMap  :: SrcMap -> Maybe Value
   }
+
+-- | bytecode modulo immutables, to identify contracts
+data Code =
+  Code {
+    raw :: ByteString,
+    immutableLocations :: [Reference]
+  }
+  deriving Show
 
 data DappContext = DappContext
   { _contextInfo :: DappInfo
@@ -59,6 +69,7 @@ dappInfo root solcByName sources =
   let
     solcs = Map.elems solcByName
     astIds = astIdMap $ snd <$> toList (view sourceAsts sources)
+    immutables = filter ((/=) mempty . _immutableReferences) solcs
 
   in DappInfo
     { _dappRoot = root
@@ -72,7 +83,9 @@ dappInfo root solcByName sources =
           mappend
            (f runtimeCodehash  Runtime)
            (f creationCodehash Creation)
-
+      -- contracts with immutable locations can't be id by hash
+    , _dappSolcByCode =
+      [(Code (_runtimeCode x) (concat $ elems $ _immutableReferences x), x) | x <- immutables]
       -- Sum up the ABI maps from all the contracts.
     , _dappAbiMap   = mconcat (map (view abiMap) solcs)
     , _dappEventMap = mconcat (map (view eventMap) solcs)
@@ -148,15 +161,35 @@ extractSig (SymbolicTest sig) = sig
 traceSrcMap :: DappInfo -> Trace -> Maybe SrcMap
 traceSrcMap dapp trace =
   let
-    h = view traceCodehash trace
+    h = view traceCode trace
     i = view traceOpIx trace
-  in case preview (dappSolcByHash . ix h) dapp of
-    Nothing ->
-      Nothing
-    Just (Creation, solc) ->
-      i >>= \i' -> preview (creationSrcmap . ix i') solc
-    Just (Runtime, solc) ->
-      i >>= \i' -> preview (runtimeSrcmap . ix i') solc
+  in srcMap dapp h i
+
+srcMap :: DappInfo -> ContractCode -> Int -> Maybe SrcMap
+srcMap dapp code opIndex = do
+  sol <- lookupCode code dapp
+  case code of
+    (InitCode _) ->
+      preview (creationSrcmap . ix opIndex) sol
+    (RuntimeCode _) ->
+      preview (runtimeSrcmap . ix opIndex) sol
+
+lookupCode :: ContractCode -> DappInfo -> Maybe SolcContract
+lookupCode (InitCode (SymbolicBuffer _)) _ = Nothing -- TODO: srcmaps for symbolic bytecode
+lookupCode (RuntimeCode (SymbolicBuffer _)) _ = Nothing -- TODO: srcmaps for symbolic bytecode
+lookupCode (InitCode (ConcreteBuffer c)) a =
+  snd <$> preview (dappSolcByHash . ix (keccak (stripBytecodeMetadata c))) a
+lookupCode (RuntimeCode (ConcreteBuffer c)) a =
+  case snd <$> preview (dappSolcByHash . ix (keccak (stripBytecodeMetadata c))) a of
+    Just x -> return x
+    Nothing -> snd <$> find (compareCode c . fst) (view dappSolcByCode a)
+
+compareCode :: ByteString -> Code -> Bool
+compareCode raw (Code template locs) =
+  let holes' = sort [(start, len) | (Reference start len) <- locs]
+      insert at' len' bs = writeMemory (BS.replicate len' 0) (fromIntegral len') 0 (fromIntegral at') bs
+      refined = foldr (\(start, len) acc -> insert start len acc) raw holes'
+  in template == refined
 
 showTraceLocation :: DappInfo -> Trace -> Either Text Text
 showTraceLocation dapp trace =

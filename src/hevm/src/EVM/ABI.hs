@@ -70,7 +70,7 @@ import Data.Text.Encoding (encodeUtf8, decodeUtf8')
 import Data.Vector        (Vector, toList)
 import Data.Word          (Word32)
 import Data.List          (intercalate)
-import Data.SBV           (SWord, fromBytes)
+import Data.SBV           (fromBytes)
 import GHC.Generics
 
 import Test.QuickCheck hiding ((.&.), label)

@@ -22,6 +22,12 @@ case "$SOURCE" in
     # for some reason etherscan surrounds the actual json with '{}'
     SOURCE="${SOURCE/#\{\{/\{}"
     SOURCE="${SOURCE/%\}\}/\}}"
+
+    # write all source files in the local directory
+    for x in $(echo "$SOURCE" | jq '.sources | keys | .[]' -r); do
+        mkdir -p "$(dirname "$x")"
+        echo "$SOURCE" | jq ".sources.\"$x\".content" -r > $x
+    done;
     export DAPP_SOLC_JSON="$SOURCE"
     seth --use solc:"${SOLC_VERSION}" solc
     ;;

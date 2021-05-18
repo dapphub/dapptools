@@ -289,9 +289,6 @@ atFileLine dapp wantedFileName wantedLineNumber vm =
   case currentSrcMap dapp vm of
     Nothing -> False
     Just sm ->
-      case view (dappSources . sourceFiles . at (srcMapFile sm)) dapp of
-        Nothing -> False
-        Just _ ->
           let
             (currentFileName, currentLineNumber) =
               fromJust (srcMapCodePos (view dappSources dapp) sm)
@@ -323,7 +320,7 @@ outputVm = do
   fromMaybe noMap $ do
     dapp <- view uiVmDapp s
     sm <- currentSrcMap dapp (view uiVm s)
-    (fileName, _) <- view (dappSources . sourceFiles . at (srcMapFile sm)) dapp
+    let (fileName, _) = view (dappSources . sourceFiles) dapp !! srcMapFile sm
     pure . output $
       L [ A "step"
         , L [A ("vm" :: Text), sexp (view uiVm s)]
