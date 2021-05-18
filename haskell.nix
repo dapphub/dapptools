@@ -2,7 +2,7 @@
 # to our Haskell package extensions from other overlays, bypassing the
 # rest of our overlay.  This was necessary for rather obscure reasons.
 
-{ pkgs, lib }:
+{ pkgs, lib, wrapped ? true }:
 
 let
   stdenv = pkgs.stdenv;
@@ -16,23 +16,23 @@ in self-hs: super-hs:
     sbv_prepatch = pkgs.haskell.lib.dontCheck (self-hs.callCabal2nix "sbv"
       (builtins.fetchGit {
         url = "https://github.com/LeventErkok/sbv";
-        rev = "59c1cf37070a5423113f950bf071804257756c7a";
-      }) 
+        rev = "b64905e2698c320ac14ffbad53325d33081839fb";
+      })
       {inherit (pkgs) z3;});
 
   in {
     restless-git = dontCheck "restless-git" (./src/restless-git);
     wreq = pkgs.haskell.lib.doJailbreak super-hs.wreq;
 
-    # we use a pretty bleeding edge sbv version
     sbv = sbv_prepatch.overrideAttrs (attrs: {
-      postPatch = ''
-      sed -i -e 's|"z3"|"${pkgs.z3}/bin/z3"|' Data/SBV/Provers/Z3.hs
-      sed -i -e 's|"cvc4"|"${pkgs.cvc4}/bin/cvc4"|' Data/SBV/Provers/CVC4.hs'';
+      postPatch = stdenv.lib.optionalString wrapped
+          ''
+             sed -i -e 's|"z3"|"${pkgs.z3}/bin/z3"|' Data/SBV/Provers/Z3.hs
+             sed -i -e 's|"cvc4"|"${pkgs.cvc4}/bin/cvc4"|' Data/SBV/Provers/CVC4.hs
+          '';
       configureFlags = attrs.configureFlags ++ [
         "--ghc-option=-O2"
       ];
-
     });
 
 
@@ -58,16 +58,29 @@ in self-hs: super-hs:
         ff = pkgs.libff;
       }
     ).overrideAttrs (attrs: {
-      postInstall = ''
-        wrapProgram $out/bin/hevm --prefix PATH \
-          : "${lib.makeBinPath (with pkgs; [bash coreutils git solc])}"
-      '';
+      postInstall =
+        if wrapped
+        then
+          ''
+            wrapProgram $out/bin/hevm --prefix PATH \
+              : "${lib.makeBinPath (with pkgs; [bash coreutils git solc])}"
+          ''
+        else "";
 
       enableSeparateDataOutput = true;
-      buildInputs = attrs.buildInputs ++ [pkgs.solc];
+      buildInputs = attrs.buildInputs ++ [pkgs.solc] ++ (if wrapped then [] else [pkgs.z3 pkgs.cvc4]);
       nativeBuildInputs = attrs.nativeBuildInputs ++ [pkgs.makeWrapper];
       configureFlags = attrs.configureFlags ++ [
           "--ghc-option=-O2"
-          ];
+      ] ++
+      (if stdenv.isDarwin then [] else [
+          "--enable-executable-static"
+          "--extra-lib-dirs=${pkgs.gmp.override { withStatic = true; }}/lib"
+          "--extra-lib-dirs=${pkgs.glibc.static}/lib"
+          "--extra-lib-dirs=${pkgs.libff}/lib"
+          "--extra-lib-dirs=${pkgs.ncurses.override {enableStatic = true; }}/lib"
+          "--extra-lib-dirs=${pkgs.zlib.static}/lib"
+          "--extra-lib-dirs=${pkgs.libffi.overrideAttrs (old: { dontDisableStatic = true; })}/lib"
+      ]);
     }));
   }

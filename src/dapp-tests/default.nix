@@ -142,7 +142,7 @@ in
     dss = pkgs.buildDappPackage {
       src = dss-src;
       name = "dss";
-      doCheck = true;
+      dappFlags = "--match '[^dai].t.sol'";
       deps = [ ds-test ds-token ds-value ];
     };
   }

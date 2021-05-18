@@ -51,6 +51,7 @@ import qualified EVM.Facts.Git as Git
 import qualified EVM.UnitTest
 
 import GHC.IO.Encoding
+import GHC.Stack
 import Control.Concurrent.Async   (async, waitCatch)
 import Control.Lens hiding (pre, passing)
 import Control.Monad              (void, when, forM_, unless)
@@ -58,14 +59,14 @@ import Control.Monad.State.Strict (execStateT, liftIO)
 import Data.ByteString            (ByteString)
 import Data.List                  (intercalate, isSuffixOf)
 import Data.Tree
-import Data.Text                  (Text, unpack, pack)
+import Data.Text                  (unpack, pack)
 import Data.Text.Encoding         (encodeUtf8)
 import Data.Text.IO               (hPutStr)
 import Data.Maybe                 (fromMaybe, fromJust)
 import Data.Version               (showVersion)
 import Data.SBV hiding (Word, solver, verbose, name)
 import Data.SBV.Control hiding (Version, timeout, create)
-import System.IO                  (hFlush, stdout, stderr, utf8)
+import System.IO                  (hFlush, stdout, stderr)
 import System.Directory           (withCurrentDirectory, listDirectory)
 import System.Exit                (exitFailure, exitWith, ExitCode(..))
 import System.Environment         (setEnv)
@@ -738,7 +739,9 @@ vmFromCommand cmd = do
         caller'  = addr caller 0
         origin'  = addr origin 0
         calldata' = ConcreteBuffer (Todo "cliCalldata" []) $ bytes calldata ""
-        codeType = if create cmd then EVM.InitCode else EVM.RuntimeCode
+        -- codeType = if create cmd then EVM.InitCode else EVM.RuntimeCode
+        -- calldata' = ConcreteBuffer $ bytes calldata ""
+        codeType = (if create cmd then EVM.InitCode else EVM.RuntimeCode) . ConcreteBuffer (Todo "codeType" [])
         address' = if create cmd
               then addr address (createAddress origin' (word nonce 0))
               else addr address 0xacab
@@ -759,10 +762,11 @@ vmFromCommand cmd = do
           , EVM.vmoptGasprice      = word gasprice 0
           , EVM.vmoptMaxCodeSize   = word maxcodesize 0xffffffff
           , EVM.vmoptDifficulty    = word difficulty diff
-          , EVM.vmoptSchedule      = FeeSchedule.istanbul
+          , EVM.vmoptSchedule      = FeeSchedule.berlin
           , EVM.vmoptChainId       = word chainid 1
           , EVM.vmoptCreate        = create cmd
           , EVM.vmoptStorageModel  = ConcreteS
+          , EVM.vmoptTxAccessList  = mempty -- TODO: support me soon        
           }
         word f def = fromMaybe def (f cmd)
         addr f def = fromMaybe def (f cmd)
@@ -843,7 +847,7 @@ symvmFromCommand cmd = do
     decipher = hexByteString "bytes" . strip0x
     block'   = maybe EVM.Fetch.Latest EVM.Fetch.BlockNumber (block cmd)
     origin'  = addr origin 0
-    codeType = if create cmd then EVM.InitCode else EVM.RuntimeCode
+    codeType = (if create cmd then EVM.InitCode else EVM.RuntimeCode) . ConcreteBuffer (Todo "symvmFromCommand" [])
     address' = if create cmd
           then addr address (createAddress origin' (word nonce 0))
           else addr address 0xacab
@@ -863,15 +867,16 @@ symvmFromCommand cmd = do
       , EVM.vmoptGasprice      = word gasprice 0
       , EVM.vmoptMaxCodeSize   = word maxcodesize 0xffffffff
       , EVM.vmoptDifficulty    = word difficulty diff
-      , EVM.vmoptSchedule      = FeeSchedule.istanbul
+      , EVM.vmoptSchedule      = FeeSchedule.berlin
       , EVM.vmoptChainId       = word chainid 1
       , EVM.vmoptCreate        = create cmd
       , EVM.vmoptStorageModel  = fromMaybe SymbolicS (storageModel cmd)
+      , EVM.vmoptTxAccessList  = mempty
       }
     word f def = fromMaybe def (f cmd)
     addr f def = fromMaybe def (f cmd)
 
-launchTest :: Command Options.Unwrapped ->  IO ()
+launchTest :: HasCallStack => Command Options.Unwrapped ->  IO ()
 launchTest cmd = do
 #if MIN_VERSION_aeson(1, 0, 0)
   parsed <- VMTest.parseBCSuite <$> LazyByteString.readFile (file cmd)
@@ -891,7 +896,7 @@ launchTest cmd = do
 #endif
 
 #if MIN_VERSION_aeson(1, 0, 0)
-runVMTest :: Bool -> Mode -> Maybe Int -> (String, VMTest.Case) -> IO Bool
+runVMTest :: HasCallStack => Bool -> Mode -> Maybe Int -> (String, VMTest.Case) -> IO Bool
 runVMTest diffmode mode timelimit (name, x) =
  do
   let vm0 = VMTest.vmForCase x

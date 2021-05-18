@@ -46,7 +46,7 @@ h1, h2 { text-align: center; margin-top: 2rem  }
 <h1>hevm consensus test report</h1>
 <p>$(date +%Y-%m-%d)</p>
 <p>$(echo "$npass passed, $nbal bad-balance, $nnon bad-nonce, $nstr bad-storage, $nfail failed, $nskip skipped, $ntime timeout")</p>
-(Test suite: <span class=GeneralStateTests</span>GeneralStateTests</span> for Istanbul)
+(Test suite: <span class=GeneralStateTests</span>GeneralStateTests</span> for Berlin)
 </header>
 <h2>Failed tests</h2>
 <table id=failed>
@@ -82,14 +82,28 @@ shopt -s nocasematch
 {
   cd "$tests"
   for x in BlockchainTests/GeneralStateTests/*/*; do
-    if [[ $x =~ .*$match.* ]] && [[ -n $skip && $x =~ .*$skip.* ]]; then
-      for job in $(<$x jq '.|keys[]' -r); do
-        echo -n "$job " ; echo "skip"
+    if [ -d $x ]; then
+      for y in $x/*; do
+        if [[ $y =~ .*$match.* ]] && [[ -n $skip && $y =~ .*$skip.* ]]; then
+          for job in $(<$y jq '.|keys[]' -r); do
+            echo -n "$job " ; echo "skip"
+          done
+        elif [[ $y =~ .*$match.* ]]; then
+          set +e
+          "$HEVM" bc-test --file $y --timeout $timeout 2>&1
+          set -e
+        fi
       done
-    elif [[ $x =~ .*$match.* ]]; then
-      set +e
-      "$HEVM" bc-test --file $x --timeout $timeout 2>&1
-      set -e
+    else
+      if [[ $x =~ .*$match.* ]] && [[ -n $skip && $x =~ .*$skip.* ]]; then
+        for job in $(<$x jq '.|keys[]' -r); do
+          echo -n "$job " ; echo "skip"
+        done
+      elif [[ $x =~ .*$match.* ]]; then
+        set +e
+        "$HEVM" bc-test --file $x --timeout $timeout 2>&1
+        set -e
+      fi
     fi
   done
 } | {

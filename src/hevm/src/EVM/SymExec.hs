@@ -120,11 +120,11 @@ abstractVM typesignature concreteArgs x storagemodel = do
     ConcreteS -> return $ Concrete mempty
   c <- SAddr <$> freshVar_
   value' <- var "CALLVALUE" <$> freshVar_
-  return $ loadSymVM (RuntimeCode x) symstore storagemodel c value' (SymbolicBuffer (Todo "abstractVM" []) cd', cdlen) & over constraints ((<>) [cdconstraint])
+  return $ loadSymVM (RuntimeCode (ConcreteBuffer (Todo "abstractVM" []) x)) symstore storagemodel c value' (SymbolicBuffer (Todo "abstractVM" []) cd', cdlen) & over constraints ((<>) [cdconstraint])
 
 loadSymVM :: ContractCode -> Storage -> StorageModel -> SAddr -> SymWord -> (Buffer, SymWord) -> VM
 loadSymVM x initStore model addr callvalue' calldata' =
-    (makeVm $ VMOpts
+  (makeVm $ VMOpts
     { vmoptContract = contractWithStore x initStore
     , vmoptCalldata = calldata'
     , vmoptValue = callvalue'
@@ -140,10 +140,11 @@ loadSymVM x initStore model addr callvalue' calldata' =
     , vmoptGas = 0xffffffffffffffff
     , vmoptGaslimit = 0xffffffffffffffff
     , vmoptMaxCodeSize = 0xffffffff
-    , vmoptSchedule = FeeSchedule.istanbul
+    , vmoptSchedule = FeeSchedule.berlin
     , vmoptChainId = 1
     , vmoptCreate = False
     , vmoptStorageModel = model
+    , vmoptTxAccessList = mempty
     }) & set (env . contracts . at (createAddress ethrunAddress 1))
              (Just (contractWithStore x initStore))
 
@@ -407,7 +408,10 @@ verify preState maxIter rpcinfo maybepost = do
 -- | Compares two contract runtimes for trace equivalence by running two VMs and comparing the end states.
 equivalenceCheck :: ByteString -> ByteString -> Maybe Integer -> Maybe (Text, [AbiType]) -> Query (Either ([VM], [VM]) VM)
 equivalenceCheck bytecodeA bytecodeB maxiter signature' = do
-  preStateA <- abstractVM signature' [] bytecodeA SymbolicS
+  let 
+    bytecodeA' = if BS.null bytecodeA then BS.pack [0] else bytecodeA
+    bytecodeB' = if BS.null bytecodeB then BS.pack [0] else bytecodeB
+  preStateA <- abstractVM signature' [] bytecodeA' SymbolicS
 
   let preself = preStateA ^. state . contract
       precaller = preStateA ^. state . caller
@@ -415,7 +419,7 @@ equivalenceCheck bytecodeA bytecodeB maxiter signature' = do
       prestorage = preStateA ^?! env . contracts . ix preself . storage
       (calldata', cdlen) = view (state . calldata) preStateA
       pathconds = view constraints preStateA
-      preStateB = loadSymVM (RuntimeCode bytecodeB) prestorage SymbolicS precaller callvalue' (calldata', cdlen) & set constraints pathconds
+      preStateB = loadSymVM (RuntimeCode (ConcreteBuffer (Todo "equivalenceCheck" []) bytecodeB')) prestorage SymbolicS precaller callvalue' (calldata', cdlen) & set constraints pathconds
 
   smtState <- queryState
   push 1

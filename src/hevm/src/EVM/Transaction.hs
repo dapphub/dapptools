@@ -15,7 +15,8 @@ import Control.Lens
 
 import Data.Aeson (FromJSON (..))
 import Data.ByteString (ByteString)
-import Data.Map (Map)
+import Data.Map (Map, keys)
+import Data.Set (fromList)
 import Data.Maybe (fromMaybe, isNothing, isJust)
 
 import qualified Data.Aeson        as JSON
@@ -23,8 +24,17 @@ import qualified Data.Aeson.Types  as JSON
 import qualified Data.ByteString   as BS
 import qualified Data.Map          as Map
 
-data Transaction = Transaction
-  { txData     :: ByteString,
+data AccessListEntry = AccessListEntry {
+  accessAddress :: Addr,
+  accessStorageKeys :: [W256]
+} deriving Show
+
+data TxType = LegacyTransaction
+            | AccessListTransaction
+  deriving (Show, Eq)
+
+data Transaction = Transaction {
+    txData     :: ByteString,
     txGasLimit :: W256,
     txGasPrice :: W256,
     txNonce    :: W256,
@@ -32,29 +42,45 @@ data Transaction = Transaction
     txS        :: W256,
     txToAddr   :: Maybe Addr,
     txV        :: W256,
-    txValue    :: W256
-  } deriving Show
+    txValue    :: W256,
+    txType     :: TxType,
+    txAccessList :: [AccessListEntry]
+} deriving Show
+
+-- utility function for getting a more useful representation of accesslistentries
+-- duplicates only matter for gas computation
+-- ugly! could use a review....
+txAccessMap :: Transaction -> Map Addr [W256]
+txAccessMap tx = ((Map.fromListWith (++)) . makeTups) $ txAccessList tx
+  where makeTups = map (\ale -> (accessAddress ale, accessStorageKeys ale))
 
 ecrec :: W256 -> W256 -> W256 -> W256 -> Maybe Addr
-ecrec e v r s = (num . word) <$> EVM.Precompiled.execute 1 input 32
+ecrec v r s e = num . word <$> EVM.Precompiled.execute 1 input 32
   where input = BS.concat (word256Bytes <$> [e, v, r, s])
 
 sender :: Int -> Transaction -> Maybe Addr
-sender chainId tx = ecrec hash v' (txR tx) (txS tx)
-  where hash = keccak $ signingData chainId tx
+sender chainId tx = ecrec v' (txR tx) (txS tx) hash
+  where hash = keccak (signingData chainId tx)
         v    = txV tx
         v'   = if v == 27 || v == 28 then v
-               else 28 - mod v 2
+               else 27 + v
 
 signingData :: Int -> Transaction -> ByteString
 signingData chainId tx =
-  if v == (chainId * 2 + 35) || v == (chainId * 2 + 36)
-  then eip155Data
-  else normalData
+  case txType tx of
+    LegacyTransaction -> if v == (chainId * 2 + 35) || v == (chainId * 2 + 36)
+      then eip155Data
+      else normalData
+    AccessListTransaction -> eip2930Data
   where v          = fromIntegral (txV tx)
         to'        = case txToAddr tx of
           Just a  -> BS $ word160Bytes a
           Nothing -> BS mempty
+        accessList = txAccessList tx
+        rlpAccessList = EVM.RLP.List $ map (\accessEntry ->
+          EVM.RLP.List [BS $ word160Bytes (accessAddress accessEntry), 
+                        EVM.RLP.List $ map rlpWordFull $ accessStorageKeys accessEntry]
+          ) accessList
         normalData = rlpList [rlpWord256 (txNonce tx),
                               rlpWord256 (txGasPrice tx),
                               rlpWord256 (txGasLimit tx),
@@ -70,6 +96,23 @@ signingData chainId tx =
                               rlpWord256 (fromIntegral chainId),
                               rlpWord256 0x0,
                               rlpWord256 0x0]
+        eip2930Data = cons 0x01 $ rlpList [
+          rlpWord256 (fromIntegral chainId),
+          rlpWord256 (txNonce tx),
+          rlpWord256 (txGasPrice tx),
+          rlpWord256 (txGasLimit tx),
+          to', 
+          rlpWord256 (txValue tx),
+          BS (txData tx),
+          rlpAccessList]
+
+accessListPrice :: FeeSchedule Integer -> [AccessListEntry] -> Integer
+accessListPrice fs al =
+    sum (map 
+      (\ale -> 
+        g_access_list_address fs + 
+        (g_access_list_storage_key fs * (toInteger . length) (accessStorageKeys ale))) 
+        al)
 
 txGasCost :: FeeSchedule Integer -> Transaction -> Integer
 txGasCost fs tx =
@@ -78,9 +121,20 @@ txGasCost fs tx =
       nonZeroBytes = BS.length calldata - zeroBytes
       baseCost     = g_transaction fs
         + if isNothing (txToAddr tx) then g_txcreate fs else 0
+        + (accessListPrice fs $ txAccessList tx)
       zeroCost     = g_txdatazero fs
       nonZeroCost  = g_txdatanonzero fs
   in baseCost + zeroCost * (fromIntegral zeroBytes) + nonZeroCost * (fromIntegral nonZeroBytes)
+
+instance FromJSON AccessListEntry where
+  parseJSON (JSON.Object val) = do
+    accessAddress_ <- addrField val "address"
+    --storageKeys <- (val JSON..: "storageKeys")
+    --accessStorageKeys_ <- JSON.listParser (JSON.withText "W256" (return . readNull 0 . Text.unpack)) storageKeys
+    accessStorageKeys_ <- (val JSON..: "storageKeys") >>= parseJSONList
+    return $ AccessListEntry accessAddress_ accessStorageKeys_
+  parseJSON invalid =
+    JSON.typeMismatch "AccessListEntry" invalid
 
 instance FromJSON Transaction where
   parseJSON (JSON.Object val) = do
@@ -93,7 +147,15 @@ instance FromJSON Transaction where
     toAddr   <- addrFieldMaybe val "to"
     v        <- wordField val "v"
     value    <- wordField val "value"
-    return $ Transaction tdata gasLimit gasPrice nonce r s toAddr v value
+    txType   <- fmap read <$> (val JSON..:? "type")
+    --let legacyTxn = Transaction tdata gasLimit gasPrice nonce r s toAddr v value
+    case txType of
+      Just 0x00 -> return $ Transaction tdata gasLimit gasPrice nonce r s toAddr v value LegacyTransaction []
+      Just 0x01 -> do
+        accessListEntries <- (val JSON..: "accessList") >>= parseJSONList
+        return $ Transaction tdata gasLimit gasPrice nonce r s toAddr v value AccessListTransaction accessListEntries
+      Just _ -> fail "unrecognized custom transaction type"
+      Nothing -> return $ Transaction tdata gasLimit gasPrice nonce r s toAddr v value LegacyTransaction []
   parseJSON invalid =
     JSON.typeMismatch "Transaction" invalid
 
@@ -140,11 +202,6 @@ initTx vm = let
          else touchAccount toAddr)
       $ preState
 
-    touched = if creation
-              then [origin]
-              else [origin, toAddr]
-
     in
       vm & EVM.env . EVM.contracts .~ initState
          & EVM.tx . EVM.txReversion .~ preState
-         & EVM.tx . EVM.substate . EVM.touchedAccounts .~ touched

@@ -6,7 +6,7 @@ module EVM.Fetch where
 
 import Prelude hiding (Word)
 
-import EVM.Types    (Addr, w256, W256, hexText, Word)
+import EVM.Types    (Addr, w256, W256, hexText, Word, Buffer(..))
 import EVM.Expr
 import EVM.Symbolic (litWord)
 import EVM          (IsUnique(..), EVM, Contract, Block, initialContract, nonce, balance, external)
@@ -105,7 +105,7 @@ parseBlock j = do
   number     <- readText <$> j ^? key "number" . _String
   difficulty <- readText <$> j ^? key "difficulty" . _String
   -- default codesize, default gas limit, default feescedule
-  return $ EVM.Block coinbase timestamp number difficulty 0xffffffff 0xffffffff FeeSchedule.istanbul
+  return $ EVM.Block coinbase timestamp number difficulty 0xffffffff 0xffffffff FeeSchedule.berlin
 
 fetchWithSession :: Text -> Session -> Value -> IO (Maybe Value)
 fetchWithSession url sess x = do
@@ -124,7 +124,7 @@ fetchContractWithSession n url addr sess = runMaybeT $ do
   theBalance <- MaybeT $ fetch (QueryBalance addr)
 
   return $
-    initialContract (EVM.RuntimeCode theCode)
+    initialContract (EVM.RuntimeCode (ConcreteBuffer (Todo "fetchContractWithSession" []) theCode))
       & set nonce    (w256 theNonce)
       & set balance  (w256 theBalance)
       & set external True

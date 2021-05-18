@@ -6,6 +6,7 @@
 ### Run a transaction with hevm in the environment of the given transaction.
 ###
 ### With `--state dir`, load and save state from `dir`
+### With `--trace`, print the call trace of the transaction.
 ### With `--debug`, execute with hevm's interactive debugger
 set -e
 

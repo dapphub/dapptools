@@ -46,10 +46,8 @@ import Data.Either        (isRight, lefts)
 import Data.Foldable      (toList)
 import Data.Map           (Map)
 import Data.Maybe         (fromMaybe, catMaybes, fromJust, isJust, fromMaybe, mapMaybe)
-import Data.Monoid        ((<>))
 import Data.Text          (isPrefixOf, stripSuffix, intercalate, Text, pack, unpack)
 import Data.Text.Encoding (encodeUtf8)
-import Data.Word          (Word32)
 import System.Environment (lookupEnv)
 import System.IO          (hFlush, stdout)
 
@@ -764,7 +762,7 @@ initialUnitTestVm (UnitTestOptions {..}) theContract =
   let
     TestVMParams {..} = testParams
     vm = makeVm $ VMOpts
-           { vmoptContract = initialContract (InitCode (view creationCode theContract))
+           { vmoptContract = initialContract (InitCode (ConcreteBuffer (Todo "initalUnitTestVM" []) (view creationCode theContract)))
            , vmoptCalldata = (mempty, 0)
            , vmoptValue = 0
            , vmoptAddress = testAddress
@@ -779,10 +777,11 @@ initialUnitTestVm (UnitTestOptions {..}) theContract =
            , vmoptGasprice = testGasprice
            , vmoptMaxCodeSize = testMaxCodeSize
            , vmoptDifficulty = testDifficulty
-           , vmoptSchedule = FeeSchedule.istanbul
+           , vmoptSchedule = FeeSchedule.berlin
            , vmoptChainId = testChainId
            , vmoptCreate = True
            , vmoptStorageModel = ConcreteS -- TODO: support RPC
+           , vmoptTxAccessList = mempty -- TODO: support unit test access lists???
            }
     creator =
       initialContract (RuntimeCode mempty)

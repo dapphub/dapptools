@@ -9,19 +9,12 @@ module EVM.Types where
 
 import Prelude hiding  (Word, LT, GT)
 
-import Data.Aeson (FromJSON (..), (.:))
-
 import System.Console.ANSI
-
-#if MIN_VERSION_aeson(1, 0, 0)
 import Data.Aeson (FromJSONKey (..), FromJSONKeyFunction (..))
 import Data.Aeson
-#endif
-
 import Crypto.Hash
 import Data.SBV hiding (Word)
 import Data.Kind
-import Data.Monoid ((<>))
 import Data.Bifunctor (first)
 import Data.Char
 import Data.List (intercalate)
@@ -35,7 +28,6 @@ import qualified Data.ByteString.Char8  as Char8
 import Data.DoubleWord
 import Data.DoubleWord.TH
 import Data.Maybe (fromMaybe)
-import Data.Word (Word8)
 import Numeric (readHex, showHex)
 import Options.Generic
 import Control.Arrow ((>>>))
@@ -367,7 +359,7 @@ instance Show Addr where
   showsPrec _ addr next =
     let hex = showHex addr next
         str = replicate (40 - length hex) '0' ++ hex
-    in "0x" ++ toChecksumAddress str
+    in "0x" ++ toChecksumAddress str ++ drop 40 str
 
 instance Show SAddr where
   show (SAddr a) = case unliteral a of

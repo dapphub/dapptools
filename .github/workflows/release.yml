@@ -1,17 +1,35 @@
 name: "Release"
 on:
-  push:
-    tags:
-      - '[a-z]+/[0-9]+.[0-9]+.[0-9]+'
+  workflow_run:
+    workflows: ["macOS Binary"]
+    branches: [main]
+    types:
+      - completed
 jobs:
   release:
     name: Create Release
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
-      - uses: actions/create-release@v1
+      # v12
+      - uses: cachix/install-nix-action@v12
+      # v8
+      - uses: cachix/cachix-action@v8
+        with:
+          name: dapp
+          signingKey: '${{ secrets.CACHIX_SIGNING_KEY }}'
+      - run: nix-build -A hevmUnwrapped --out-link hevmLinux
+
+      - uses: actions/download-artifact@master
+        with:
+          name: hevm-macOS
+          path: hevm-macOS.tar.gz
+
+      - name: Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            ./hevmLinux/bin/hevm
+            hevm-macOS.tar.gz
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          tag_name: ${{ github.ref }}
-          release_name: ${{ github.ref }}

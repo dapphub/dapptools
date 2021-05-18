@@ -5,8 +5,4 @@
 set -e
 [[ $# = 1 ]] || seth --fail-usage "$0"
 [[ $ETH_FROM ]] || seth --fail "${0##*/}: error: \`ETH_FROM' not set"
-SENDER=$(seth --to-address "$ETH_FROM")
-DATA=$(seth --to-hexdata "$1")
-jshon+=(-s "$SENDER" -i append)
-jshon+=(-s "$DATA" -i append)
-seth rpc eth_sign -- "${jshon[@]}"
+ethsign msg --data "$(seth --to-hexdata "$1")" --from "$ETH_FROM"

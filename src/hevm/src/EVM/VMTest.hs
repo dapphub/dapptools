@@ -3,6 +3,7 @@
 
 module EVM.VMTest
   ( Case
+  , BlockchainCase
 #if MIN_VERSION_aeson(1, 0, 0)
   , parseBCSuite
 #endif
@@ -27,6 +28,8 @@ import EVM.Expr
 import Control.Arrow ((***), (&&&))
 import Control.Lens
 import Control.Monad
+
+import GHC.Stack
 
 import Data.Aeson ((.:), FromJSON (..))
 import Data.Foldable (fold)
@@ -104,10 +107,10 @@ checkStateFail diff x vm (okState, okMoney, okNonce, okData, okCode) = do
     printContracts actual
   return okState
 
-checkExpectation :: Bool -> Case -> EVM.VM -> IO Bool
+checkExpectation :: HasCallStack => Bool -> Case -> EVM.VM -> IO Bool
 checkExpectation diff x vm = do
   let expectation = testExpectation x
-  let (okState, b2, b3, b4, b5) = checkExpectedContracts vm $ expectation
+      (okState, b2, b3, b4, b5) = checkExpectedContracts vm $ expectation
   unless okState $ void $ checkStateFail
     diff x vm (okState, b2, b3, b4, b5)
   return okState
@@ -119,9 +122,17 @@ checkExpectation diff x vm = do
         padNewAccounts cs'' ks = (fold [Map.insertWith (\_ x -> x) k nullAccount | k <- ks]) cs''
         padded_cs' = padNewAccounts cs' (Map.keys cs)
         padded_cs  = padNewAccounts cs  (Map.keys cs')
-    in padded_cs == padded_cs'
+    in and $ zipWith (===) (Map.elems padded_cs) (Map.elems padded_cs')
 
-checkExpectedContracts :: EVM.VM -> Map Addr EVM.Contract -> (Bool, Bool, Bool, Bool, Bool)
+(===) :: EVM.Contract -> EVM.Contract -> Bool
+a === b = codeEqual && storageEqual && (view balance a == view balance b) && (view nonce a == view nonce b)
+  where
+    storageEqual = view storage a == view storage b
+    codeEqual = case (view contractcode a, view contractcode b) of
+      (EVM.RuntimeCode (ConcreteBuffer _ a'), EVM.RuntimeCode (ConcreteBuffer _ b')) -> a' == b'
+      _ -> error "unexpected code"
+
+checkExpectedContracts :: HasCallStack => EVM.VM -> Map Addr EVM.Contract -> (Bool, Bool, Bool, Bool, Bool)
 checkExpectedContracts vm expected =
   let cs = vm ^. EVM.env . EVM.contracts . to (fmap (clearZeroStorage.clearOrigStorage))
       expectedCs = clearOrigStorage <$> expected
@@ -157,7 +168,7 @@ clearCode = set contractcode (EVM.RuntimeCode mempty)
 
 instance FromJSON EVM.Contract where
   parseJSON (JSON.Object v) = do
-    code <- (EVM.RuntimeCode <$> (hexText <$> v .: "code"))
+    code <- (EVM.RuntimeCode . ConcreteBuffer (Todo "fromJson" []) <$> (hexText <$> v .: "code"))
     storage' <- Map.mapKeys w256 <$> v .: "storage"
     balance' <- v .: "balance"
     nonce'   <- v .: "nonce"
@@ -212,7 +223,7 @@ parseBCSuite x = case (JSON.eitherDecode' x) :: Either String (Map String Blockc
                        filteredCases = Map.filter keepError allCases
                        (erroredCases, parsedCases) = splitEithers filteredCases
     in if Map.size erroredCases > 0
-    then Left ("errored case: " ++ (show $ (Map.elems erroredCases) !! 0))
+    then Left ("errored case: " ++ (show erroredCases))
     else if Map.size parsedCases == 0
     then Left "No cases to check."
     else Right parsedCases
@@ -238,7 +249,7 @@ errorFatal _ = False
 fromBlockchainCase :: BlockchainCase -> Either BlockchainError Case
 fromBlockchainCase (BlockchainCase blocks preState postState network) =
   case (blocks, network) of
-    ([block], "Istanbul") -> case blockTxs block of
+    ([block], "Berlin") -> case blockTxs block of
       [tx] -> fromBlockchainCase' block tx preState postState
       []        -> Left NoTxs
       _         -> Left TooManyTxs
@@ -249,8 +260,8 @@ fromBlockchainCase' :: Block -> Transaction
                        -> Map Addr EVM.Contract -> Map Addr EVM.Contract
                        -> Either BlockchainError Case
 fromBlockchainCase' block tx preState postState =
-  let isCreate = isNothing (txToAddr tx)
-  in case (sender 1 tx, checkTx tx preState) of
+  let isCreate = isNothing (txToAddr tx) in
+  case (sender 1 tx, checkTx tx preState) of
       (Nothing, _) -> Left SignatureUnverified
       (_, Nothing) -> Left (if isCreate then FailedCreate else InvalidTx)
       (Just origin, Just checkState) -> Right $ Case
@@ -274,16 +285,17 @@ fromBlockchainCase' block tx preState postState =
          , vmoptChainId       = 1
          , vmoptCreate        = isCreate
          , vmoptStorageModel  = EVM.ConcreteS
+         , vmoptTxAccessList  = txAccessMap tx
          })
         checkState
         postState
           where
             toAddr = fromMaybe (EVM.createAddress origin senderNonce) (txToAddr tx)
             senderNonce = EVM.wordValue $ view (accountAt origin . nonce) preState
-            feeSchedule = EVM.FeeSchedule.istanbul
+            feeSchedule = EVM.FeeSchedule.berlin
             toCode = Map.lookup toAddr preState
             theCode = if isCreate
-                      then EVM.InitCode (txData tx)
+                      then EVM.InitCode (ConcreteBuffer (Todo "fromBlockchainCase" []) (txData tx))
                       else maybe (EVM.RuntimeCode mempty) (view contractcode) toCode
             cd = if isCreate
                  then (mempty, 0)
@@ -311,7 +323,7 @@ checkTx tx prestate = do
       toAddr      = fromMaybe (EVM.createAddress origin senderNonce) (txToAddr tx)
       prevCode    = view (accountAt toAddr . contractcode) prestate
       prevNonce   = view (accountAt toAddr . nonce) prestate
-  if isCreate && ((prevCode /= EVM.RuntimeCode mempty) || (prevNonce /= 0))
+  if isCreate && ((case prevCode of {EVM.RuntimeCode b -> len b /= 0; _ -> True}) || (prevNonce /= 0))
   then mzero
   else
     return $ prestate

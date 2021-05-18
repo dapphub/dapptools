@@ -233,14 +233,6 @@ These environment variables can be used to control block parameters
 
 `hevm` is distributed as part of the [Dapp tools](https://github.com/dapphub/dapptools) suite.
 
-### Static binary
-
-If you don't want to compile anything, and you're on x86-64 Linux, you can download a static binary from the "Releases" tab on GitHub. If the static binary complains about a "terminfo" file, you have to set the `TERMINFO` environment variable; on Ubuntu, you should do
-
-    $ export TERMINFO=/lib/terminfo
-
-(Put that in your `~/.bashrc` for convenience.)
-
 ### Building with Stack or Cabal
 
 If you can't or won't use Nix, the easiest way especially if you don't have GHC (the Haskell compiler) installed already, is to use [Stack](https://docs.haskellstack.org/en/stable/README/), which can take care of installing GHC for you. These commands should work:

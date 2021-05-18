@@ -65,12 +65,12 @@ smod (S w1 x) (S w2 y) = let sx, sy :: SInt 256
 addmod :: SymWord -> SymWord -> SymWord -> SymWord
 addmod (S a x) (S b y) (S c z) = let to512 :: SWord 256 -> SWord 512
                                      to512 = sFromIntegral
-                                 in S (Todo "addmod" [a, b, c]) $ sFromIntegral $ ((to512 x) + (to512 y)) `sMod` (to512 z)
+                                 in  S (Todo "addmod" [a, b, c]) $ ite (z .== 0) 0 $ sFromIntegral $ ((to512 x) + (to512 y)) `sMod` (to512 z)
 
 mulmod :: SymWord -> SymWord -> SymWord -> SymWord
 mulmod (S a x) (S b y) (S c z) = let to512 :: SWord 256 -> SWord 512
                                      to512 = sFromIntegral
-                                 in S (Todo "mulmod" [a, b, c]) $ sFromIntegral $ ((to512 x) * (to512 y)) `sMod` (to512 z)
+                                 in S (Todo "mulmod" [a, b, c]) $ ite (z .== 0) 0 $ sFromIntegral $ ((to512 x) * (to512 y)) `sMod` (to512 z)
 
 -- | Signed less than
 slt :: SymWord -> SymWord -> SymWord
@@ -216,6 +216,10 @@ setMemoryByte i x (ConcreteBuffer wbuff m) = case fromSized <$> unliteral x of
 readSWord :: Word -> Buffer -> SymWord
 readSWord i (SymbolicBuffer _ x) = readSWord' i x
 readSWord i (ConcreteBuffer _ x) = num $ Concrete.readMemoryWord i x
+
+index :: Int -> Buffer -> SWord8
+index x (ConcreteBuffer _ b) = literal $ BS.index b x
+index x (SymbolicBuffer _ b) = fromSized $ b !! x
 
 -- * Uninterpreted functions
 

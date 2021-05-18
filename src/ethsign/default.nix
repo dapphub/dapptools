@@ -2,11 +2,11 @@
 
 buildGoModule rec {
   name = "ethsign-${version}";
-  version = "0.16.1";
+  version = "0.16.2";
 
   src = ./.;
 
-  vendorSha256 = "193yjzyf6khzanvqalbdqccwzm11nq9z3aykni2q8fj7r5j8l4v0";
+  vendorSha256 = "1p7gkpv88v6swz8dpjvrzfaa2jkpr5xw26bd3rjazv5wcs6ipwy7";
   runVend = true;
 
   meta = with stdenv.lib; {

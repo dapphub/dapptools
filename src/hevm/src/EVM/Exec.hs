@@ -1,6 +1,7 @@
 module EVM.Exec where
 
 import EVM
+import EVM.Expr
 import EVM.Concrete (createAddress)
 import EVM.Symbolic (litAddr)
 import EVM.Types
@@ -21,7 +22,7 @@ ethrunAddress = Addr 0x00a329c0648769a73afac7f9381e08fb43dbea72
 vmForEthrunCreation :: ByteString -> VM
 vmForEthrunCreation creationCode =
   (makeVm $ VMOpts
-    { vmoptContract = initialContract (InitCode creationCode)
+    { vmoptContract = initialContract (InitCode (ConcreteBuffer (Todo "vmForEthrunCreation" []) creationCode))
     , vmoptCalldata = (mempty, 0)
     , vmoptValue = 0
     , vmoptAddress = createAddress ethrunAddress 1
@@ -36,10 +37,11 @@ vmForEthrunCreation creationCode =
     , vmoptGas = 0xffffffffffffffff
     , vmoptGaslimit = 0xffffffffffffffff
     , vmoptMaxCodeSize = 0xffffffff
-    , vmoptSchedule = FeeSchedule.istanbul
+    , vmoptSchedule = FeeSchedule.berlin
     , vmoptChainId = 1
     , vmoptCreate = False
     , vmoptStorageModel = ConcreteS
+    , vmoptTxAccessList = mempty
     }) & set (env . contracts . at ethrunAddress)
              (Just (initialContract (RuntimeCode mempty)))
 
