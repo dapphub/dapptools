@@ -3,10 +3,8 @@
 -}
 
 {-# Language DeriveFunctor #-}
-{-# Language LambdaCase #-}
 {-# Language OverloadedStrings #-}
 {-# Language RecordWildCards #-}
-{-# Language ViewPatterns #-}
 
 module Restless.Git
   ( Path (..)
@@ -21,7 +19,6 @@ import Control.Monad.IO.Class (MonadIO, liftIO)
 import Data.ByteString        (ByteString)
 import Data.Foldable          (toList)
 import Data.Map               (Map)
-import Data.Semigroup         ((<>))
 import Data.Set               (Set)
 import Data.Text              (Text, unpack)
 import Data.Text.Encoding     (decodeUtf8)
@@ -66,21 +63,20 @@ save
   :: (Monad m, MonadIO m)
   => FilePath -> Text -> Set File -> m ()
 save dst message files = liftIO $ do
-  tree <-
-    saveTree dst (treeFromFiles files)
-  parent <-
-    latestCommitOid dst defaultRef
-  commit <-
-    createCommit dst parent tree (unpack message)
+  ref <- defaultRef dst
+  tree <- saveTree dst (treeFromFiles files)
+  parent <- latestCommitOid dst ref
+  commit <- createCommit dst parent tree (unpack message)
 
-  updateReference dst defaultRef commit
+  updateReference dst ref commit
 
   return ()
 
 -- | Load a set of files from a repository's master branch.
 load :: (Monad m, MonadIO m) => FilePath -> m (Set File)
 load src = liftIO $ do
-  ls <- git src "ls-tree" ["-r", "-z", defaultRef]
+  ref <- defaultRef src
+  ls <- git src "ls-tree" ["-r", "-z", ref]
   Set.fromList <$> mapM (loadFile src) (filter (/= "") (BS.split 0 ls))
 
 
@@ -128,13 +124,12 @@ saveTree dst (Tree folders files) = do
 asSHA1 :: ByteString -> SHA1
 asSHA1 = SHA1 . fst . BS.break (== 0xa)
 
-defaultRef :: String
-defaultRef = "refs/heads/master"
+defaultRef :: FilePath -> IO String
+defaultRef repo = trimnl <$> run (git' repo "config" ["--get", "init.defaultBranch"])
+  where trimnl = reverse . dropWhile (=='\n') . reverse
 
-git :: String -> String -> [String] -> IO ByteString
-git repo cmd args = do
-  x <- run $ ("git" :: String, ["-C", repo] ++ (cmd : args))
-  return x
+git :: FilePath -> String -> [String] -> IO ByteString
+git repo cmd args = run $ git' repo cmd args
 
 sha1String :: SHA1 -> String
 sha1String (SHA1 bs) = unpack (decodeUtf8 bs)
