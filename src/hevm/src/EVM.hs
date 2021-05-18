@@ -65,6 +65,7 @@ import Crypto.PubKey.ECC.Types (getCurveByName, CurveName(..), Point(..))
 import Crypto.PubKey.ECC.Generate (generateQ)
 
 import Debug.Trace
+import GHC.Stack
 
 
 -- * Data types
@@ -514,7 +515,7 @@ next :: (?op :: Word8) => EVM ()
 next = modifying (state . pc) (+ (opSize ?op))
 
 -- | Executes the EVM one step
-exec1 :: EVM ()
+exec1 :: HasCallStack => EVM ()
 exec1 = do
   vm <- get
 
@@ -540,7 +541,7 @@ exec1 = do
     let
       calldatasize = snd (the state calldata)
     case maybeLitWord calldatasize of
-        Nothing -> vmError UnexpectedSymbolicArg
+        Nothing -> trace "error 1" $ vmError UnexpectedSymbolicArg
         Just calldatasize' -> do
           copyBytesToMemory (fst $ the state calldata) (num calldatasize') 0 0
           executePrecompile self (num $ the state gas) 0 (num calldatasize') 0 0 []
@@ -556,7 +557,7 @@ exec1 = do
                   touchAccount self
                   out <- use (state . returndata)
                   finishFrame (FrameReturned out)
-              Nothing -> vmError UnexpectedSymbolicArg
+              Nothing -> trace "error 2" $ vmError UnexpectedSymbolicArg
             _ ->
               underrun
 
@@ -944,14 +945,20 @@ exec1 = do
                   assign (state . stack) (view (word256At (num x)) mem : xs)
             _ -> underrun
 
+
+-- forceConcrete :: HasCallStack => SymWord -> (Word -> EVM ()) -> EVM ()
+-- forceConcrete n continue = case maybeLitWord n of
+--   Nothing -> traceStack (prettyCallStack callStack) $ vmError UnexpectedSymbolicArg
+--   Just c -> continue c
         -- op: MSTORE
         0x52 ->
           case stk of
-            (x':y:xs) -> forceConcrete x' $ \x ->
-              burn g_verylow $
-                accessMemoryWord fees x $ do
+            (n@(S w _):y:xs) -> case maybeLitWord n of
+              Nothing -> vmError UnexpectedSymbolicArg
+              Just x' -> burn g_verylow $
+                accessMemoryWord fees x' $ do
                   next
-                  assign (state . memory . word256At (num x)) y
+                  assign (state . memory . word256At (num x')) y
                   assign (state . stack) xs
             _ -> underrun
 
@@ -1343,7 +1350,7 @@ precompiledContract this xGas precompileAddr recipient xValue inOffset inSize ou
           touchAccount self
           touchAccount recipient
           touchAccount precompileAddr
-        _ -> vmError UnexpectedSymbolicArg
+        _ -> trace "error 3" $ vmError UnexpectedSymbolicArg
       _ -> underrun
 
 executePrecompile
@@ -1803,42 +1810,42 @@ burn n' continue =
 
 forceConcreteAddr :: SAddr -> (Addr -> EVM ()) -> EVM ()
 forceConcreteAddr n continue = case maybeLitAddr n of
-  Nothing -> vmError UnexpectedSymbolicArg
+  Nothing -> trace "error 3" $ vmError UnexpectedSymbolicArg
   Just c -> continue c
 
-forceConcrete :: SymWord -> (Word -> EVM ()) -> EVM ()
+forceConcrete :: HasCallStack => SymWord -> (Word -> EVM ()) -> EVM ()
 forceConcrete n continue = case maybeLitWord n of
-  Nothing -> vmError UnexpectedSymbolicArg
+  Nothing -> traceStack (prettyCallStack callStack) $ vmError UnexpectedSymbolicArg
   Just c -> continue c
 
 forceConcrete2 :: (SymWord, SymWord) -> ((Word, Word) -> EVM ()) -> EVM ()
 forceConcrete2 (n,m) continue = case (maybeLitWord n, maybeLitWord m) of
   (Just c, Just d) -> continue (c, d)
-  _ -> vmError UnexpectedSymbolicArg
+  _ -> trace "error 5" $ vmError UnexpectedSymbolicArg
 
 forceConcrete3 :: (SymWord, SymWord, SymWord) -> ((Word, Word, Word) -> EVM ()) -> EVM ()
 forceConcrete3 (k,n,m) continue = case (maybeLitWord k, maybeLitWord n, maybeLitWord m) of
   (Just c, Just d, Just f) -> continue (c, d, f)
-  _ -> vmError UnexpectedSymbolicArg
+  _ -> trace "error 6" $ vmError UnexpectedSymbolicArg
 
 forceConcrete4 :: (SymWord, SymWord, SymWord, SymWord) -> ((Word, Word, Word, Word) -> EVM ()) -> EVM ()
 forceConcrete4 (k,l,n,m) continue = case (maybeLitWord k, maybeLitWord l, maybeLitWord n, maybeLitWord m) of
   (Just b, Just c, Just d, Just f) -> continue (b, c, d, f)
-  _ -> vmError UnexpectedSymbolicArg
+  _ -> trace "error 7" $ vmError UnexpectedSymbolicArg
 
 forceConcrete5 :: (SymWord, SymWord, SymWord, SymWord, SymWord) -> ((Word, Word, Word, Word, Word) -> EVM ()) -> EVM ()
 forceConcrete5 (k,l,m,n,o) continue = case (maybeLitWord k, maybeLitWord l, maybeLitWord m, maybeLitWord n, maybeLitWord o) of
   (Just a, Just b, Just c, Just d, Just e) -> continue (a, b, c, d, e)
-  _ -> vmError UnexpectedSymbolicArg
+  _ -> trace "error 8" $ vmError UnexpectedSymbolicArg
 
 forceConcrete6 :: (SymWord, SymWord, SymWord, SymWord, SymWord, SymWord) -> ((Word, Word, Word, Word, Word, Word) -> EVM ()) -> EVM ()
 forceConcrete6 (k,l,m,n,o,p) continue = case (maybeLitWord k, maybeLitWord l, maybeLitWord m, maybeLitWord n, maybeLitWord o, maybeLitWord p) of
   (Just a, Just b, Just c, Just d, Just e, Just f) -> continue (a, b, c, d, e, f)
-  _ -> vmError UnexpectedSymbolicArg
+  _ -> trace "error 9" $ vmError UnexpectedSymbolicArg
 
 forceConcreteBuffer :: Buffer -> (ByteString -> EVM ()) -> EVM ()
 forceConcreteBuffer (SymbolicBuffer _ b) continue = case maybeLitBytes b of
-  Nothing -> vmError UnexpectedSymbolicArg
+  Nothing -> trace "error 10" $ vmError UnexpectedSymbolicArg
   Just bs -> continue bs
 forceConcreteBuffer (ConcreteBuffer _ b) continue = continue b
 
@@ -1881,7 +1888,7 @@ cheat (inOffset, inSize) (outOffset, outSize) = do
     abi = readMemoryWord32 inOffset mem
     input = readMemory (inOffset + 4) (inSize - 4) vm
   case fromSized <$> unliteral abi of
-    Nothing -> vmError UnexpectedSymbolicArg
+    Nothing -> trace "error 11" $ vmError UnexpectedSymbolicArg
     Just abi' ->
       case Map.lookup abi' cheatActions of
         Nothing ->

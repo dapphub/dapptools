@@ -1,5 +1,5 @@
-{-# LANGUAGE ImplicitParams #-}
-{-# LANGUAGE TemplateHaskell #-}
+  {-# LANGUAGE ImplicitParams #-}
+  {-# LANGUAGE TemplateHaskell #-}
 
 -- TODO:
 --       get ridd of oops for todo's
@@ -22,7 +22,6 @@ module EVM.ExprSimp where
 import Data.Text (Text, unpack)
 import qualified Data.Map as Map
 import Data.Word (Word32)
-import EVM (VM)
 import EVM.Dapp (DappInfo (..))
 import EVM.Expr
 import EVM.Solidity (methodInputs, Method(..), StorageItem (..))
@@ -39,6 +38,8 @@ data ExprContext = ExprContext
   , _abimap             :: Map.Map Word32 Method
   , _methodctx          :: Maybe Method
   }
+emptyExprContext :: ExprContext
+emptyExprContext = ExprContext (\_ -> False) id mempty Nothing
 makeLenses ''ExprContext
 
 
@@ -95,7 +96,7 @@ inferExpr e@(EC t tt [a, b])
         bt   = exprType b'
     in if at == bt then
       (EC t ECTBool [a', b'])
-      else trace ("error"++(show t) ++ " " ++ (show at) ++ " " ++ (show bt)) (EC t ECTError [a', b'])
+      else trace ("error "++(show t) ++ " " ++ (show at) ++ " " ++ (show bt)) (EC t ECTError [a', b'])
   | t `elem` ["Add", "Sub", "Mul", "Div", "Mod", "Exp",
   -- todo
   "SHL", "SHR", "SAR"]
@@ -123,7 +124,16 @@ inferExpr e@(EC t tt [a, b])
         tt'  = if at <= ECTWord 256
                && bt == ECTBuffer
           then ECTWord 256
-          else trace ("error"++(show t) ++ " " ++ (show at) ++ " " ++ (show bt)) ECTError
+          else trace ("error "
+            ++ (show t) 
+            ++ " " 
+            ++ (show at) 
+            ++ " " 
+            ++ (show bt)
+            ++ "\n"
+            ++ (show a)
+            ++ "\n"
+            ++  (show b)) ECTError
     in (EC t tt' [a', b'])
   | t `elem` ["Lambda"]
   = let a'   = inferExpr a
@@ -330,6 +340,18 @@ simpExpr e@(EC "ReadWord" ta
       pname = unpack $ fst (inputs !! index)
       name = if pname == "" then "param_" ++ (show index) else pname
     in ECVar name ta
+simpExpr (EC "ReadWord" ta 
+  [ ECLiteral x
+  , r@(EC "WriteWord" tb 
+    [ ECLiteral y
+    , a
+    , b ])])
+    | x == y
+    = simpExpr a
+    | x + 0x20 <= y 
+    = simpExpr (EC "ReadWord" ta [ECLiteral x, b])
+    | otherwise 
+    = (EC "ReadWord" ta [ECLiteral x, simpExpr r])
 
 -- semantic storage
 simpExpr (EC "FromKeccak" ta [s])

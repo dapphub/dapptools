@@ -1,6 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards   #-}
 {-# Language ImplicitParams #-}
+{-# LANGUAGE DeriveGeneric, DeriveAnyClass #-}
 
 -- TODO test nested mappings
 -- loops
@@ -18,6 +19,8 @@ import Prelude hiding  (Word, LT, GT)
 import Data.List (intercalate)
 import Data.DoubleWord
 import Control.Monad
+import GHC.Generics
+import Data.Aeson
 -- import Control.Monad
 import Text.Megaparsec hiding (State)
 import Text.Megaparsec.Char
@@ -74,7 +77,7 @@ data Expr =
   | FromKeccak Expr
   | Pointer1 String Expr
   | Literal Word256
-  | Var String
+  | Var String ECType
   | Sig String Word256
 
   -- sniff
@@ -106,7 +109,7 @@ data Expr =
   | ReadStorage
       Expr          -- key
       Expr          -- storage
-  | Calldata        -- Unknown Calldata
+  -- | Calldata        -- Unknown Calldata
   | SEmpty          -- Unknown Buffer
   | UStorage        -- Unknown Storage
   | Bottom
@@ -124,7 +127,7 @@ data ECType
   | ECTBuffer
   | ECTStorage
   | ECTError
-  deriving (Eq, Ord)
+  deriving (Eq, Ord, Generic, ToJSON)
 
 instance Show ECType where
   show ECTUnknown   = "Unknown"
@@ -138,19 +141,26 @@ instance Show ECType where
 
 -- compact representation for easyper folding and simplification
 data ExprC
-  = EC
-  String              -- name
-  ECType              -- Type
-  [ ExprC ]           -- children
+  = EC {
+  name :: String,              -- name
+  ttype :: ECType,              -- Type
+  children :: [ ExprC ]           -- children
+       }
   | ECTodo String [ExprC]
   | ECLiteral Word256
   | ECPointer1 String ExprC
   | ECVar String ECType
   | ECSig String Word256
-  deriving (Eq)
+  deriving (Eq, Generic, ToJSON)
+
+instance ToJSON Word256 where
+  toJSON p = Number (fromIntegral p)
 
 indent :: String -> String
 indent x = intercalate "\n" $ map ((++) "  ") $ map unpack $ splitOn (pack "\n") (pack x)
+
+-- instance Show ExprC where
+  -- show e = show $ encode e
 
 instance Show ExprC where
   show (ECTodo str cs)       = "todo \"" ++ str ++  "\"\n[" ++ (intercalate "\n," (indent <$> show <$> cs)) ++ "\n]"
@@ -165,7 +175,7 @@ fromExpr :: Expr -> ExprC
 fromExpr (Todo str as)       = ECTodo str (fromExpr <$> as)
 fromExpr (Literal n)         = ECLiteral n
 fromExpr (Pointer1 str a)    = ECPointer1 str (fromExpr a)
-fromExpr (Var w)             = ECVar w (ECTWord 256)
+fromExpr (Var w t)           = ECVar w t
 fromExpr (Sig w s)           = ECSig w s
 fromExpr (Lambda a b)        = EC "Lambda"      ECTUnknown (fromExpr <$> [ a, b ])
 fromExpr (And  a b)          = EC "And"         ECTUnknown (fromExpr <$> [ a, b ])
@@ -198,7 +208,7 @@ fromExpr (WriteWord a b c)   = EC "WriteWord"   ECTBuffer  (fromExpr <$> [ a, b,
 fromExpr (ReadStorage a b)   = EC "ReadStorage" (ECTWord 256) (fromExpr <$> [ a, b ])
 fromExpr (WriteStorage a b c)= EC "WriteStorage"ECTStorage (fromExpr <$> [ a, b, c ])
 fromExpr (Write a b c d e)   = EC "Write"       ECTBuffer  (fromExpr <$> [ a, b, c, d, e ])
-fromExpr (Calldata)          = EC "Calldata"    ECTBuffer  []
+-- fromExpr (Calldata)          = EC "Calldata"    ECTBuffer  []
 fromExpr (SEmpty)            = EC "SEmpty"      ECTBuffer  []
 fromExpr (UStorage)          = EC "UStorage"    ECTStorage []
 fromExpr (Bottom)            = EC "Bottom"      ECTUnknown []
@@ -208,7 +218,7 @@ toExpr :: ExprC -> Expr
 toExpr (ECTodo str as)                        = (Todo str (toExpr <$> as))
 toExpr (ECLiteral n)                          = (Literal n)
 toExpr (ECPointer1 str a)                     = (Pointer1 str (toExpr a))
-toExpr (ECVar w _)                            = (Var w)
+toExpr (ECVar w t)                            = (Var w t)
 toExpr (ECSig w s)                            = (Sig w s)
 toExpr (EC "Lambda"       _ [ a, b ])         = (Lambda (toExpr a) (toExpr b))
 toExpr (EC "And"          _ [ a, b ])         = (And  (toExpr a) (toExpr b))
@@ -241,7 +251,7 @@ toExpr (EC "Slice"        _ [ a, b, c ])      = (Slice (toExpr a) (toExpr b) (to
 toExpr (EC "WriteWord"    _ [ a, b, c ])      = (WriteWord (toExpr a) (toExpr b) (toExpr c))
 toExpr (EC "WriteStorage" _ [ a, b, c ])      = (WriteStorage (toExpr a) (toExpr b) (toExpr c))
 toExpr (EC "Write"        _ [ a, b, c, d, e ])= (Write (toExpr a) (toExpr b) (toExpr c) (toExpr d) (toExpr e))
-toExpr (EC "Calldata"     _ [])               = (Calldata)
+-- toExpr (EC "Calldata"     _ [])               = (Calldata)
 toExpr (EC "SEmpty"       _ [])               = (SEmpty)
 toExpr (EC "UStorage"     _ [])               = (UStorage)
 toExpr (EC "Bottom"       _ [])               = (Bottom)
@@ -311,14 +321,14 @@ instance Show Expr where
       Mod x y         -> sexpr "%"      [x, y]
       Return b s      -> sexpr "return" [b, s]
       IsZero x        -> sexpr "IsZero" [x]
-      Var v           -> sexpr "var"    [v]
+      Var v _         -> sexpr "var"    [v]
       Sig v s         -> sexpr "sig"    [v, showHex s ""]
       Bit a           -> sexpr "bit"    [a]
       Sgn a           -> sexpr "sgn"    [a]
       Sex a           -> sexpr "signextend" [a]
       Neg a           -> sexpr "not"    [a]
       FromKeccak buf  -> sexpr "keccak" [buf]
-      Calldata        -> "CALLDATA"
+      -- Calldata        -> "CALLDATA"
       SEmpty          -> "SEmpty"
       UStorage        -> "UStorage"
       Bottom          -> "Bottom"
@@ -332,8 +342,8 @@ genExpr n
   | n == 0 = oneof $
     [
     -- , liftM Literal (arbitrar
-      pure Calldata -- TODO remove
-    , pure SEmpty
+      -- pure Calldata -- TODO remove
+      pure SEmpty
     , pure Bottom
     , pure UStorage
     ]
@@ -366,7 +376,7 @@ genExpr n
     , liftM2 Return a a
     , liftM2 Pointer1 as a
     -- , liftM2 Sig as arbitrary
-    , liftM Var as
+    -- , liftM Var as
     , liftM IsZero a
     , liftM Neg a
     , liftM Sex a
@@ -418,7 +428,7 @@ pVar = do
   _ <- string "var"
   space
   name <- stringLiteral
-  return $ Var name
+  return $ Var name (ECTUnknown)
 
 pTreToken :: Parser Expr
 pTreToken = do
@@ -486,8 +496,9 @@ pUnToken = do
 
 pZToken :: Parser Expr
 pZToken = choice
-  [ Calldata <$ string "CALLDATA"
-  , SEmpty   <$ string "SEmpty"
+  [ 
+  -- Calldata <$ string "CALLDATA"
+    SEmpty   <$ string "SEmpty"
   , UStorage <$ string "UStorage"
   , Bottom   <$ string "Bottom"]
 

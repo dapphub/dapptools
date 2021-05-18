@@ -41,7 +41,7 @@ import EVM.UnitTest (UnitTestOptions, coverageReport, coverageForUnitTestContrac
 import EVM.UnitTest (runUnitTestContract)
 import EVM.UnitTest (getParametersFromEnvironmentVariables, testNumber)
 import EVM.Dapp (findUnitTests, dappInfo, DappInfo, emptyDapp)
-import EVM.Format (propagateData, currentSolc, showTraceTree, showTree', renderTree, showBranchInfoWithAbi, showPlaneBranchInfo, showLeafInfo)
+import EVM.Format (propagateData, currentSolc, showTraceTree, showTree', renderTree, showPlaneBranchInfo)
 import EVM.RLP (rlpdecode)
 import qualified EVM.Patricia as Patricia
 import Data.Map (Map)
@@ -447,7 +447,7 @@ checkForVMErrors [] = []
 checkForVMErrors (vm:vms) =
   case view EVM.result vm of
     Just (EVM.VMFailure EVM.UnexpectedSymbolicArg) ->
-      ("Unexpected symbolic argument at opcode: "
+      T.trace "error 43" $ ("Unexpected symbolic argument at opcode: "
       <> maybe "??" show (EVM.vmOp vm)
       <> ". Not supported (yet!)"
       ) : checkForVMErrors vms
@@ -501,7 +501,7 @@ assert cmd = do
                 -- renderTree' = renderTree showBranchInfoWithAbi showLeafInfo
                 -- tree'' = propagateData 0 tree
                 -- expr = tree2expr expr
-                in io $ setLocaleEncoding utf8 >> putStrLn (show expr)
+                in io $ setLocaleEncoding utf8 >> putStrLn (show expr'')
                 -- in io $ setLocaleEncoding utf8 >> putStrLn (showTree' (renderTree' tree''))
 
   -- maybesig <- case sig cmd of
@@ -788,7 +788,7 @@ symvmFromCommand cmd = do
     (Nothing, Nothing) -> do
       cd <- sbytes256
       len' <- freshVar_
-      return (SymbolicBuffer Calldata cd, var "CALLDATALENGTH" len', (len' .<= 256, Todo "len < 256" []))
+      return (SymbolicBuffer (Var "AbstractCalldata" ECTBuffer) cd, var "CALLDATALENGTH" len', (len' .<= 256, Todo "len < 256" []))
     -- fully concrete calldata
     (Just c, Nothing) ->
       let cd = ConcreteBuffer (Todo "clicalldata3" []) $ decipher c
@@ -798,7 +798,7 @@ symvmFromCommand cmd = do
       method' <- io $ functionAbi sig'
       let typs = snd <$> view methodInputs method'
       (cd, cdlen) <- symCalldata (view methodSignature method') typs (arg cmd)
-      return (SymbolicBuffer (Todo "cliCalldata4" []) cd, litWord (num cdlen), (sTrue, Todo "" []))
+      return (SymbolicBuffer (Var "cliCalldata4" ECTBuffer) cd, litWord (num cdlen), (sTrue, Todo "" []))
     _ -> error "incompatible options: calldata and abi"
 
   store <- case storageModel cmd of

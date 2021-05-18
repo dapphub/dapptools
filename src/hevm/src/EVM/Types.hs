@@ -182,7 +182,7 @@ instance Show SymWord where
   show s@(S w _) = show w
 
 var :: String -> SWord 256 -> SymWord
-var name x = S (Var name) x
+var name x = S (Var name (ECTWord 256)) x
 -- TODO
 
 -- | Custom instances for SymWord, many of which have direct

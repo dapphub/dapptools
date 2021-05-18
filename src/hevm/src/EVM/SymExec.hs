@@ -160,8 +160,8 @@ doInterpret fetcher maxIter vm = let
 
 
 interpret'' :: Fetch.Fetcher -> Maybe Integer -> VM -> Query Expr
-interpret'' _ Nothing _ = return Bottom
-interpret'' _ (Just 0) _ = return Bottom
+interpret'' _ Nothing _ = return $ Todo "limit" []
+interpret'' _ (Just 0) _ = return $ Todo "limit" []
 interpret'' fetcher (Just maxIter) vm =  let
   cont s = interpret'' fetcher (Just maxIter) $ execState s vm
   in case view EVM.result vm of
@@ -438,10 +438,10 @@ equivalenceCheck bytecodeA bytecodeB maxiter signature' = do
                 aOut ./= bOut .|| aStorage ./= bStorage .|| fromBool (aSelf /= bSelf)
 
               (Just (VMFailure UnexpectedSymbolicArg), _) ->
-                error $ "Unexpected symbolic argument at opcode: " <> maybe "??" show (vmOp a) <> ". Not supported (yet!)"
+                trace "error 32" $ error $ "Unexpected symbolic argument at opcode: " <> maybe "??" show (vmOp a) <> ". Not supported (yet!)"
 
               (_, Just (VMFailure UnexpectedSymbolicArg)) ->
-                error $ "Unexpected symbolic argument at opcode: " <> maybe "??" show (vmOp a) <> ". Not supported (yet!)"
+                trace "error 33" $ error $ "Unexpected symbolic argument at opcode: " <> maybe "??" show (vmOp a) <> ". Not supported (yet!)"
 
               (Just (VMFailure _), Just (VMFailure _)) -> sFalse
 

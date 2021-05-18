@@ -1,4 +1,5 @@
 {-# LANGUAGE DeriveGeneric     #-}
+{-# LANGUAGE ImplicitParams #-}
 {-# Language OverloadedStrings #-}
 
 module Main where
@@ -19,6 +20,9 @@ data Command
   | Interpret {
 
   }
+  | Fix {
+    exprString :: String
+        }
   | Unify {
     exprA :: String,
     exprB :: String
@@ -39,6 +43,12 @@ main = do
         in case pexpr of
         Left err    -> print (show err)
         Right expr  -> print (fromExpr expr)
+    Fix str -> let ?ctx = emptyExprContext in 
+                   let
+        pexpr = parse pScheme "" (pack $ exprString x)
+        in case pexpr of
+        Left err    -> print (show err)
+        Right expr  -> print (fixExpr $ fromExpr expr)
     Unify exprA exprB
       -> print (x :: Command)
     X exprString
