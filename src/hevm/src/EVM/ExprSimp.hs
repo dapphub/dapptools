@@ -55,7 +55,7 @@ inferExpr e@(ECSig _ _)      = e
 
 -- zero children
 inferExpr e@(EC t tt [])
-  | t `elem` [ "Calldata", "SEmpty", "UStorage", "Bottom" ]
+  | t `elem` [ "SEmpty", "UStorage", "Bottom" ]
   = (EC t tt [])
   | otherwise
   = error $ "unknown type found " ++ (show e)
@@ -302,7 +302,7 @@ simpExpr (EC "ITE" ta
       , EC "SHR" _
         [ EC "ReadWord" _
           [ ECLiteral 0
-          , EC "Calldata" _ []]
+          , ECVar "Calldata" _]
         , ECLiteral 0xe0 ] ] ])
   , case_notfound
   , case_found ])
@@ -329,7 +329,7 @@ simpExpr (EC "ITE" ta cs@[EC "Eq" tb [ECVar "signature" (ECTWord 32), ECSig clea
 
 simpExpr e@(EC "ReadWord" ta
   [ ECLiteral offset
-  , EC "Calldata" _ []]) = case (view methodctx ?ctx) of
+  , ECVar "Calldata" _]) = case (view methodctx ?ctx) of
   Nothing     -> e
   Just method -> let
     inputs = view methodInputs method
@@ -449,7 +449,9 @@ simpExpr (EC "ITE" _
     , b
     ])
 simpExpr (EC "IsZero" _ [EC "IsZero" _ [e@(EC "IsZero" _ _)]])
-  = e
+  = simpExpr e
+simpExpr (EC "IsZero" _ [EC "IsZero" _ [e@(EC _ ECTBool _)]])
+  = simpExpr e
 
 -- fold default cases
 simpExpr (EC t tt cs)               = EC t  tt (simpExpr <$> cs)

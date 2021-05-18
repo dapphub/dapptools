@@ -448,7 +448,7 @@ checkForVMErrors [] = []
 checkForVMErrors (vm:vms) =
   case view EVM.result vm of
     Just (EVM.VMFailure EVM.UnexpectedSymbolicArg) ->
-      T.trace "error 43" $ ("Unexpected symbolic argument at opcode: "
+      ("Unexpected symbolic argument at opcode: "
       <> maybe "??" show (EVM.vmOp vm)
       <> ". Not supported (yet!)"
       ) : checkForVMErrors vms
@@ -553,7 +553,7 @@ assert cmd = do
         --             "Reverted: " <> show (ByteStringS msg)
         --           Just (EVM.VMFailure err) -> io . putStrLn $
         --             "Failed: " <> show err
-        --           Just (EVM.VMSuccess (ConcreteBuffer _ msg)) ->
+       --           Just (EVM.VMSuccess (ConcreteBuffer _ msg)) ->
         --             if ByteString.null msg
         --             then io $ putStrLn
         --               "Stopped"
@@ -792,7 +792,7 @@ symvmFromCommand cmd = do
     (Nothing, Nothing) -> do
       cd <- sbytes256
       len' <- freshVar_
-      return (SymbolicBuffer (Var "AbstractCalldata" ECTBuffer) cd, var "CALLDATALENGTH" len', (len' .<= 256, Todo "len < 256" []))
+      return (SymbolicBuffer (Var "Calldata" ECTBuffer) cd, var "CALLDATALENGTH" len', (len' .<= 256, Todo "len < 256" []))
     -- fully concrete calldata
     (Just c, Nothing) ->
       let cd = ConcreteBuffer (Todo "clicalldata3" []) $ decipher c

@@ -964,11 +964,6 @@ exec1 = do
                   assign (state . stack) (view (word256At (num x)) mem : xs)
             _ -> underrun
 
-
--- forceConcrete :: HasCallStack => SymWord -> (Word -> EVM ()) -> EVM ()
--- forceConcrete n continue = case maybeLitWord n of
---   Nothing -> traceStack (prettyCallStack callStack) $ vmError UnexpectedSymbolicArg
---   Just c -> continue c
         -- op: MSTORE
         0x52 ->
           case stk of
@@ -1839,7 +1834,7 @@ burn n' continue =
 
 forceConcreteAddr :: SAddr -> (Addr -> EVM ()) -> EVM ()
 forceConcreteAddr n continue = case maybeLitAddr n of
-  Nothing -> trace "error 3" $ vmError UnexpectedSymbolicArg
+  Nothing -> vmError UnexpectedSymbolicArg
   Just c -> continue c
 
 forceConcrete :: HasCallStack => SymWord -> (Word -> EVM ()) -> EVM ()
@@ -1850,31 +1845,31 @@ forceConcrete n continue = case maybeLitWord n of
 forceConcrete2 :: (SymWord, SymWord) -> ((Word, Word) -> EVM ()) -> EVM ()
 forceConcrete2 (n,m) continue = case (maybeLitWord n, maybeLitWord m) of
   (Just c, Just d) -> continue (c, d)
-  _ -> trace "error 5" $ vmError UnexpectedSymbolicArg
+  _ -> vmError UnexpectedSymbolicArg
 
 forceConcrete3 :: (SymWord, SymWord, SymWord) -> ((Word, Word, Word) -> EVM ()) -> EVM ()
 forceConcrete3 (k,n,m) continue = case (maybeLitWord k, maybeLitWord n, maybeLitWord m) of
   (Just c, Just d, Just f) -> continue (c, d, f)
-  _ -> trace "error 6" $ vmError UnexpectedSymbolicArg
+  _ -> vmError UnexpectedSymbolicArg
 
 forceConcrete4 :: (SymWord, SymWord, SymWord, SymWord) -> ((Word, Word, Word, Word) -> EVM ()) -> EVM ()
 forceConcrete4 (k,l,n,m) continue = case (maybeLitWord k, maybeLitWord l, maybeLitWord n, maybeLitWord m) of
   (Just b, Just c, Just d, Just f) -> continue (b, c, d, f)
-  _ -> trace "error 7" $ vmError UnexpectedSymbolicArg
+  _ -> vmError UnexpectedSymbolicArg
 
 forceConcrete5 :: (SymWord, SymWord, SymWord, SymWord, SymWord) -> ((Word, Word, Word, Word, Word) -> EVM ()) -> EVM ()
 forceConcrete5 (k,l,m,n,o) continue = case (maybeLitWord k, maybeLitWord l, maybeLitWord m, maybeLitWord n, maybeLitWord o) of
   (Just a, Just b, Just c, Just d, Just e) -> continue (a, b, c, d, e)
-  _ -> trace "error 8" $ vmError UnexpectedSymbolicArg
+  _ -> vmError UnexpectedSymbolicArg
 
 forceConcrete6 :: (SymWord, SymWord, SymWord, SymWord, SymWord, SymWord) -> ((Word, Word, Word, Word, Word, Word) -> EVM ()) -> EVM ()
 forceConcrete6 (k,l,m,n,o,p) continue = case (maybeLitWord k, maybeLitWord l, maybeLitWord m, maybeLitWord n, maybeLitWord o, maybeLitWord p) of
   (Just a, Just b, Just c, Just d, Just e, Just f) -> continue (a, b, c, d, e, f)
-  _ -> trace "error 9" $ vmError UnexpectedSymbolicArg
+  _ -> vmError UnexpectedSymbolicArg
 
 forceConcreteBuffer :: Buffer -> (ByteString -> EVM ()) -> EVM ()
 forceConcreteBuffer (SymbolicBuffer _ b) continue = case maybeLitBytes b of
-  Nothing -> trace "error 10" $ vmError UnexpectedSymbolicArg
+  Nothing -> vmError UnexpectedSymbolicArg
   Just bs -> continue bs
 forceConcreteBuffer (ConcreteBuffer _ b) continue = continue b
 
@@ -1946,7 +1941,7 @@ cheat (inOffset, inSize) (outOffset, outSize) = do
     abi = readMemoryWord32 inOffset mem
     input = readMemory (inOffset + 4) (inSize - 4) vm
   case fromSized <$> unliteral abi of
-    Nothing -> trace "error 11" $ vmError UnexpectedSymbolicArg
+    Nothing -> vmError UnexpectedSymbolicArg
     Just abi' ->
       case Map.lookup abi' cheatActions of
         Nothing ->
