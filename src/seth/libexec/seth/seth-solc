@@ -32,7 +32,9 @@ JSON="${DAPP_SOLC_JSON:-$(jq -n '{}
 # we have what hevm wants
 JSON="$(<<<"$JSON" jq '.
   | .settings.outputSelection["*"]["*"]=[
+      "metadata",
       "evm.bytecode",
+      "evm.deployedBytecode",
       "abi",
       "storageLayout",
       "evm.bytecode.sourceMap",
@@ -40,7 +42,8 @@ JSON="$(<<<"$JSON" jq '.
       "evm.bytecode.generatedSources",
       "evm.deployedBytecode.sourceMap",
       "evm.deployedBytecode.linkReferences",
-      "evm.deployedBytecode.generatedSources"
+      "evm.deployedBytecode.generatedSources",
+      "evm.deployedBytecode.immutableReferences"
     ]
   | .settings.outputSelection["*"][""] = ["ast"]
   ')"

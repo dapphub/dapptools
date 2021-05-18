@@ -76,7 +76,8 @@ tmpljson["settings"]["outputSelection"]["*"]["*"]=[
     "evm.bytecode.generatedSources",
     "evm.deployedBytecode.sourceMap",
     "evm.deployedBytecode.linkReferences",
-    "evm.deployedBytecode.generatedSources"
+    "evm.deployedBytecode.generatedSources",
+    "evm.deployedBytecode.immutableReferences"
     ]
 
 tmpljson["settings"]["outputSelection"]["*"][""] = ["ast"]

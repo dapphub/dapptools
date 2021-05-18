@@ -8,15 +8,13 @@ import EVM.FeeSchedule
 import EVM.Precompiled (execute)
 import EVM.RLP
 import EVM.Symbolic (forceLit)
-import EVM.Types (keccak)
 import EVM.Types
 
 import Control.Lens
 
 import Data.Aeson (FromJSON (..))
 import Data.ByteString (ByteString)
-import Data.Map (Map, keys)
-import Data.Set (fromList)
+import Data.Map (Map)
 import Data.Maybe (fromMaybe, isNothing, isJust)
 
 import qualified Data.Aeson        as JSON

@@ -16,6 +16,7 @@ module EVM.Solidity
   , CodeType (..)
   , Method (..)
   , SlotType (..)
+  , Reference(..)
   , methodName
   , methodSignature
   , methodInputs
@@ -59,7 +60,8 @@ import Data.SBV
 import Control.Applicative
 import Control.Monad
 import Control.Lens         hiding (Indexed, (.=))
-import Data.Aeson           (Value (..), ToJSON(..), (.=), object, encode)
+import Data.Aeson hiding (json)
+import Data.Aeson.Types
 import Data.Aeson.Lens
 import Data.Scientific
 import Data.ByteString      (ByteString)
@@ -76,7 +78,6 @@ import Data.Text            (Text, pack, intercalate)
 import Data.Text.Encoding   (encodeUtf8, decodeUtf8)
 import Data.Text.IO         (readFile, writeFile)
 import Data.Vector          (Vector)
-import Data.Word
 import GHC.Generics         (Generic)
 import Prelude hiding       (readFile, writeFile)
 import System.IO hiding     (readFile, writeFile)
@@ -105,6 +106,11 @@ data SlotType
   | StorageValue AbiType
 --  | StorageArray AbiType
   deriving Eq
+
+data Code = Code
+  { rawCode :: ByteString,
+    immutRefs :: Map W256 [Reference]
+  } deriving Show
 
 instance Show SlotType where
  show (StorageValue t) = show t
@@ -136,6 +142,7 @@ data SolcContract = SolcContract
   , _constructorInputs :: [(Text, AbiType)]
   , _abiMap           :: Map Word32 Method
   , _eventMap         :: Map W256 Event
+  , _immutableReferences :: Map W256 [Reference]
   , _storageLayout    :: Maybe (Map Text StorageItem)
   , _runtimeSrcmap    :: Seq SrcMap
   , _creationSrcmap   :: Seq SrcMap
@@ -149,10 +156,22 @@ data Method = Method
   } deriving (Show, Eq, Ord, Generic)
 
 data SourceCache = SourceCache
-  { _sourceFiles  :: Map Int (Text, ByteString)
-  , _sourceLines  :: Map Int (Vector ByteString)
+  { _sourceFiles  :: [(Text, ByteString)]
+  , _sourceLines  :: [(Vector ByteString)]
   , _sourceAsts   :: Map Text Value
   } deriving (Show, Eq, Generic)
+
+data Reference = Reference
+  { _refStart :: Int,
+    _refLength :: Int
+  } deriving (Show, Eq)
+
+instance FromJSON Reference where
+  parseJSON (Object v) = Reference
+    <$> v .: "start"
+    <*> v .: "length"
+  parseJSON invalid =
+    typeMismatch "Transaction" invalid
 
 instance Semigroup SourceCache where
   _ <> _ = error "lol"
@@ -241,13 +260,9 @@ makeSourceCache paths asts = do
       f (fp, Nothing) = BS.readFile $ Text.unpack fp
   xs <- mapM f paths
   return $! SourceCache
-    { _sourceFiles =
-        Map.fromList (zip [0..] (zip (fst <$> paths) xs))
-    , _sourceLines =
-        Map.fromList (zip [0 .. length paths - 1]
-                       (map (Vector.fromList . BS.split 0xa) xs))
-    , _sourceAsts =
-        asts
+    { _sourceFiles = zip (fst <$> paths) xs
+    , _sourceLines = map (Vector.fromList . BS.split 0xa) xs
+    , _sourceAsts  = asts
     }
 
 lineSubrange ::
@@ -299,6 +314,7 @@ readJSON json = case json ^? key "sourceList" of
   Nothing -> readStdJSON json
   _ -> readCombinedJSON json
 
+-- deprecate me soon
 readCombinedJSON :: Text -> Maybe (Map Text SolcContract, Map Text Value, [(Text, Maybe ByteString)])
 readCombinedJSON json = do
   contracts <- f <$> (json ^? key "contracts" . _Object)
@@ -324,7 +340,8 @@ readCombinedJSON json = do
         _constructorInputs = mkConstructor abis,
         _abiMap       = mkAbiMap abis,
         _eventMap     = mkEventMap abis,
-        _storageLayout = mkStorageLayout $ x ^? key "storage-layout" . _String
+        _storageLayout = mkStorageLayout $ x ^? key "storage-layout" . _String,
+        _immutableReferences = mempty -- TODO: deprecate combined-json
       }
 
 readStdJSON :: Text -> Maybe (Map Text SolcContract, Map Text Value, [(Text, Maybe ByteString)])
@@ -340,13 +357,14 @@ readStdJSON json = do
     f :: (AsValue s) => HMap.HashMap Text s -> (Map Text (SolcContract, (HMap.HashMap Text Text)))
     f x = Map.fromList . (concatMap g) . HMap.toList $ x
     g (s, x) = h s <$> HMap.toList (view _Object x)
+    h :: Text -> (Text, Value) -> (Text, (SolcContract, HMap.HashMap Text Text))
     h s (c, x) = 
       let
         evmstuff = x ^?! key "evm"
         runtime = evmstuff ^?! key "deployedBytecode"
         creation =  evmstuff ^?! key "bytecode"
-        theRuntimeCode = toCode $ runtime ^?! key "object" . _String
-        theCreationCode = toCode $ creation ^?! key "object" . _String
+        theRuntimeCode = toCode $ fromMaybe "" $ runtime ^? key "object" . _String
+        theCreationCode = toCode $ fromMaybe "" $ creation ^? key "object" . _String
         srcContents :: Maybe (HMap.HashMap Text Text)
         srcContents = do metadata <- x ^? key "metadata" . _String
                          srcs <- metadata ^? key "sources" . _Object
@@ -364,7 +382,12 @@ readStdJSON json = do
         _constructorInputs = mkConstructor abis,
         _abiMap        = mkAbiMap abis,
         _eventMap      = mkEventMap abis,
-        _storageLayout = mkStorageLayout $ x ^? key "storage-layout" . _String
+        _storageLayout = mkStorageLayout $ x ^? key "storage-layout" . _String,
+        _immutableReferences = fromMaybe mempty $
+          do x' <- runtime ^? key "immutableReferences"
+             case fromJSON x' of
+               Success a -> return a
+               _ -> Nothing
       }, fromMaybe mempty srcContents))
 
 mkAbiMap :: [Value] -> Map Word32 Method
@@ -502,7 +525,8 @@ instance ToJSON StandardJSON where
                                "evm.bytecode.generatedSources",
                                "evm.deployedBytecode.sourceMap",
                                "evm.deployedBytecode.linkReferences",
-                               "evm.deployedBytecode.generatedSources"
+                               "evm.deployedBytecode.generatedSources",
+                               "evm.deployedBytecode.immutableReferences"
                               ]),
                               "" .= (toJSON ["ast" :: String])
                              ]

@@ -13,7 +13,7 @@ import Brick.Widgets.List
 import EVM
 import EVM.ABI (abiTypeSolidity, decodeAbiValue, AbiType(..), emptyAbi)
 import EVM.SymExec (maxIterationsReached, symCalldata)
-import EVM.Dapp (DappInfo, dappInfo, Test, extractSig, Test(..))
+import EVM.Dapp (DappInfo, dappInfo, Test, extractSig, Test(..), srcMap)
 import EVM.Dapp (dappUnitTests, unitTestMethods, dappSolcByName, dappSolcByHash, dappSources)
 import EVM.Dapp (dappAstSrcMap)
 import EVM.Debug
@@ -853,13 +853,8 @@ currentSrcMap dapp vm = do
   this <- currentContract vm
   let
     i = (view opIxMap this) SVec.! (view (state . pc) vm)
-    h = view codehash this
-  srcmap <- preview (dappSolcByHash . ix h) dapp
-  case srcmap of
-    (Creation, sol) ->
-      preview (creationSrcmap . ix i) sol
-    (Runtime, sol) ->
-      preview (runtimeSrcmap . ix i) sol
+    h = view contractcode this
+  srcMap dapp h i
 
 drawStackPane :: UiVmState -> UiWidget
 drawStackPane ui =
@@ -974,14 +969,13 @@ solidityList vm dapp' =
 drawSolidityPane :: UiVmState -> UiWidget
 drawSolidityPane ui =
   let dapp' = dapp (view uiTestOpts ui)
+      dappSrcs = view dappSources dapp'
       vm = view uiVm ui
   in case currentSrcMap dapp' vm of
     Nothing -> padBottom Max (hBorderWithLabel (txt "<no source map>"))
     Just sm ->
-      case view (dappSources . sourceLines . at (srcMapFile sm)) dapp' of
-        Nothing -> padBottom Max (hBorderWithLabel (txt "<source not found>"))
-        Just rows ->
           let
+            rows = (_sourceLines dappSrcs) !! srcMapFile sm
             subrange = lineSubrange rows (srcMapOffset sm, srcMapLength sm)
             fileName :: Maybe Text
             fileName = preview (dappSources . sourceFiles . ix (srcMapFile sm) . _1) dapp'

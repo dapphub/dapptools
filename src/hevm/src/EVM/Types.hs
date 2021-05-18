@@ -9,7 +9,6 @@ module EVM.Types where
 
 import Prelude hiding  (Word, LT, GT)
 
-import Data.Aeson (FromJSONKey (..), FromJSONKeyFunction (..))
 import Data.Aeson
 import Crypto.Hash
 import Data.SBV hiding (Word)
