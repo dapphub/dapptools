@@ -38,6 +38,7 @@ if os.getenv('DAPP_VERIFY_CONTRACT_MULTIPLE') == "yes":
             tmpljson["sources"][f]["content"] = [content.read()]
 else:
     for f in files:
+        tmpljson["sources"][f]={}
         tmpljson["sources"][f]["urls"] = [f]
 
 if os.getenv('DAPP_REMAPPINGS') is None or os.getenv('DAPP_REMAPPINGS') == "":
