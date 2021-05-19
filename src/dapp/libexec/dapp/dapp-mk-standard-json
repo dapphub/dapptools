@@ -27,12 +27,17 @@ for root, dirnames, filenames in os.walk(src):
         files.append(os.path.join(root, filename))
 
 tmpljson["sources"]={}
-for f in files:
-    tmpljson["sources"][f]={}
-    if os.getenv('DAPP_VERIFY_CONTRACT_MULTIPLE') == "yes":
-        content = open(f, "r");
-        tmpljson["sources"][f]["content"] = [content.read()]
-    else:
+
+if os.getenv('DAPP_VERIFY_CONTRACT_MULTIPLE') == "yes":
+    for f in files:
+        if f.endswith(".t.sol"):
+            continue
+        else:
+            tmpljson["sources"][f]={}
+            content = open(f, "r");
+            tmpljson["sources"][f]["content"] = [content.read()]
+else:
+    for f in files:
         tmpljson["sources"][f]["urls"] = [f]
 
 if os.getenv('DAPP_REMAPPINGS') is None or os.getenv('DAPP_REMAPPINGS') == "":
