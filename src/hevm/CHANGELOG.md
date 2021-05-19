@@ -1,5 +1,11 @@
 # hevm changelog
 
+## unreleased
+
+### Added
+
+Can now identify contracts with `immutable` by comparing bytecode modulo immutableReferences
+
 ## 0.46.0 - 2021-04-29
 
 ### Added
