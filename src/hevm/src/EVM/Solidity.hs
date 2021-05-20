@@ -107,11 +107,6 @@ data SlotType
 --  | StorageArray AbiType
   deriving Eq
 
-data Code = Code
-  { rawCode :: ByteString,
-    immutRefs :: Map W256 [Reference]
-  } deriving Show
-
 instance Show SlotType where
  show (StorageValue t) = show t
  show (StorageMapping s t) =
