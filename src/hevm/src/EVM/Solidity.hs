@@ -353,7 +353,7 @@ readStdJSON json = do
     f x = Map.fromList . (concatMap g) . HMap.toList $ x
     g (s, x) = h s <$> HMap.toList (view _Object x)
     h :: Text -> (Text, Value) -> (Text, (SolcContract, HMap.HashMap Text Text))
-    h s (c, x) = 
+    h s (c, x) =
       let
         evmstuff = x ^?! key "evm"
         runtime = evmstuff ^?! key "deployedBytecode"
@@ -377,7 +377,7 @@ readStdJSON json = do
         _constructorInputs = mkConstructor abis,
         _abiMap        = mkAbiMap abis,
         _eventMap      = mkEventMap abis,
-        _storageLayout = mkStorageLayout $ x ^? key "storage-layout" . _String,
+        _storageLayout = mkStorageLayout $ x ^? key "storageLayout" . _String,
         _immutableReferences = fromMaybe mempty $
           do x' <- runtime ^? key "immutableReferences"
              case fromJSON x' of
@@ -508,7 +508,7 @@ instance ToJSON StandardJSON where
                                    object ["content" .= src]]
            , "settings" .=
              object [ "outputSelection" .=
-                    object ["*" .= 
+                    object ["*" .=
                       object ["*" .= (toJSON
                               ["metadata" :: String,
                                "evm.bytecode",
@@ -528,7 +528,7 @@ instance ToJSON StandardJSON where
                             ]
                     ]
            ]
-                               
+
 stdjson :: Language -> Text -> Text
 stdjson lang src = decodeUtf8 $ toStrict $ encode $ StandardJSON lang src
 
