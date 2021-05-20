@@ -215,6 +215,8 @@ interpret fetcher maxIter =
           exec >>= interpret fetcher maxIter . k
         Stepper.Run ->
           run >>= interpret fetcher maxIter . k
+        Stepper.IOAct q ->
+          mapStateT io q >>= interpret fetcher maxIter . k
         Stepper.Ask (EVM.PleaseChoosePath _ continue) -> do
           vm <- get
           case maxIterationsReached vm maxIter of

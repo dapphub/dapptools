@@ -247,6 +247,8 @@ interpretWithTrace fetcher =
              State.state (runState m) >> interpretWithTrace fetcher (k ())
         EVM.Stepper.Ask _ ->
           error "cannot make choices with this interpretWithTraceer"
+        EVM.Stepper.IOAct m ->
+          m >>= interpretWithTrace fetcher . k
         EVM.Stepper.EVM m -> do
           r <- State.state (runState m)
           interpretWithTrace fetcher (k r)
