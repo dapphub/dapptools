@@ -3,11 +3,11 @@
 
 module EVM.Dapp where
 
-import EVM (Trace, traceCode, traceOpIx, Env, ContractCode(..))
+import EVM (Trace, traceCode, traceOpIx, Env, ContractCode(..), Contract)
 import EVM.ABI (Event, AbiType)
 import EVM.Debug (srcMapCodePos)
 import EVM.Solidity
-import EVM.Types (W256, abiKeccak, keccak, Buffer(..))
+import EVM.Types (W256, abiKeccak, keccak, Buffer(..), Addr)
 import EVM.Concrete
 
 import Data.ByteString (ByteString)
@@ -52,10 +52,10 @@ data Code =
 
 data DappContext = DappContext
   { _contextInfo :: DappInfo
-  , _contextEnv  :: Env
+  , _contextEnv  :: Map Addr Contract
   }
 
-data Test = ConcreteTest Text | SymbolicTest Text
+data Test = ConcreteTest Text | SymbolicTest Text | ExploreTest Text
 
 makeLenses ''DappInfo
 makeLenses ''DappContext
@@ -111,12 +111,13 @@ unitTestMarkerAbi :: Word32
 unitTestMarkerAbi = abiKeccak (encodeUtf8 "IS_TEST()")
 
 findAllUnitTests :: [SolcContract] -> [(Text, [(Test, [AbiType])])]
-findAllUnitTests = findUnitTests ".*:.*\\.(test|prove).*"
+findAllUnitTests = findUnitTests ".*:.*\\.(test|prove|invariant).*"
 
 mkTest :: Text -> Maybe Test
 mkTest sig
   | "test" `isPrefixOf` sig = Just (ConcreteTest sig)
   | "prove" `isPrefixOf` sig = Just (SymbolicTest sig)
+  | "invariant" `isPrefixOf` sig = Just (ExploreTest sig)
   | otherwise = Nothing
 
 regexMatches :: Text -> Text -> Bool
@@ -157,6 +158,7 @@ unitTestMethods =
 extractSig :: Test -> Text
 extractSig (ConcreteTest sig) = sig
 extractSig (SymbolicTest sig) = sig
+extractSig (ExploreTest  sig) = sig
 
 traceSrcMap :: DappInfo -> Trace -> Maybe SrcMap
 traceSrcMap dapp trace =

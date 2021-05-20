@@ -84,7 +84,7 @@ showAbiValue (AbiBytes _ bs) =
   formatBytes bs  -- opportunistically decodes recognisable strings
 showAbiValue (AbiAddress addr) =
   let dappinfo = view contextInfo ?context
-      contracts = view (contextEnv . EVM.contracts) ?context
+      contracts = view contextEnv ?context
       name = case (Map.lookup addr contracts) of
         Nothing -> ""
         Just contract ->
@@ -175,7 +175,7 @@ unindexed ts = [t | (t, NotIndexed) <- ts]
 
 showTrace :: DappInfo -> VM -> Trace -> Text
 showTrace dapp vm trace =
-  let ?context = DappContext { _contextInfo = dapp, _contextEnv = vm ^?! EVM.env }
+  let ?context = DappContext { _contextInfo = dapp, _contextEnv = vm ^?! EVM.env . EVM.contracts }
   in let
     pos =
       case showTraceLocation dapp trace of
@@ -420,7 +420,7 @@ showStorage = fmap (\(k, v) -> show k <> " => " <> show v)
 
 showLeafInfo :: DappInfo -> BranchInfo -> [String]
 showLeafInfo srcInfo (BranchInfo vm _) = let
-  ?context = DappContext { _contextInfo = srcInfo, _contextEnv = vm ^?! EVM.env }
+  ?context = DappContext { _contextInfo = srcInfo, _contextEnv = vm ^?! EVM.env . EVM.contracts }
   in let
   self    = view (EVM.state . EVM.contract) vm
   updates = case view (EVM.env . EVM.contracts) vm ^?! ix self . EVM.storage of

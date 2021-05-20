@@ -180,6 +180,10 @@ interpret mode =
           do m <- liftIO (?fetcher q)
              interpret mode (Stepper.evm m >>= k)
 
+        -- Stepper wants to make a query and wait for the results?
+        Stepper.IOAct q -> do
+          zoom uiVm (StateT (runStateT q)) >>= interpret mode . k
+
         -- Stepper wants to modify the VM.
         Stepper.EVM m -> do
           vm <- use uiVm
@@ -235,6 +239,7 @@ runFromVM maxIter' dappinfo oracle' vm = do
       , smtTimeout        = Nothing
       , smtState          = Nothing
       , solver            = Nothing
+      , maxDepth          = Nothing
       , match             = ""
       , fuzzRuns          = 1
       , replay            = error "irrelevant"
@@ -274,6 +279,7 @@ isFuzzTest :: (Test, [AbiType]) -> Bool
 isFuzzTest (SymbolicTest _, _) = False
 isFuzzTest (ConcreteTest _, []) = False
 isFuzzTest (ConcreteTest _, _) = True
+isFuzzTest (ExploreTest _, _) = False -- testing...
 
 main :: UnitTestOptions -> FilePath -> FilePath -> IO ()
 main opts root jsonFilePath =
@@ -631,7 +637,9 @@ initialUiVmStateForTest opts@UnitTestOptions{..} (theContractName, theTestName) 
             void (runUnitTest opts theTestName args)
           SymbolicTest _ -> do
             Stepper.evm $ modify symbolify
-            void (execSymTest opts theTestName (SymbolicBuffer buf, w256lit len)) -- S (Literal $ num len) (literal $ num len)))
+            void (execSymTest opts theTestName (SymbolicBuffer buf, w256lit len)) -- S (Literal $
+          ExploreTest _ -> do
+            void $ explorationStepper opts theTestName (fromMaybe 20 maxDepth)
   pure $ initUiVmState vm0 opts script
   where
     Just (test, types) = find (\(test',_) -> extractSig test' == theTestName) $ unitTestMethods testContract
@@ -979,11 +987,12 @@ drawSolidityPane ui =
             subrange = lineSubrange rows (srcMapOffset sm, srcMapLength sm)
             fileName :: Maybe Text
             fileName = preview (dappSources . sourceFiles . ix (srcMapFile sm) . _1) dapp'
-            lineNo =
-              (snd . fromJust $
+            lineNo :: Maybe Int
+            lineNo = maybe Nothing (\a -> Just (a - 1))
+              (snd <$>
                 (srcMapCodePos
                  (view dappSources dapp')
-                 sm)) - 1
+                 sm))
           in vBox
             [ hBorderWithLabel $
                 txt (fromMaybe "<unknown>" fileName)
@@ -1008,7 +1017,7 @@ drawSolidityPane ui =
                                   , withHighlight False (txt z)
                                   ])
                 False
-                (listMoveTo lineNo
+                ((maybe id listMoveTo lineNo)
                   (solidityList vm dapp'))
             ]
 

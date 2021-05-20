@@ -11,6 +11,7 @@ module EVM.Stepper
   , wait
   , ask
   , evm
+  , evmIO
   , entering
   , enter
   , interpret
@@ -57,6 +58,9 @@ data Action a where
   -- | Embed a VM state transformation
   EVM  :: EVM a   -> Action a
 
+  -- | Perform an IO action
+  IOAct :: StateT VM IO a -> Action a -- they should all just be this?
+
 -- | Type alias for an operational monad of @Action@
 type Stepper a = Program Action a
 
@@ -76,6 +80,9 @@ ask = singleton . Ask
 
 evm :: EVM a -> Stepper a
 evm = singleton . EVM
+
+evmIO :: StateT VM IO a -> Stepper a
+evmIO = singleton . IOAct
 
 -- | Run the VM until final result, resolving all queries
 execFully :: Stepper (Either Error Buffer)
@@ -136,6 +143,8 @@ interpret fetcher =
              State.state (runState m) >> interpret fetcher (k ())
         Ask _ ->
           error "cannot make choices with this interpreter"
+        IOAct m ->
+          do m >>= interpret fetcher . k
         EVM m -> do
           r <- State.state (runState m)
           interpret fetcher (k r)

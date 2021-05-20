@@ -26,7 +26,7 @@ import EVM.Stepper (Stepper, interpret)
 import qualified EVM.Stepper as Stepper
 import qualified Control.Monad.Operational as Operational
 
-import Control.Lens hiding (Indexed)
+import Control.Lens hiding (Indexed, elements)
 import Control.Monad.State.Strict hiding (state)
 import qualified Control.Monad.State.Strict as State
 
@@ -44,7 +44,7 @@ import Data.Decimal       (DecimalRaw(..))
 import Data.Either        (isRight, lefts)
 import Data.Foldable      (toList)
 import Data.Map           (Map)
-import Data.Maybe         (fromMaybe, catMaybes, fromJust, isJust, fromMaybe, mapMaybe)
+import Data.Maybe         (fromMaybe, catMaybes, fromJust, isJust, fromMaybe, mapMaybe, isNothing)
 import Data.Text          (isPrefixOf, stripSuffix, intercalate, Text, pack, unpack)
 import Data.Text.Encoding (encodeUtf8)
 import System.Environment (lookupEnv)
@@ -72,6 +72,7 @@ data UnitTestOptions = UnitTestOptions
   { oracle     :: EVM.Query -> IO (EVM ())
   , verbose    :: Maybe Int
   , maxIter    :: Maybe Integer
+  , maxDepth   :: Maybe Int
   , smtTimeout :: Maybe Integer
   , smtState   :: Maybe SBV.State
   , solver     :: Maybe Text
@@ -158,11 +159,11 @@ initializeUnitTest UnitTestOptions { .. } theContract = do
 -- will run the specified test method and return whether it succeeded.
 runUnitTest :: UnitTestOptions -> ABIMethod -> AbiValue -> Stepper Bool
 runUnitTest a method args = do
-  x <- execTest a method args
+  x <- execTestStepper a method args
   checkFailures a method x
 
-execTest :: UnitTestOptions -> ABIMethod -> AbiValue -> Stepper Bool
-execTest UnitTestOptions { .. } method args = do
+execTestStepper :: UnitTestOptions -> ABIMethod -> AbiValue -> Stepper Bool
+execTestStepper UnitTestOptions { .. } method args = do
   -- Set up the call to the test method
   Stepper.evm $ do
     abiCall testParams method args
@@ -264,6 +265,8 @@ interpretWithCoverage opts =
              zoom _1 (State.state (runState m)) >> interpretWithCoverage opts (k ())
         Stepper.Ask _ ->
           error "cannot make choice in this interpreter"
+        Stepper.IOAct q ->
+          zoom _1 (StateT (runStateT q)) >>= interpretWithCoverage opts . k
         Stepper.EVM m ->
           zoom _1 (State.state (runState m)) >>= interpretWithCoverage opts . k
 
@@ -422,15 +425,68 @@ runTest opts@UnitTestOptions{..} vm (ConcreteTest testName, types) = liftIO $ ca
       decodeAbiValue (AbiTupleType (Vector.fromList types)) callData
     else fuzzRun opts vm testName types
 runTest opts vm (SymbolicTest testName, types) = symRun opts vm testName types
+runTest opts vm (ExploreTest testName, []) = liftIO $ exploreRun opts vm testName
+runTest opts vm (ExploreTest testName, _) = error "this is cool, I can't think of why you would want this"
 
+explorationStepper :: UnitTestOptions -> ABIMethod -> Int -> Stepper Bool
+explorationStepper opts@UnitTestOptions{..} testName 0 = return True
+explorationStepper opts@UnitTestOptions{..} testName i = do
+ (target, args, types, sig) <- Stepper.evmIO $ do
+    vm <- get
+    let cs = Map.toList $ view (env . contracts) vm
+        knownAbis :: Map Addr SolcContract
+        knownAbis =
+          -- exclude testing abis
+          Map.filter (isNothing . preview (abiMap . ix unitTestMarkerAbi)) $
+          -- pick all contracts with known compiler artifacts
+          fmap fromJust (Map.filter isJust $ Map.fromList [(addr, lookupCode (view contractcode c) dapp) | (addr, c)  <- cs])
+    -- go to IO and generate a random valid call to any known contract
+    liftIO $ do
+      (target, solcInfo) <- generate $ elements (Map.toList knownAbis)
+      (_, (Method _ inputs sig _)) <- generate (elements $ Map.toList $ view abiMap solcInfo)
+      let types = snd <$> inputs
+      args <- generate $ genAbiValue (AbiTupleType $ Vector.fromList types)
+      return (target, args, types, sig)
+ let opts' = opts { testParams = testParams {testAddress = target }}
+ -- perform the call
+ bailed <- execTestStepper opts' (sig <> "(" <> intercalate "," ((pack . show) <$> types) <> ")") args
+ Stepper.evm popTrace
+ let carryOn = explorationStepper opts testName (i - 1)
+ -- if we didn't revert, run the test function
+ if bailed
+ then carryOn
+ else
+   do x <- runUnitTest opts testName emptyAbi
+      if x
+      then carryOn
+      else pure False
+
+exploreRun :: UnitTestOptions -> VM -> ABIMethod -> IO (Text, Either Text Text, VM)
+exploreRun opts@UnitTestOptions{..} initialVm testName =
+  let depth = fromMaybe 20 maxDepth
+  in do
+  (x, vm') <- foldM (\last _ ->
+                       if fst last
+                       then runStateT (EVM.Stepper.interpret oracle (explorationStepper opts testName depth)) initialVm
+                       else pure last)
+                (True, initialVm)  -- no canonical "post vm"
+                [0..fuzzRuns]
+  if x
+  then return ("\x1b[32m[PASS]\x1b[0m " <> testName <>  " (runs: " <> (pack $ show fuzzRuns) <>", depth: " <> pack (show depth) <> ")",
+               Right (passOutput vm' opts testName), vm') -- no canonical "post vm"
+  else return ("\x1b[31m[FAIL]\x1b[0m " <> testName, Left  (failOutput vm' opts testName), vm')
+
+execTest :: UnitTestOptions -> VM -> ABIMethod -> AbiValue -> IO (Bool, VM)
+execTest opts@UnitTestOptions{..} vm testName args =
+  runStateT
+    (EVM.Stepper.interpret oracle (execTestStepper opts testName args))
+    vm
+  
 -- | Define the thread spawner for normal test cases
 runOne :: UnitTestOptions -> VM -> ABIMethod -> AbiValue -> IO (Text, Either Text Text, VM)
 runOne opts@UnitTestOptions{..} vm testName args = do
   let argInfo = pack (if args == emptyAbi then "" else " with arguments: " <> show args)
-  (bailed, vm') <-
-    runStateT
-      (EVM.Stepper.interpret oracle (execTest opts testName args))
-      vm
+  (bailed, vm') <- execTest opts vm testName args
   (success, vm'') <-
     runStateT
       (EVM.Stepper.interpret oracle (checkFailures opts testName bailed)) vm'
@@ -525,7 +581,7 @@ symRun opts@UnitTestOptions{..} concreteVm testName types = do
       -- report a failure unless the test is supposed to fail.
 
       \(bailed, vm') -> do
-        let ?context = DappContext { _contextInfo = dapp, _contextEnv = vm ^?! EVM.env }
+        let ?context = DappContext { _contextInfo = dapp, _contextEnv = vm ^?! EVM.env . EVM.contracts }
         SBV.resetAssertions
         constrain $ sAnd (fst <$> view EVM.constraints vm')
         unless bailed $
@@ -567,7 +623,7 @@ symFailure UnitTestOptions {..} testName failures' = mconcat
     showRes vm = let Just res = view result vm in
                  case res of
                    VMFailure _ ->
-                     let ?context = DappContext { _contextInfo = dapp, _contextEnv = vm ^?! EVM.env }
+                     let ?context = DappContext { _contextInfo = dapp, _contextEnv = vm ^?! EVM.env . EVM.contracts}
                      in prettyvmresult res
                    VMSuccess _ -> if "proveFail" `isPrefixOf` testName
                                   then "Successful execution"
@@ -624,7 +680,7 @@ indentLines n s =
 
 passOutput :: VM -> UnitTestOptions -> Text -> Text
 passOutput vm UnitTestOptions { .. } testName =
-  let ?context = DappContext { _contextInfo = dapp, _contextEnv = vm ^?! EVM.env }
+  let ?context = DappContext { _contextInfo = dapp, _contextEnv = vm ^?! EVM.env . EVM.contracts }
   in let v = fromMaybe 0 verbose
   in if (v > 1) then
     mconcat
@@ -639,7 +695,7 @@ passOutput vm UnitTestOptions { .. } testName =
 
 failOutput :: VM -> UnitTestOptions -> Text -> Text
 failOutput vm UnitTestOptions { .. } testName =
-  let ?context = DappContext { _contextInfo = dapp, _contextEnv = vm ^?! EVM.env }
+  let ?context = DappContext { _contextInfo = dapp, _contextEnv = vm ^?! EVM.env . EVM.contracts}
   in mconcat
   [ "Failure: "
   , fromMaybe "" (stripSuffix "()" testName)

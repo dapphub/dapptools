@@ -171,6 +171,7 @@ data Command w
       , debug         :: w ::: Bool                     <?> "Run interactively"
       , jsontrace     :: w ::: Bool                     <?> "Print json trace output at every step"
       , fuzzRuns      :: w ::: Maybe Int                <?> "Number of times to run fuzz tests"
+      , depth         :: w ::: Maybe Int                <?> "Number of transactions to explore"
       , replay        :: w ::: Maybe (Text, ByteString) <?> "Custom fuzz case to run/debug"
       , rpc           :: w ::: Maybe URL                <?> "Fetch state from a remote node"
       , verbose       :: w ::: Maybe Int                <?> "Append call trace: {1} failures {2} all"
@@ -284,6 +285,7 @@ unitTestOptions cmd testFile = do
     , EVM.UnitTest.smtState = Just state
     , EVM.UnitTest.verbose = verbose cmd
     , EVM.UnitTest.match = pack $ fromMaybe ".*" (match cmd)
+    , EVM.UnitTest.maxDepth = depth cmd
     , EVM.UnitTest.fuzzRuns = fromMaybe 100 (fuzzRuns cmd)
     , EVM.UnitTest.replay = do
         arg' <- replay cmd
