@@ -8,7 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- seth bundle-source writes the contents of standard-json to the current directory to enable better sourcemaps for multiple files version of etherscan source.
+- seth bundle-source writes the contents of standard-json to the current directory to enable better sourcemaps for multi-file etherscan source code.
 
 ## [0.10.1] - 2021-03-22
 
