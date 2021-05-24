@@ -191,7 +191,7 @@ compareCode raw (Code template locs) =
   let holes' = sort [(start, len) | (Reference start len) <- locs]
       insert at' len' bs = writeMemory (BS.replicate len' 0) (fromIntegral len') 0 (fromIntegral at') bs
       refined = foldr (\(start, len) acc -> insert start len acc) raw holes'
-  in length raw == length template && template == refined
+  in BS.length raw == BS.length template && template == refined
 
 showTraceLocation :: DappInfo -> Trace -> Either Text Text
 showTraceLocation dapp trace =
