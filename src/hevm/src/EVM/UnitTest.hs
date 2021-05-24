@@ -435,6 +435,7 @@ explorationStepper opts@UnitTestOptions{..} testName i = do
     vm <- get
     let cs = Map.toList $ view (env . contracts) vm
         knownAbis :: Map Addr SolcContract
+        mutable m = view methodMutability m `elem` [NonPayable, Payable]
         knownAbis =
           -- exclude testing abis
           Map.filter (isNothing . preview (abiMap . ix unitTestMarkerAbi)) $
@@ -443,7 +444,7 @@ explorationStepper opts@UnitTestOptions{..} testName i = do
     -- go to IO and generate a random valid call to any known contract
     liftIO $ do
       (target, solcInfo) <- generate $ elements (Map.toList knownAbis)
-      (_, (Method _ inputs sig _)) <- generate (elements $ Map.toList $ view abiMap solcInfo)
+      (_, (Method _ inputs sig _ _)) <- generate (elements $ Map.toList $ Map.filter mutable $ view abiMap solcInfo)
       let types = snd <$> inputs
       args <- generate $ genAbiValue (AbiTupleType $ Vector.fromList types)
       return (target, args, types, sig)

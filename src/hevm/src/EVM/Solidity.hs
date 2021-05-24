@@ -17,10 +17,12 @@ module EVM.Solidity
   , Method (..)
   , SlotType (..)
   , Reference(..)
+  , Mutability(..)
   , methodName
   , methodSignature
   , methodInputs
   , methodOutput
+  , methodMutability
   , abiMap
   , eventMap
   , storageLayout
@@ -148,7 +150,15 @@ data Method = Method
   , _methodInputs :: [(Text, AbiType)]
   , _methodName :: Text
   , _methodSignature :: Text
+  , _methodMutability :: Mutability
   } deriving (Show, Eq, Ord, Generic)
+
+data Mutability
+  = Pure       -- ^ specified to not read blockchain state
+  | View       -- ^ specified to not modify the blockchain state
+  | NonPayable -- ^ function does not accept Ether - the default
+  | Payable    -- ^ function accepts Ether
+ deriving (Show, Eq, Ord, Generic)
 
 data SourceCache = SourceCache
   { _sourceFiles  :: [(Text, ByteString)]
@@ -397,6 +407,8 @@ mkAbiMap abis = Map.fromList $
                  (toList (abi ^?! key "inputs" . _Array))
               , _methodOutput = map parseMethodInput
                  (toList (abi ^?! key "outputs" . _Array))
+              , _methodMutability = parseMutability
+                 (abi ^?! key "stateMutability" . _String)
               })
   in f <$> relevant
 
@@ -463,6 +475,13 @@ parseTypeName' x =
     (fromMaybe mempty $ x ^? key "components" . _Array . to parseComponents)
     (x ^?! key "type" . _String)
   where parseComponents = fmap $ snd . parseMethodInput
+
+parseMutability :: Text -> Mutability
+parseMutability "view" = View
+parseMutability "pure" = Pure
+parseMutability "nonpayable" = NonPayable
+parseMutability "payable" = Payable
+parseMutability _ = error "unknown function mutability"
 
 -- This actually can also parse a method output! :O
 parseMethodInput :: AsValue s => s -> (Text, AbiType)
