@@ -5,6 +5,7 @@
 {-# Language DeriveFunctor #-}
 {-# Language OverloadedStrings #-}
 {-# Language RecordWildCards #-}
+{-# Language TupleSections #-}
 
 module Restless.Git
   ( Path (..)
@@ -22,6 +23,7 @@ import Data.Map               (Map)
 import Data.Set               (Set)
 import Data.Text              (Text, unpack)
 import Data.Text.Encoding     (decodeUtf8)
+import System.Exit            (ExitCode(..))
 import HSH                    (run, (-|-))
 
 import qualified Data.ByteString  as BS
@@ -100,7 +102,7 @@ data ObjectType = TreeObject | BlobObject
 newtype SHA1 = SHA1 ByteString
   deriving Show
 
-data MkTree =
+newtype MkTree =
   MkTree (Map ByteString (ObjectType, SHA1))
   deriving Show
 
@@ -116,8 +118,8 @@ mkTreeLine name (BlobObject, SHA1 sha1) =
 
 saveTree :: FilePath -> Tree ByteString -> IO SHA1
 saveTree dst (Tree folders files) = do
-  trees <- mapM (fmap ((,) TreeObject) . saveTree dst) folders
-  blobs <- mapM (fmap ((,) BlobObject) . createBlob dst) files
+  trees <- mapM (fmap (TreeObject, ) . saveTree dst) folders
+  blobs <- mapM (fmap (BlobObject, ) . createBlob dst) files
   let input = serializeMkTree (MkTree (trees <> blobs))
   asSHA1 <$> run ((\() -> input) -|- git' dst "mktree" ["-z"])
 
@@ -125,8 +127,15 @@ asSHA1 :: ByteString -> SHA1
 asSHA1 = SHA1 . fst . BS.break (== 0xa)
 
 defaultRef :: FilePath -> IO String
-defaultRef repo = trimnl <$> run (git' repo "config" ["--get", "init.defaultBranch"])
-  where trimnl = reverse . dropWhile (=='\n') . reverse
+defaultRef repo = do
+  (ref, finish) <- run cmd :: IO (String, IO (String, ExitCode))
+  (_, code) <- finish
+  pure $ case code of
+    ExitFailure _ -> "refs/heads/master"
+    ExitSuccess -> "refs/heads/" <> (trimnl ref)
+  where
+    cmd = git' repo "config" ["--get", "init.defaultBranch"]
+    trimnl = reverse . dropWhile (=='\n') . reverse
 
 git :: FilePath -> String -> [String] -> IO ByteString
 git repo cmd args = run $ git' repo cmd args
