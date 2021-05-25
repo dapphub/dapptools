@@ -18,14 +18,8 @@ import qualified Data.ListLike as LL
 
 -- | Given an 'AbiValue', generate a random \"similar\" value of the same 'AbiType'.
 mutateAbiValue :: AbiValue -> Gen AbiValue
-mutateAbiValue (AbiUInt n x)         = chooseInt (0, 9) >>= -- 10% of chance of mutation
-                                          \case
-                                            0 -> fixAbiUInt n <$> mutateNum x
-                                            _ -> return $ AbiUInt n x
-mutateAbiValue (AbiInt n x)          = chooseInt (0, 9) >>= -- 10% of chance of mutation
-                                          \case
-                                            0 -> fixAbiInt n <$> mutateNum x
-                                            _ -> return $ AbiInt n x
+mutateAbiValue (AbiUInt n x)         = frequency [(1, fixAbiUInt n <$> mutateNum x), (9, pure $ AbiUInt n x)]
+mutateAbiValue (AbiInt n x)         = frequency [(1, fixAbiInt n <$> mutateNum x), (9, pure $ AbiInt n x)]
 
 mutateAbiValue (AbiAddress x)        = return $ AbiAddress x
 mutateAbiValue (AbiBool _)           = genAbiValue AbiBoolType

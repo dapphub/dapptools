@@ -82,6 +82,7 @@ data UnitTestOptions = UnitTestOptions
   , vmModifier :: VM -> VM
   , dapp       :: DappInfo
   , testParams :: TestVMParams
+  , mutations  :: Int
   }
 
 data TestVMParams = TestVMParams
@@ -103,6 +104,7 @@ data TestVMParams = TestVMParams
   }
 
 type Corpus = Map (MultiSet OpLocation) (SolcContract, Text, AbiValue)
+data FuzzResult = Pass | Fail VM String
 
 defaultGasForCreating :: W256
 defaultGasForCreating = 0xffffffffffff
@@ -196,15 +198,12 @@ checkFailures UnitTestOptions { .. } method bailed = do
 
 -- | Either generates the calldata by mutating an example from the corpus, or synthesizes a random example
 genWithCorpus :: UnitTestOptions -> Corpus -> Text -> [AbiType] -> Gen AbiValue
-genWithCorpus _ corpus sig tps = do
-  b <- arbitrary :: Gen Bool
-  if b then genAbiValue (AbiTupleType $ Vector.fromList tps)
-       else do
-         -- TODO: also check that the contract matches here
-         let examples = [cd | (_, sig', cd) <- (fmap snd) . Map.toList $ corpus, sig' == sig]
-         case examples of
-           [] -> genAbiValue (AbiTupleType $ Vector.fromList tps)
-           _ -> Test.QuickCheck.elements examples >>= mutateAbiValue
+genWithCorpus UnitTestOptions { .. } corpus sig tps = do
+  -- TODO: also check that the contract matches here
+  let examples = [cd | (_, sig', cd) <- (fmap snd) . Map.toList $ corpus, sig' == sig]
+  if (null examples)
+     then genAbiValue (AbiTupleType $ Vector.fromList tps)
+     else frequency [(mutations, Test.QuickCheck.elements examples >>= mutateAbiValue), (100 - mutations, genAbiValue (AbiTupleType $ Vector.fromList tps))]
 
 -- | Randomly generates the calldata arguments and runs the test, updates the corpus with a new example if we explored a new path
 fuzzTest :: UnitTestOptions -> Text -> [AbiType] -> VM -> StateT Corpus IO FuzzResult
@@ -481,8 +480,6 @@ runOne opts@UnitTestOptions{..} vm testName args = do
           , Left (failOutput vm'' opts testName)
           , vm''
           )
-
-data FuzzResult = Pass | Fail VM String
 
 -- | Define the thread spawner for property based tests
 fuzzRun :: UnitTestOptions -> VM -> Text -> [AbiType] -> IO (Text, Either Text Text, VM)

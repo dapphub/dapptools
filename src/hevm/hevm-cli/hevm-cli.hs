@@ -171,6 +171,7 @@ data Command w
       , debug         :: w ::: Bool                     <?> "Run interactively"
       , jsontrace     :: w ::: Bool                     <?> "Print json trace output at every step"
       , fuzzRuns      :: w ::: Maybe Int                <?> "Number of times to run fuzz tests"
+      , mutations     :: w ::: Maybe Int                <?> "Percentage of fuzz runs that should mutate a previous input vs randomly generating new inputs"
       , replay        :: w ::: Maybe (Text, ByteString) <?> "Custom fuzz case to run/debug"
       , rpc           :: w ::: Maybe URL                <?> "Fetch state from a remote node"
       , verbose       :: w ::: Maybe Int                <?> "Append call trace: {1} failures {2} all"
@@ -291,6 +292,11 @@ unitTestOptions cmd testFile = do
     , EVM.UnitTest.vmModifier = vmModifier
     , EVM.UnitTest.testParams = params
     , EVM.UnitTest.dapp = srcInfo
+    , EVM.UnitTest.mutations = case mutations cmd of
+                                 Nothing -> 50
+                                 Just x -> if x > 100
+                                              then error "Mutations cannot be greater than 100"
+                                              else x
     }
 
 main :: IO ()
@@ -757,7 +763,7 @@ vmFromCommand cmd = do
           , EVM.vmoptChainId       = word chainid 1
           , EVM.vmoptCreate        = create cmd
           , EVM.vmoptStorageModel  = ConcreteS
-          , EVM.vmoptTxAccessList  = mempty -- TODO: support me soon        
+          , EVM.vmoptTxAccessList  = mempty -- TODO: support me soon
           }
         word f def = fromMaybe def (f cmd)
         addr f def = fromMaybe def (f cmd)
