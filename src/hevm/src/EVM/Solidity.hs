@@ -97,7 +97,7 @@ data StorageItem = StorageItem {
   _type   :: SlotType,
   _offset :: Int,
   _slot   :: Int
-  } deriving (Show, Eq)
+  } deriving (Show, Eq, Ord)
 
 data SlotType
   -- Note that mapping keys can only be elementary;
@@ -105,7 +105,7 @@ data SlotType
   = StorageMapping (NonEmpty AbiType) AbiType
   | StorageValue AbiType
 --  | StorageArray AbiType
-  deriving Eq
+  deriving (Eq, Ord)
 
 instance Show SlotType where
  show (StorageValue t) = show t
@@ -141,7 +141,7 @@ data SolcContract = SolcContract
   , _storageLayout    :: Maybe (Map Text StorageItem)
   , _runtimeSrcmap    :: Seq SrcMap
   , _creationSrcmap   :: Seq SrcMap
-  } deriving (Show, Eq, Generic)
+  } deriving (Show, Eq, Generic, Ord)
 
 data Method = Method
   { _methodOutput :: [(Text, AbiType)]
@@ -159,7 +159,7 @@ data SourceCache = SourceCache
 data Reference = Reference
   { _refStart :: Int,
     _refLength :: Int
-  } deriving (Show, Eq)
+  } deriving (Show, Eq, Ord)
 
 instance FromJSON Reference where
   parseJSON (Object v) = Reference

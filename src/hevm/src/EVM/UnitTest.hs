@@ -45,7 +45,7 @@ import Data.Decimal       (DecimalRaw(..))
 import Data.Either        (isRight, lefts)
 import Data.Foldable      (toList)
 import Data.Map           (Map)
-import Data.Maybe         (fromMaybe, catMaybes, fromJust, isJust, isNothing, fromMaybe, mapMaybe)
+import Data.Maybe         (fromMaybe, catMaybes, fromJust, isJust, fromMaybe, mapMaybe)
 import Data.Text          (isPrefixOf, stripSuffix, intercalate, Text, pack, unpack)
 import Data.Text.Encoding (encodeUtf8)
 import System.Environment (lookupEnv)
@@ -103,7 +103,8 @@ data TestVMParams = TestVMParams
   , testChainId       :: W256
   }
 
-type Corpus = Map (MultiSet OpLocation) (SolcContract, Text, AbiValue)
+-- | For each tuple of (contract, method) we store the calldata required to reach each known path in the method
+type Corpus = Map (SolcContract, Text) (Map (MultiSet OpLocation) AbiValue)
 data FuzzResult = Pass | Fail VM String
 
 defaultGasForCreating :: W256
@@ -197,23 +198,26 @@ checkFailures UnitTestOptions { .. } method bailed = do
       _ -> error "internal error: unexpected failure code"
 
 -- | Either generates the calldata by mutating an example from the corpus, or synthesizes a random example
-genWithCorpus :: UnitTestOptions -> Corpus -> Text -> [AbiType] -> Gen AbiValue
-genWithCorpus UnitTestOptions { .. } corpus sig tps = do
+genWithCorpus :: UnitTestOptions -> Corpus -> SolcContract -> Text -> [AbiType] -> Gen AbiValue
+genWithCorpus UnitTestOptions { .. } corpus contract' sig tps = do
   -- TODO: also check that the contract matches here
-  let examples = [cd | (_, sig', cd) <- (fmap snd) . Map.toList $ corpus, sig' == sig]
-  if (null examples)
-     then genAbiValue (AbiTupleType $ Vector.fromList tps)
-     else frequency [(mutations, Test.QuickCheck.elements examples >>= mutateAbiValue), (100 - mutations, genAbiValue (AbiTupleType $ Vector.fromList tps))]
+  --let examples = [cd | (_, sig', cd) <- (fmap snd) . Map.toList $ corpus, sig' == sig]
+  case Map.lookup (contract', sig) corpus of
+    Nothing -> genAbiValue (AbiTupleType $ Vector.fromList tps)
+    Just examples -> frequency
+      [ (mutations,       Test.QuickCheck.elements (fmap snd $ Map.toList examples) >>= mutateAbiValue)
+      , (100 - mutations, genAbiValue (AbiTupleType $ Vector.fromList tps))
+      ]
 
 -- | Randomly generates the calldata arguments and runs the test, updates the corpus with a new example if we explored a new path
 fuzzTest :: UnitTestOptions -> Text -> [AbiType] -> VM -> StateT Corpus IO FuzzResult
 fuzzTest opts@UnitTestOptions { .. } sig types vm = do
+  let code' = _contractcode . fromJust $ currentContract vm
+      contract' = fromJust $ lookupCode code' dapp
   corpus <- get
-  args <- liftIO . generate $ genWithCorpus opts corpus sig types
+  args <- liftIO . generate $ genWithCorpus opts corpus contract' sig types
   (res, (vm', coverage)) <- liftIO $ runStateT (interpretWithCoverage opts (runUnitTest opts sig args)) (vm, mempty)
-  let contract' = _contractcode . fromJust $ currentContract vm
-      code' = fromJust $ lookupCode contract' dapp
-  when (isNothing $ Map.lookup coverage corpus) $ modify (Map.insert coverage (code', sig, args))
+  modify (Map.adjust (Map.insert coverage args) (contract', sig))
   if res
      then pure Pass
      else pure $ Fail vm' (show . ByteStringS . encodeAbiValue $ args)
