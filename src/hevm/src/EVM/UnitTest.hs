@@ -18,6 +18,7 @@ import EVM.Solidity
 import EVM.SymExec
 import EVM.Types
 import EVM.Transaction (initTx)
+import EVM.Mutate (mutateAbiValue)
 import qualified EVM.Fetch
 
 import qualified EVM.FeeSchedule as FeeSchedule
@@ -44,7 +45,7 @@ import Data.Decimal       (DecimalRaw(..))
 import Data.Either        (isRight, lefts)
 import Data.Foldable      (toList)
 import Data.Map           (Map)
-import Data.Maybe         (fromMaybe, catMaybes, fromJust, isJust, fromMaybe, mapMaybe)
+import Data.Maybe         (fromMaybe, catMaybes, fromJust, isJust, isNothing, fromMaybe, mapMaybe)
 import Data.Text          (isPrefixOf, stripSuffix, intercalate, Text, pack, unpack)
 import Data.Text.Encoding (encodeUtf8)
 import System.Environment (lookupEnv)
@@ -100,6 +101,8 @@ data TestVMParams = TestVMParams
   , testDifficulty    :: W256
   , testChainId       :: W256
   }
+
+type Corpus = Map (MultiSet OpLocation) (SolcContract, Text, AbiValue)
 
 defaultGasForCreating :: W256
 defaultGasForCreating = 0xffffffffffff
@@ -191,11 +194,30 @@ checkFailures UnitTestOptions { .. } method bailed = do
         in pure (shouldFail == failed)
       _ -> error "internal error: unexpected failure code"
 
--- | Randomly generates the calldata arguments and runs the test
-fuzzTest :: UnitTestOptions -> Text -> [AbiType] -> VM -> Property
-fuzzTest opts sig types vm = forAllShow (genAbiValue (AbiTupleType $ Vector.fromList types)) (show . ByteStringS . encodeAbiValue)
-  $ \args -> ioProperty $
-    fst <$> runStateT (EVM.Stepper.interpret (oracle opts) (runUnitTest opts sig args)) vm
+-- | Either generates the calldata by mutating an example from the corpus, or synthesizes a random example
+genWithCorpus :: UnitTestOptions -> Corpus -> Text -> [AbiType] -> Gen AbiValue
+genWithCorpus _ corpus sig tps = do
+  b <- arbitrary :: Gen Bool
+  if b then genAbiValue (AbiTupleType $ Vector.fromList tps)
+       else do
+         -- TODO: also check that the contract matches here
+         let examples = [cd | (_, sig', cd) <- (fmap snd) . Map.toList $ corpus, sig' == sig]
+         case examples of
+           [] -> genAbiValue (AbiTupleType $ Vector.fromList tps)
+           _ -> Test.QuickCheck.elements examples >>= mutateAbiValue
+
+-- | Randomly generates the calldata arguments and runs the test, updates the corpus with a new example if we explored a new path
+fuzzTest :: UnitTestOptions -> Text -> [AbiType] -> VM -> StateT Corpus IO FuzzResult
+fuzzTest opts@UnitTestOptions { .. } sig types vm = do
+  corpus <- get
+  args <- liftIO . generate $ genWithCorpus opts corpus sig types
+  (res, (vm', coverage)) <- liftIO $ runStateT (interpretWithCoverage opts (runUnitTest opts sig args)) (vm, mempty)
+  let contract' = _contractcode . fromJust $ currentContract vm
+      code' = fromJust $ lookupCode contract' dapp
+  when (isNothing $ Map.lookup coverage corpus) $ modify (Map.insert coverage (code', sig, args))
+  if res
+     then pure Pass
+     else pure $ Fail vm' (show . ByteStringS . encodeAbiValue $ args)
 
 tick :: Text -> IO ()
 tick x = Text.putStr x >> hFlush stdout
@@ -294,7 +316,7 @@ coverageReport dapp cov =
     linesByName :: Map Text (Vector ByteString)
     linesByName =
       Map.fromList $ zipWith
-          (\(name, _) lines -> (name, lines))
+          (\(name, _) lines' -> (name, lines'))
           (view sourceFiles sources)
           (view sourceLines sources)
 
@@ -460,44 +482,37 @@ runOne opts@UnitTestOptions{..} vm testName args = do
           , vm''
           )
 
+data FuzzResult = Pass | Fail VM String
+
 -- | Define the thread spawner for property based tests
 fuzzRun :: UnitTestOptions -> VM -> Text -> [AbiType] -> IO (Text, Either Text Text, VM)
 fuzzRun opts@UnitTestOptions{..} vm testName types = do
-  let args = Args{ replay          = Nothing
-                 , maxSuccess      = fuzzRuns
-                 , maxDiscardRatio = 10
-                 , maxSize         = 100
-                 , chatty          = isJust verbose
-                 , maxShrinks      = maxBound
-                 }
-  quickCheckWithResult args (fuzzTest opts testName types vm) >>= \case
-    Success numTests _ _ _ _ _ ->
+  (res, _) <- foldM (\(res, corpus) _ -> case res of
+      Pass -> runStateT (fuzzTest opts testName types vm) corpus
+      Fail {} -> pure (res, corpus)
+    ) (Pass, mempty) [0..fuzzRuns]
+
+  case res of
+    (Pass) ->
       pure ("\x1b[32m[PASS]\x1b[0m "
-             <> testName <> " (runs: " <> (pack $ show numTests) <> ")"
+              <> testName <> " (runs: " <> (pack . show $ fuzzRuns) <> ")"
              -- this isn't the post vm we actually want, as we
              -- can't retrieve the correct vm from quickcheck
            , Right (passOutput vm opts testName)
            , vm
            )
-    Failure _ _ _ _ _ _ _ _ _ _ failCase _ _ ->
-      let abiValue = decodeAbiValue (AbiTupleType (Vector.fromList types)) $ BSLazy.fromStrict $ hexText (pack $ concat failCase)
-          ppOutput = pack $ show abiValue
-      in do
-        -- Run the failing test again to get a proper trace
-        vm' <- execStateT (EVM.Stepper.interpret oracle (runUnitTest opts testName abiValue)) vm
-        pure ("\x1b[31m[FAIL]\x1b[0m "
-               <> testName <> ". Counterexample: " <> ppOutput
-               <> "\nRun:\n dapp test --replay '(\"" <> testName <> "\",\""
-               <> (pack (concat failCase)) <> "\")'\nto test this case again, or \n dapp debug --replay '(\""
-               <> testName <> "\",\"" <> (pack (concat failCase)) <> "\")'\nto debug it."
-             , Left (failOutput vm' opts testName)
-             , vm'
-             )
-    _ -> pure ("\x1b[31m[OOPS]\x1b[0m "
-               <> testName
-              , Left (failOutput vm opts testName)
-              , vm
-              )
+    (Fail vm' cex) ->
+      pure ("\x1b[31m[FAIL]\x1b[0m "
+             <> testName <> ". Counterexample: " <> ppOutput
+             <> "\nRun:\n dapp test --replay '(\"" <> testName <> "\",\""
+             <> (pack cex) <> "\")'\nto test this case again, or \n dapp debug --replay '(\""
+             <> testName <> "\",\"" <> (pack cex) <> "\")'\nto debug it."
+           , Left (failOutput vm' opts testName)
+           , vm'
+           )
+       where
+         abiValue = decodeAbiValue (AbiTupleType (Vector.fromList types)) $ BSLazy.fromStrict $ hexText (pack cex)
+         ppOutput = pack $ show abiValue
 
 -- | Define the thread spawner for symbolic tests
 -- TODO: return a list of VM's
