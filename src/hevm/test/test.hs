@@ -17,7 +17,7 @@ import Prelude hiding (fail)
 
 import qualified Data.Text as Text
 import qualified Data.ByteString as BS
-import qualified Data.ByteString.Lazy as BS (fromStrict, toStrict)
+import qualified Data.ByteString.Lazy as BS (fromStrict)
 import qualified Data.ByteString.Base16 as Hex
 import Test.Tasty
 import Test.Tasty.QuickCheck
@@ -37,14 +37,14 @@ import Data.SBV.Control
 import qualified Data.Map as Map
 import Data.Binary.Get (runGetOrFail)
 
-import EVM hiding (Query)
+import EVM hiding (Query, code, path)
 import EVM.SymExec
 import EVM.ABI
 import EVM.Exec
 import qualified EVM.Patricia as Patricia
 import EVM.Precompiled
 import EVM.RLP
-import EVM.Solidity
+import EVM.Solidity hiding (solc)
 import EVM.Types
 
 instance MonadFail Query where
@@ -319,7 +319,7 @@ main = defaultMain $ testGroup "hevm"
           (Right _, vm) <- verifyContract c (Just ("f(uint256,uint256)", [AbiUIntType 256, AbiUIntType 256])) [] SymbolicS pre (Just post)
           case view (state . calldata . _1) vm of
             SymbolicBuffer bs -> BS.pack <$> mapM (getValue.fromSized) bs
-            ConcreteBuffer bs -> error "unexpected"
+            ConcreteBuffer _ -> error "unexpected"
 
         let [AbiUInt 256 x, AbiUInt 256 y] = decodeAbiValues [AbiUIntType 256, AbiUIntType 256] bs
         assertEqual "Catch storage collisions" x y
@@ -519,7 +519,7 @@ main = defaultMain $ testGroup "hevm"
               aAddr = Addr 0x35D1b3F3D7966A1DFe207aa4514C12a259A0492B
           Just c <- solcRuntime "C" code
           Just a <- solcRuntime "A" code
-          Right cex <- runSMT $ query $ do
+          Right _ <- runSMT $ query $ do
             vm0 <- abstractVM (Just ("call_A()", [])) [] c SymbolicS
             store <- freshArray (show aAddr) Nothing
             let vm = vm0
@@ -548,7 +548,7 @@ main = defaultMain $ testGroup "hevm"
                   }
                 |]
           Just c <- solcRuntime "C" code
-          Right cex <- runSMT $ query $ do
+          Right _ <- runSMT $ query $ do
             vm0 <- abstractVM (Just ("call_A()", [])) [] c SymbolicS
             let vm = vm0 & set (state . callvalue) 0
             verify vm Nothing Nothing (Just checkAssertions)
@@ -619,7 +619,7 @@ main = defaultMain $ testGroup "hevm"
         let aPrgm = hex "602060006000376000805160008114601d5760018114602457fe6029565b8191506029565b600191505b50600160015250"
             bPrgm = hex "6020600060003760005160008114601c5760028114602057fe6021565b6021565b5b506001600152"
         runSMTWith z3 $ query $ do
-          Right counterexample <- equivalenceCheck aPrgm bPrgm Nothing Nothing
+          Right _ <- equivalenceCheck aPrgm bPrgm Nothing Nothing
           return ()
 
     ]
