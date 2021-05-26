@@ -12,6 +12,7 @@
 
 module Main where
 
+import qualified Debug.Trace as Debug
 import EVM (StorageModel(..))
 import qualified EVM
 import EVM.Concrete (createAddress,  wordValue)
@@ -36,11 +37,12 @@ import EVM.Types hiding (word)
 import EVM.UnitTest (UnitTestOptions, coverageReport, coverageForUnitTestContract)
 import EVM.UnitTest (runUnitTestContract)
 import EVM.UnitTest (getParametersFromEnvironmentVariables, testNumber)
-import EVM.Dapp (findUnitTests, dappInfo, DappInfo, emptyDapp)
+import EVM.Dapp (findUnitTests, dappInfo, DappInfo(..), emptyDapp)
 import EVM.Format (showTraceTree, showTree', renderTree, showBranchInfoWithAbi, showLeafInfo)
 import EVM.RLP (rlpdecode)
 import qualified EVM.Patricia as Patricia
 import Data.Map (Map)
+import System.Directory (doesFileExist)
 
 import qualified EVM.Facts     as Facts
 import qualified EVM.Facts.Git as Git
@@ -50,7 +52,7 @@ import GHC.IO.Encoding
 import GHC.Stack
 import Control.Concurrent.Async   (async, waitCatch)
 import Control.Lens hiding (pre, passing)
-import Control.Monad              (void, when, forM_, unless)
+import Control.Monad              (void, when, forM_, unless, foldM)
 import Control.Monad.State.Strict (execStateT, liftIO)
 import Data.ByteString            (ByteString)
 import Data.List                  (intercalate, isSuffixOf)
@@ -171,7 +173,8 @@ data Command w
       , debug         :: w ::: Bool                     <?> "Run interactively"
       , jsontrace     :: w ::: Bool                     <?> "Print json trace output at every step"
       , fuzzRuns      :: w ::: Maybe Int                <?> "Number of times to run fuzz tests"
-      , mutations     :: w ::: Maybe Int                <?> "Percentage of fuzz runs that should mutate a previous input vs randomly generating new inputs"
+      , mutations     :: w ::: Maybe Int                <?> "Percentage of fuzz runs that should mutate a previous input vs randomly generating new inputs (default: 50)"
+      , corpus        :: w ::: Maybe FilePath           <?> "Path to the location where the corpus of test inputs should be stored (default: .hevm.corpus)"
       , replay        :: w ::: Maybe (Text, ByteString) <?> "Custom fuzz case to run/debug"
       , rpc           :: w ::: Maybe URL                <?> "Fetch state from a remote node"
       , verbose       :: w ::: Maybe Int                <?> "Append call trace: {1} failures {2} all"
@@ -292,6 +295,7 @@ unitTestOptions cmd testFile = do
     , EVM.UnitTest.vmModifier = vmModifier
     , EVM.UnitTest.testParams = params
     , EVM.UnitTest.dapp = srcInfo
+    , EVM.UnitTest.corpus = fromMaybe ".hevm.corpus" (corpus cmd)
     , EVM.UnitTest.mutations = case mutations cmd of
                                  Nothing -> 50
                                  Just x -> if x > 100
@@ -385,10 +389,21 @@ findJsonFile Nothing = do
 dappTest :: UnitTestOptions -> String -> Maybe String -> Query ()
 dappTest opts solcFile cache = do
   out <- liftIO $ readSolc solcFile
+  let dappInfo' = EVM.UnitTest.dapp opts
+      corpusPath  = (_dappRoot dappInfo') <> "/" <> (EVM.UnitTest.corpus opts)
+  initalCorpus <- liftIO $ doesFileExist corpusPath >>= \case
+    True -> liftIO $ JSON.decodeFileStrict' corpusPath >>= \case
+      Nothing -> error "unable to parse corpus"
+      Just a -> pure a
+    False -> pure mempty
+
   case out of
     Just (contractMap, _) -> do
       let unitTests = findUnitTests (EVM.UnitTest.match opts) $ Map.elems contractMap
-      results <- concatMapM (runUnitTestContract opts contractMap) unitTests
+      (finalCorpus, results) <- foldM (\(corpus, results) test -> do
+          (corpus', results') <- runUnitTestContract opts corpus contractMap test
+          pure (corpus', results <> results')
+        ) (initalCorpus, mempty) unitTests
       let (passing, vms) = unzip results
       case cache of
         Nothing ->
@@ -400,6 +415,7 @@ dappTest opts solcFile cache = do
           in
             liftIO $ Git.saveFacts (Git.RepoAt path) (Facts.cacheFacts cache')
 
+      liftIO $ JSON.encodeFile (EVM.UnitTest.corpus opts) finalCorpus
       liftIO $ unless (and passing) exitFailure
     Nothing ->
       error ("Failed to read Solidity JSON for `" ++ solcFile ++ "'")

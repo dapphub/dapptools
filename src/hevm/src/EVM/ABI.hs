@@ -63,10 +63,10 @@ import Data.Binary.Get    (Get, runGet, runGetOrFail, label, getWord8, getWord32
 import Data.Binary.Put    (Put, runPut, putWord8, putWord32be)
 import Data.Bits          (shiftL, shiftR, (.&.))
 import Data.ByteString    (ByteString)
-import Data.DoubleWord    (Word256, Int256, signedWord)
+import Data.DoubleWord    (Word256, Word128, Word160, Int128, Int256, signedWord)
 import Data.Functor       (($>))
 import Data.Text          (Text, pack, unpack)
-import Data.Text.Encoding (encodeUtf8, decodeUtf8')
+import Data.Text.Encoding (encodeUtf8, decodeUtf8, decodeUtf8')
 import Data.Vector        (Vector, toList)
 import Data.Word          (Word32)
 import Data.List          (intercalate)
@@ -76,6 +76,7 @@ import GHC.Generics
 import Test.QuickCheck hiding ((.&.), label)
 import Text.ParserCombinators.ReadP
 import Control.Applicative
+import Data.Aeson
 
 import qualified Data.ByteString       as BS
 import qualified Data.ByteString.Char8 as Char8
@@ -98,6 +99,43 @@ data AbiValue
   | AbiArray        Int AbiType (Vector AbiValue)
   | AbiTuple        (Vector AbiValue)
   deriving (Read, Eq, Ord, Generic)
+
+--instance ToJSON AbiValue where
+  --toJSON val = case val of
+    --AbiUInt n v -> object [ "size" .= n, "val" .= show v ]
+    --AbiInt n v -> object [ "size" .= n, "val" .= show v ]
+    --AbiAddress a -> toJSON a
+    --AbiBool b -> toJSON b
+    --AbiBytes n bs -> object [ "size" .= n, "val" .= show (ByteStringS bs) ]
+    --AbiBytesDynamic bs -> String . Text.pack . show . ByteStringS $ bs
+    --AbiString bs -> String . Text.pack . show . ByteStringS $ bs
+    --AbiArrayDynamic tp vs -> object [ "type" .= show tp, "values" .= toJSON vs ]
+    --AbiArray n tp vs -> object [ "size" .= n, "type" .= show tp, "values" .= toJSON vs ]
+    --AbiTuple vs -> toJSON vs
+
+--instance FromJSON AbiValue where
+  --parseJSON v = pure $ case v of
+
+instance ToJSON AbiValue
+instance FromJSON AbiValue
+
+instance ToJSON Int256
+instance FromJSON Int256
+
+instance ToJSON Int128
+instance FromJSON Int128
+
+instance ToJSON Word256
+instance FromJSON Word256
+
+instance ToJSON Word128
+instance FromJSON Word128
+
+instance ToJSON ByteString where
+  toJSON b = toJSON (ByteStringS b)
+
+instance FromJSON ByteString where
+  parseJSON = withText "ByteString" $ pure . read . Text.unpack
 
 -- | Pretty-print some 'AbiValue'.
 instance Show AbiValue where
@@ -134,6 +172,9 @@ data AbiType
   | AbiTupleType        (Vector AbiType)
   deriving (Read, Eq, Ord, Generic)
 
+instance ToJSON AbiType
+instance FromJSON AbiType
+
 instance Show AbiType where
   show = Text.unpack . abiTypeSolidity
 
@@ -146,6 +187,15 @@ data Indexed   = Indexed   | NotIndexed
   deriving (Show, Ord, Eq, Generic)
 data Event     = Event Text Anonymity [(AbiType, Indexed)]
   deriving (Show, Ord, Eq, Generic)
+
+instance ToJSON Anonymity
+instance FromJSON Anonymity
+
+instance ToJSON Indexed
+instance FromJSON Indexed
+
+instance ToJSON Event
+instance FromJSON Event
 
 abiKind :: AbiType -> AbiKind
 abiKind = \case

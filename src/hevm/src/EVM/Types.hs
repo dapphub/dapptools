@@ -138,6 +138,9 @@ instance Read ByteStringS where
 instance JSON.ToJSON ByteStringS where
   toJSON = JSON.String . Text.pack . show
 
+instance JSON.FromJSON ByteStringS where
+  parseJSON = withText "ByteStringS" $ pure . read . Text.unpack
+
 -- | Symbolic words of 256 bits, possibly annotated with additional
 --   "insightful" information
 data SymWord = S Whiff (SWord 256)
@@ -269,6 +272,16 @@ instance Show Whiff where
 newtype Addr = Addr { addressWord160 :: Word160 }
   deriving (Num, Integral, Real, Ord, Enum, Eq, Bits, Generic)
 
+instance ToJSON Addr where
+  toJSON = String . Text.pack . show
+
+instance FromJSON Addr where
+  parseJSON v = do
+    s <- Text.unpack <$> parseJSON v
+    case reads s of
+      [(x, "")] -> return x
+      _         -> fail $ "invalid address (" ++ s ++ ")"
+
 newtype SAddr = SAddr { saddressWord160 :: SWord 160 }
   deriving (Num)
 
@@ -349,6 +362,7 @@ instance Read W256 where
 instance Show W256 where
   showsPrec _ s = ("0x" ++) . showHex s
 
+instance ToJSONKey W256
 instance JSON.ToJSON W256 where
   toJSON = JSON.String . Text.pack . show
 
@@ -386,13 +400,6 @@ instance FromJSON W256 where
     case reads s of
       [(x, "")]  -> return x
       _          -> fail $ "invalid hex word (" ++ s ++ ")"
-
-instance FromJSON Addr where
-  parseJSON v = do
-    s <- Text.unpack <$> parseJSON v
-    case reads s of
-      [(x, "")] -> return x
-      _         -> fail $ "invalid address (" ++ s ++ ")"
 
 #if MIN_VERSION_aeson(1, 0, 0)
 

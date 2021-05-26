@@ -1,8 +1,11 @@
 {-# Language LambdaCase #-}
 {-# Language DataKinds #-}
 {-# Language ImplicitParams #-}
+{-# LANGUAGE FlexibleInstances #-}
 
 module EVM.UnitTest where
+
+import Debug.Trace
 
 import Prelude hiding (Word)
 
@@ -44,12 +47,13 @@ import Data.SBV.Control   (CheckSatResult(..), checkSat)
 import Data.Decimal       (DecimalRaw(..))
 import Data.Either        (isRight, lefts)
 import Data.Foldable      (toList)
-import Data.Map           (Map)
+import Data.Map           hiding (mapMaybe, toList, map, filter, null, take)
 import Data.Maybe         (fromMaybe, catMaybes, fromJust, isJust, fromMaybe, mapMaybe)
 import Data.Text          (isPrefixOf, stripSuffix, intercalate, Text, pack, unpack)
 import Data.Text.Encoding (encodeUtf8)
 import System.Environment (lookupEnv)
 import System.IO          (hFlush, stdout)
+import GHC.Generics       (Generic)
 
 import qualified Control.Monad.Par.Class as Par
 import qualified Data.ByteString as BS
@@ -83,6 +87,7 @@ data UnitTestOptions = UnitTestOptions
   , dapp       :: DappInfo
   , testParams :: TestVMParams
   , mutations  :: Int
+  , corpus     :: FilePath
   }
 
 data TestVMParams = TestVMParams
@@ -104,7 +109,9 @@ data TestVMParams = TestVMParams
   }
 
 -- | For each tuple of (contract, method) we store the calldata required to reach each known path in the method
-type Corpus = Map (SolcContract, Text) (Map (MultiSet OpLocation) AbiValue)
+-- | The keys in the corpus are hashed to keep the size of the serialized representation manageable
+type Corpus = Map W256 (Map W256 AbiValue)
+
 data FuzzResult = Pass | Fail VM String
 
 defaultGasForCreating :: W256
@@ -199,28 +206,41 @@ checkFailures UnitTestOptions { .. } method bailed = do
 
 -- | Either generates the calldata by mutating an example from the corpus, or synthesizes a random example
 genWithCorpus :: UnitTestOptions -> Corpus -> SolcContract -> Text -> [AbiType] -> Gen AbiValue
-genWithCorpus UnitTestOptions { .. } corpus contract' sig tps = do
+genWithCorpus opts corpus contract' sig tps = do
   -- TODO: also check that the contract matches here
-  --let examples = [cd | (_, sig', cd) <- (fmap snd) . Map.toList $ corpus, sig' == sig]
-  case Map.lookup (contract', sig) corpus of
+  case Map.lookup (hashCall (contract', sig)) corpus of
     Nothing -> genAbiValue (AbiTupleType $ Vector.fromList tps)
     Just examples -> frequency
-      [ (mutations,       Test.QuickCheck.elements (fmap snd $ Map.toList examples) >>= mutateAbiValue)
-      , (100 - mutations, genAbiValue (AbiTupleType $ Vector.fromList tps))
+      [ (mutations opts,         Test.QuickCheck.elements (Map.elems examples) >>= mutateAbiValue)
+      , (100 - (mutations opts), genAbiValue (AbiTupleType $ Vector.fromList tps))
       ]
 
 -- | Randomly generates the calldata arguments and runs the test, updates the corpus with a new example if we explored a new path
 fuzzTest :: UnitTestOptions -> Text -> [AbiType] -> VM -> StateT Corpus IO FuzzResult
-fuzzTest opts@UnitTestOptions { .. } sig types vm = do
+fuzzTest opts sig types vm = do
   let code' = _contractcode . fromJust $ currentContract vm
-      contract' = fromJust $ lookupCode code' dapp
+      contract' = fromJust $ lookupCode code' (dapp opts)
   corpus <- get
   args <- liftIO . generate $ genWithCorpus opts corpus contract' sig types
   (res, (vm', coverage)) <- liftIO $ runStateT (interpretWithCoverage opts (runUnitTest opts sig args)) (vm, mempty)
-  modify (Map.adjust (Map.insert coverage args) (contract', sig))
+  modify $ updateCorpus (hashCall (contract', sig)) (hashTrace coverage) args
   if res
      then pure Pass
      else pure $ Fail vm' (show . ByteStringS . encodeAbiValue $ args)
+  where
+    updateCorpus k1 k2 v c = case Map.lookup k1 c of
+      Nothing -> Map.insert k1 (Map.insert k2 v mempty) c
+      Just m' -> Map.insert k1 (Map.insert k2 v m') c
+
+hashCall :: (SolcContract, Text) -> W256
+hashCall (contract', sig) = keccak . encodeUtf8 $
+  (Text.pack . show . _runtimeCodehash $ contract') <> (Text.pack . show . _creationCodehash $ contract') <> sig
+
+hashTrace :: MultiSet OpLocation -> W256
+hashTrace = keccak . encodeUtf8 . Text.pack . show . (fmap hashLoc) . MultiSet.toList
+
+hashLoc :: OpLocation -> W256
+hashLoc (OpLocation code ix) = keccak . encodeUtf8 . Text.pack $ (show code) <> (show ix)
 
 tick :: Text -> IO ()
 tick x = Text.putStr x >> hFlush stdout
@@ -229,7 +249,7 @@ tick x = Text.putStr x >> hFlush stdout
 data OpLocation = OpLocation
   { srcCode :: ContractCode
   , srcOpIx :: Int
-  } deriving (Show, Eq, Ord)
+  } deriving (Show, Eq, Ord, Generic)
 
 srcMapForOpLocation :: DappInfo -> OpLocation -> Maybe SrcMap
 srcMapForOpLocation dapp (OpLocation hash opIx) = srcMap dapp hash opIx
@@ -379,11 +399,12 @@ coverageForUnitTestContract
 
 runUnitTestContract
   :: UnitTestOptions
+  -> Corpus
   -> Map Text SolcContract
   -> (Text, [(Test, [AbiType])])
-  -> SBV.Query [(Bool, VM)]
+  -> SBV.Query (Corpus, [(Bool, VM)])
 runUnitTestContract
-  opts@(UnitTestOptions {..}) contractMap (name, testSigs) = do
+  opts@(UnitTestOptions {..}) corpus' contractMap (name, testSigs) = do
 
   -- Print a header
   liftIO $ putStrLn $ "Running " ++ show (length testSigs) ++ " tests for "
@@ -410,20 +431,20 @@ runUnitTestContract
           Text.putStrLn "\x1b[31m[BAIL]\x1b[0m setUp() "
           tick "\n"
           tick $ failOutput vm1 opts "setUp()"
-          pure [(False, vm1)]
+          pure (corpus', [(False, vm1)])
         Just (VMSuccess _) -> do
           let
-            runCache :: ([(Either Text Text, VM)], VM) -> (Test, [AbiType])
-                        -> SBV.Query ([(Either Text Text, VM)], VM)
-            runCache (results, vm) (test, types) = do
-              (t, r, vm') <- runTest opts vm (test, types)
+            runCache :: ([(Either Text Text, VM)], VM, Corpus) -> (Test, [AbiType])
+                        -> SBV.Query ([(Either Text Text, VM)], VM, Corpus)
+            runCache (results, vm, corp) (test, types) = do
+              (t, r, vm', corp') <- runTest opts vm corp (test, types)
               liftIO $ Text.putStrLn t
               let vmCached = vm & set (cache . fetched) (view (cache . fetched) vm')
-              pure (((r, vm'): results), vmCached)
+              pure (((r, vm'): results), vmCached, corp')
 
           -- Run all the test cases and print their status updates,
           -- accumulating the vm cache throughout
-          (details, _) <- foldM runCache ([], vm1) testSigs
+          (details, _, finalCorpus) <- foldM runCache ([], vm1, corpus') testSigs
 
           let running = [x | (Right x, _) <- details]
           let bailing = [x | (Left  x, _) <- details]
@@ -433,20 +454,24 @@ runUnitTestContract
             tick (Text.unlines (filter (not . Text.null) running))
             tick (Text.unlines (filter (not . Text.null) bailing))
 
-          pure [(isRight r, vm) | (r, vm) <- details]
+          pure (finalCorpus, [(isRight r, vm) | (r, vm) <- details])
 
 
-runTest :: UnitTestOptions -> VM -> (Test, [AbiType]) -> SBV.Query (Text, Either Text Text, VM)
-runTest opts@UnitTestOptions{..} vm (ConcreteTest testName, []) = liftIO $ runOne opts vm testName emptyAbi
-runTest opts@UnitTestOptions{..} vm (ConcreteTest testName, types) = liftIO $ case replay of
-  Nothing ->
-    fuzzRun opts vm testName types
+runTest :: UnitTestOptions -> VM -> Corpus -> (Test, [AbiType]) -> SBV.Query (Text, Either Text Text, VM, Corpus)
+runTest opts@UnitTestOptions{..} vm corpus' (ConcreteTest testName, []) = do
+  (msg, verboseMsg, postvm) <- liftIO (runOne opts vm testName emptyAbi)
+  pure (msg, verboseMsg, postvm, corpus')
+runTest opts@UnitTestOptions{..} vm corpus' (ConcreteTest testName, types) = liftIO $ case replay of
+  Nothing -> fuzzRun opts vm corpus' testName types
   Just (sig, callData) ->
     if sig == testName
-    then runOne opts vm testName $
-      decodeAbiValue (AbiTupleType (Vector.fromList types)) callData
-    else fuzzRun opts vm testName types
-runTest opts vm (SymbolicTest testName, types) = symRun opts vm testName types
+    then do
+      (msg, verboseMsg, postvm) <- runOne opts vm testName $ decodeAbiValue (AbiTupleType (Vector.fromList types)) callData
+      pure (msg, verboseMsg, postvm, corpus')
+    else fuzzRun opts vm corpus' testName types
+runTest opts vm corpus' (SymbolicTest testName, types) = do
+  (msg, verboseMsg, postvm) <- symRun opts vm testName types
+  pure (msg, verboseMsg, postvm, corpus')
 
 -- | Define the thread spawner for normal test cases
 runOne :: UnitTestOptions -> VM -> ABIMethod -> AbiValue -> IO (Text, Either Text Text, VM)
@@ -486,12 +511,13 @@ runOne opts@UnitTestOptions{..} vm testName args = do
           )
 
 -- | Define the thread spawner for property based tests
-fuzzRun :: UnitTestOptions -> VM -> Text -> [AbiType] -> IO (Text, Either Text Text, VM)
-fuzzRun opts@UnitTestOptions{..} vm testName types = do
-  (res, _) <- foldM (\(res, corpus) _ -> case res of
-      Pass -> runStateT (fuzzTest opts testName types vm) corpus
-      Fail {} -> pure (res, corpus)
-    ) (Pass, mempty) [0..fuzzRuns]
+fuzzRun :: UnitTestOptions -> VM -> Corpus -> Text -> [AbiType] -> IO (Text, Either Text Text, VM, Corpus)
+fuzzRun opts@UnitTestOptions{..} vm corpus' testName types = do
+
+  (res, finalCorpus) <- foldM (\(res, corp) _ -> case res of
+      Pass -> runStateT (fuzzTest opts testName types vm) corp
+      Fail {} -> pure (res, corp)
+    ) (Pass, corpus') [0..fuzzRuns]
 
   case res of
     (Pass) ->
@@ -501,6 +527,7 @@ fuzzRun opts@UnitTestOptions{..} vm testName types = do
              -- can't retrieve the correct vm from quickcheck
            , Right (passOutput vm opts testName)
            , vm
+           , finalCorpus
            )
     (Fail vm' cex) ->
       pure ("\x1b[31m[FAIL]\x1b[0m "
@@ -510,6 +537,7 @@ fuzzRun opts@UnitTestOptions{..} vm testName types = do
              <> testName <> "\",\"" <> (pack cex) <> "\")'\nto debug it."
            , Left (failOutput vm' opts testName)
            , vm'
+           , finalCorpus
            )
        where
          abiValue = decodeAbiValue (AbiTupleType (Vector.fromList types)) $ BSLazy.fromStrict $ hexText (pack cex)

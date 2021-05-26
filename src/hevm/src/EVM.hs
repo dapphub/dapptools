@@ -286,7 +286,7 @@ data SubState = SubState
 data ContractCode
   = InitCode Buffer     -- ^ "Constructor" code, during contract creation
   | RuntimeCode Buffer  -- ^ "Instance" code, after contract creation
-  deriving (Show)
+  deriving (Show, Generic)
 
 -- runtime err when used for symbolic code
 instance Eq ContractCode where
@@ -436,14 +436,14 @@ currentContract vm =
 -- * Data constructors
 
 makeVm :: VMOpts -> VM
-makeVm o = 
+makeVm o =
   let txaccessList = vmoptTxAccessList o
       txorigin = vmoptOrigin o
       txtoAddr = vmoptAddress o
       initialAccessedAddrs = fromList $ [txorigin, txtoAddr] ++ [1..9] ++ (Map.keys txaccessList)
       initialAccessedStorageKeys = fromList $ foldMap (uncurry (map . (,))) (Map.toList txaccessList)
       touched = if vmoptCreate o then [txorigin] else [txorigin, txtoAddr]
-  in 
+  in
   VM
   { _result = Nothing
   , _frames = mempty
@@ -2283,7 +2283,7 @@ finishFrame how = do
 
           -- In other words, we special case address 0x03 and keep it in the set of touched accounts during revert
           touched <- use (tx . substate . touchedAccounts)
-          
+
           let
             substate'' = over touchedAccounts (maybe id cons (find ((==) 3) touched)) substate'
             revertContracts = assign (env . contracts) reversion

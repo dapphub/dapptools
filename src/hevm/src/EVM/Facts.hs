@@ -39,6 +39,7 @@ import EVM          (VM, Contract, Cache)
 import EVM.Symbolic (litWord, forceLit)
 import EVM          (balance, nonce, storage, bytecode, env, contracts, contract, state, cache, fetched)
 import EVM.Types    (Addr, Word, SymWord, Buffer(..))
+import EVM.UnitTest (Corpus)
 
 import qualified EVM
 
@@ -71,10 +72,10 @@ default (ASCII)
 -- Note that Haskell allows this kind of union of records.
 -- It's convenient here, but typically avoided.
 data Fact
-  = BalanceFact { addr :: Addr, what :: Word }
-  | NonceFact   { addr :: Addr, what :: Word }
-  | StorageFact { addr :: Addr, what :: Word, which :: Word }
-  | CodeFact    { addr :: Addr, blob :: ByteString }
+  = BalanceFact       { addr :: Addr, what :: Word }
+  | NonceFact         { addr :: Addr, what :: Word }
+  | StorageFact       { addr :: Addr, what :: Word, which :: Word }
+  | CodeFact          { addr :: Addr, blob :: ByteString }
   deriving (Eq, Show)
 
 -- A fact path means something like "/0123...abc/storage/0x1",
@@ -113,13 +114,13 @@ instance AsASCII ByteString where
 
 contractFacts :: Addr -> Contract -> [Fact]
 contractFacts a x = case view bytecode x of
-  ConcreteBuffer b -> 
+  ConcreteBuffer b ->
     storageFacts a x ++
     [ BalanceFact a (view balance x)
     , NonceFact   a (view nonce x)
     , CodeFact    a b
     ]
-  SymbolicBuffer b ->
+  SymbolicBuffer _ ->
     -- here simply ignore storing the bytecode
     storageFacts a x ++
     [ BalanceFact a (view balance x)

@@ -26,6 +26,7 @@ import Options.Generic
 import Data.SBV.Trans.Control
 import Data.Maybe (fromMaybe)
 import Control.Monad.State.Strict (execStateT)
+import Control.Monad (foldM)
 
 import qualified Data.Map as Map
 import qualified Data.ByteString.Lazy   as LazyByteString
@@ -72,12 +73,17 @@ ghciTest root path statePath =
         , vmModifier = loadFacts
         , dapp = emptyDapp
         , testParams = params
+        , mutations = 50
+        , corpus = ".hevm.corpus"
         }
     readSolc path >>=
       \case
         Just (contractMap, _) -> do
           let unitTests = findAllUnitTests (Map.elems contractMap)
-          results <- runSMT $ query $ concatMapM (runUnitTestContract opts contractMap) unitTests
+          (_, results) <- runSMT $ query $ foldM (\(c, r) t -> do
+              (c', r') <- runUnitTestContract opts c contractMap t
+              pure (c', r <> r')
+            ) mempty unitTests
           let (passing, _) = unzip results
           pure passing
 
@@ -129,6 +135,8 @@ ghciTty root path statePath =
         , vmModifier = loadFacts
         , dapp = emptyDapp
         , testParams = params
+        , mutations = 50
+        , corpus = ".hevm.corpus"
         }
     EVM.TTY.main testOpts root path
 
