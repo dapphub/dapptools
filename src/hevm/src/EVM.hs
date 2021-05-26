@@ -2421,7 +2421,7 @@ withTraceLocation x = do
   pure Trace
     { _traceData = x
     , _traceCode = view contractcode this
-    , _traceOpIx = (view opIxMap this) Vector.! (view (state . pc) vm)
+    , _traceOpIx = fromMaybe 0 $ (view opIxMap this) Vector.!? (view (state . pc) vm)
     }
 
 pushTrace :: TraceData -> EVM ()
