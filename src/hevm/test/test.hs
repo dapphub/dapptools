@@ -3,7 +3,6 @@
 {-# Language ScopedTypeVariables #-}
 {-# Language LambdaCase #-}
 {-# Language QuasiQuotes #-}
-{-# Language TypeSynonymInstances #-}
 {-# Language FlexibleInstances #-}
 {-# Language GeneralizedNewtypeDeriving #-}
 {-# Language DataKinds #-}
@@ -497,7 +496,7 @@ main = defaultMain $ testGroup "hevm"
             |]
           -- should find a counterexample
           Right _ <- runSMTWith cvc4 $ query $ fst <$> checkAssert c (Just ("f(uint256,uint256)", [AbiUIntType 256, AbiUIntType 256])) []
-          putStrLn $ "found counterexample:"
+          putStrLn "found counterexample:"
 
 
       ,
@@ -529,7 +528,7 @@ main = defaultMain $ testGroup "hevm"
                        (Map.insert aAddr (initialContract (RuntimeCode $ ConcreteBuffer a) &
                                            set EVM.storage (EVM.Symbolic [] store)))
             verify vm Nothing Nothing (Just checkAssertions)
-          putStrLn $ "found counterexample:"
+          putStrLn "found counterexample:"
       ,
          testCase "calling unique contracts (read from storage)" $ do
           let code =
@@ -553,7 +552,7 @@ main = defaultMain $ testGroup "hevm"
             vm0 <- abstractVM (Just ("call_A()", [])) [] c SymbolicS
             let vm = vm0 & set (state . callvalue) 0
             verify vm Nothing Nothing (Just checkAssertions)
-          putStrLn $ "found counterexample:"
+          putStrLn "found counterexample:"
       ,
 
          testCase "keccak concrete and sym agree" $ do
@@ -572,14 +571,14 @@ main = defaultMain $ testGroup "hevm"
             vm0 <- abstractVM (Just ("kecc(uint256)", [AbiUIntType 256])) [] c SymbolicS
             let vm = vm0 & set (state . callvalue) 0
             verify vm Nothing Nothing (Just checkAssertions)
-          putStrLn $ "found counterexample:"
+          putStrLn "found counterexample:"
 
       , testCase "safemath distributivity (yul)" $ do
           Left _ <- runSMTWith cvc4 $ query $ do
             let yulsafeDistributivity = hex "6355a79a6260003560e01c14156016576015601f565b5b60006000fd60a1565b603d602d604435600435607c565b6039602435600435607c565b605d565b6052604b604435602435605d565b600435607c565b141515605a57fe5b5b565b6000828201821115151560705760006000fd5b82820190505b92915050565b6000818384048302146000841417151560955760006000fd5b82820290505b92915050565b"
             vm <- abstractVM (Just ("distributivity(uint256,uint256,uint256)", [AbiUIntType 256, AbiUIntType 256, AbiUIntType 256])) [] yulsafeDistributivity SymbolicS
             verify vm Nothing Nothing (Just checkAssertions)
-          putStrLn $ "Proven"
+          putStrLn "Proven"
 
       , testCase "safemath distributivity (sol)" $ do
           let code =
@@ -602,7 +601,7 @@ main = defaultMain $ testGroup "hevm"
           Left _ <- runSMTWith z3 $ query $ do
             vm <- abstractVM (Just ("distributivity(uint256,uint256,uint256)", [AbiUIntType 256, AbiUIntType 256, AbiUIntType 256])) [] c SymbolicS
             verify vm Nothing Nothing (Just checkAssertions)
-          putStrLn $ "Proven"
+          putStrLn "Proven"
 
     ]
   , testGroup "Equivalence checking"
@@ -753,4 +752,3 @@ bothM f (a, a') = do
   b  <- f a
   b' <- f a'
   return (b, b')
-  
