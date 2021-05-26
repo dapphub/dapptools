@@ -30,6 +30,7 @@ import qualified EVM.Precompiled
 import Control.Lens hiding (op, (:<), (|>), (.>))
 import Control.Monad.State.Strict hiding (state)
 
+import Data.Aeson                   (ToJSON, FromJSON)
 import Data.ByteString              (ByteString)
 import Data.ByteString.Lazy         (fromStrict)
 import Data.Map.Strict              (Map)
@@ -287,6 +288,9 @@ data ContractCode
   = InitCode Buffer     -- ^ "Constructor" code, during contract creation
   | RuntimeCode Buffer  -- ^ "Instance" code, after contract creation
   deriving (Show, Generic)
+
+instance ToJSON ContractCode
+instance FromJSON ContractCode
 
 -- runtime err when used for symbolic code
 instance Eq ContractCode where

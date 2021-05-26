@@ -51,6 +51,13 @@ data Buffer
   = ConcreteBuffer ByteString
   | SymbolicBuffer [SWord 8]
 
+instance ToJSON Buffer where
+  toJSON (ConcreteBuffer bs) = String . Text.pack . show . ByteStringS $ bs
+  toJSON (SymbolicBuffer _) = error "cannot serialize a symbolic buffer to JSON"
+
+instance FromJSON Buffer where
+  parseJSON = withText "Buffer" $ pure . ConcreteBuffer . read . Text.unpack
+
 newtype W256 = W256 Word256
   deriving
     ( Num, Integral, Real, Ord, Enum, Eq

@@ -26,6 +26,9 @@ import qualified EVM.Fetch
 
 import qualified EVM.FeeSchedule as FeeSchedule
 
+import Data.Aeson
+import Data.Aeson.Types
+
 import EVM.Stepper (Stepper, interpret)
 import qualified EVM.Stepper as Stepper
 import qualified Control.Monad.Operational as Operational
@@ -110,7 +113,7 @@ data TestVMParams = TestVMParams
 
 -- | For each tuple of (contract, method) we store the calldata required to reach each known path in the method
 -- | The keys in the corpus are hashed to keep the size of the serialized representation manageable
-type Corpus = Map W256 (Map W256 AbiValue)
+type Corpus = Map W256 (Map (MultiSet OpLocation) AbiValue)
 
 data FuzzResult = Pass | Fail VM String
 
@@ -223,7 +226,7 @@ fuzzTest opts sig types vm = do
   corpus <- get
   args <- liftIO . generate $ genWithCorpus opts corpus contract' sig types
   (res, (vm', coverage)) <- liftIO $ runStateT (interpretWithCoverage opts (runUnitTest opts sig args)) (vm, mempty)
-  modify $ updateCorpus (hashCall (contract', sig)) (hashTrace coverage) args
+  modify $ updateCorpus (hashCall (contract', sig)) coverage args
   if res
      then pure Pass
      else pure $ Fail vm' (show . ByteStringS . encodeAbiValue $ args)
@@ -236,12 +239,6 @@ hashCall :: (SolcContract, Text) -> W256
 hashCall (contract', sig) = keccak . encodeUtf8 $
   (Text.pack . show . _runtimeCodehash $ contract') <> (Text.pack . show . _creationCodehash $ contract') <> sig
 
-hashTrace :: MultiSet OpLocation -> W256
-hashTrace = keccak . encodeUtf8 . Text.pack . show . (fmap hashLoc) . MultiSet.toList
-
-hashLoc :: OpLocation -> W256
-hashLoc (OpLocation code ix) = keccak . encodeUtf8 . Text.pack $ (show code) <> (show ix)
-
 tick :: Text -> IO ()
 tick x = Text.putStr x >> hFlush stdout
 
@@ -250,6 +247,24 @@ data OpLocation = OpLocation
   { srcCode :: ContractCode
   , srcOpIx :: Int
   } deriving (Show, Eq, Ord, Generic)
+
+instance FromJSON OpLocation
+instance FromJSONKey OpLocation
+instance ToJSON OpLocation
+
+instance (Ord a, FromJSON a) => FromJSON (MultiSet a) where
+    parseJSON = fmap MultiSet.fromList . parseJSON
+
+instance ToJSON1 MultiSet where
+    liftToJSON t _ = listValue t . MultiSet.toList
+    liftToEncoding t _ = listEncoding t . MultiSet.toList
+
+instance (ToJSON a) => ToJSON (MultiSet a) where
+    toJSON = toJSON1
+    toEncoding = toEncoding1
+
+instance ToJSONKey (MultiSet OpLocation)
+instance FromJSONKey (MultiSet OpLocation)
 
 srcMapForOpLocation :: DappInfo -> OpLocation -> Maybe SrcMap
 srcMapForOpLocation dapp (OpLocation hash opIx) = srcMap dapp hash opIx
