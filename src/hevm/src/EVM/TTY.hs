@@ -24,6 +24,7 @@ import EVM.Op
 import EVM.Solidity hiding (storageLayout)
 import EVM.Types hiding (padRight)
 import EVM.UnitTest
+import EVM.RLP (RLP(..))
 import EVM.StorageLayout
 
 import EVM.Stepper (Stepper)
@@ -32,7 +33,7 @@ import qualified Control.Monad.Operational as Operational
 
 import EVM.Fetch (Fetcher)
 
-import Control.Lens
+import Control.Lens hiding (List)
 import Control.Monad.Trans.Reader
 import Control.Monad.State.Strict hiding (state)
 
@@ -279,7 +280,9 @@ isFuzzTest :: (Test, [AbiType]) -> Bool
 isFuzzTest (SymbolicTest _, _) = False
 isFuzzTest (ConcreteTest _, []) = False
 isFuzzTest (ConcreteTest _, _) = True
-isFuzzTest (ExploreTest _, _) = False -- testing...
+isFuzzTest (ExploreTest _, []) = False
+isFuzzTest (ExploreTest _, _) = True
+-- testing...
 
 main :: UnitTestOptions -> FilePath -> FilePath -> IO ()
 main opts root jsonFilePath =
@@ -639,7 +642,13 @@ initialUiVmStateForTest opts@UnitTestOptions{..} (theContractName, theTestName) 
             Stepper.evm $ modify symbolify
             void (execSymTest opts theTestName (SymbolicBuffer buf, w256lit len)) -- S (Literal $
           ExploreTest _ -> do
-            void $ explorationStepper opts theTestName (fromMaybe 20 maxDepth)
+            let randomRun = explorationStepper opts theTestName [] (List []) (fromMaybe 20 maxDepth)
+            void $ case replay of
+              Nothing -> randomRun
+              Just (sig, cd) ->
+                if theTestName == sig
+                then explorationStepper opts theTestName (decodeCalls cd) (List []) (length (decodeCalls cd))
+                else randomRun
   pure $ initUiVmState vm0 opts script
   where
     Just (test, types) = find (\(test',_) -> extractSig test' == theTestName) $ unitTestMethods testContract
@@ -859,9 +868,8 @@ isExecutionHalted _ vm = isJust (view result vm)
 currentSrcMap :: DappInfo -> VM -> Maybe SrcMap
 currentSrcMap dapp vm = do
   this <- currentContract vm
-  let
-    i = (view opIxMap this) SVec.! (view (state . pc) vm)
-    h = view contractcode this
+  i <- (view opIxMap this) SVec.!? (view (state . pc) vm)
+  let h = view contractcode this
   srcMap dapp h i
 
 drawStackPane :: UiVmState -> UiWidget
