@@ -139,23 +139,6 @@ main = defaultMain $ testGroup "hevm"
         pure $ case (fromJSON . toJSON $ val) of
           Error _ -> False
           Data.Aeson.Success v -> val == v
-
-    --, testProperty "Debuggg" $ do
-        --src <- arbitrary :: Gen Corpus
-
-        --let json = toJSON (trace ("src: " <> show src) src)
-
-        --let res = fromJSON (trace ("json: " <> show json) json)
-
-        --pure $ case trace ("res: " <> show res) res of
-          --Error _ -> False
-          --Data.Aeson.Success v -> v == src
-
-    --, testProperty "Corpus" $ do
-        --corpus' <- arbitrary :: Gen Corpus
-        --pure $ case (fromJSON . toJSON $ corpus') of
-          --Error _ -> False
-          --Data.Aeson.Success v -> v == corpus'
     ]
 
   , testGroup "Precompiled contracts"

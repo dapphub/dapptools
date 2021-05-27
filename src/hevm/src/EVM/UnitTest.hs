@@ -256,7 +256,7 @@ data OpLocation = OpLocation
 instance Arbitrary OpLocation where
   arbitrary = do
     src <- arbitrary :: Gen ContractCode
-    opIx <- chooseInt (0, codesize src)
+    opIx <- choose (0, codesize src)
     pure $ OpLocation src opIx
     where
       codesize (InitCode (ConcreteBuffer c)) = BS.length c

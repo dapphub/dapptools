@@ -5,7 +5,7 @@ module EVM.Mutate where
 
 import Data.Bifunctor (second)
 import Data.Bool (bool)
-import Test.QuickCheck.Gen (Gen, chooseInt, chooseInteger, frequency)
+import Test.QuickCheck.Gen (Gen, choose, frequency)
 import Data.DoubleWord (Int256, Word256)
 import Test.QuickCheck.Arbitrary (arbitrary)
 
@@ -58,8 +58,8 @@ expandRandList xs
   | l == 0    = return xs
   | l >= 32   = return xs
   | otherwise = do
-    k <- chooseInt (0, l - 1)
-    t <- chooseInt (1, min 32 l)
+    k <- choose (0, l - 1)
+    t <- choose (1, min 32 l)
     return $ expandAt xs k t
   where l = LL.length xs
 
@@ -77,7 +77,7 @@ deleteRandList xs =
   if LL.null xs
   then return xs
   else do
-    k <- chooseInt (0, LL.length xs - 1)
+    k <- choose (0, LL.length xs - 1)
     return $ deleteAt k xs
 
 deleteAt :: LL.ListLike f i => Int -> f -> f
@@ -89,8 +89,8 @@ swapRandList xs =
   if LL.null xs
   then return xs
   else do
-    i <- chooseInt (0, LL.length xs - 1)
-    j <- chooseInt (0, LL.length xs - 1)
+    i <- choose (0, LL.length xs - 1)
+    j <- choose (0, LL.length xs - 1)
     return $ if i == j then xs else swapAt xs (min i j) (max i j)
 
 -- taken from https://stackoverflow.com/questions/30551033/swap-two-elements-in-a-list-by-its-indices/30551130#30551130
@@ -105,7 +105,7 @@ swapAt xs i j = left <> LL.cons elemJ middle <> LL.cons elemI right
 
 -- | Given an 'Integral' number n, get a random number in [0,2n].
 mutateNum :: Integral a => a -> Gen a
-mutateNum x = bool (x +) (x -) <$> arbitrary <*> (fromInteger <$> (chooseInteger (0, toInteger x)))
+mutateNum x = bool (x +) (x -) <$> arbitrary <*> (fromInteger <$> (choose (0, toInteger x)))
 
 -- | Force `x` to be in the range of a uint of size `n`
 fixAbiUInt :: Int -> Word256 -> AbiValue

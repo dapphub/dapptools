@@ -29,7 +29,7 @@ import Data.Maybe (fromMaybe)
 import Numeric (readHex, showHex)
 import Options.Generic
 import Control.Arrow ((>>>))
-import Test.QuickCheck (Arbitrary(..), chooseInteger)
+import Test.QuickCheck (Arbitrary(..), choose)
 
 import qualified Data.ByteArray       as BA
 import qualified Data.Aeson           as JSON
@@ -73,7 +73,7 @@ newtype W256 = W256 Word256
 
 instance Arbitrary W256 where
   arbitrary = do
-    v <- chooseInteger (0, 2 ^ (256 :: Integer))
+    v <- choose (0, 2 ^ (256 :: Integer))
     pure $ W256 (fromInteger v)
 
 data Word = C Whiff W256 --maybe to remove completely in the future

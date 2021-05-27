@@ -66,7 +66,7 @@ import Data.ByteString    (ByteString)
 import Data.DoubleWord    (Word256, Word128, Word160, Int128, Int256, signedWord)
 import Data.Functor       (($>))
 import Data.Text          (Text, pack, unpack)
-import Data.Text.Encoding (encodeUtf8, decodeUtf8, decodeUtf8')
+import Data.Text.Encoding (encodeUtf8, decodeUtf8')
 import Data.Vector        (Vector, toList)
 import Data.Word          (Word32)
 import Data.List          (intercalate)
@@ -99,22 +99,6 @@ data AbiValue
   | AbiArray        Int AbiType (Vector AbiValue)
   | AbiTuple        (Vector AbiValue)
   deriving (Read, Eq, Ord, Generic)
-
---instance ToJSON AbiValue where
-  --toJSON val = case val of
-    --AbiUInt n v -> object [ "size" .= n, "val" .= show v ]
-    --AbiInt n v -> object [ "size" .= n, "val" .= show v ]
-    --AbiAddress a -> toJSON a
-    --AbiBool b -> toJSON b
-    --AbiBytes n bs -> object [ "size" .= n, "val" .= show (ByteStringS bs) ]
-    --AbiBytesDynamic bs -> String . Text.pack . show . ByteStringS $ bs
-    --AbiString bs -> String . Text.pack . show . ByteStringS $ bs
-    --AbiArrayDynamic tp vs -> object [ "type" .= show tp, "values" .= toJSON vs ]
-    --AbiArray n tp vs -> object [ "size" .= n, "type" .= show tp, "values" .= toJSON vs ]
-    --AbiTuple vs -> toJSON vs
-
---instance FromJSON AbiValue where
-  --parseJSON v = pure $ case v of
 
 instance ToJSON AbiValue
 instance FromJSON AbiValue
