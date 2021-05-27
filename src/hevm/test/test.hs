@@ -10,6 +10,8 @@
 
 module Main where
 
+import Debug.Trace
+
 import Data.Text (Text)
 import Data.ByteString (ByteString)
 
@@ -36,6 +38,8 @@ import Data.SBV hiding ((===), forAll, sList)
 import Data.SBV.Control
 import qualified Data.Map as Map
 import Data.Binary.Get (runGetOrFail)
+
+import Data.Aeson (fromJSON, toJSON, Result(..))
 
 import EVM hiding (Query, code, path)
 import EVM.SymExec
@@ -94,6 +98,17 @@ main = defaultMain $ testGroup "hevm"
           -- traceM ("encoded (solidity): " ++ show solidityEncoded)
           -- traceM ("encoded (hevm): " ++ show (AbiBytesDynamic hevmEncoded))
           assertEqual "abi encoding mismatch" solidityEncoded (AbiBytesDynamic hevmEncoded)
+    ]
+  , testGroup "Corpus Serialization"
+    [ testProperty "AbiValue" $ forAll (arbitrary >>= genAbiValue) $
+        \val -> case (fromJSON . toJSON $ val) of
+          Error _ -> False
+          Data.Aeson.Success v -> val == v
+    , testPropery "MultiSet" $ do
+
+
+
+          assertFailure "whoops"
     ]
 
   , testGroup "Precompiled contracts"

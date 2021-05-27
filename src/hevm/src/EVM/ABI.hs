@@ -132,7 +132,7 @@ instance ToJSON Word128
 instance FromJSON Word128
 
 instance ToJSON ByteString where
-  toJSON b = toJSON (ByteStringS b)
+  toJSON = String . Text.pack . show
 
 instance FromJSON ByteString where
   parseJSON = withText "ByteString" $ pure . read . Text.unpack
@@ -174,6 +174,7 @@ data AbiType
 
 instance ToJSON AbiType
 instance FromJSON AbiType
+
 
 instance Show AbiType where
   show = Text.unpack . abiTypeSolidity
