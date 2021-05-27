@@ -116,18 +116,6 @@ main = defaultMain $ testGroup "hevm"
           Error _ -> False
           Data.Aeson.Success v -> val == v
 
-    , testProperty "OpLocation" $ do
-        val <- arbitrary :: Gen OpLocation
-        pure $ case (fromJSON . toJSON $ val) of
-          Error _ -> False
-          Data.Aeson.Success v -> val == v
-
-    , testProperty "MultiSet OpLocation" $ do
-        val <- arbitrary :: Gen (MultiSet OpLocation)
-        pure $ case (fromJSON . toJSON $ val) of
-          Error _ -> False
-          Data.Aeson.Success v -> val == v
-
     , testProperty "W256" $ do
         val <- arbitrary :: Gen W256
         pure $ case (fromJSON . toJSON $ val) of

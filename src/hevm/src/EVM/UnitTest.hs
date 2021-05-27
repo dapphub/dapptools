@@ -5,8 +5,6 @@
 
 module EVM.UnitTest where
 
-import Debug.Trace
-
 import Prelude hiding (Word)
 
 import EVM
@@ -113,7 +111,7 @@ data TestVMParams = TestVMParams
 
 -- | For each tuple of (contract, method) we store the calldata required to reach each known path in the method
 -- | The keys in the corpus are hashed to keep the size of the serialized representation manageable
-type Corpus = Map W256 (Map (MultiSet OpLocation) AbiValue)
+type Corpus = Map W256 (Map W256 AbiValue)
 
 instance Arbitrary (MultiSet OpLocation) where
   arbitrary = do
@@ -231,7 +229,7 @@ fuzzTest opts sig types vm = do
   corpus <- get
   args <- liftIO . generate $ genWithCorpus opts corpus contract' sig types
   (res, (vm', coverage)) <- liftIO $ runStateT (interpretWithCoverage opts (runUnitTest opts sig args)) (vm, mempty)
-  modify $ updateCorpus (hashCall (contract', sig)) coverage args
+  modify $ updateCorpus (hashCall (contract', sig)) (hashCoverage coverage) args
   if res
      then pure Pass
      else pure $ Fail vm' (show . ByteStringS . encodeAbiValue $ args)
@@ -244,45 +242,32 @@ hashCall :: (SolcContract, Text) -> W256
 hashCall (contract', sig) = keccak . encodeUtf8 $
   (Text.pack . show . _runtimeCodehash $ contract') <> (Text.pack . show . _creationCodehash $ contract') <> sig
 
+hashCoverage :: MultiSet OpLocation -> W256
+hashCoverage = MultiSet.fold (\loc acc -> keccak ((word256Bytes acc) <> (word256Bytes . codeHash $ loc))) (W256 0)
+
 tick :: Text -> IO ()
 tick x = Text.putStr x >> hFlush stdout
 
 -- | This is like an unresolved source mapping.
 data OpLocation = OpLocation
-  { srcCode :: ContractCode
-  , srcOpIx :: Int
+  { srcCode  :: ContractCode
+  , codeHash :: W256
+  , srcOpIx  :: Int
   } deriving (Show, Eq, Ord, Generic)
 
 instance Arbitrary OpLocation where
   arbitrary = do
-    src <- arbitrary :: Gen ContractCode
+    src <- arbitrary
+    hash <- arbitrary
     opIx <- choose (0, codesize src)
-    pure $ OpLocation src opIx
+    pure $ OpLocation src hash opIx
     where
       codesize (InitCode (ConcreteBuffer c)) = BS.length c
       codesize (RuntimeCode (ConcreteBuffer c)) = BS.length c
       codesize _ = error "cannot compute length for symbolic bytecode"
 
-instance FromJSON OpLocation
-instance FromJSONKey OpLocation
-instance ToJSON OpLocation
-
-instance (Ord a, FromJSON a) => FromJSON (MultiSet a) where
-    parseJSON = fmap MultiSet.fromList . parseJSON
-
-instance ToJSON1 MultiSet where
-    liftToJSON t _ = listValue t . MultiSet.toList
-    liftToEncoding t _ = listEncoding t . MultiSet.toList
-
-instance (ToJSON a) => ToJSON (MultiSet a) where
-    toJSON = toJSON1
-    toEncoding = toEncoding1
-
-instance ToJSONKey (MultiSet OpLocation)
-instance FromJSONKey (MultiSet OpLocation)
-
 srcMapForOpLocation :: DappInfo -> OpLocation -> Maybe SrcMap
-srcMapForOpLocation dapp (OpLocation hash opIx) = srcMap dapp hash opIx
+srcMapForOpLocation dapp (OpLocation code' _ opIx) = srcMap dapp code' opIx
 
 type CoverageState = (VM, MultiSet OpLocation)
 
@@ -294,6 +279,7 @@ currentOpLocation vm =
     Just c ->
       OpLocation
         (view contractcode c)
+        (view codehash c)
         (fromMaybe (error "internal error: op ix") (vmOpIx vm))
 
 execWithCoverage :: StateT CoverageState IO VMResult
