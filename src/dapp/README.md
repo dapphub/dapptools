@@ -156,6 +156,8 @@ function test_withdraw(uint96 amount) public {
 }
 ```
 
+If a counterexample is found, it can be replayed or analyzed in the debugger using the `--replay` flag.
+
 ### Symbolically executed tests
 
 While property based testing runs each function repeatedly with new input values, symbolic execution leaves these 
@@ -188,6 +190,26 @@ Failure: proveFail_withdraw(uint256)
 which demonstrates that if we give the password `42`, it is possible to withdraw from the vault.
 
 For more reading on property based testing and symbolic execution, see [this tutorial on the Ethereum Foundation blog](https://fv.ethereum.org/2020/12/11/symbolic-execution-with-ds-test/).
+
+### Invariant testing
+
+While other forms of tests are always run against the post state of the `setUp()` function in the testing contract,
+it can be also be useful to check whether a property is satisfied at any possible contract state. This can be done with
+the `invariant*` testing type. When running an invariant test, hevm will invoke any state mutating function from any 
+non-testing contract available after the `setUp()` function has been run, checking the `invariant*` after each run.
+
+The `--depth` paramenter determines how many transactions deep each test will run, while the `--fuzz-runs` parameter 
+determines how many times the whole process is repeated.
+
+Example:
+
+```solidity
+function invariant_totalSupply() public {
+    assertEq(token.totalSupply(), initialTotalSupply);
+}
+```
+
+If a counterexample is found, it can be replayed or analyzed in the debugger using the `--replay` flag.
 
 ### Testing against RPC state
 
