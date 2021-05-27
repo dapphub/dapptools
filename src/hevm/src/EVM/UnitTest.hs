@@ -115,6 +115,11 @@ data TestVMParams = TestVMParams
 -- | The keys in the corpus are hashed to keep the size of the serialized representation manageable
 type Corpus = Map W256 (Map (MultiSet OpLocation) AbiValue)
 
+instance Arbitrary (MultiSet OpLocation) where
+  arbitrary = do
+    coverage <- listOf (arbitrary :: Gen OpLocation)
+    pure $ MultiSet.fromList coverage
+
 data FuzzResult = Pass | Fail VM String
 
 defaultGasForCreating :: W256
@@ -247,6 +252,16 @@ data OpLocation = OpLocation
   { srcCode :: ContractCode
   , srcOpIx :: Int
   } deriving (Show, Eq, Ord, Generic)
+
+instance Arbitrary OpLocation where
+  arbitrary = do
+    src <- arbitrary :: Gen ContractCode
+    opIx <- chooseInt (0, codesize src)
+    pure $ OpLocation src opIx
+    where
+      codesize (InitCode (ConcreteBuffer c)) = BS.length c
+      codesize (RuntimeCode (ConcreteBuffer c)) = BS.length c
+      codesize _ = error "cannot compute length for symbolic bytecode"
 
 instance FromJSON OpLocation
 instance FromJSONKey OpLocation

@@ -29,6 +29,7 @@ import Data.Maybe (fromMaybe)
 import Numeric (readHex, showHex)
 import Options.Generic
 import Control.Arrow ((>>>))
+import Test.QuickCheck (Arbitrary(..), chooseInteger)
 
 import qualified Data.ByteArray       as BA
 import qualified Data.Aeson           as JSON
@@ -37,6 +38,7 @@ import qualified Data.ByteString      as BS
 import qualified Data.Serialize.Get   as Cereal
 import qualified Data.Text            as Text
 import qualified Data.Text.Encoding   as Text
+import qualified Data.ByteString.Builder as B
 import qualified Text.Read
 
 -- Some stuff for "generic programming", needed to create Word512
@@ -51,8 +53,13 @@ data Buffer
   = ConcreteBuffer ByteString
   | SymbolicBuffer [SWord 8]
 
+instance Arbitrary Buffer where
+  arbitrary = do
+    contents <- arbitrary
+    pure $ ConcreteBuffer (Text.encodeUtf8 . Text.pack $ contents)
+
 instance ToJSON Buffer where
-  toJSON (ConcreteBuffer bs) = String . Text.pack . show . ByteStringS $ bs
+  toJSON (ConcreteBuffer bs) = String . Text.pack . show $ bs
   toJSON (SymbolicBuffer _) = error "cannot serialize a symbolic buffer to JSON"
 
 instance FromJSON Buffer where
@@ -63,6 +70,11 @@ newtype W256 = W256 Word256
     ( Num, Integral, Real, Ord, Enum, Eq
     , Bits, FiniteBits, Bounded, Generic
     )
+
+instance Arbitrary W256 where
+  arbitrary = do
+    v <- chooseInteger (0, 2 ^ (256 :: Integer))
+    pure $ W256 (fromInteger v)
 
 data Word = C Whiff W256 --maybe to remove completely in the future
 
@@ -369,7 +381,12 @@ instance Read W256 where
 instance Show W256 where
   showsPrec _ s = ("0x" ++) . showHex s
 
-instance ToJSONKey W256
+instance ToJSONKey W256 where
+  toJSONKey = JSON.toJSONKeyText w256Text
+
+w256Text :: W256 -> Text
+w256Text = Text.pack . show
+
 instance JSON.ToJSON W256 where
   toJSON = JSON.String . Text.pack . show
 

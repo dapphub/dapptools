@@ -27,7 +27,7 @@ import EVM.FeeSchedule (FeeSchedule (..))
 import Options.Generic as Options
 import qualified EVM.Precompiled
 
-import Control.Lens hiding (op, (:<), (|>), (.>))
+import Control.Lens hiding (op, (:<), (|>), (.>), elements)
 import Control.Monad.State.Strict hiding (state)
 
 import Data.Aeson                   (ToJSON, FromJSON)
@@ -39,6 +39,7 @@ import Data.Maybe                   (fromMaybe)
 import Data.Sequence                (Seq)
 import Data.Vector.Storable         (Vector)
 import Data.Foldable                (toList)
+import Test.QuickCheck              (Arbitrary(..), elements)
 
 import Data.Tree
 import Data.List (find)
@@ -288,6 +289,11 @@ data ContractCode
   = InitCode Buffer     -- ^ "Constructor" code, during contract creation
   | RuntimeCode Buffer  -- ^ "Instance" code, after contract creation
   deriving (Show, Generic)
+
+instance Arbitrary ContractCode where
+  arbitrary = do
+    buf <- arbitrary
+    elements [InitCode buf, RuntimeCode buf]
 
 instance ToJSON ContractCode
 instance FromJSON ContractCode
@@ -1590,8 +1596,8 @@ makeUnique sw@(S w val) cont = case maybeLitWord sw of
       Unique a -> do
         assign result Nothing
         cont (C w $ fromSizzle a)
-      InconsistentU -> vmError $ DeadPath
-      TimeoutU -> vmError $ SMTTimeout
+      InconsistentU -> vmError DeadPath
+      TimeoutU -> vmError SMTTimeout
       Multiple -> vmError $ NotUnique w
   Just a -> cont a
 
@@ -2127,7 +2133,7 @@ create self this xGas' xValue xs newAddr initCode = do
   then do
     assign (state . stack) (0 : xs)
     assign (state . returndata) mempty
-    pushTrace $ ErrorTrace $ CallDepthLimitReached
+    pushTrace $ ErrorTrace CallDepthLimitReached
     next
   else if collision $ view (env . contracts . at newAddr) vm0
   then burn xGas $ do

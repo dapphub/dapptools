@@ -211,8 +211,9 @@ test-suite test
     secp256k1
   build-depends:
     HUnit >= 1.6,
-    aeson,
     QuickCheck,
+    aeson,
+    multiset,
     base,
     base16-bytestring,
     binary,

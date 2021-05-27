@@ -38,6 +38,7 @@ import Data.SBV hiding ((===), forAll, sList)
 import Data.SBV.Control
 import qualified Data.Map as Map
 import Data.Binary.Get (runGetOrFail)
+import Data.MultiSet (MultiSet)
 
 import Data.Aeson (fromJSON, toJSON, Result(..))
 
@@ -50,6 +51,7 @@ import EVM.Precompiled
 import EVM.RLP
 import EVM.Solidity hiding (solc)
 import EVM.Types
+import EVM.UnitTest
 
 instance MonadFail Query where
     fail = io . fail
@@ -99,16 +101,61 @@ main = defaultMain $ testGroup "hevm"
           -- traceM ("encoded (hevm): " ++ show (AbiBytesDynamic hevmEncoded))
           assertEqual "abi encoding mismatch" solidityEncoded (AbiBytesDynamic hevmEncoded)
     ]
+
   , testGroup "Corpus Serialization"
-    [ testProperty "AbiValue" $ forAll (arbitrary >>= genAbiValue) $
-        \val -> case (fromJSON . toJSON $ val) of
+
+    [ testProperty "AbiValue" $ do
+        val <- arbitrary :: Gen AbiValue
+        pure $ case (fromJSON . toJSON $ val) of
           Error _ -> False
           Data.Aeson.Success v -> val == v
-    , testPropery "MultiSet" $ do
 
+    , testProperty "ByteString" $ do
+        val <- arbitrary :: Gen ByteString
+        pure $ case (fromJSON . toJSON $ val) of
+          Error _ -> False
+          Data.Aeson.Success v -> val == v
 
+    , testProperty "OpLocation" $ do
+        val <- arbitrary :: Gen OpLocation
+        pure $ case (fromJSON . toJSON $ val) of
+          Error _ -> False
+          Data.Aeson.Success v -> val == v
 
-          assertFailure "whoops"
+    , testProperty "MultiSet OpLocation" $ do
+        val <- arbitrary :: Gen (MultiSet OpLocation)
+        pure $ case (fromJSON . toJSON $ val) of
+          Error _ -> False
+          Data.Aeson.Success v -> val == v
+
+    , testProperty "W256" $ do
+        val <- arbitrary :: Gen W256
+        pure $ case (fromJSON . toJSON $ val) of
+          Error _ -> False
+          Data.Aeson.Success v -> val == v
+
+    , testProperty "Corpus" $ withMaxSuccess 20 $ do
+        val <- arbitrary :: Gen Corpus
+        pure $ case (fromJSON . toJSON $ val) of
+          Error _ -> False
+          Data.Aeson.Success v -> val == v
+
+    --, testProperty "Debuggg" $ do
+        --src <- arbitrary :: Gen Corpus
+
+        --let json = toJSON (trace ("src: " <> show src) src)
+
+        --let res = fromJSON (trace ("json: " <> show json) json)
+
+        --pure $ case trace ("res: " <> show res) res of
+          --Error _ -> False
+          --Data.Aeson.Success v -> v == src
+
+    --, testProperty "Corpus" $ do
+        --corpus' <- arbitrary :: Gen Corpus
+        --pure $ case (fromJSON . toJSON $ corpus') of
+          --Error _ -> False
+          --Data.Aeson.Success v -> v == corpus'
     ]
 
   , testGroup "Precompiled contracts"

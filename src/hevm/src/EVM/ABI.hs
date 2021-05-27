@@ -137,6 +137,11 @@ instance ToJSON ByteString where
 instance FromJSON ByteString where
   parseJSON = withText "ByteString" $ pure . read . Text.unpack
 
+instance Arbitrary ByteString where
+  arbitrary = do
+    s <- arbitrary
+    pure $ encodeUtf8 . pack $ s
+
 -- | Pretty-print some 'AbiValue'.
 instance Show AbiValue where
   show (AbiUInt _ n)         = show n
