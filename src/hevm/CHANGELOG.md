@@ -4,7 +4,8 @@
 
 ### Added
 
-Can now identify contracts with `immutable` by comparing bytecode modulo immutableReferences
+- Can now identify contracts with `immutable` by comparing bytecode modulo immutableReferences.
+- A new test runner for exploring arbitrary contract states.
 
 ## 0.46.0 - 2021-04-29
 
