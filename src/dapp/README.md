@@ -16,6 +16,7 @@ that isn't available in `rpc`, such as [fuzz testing](#dapp-test-flags), symboli
   - [Unit testing](#unit-testing)
   - [Property based testing](#property-based-testing)
   - [Symbolically executed tests](#symbolically-executed-tests)
+  - [Invariant testing](#invariant-testing)
   - [Testing against RPC state](#testing-against-rpc-state)
   - [Deployment](#deployment)
 - [Configuration](#configuration)
