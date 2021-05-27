@@ -130,7 +130,8 @@ library
     wreq                              >= 0.5.3 && < 0.6,
     regex-tdfa                        >= 1.2.3 && < 1.4,
     base                              >= 4.9 && < 5,
-    ListLike                          >= 4.7.2 && < 4.8
+    ListLike                          >= 4.7.2 && < 4.8,
+    blake3                            >= 0.2 && < 0.3
   hs-source-dirs:
     src
   default-language:
@@ -213,7 +214,7 @@ test-suite test
     HUnit >= 1.6,
     QuickCheck,
     aeson,
-    multiset,
+    blake3,
     base,
     base16-bytestring,
     binary,

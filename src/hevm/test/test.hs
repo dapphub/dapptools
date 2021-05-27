@@ -38,7 +38,8 @@ import Data.SBV hiding ((===), forAll, sList)
 import Data.SBV.Control
 import qualified Data.Map as Map
 import Data.Binary.Get (runGetOrFail)
-import Data.MultiSet (MultiSet)
+import qualified BLAKE3
+
 
 import Data.Aeson (fromJSON, toJSON, Result(..))
 
@@ -112,6 +113,12 @@ main = defaultMain $ testGroup "hevm"
 
     , testProperty "ByteString" $ do
         val <- arbitrary :: Gen ByteString
+        pure $ case (fromJSON . toJSON $ val) of
+          Error _ -> False
+          Data.Aeson.Success v -> val == v
+
+    , testProperty "Blake3 Digest" $ do
+        val <- arbitrary :: Gen (BLAKE3.Digest 32)
         pure $ case (fromJSON . toJSON $ val) of
           Error _ -> False
           Data.Aeson.Success v -> val == v

@@ -24,9 +24,6 @@ import qualified EVM.Fetch
 
 import qualified EVM.FeeSchedule as FeeSchedule
 
-import Data.Aeson
-import Data.Aeson.Types
-
 import EVM.Stepper (Stepper, interpret)
 import qualified EVM.Stepper as Stepper
 import qualified Control.Monad.Operational as Operational
@@ -37,6 +34,14 @@ import qualified Control.Monad.State.Strict as State
 
 import Control.Monad.Par.Class (spawn_)
 import Control.Monad.Par.IO (runParIO)
+
+import qualified BLAKE3
+import qualified Data.ByteArray()
+import GHC.TypeLits (KnownNat)
+import Data.ByteArray.Encoding (convertFromBase, Base(..))
+import Data.Aeson (ToJSON(..), FromJSON(..), ToJSONKey(..), FromJSONKey(..), Value(..), withText)
+import Data.Aeson.Types (toJSONKeyText)
+import Data.ByteString.Base16 as BS16
 
 import qualified Data.ByteString.Lazy as BSLazy
 import qualified Data.SBV.Trans.Control as SBV (Query, getValue, resetAssertions)
@@ -51,7 +56,7 @@ import Data.Foldable      (toList)
 import Data.Map           hiding (mapMaybe, toList, map, filter, null, take)
 import Data.Maybe         (fromMaybe, catMaybes, fromJust, isJust, fromMaybe, mapMaybe)
 import Data.Text          (isPrefixOf, stripSuffix, intercalate, Text, pack, unpack)
-import Data.Text.Encoding (encodeUtf8)
+import Data.Text.Encoding (encodeUtf8, decodeUtf8)
 import System.Environment (lookupEnv)
 import System.IO          (hFlush, stdout)
 import GHC.Generics       (Generic)
@@ -111,7 +116,7 @@ data TestVMParams = TestVMParams
 
 -- | For each tuple of (contract, method) we store the calldata required to reach each known path in the method
 -- | The keys in the corpus are hashed to keep the size of the serialized representation manageable
-type Corpus = Map W256 (Map W256 AbiValue)
+type Corpus = Map (BLAKE3.Digest 32) (Map (BLAKE3.Digest 32) AbiValue)
 
 instance Arbitrary (MultiSet OpLocation) where
   arbitrary = do
@@ -238,12 +243,37 @@ fuzzTest opts sig types vm = do
       Nothing -> Map.insert k1 (Map.insert k2 v mempty) c
       Just m' -> Map.insert k1 (Map.insert k2 v m') c
 
-hashCall :: (SolcContract, Text) -> W256
-hashCall (contract', sig) = keccak . encodeUtf8 $
-  (Text.pack . show . _runtimeCodehash $ contract') <> (Text.pack . show . _creationCodehash $ contract') <> sig
+hashCall :: (SolcContract, Text) -> BLAKE3.Digest 32
+hashCall (contract', sig) = BLAKE3.hash
+  [encodeUtf8 . Text.pack $ (show . _runtimeCodehash $ contract') <> (show . _creationCodehash $ contract') <> (Text.unpack sig)]
 
-hashCoverage :: MultiSet OpLocation -> W256
-hashCoverage = MultiSet.fold (\loc acc -> keccak ((word256Bytes acc) <> (word256Bytes . codeHash $ loc))) (W256 0)
+hashCoverage :: MultiSet OpLocation -> BLAKE3.Digest 32
+hashCoverage cov = BLAKE3.finalize $ MultiSet.fold (\loc acc -> BLAKE3.update acc [word256Bytes . codeHash $ loc]) (BLAKE3.hasher) cov
+
+instance Arbitrary (BLAKE3.Digest 32) where
+  arbitrary = do
+    msg <- arbitrary :: Gen ByteString
+    pure $ BLAKE3.hash [msg]
+
+instance Ord (BLAKE3.Digest 32) where
+  x <= y = show x <= show y
+
+instance ToJSONKey (BLAKE3.Digest 32)
+instance FromJSONKey (BLAKE3.Digest 32)
+
+digestText :: BLAKE3.Digest 32 -> Text
+digestText = Text.pack . show
+
+instance ToJSON (BLAKE3.Digest 32) where
+  toJSON = String . Text.pack . show
+
+instance FromJSON (BLAKE3.Digest 32) where
+  parseJSON = withText "BLAKE3.Digest 32" $ pure . read . Text.unpack
+
+instance KnownNat a => Read (BLAKE3.Digest a) where
+  readsPrec _ x = [bimap decode (Text.unpack . decodeUtf8) bytes]
+     where bytes = BS16.decode (encodeUtf8 (Text.pack x))
+           decode = fromJust . BLAKE3.digest
 
 tick :: Text -> IO ()
 tick x = Text.putStr x >> hFlush stdout
