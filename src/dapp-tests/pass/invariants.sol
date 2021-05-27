@@ -12,10 +12,10 @@ contract InvariantTest is DSTest {
         token.mint(100 ether);
     }
 
-    function invariantTestThisBal() {
+    function invariantTestThisBal() public {
         assertLe(token.balanceOf(address(this)), 100 ether);
     }
-    function invariantTotSupply() {
+    function invariantTotSupply() public {
         assertEq(token.totalSupply(), 100 ether);
     }
 }
