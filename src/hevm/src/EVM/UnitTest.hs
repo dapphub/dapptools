@@ -509,7 +509,7 @@ explorationStepper opts@UnitTestOptions{..} testName replayData (List history) i
  let opts' = opts { testParams = testParams {testAddress = target, testCaller = caller', testTimestamp = timestamp'}}
      thisCallRLP = List [BS $ word160Bytes caller', BS $ word160Bytes target, BS cd, BS $ word256Bytes timestamp']
  -- set the timestamp
- Stepper.evm $ assign (block . timestamp) timestamp'
+ Stepper.evm $ assign (block . timestamp) (w256lit timestamp')
  -- perform the call
  bailed <- exploreStep opts' cd
  Stepper.evm popTrace
