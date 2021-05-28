@@ -450,7 +450,7 @@ runTest opts@UnitTestOptions{..} vm (InvariantTest testName, []) = liftIO $ case
     if sig == testName
     then exploreRun opts vm testName (decodeCalls cds)
     else exploreRun opts vm testName []
-runTest _ _ (InvariantTest _, _) = error "TODO: support this too"
+runTest _ _ (InvariantTest _, _) = error "invariant testing with arguments is not implemented (yet!)"
 
 type ExploreTx = (Addr, Addr, ByteString, W256)
 
