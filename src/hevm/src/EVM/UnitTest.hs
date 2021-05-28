@@ -38,9 +38,7 @@ import Control.Monad.Par.IO (runParIO)
 import qualified BLAKE3
 import qualified Data.ByteArray()
 import GHC.TypeLits (KnownNat)
-import Data.ByteArray.Encoding (convertFromBase, Base(..))
 import Data.Aeson (ToJSON(..), FromJSON(..), ToJSONKey(..), FromJSONKey(..), Value(..), withText)
-import Data.Aeson.Types (toJSONKeyText)
 import Data.ByteString.Base16 as BS16
 
 import qualified Data.ByteString.Lazy as BSLazy
@@ -233,8 +231,9 @@ fuzzTest opts sig types vm = do
       contract' = fromJust $ lookupCode code' (dapp opts)
   corpus <- get
   args <- liftIO . generate $ genWithCorpus opts corpus contract' sig types
-  (res, (vm', coverage)) <- liftIO $ runStateT (interpretWithCoverage opts (runUnitTest opts sig args)) (vm, mempty)
-  modify $ updateCorpus (hashCall (contract', sig)) (hashCoverage coverage) args
+  (res, (vm', hasher)) <- liftIO $ runStateT (interpretWithTraceId opts (runUnitTest opts sig args)) (vm, BLAKE3.hasher)
+  let traceId = BLAKE3.finalize hasher
+  modify $ updateCorpus (hashCall (contract', sig)) traceId args
   if res
      then pure Pass
      else pure $ Fail vm' (show . ByteStringS . encodeAbiValue $ args)
@@ -246,9 +245,6 @@ fuzzTest opts sig types vm = do
 hashCall :: (SolcContract, Text) -> BLAKE3.Digest 32
 hashCall (contract', sig) = BLAKE3.hash
   [encodeUtf8 . Text.pack $ (show . _runtimeCodehash $ contract') <> (show . _creationCodehash $ contract') <> (Text.unpack sig)]
-
-hashCoverage :: MultiSet OpLocation -> BLAKE3.Digest 32
-hashCoverage cov = BLAKE3.finalize $ MultiSet.fold (\loc acc -> BLAKE3.update acc [encodeUtf8 . Text.pack . show . codeHash $ loc]) (BLAKE3.hasher) cov
 
 instance Arbitrary (BLAKE3.Digest 32) where
   arbitrary = do
@@ -274,6 +270,62 @@ instance KnownNat a => Read (BLAKE3.Digest a) where
   readsPrec _ x = [bimap decode (Text.unpack . decodeUtf8) bytes]
      where bytes = BS16.decode (encodeUtf8 (Text.pack x))
            decode = fromJust . BLAKE3.digest
+
+type TraceIdState = (VM, BLAKE3.Hasher)
+
+-- | This interpreter is similar to interpretWithCoverage, except instead of
+-- collecting the full trace, we instead return a hash of the trace. This
+-- avoids the overhead associated with the MultiSet used in interpretWithCoverage
+interpretWithTraceId
+  :: UnitTestOptions
+  -> Stepper a
+  -> StateT TraceIdState IO a
+interpretWithTraceId opts =
+  eval . Operational.view
+
+  where
+    eval
+      :: Operational.ProgramView Stepper.Action a
+      -> StateT TraceIdState IO a
+
+    eval (Operational.Return x) =
+      pure x
+
+    eval (action Operational.:>>= k) =
+      case action of
+        Stepper.Exec ->
+          execWithTraceId >>= interpretWithTraceId opts . k
+        Stepper.Run ->
+          runWithTraceId >>= interpretWithTraceId opts . k
+        Stepper.Wait q -> do
+          m <- liftIO (oracle opts q)
+          zoom _1 (State.state (runState m)) >> interpretWithTraceId opts (k ())
+        Stepper.Ask _ ->
+          error "cannot make choice in this interpreter"
+        Stepper.EVM m ->
+          zoom _1 (State.state (runState m)) >>= interpretWithTraceId opts . k
+
+execWithTraceId :: StateT TraceIdState IO VMResult
+execWithTraceId = do _ <- runWithTraceId
+                     fromJust <$> use (_1 . result)
+
+runWithTraceId :: StateT TraceIdState IO VM
+runWithTraceId = do
+  -- This is just like `exec` except for every instruction evaluated,
+  -- we also updae a hash accumulator for each instruction visited
+  vm0 <- use _1
+  case view result vm0 of
+    Nothing -> do
+      vm1 <- zoom _1 (State.state (runState exec1) >> get)
+      zoom _2 (modify (flip BLAKE3.update ([encodeUtf8 . Text.pack . show . loc $ vm1])))
+      runWithTraceId
+    Just _ -> pure vm0
+  where
+    loc vm =
+      case currentContract vm of
+        Nothing ->
+          error "internal error: why no contract?"
+        Just c -> (view codehash c, fromMaybe (error "internal error: op ix") (vmOpIx vm))
 
 tick :: Text -> IO ()
 tick x = Text.putStr x >> hFlush stdout
