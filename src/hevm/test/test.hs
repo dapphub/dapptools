@@ -117,12 +117,6 @@ main = defaultMain $ testGroup "hevm"
           Error _ -> False
           Data.Aeson.Success v -> val == v
 
-    , testProperty "Blake3 Digest" $ do
-        val <- arbitrary :: Gen (BLAKE3.Digest 32)
-        pure $ case (fromJSON . toJSON $ val) of
-          Error _ -> False
-          Data.Aeson.Success v -> val == v
-
     , testProperty "W256" $ do
         val <- arbitrary :: Gen W256
         pure $ case (fromJSON . toJSON $ val) of

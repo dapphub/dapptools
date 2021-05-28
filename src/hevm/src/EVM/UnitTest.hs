@@ -35,8 +35,6 @@ import qualified Control.Monad.State.Strict as State
 import Control.Monad.Par.Class (spawn_)
 import Control.Monad.Par.IO (runParIO)
 
-import Data.Digest.XXHash.FFI
-
 import qualified Data.ByteString.Lazy as BSLazy
 import qualified Data.SBV.Trans.Control as SBV (Query, getValue, resetAssertions)
 import qualified Data.SBV.Internals as SBV (State)
@@ -108,9 +106,9 @@ data TestVMParams = TestVMParams
   , testChainId       :: W256
   }
 
--- | For each tuple of (contract, method) we store the calldata required to reach each known path in the method
--- | The keys in the corpus are hashed to keep the size of the serialized representation manageable
-type Corpus = Map Word64 (Map [(W256, Int)] AbiValue)
+-- | For each tuple of (contract, method) we store the calldata required to
+-- reach each known path in the method
+type Corpus = Map (W256,Text) (Map [(W256, Int)] AbiValue)
 
 instance Arbitrary (MultiSet OpLocation) where
   arbitrary = do
@@ -209,14 +207,10 @@ checkFailures UnitTestOptions { .. } method bailed = do
         in pure (shouldFail == failed)
       _ -> error "internal error: unexpected failure code"
 
-xxhash :: ByteString -> Word64
-xxhash bs = xxh64 bs 42069
-
 -- | Either generates the calldata by mutating an example from the corpus, or synthesizes a random example
-genWithCorpus :: UnitTestOptions -> Corpus -> SolcContract -> Text -> [AbiType] -> Gen AbiValue
-genWithCorpus opts corpus contract' sig tps = do
-  -- TODO: also check that the contract matches here
-  case Map.lookup (hashCall (contract', sig)) corpus of
+genWithCorpus :: UnitTestOptions -> Corpus -> W256 -> Text -> [AbiType] -> Gen AbiValue
+genWithCorpus opts corpus codeHash sig tps = do
+  case Map.lookup (codeHash, sig) corpus of
     Nothing -> genAbiValue (AbiTupleType $ Vector.fromList tps)
     Just examples -> frequency
       [ (mutations opts,         Test.QuickCheck.elements (Map.elems examples) >>= mutateAbiValue)
@@ -226,12 +220,11 @@ genWithCorpus opts corpus contract' sig tps = do
 -- | Randomly generates the calldata arguments and runs the test, updates the corpus with a new example if we explored a new path
 fuzzTest :: UnitTestOptions -> Text -> [AbiType] -> VM -> StateT Corpus IO FuzzResult
 fuzzTest opts sig types vm = do
-  let code' = _contractcode . fromJust $ currentContract vm
-      contract' = fromJust $ lookupCode code' (dapp opts)
+  let codeHash' = _codehash . fromJust $ currentContract vm
   corpus <- get
-  args <- liftIO . generate $ genWithCorpus opts corpus contract' sig types
-  (res, (vm', traceId)) <- liftIO $ runStateT (interpretWithTraceId opts (runUnitTest opts sig args)) (vm, [])
-  modify $ updateCorpus (hashCall (contract', sig)) traceId args
+  args <- liftIO . generate $ genWithCorpus opts corpus codeHash' sig types
+  (res, (vm', trace')) <- liftIO $ runStateT (interpretWithTraceId opts (runUnitTest opts sig args)) (vm, [])
+  modify $ updateCorpus (codeHash', sig) trace' args
   if res
      then pure Pass
      else pure $ Fail vm' (show . ByteStringS . encodeAbiValue $ args)
@@ -239,10 +232,6 @@ fuzzTest opts sig types vm = do
     updateCorpus k1 k2 v c = case Map.lookup k1 c of
       Nothing -> Map.insert k1 (Map.insert k2 v mempty) c
       Just m' -> Map.insert k1 (Map.insert k2 v m') c
-
-hashCall :: (SolcContract, Text) -> Word64
-hashCall (contract', sig) = xxhash .
-  encodeUtf8 . Text.pack $ (show . _runtimeCodehash $ contract') <> (show . _creationCodehash $ contract') <> (Text.unpack sig)
 
 type TraceIdState = (VM, [(W256, Int)])
 
