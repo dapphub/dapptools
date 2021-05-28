@@ -505,7 +505,8 @@ explorationStepper opts@UnitTestOptions{..} testName replayData (List history) i
          let cd = abiMethod (sig <> "(" <> intercalate "," ((pack . show) <$> types) <> ")") args
          -- increment timestamp with random amount
          timepassed <- num <$> generate (arbitrarySizedNatural :: Gen Word32)
-         return (caller', target, cd, testTimestamp testParams + timepassed)
+         let ts = view (block . timestamp) vm
+         return (caller', target, cd, ts + num timepassed)
  let opts' = opts { testParams = testParams {testAddress = target, testCaller = caller', testTimestamp = timestamp'}}
      thisCallRLP = List [BS $ word160Bytes caller', BS $ word160Bytes target, BS cd, BS $ word256Bytes timestamp']
  -- set the timestamp
