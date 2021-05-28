@@ -444,13 +444,13 @@ runTest opts@UnitTestOptions{..} vm (ConcreteTest testName, types) = liftIO $ ca
       decodeAbiValue (AbiTupleType (Vector.fromList types)) callData
     else fuzzRun opts vm testName types
 runTest opts vm (SymbolicTest testName, types) = symRun opts vm testName types
-runTest opts@UnitTestOptions{..} vm (ExploreTest testName, []) = liftIO $ case replay of
+runTest opts@UnitTestOptions{..} vm (InvariantTest testName, []) = liftIO $ case replay of
   Nothing -> exploreRun opts vm testName []
   Just (sig, cds) ->
     if sig == testName
     then exploreRun opts vm testName (decodeCalls cds)
     else exploreRun opts vm testName []
-runTest _ _ (ExploreTest _, _) = error "TODO: support this too"
+runTest _ _ (InvariantTest _, _) = error "TODO: support this too"
 
 type ExploreTx = (Addr, Addr, ByteString, W256)
 

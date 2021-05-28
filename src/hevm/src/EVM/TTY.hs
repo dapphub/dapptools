@@ -280,9 +280,7 @@ isFuzzTest :: (Test, [AbiType]) -> Bool
 isFuzzTest (SymbolicTest _, _) = False
 isFuzzTest (ConcreteTest _, []) = False
 isFuzzTest (ConcreteTest _, _) = True
-isFuzzTest (ExploreTest _, []) = False
 isFuzzTest (ExploreTest _, _) = True
--- testing...
 
 main :: UnitTestOptions -> FilePath -> FilePath -> IO ()
 main opts root jsonFilePath =
