@@ -35,11 +35,7 @@ import qualified Control.Monad.State.Strict as State
 import Control.Monad.Par.Class (spawn_)
 import Control.Monad.Par.IO (runParIO)
 
-import qualified BLAKE3
-import qualified Data.ByteArray()
-import GHC.TypeLits (KnownNat)
-import Data.Aeson (ToJSON(..), FromJSON(..), ToJSONKey(..), FromJSONKey(..), Value(..), withText)
-import Data.ByteString.Base16 as BS16
+import Data.Digest.XXHash.FFI
 
 import qualified Data.ByteString.Lazy as BSLazy
 import qualified Data.SBV.Trans.Control as SBV (Query, getValue, resetAssertions)
@@ -54,7 +50,7 @@ import Data.Foldable      (toList)
 import Data.Map           hiding (mapMaybe, toList, map, filter, null, take)
 import Data.Maybe         (fromMaybe, catMaybes, fromJust, isJust, fromMaybe, mapMaybe)
 import Data.Text          (isPrefixOf, stripSuffix, intercalate, Text, pack, unpack)
-import Data.Text.Encoding (encodeUtf8, decodeUtf8)
+import Data.Text.Encoding (encodeUtf8)
 import System.Environment (lookupEnv)
 import System.IO          (hFlush, stdout)
 import GHC.Generics       (Generic)
@@ -114,7 +110,7 @@ data TestVMParams = TestVMParams
 
 -- | For each tuple of (contract, method) we store the calldata required to reach each known path in the method
 -- | The keys in the corpus are hashed to keep the size of the serialized representation manageable
-type Corpus = Map (BLAKE3.Digest 32) (Map (BLAKE3.Digest 32) AbiValue)
+type Corpus = Map Word64 (Map Word64 AbiValue)
 
 instance Arbitrary (MultiSet OpLocation) where
   arbitrary = do
@@ -213,6 +209,9 @@ checkFailures UnitTestOptions { .. } method bailed = do
         in pure (shouldFail == failed)
       _ -> error "internal error: unexpected failure code"
 
+xxhash :: ByteString -> Word64
+xxhash bs = xxh64 bs 42069
+
 -- | Either generates the calldata by mutating an example from the corpus, or synthesizes a random example
 genWithCorpus :: UnitTestOptions -> Corpus -> SolcContract -> Text -> [AbiType] -> Gen AbiValue
 genWithCorpus opts corpus contract' sig tps = do
@@ -231,8 +230,7 @@ fuzzTest opts sig types vm = do
       contract' = fromJust $ lookupCode code' (dapp opts)
   corpus <- get
   args <- liftIO . generate $ genWithCorpus opts corpus contract' sig types
-  (res, (vm', hasher)) <- liftIO $ runStateT (interpretWithTraceId opts (runUnitTest opts sig args)) (vm, BLAKE3.hasher)
-  let traceId = BLAKE3.finalize hasher
+  (res, (vm', traceId)) <- liftIO $ runStateT (interpretWithTraceId opts (runUnitTest opts sig args)) (vm, 0)
   modify $ updateCorpus (hashCall (contract', sig)) traceId args
   if res
      then pure Pass
@@ -242,36 +240,11 @@ fuzzTest opts sig types vm = do
       Nothing -> Map.insert k1 (Map.insert k2 v mempty) c
       Just m' -> Map.insert k1 (Map.insert k2 v m') c
 
-hashCall :: (SolcContract, Text) -> BLAKE3.Digest 32
-hashCall (contract', sig) = BLAKE3.hash
-  [encodeUtf8 . Text.pack $ (show . _runtimeCodehash $ contract') <> (show . _creationCodehash $ contract') <> (Text.unpack sig)]
+hashCall :: (SolcContract, Text) -> Word64
+hashCall (contract', sig) = xxhash .
+  encodeUtf8 . Text.pack $ (show . _runtimeCodehash $ contract') <> (show . _creationCodehash $ contract') <> (Text.unpack sig)
 
-instance Arbitrary (BLAKE3.Digest 32) where
-  arbitrary = do
-    msg <- arbitrary :: Gen ByteString
-    pure $ BLAKE3.hash [msg]
-
-instance Ord (BLAKE3.Digest 32) where
-  x <= y = show x <= show y
-
-instance ToJSONKey (BLAKE3.Digest 32)
-instance FromJSONKey (BLAKE3.Digest 32)
-
-digestText :: BLAKE3.Digest 32 -> Text
-digestText = Text.pack . show
-
-instance ToJSON (BLAKE3.Digest 32) where
-  toJSON = String . Text.pack . show
-
-instance FromJSON (BLAKE3.Digest 32) where
-  parseJSON = withText "BLAKE3.Digest 32" $ pure . read . Text.unpack
-
-instance KnownNat a => Read (BLAKE3.Digest a) where
-  readsPrec _ x = [bimap decode (Text.unpack . decodeUtf8) bytes]
-     where bytes = BS16.decode (encodeUtf8 (Text.pack x))
-           decode = fromJust . BLAKE3.digest
-
-type TraceIdState = (VM, BLAKE3.Hasher)
+type TraceIdState = (VM, Word64)
 
 -- | This interpreter is similar to interpretWithCoverage, except instead of
 -- collecting the full trace, we instead return a hash of the trace. This
@@ -317,7 +290,7 @@ runWithTraceId = do
   case view result vm0 of
     Nothing -> do
       vm1 <- zoom _1 (State.state (runState exec1) >> get)
-      zoom _2 (modify (flip BLAKE3.update ([encodeUtf8 . Text.pack . show . loc $ vm1])))
+      zoom _2 (modify (\acc -> xxhash ((encodeUtf8 . Text.pack . show $ acc) <> loc vm1)))
       runWithTraceId
     Just _ -> pure vm0
   where
@@ -325,7 +298,7 @@ runWithTraceId = do
       case currentContract vm of
         Nothing ->
           error "internal error: why no contract?"
-        Just c -> (view codehash c, fromMaybe (error "internal error: op ix") (vmOpIx vm))
+        Just c -> encodeUtf8 . Text.pack . show $ (view codehash c, fromMaybe (error "internal error: op ix") (vmOpIx vm))
 
 tick :: Text -> IO ()
 tick x = Text.putStr x >> hFlush stdout

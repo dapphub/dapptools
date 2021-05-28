@@ -38,7 +38,6 @@ import qualified Data.ByteString      as BS
 import qualified Data.Serialize.Get   as Cereal
 import qualified Data.Text            as Text
 import qualified Data.Text.Encoding   as Text
-import qualified Data.ByteString.Builder as B
 import qualified Text.Read
 
 -- Some stuff for "generic programming", needed to create Word512
