@@ -55,7 +55,7 @@ data DappContext = DappContext
   , _contextEnv  :: Map Addr Contract
   }
 
-data Test = ConcreteTest Text | SymbolicTest Text | ExploreTest Text
+data Test = ConcreteTest Text | SymbolicTest Text | InvariantTest Text
 
 makeLenses ''DappInfo
 makeLenses ''DappContext
@@ -117,7 +117,7 @@ mkTest :: Text -> Maybe Test
 mkTest sig
   | "test" `isPrefixOf` sig = Just (ConcreteTest sig)
   | "prove" `isPrefixOf` sig = Just (SymbolicTest sig)
-  | "invariant" `isPrefixOf` sig = Just (ExploreTest sig)
+  | "invariant" `isPrefixOf` sig = Just (InvariantTest sig)
   | otherwise = Nothing
 
 regexMatches :: Text -> Text -> Bool
@@ -158,7 +158,7 @@ unitTestMethods =
 extractSig :: Test -> Text
 extractSig (ConcreteTest sig) = sig
 extractSig (SymbolicTest sig) = sig
-extractSig (ExploreTest  sig) = sig
+extractSig (InvariantTest sig) = sig
 
 traceSrcMap :: DappInfo -> Trace -> Maybe SrcMap
 traceSrcMap dapp trace =

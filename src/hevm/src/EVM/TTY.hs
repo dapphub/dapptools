@@ -280,7 +280,7 @@ isFuzzTest :: (Test, [AbiType]) -> Bool
 isFuzzTest (SymbolicTest _, _) = False
 isFuzzTest (ConcreteTest _, []) = False
 isFuzzTest (ConcreteTest _, _) = True
-isFuzzTest (ExploreTest _, _) = True
+isFuzzTest (InvariantTest _, _) = True
 
 main :: UnitTestOptions -> FilePath -> FilePath -> IO ()
 main opts root jsonFilePath =
@@ -639,7 +639,7 @@ initialUiVmStateForTest opts@UnitTestOptions{..} (theContractName, theTestName) 
           SymbolicTest _ -> do
             Stepper.evm $ modify symbolify
             void (execSymTest opts theTestName (SymbolicBuffer buf, w256lit len)) -- S (Literal $
-          ExploreTest _ -> do
+          InvariantTest _ -> do
             let randomRun = explorationStepper opts theTestName [] (List []) (fromMaybe 20 maxDepth)
             void $ case replay of
               Nothing -> randomRun
