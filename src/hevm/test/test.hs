@@ -10,8 +10,6 @@
 
 module Main where
 
-import Debug.Trace
-
 import Data.Text (Text)
 import Data.ByteString (ByteString)
 
@@ -24,6 +22,7 @@ import qualified Data.ByteString.Base16 as Hex
 import Test.Tasty
 import Test.Tasty.QuickCheck
 import Test.Tasty.HUnit
+import Data.Text.Arbitrary ()
 
 import Control.Monad.State.Strict (execState, runState)
 import Control.Lens hiding (List, pre, (.>))
@@ -38,8 +37,6 @@ import Data.SBV hiding ((===), forAll, sList)
 import Data.SBV.Control
 import qualified Data.Map as Map
 import Data.Binary.Get (runGetOrFail)
-import qualified BLAKE3
-
 
 import Data.Aeson (fromJSON, toJSON, Result(..))
 
