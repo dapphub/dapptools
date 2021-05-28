@@ -54,7 +54,8 @@ let
     owner = "makerdao";
     repo = "dss";
     rev = "36dab5c9fdce4fc36812e4fd8228be3beb18774d";
-    sha256 = "0nymyvw0ydg5rfzvw3x89h5lj3c6qhrk8kb2460lzi2p36df00zj";
+    sha256 = "1h82zw9qkb6wxwfc0ffz2lbmmmh0pj6s76jb23sqqcmy1wfnld1h";
+    fetchSubmodules = false;
   } + "/src";
 
   ds-test = pkgs.buildDappPackage {
