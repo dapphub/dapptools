@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## unreleased
 
 - A new type of test has been added invariant testing, 
-which run a test function against an arbitrary contract state. More information in the [README](./README.md###invariant-testing).
+which runs a test function against an arbitrary contract state. More information in the [README](./README.md###invariant-testing).
 
 ## [0.32.2] - 2021-03-22
 
