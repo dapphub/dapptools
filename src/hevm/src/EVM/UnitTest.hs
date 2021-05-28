@@ -502,20 +502,17 @@ runUnitTestContract
 
 
 runTest :: UnitTestOptions -> VM -> Corpus -> (Test, [AbiType]) -> SBV.Query (Text, Either Text Text, VM, Corpus)
-runTest opts@UnitTestOptions{..} vm corpus' (ConcreteTest testName, []) = do
-  (msg, verboseMsg, postvm) <- liftIO (runOne opts vm testName emptyAbi)
-  pure (msg, verboseMsg, postvm, corpus')
+runTest opts@UnitTestOptions{..} vm corpus' (ConcreteTest testName, []) = liftIO $ extend3 corpus' <$> runOne opts vm testName emptyAbi
 runTest opts@UnitTestOptions{..} vm corpus' (ConcreteTest testName, types) = liftIO $ case replay of
   Nothing -> fuzzRun opts vm corpus' testName types
   Just (sig, callData) ->
     if sig == testName
-    then do
-      (msg, verboseMsg, postvm) <- runOne opts vm testName $ decodeAbiValue (AbiTupleType (Vector.fromList types)) callData
-      pure (msg, verboseMsg, postvm, corpus')
+    then extend3 corpus' <$> (runOne opts vm testName $ decodeAbiValue (AbiTupleType (Vector.fromList types)) callData)
     else fuzzRun opts vm corpus' testName types
-runTest opts vm corpus' (SymbolicTest testName, types) = do
-  (msg, verboseMsg, postvm) <- symRun opts vm testName types
-  pure (msg, verboseMsg, postvm, corpus')
+runTest opts vm corpus' (SymbolicTest testName, types) = extend3 corpus' <$> (symRun opts vm testName types)
+
+extend3:: d -> (a, b, c) -> (a, b, c, d)
+extend3 d (a, b, c) = (a, b, c, d)
 
 -- | Define the thread spawner for normal test cases
 runOne :: UnitTestOptions -> VM -> ABIMethod -> AbiValue -> IO (Text, Either Text Text, VM)
