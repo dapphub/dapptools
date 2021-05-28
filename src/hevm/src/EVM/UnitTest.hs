@@ -508,6 +508,8 @@ explorationStepper opts@UnitTestOptions{..} testName replayData (List history) i
          return (caller', target, cd, testTimestamp testParams + timepassed)
  let opts' = opts { testParams = testParams {testAddress = target, testCaller = caller', testTimestamp = timestamp'}}
      thisCallRLP = List [BS $ word160Bytes caller', BS $ word160Bytes target, BS cd, BS $ word256Bytes timestamp']
+ -- set the timestamp
+ Stepper.evm $ assign (block . timestamp) timestamp'
  -- perform the call
  bailed <- exploreStep opts' cd
  Stepper.evm popTrace
@@ -864,7 +866,6 @@ makeTxCall TestVMParams{..} cd = do
   loadContract testAddress
   assign (state . calldata) cd
   assign (state . caller) (litAddr testCaller)
-  assign (block . timestamp) (w256lit testTimestamp)
   assign (state . gas) (w256 testGasCall)
   origin' <- fromMaybe (initialContract (RuntimeCode mempty)) <$> use (env . contracts . at testOrigin)
   let originBal = view balance origin'
