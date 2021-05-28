@@ -39,6 +39,7 @@ import qualified Data.Map as Map
 import Data.Binary.Get (runGetOrFail)
 
 import Data.Aeson (fromJSON, toJSON, Result(..))
+import Codec.Serialise (serialise, deserialise)
 
 import EVM hiding (Query, code, path)
 import EVM.SymExec
@@ -104,27 +105,11 @@ main = defaultMain $ testGroup "hevm"
 
     [ testProperty "AbiValue" $ do
         val <- arbitrary :: Gen AbiValue
-        pure $ case (fromJSON . toJSON $ val) of
-          Error _ -> False
-          Data.Aeson.Success v -> val == v
-
-    , testProperty "ByteString" $ do
-        val <- arbitrary :: Gen ByteString
-        pure $ case (fromJSON . toJSON $ val) of
-          Error _ -> False
-          Data.Aeson.Success v -> val == v
-
-    , testProperty "W256" $ do
-        val <- arbitrary :: Gen W256
-        pure $ case (fromJSON . toJSON $ val) of
-          Error _ -> False
-          Data.Aeson.Success v -> val == v
+        pure $ (deserialise . serialise $ val) == val
 
     , testProperty "Corpus" $ withMaxSuccess 20 $ do
         val <- arbitrary :: Gen Corpus
-        pure $ case (fromJSON . toJSON $ val) of
-          Error _ -> False
-          Data.Aeson.Success v -> val == v
+        pure $ (deserialise . serialise $ val) == val
     ]
 
   , testGroup "Precompiled contracts"

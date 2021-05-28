@@ -99,9 +99,6 @@ data StorageItem = StorageItem {
   _slot   :: Int
   } deriving (Show, Eq, Ord, Generic)
 
-instance ToJSON StorageItem
-instance FromJSON StorageItem
-
 data SlotType
   -- Note that mapping keys can only be elementary;
   -- that excludes arrays, contracts, and mappings.
@@ -109,9 +106,6 @@ data SlotType
   | StorageValue AbiType
 --  | StorageArray AbiType
   deriving (Eq, Ord, Generic)
-
-instance ToJSON SlotType
-instance FromJSON SlotType
 
 instance Show SlotType where
  show (StorageValue t) = show t
@@ -149,18 +143,12 @@ data SolcContract = SolcContract
   , _creationSrcmap   :: Seq SrcMap
   } deriving (Show, Eq, Generic, Ord)
 
-instance ToJSON SolcContract
-instance FromJSON SolcContract
-
 data Method = Method
   { _methodOutput :: [(Text, AbiType)]
   , _methodInputs :: [(Text, AbiType)]
   , _methodName :: Text
   , _methodSignature :: Text
   } deriving (Show, Eq, Ord, Generic)
-
-instance ToJSON Method
-instance FromJSON Method
 
 data SourceCache = SourceCache
   { _sourceFiles  :: [(Text, ByteString)]
@@ -172,9 +160,6 @@ data Reference = Reference
   { _refStart :: Int,
     _refLength :: Int
   } deriving (Show, Eq, Ord)
-
-instance ToJSON Reference where
-  toJSON (Reference start len) = object [ "start" .= start, "length" .= len ]
 
 instance FromJSON Reference where
   parseJSON (Object v) = Reference
@@ -192,9 +177,6 @@ instance Monoid SourceCache where
 data JumpType = JumpInto | JumpFrom | JumpRegular
   deriving (Show, Eq, Ord, Generic)
 
-instance ToJSON JumpType
-instance FromJSON JumpType
-
 data SrcMap = SM {
   srcMapOffset :: {-# UNPACK #-} Int,
   srcMapLength :: {-# UNPACK #-} Int,
@@ -202,9 +184,6 @@ data SrcMap = SM {
   srcMapJump   :: JumpType,
   srcMapModifierDepth :: {-# UNPACK #-} Int
 } deriving (Show, Eq, Ord, Generic)
-
-instance ToJSON SrcMap
-instance FromJSON SrcMap
 
 data SrcMapParseState
   = F1 String Int

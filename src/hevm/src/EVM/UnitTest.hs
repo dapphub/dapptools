@@ -110,11 +110,6 @@ data TestVMParams = TestVMParams
 -- reach each known path in the method
 type Corpus = Map (W256,Text) (Map [(W256, Int)] AbiValue)
 
-instance Arbitrary (MultiSet OpLocation) where
-  arbitrary = do
-    coverage <- listOf (arbitrary :: Gen OpLocation)
-    pure $ MultiSet.fromList coverage
-
 data FuzzResult = Pass | Fail VM String
 
 defaultGasForCreating :: W256
@@ -298,17 +293,6 @@ data OpLocation = OpLocation
   , codeHash :: W256
   , srcOpIx  :: Int
   } deriving (Show, Eq, Ord, Generic)
-
-instance Arbitrary OpLocation where
-  arbitrary = do
-    src <- arbitrary
-    hash <- arbitrary
-    opIx <- choose (0, codesize src)
-    pure $ OpLocation src hash opIx
-    where
-      codesize (InitCode (ConcreteBuffer c)) = BS.length c
-      codesize (RuntimeCode (ConcreteBuffer c)) = BS.length c
-      codesize _ = error "cannot compute length for symbolic bytecode"
 
 srcMapForOpLocation :: DappInfo -> OpLocation -> Maybe SrcMap
 srcMapForOpLocation dapp (OpLocation code' _ opIx) = srcMap dapp code' opIx

@@ -77,6 +77,7 @@ import Test.QuickCheck hiding ((.&.), label)
 import Text.ParserCombinators.ReadP
 import Control.Applicative
 import Data.Aeson
+import Codec.Serialise (Serialise(..))
 
 import qualified Data.ByteString       as BS
 import qualified Data.ByteString.Char8 as Char8
@@ -100,31 +101,12 @@ data AbiValue
   | AbiTuple        (Vector AbiValue)
   deriving (Read, Eq, Ord, Generic)
 
-instance ToJSON AbiValue
-instance FromJSON AbiValue
-
-instance ToJSON Int256
-instance FromJSON Int256
-
-instance ToJSON Int128
-instance FromJSON Int128
-
-instance ToJSON Word256
-instance FromJSON Word256
-
-instance ToJSON Word128
-instance FromJSON Word128
-
-instance ToJSON ByteString where
-  toJSON = String . Text.pack . show
-
-instance FromJSON ByteString where
-  parseJSON = withText "ByteString" $ pure . read . Text.unpack
-
-instance Arbitrary ByteString where
-  arbitrary = do
-    s <- arbitrary
-    pure $ encodeUtf8 . pack $ s
+instance Serialise AbiValue
+instance Serialise Int256
+instance Serialise Int128
+instance Serialise Addr
+instance Serialise Word160
+instance Serialise AbiType
 
 -- | Pretty-print some 'AbiValue'.
 instance Show AbiValue where

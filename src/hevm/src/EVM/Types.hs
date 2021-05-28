@@ -30,6 +30,7 @@ import Numeric (readHex, showHex)
 import Options.Generic
 import Control.Arrow ((>>>))
 import Test.QuickCheck (Arbitrary(..), choose)
+import Codec.Serialise (Serialise(..))
 
 import qualified Data.ByteArray       as BA
 import qualified Data.Aeson           as JSON
@@ -52,23 +53,15 @@ data Buffer
   = ConcreteBuffer ByteString
   | SymbolicBuffer [SWord 8]
 
-instance Arbitrary Buffer where
-  arbitrary = do
-    contents <- arbitrary
-    pure $ ConcreteBuffer (Text.encodeUtf8 . Text.pack $ contents)
-
-instance ToJSON Buffer where
-  toJSON (ConcreteBuffer bs) = String . Text.pack . show $ bs
-  toJSON (SymbolicBuffer _) = error "cannot serialize a symbolic buffer to JSON"
-
-instance FromJSON Buffer where
-  parseJSON = withText "Buffer" $ pure . ConcreteBuffer . read . Text.unpack
-
 newtype W256 = W256 Word256
   deriving
     ( Num, Integral, Real, Ord, Enum, Eq
     , Bits, FiniteBits, Bounded, Generic
     )
+
+instance Serialise W256
+instance Serialise Word256
+instance Serialise Word128
 
 instance Arbitrary W256 where
   arbitrary = do

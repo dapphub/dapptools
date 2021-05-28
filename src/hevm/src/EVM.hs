@@ -30,7 +30,6 @@ import qualified EVM.Precompiled
 import Control.Lens hiding (op, (:<), (|>), (.>), elements)
 import Control.Monad.State.Strict hiding (state)
 
-import Data.Aeson                   (ToJSON, FromJSON)
 import Data.ByteString              (ByteString)
 import Data.ByteString.Lazy         (fromStrict)
 import Data.Map.Strict              (Map)
@@ -39,7 +38,6 @@ import Data.Maybe                   (fromMaybe)
 import Data.Sequence                (Seq)
 import Data.Vector.Storable         (Vector)
 import Data.Foldable                (toList)
-import Test.QuickCheck              (Arbitrary(..), elements)
 
 import Data.Tree
 import Data.List (find)
@@ -289,14 +287,6 @@ data ContractCode
   = InitCode Buffer     -- ^ "Constructor" code, during contract creation
   | RuntimeCode Buffer  -- ^ "Instance" code, after contract creation
   deriving (Show, Generic)
-
-instance Arbitrary ContractCode where
-  arbitrary = do
-    buf <- arbitrary
-    elements [InitCode buf, RuntimeCode buf]
-
-instance ToJSON ContractCode
-instance FromJSON ContractCode
 
 -- runtime err when used for symbolic code
 instance Eq ContractCode where

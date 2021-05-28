@@ -12,7 +12,6 @@
 
 module Main where
 
-import qualified Debug.Trace as Debug
 import EVM (StorageModel(..))
 import qualified EVM
 import EVM.Concrete (createAddress,  wordValue)
@@ -73,6 +72,7 @@ import qualified Data.Aeson        as JSON
 import qualified Data.Aeson.Types  as JSON
 import Data.Aeson (FromJSON (..), (.:))
 import Data.Aeson.Lens hiding (values)
+import Codec.Serialise (serialise, deserialiseOrFail, DeserialiseFailure(..))
 import qualified Data.Vector as V
 import qualified Data.ByteString.Lazy  as Lazy
 
@@ -392,9 +392,9 @@ dappTest opts solcFile cache = do
   let dappInfo' = EVM.UnitTest.dapp opts
       corpusPath  = (_dappRoot dappInfo') <> "/" <> (EVM.UnitTest.corpus opts)
   initalCorpus <- liftIO $ doesFileExist corpusPath >>= \case
-    True -> liftIO $ JSON.decodeFileStrict' corpusPath >>= \case
-      Nothing -> error "unable to parse corpus"
-      Just a -> pure a
+    True -> liftIO $ (LazyByteString.readFile corpusPath) >>= \v -> case deserialiseOrFail v of
+      Left (DeserialiseFailure _ msg) -> error $ "unable to parse corpus: " <> msg
+      Right a -> pure a
     False -> pure mempty
 
   case out of
@@ -415,7 +415,7 @@ dappTest opts solcFile cache = do
           in
             liftIO $ Git.saveFacts (Git.RepoAt path) (Facts.cacheFacts cache')
 
-      liftIO $ JSON.encodeFile (EVM.UnitTest.corpus opts) finalCorpus
+      liftIO $ LazyByteString.writeFile (EVM.UnitTest.corpus opts) (serialise finalCorpus)
       liftIO $ unless (and passing) exitFailure
     Nothing ->
       error ("Failed to read Solidity JSON for `" ++ solcFile ++ "'")
