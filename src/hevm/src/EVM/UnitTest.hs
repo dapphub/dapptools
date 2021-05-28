@@ -248,7 +248,7 @@ hashCall (contract', sig) = BLAKE3.hash
   [encodeUtf8 . Text.pack $ (show . _runtimeCodehash $ contract') <> (show . _creationCodehash $ contract') <> (Text.unpack sig)]
 
 hashCoverage :: MultiSet OpLocation -> BLAKE3.Digest 32
-hashCoverage cov = BLAKE3.finalize $ MultiSet.fold (\loc acc -> BLAKE3.update acc [word256Bytes . codeHash $ loc]) (BLAKE3.hasher) cov
+hashCoverage cov = BLAKE3.finalize $ MultiSet.fold (\loc acc -> BLAKE3.update acc [encodeUtf8 . Text.pack . show . codeHash $ loc]) (BLAKE3.hasher) cov
 
 instance Arbitrary (BLAKE3.Digest 32) where
   arbitrary = do
