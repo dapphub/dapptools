@@ -110,7 +110,7 @@ data TestVMParams = TestVMParams
 
 -- | For each tuple of (contract, method) we store the calldata required to reach each known path in the method
 -- | The keys in the corpus are hashed to keep the size of the serialized representation manageable
-type Corpus = Map Word64 (Map Word64 AbiValue)
+type Corpus = Map Word64 (Map [(W256, Int)] AbiValue)
 
 instance Arbitrary (MultiSet OpLocation) where
   arbitrary = do
@@ -230,7 +230,7 @@ fuzzTest opts sig types vm = do
       contract' = fromJust $ lookupCode code' (dapp opts)
   corpus <- get
   args <- liftIO . generate $ genWithCorpus opts corpus contract' sig types
-  (res, (vm', traceId)) <- liftIO $ runStateT (interpretWithTraceId opts (runUnitTest opts sig args)) (vm, 0)
+  (res, (vm', traceId)) <- liftIO $ runStateT (interpretWithTraceId opts (runUnitTest opts sig args)) (vm, [])
   modify $ updateCorpus (hashCall (contract', sig)) traceId args
   if res
      then pure Pass
@@ -244,7 +244,7 @@ hashCall :: (SolcContract, Text) -> Word64
 hashCall (contract', sig) = xxhash .
   encodeUtf8 . Text.pack $ (show . _runtimeCodehash $ contract') <> (show . _creationCodehash $ contract') <> (Text.unpack sig)
 
-type TraceIdState = (VM, Word64)
+type TraceIdState = (VM, [(W256, Int)])
 
 -- | This interpreter is similar to interpretWithCoverage, except instead of
 -- collecting the full trace, we instead return a hash of the trace. This
@@ -290,7 +290,7 @@ runWithTraceId = do
   case view result vm0 of
     Nothing -> do
       vm1 <- zoom _1 (State.state (runState exec1) >> get)
-      zoom _2 (modify (\acc -> xxhash ((encodeUtf8 . Text.pack . show $ acc) <> loc vm1)))
+      zoom _2 (modify (\acc -> loc vm1 : acc))
       runWithTraceId
     Just _ -> pure vm0
   where
@@ -298,7 +298,7 @@ runWithTraceId = do
       case currentContract vm of
         Nothing ->
           error "internal error: why no contract?"
-        Just c -> encodeUtf8 . Text.pack . show $ (view codehash c, fromMaybe (error "internal error: op ix") (vmOpIx vm))
+        Just c -> (view codehash c, fromMaybe (error "internal error: op ix") (vmOpIx vm))
 
 tick :: Text -> IO ()
 tick x = Text.putStr x >> hFlush stdout
