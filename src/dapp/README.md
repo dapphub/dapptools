@@ -202,6 +202,8 @@ non-testing contract available after the `setUp()` function has been run, checki
 The `--depth` paramenter determines how many transactions deep each test will run, while the `--fuzz-runs` parameter 
 determines how many times the whole process is repeated.
 
+Note that a revert in any of the randomly generated call will not trigger a test failure. The goal of invariant tests is to find a state change that results in a violation of the assertions defined in the body of the test method, and since reverts do not result in a state change, they can be safely ignored. Reverts within the body of the `invariant*` test method will however still cause a test failure.
+
 Example:
 
 ```solidity
