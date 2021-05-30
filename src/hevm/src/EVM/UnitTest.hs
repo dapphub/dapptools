@@ -483,7 +483,7 @@ explorationStepper opts@UnitTestOptions{..} testName replayData (List history) i
              -- exclude testing abis
              Map.filter (isNothing . preview (abiMap . ix unitTestMarkerAbi)) $
              -- pick all contracts with known compiler artifacts
-             fmap fromJust (Map.filter isJust $ Map.fromList [(addr, lookupCode (view contractcode c) dapp) | (addr, c)  <- Map.toList $ cs])
+             fmap fromJust (Map.filter isJust $ Map.fromList [(addr, lookupCode (view contractcode c) dapp) | (addr, c)  <- Map.toList cs])
        -- go to IO and generate a random valid call to any known contract
        liftIO $ do
          -- select random contract
