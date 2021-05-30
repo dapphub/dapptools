@@ -195,7 +195,7 @@ For more reading on property based testing and symbolic execution, see [this tut
 ### Invariant testing
 
 While other forms of tests are always run against the post state of the `setUp()` function in the testing contract,
-it can be also be useful to check whether a property is satisfied at any possible contract state. This can be done with
+it can be also be useful to check whether a property is satisfied at every possible contract state. This can be done with
 the `invariant*` testing type. When running an invariant test, hevm will invoke any state mutating function from any 
 non-testing contract available after the `setUp()` function has been run, checking the `invariant*` after each run.
 
