@@ -95,7 +95,7 @@ if  [[ $DAPP_VERIFY_CONTRACT_MULTIPLE == yes ]]; then
   params=(
   "module=contract" "action=verifysourcecode"
   "contractname=$contractName" "contractaddress=$address"
-  "sourcecode=$inputJSON" "codeformat=solidity-standard-json-input"
+  "sourceCode=$inputJSON" "codeformat=solidity-standard-json-input"
   "apikey=$ETHERSCAN_API_KEY"
   )
 
