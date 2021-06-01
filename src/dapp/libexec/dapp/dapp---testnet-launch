@@ -27,7 +27,7 @@ else
   mkdir -p "$chaindir/config"
   for i in $(seq 0 "$DAPP_TESTNET_ACCOUNTS"); do
     address+=( "$(
-      geth 2>/dev/null account new --datadir "$chaindir" --password=<(exit) 2>/dev/null \
+      geth 2>/dev/null account new --datadir "$chaindir" --password=<(exit) \
         | grep -o -E "0x[A-Fa-f0-9]*" )" )
     balance+=(-n {} -s "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff" -i balance \
       -i "${address[i]}")
