@@ -108,12 +108,12 @@ instance AsASCII ByteString where
   dump x = BS16.encode x <> "\n"
   load x =
     case BS16.decode . mconcat . BS.split 10 $ x of
-      (y, "") -> Just y
+      Right y -> Just y
       _       -> Nothing
 
 contractFacts :: Addr -> Contract -> [Fact]
 contractFacts a x = case view bytecode x of
-  ConcreteBuffer b -> 
+  ConcreteBuffer b ->
     storageFacts a x ++
     [ BalanceFact a (view balance x)
     , NonceFact   a (view nonce x)

@@ -652,8 +652,8 @@ loadVM x =
 hex :: ByteString -> ByteString
 hex s =
   case Hex.decode s of
-    (x, "") -> x
-    _ -> error "internal error"
+    Right x -> x
+    Left e -> error e
 
 singleContract :: Text -> Text -> IO (Maybe ByteString)
 singleContract x s =
@@ -753,4 +753,4 @@ bothM f (a, a') = do
   b  <- f a
   b' <- f a'
   return (b, b')
-  
+

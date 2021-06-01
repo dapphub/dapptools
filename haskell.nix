@@ -22,10 +22,9 @@ in self-hs: super-hs:
 
   in {
     restless-git = dontCheck "restless-git" (./src/restless-git);
-    wreq = pkgs.haskell.lib.doJailbreak super-hs.wreq;
 
     sbv = sbv_prepatch.overrideAttrs (attrs: {
-      postPatch = stdenv.lib.optionalString wrapped
+      postPatch = pkgs.lib.optionalString wrapped
           ''
              sed -i -e 's|"z3"|"${pkgs.z3}/bin/z3"|' Data/SBV/Provers/Z3.hs
              sed -i -e 's|"cvc4"|"${pkgs.cvc4}/bin/cvc4"|' Data/SBV/Provers/CVC4.hs
@@ -35,27 +34,12 @@ in self-hs: super-hs:
       ];
     });
 
-
-    # This package is somewhat unmaintained and doesn't compile with GHC 8.4,
-    # so we have to use a GitHub fork that fixes it.
-    semver-range = super-hs.semver-range.overrideAttrs (attrs: {
-      src = pkgs.fetchFromGitHub {
-        owner = "dmjio";
-        repo = "semver-range";
-        rev = "patch-1";
-        sha256 = "1l20hni4v4k6alxj867z00625pa5hkf0h5sdaj1mjc237k5v78j9";
-      };
-      meta.broken = false;
-    });
-
     hevm = pkgs.haskell.lib.dontHaddock ((
       self-hs.callCabal2nix "hevm" (./src/hevm) {
         # Haskell libs with the same names as C libs...
         # Depend on the C libs, not the Haskell libs.
         # These are system deps, not Cabal deps.
         inherit (pkgs) secp256k1;
-
-        ff = pkgs.libff;
       }
     ).overrideAttrs (attrs: {
       postInstall =
