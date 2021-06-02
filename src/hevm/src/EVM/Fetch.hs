@@ -6,6 +6,7 @@ module EVM.Fetch where
 
 import Prelude hiding (Word)
 
+import EVM.ABI
 import EVM.Types    (Addr, w256, W256, hexText, Word, Buffer(..))
 import EVM.Symbolic (litWord)
 import EVM          (IsUnique(..), EVM, Contract, Block, initialContract, nonce, balance, external)
@@ -23,8 +24,15 @@ import Data.Aeson
 import Data.Aeson.Lens
 import Data.ByteString (ByteString)
 import Data.Text (Text, unpack, pack)
+import Data.Text.Encoding (encodeUtf8, decodeUtf8)
+
+
+import qualified Data.Vector as RegularVector
 import Network.Wreq
 import Network.Wreq.Session (Session)
+import System.Process
+
+import Debug.Trace
 
 import qualified Network.Wreq.Session as Session
 
@@ -164,6 +172,13 @@ zero = oracle Nothing Nothing True
 oracle :: Maybe SBV.State -> Maybe (BlockNumber, Text) -> Bool -> Fetcher
 oracle smtstate info ensureConsistency q = do
   case q of
+    EVM.PleaseDoFFI vals continue -> case vals of 
+       cmd : args -> do
+          (errCode, stdout', stderr') <- readProcessWithExitCode cmd args ""
+          pure $ continue $ encodeAbiValue $
+                            AbiTuple (RegularVector.fromList [ AbiBytesDynamic $ encodeUtf8 $ pack $ stdout'])
+       _ -> error (show vals)
+
     EVM.PleaseAskSMT branchcondition pathconditions continue ->
       case smtstate of
         Nothing -> return $ continue EVM.Unknown

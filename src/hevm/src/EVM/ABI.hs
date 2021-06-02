@@ -521,6 +521,7 @@ bytesP = do
     Left d -> pfail
 
 data AbiVals = NoVals | CAbi [AbiValue] | SAbi [SymWord]
+  deriving (Show)
 
 decodeBuffer :: [AbiType] -> Buffer -> AbiVals
 decodeBuffer tps (ConcreteBuffer b)
