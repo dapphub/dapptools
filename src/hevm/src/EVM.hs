@@ -17,6 +17,9 @@ import Prelude hiding (log, Word, exponent, GT, LT)
 
 import Data.SBV hiding (Word, output, Unknown)
 import Data.Proxy (Proxy(..))
+import Data.Text (unpack, pack)
+import Data.Text.Encoding (encodeUtf8, decodeUtf8)
+import qualified Data.Vector as V
 import EVM.ABI
 import EVM.Types
 import EVM.Solidity
@@ -26,6 +29,8 @@ import EVM.Op
 import EVM.FeeSchedule (FeeSchedule (..))
 import Options.Generic as Options
 import qualified EVM.Precompiled
+
+import Debug.Trace
 
 import Control.Lens hiding (op, (:<), (|>), (.>))
 import Control.Monad.State.Strict hiding (state)
@@ -87,6 +92,7 @@ data Error
   | DeadPath
   | NotUnique Whiff
   | SMTTimeout
+  | FFI AbiVals
 deriving instance Show Error
 
 -- | The possible result states of a VM
@@ -135,6 +141,7 @@ data Query where
   PleaseMakeUnique    :: SymVal a => SBV a -> [SBool] -> (IsUnique a -> EVM ()) -> Query
   PleaseFetchSlot     :: Addr -> Word -> (Word -> EVM ()) -> Query
   PleaseAskSMT        :: SBool -> [SBool] -> (BranchCondition -> EVM ()) -> Query
+  PleaseDoFFI         :: [String] -> (ByteString -> EVM ()) -> Query
 
 data Choose where
   PleaseChoosePath    :: Whiff -> (Bool -> EVM ()) -> Choose
@@ -1951,7 +1958,35 @@ type CheatAction = Word -> Word -> Buffer -> EVM ()
 cheatActions :: Map Word32 CheatAction
 cheatActions =
   Map.fromList
-    [ action "warp(uint256)" $
+    [ action "ffi(string[])" $
+        \sig outOffset outSize input -> let
+            decoded = decodeBuffer [AbiArrayDynamicType AbiStringType] input
+              in case decoded of
+                  CAbi valsArr -> case valsArr of 
+                    [AbiArrayDynamic AbiStringType strsV] -> trace (show strsV) $ assign result (Just . VMFailure . Query $ (PleaseDoFFI ((\x -> case x of 
+                                 (AbiString a) -> unpack $ decodeUtf8 a
+                                 _ -> "") <$> V.toList strsV) (\bs -> do
+                      let encoded = ConcreteBuffer $ bs
+                      -- let returnBytes = ConcreteBuffer bs
+                      assign (state . returndata) encoded
+                      copyBytesToMemory encoded outSize 0 outOffset
+                      assign result Nothing
+                      )))
+                    _ -> error "wat????"
+                  _ -> vmError (BadCheatCode sig),
+
+              -- 
+              -- do 
+          --
+          -- in case decodeStaticArgs input of
+          -- [a, slot] ->
+          --   makeUnique a $ \(C _ (num -> a'))->
+          --     accessStorage a' slot $ \res -> do
+          --       assign (state . returndata . word256At 0) res
+          --       assign (state . memory . word256At outOffset) res
+          -- _ -> vmError (BadCheatCode sig),
+
+      action "warp(uint256)" $
         \sig _ _ input -> case decodeStaticArgs input of
           [x]  -> assign (block . timestamp) x
           _ -> vmError (BadCheatCode sig),
