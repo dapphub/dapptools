@@ -22,7 +22,11 @@ import qualified Data.SBV.Internals as SBV
 import Data.SBV.Trans hiding (Word)
 import Data.Aeson
 import Data.Aeson.Lens
-import Data.ByteString (ByteString)
+import qualified Data.ByteString as BS
+import Data.ByteString.Lazy (toStrict)
+import Data.ByteString.Builder (byteStringHex, toLazyByteString)
+import Data.List
+import Data.Char
 import Data.Text (Text, unpack, pack)
 import Data.Text.Encoding (encodeUtf8, decodeUtf8)
 
@@ -38,7 +42,7 @@ import qualified Network.Wreq.Session as Session
 
 -- | Abstract representation of an RPC fetch request
 data RpcQuery a where
-  QueryCode    :: Addr         -> RpcQuery ByteString
+  QueryCode    :: Addr         -> RpcQuery BS.ByteString
   QueryBlock   ::                 RpcQuery Block
   QueryBalance :: Addr         -> RpcQuery W256
   QueryNonce   :: Addr         -> RpcQuery W256
@@ -175,8 +179,8 @@ oracle smtstate info ensureConsistency q = do
     EVM.PleaseDoFFI vals continue -> case vals of 
        cmd : args -> do
           (errCode, stdout', stderr') <- readProcessWithExitCode cmd args ""
-          pure $ continue $ encodeAbiValue $
-                            AbiTuple (RegularVector.fromList [ AbiBytesDynamic $ encodeUtf8 $ pack $ stdout'])
+          pure $ trace (show stdout') $ continue $ encodeAbiValue $
+                            AbiTuple (RegularVector.fromList [ AbiBytesDynamic $ hexText $ pack $ stdout'])
        _ -> error (show vals)
 
     EVM.PleaseAskSMT branchcondition pathconditions continue ->
