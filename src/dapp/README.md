@@ -353,7 +353,7 @@ You can override this with the `DAPP_REMAPPINGS` environment variable.
   
     Options:
         -v, --verbose             trace ouput for failing tests
-        -vv                       trace output for all tests including passes
+        --vv                      trace output for all tests including passes
         --verbosity <number>      sets the verbosity to <number>
         --fuzz-runs <number>      number of times to run fuzzing tests
         --replay <string>         rerun a particular test case
@@ -383,7 +383,7 @@ prefixed by `testFail` are expected to fail.
 Functions prefixed with `prove` are run symbolically, expecting success while functions
 prefixed `proveFail` are run symbolically expecting failure.
 
-The `-v` flag prints call traces for failing tests, `-vv` for all tests.
+The `-v` flag prints call traces for failing tests, `--vv` for all tests.
 
 If you provide `--rpc`, state will be fetched via rpc. Local changes take priority.
 
