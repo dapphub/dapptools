@@ -129,14 +129,6 @@ instance Show ByteStringS where
       fromBinary =
         Text.decodeUtf8 . toStrict . toLazyByteString . byteStringHex
 
-instance Read ByteStringS where
-    readsPrec _ ('0':'x':x) =
-      case BS16.decode (Text.encodeUtf8 (Text.pack x)) of
-        Right d -> [(ByteStringS d, "")]
-        Left _ -> []
-
-    readsPrec _ _ = []
-
 instance JSON.ToJSON ByteStringS where
   toJSON = JSON.String . Text.pack . show
 

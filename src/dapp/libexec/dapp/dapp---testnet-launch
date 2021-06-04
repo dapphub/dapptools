@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# shellcheck disable=SC2261
 set -e
 
 DAPP_TESTNET_RPC_PORT=${DAPP_TESTNET_RPC_PORT-8545}
@@ -27,7 +28,7 @@ else
   mkdir -p "$chaindir/config"
   for i in $(seq 0 "$DAPP_TESTNET_ACCOUNTS"); do
     address+=( "$(
-      geth 2>/dev/null account new --datadir "$chaindir" --password=<(exit) \
+      geth 2>/dev/null account new --datadir "$chaindir" --password=<(exit) 2>/dev/null \
         | grep -o -E "0x[A-Fa-f0-9]*" )" )
     balance+=(-n {} -s "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff" -i balance \
       -i "${address[i]}")

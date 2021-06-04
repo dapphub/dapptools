@@ -63,6 +63,7 @@ import Data.Binary.Get    (Get, runGet, runGetOrFail, label, getWord8, getWord32
 import Data.Binary.Put    (Put, runPut, putWord8, putWord32be)
 import Data.Bits          (shiftL, shiftR, (.&.))
 import Data.ByteString    (ByteString)
+import Data.Char          (isHexDigit)
 import Data.DoubleWord    (Word256, Int256, signedWord)
 import Data.Functor       (($>))
 import Data.Text          (Text, pack, unpack)
@@ -77,11 +78,12 @@ import Test.QuickCheck hiding ((.&.), label)
 import Text.ParserCombinators.ReadP
 import Control.Applicative
 
-import qualified Data.ByteString       as BS
-import qualified Data.ByteString.Char8 as Char8
-import qualified Data.ByteString.Lazy  as BSLazy
-import qualified Data.Text             as Text
-import qualified Data.Vector           as Vector
+import qualified Data.ByteString        as BS
+import qualified Data.ByteString.Base16 as BS16
+import qualified Data.ByteString.Char8  as Char8
+import qualified Data.ByteString.Lazy   as BSLazy
+import qualified Data.Text              as Text
+import qualified Data.Vector            as Vector
 
 import qualified Text.Megaparsec      as P
 import qualified Text.Megaparsec.Char as P
@@ -491,9 +493,9 @@ parseAbiValue AbiBoolType = (do W256 w <- readS_to_P reads
                                 return $ AbiBool (w /= 0))
                             <|> (do Boolz b <- readS_to_P reads
                                     return $ AbiBool b)
-parseAbiValue (AbiBytesType n) = AbiBytes n <$> do ByteStringS bytes <- readS_to_P reads
+parseAbiValue (AbiBytesType n) = AbiBytes n <$> do ByteStringS bytes <- bytesP
                                                    return bytes
-parseAbiValue AbiBytesDynamicType = AbiBytesDynamic <$> do ByteStringS bytes <- readS_to_P reads
+parseAbiValue AbiBytesDynamicType = AbiBytesDynamic <$> do ByteStringS bytes <- bytesP
                                                            return bytes
 parseAbiValue AbiStringType = AbiString <$> do Char8.pack <$> readS_to_P reads
 parseAbiValue (AbiArrayDynamicType typ) =
@@ -509,6 +511,14 @@ listP parser = between (char '[') (char ']') ((do skipSpaces
                                                   a <- parser
                                                   skipSpaces
                                                   return a) `sepBy` (char ','))
+
+bytesP :: ReadP ByteStringS
+bytesP = do
+  string "0x"
+  hex <- munch1 isHexDigit
+  case BS16.decode (encodeUtf8 (Text.pack hex)) of
+    Right d -> pure $ ByteStringS d
+    Left d -> pfail
 
 data AbiVals = NoVals | CAbi [AbiValue] | SAbi [SymWord]
 
