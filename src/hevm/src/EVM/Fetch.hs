@@ -179,7 +179,7 @@ oracle smtstate info ensureConsistency q = do
     EVM.PleaseDoFFI vals continue -> case vals of 
        cmd : args -> do
           (errCode, stdout', stderr') <- readProcessWithExitCode cmd args ""
-          pure $ trace (show stdout') $ continue $ encodeAbiValue $
+          pure $ continue $ encodeAbiValue $
                             AbiTuple (RegularVector.fromList [ AbiBytesDynamic $ hexText $ pack $ stdout'])
        _ -> error (show vals)
 
