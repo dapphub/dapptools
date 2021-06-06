@@ -123,7 +123,7 @@ in rec {
 
       # Huge block gas limit in --dev mode
       substituteInPlace core/genesis.go --replace \
-        'GasLimit:   6283185,' \
+        'GasLimit:   11500000,' \
         'GasLimit:   0xffffffffffffffff,'
     '';
   });
