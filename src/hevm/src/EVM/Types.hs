@@ -16,7 +16,6 @@ import Data.Kind
 import Data.Bifunctor (first)
 import Data.Char
 import Data.List (intercalate)
-import Data.Bifunctor (bimap)
 import Data.ByteString (ByteString)
 import Data.ByteString.Base16 as BS16
 import Data.ByteString.Builder (byteStringHex, toLazyByteString)
@@ -129,11 +128,6 @@ instance Show ByteStringS where
     where
       fromBinary =
         Text.decodeUtf8 . toStrict . toLazyByteString . byteStringHex
-
-instance Read ByteStringS where
-    readsPrec _ ('0':'x':x) = [bimap ByteStringS (Text.unpack . Text.decodeUtf8) bytes]
-       where bytes = BS16.decode (Text.encodeUtf8 (Text.pack x))
-    readsPrec _ _ = []
 
 instance JSON.ToJSON ByteStringS where
   toJSON = JSON.String . Text.pack . show
@@ -423,13 +417,13 @@ instance ParseRecord Addr where
 hexByteString :: String -> ByteString -> ByteString
 hexByteString msg bs =
   case BS16.decode bs of
-    (x, "") -> x
+    Right x -> x
     _ -> error ("invalid hex bytestring for " ++ msg)
 
 hexText :: Text -> ByteString
 hexText t =
   case BS16.decode (Text.encodeUtf8 (Text.drop 2 t)) of
-    (x, "") -> x
+    Right x -> x
     _ -> error ("invalid hex bytestring " ++ show t)
 
 readN :: Integral a => String -> a

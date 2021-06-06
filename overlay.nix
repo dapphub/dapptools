@@ -71,7 +71,7 @@ in rec {
           //
           fetchSolcVersions { owner = "dapphub"; attr = "unreleased_" + super.system; }
         );
-  solc = solc-versions.solc_0_6_7;
+  solc = self.pkgs.runCommand "solc" { } "mkdir -p $out/bin; ln -s ${solc-static-versions.solc_0_6_7}/bin/solc-0.6.7 $out/bin/solc";
 
   solc-static-versions =
     let
@@ -123,7 +123,7 @@ in rec {
 
       # Huge block gas limit in --dev mode
       substituteInPlace core/genesis.go --replace \
-        'GasLimit:   6283185,' \
+        'GasLimit:   11500000,' \
         'GasLimit:   0xffffffffffffffff,'
     '';
   });

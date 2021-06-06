@@ -491,7 +491,9 @@ parseMethodInput x =
   )
 
 toCode :: Text -> ByteString
-toCode = fst . BS16.decode . encodeUtf8
+toCode t = case BS16.decode (encodeUtf8 t) of
+  Right d -> d
+  Left e -> error e
 
 solidity' :: Text -> IO (Text, Text)
 solidity' src = withSystemTempFile "hevm.sol" $ \path handle -> do
