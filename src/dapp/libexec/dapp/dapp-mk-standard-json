@@ -35,7 +35,7 @@ if os.getenv('DAPP_VERIFY_CONTRACT_MULTIPLE') == "yes":
         else:
             tmpljson["sources"][f]={}
             content = open(f, "r");
-            tmpljson["sources"][f]["content"] = [content.read()]
+            tmpljson["sources"][f]["content"] = content.read()
 else:
     for f in files:
         tmpljson["sources"][f]={}
