@@ -6,9 +6,12 @@ set -e
 
 [[ $ETHERSCAN_API_KEY ]] || {
   cat >&2 <<.
+
   You need an Etherscan Api Key to verify contracts.
   Create one at https://etherscan.io/myapikey
+
   Then export it with \`export ETHERSCAN_API_KEY=xxxxxxxx'
+
 .
   exit 1
 }
