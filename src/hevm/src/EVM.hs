@@ -114,9 +114,9 @@ data VM = VM
   deriving (Show)
 
 data Trace = Trace
-  { _traceCode :: ContractCode
-  , _traceOpIx :: Int
-  , _traceData :: TraceData
+  { _traceOpIx     :: Int
+  , _traceContract :: Contract
+  , _traceData     :: TraceData
   }
   deriving (Show)
 
@@ -2420,7 +2420,7 @@ withTraceLocation x = do
       currentContract vm
   pure Trace
     { _traceData = x
-    , _traceCode = view contractcode this
+    , _traceContract = this
     , _traceOpIx = fromMaybe 0 $ (view opIxMap this) Vector.!? (view (state . pc) vm)
     }
 
