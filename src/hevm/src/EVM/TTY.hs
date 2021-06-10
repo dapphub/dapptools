@@ -638,14 +638,15 @@ initialUiVmStateForTest opts@UnitTestOptions{..} (theContractName, theTestName) 
             void (runUnitTest opts theTestName args)
           SymbolicTest _ -> do
             Stepper.evm $ modify symbolify
-            void (execSymTest opts theTestName (SymbolicBuffer buf, w256lit len)) -- S (Literal $
+            void (execSymTest opts theTestName (SymbolicBuffer buf, w256lit len))
           InvariantTest _ -> do
-            let randomRun = explorationStepper opts theTestName [] (List []) (fromMaybe 20 maxDepth)
+            targets <- getTargetContracts opts
+            let randomRun = explorationStepper opts theTestName [] targets (List []) (fromMaybe 20 maxDepth)
             void $ case replay of
               Nothing -> randomRun
               Just (sig, cd) ->
                 if theTestName == sig
-                then explorationStepper opts theTestName (decodeCalls cd) (List []) (length (decodeCalls cd))
+                then explorationStepper opts theTestName (decodeCalls cd) targets (List []) (length (decodeCalls cd))
                 else randomRun
   pure $ initUiVmState vm0 opts script
   where
@@ -867,8 +868,7 @@ currentSrcMap :: DappInfo -> VM -> Maybe SrcMap
 currentSrcMap dapp vm = do
   this <- currentContract vm
   i <- (view opIxMap this) SVec.!? (view (state . pc) vm)
-  let h = view contractcode this
-  srcMap dapp h i
+  srcMap dapp this i
 
 drawStackPane :: UiVmState -> UiWidget
 drawStackPane ui =

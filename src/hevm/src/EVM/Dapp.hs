@@ -3,7 +3,7 @@
 
 module EVM.Dapp where
 
-import EVM (Trace, traceCode, traceOpIx, ContractCode(..), Contract)
+import EVM (Trace, traceContract, traceOpIx, ContractCode(..), Contract(..), codehash, contractcode)
 import EVM.ABI (Event, AbiType)
 import EVM.Debug (srcMapCodePos)
 import EVM.Solidity
@@ -163,18 +163,24 @@ extractSig (InvariantTest sig) = sig
 traceSrcMap :: DappInfo -> Trace -> Maybe SrcMap
 traceSrcMap dapp trace =
   let
-    h = view traceCode trace
+    h = view traceContract trace
     i = view traceOpIx trace
   in srcMap dapp h i
 
-srcMap :: DappInfo -> ContractCode -> Int -> Maybe SrcMap
-srcMap dapp code opIndex = do
-  sol <- lookupCode code dapp
-  case code of
+srcMap :: DappInfo -> Contract -> Int -> Maybe SrcMap
+srcMap dapp contr opIndex = do
+  sol <- findSrc contr dapp
+  case view contractcode contr of
     (InitCode _) ->
       preview (creationSrcmap . ix opIndex) sol
     (RuntimeCode _) ->
       preview (runtimeSrcmap . ix opIndex) sol
+
+findSrc :: Contract -> DappInfo -> Maybe SolcContract
+findSrc c dapp = case preview (dappSolcByHash . ix (view codehash c)) dapp of
+  Just (_, v) -> Just v
+  Nothing -> lookupCode (view contractcode c) dapp
+
 
 lookupCode :: ContractCode -> DappInfo -> Maybe SolcContract
 lookupCode (InitCode (SymbolicBuffer _)) _ = Nothing -- TODO: srcmaps for symbolic bytecode

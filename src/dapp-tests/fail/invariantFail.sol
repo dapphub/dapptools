@@ -24,3 +24,55 @@ contract TestdappTest is DSTest {
         assertLt(testdapp.x(), 100);
     }
 }
+
+contract BrokenCoin {
+  mapping(address=>uint) public balanceOf;
+  constructor(uint amount) public {
+    balanceOf[msg.sender] = amount;
+  }
+
+  function transfer(address to, uint amount) public {
+    uint senderBal = balanceOf[msg.sender];
+    uint toBal = balanceOf[to];
+    require(senderBal >= amount);
+    senderBal += amount;
+    toBal -= amount;
+    balanceOf[msg.sender] = senderBal;
+    balanceOf[to] = toBal;
+  }
+}
+
+contract InvariantTest is DSTest {
+    BrokenCoin token;
+    User user;
+    address[] targetContracts_;
+
+    function targetContracts() public returns (address[] memory) {
+      return targetContracts_;
+    }
+    function setUp() public {
+        token = new BrokenCoin(100 ether);
+        user = new User(token);
+        token.transfer(address(user), 100 ether);
+        targetContracts_.push(address(user));
+    }
+
+    function invariantTestUserBal() public {
+        assertLe(token.balanceOf(address(user)), 100 ether);
+    }
+}
+
+contract User {
+  BrokenCoin token;
+  constructor(BrokenCoin token_) public {
+    token = token_;
+  }
+
+  function doTransfer(address to, uint amount) public {
+    token.transfer(to, amount);
+  }
+
+  function doSelfTransfer(uint amount) public {
+    token.transfer(address(this), amount);
+  }
+}
