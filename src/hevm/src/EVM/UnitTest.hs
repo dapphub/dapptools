@@ -543,7 +543,7 @@ getTargetContracts UnitTestOptions{..} = do
       theAbi = view abiMap $ fromJust $ lookupCode (view contractcode contract) dapp
       setUp  = abiKeccak (encodeUtf8 "targetContracts()")
   case Map.lookup setUp theAbi of
-    Nothing -> error "no method targetContracts"--return []
+    Nothing -> return []
     Just _ -> do
       Stepper.evm $ abiCall testParams (Left ("targetContracts()", emptyAbi))
       res <- Stepper.execFully
