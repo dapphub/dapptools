@@ -222,12 +222,18 @@ tick x = Text.putStr x >> hFlush stdout
 
 -- | This is like an unresolved source mapping.
 data OpLocation = OpLocation
-  { srcCode :: ContractCode
+  { srcContract :: Contract
   , srcOpIx :: Int
-  } deriving (Show, Eq, Ord)
+  } deriving (Show)
+
+instance Eq OpLocation where
+  (==) (OpLocation a b) (OpLocation a' b') = b == b' && view contractcode a == view contractcode a'
+
+instance Ord OpLocation where
+  compare (OpLocation a b) (OpLocation a' b') = compare (view contractcode a, b) (view contractcode a', b')
 
 srcMapForOpLocation :: DappInfo -> OpLocation -> Maybe SrcMap
-srcMapForOpLocation dapp (OpLocation hash opIx) = srcMap dapp hash opIx
+srcMapForOpLocation dapp (OpLocation contr opIx) = srcMap dapp contr opIx
 
 type CoverageState = (VM, MultiSet OpLocation)
 
@@ -238,7 +244,7 @@ currentOpLocation vm =
       error "internal error: why no contract?"
     Just c ->
       OpLocation
-        (view contractcode c)
+        c
         (fromMaybe (error "internal error: op ix") (vmOpIx vm))
 
 execWithCoverage :: StateT CoverageState IO VMResult
@@ -450,7 +456,7 @@ runTest opts@UnitTestOptions{..} vm (InvariantTest testName, []) = liftIO $ case
     if sig == testName
     then exploreRun opts vm testName (decodeCalls cds)
     else exploreRun opts vm testName []
-runTest _ _ (InvariantTest _, _) = error "invariant testing with arguments is not implemented (yet!)"
+runTest _ _ (InvariantTest _, types) = error $ "invariant testing with arguments: " <> show types <> " is not implemented (yet!)"
 
 type ExploreTx = (Addr, Addr, ByteString, W256)
 
@@ -460,13 +466,13 @@ decodeCalls b = fromMaybe (error "could not decode replay data") $ do
   return $ flip fmap v $ \(List [BS caller', BS target, BS cd, BS ts]) -> (num (word caller'), num (word target), cd, word ts)
 
 
-explorationStepper :: UnitTestOptions -> ABIMethod -> [ExploreTx] -> RLP -> Int -> Stepper (Bool, RLP)
-explorationStepper _ _ _ history 0  = return (True, history)
-explorationStepper opts@UnitTestOptions{..} testName replayData (List history) i = do
+explorationStepper :: UnitTestOptions -> ABIMethod -> [ExploreTx] -> [Addr] -> RLP -> Int -> Stepper (Bool, RLP)
+explorationStepper _ _ _ _ history 0  = return (True, history)
+explorationStepper opts@UnitTestOptions{..} testName replayData targets (List history) i = do
  (caller', target, cd, timestamp') <-
    case preview (ix (i - 1)) replayData of
      Just v -> return v
-     Nothing -> 
+     Nothing ->
       Stepper.evmIO $ do
        vm <- get
        let cs = view (env . contracts) vm
@@ -477,17 +483,20 @@ explorationStepper opts@UnitTestOptions{..} testName replayData (List history) i
            knownAbis :: Map Addr SolcContract
            knownAbis =
              -- exclude contracts without code
-             Map.filter (not . BS.null . view runtimeCode) $ 
+             Map.filter (not . BS.null . view runtimeCode) $
              -- exclude contracts without state changing functions
-             Map.filter (not . null . Map.filter mutable . view abiMap) $ 
+             Map.filter (not . null . Map.filter mutable . view abiMap) $
              -- exclude testing abis
              Map.filter (isNothing . preview (abiMap . ix unitTestMarkerAbi)) $
              -- pick all contracts with known compiler artifacts
              fmap fromJust (Map.filter isJust $ Map.fromList [(addr, lookupCode (view contractcode c) dapp) | (addr, c)  <- Map.toList cs])
+           selected = [(addr,
+                        fromMaybe (error ("no src found for: " <> show addr)) $ lookupCode (view contractcode (fromMaybe (error $ "contract not found: " <> show addr) $ Map.lookup addr cs)) dapp)
+                       | addr  <- targets]
        -- go to IO and generate a random valid call to any known contract
        liftIO $ do
          -- select random contract
-         (target, solcInfo) <- generate $ elements (Map.toList knownAbis)
+         (target, solcInfo) <- generate $ elements (if null targets then Map.toList knownAbis else selected)
          -- choose a random mutable method
          (_, (Method _ inputs sig _ _)) <- generate (elements $ Map.toList $ Map.filter mutable $ view abiMap solcInfo)
          let types = snd <$> inputs
@@ -516,7 +525,7 @@ explorationStepper opts@UnitTestOptions{..} testName replayData (List history) i
  Stepper.evm popTrace
  let newHistory = if bailed then List history else List (thisCallRLP:history)
      opts'' = opts {testParams = testParams {testTimestamp = timestamp'}}
-     carryOn = explorationStepper opts'' testName replayData newHistory (i - 1)
+     carryOn = explorationStepper opts'' testName replayData targets newHistory (i - 1)
  -- if we didn't revert, run the test function
  if bailed
  then carryOn
@@ -525,22 +534,40 @@ explorationStepper opts@UnitTestOptions{..} testName replayData (List history) i
       if x
       then carryOn
       else pure (False, List (thisCallRLP:history))
-explorationStepper _ _ _ _ _  = error "malformed rlp"
+explorationStepper _ _ _ _ _ _  = error "malformed rlp"
+
+getTargetContracts :: UnitTestOptions -> Stepper [Addr]
+getTargetContracts UnitTestOptions{..} = do
+  vm <- Stepper.evm $ get
+  let Just contract = currentContract vm
+      theAbi = view abiMap $ fromJust $ lookupCode (view contractcode contract) dapp
+      setUp  = abiKeccak (encodeUtf8 "targetContracts()")
+  case Map.lookup setUp theAbi of
+    Nothing -> error "no method targetContracts"--return []
+    Just _ -> do
+      Stepper.evm $ abiCall testParams (Left ("targetContracts()", emptyAbi))
+      res <- Stepper.execFully
+      case res of
+        Right (ConcreteBuffer r) ->
+          let AbiTuple vs = decodeAbiValue (AbiTupleType (Vector.fromList [AbiArrayDynamicType AbiAddressType])) (BSLazy.fromStrict r)
+              [AbiArrayDynamic AbiAddressType targets] = Vector.toList vs
+          in return $ fmap (\(AbiAddress a) -> a) (Vector.toList targets)
+        _ -> error "internal error: unexpected failure code"
 
 exploreRun :: UnitTestOptions -> VM -> ABIMethod -> [ExploreTx] -> IO (Text, Either Text Text, VM)
-exploreRun opts@UnitTestOptions{..} initialVm testName replayTxs =
+exploreRun opts@UnitTestOptions{..} initialVm testName replayTxs = do
+  (targets, _) <- runStateT (EVM.Stepper.interpret oracle (getTargetContracts opts)) initialVm
   let depth = fromMaybe 20 maxDepth
-  in do
   ((x, counterex), vm') <-
     if null replayTxs
     then
     foldM (\a@((success, _), _) _ ->
                        if success
-                       then runStateT (EVM.Stepper.interpret oracle (explorationStepper opts testName [] (List []) depth)) initialVm
+                       then runStateT (EVM.Stepper.interpret oracle (explorationStepper opts testName [] targets (List []) depth)) initialVm
                        else pure a)
                        ((True, (List [])), initialVm)  -- no canonical "post vm"
                        [0..fuzzRuns]
-    else runStateT (EVM.Stepper.interpret oracle (explorationStepper opts testName replayTxs (List []) (length replayTxs))) initialVm
+    else runStateT (EVM.Stepper.interpret oracle (explorationStepper opts testName replayTxs targets (List []) (length replayTxs))) initialVm
   if x
   then return ("\x1b[32m[PASS]\x1b[0m " <> testName <>  " (runs: " <> (pack $ show fuzzRuns) <>", depth: " <> pack (show depth) <> ")",
                Right (passOutput vm' opts testName), vm') -- no canonical "post vm"
@@ -554,7 +581,7 @@ execTest opts@UnitTestOptions{..} vm testName args =
   runStateT
     (EVM.Stepper.interpret oracle (execTestStepper opts testName args))
     vm
-  
+
 -- | Define the thread spawner for normal test cases
 runOne :: UnitTestOptions -> VM -> ABIMethod -> AbiValue -> IO (Text, Either Text Text, VM)
 runOne opts@UnitTestOptions{..} vm testName args = do
