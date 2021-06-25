@@ -591,10 +591,14 @@ main = defaultMain $ testGroup "hevm"
                       }
 
                       function add(uint x, uint y) internal pure returns (uint z) {
-                          require((z = x + y) >= x, "ds-math-add-overflow");
+                          unchecked {
+                            require((z = x + y) >= x, "ds-math-add-overflow");
+                          }
                       }
                       function mul(uint x, uint y) internal pure returns (uint z) {
-                          require(y == 0 || (z = x * y) / y == x, "ds-math-mul-overflow");
+                          unchecked {
+                            require(y == 0 || (z = x * y) / y == x, "ds-math-mul-overflow");
+                          }
                       }
                  }
                 |]
@@ -603,7 +607,7 @@ main = defaultMain $ testGroup "hevm"
           Left _ <- runSMTWith z3 $ query $ do
             vm <- abstractVM (Just ("distributivity(uint256,uint256,uint256)", [AbiUIntType 256, AbiUIntType 256, AbiUIntType 256])) [] c SymbolicS
             verify vm Nothing Nothing (Just checkAssertions)
-          putStrLn $ "Proven"
+          putStrLn "Proven"
 
     ]
   , testGroup "Equivalence checking"
