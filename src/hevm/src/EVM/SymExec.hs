@@ -26,6 +26,7 @@ import Data.SBV.Trans hiding (distinct, Word)
 import Data.SBV hiding (runSMT, newArray_, addAxiom, distinct, sWord8s, Word)
 import Data.Vector (toList, fromList)
 import Data.Tree
+import Data.DoubleWord (Word256)
 
 import Data.ByteString (ByteString, pack)
 import qualified Data.ByteString.Lazy as Lazy
@@ -269,10 +270,36 @@ type Postcondition = (VM, VM) -> SBool
 checkAssert :: ByteString -> Maybe (Text, [AbiType]) -> [String] -> Query (Either (Tree BranchInfo) (Tree BranchInfo), VM)
 checkAssert c signature' concreteArgs = verifyContract c signature' concreteArgs SymbolicS (const sTrue) (Just checkAssertions)
 
+{- |Checks if an assertion violation has been encountered
+
+  hevm recognises the following as an assertion violation:
+
+  1. the invalid opcode (0xfe) (solc < 0.8)
+  2. a revert with a reason of the form `abi.encodeWithSelector("Panic(uint256)", code)`, where code is one of the following (solc >= 0.8):
+    - 0x00: Used for generic compiler inserted panics.
+    - 0x01: If you call assert with an argument that evaluates to false.
+    - 0x11: If an arithmetic operation results in underflow or overflow outside of an unchecked { ... } block.
+    - 0x12; If you divide or modulo by zero (e.g. 5 / 0 or 23 % 0).
+    - 0x21: If you convert a value that is too big or negative into an enum type.
+    - 0x22: If you access a storage byte array that is incorrectly encoded.
+    - 0x31: If you call .pop() on an empty array.
+    - 0x32: If you access an array, bytesN or an array slice at an out-of-bounds or negative index (i.e. x[i] where i >= x.length or i < 0).
+    - 0x41: If you allocate too much memory or create an array that is too large.
+    - 0x51: If you call a zero-initialized variable of internal function type.
+
+  see: https://docs.soliditylang.org/en/v0.8.6/control-structures.html?highlight=Panic#panic-via-assert-and-error-via-require
+-}
 checkAssertions :: Postcondition
 checkAssertions (_, out) = case view result out of
   Just (EVM.VMFailure (EVM.UnrecognizedOpcode 254)) -> sFalse
+  Just (EVM.VMFailure (EVM.Revert msg)) -> if msg `elem` assertions then sFalse else sTrue
   _ -> sTrue
+  where
+    assertions = [panic 0x00, panic 0x01, panic 0x11, panic 0x12, panic 0x21, panic 0x22, panic 0x31, panic 0x32, panic 0x41, panic 0x51]
+
+-- |Produces the revert message for solc >=0.8 assertion violations
+panic :: Word256 -> ByteString
+panic err = (selector "Panic(uint256)") <> (encodeAbiValue $ AbiUInt 256 err)
 
 verifyContract :: ByteString -> Maybe (Text, [AbiType]) -> [String] -> StorageModel -> Precondition -> Maybe Postcondition -> Query (Either (Tree BranchInfo) (Tree BranchInfo), VM)
 verifyContract theCode signature' concreteArgs storagemodel pre maybepost = do
