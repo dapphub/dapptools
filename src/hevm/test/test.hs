@@ -266,8 +266,10 @@ main = defaultMain $ testGroup "hevm"
           contract A {
             uint x;
             function f(uint256 y) public {
-               x += y;
-               x += y;
+               unchecked {
+                 x += y;
+                 x += y;
+               }
             }
           }
           |]
