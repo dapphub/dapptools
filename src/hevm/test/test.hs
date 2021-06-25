@@ -66,7 +66,7 @@ main = defaultMain $ testGroup "hevm"
     , testCase "Arithmetic" $ do
         SolidityCall "x = a + 1;"
           [AbiUInt 256 1] ===> AbiUInt 256 2
-        SolidityCall "x = a - 1;"
+        SolidityCall "unchecked { x = a - 1; }"
           [AbiUInt 8 0] ===> AbiUInt 8 255
 
     , testCase "keccak256()" $
