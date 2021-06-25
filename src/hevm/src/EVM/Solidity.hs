@@ -3,6 +3,7 @@
 {-# Language StrictData #-}
 {-# Language TemplateHaskell #-}
 {-# Language OverloadedStrings #-}
+{-# Language QuasiQuotes #-}
 
 module EVM.Solidity
   ( solidity
@@ -62,6 +63,7 @@ import Data.SBV
 import Control.Applicative
 import Control.Monad
 import Control.Lens         hiding (Indexed, (.=))
+import qualified Data.String.Here as Here
 import Data.Aeson hiding (json)
 import Data.Aeson.Types
 import Data.Aeson.Lens
@@ -447,7 +449,7 @@ mkStorageLayout Nothing = Nothing
 mkStorageLayout (Just json) = do
   items <- json ^? key "storage" . _Array
   types <- json ^? key "types"
-  fmap Map.fromList $ (forM (Vector.toList items) $ \item ->
+  fmap Map.fromList (forM (Vector.toList items) $ \item ->
     do name <- item ^? key "label" . _String
        offset <- item ^? key "offset" . _Number >>= toBoundedInteger
        slot <- item ^? key "slot" . _String
@@ -498,11 +500,46 @@ toCode t = case BS16.decode (encodeUtf8 t) of
 solidity' :: Text -> IO (Text, Text)
 solidity' src = withSystemTempFile "hevm.sol" $ \path handle -> do
   hClose handle
-  writeFile path ("pragma solidity ^0.6.7;\n" <> src)
+  writeFile path ("//SPDX-License-Identifier: UNLICENSED\n" <> "pragma solidity ^0.8.6;\n" <> src)
+  writeFile (path <> ".json")
+    [Here.i|
+    {
+      "language": "Solidity",
+      "sources": {
+        ${path}: {
+          "urls": [
+            ${path}
+          ]
+        }
+      },
+      "settings": {
+        "outputSelection": {
+          "*": {
+            "*": [
+              "metadata",
+              "evm.bytecode",
+              "evm.deployedBytecode",
+              "abi",
+              "storageLayout",
+              "evm.bytecode.sourceMap",
+              "evm.bytecode.linkReferences",
+              "evm.bytecode.generatedSources",
+              "evm.deployedBytecode.sourceMap",
+              "evm.deployedBytecode.linkReferences",
+              "evm.deployedBytecode.generatedSources"
+            ],
+            "": [
+              "ast"
+            ]
+          }
+        }
+      }
+    }
+    |]
   x <- pack <$>
     readProcess
       "solc"
-      ["--combined-json=bin-runtime,bin,srcmap,srcmap-runtime,abi,ast,storage-layout", path]
+      ["--allow-paths", path, "--standard-json", (path <> ".json")]
       ""
   return (x, pack path)
 
@@ -576,9 +613,9 @@ stripBytecodeMetadataSym :: [SWord 8] -> [SWord 8]
 stripBytecodeMetadataSym b =
   let
     concretes :: [Maybe Word8]
-    concretes = (fmap fromSized) <$> unliteral <$> b
+    concretes = (fmap fromSized) . unliteral <$> b
     bzzrs :: [[Maybe Word8]]
-    bzzrs = fmap (Just) <$> BS.unpack <$> knownBzzrPrefixes
+    bzzrs = fmap (Just) . BS.unpack <$> knownBzzrPrefixes
     candidates = (flip Data.List.isInfixOf concretes) <$> bzzrs
   in case elemIndex True candidates of
     Nothing -> b
