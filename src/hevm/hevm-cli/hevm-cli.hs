@@ -427,7 +427,7 @@ runSMTWithTimeOut :: Maybe Text -> Maybe Integer -> Bool -> Symbolic a -> IO a
 runSMTWithTimeOut solver maybeTimeout smtdebug symb
   | solver == Just "cvc4" = runwithcvc4
   | solver == Just "z3" = runwithz3
-  | solver == Nothing = runwithcvc4
+  | solver == Nothing = runwithz3
   | otherwise = error "Unknown solver. Currently supported solvers; z3, cvc4"
  where timeout = fromMaybe 30000 maybeTimeout
        runwithz3 = runSMTWith z3{SBV.verbose=smtdebug} $ (setTimeOut timeout) >> symb
