@@ -267,8 +267,8 @@ maxIterationsReached vm (Just maxIter) =
 type Precondition = VM -> SBool
 type Postcondition = (VM, VM) -> SBool
 
-checkAssert :: ByteString -> Maybe (Text, [AbiType]) -> [String] -> Query (Either (Tree BranchInfo) (Tree BranchInfo), VM)
-checkAssert c signature' concreteArgs = verifyContract c signature' concreteArgs SymbolicS (const sTrue) (Just checkAssertions)
+checkAssert :: [Word256] -> ByteString -> Maybe (Text, [AbiType]) -> [String] -> Query (Either (Tree BranchInfo) (Tree BranchInfo), VM)
+checkAssert errs c signature' concreteArgs = verifyContract c signature' concreteArgs SymbolicS (const sTrue) (Just $ checkAssertions errs)
 
 {- |Checks if an assertion violation has been encountered
 
@@ -289,17 +289,22 @@ checkAssert c signature' concreteArgs = verifyContract c signature' concreteArgs
 
   see: https://docs.soliditylang.org/en/v0.8.6/control-structures.html?highlight=Panic#panic-via-assert-and-error-via-require
 -}
-checkAssertions :: Postcondition
-checkAssertions (_, out) = case view result out of
+checkAssertions :: [Word256] -> Postcondition
+checkAssertions errs (_, out) = case view result out of
   Just (EVM.VMFailure (EVM.UnrecognizedOpcode 254)) -> sFalse
-  Just (EVM.VMFailure (EVM.Revert msg)) -> if msg `elem` assertions then sFalse else sTrue
+  Just (EVM.VMFailure (EVM.Revert msg)) -> if msg `elem` (fmap panicMsg errs) then sFalse else sTrue
   _ -> sTrue
-  where
-    assertions = [panic 0x00, panic 0x01, panic 0x11, panic 0x12, panic 0x21, panic 0x22, panic 0x31, panic 0x32, panic 0x41, panic 0x51]
+
+-- |By default hevm checks for all assertions except those which result from arithmetic overflow
+defaultPanicCodes :: [Word256]
+defaultPanicCodes = [ 0x00, 0x01, 0x12, 0x21, 0x22, 0x31, 0x32, 0x41, 0x51 ]
+
+allPanicCodes :: [Word256]
+allPanicCodes = [ 0x00, 0x01, 0x11, 0x12, 0x21, 0x22, 0x31, 0x32, 0x41, 0x51 ]
 
 -- |Produces the revert message for solc >=0.8 assertion violations
-panic :: Word256 -> ByteString
-panic err = (selector "Panic(uint256)") <> (encodeAbiValue $ AbiUInt 256 err)
+panicMsg :: Word256 -> ByteString
+panicMsg err = (selector "Panic(uint256)") <> (encodeAbiValue $ AbiUInt 256 err)
 
 verifyContract :: ByteString -> Maybe (Text, [AbiType]) -> [String] -> StorageModel -> Precondition -> Maybe Postcondition -> Query (Either (Tree BranchInfo) (Tree BranchInfo), VM)
 verifyContract theCode signature' concreteArgs storagemodel pre maybepost = do
