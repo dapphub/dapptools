@@ -143,8 +143,6 @@ while [[ $1 ]]; do
 
     -m|--match)        shift; export DAPP_TEST_MATCH=$1;;
     -v|--verbose)             export DAPP_TEST_VERBOSITY=1;;
-    -vv)                      export DAPP_TEST_VERBOSITY=2;;
-    -vvv)                     export DAPP_TEST_VERBOSITY=3;;
     --verbosity)       shift; export DAPP_TEST_VERBOSITY=$1;;
     --fuzz-runs)       shift; export DAPP_TEST_FUZZ_RUNS=$1;;
 
