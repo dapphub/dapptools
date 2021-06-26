@@ -4,7 +4,6 @@
 
 module EVM.SymExec where
 
-
 import Prelude hiding (Word)
 
 import Control.Lens hiding (pre)
