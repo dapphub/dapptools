@@ -1,4 +1,4 @@
-pragma solidity ^0.8.6;
+pragma solidity ^0.7.6;
 
 import "ds-test/test.sol";
 
@@ -39,7 +39,7 @@ contract ConstantinopleTests is DSTest {
         uint256 h;
         assembly {
             let top := mload(0x40)
-            mstore(top, sload(zerocode_slot))
+            mstore(top, sload(zerocode.slot))
             a := create(0, top, 5)
             h := extcodehash(a)
         }
@@ -52,7 +52,7 @@ contract ConstantinopleTests is DSTest {
 
         assembly {
           let top := mload(0x40)
-          mstore(top, sload(deadcode_slot))
+          mstore(top, sload(deadcode.slot))
           a := create(0, top, 13)
           h := extcodehash(a)
         }
@@ -92,7 +92,7 @@ contract ConstantinopleTests is DSTest {
         uint256 salt = 0xfacefeed;
         assembly {
           let top := mload(0x40)
-          mstore(top, sload(deadcode_slot))
+          mstore(top, sload(deadcode.slot))
           a := create2(0, top, 13, salt)
         }
 
@@ -100,7 +100,7 @@ contract ConstantinopleTests is DSTest {
 
         assembly {
           let top := mload(0x40)
-          mstore(top, sload(deadcode_slot))
+          mstore(top, sload(deadcode.slot))
           let inithash := keccak256(top, 13)
           mstore(sub(top, 11), address())
           mstore8(top, 0xff)
@@ -117,7 +117,7 @@ contract ConstantinopleTests is DSTest {
         uint256 salt = 0xfacefeed;
         assembly {
           let top := mload(0x40)
-          mstore(top, sload(deploysdeadcode_slot))
+          mstore(top, sload(deploysdeadcode.slot))
           a := create2(0, top, 25, salt)
         }
 
