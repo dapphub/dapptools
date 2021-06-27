@@ -113,9 +113,9 @@ contract DapptutorialTest is DSTest {
 
 In the `setUp()` function, we are deploying the `Dapptutorial` contract.
 All following tests are run against the poststate of the `setUp()` function.
-The `test_withdraw` function first deposits 1 eth and then withdraws it, by giving the correct password. 
-We check that the call was successful by comparing the pre and post balance of the testing account using 
-`assertEq`. You can try changing the right hand side to `postBalance + 1` and see what happens. 
+The `test_withdraw` function first deposits 1 eth and then withdraws it, by giving the correct password.
+We check that the call was successful by comparing the pre and post balance of the testing account using
+`assertEq`. You can try changing the right hand side to `postBalance + 1` and see what happens.
 Finally, we are testing the case where the wrong password is given in `testFail_withdraw_wrong_pass`.
 Any function prefixed with `testFail` is expected to fail, either with a `revert` or by violating an
 assertion.
@@ -140,7 +140,7 @@ function test_withdraw(uint amount) public {
     assertEq(preBalance + amount, postBalance);
 }
 ```
-A test that takes at least one parameters is interpreted as a "property based test", or "fuzz test", and will 
+A test that takes at least one parameters is interpreted as a "property based test", or "fuzz test", and will
 be run multiple times with different values given to the parameters. The number of times each test is run can be
 configured by the `--fuzz-runs` flag and defaults to 100.
 
@@ -161,11 +161,11 @@ If a counterexample is found, it can be replayed or analyzed in the debugger usi
 
 ### Symbolically executed tests
 
-While property based testing runs each function repeatedly with new input values, symbolic execution leaves these 
+While property based testing runs each function repeatedly with new input values, symbolic execution leaves these
 values symbolic and tries to explore each possible execution path. This gives a stronger guarantee and is more powerful than
 property based testing, but is also more difficult, especially for complicated functions.
 
-Continuing with our vault example, imagine that we forgot the password and did not have the source available. 
+Continuing with our vault example, imagine that we forgot the password and did not have the source available.
 We can symbolically explore all possibilities to find the one that lets us withdraw by writing a `proveFail` test:
 
 ```solidity
@@ -196,10 +196,10 @@ For more reading on property based testing and symbolic execution, see [this tut
 
 While other forms of tests are always run against the post state of the `setUp()` function in the testing contract,
 it can be also be useful to check whether a property is satisfied at every possible contract state. This can be done with
-the `invariant*` testing type. When running an invariant test, hevm will invoke any state mutating function from any 
+the `invariant*` testing type. When running an invariant test, hevm will invoke any state mutating function from all addresses returned by a call to `targetContracts()`, if such a function exists in the testing contracts. If no such method exists, it will invoke methods from any
 non-testing contract available after the `setUp()` function has been run, checking the `invariant*` after each run.
 
-The `--depth` paramenter determines how many transactions deep each test will run, while the `--fuzz-runs` parameter 
+The `--depth` paramenter determines how many transactions deep each test will run, while the `--fuzz-runs` parameter
 determines how many times the whole process is repeated.
 
 Note that a revert in any of the randomly generated call will not trigger a test failure. The goal of invariant tests is to find a state change that results in a violation of the assertions defined in the body of the test method, and since reverts do not result in a state change, they can be safely ignored. Reverts within the body of the `invariant*` test method will however still cause a test failure.
@@ -216,7 +216,7 @@ If a counterexample is found, it can be replayed or analyzed in the debugger usi
 
 ### Testing against RPC state
 
-You can test how your contract interacts with already deployed contracts by 
+You can test how your contract interacts with already deployed contracts by
 letting the testing state be fetched from rpc with the `--rpc` flag.
 
 Running `dapp test` with the `--rpc` flag enabled will cause every state fetching operation
@@ -245,10 +245,10 @@ contract WethTest is DSTest {
 }
 ```
 
-With `ETH_RPC_URL` set, you can run `dapp test --rpc` on this test or `dapp debug --rpc` to step through 
+With `ETH_RPC_URL` set, you can run `dapp test --rpc` on this test or `dapp debug --rpc` to step through
 the `testWrap` function in the interactive debugger.
 
-It is often useful to modify the state for testing purposes, for example to grant the testing contract 
+It is often useful to modify the state for testing purposes, for example to grant the testing contract
 with a balance of a particular token. This can be done using [`hevm cheat codes`](../hevm/README.md#cheat-codes).
 
 ### Deployment
@@ -291,8 +291,8 @@ A local `.dapprc` can also be defined in your project's root, which overrides va
 
 You can specify a custom `solc` version to run within `dapp` with `dapp --use <arg>`.
 If the argument is of the form `solc:x.y.z`, the appropriate solc version
-will temporarily installed. 
-If the argument contains a `/`, it is interpreted as a path to a solc 
+will temporarily installed.
+If the argument contains a `/`, it is interpreted as a path to a solc
 binary to be used.
 
 You can install any supported `solc` "standalone" (i.e. add it to your `$PATH`) with:
@@ -338,7 +338,7 @@ installing `ds-test` and creating two boilerplate contracts in the `src` directo
         missing from this format. This is provided for compatibility with older
         workflows.
 
-Compiles the contracts in the `src` directory. 
+Compiles the contracts in the `src` directory.
 The compiler options of the build are generated by the [`dapp mk-standard-json`](#dapp-mk-standard-json) command,
 which infers most options from the project structure. For more customizability, you can define your own configuration json
 by setting the file to the environment variable `DAPP_STANDARD_JSON`.
@@ -350,10 +350,9 @@ You can override this with the `DAPP_REMAPPINGS` environment variable.
 ### `dapp test`
 
     Usage: dapp test [<options>]
-  
+
     Options:
         -v, --verbose             trace ouput for failing tests
-        -vv                       trace output for all tests including passes
         --verbosity <number>      sets the verbosity to <number>
         --fuzz-runs <number>      number of times to run fuzzing tests
         --replay <string>         rerun a particular test case
@@ -377,13 +376,14 @@ dapp install ds-test
 
 Every contract which inherits from `DSTest` will be treated as a test contract, if it has a `setUp()` function, it will be run before every test.
 
-Every function prefixed with `test` is expected to succeed, while functions 
+Every function prefixed with `test` is expected to succeed, while functions
 prefixed by `testFail` are expected to fail.
 
 Functions prefixed with `prove` are run symbolically, expecting success while functions
 prefixed `proveFail` are run symbolically expecting failure.
 
-The `-v` flag prints call traces for failing tests, `-vv` for all tests.
+The `-v` flag prints call traces for failing tests, `--verbosity 2` will show `ds-test` events for
+all tests, while `--verbosity 3` will show call traces for all tests.
 
 If you provide `--rpc`, state will be fetched via rpc. Local changes take priority.
 
@@ -432,7 +432,7 @@ This can be skipped by setting `DAPP_LINK_TEST_LIBRARIES=0`.
 
     dapp-debug -- run unit tests interactively (hevm)
     Usage: dapp debug [<options>]
-    
+
     Options:
        --rpc                 fetch remote state via ETH_RPC_URL
        --rpc-url=<url>       fetch remote state via <url>
