@@ -116,7 +116,7 @@ let
 
   runTest = { dir, shouldFail, name, dappFlags?"" }: pkgs.buildDappPackage {
     inherit name shouldFail;
-    solc=solc-0_7_6;
+    solc=solc-0_6_7;
     src = dir;
     dappFlags = "${dappFlags}";
     deps = [ ds-test ds-token ds-math ];
