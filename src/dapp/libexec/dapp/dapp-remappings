@@ -30,15 +30,15 @@ function findRemappings(prefix) {
       console.error(`${PROGRAM_NAME}: error: try "dapp update" to initialize submodules`)
       process.exit(1)
     }
-    
+
     var hash = run("git", ["-C", src, "rev-parse", "HEAD"])
-  
+
     if (pkg_src[name]) {
       if (hash != pkg_hash[name]) {
-        console.error(`${PROGRAM_NAME}: error: mismatching packages:`)
-        console.error(`${PROGRAM_NAME}: error: (1) ${pkg_src[name]}`)
-        console.error(`${PROGRAM_NAME}: error: (2) ${src}`)
-        process.exit(1)
+        console.error(`${PROGRAM_NAME}: warning: mismatching packages:`)
+        console.error(`${PROGRAM_NAME}: warning: (1) ${pkg_src[name]}`)
+        console.error(`${PROGRAM_NAME}: warning: (2) ${src}`)
+        console.error(`${PROGRAM_NAME}: warning: using ${pkg_src[name]}. You can override this using \`DAPP_REMAPPINGS\``)
       } else if (src.length < pkg_src[name].length) {
         pkg_src[name] = src
       }
@@ -46,7 +46,7 @@ function findRemappings(prefix) {
       pkg_src[name] = src
       pkg_hash[name] = hash
     }
-  
+
     findRemappings(`${lib}/${name}`)
   })
 }
