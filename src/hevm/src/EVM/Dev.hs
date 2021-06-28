@@ -72,6 +72,8 @@ ghciTest root path statePath =
         , vmModifier = loadFacts
         , dapp = emptyDapp
         , testParams = params
+        , maxDepth = Nothing
+        , allowFFI = False
         }
     readSolc path >>=
       \case
@@ -129,6 +131,8 @@ ghciTty root path statePath =
         , vmModifier = loadFacts
         , dapp = emptyDapp
         , testParams = params
+        , maxDepth = Nothing
+        , allowFFI = False
         }
     EVM.TTY.main testOpts root path
 

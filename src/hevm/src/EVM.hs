@@ -114,6 +114,7 @@ data VM = VM
   , _burned         :: Word
   , _constraints    :: [(SBool, Whiff)]
   , _iterations     :: Map CodeLocation Int
+  , _options        :: VMOpts
   }
   deriving (Show)
 
@@ -210,6 +211,7 @@ data VMOpts = VMOpts
   , vmoptCreate :: Bool
   , vmoptStorageModel :: StorageModel
   , vmoptTxAccessList :: Map Addr [W256]
+  , vmoptAllowFFI :: Bool
   } deriving Show
 
 -- | A log entry
@@ -504,6 +506,7 @@ makeVm o =
   , _burned = 0
   , _constraints = []
   , _iterations = mempty
+  , _options = o
   } where theCode = case _contractcode (vmoptContract o) of
             InitCode b    -> b
             RuntimeCode b -> b
@@ -1959,23 +1962,27 @@ cheatActions :: Map Word32 CheatAction
 cheatActions =
   Map.fromList
     [ action "ffi(string[])" $
-        \sig outOffset outSize input -> let
-            decoded = decodeBuffer [AbiArrayDynamicType AbiStringType] input
-              in case decoded of
-                  CAbi valsArr -> case valsArr of
-                    [AbiArrayDynamic AbiStringType strsV] ->
-                      let
-                        cmd = (flip fmap) (V.toList strsV) (\case
-                          (AbiString a) -> unpack $ decodeUtf8 a
-                          _ -> "")
-                        cont = \bs -> do
-                          let encoded = ConcreteBuffer bs
-                          assign (state . returndata) encoded
-                          copyBytesToMemory encoded outSize 0 outOffset
-                          assign result Nothing
-                      in assign result (Just . VMFailure . Query $ (PleaseDoFFI cmd cont))
-                    _ -> vmError (BadCheatCode sig)
-                  _ -> vmError (BadCheatCode sig),
+        \sig outOffset outSize input -> do
+          vm <- get
+          if vmoptAllowFFI (view EVM.options vm) then
+            case decodeBuffer [AbiArrayDynamicType AbiStringType] input of
+              CAbi valsArr -> case valsArr of
+                [AbiArrayDynamic AbiStringType strsV] ->
+                  let
+                    cmd = (flip fmap) (V.toList strsV) (\case
+                      (AbiString a) -> unpack $ decodeUtf8 a
+                      _ -> "")
+                    cont = \bs -> do
+                      let encoded = ConcreteBuffer bs
+                      assign (state . returndata) encoded
+                      copyBytesToMemory encoded outSize 0 outOffset
+                      assign result Nothing
+                  in assign result (Just . VMFailure . Query $ (PleaseDoFFI cmd cont))
+                _ -> vmError (BadCheatCode sig)
+              _ -> vmError (BadCheatCode sig)
+          else
+            let msg = "ffi disabled: run again with --ffi if you want to allow tests to call external scripts"
+            in vmError . Revert $ abiMethod "Error(string)" (AbiString msg),
 
       action "warp(uint256)" $
         \sig _ _ input -> case decodeStaticArgs input of
@@ -2149,7 +2156,7 @@ create self this xGas' xValue xs newAddr initCode = do
   then do
     assign (state . stack) (0 : xs)
     assign (state . returndata) mempty
-    pushTrace $ ErrorTrace $ CallDepthLimitReached
+    pushTrace $ ErrorTrace CallDepthLimitReached
     next
   else if collision $ view (env . contracts . at newAddr) vm0
   then burn xGas $ do

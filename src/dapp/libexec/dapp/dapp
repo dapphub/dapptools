@@ -21,6 +21,7 @@
 ### replay=<string>      rerun a particular test case
 ### m,match=<string>     only run test methods matching regex
 ### cache=<string>       use the cache at directory
+### ffi                  allow the use of the ffi cheatcode (WARNING: allows test authors to execute arbitrary code on your machine)
 ###
 ###   RPC options:
 ### rpc                  fetch remote state via ETH_RPC_URL
@@ -67,6 +68,7 @@ fuzz-runs=<number>   number of times to run fuzzing tests
 replay=<string>      rerun a particular test case
 m,match=<string>     only run test methods matching regex
 cache=<string>       use the cache at directory
+ffi                  allow the use of the ffi cheatcode (WARNING: allows test authors to execute arbitrary code on your machine)
 
   RPC options:
 rpc                  fetch remote state via ETH_RPC_URL
@@ -152,6 +154,7 @@ while [[ $1 ]]; do
 
     --replay)          shift; export DAPP_TEST_REPLAY=$1;;
     --cache)           shift; export DAPP_TEST_CACHE=$1;;
+    --ffi)                    export DAPP_TEST_FFI=1;;
     --rpc-url)         shift; export HEVM_RPC=yes; export ETH_RPC_URL=$1;;
     --rpc-block)       shift; export HEVM_RPC=yes; export DAPP_TEST_NUMBER=$1;;
     --rpc)             [ -n "$ETH_RPC_URL" ] || fail "ETH_RPC_URL not set.";

@@ -247,6 +247,7 @@ runFromVM maxIter' dappinfo oracle' vm = do
       , vmModifier        = id
       , testParams        = error "irrelevant"
       , dapp              = dappinfo
+      , allowFFI          = False
       }
     ui0 = initUiVmState vm opts (void Stepper.execFully)
 

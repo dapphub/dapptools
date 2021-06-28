@@ -120,7 +120,7 @@ in
       dir = ./pass;
       name = "dappTestsShouldPass";
       shouldFail = false;
-      dappFlags = "--max-iterations 50 --smttimeout 600000";
+      dappFlags = "--max-iterations 50 --smttimeout 600000 --fii";
     };
 
     shouldFail = let
@@ -138,6 +138,7 @@ in
       prove-mul = fail "prove_mul";
       prove-distributivity = fail "prove_distributivity";
       prove-transfer = fail "prove_transfer";
+      try-ffi = fail "testBadFFI";
     };
 
     dss = pkgs.buildDappPackage {

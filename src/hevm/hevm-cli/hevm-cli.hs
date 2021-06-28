@@ -183,6 +183,7 @@ data Command w
       , maxIterations :: w ::: Maybe Integer            <?> "Number of times we may revisit a particular branching point"
       , solver        :: w ::: Maybe Text               <?> "Used SMT solver: z3 (default) or cvc4"
       , smtdebug      :: w ::: Bool                     <?> "Print smt queries sent to the solver"
+      , ffi           :: w ::: Bool                     <?> "Allow the usage of the hevm.ffi() cheatcode (WARNING: this allows test authors to execute arbitrary code on your machine)"
       }
   | BcTest -- Run an Ethereum Blockhain/GeneralState test
       { file      :: w ::: String    <?> "Path to .json test file"
@@ -293,6 +294,7 @@ unitTestOptions cmd testFile = do
     , EVM.UnitTest.vmModifier = vmModifier
     , EVM.UnitTest.testParams = params
     , EVM.UnitTest.dapp = srcInfo
+    , EVM.UnitTest.allowFFI = ffi cmd
     }
 
 main :: IO ()
@@ -759,7 +761,8 @@ vmFromCommand cmd = do
           , EVM.vmoptChainId       = word chainid 1
           , EVM.vmoptCreate        = create cmd
           , EVM.vmoptStorageModel  = ConcreteS
-          , EVM.vmoptTxAccessList  = mempty -- TODO: support me soon        
+          , EVM.vmoptTxAccessList  = mempty -- TODO: support me soon
+          , EVM.vmoptAllowFFI      = False
           }
         word f def = fromMaybe def (f cmd)
         addr f def = fromMaybe def (f cmd)
@@ -771,7 +774,7 @@ symvmFromCommand cmd = do
   (miner,blockNum,diff) <- case rpc cmd of
     Nothing -> return (0,0,0)
     Just url -> io $ EVM.Fetch.fetchBlockFrom block' url >>= \case
-      Nothing -> error $ "Could not fetch block"
+      Nothing -> error "Could not fetch block"
       Just EVM.Block{..} -> return (_coinbase
                                    , wordValue _number
                                    , wordValue _difficulty
@@ -829,7 +832,7 @@ symvmFromCommand cmd = do
                         & set EVM.external    (view EVM.external contract')
 
     (_, _, Just c)  ->
-      return $ (EVM.initialContract . codeType $ decipher c)
+      return (EVM.initialContract . codeType $ decipher c)
     (_, _, Nothing) ->
       error "must provide at least (rpc + address) or code"
 
@@ -866,6 +869,7 @@ symvmFromCommand cmd = do
       , EVM.vmoptCreate        = create cmd
       , EVM.vmoptStorageModel  = fromMaybe SymbolicS (storageModel cmd)
       , EVM.vmoptTxAccessList  = mempty
+      , EVM.vmoptAllowFFI      = False
       }
     word f def = fromMaybe def (f cmd)
     addr f def = fromMaybe def (f cmd)

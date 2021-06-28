@@ -171,8 +171,8 @@ oracle smtstate info ensureConsistency q = do
     EVM.PleaseDoFFI vals continue -> case vals of
        cmd : args -> do
           (_, stdout', _) <- readProcessWithExitCode cmd args ""
-          pure $ continue $ encodeAbiValue $
-                            AbiTuple (RegularVector.fromList [ AbiBytesDynamic . hexText . pack $ stdout'])
+          pure . continue . encodeAbiValue $
+            AbiTuple (RegularVector.fromList [ AbiBytesDynamic . hexText . pack $ stdout'])
        _ -> error (show vals)
 
     EVM.PleaseAskSMT branchcondition pathconditions continue ->

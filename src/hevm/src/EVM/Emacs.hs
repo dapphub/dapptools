@@ -517,6 +517,8 @@ defaultUnitTestOptions = do
     , vmModifier        = id
     , dapp              = emptyDapp
     , testParams        = params
+    , maxDepth          = Nothing
+    , allowFFI          = False
     }
 
 initialStateForTest
