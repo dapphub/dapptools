@@ -23,20 +23,12 @@ import Data.SBV.Trans hiding (Word)
 import Data.Aeson
 import Data.Aeson.Lens
 import qualified Data.ByteString as BS
-import Data.ByteString.Lazy (toStrict)
-import Data.ByteString.Builder (byteStringHex, toLazyByteString)
-import Data.List
-import Data.Char
 import Data.Text (Text, unpack, pack)
-import Data.Text.Encoding (encodeUtf8, decodeUtf8)
-
 
 import qualified Data.Vector as RegularVector
 import Network.Wreq
 import Network.Wreq.Session (Session)
 import System.Process
-
-import Debug.Trace
 
 import qualified Network.Wreq.Session as Session
 
@@ -176,11 +168,11 @@ zero = oracle Nothing Nothing True
 oracle :: Maybe SBV.State -> Maybe (BlockNumber, Text) -> Bool -> Fetcher
 oracle smtstate info ensureConsistency q = do
   case q of
-    EVM.PleaseDoFFI vals continue -> case vals of 
+    EVM.PleaseDoFFI vals continue -> case vals of
        cmd : args -> do
-          (errCode, stdout', stderr') <- readProcessWithExitCode cmd args ""
+          (_, stdout', _) <- readProcessWithExitCode cmd args ""
           pure $ continue $ encodeAbiValue $
-                            AbiTuple (RegularVector.fromList [ AbiBytesDynamic $ hexText $ pack $ stdout'])
+                            AbiTuple (RegularVector.fromList [ AbiBytesDynamic . hexText . pack $ stdout'])
        _ -> error (show vals)
 
     EVM.PleaseAskSMT branchcondition pathconditions continue ->

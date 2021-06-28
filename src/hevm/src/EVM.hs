@@ -17,8 +17,8 @@ import Prelude hiding (log, Word, exponent, GT, LT)
 
 import Data.SBV hiding (Word, output, Unknown)
 import Data.Proxy (Proxy(..))
-import Data.Text (unpack, pack)
-import Data.Text.Encoding (encodeUtf8, decodeUtf8)
+import Data.Text (unpack)
+import Data.Text.Encoding (decodeUtf8)
 import qualified Data.Vector as V
 import EVM.ABI
 import EVM.Types
@@ -160,6 +160,8 @@ instance Show Query where
       (("<EVM.Query: make value "
         ++ show val ++ " unique in context "
         ++ show constraints ++ ">") ++)
+    PleaseDoFFI cmd _ ->
+      (("<EVM.Query: do ffi: " ++ (show cmd)) ++)
 
 instance Show Choose where
   showsPrec _ = \case
@@ -441,14 +443,14 @@ currentContract vm =
 -- * Data constructors
 
 makeVm :: VMOpts -> VM
-makeVm o = 
+makeVm o =
   let txaccessList = vmoptTxAccessList o
       txorigin = vmoptOrigin o
       txtoAddr = vmoptAddress o
       initialAccessedAddrs = fromList $ [txorigin, txtoAddr] ++ [1..9] ++ (Map.keys txaccessList)
       initialAccessedStorageKeys = fromList $ foldMap (uncurry (map . (,))) (Map.toList txaccessList)
       touched = if vmoptCreate o then [txorigin] else [txorigin, txtoAddr]
-  in 
+  in
   VM
   { _result = Nothing
   , _frames = mempty
@@ -1591,8 +1593,8 @@ makeUnique sw@(S w val) cont = case maybeLitWord sw of
       Unique a -> do
         assign result Nothing
         cont (C w $ fromSizzle a)
-      InconsistentU -> vmError $ DeadPath
-      TimeoutU -> vmError $ SMTTimeout
+      InconsistentU -> vmError DeadPath
+      TimeoutU -> vmError SMTTimeout
       Multiple -> vmError $ NotUnique w
   Just a -> cont a
 
@@ -1960,29 +1962,20 @@ cheatActions =
         \sig outOffset outSize input -> let
             decoded = decodeBuffer [AbiArrayDynamicType AbiStringType] input
               in case decoded of
-                  CAbi valsArr -> case valsArr of 
-                    [AbiArrayDynamic AbiStringType strsV] -> trace (show strsV) $ assign result (Just . VMFailure . Query $ (PleaseDoFFI ((\x -> case x of 
-                                 (AbiString a) -> unpack $ decodeUtf8 a
-                                 _ -> "") <$> V.toList strsV) (\bs -> do
-                      let encoded = ConcreteBuffer $ bs
-                      -- let returnBytes = ConcreteBuffer bs
-                      assign (state . returndata) encoded
-                      copyBytesToMemory encoded outSize 0 outOffset
-                      assign result Nothing
-                      )))
-                    _ -> error "wat????"
+                  CAbi valsArr -> case valsArr of
+                    [AbiArrayDynamic AbiStringType strsV] ->
+                      let
+                        cmd = (flip fmap) (V.toList strsV) (\case
+                          (AbiString a) -> unpack $ decodeUtf8 a
+                          _ -> "")
+                        cont = \bs -> do
+                          let encoded = ConcreteBuffer bs
+                          assign (state . returndata) encoded
+                          copyBytesToMemory encoded outSize 0 outOffset
+                          assign result Nothing
+                      in assign result (Just . VMFailure . Query $ (PleaseDoFFI cmd cont))
+                    _ -> vmError (BadCheatCode sig)
                   _ -> vmError (BadCheatCode sig),
-
-              -- 
-              -- do 
-          --
-          -- in case decodeStaticArgs input of
-          -- [a, slot] ->
-          --   makeUnique a $ \(C _ (num -> a'))->
-          --     accessStorage a' slot $ \res -> do
-          --       assign (state . returndata . word256At 0) res
-          --       assign (state . memory . word256At outOffset) res
-          -- _ -> vmError (BadCheatCode sig),
 
       action "warp(uint256)" $
         \sig _ _ input -> case decodeStaticArgs input of
@@ -2316,7 +2309,7 @@ finishFrame how = do
 
           -- In other words, we special case address 0x03 and keep it in the set of touched accounts during revert
           touched <- use (tx . substate . touchedAccounts)
-          
+
           let
             substate'' = over touchedAccounts (maybe id cons (find ((==) 3) touched)) substate'
             revertContracts = assign (env . contracts) reversion
