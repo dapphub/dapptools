@@ -120,7 +120,7 @@ in
       dir = ./pass;
       name = "dappTestsShouldPass";
       shouldFail = false;
-      dappFlags = "--max-iterations 50 --smttimeout 300000";
+      dappFlags = "--max-iterations 50 --smttimeout 600000";
     };
 
     shouldFail = let
@@ -128,7 +128,7 @@ in
         dir = ./fail;
         shouldFail = true;
         name = "dappTestsShouldFail-${match}";
-        dappFlags = "--match ${match} --smttimeout 300000";
+        dappFlags = "--match ${match} --smttimeout 600000";
       };
     in pkgs.recurseIntoAttrs {
       prove-add = fail "prove_add";
