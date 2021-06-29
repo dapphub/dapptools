@@ -114,7 +114,7 @@ data VM = VM
   , _burned         :: Word
   , _constraints    :: [(SBool, Whiff)]
   , _iterations     :: Map CodeLocation Int
-  , _options        :: VMOpts
+  , _allowFFI       :: Bool
   }
   deriving (Show)
 
@@ -506,7 +506,7 @@ makeVm o =
   , _burned = 0
   , _constraints = []
   , _iterations = mempty
-  , _options = o
+  , _allowFFI = vmoptAllowFFI o
   } where theCode = case _contractcode (vmoptContract o) of
             InitCode b    -> b
             RuntimeCode b -> b
@@ -1964,7 +1964,7 @@ cheatActions =
     [ action "ffi(string[])" $
         \sig outOffset outSize input -> do
           vm <- get
-          if vmoptAllowFFI (view EVM.options vm) then
+          if view EVM.allowFFI vm then
             case decodeBuffer [AbiArrayDynamicType AbiStringType] input of
               CAbi valsArr -> case valsArr of
                 [AbiArrayDynamic AbiStringType strsV] ->
