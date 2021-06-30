@@ -1973,7 +1973,7 @@ cheatActions =
                     cmd = (flip fmap) (V.toList strsV) (\case
                       (AbiString a) -> unpack $ decodeUtf8 a
                       _ -> "")
-                    cont = \bs -> do
+                    cont bs = do
                       let encoded = ConcreteBuffer bs
                       assign (state . returndata) encoded
                       copyBytesToMemory encoded outSize 0 outOffset
