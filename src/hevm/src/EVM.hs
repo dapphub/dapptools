@@ -18,7 +18,7 @@ import Prelude hiding (log, Word, exponent, GT, LT)
 import Data.SBV hiding (Word, output, Unknown)
 import Data.Proxy (Proxy(..))
 import Data.Text (unpack)
-import Data.Text.Encoding (decodeUtf8)
+import Data.Text.Encoding (decodeUtf8, encodeUtf8)
 import qualified Data.Vector as V
 import EVM.ABI
 import EVM.Types
@@ -52,6 +52,7 @@ import qualified Data.ByteArray       as BA
 import qualified Data.Map.Strict      as Map
 import qualified Data.Sequence        as Seq
 import qualified Data.Tree.Zipper     as Zipper
+import qualified Data.Vector          as V
 import qualified Data.Vector.Storable as Vector
 import qualified Data.Vector.Storable.Mutable as Vector
 
@@ -1981,8 +1982,8 @@ cheatActions =
                 _ -> vmError (BadCheatCode sig)
               _ -> vmError (BadCheatCode sig)
           else
-            let msg = "ffi disabled: run again with --ffi if you want to allow tests to call external scripts"
-            in vmError . Revert $ abiMethod "Error(string)" (AbiString msg),
+            let msg = encodeUtf8 "ffi disabled: run again with --ffi if you want to allow tests to call external scripts"
+            in vmError . Revert $ abiMethod "Error(string)" (AbiTuple . V.fromList $ [AbiString msg]),
 
       action "warp(uint256)" $
         \sig _ _ input -> case decodeStaticArgs input of
