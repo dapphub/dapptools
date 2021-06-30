@@ -17,6 +17,9 @@ import Prelude hiding (log, Word, exponent, GT, LT)
 
 import Data.SBV hiding (Word, output, Unknown)
 import Data.Proxy (Proxy(..))
+import Data.Text (unpack)
+import Data.Text.Encoding (decodeUtf8, encodeUtf8)
+import qualified Data.Vector as V
 import EVM.ABI
 import EVM.Types
 import EVM.Solidity
@@ -49,6 +52,7 @@ import qualified Data.ByteArray       as BA
 import qualified Data.Map.Strict      as Map
 import qualified Data.Sequence        as Seq
 import qualified Data.Tree.Zipper     as Zipper
+import qualified Data.Vector          as V
 import qualified Data.Vector.Storable as Vector
 import qualified Data.Vector.Storable.Mutable as Vector
 
@@ -87,6 +91,7 @@ data Error
   | DeadPath
   | NotUnique Whiff
   | SMTTimeout
+  | FFI AbiVals
 deriving instance Show Error
 
 -- | The possible result states of a VM
@@ -110,6 +115,7 @@ data VM = VM
   , _burned         :: Word
   , _constraints    :: [(SBool, Whiff)]
   , _iterations     :: Map CodeLocation Int
+  , _allowFFI       :: Bool
   }
   deriving (Show)
 
@@ -135,6 +141,7 @@ data Query where
   PleaseMakeUnique    :: SymVal a => SBV a -> [SBool] -> (IsUnique a -> EVM ()) -> Query
   PleaseFetchSlot     :: Addr -> Word -> (Word -> EVM ()) -> Query
   PleaseAskSMT        :: SBool -> [SBool] -> (BranchCondition -> EVM ()) -> Query
+  PleaseDoFFI         :: [String] -> (ByteString -> EVM ()) -> Query
 
 data Choose where
   PleaseChoosePath    :: Whiff -> (Bool -> EVM ()) -> Choose
@@ -155,6 +162,8 @@ instance Show Query where
       (("<EVM.Query: make value "
         ++ show val ++ " unique in context "
         ++ show constraints ++ ">") ++)
+    PleaseDoFFI cmd _ ->
+      (("<EVM.Query: do ffi: " ++ (show cmd)) ++)
 
 instance Show Choose where
   showsPrec _ = \case
@@ -203,6 +212,7 @@ data VMOpts = VMOpts
   , vmoptCreate :: Bool
   , vmoptStorageModel :: StorageModel
   , vmoptTxAccessList :: Map Addr [W256]
+  , vmoptAllowFFI :: Bool
   } deriving Show
 
 -- | A log entry
@@ -436,14 +446,14 @@ currentContract vm =
 -- * Data constructors
 
 makeVm :: VMOpts -> VM
-makeVm o = 
+makeVm o =
   let txaccessList = vmoptTxAccessList o
       txorigin = vmoptOrigin o
       txtoAddr = vmoptAddress o
       initialAccessedAddrs = fromList $ [txorigin, txtoAddr] ++ [1..9] ++ (Map.keys txaccessList)
       initialAccessedStorageKeys = fromList $ foldMap (uncurry (map . (,))) (Map.toList txaccessList)
       touched = if vmoptCreate o then [txorigin] else [txorigin, txtoAddr]
-  in 
+  in
   VM
   { _result = Nothing
   , _frames = mempty
@@ -497,6 +507,7 @@ makeVm o =
   , _burned = 0
   , _constraints = []
   , _iterations = mempty
+  , _allowFFI = vmoptAllowFFI o
   } where theCode = case _contractcode (vmoptContract o) of
             InitCode b    -> b
             RuntimeCode b -> b
@@ -1586,8 +1597,8 @@ makeUnique sw@(S w val) cont = case maybeLitWord sw of
       Unique a -> do
         assign result Nothing
         cont (C w $ fromSizzle a)
-      InconsistentU -> vmError $ DeadPath
-      TimeoutU -> vmError $ SMTTimeout
+      InconsistentU -> vmError DeadPath
+      TimeoutU -> vmError SMTTimeout
       Multiple -> vmError $ NotUnique w
   Just a -> cont a
 
@@ -1951,7 +1962,30 @@ type CheatAction = Word -> Word -> Buffer -> EVM ()
 cheatActions :: Map Word32 CheatAction
 cheatActions =
   Map.fromList
-    [ action "warp(uint256)" $
+    [ action "ffi(string[])" $
+        \sig outOffset outSize input -> do
+          vm <- get
+          if view EVM.allowFFI vm then
+            case decodeBuffer [AbiArrayDynamicType AbiStringType] input of
+              CAbi valsArr -> case valsArr of
+                [AbiArrayDynamic AbiStringType strsV] ->
+                  let
+                    cmd = (flip fmap) (V.toList strsV) (\case
+                      (AbiString a) -> unpack $ decodeUtf8 a
+                      _ -> "")
+                    cont bs = do
+                      let encoded = ConcreteBuffer bs
+                      assign (state . returndata) encoded
+                      copyBytesToMemory encoded outSize 0 outOffset
+                      assign result Nothing
+                  in assign result (Just . VMFailure . Query $ (PleaseDoFFI cmd cont))
+                _ -> vmError (BadCheatCode sig)
+              _ -> vmError (BadCheatCode sig)
+          else
+            let msg = encodeUtf8 "ffi disabled: run again with --ffi if you want to allow tests to call external scripts"
+            in vmError . Revert $ abiMethod "Error(string)" (AbiTuple . V.fromList $ [AbiString msg]),
+
+      action "warp(uint256)" $
         \sig _ _ input -> case decodeStaticArgs input of
           [x]  -> assign (block . timestamp) x
           _ -> vmError (BadCheatCode sig),
@@ -2123,7 +2157,7 @@ create self this xGas' xValue xs newAddr initCode = do
   then do
     assign (state . stack) (0 : xs)
     assign (state . returndata) mempty
-    pushTrace $ ErrorTrace $ CallDepthLimitReached
+    pushTrace $ ErrorTrace CallDepthLimitReached
     next
   else if collision $ view (env . contracts . at newAddr) vm0
   then burn xGas $ do
@@ -2283,7 +2317,7 @@ finishFrame how = do
 
           -- In other words, we special case address 0x03 and keep it in the set of touched accounts during revert
           touched <- use (tx . substate . touchedAccounts)
-          
+
           let
             substate'' = over touchedAccounts (maybe id cons (find ((==) 3) touched)) substate'
             revertContracts = assign (env . contracts) reversion

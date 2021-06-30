@@ -252,6 +252,7 @@ putAbi = \case
   AbiTuple v ->
     putAbiSeq v
 
+-- | Decode a sequence type (e.g. tuple / array). Will fail for non sequence types
 getAbiSeq :: Int -> [AbiType] -> Get (Vector AbiValue)
 getAbiSeq n ts = label "sequence" $ do
   hs <- label "sequence head" (getAbiHead n ts)
@@ -521,6 +522,7 @@ bytesP = do
     Left d -> pfail
 
 data AbiVals = NoVals | CAbi [AbiValue] | SAbi [SymWord]
+  deriving (Show)
 
 decodeBuffer :: [AbiType] -> Buffer -> AbiVals
 decodeBuffer tps (ConcreteBuffer b)

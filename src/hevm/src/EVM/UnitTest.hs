@@ -83,6 +83,7 @@ data UnitTestOptions = UnitTestOptions
   , vmModifier :: VM -> VM
   , dapp       :: DappInfo
   , testParams :: TestVMParams
+  , allowFFI   :: Bool
   }
 
 data TestVMParams = TestVMParams
@@ -926,6 +927,7 @@ initialUnitTestVm (UnitTestOptions {..}) theContract =
            , vmoptCreate = True
            , vmoptStorageModel = ConcreteS -- TODO: support RPC
            , vmoptTxAccessList = mempty -- TODO: support unit test access lists???
+           , vmoptAllowFFI = allowFFI
            }
     creator =
       initialContract (RuntimeCode mempty)

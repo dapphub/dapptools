@@ -10,6 +10,7 @@ fail () {
 
 opts=()
 [[ "$DAPP_TEST_CACHE" ]]          && opts+=(--cache "$DAPP_TEST_CACHE")
+[[ "$DAPP_TEST_FFI" ]]            && opts+=(--ffi)
 [[ "$DAPP_TEST_MATCH" ]]          && opts+=(--match "$DAPP_TEST_MATCH")
 [[ "$DAPP_TEST_SOLVER" ]]         && opts+=(--solver "$DAPP_TEST_SOLVER")
 [[ "$DAPP_TEST_REPLAY" ]]         && opts+=(--replay "$DAPP_TEST_REPLAY")

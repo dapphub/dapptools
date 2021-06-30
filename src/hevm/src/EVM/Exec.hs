@@ -41,6 +41,7 @@ vmForEthrunCreation creationCode =
     , vmoptCreate = False
     , vmoptStorageModel = ConcreteS
     , vmoptTxAccessList = mempty
+    , vmoptAllowFFI = False
     }) & set (env . contracts . at ethrunAddress)
              (Just (initialContract (RuntimeCode mempty)))
 

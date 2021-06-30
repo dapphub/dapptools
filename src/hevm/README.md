@@ -296,6 +296,11 @@ Signs the `digest` using the private key `sk`. Note that signatures produced via
 Derives an ethereum address from the private key `sk`. Note that `hevm.addr(0)` will fail with
 `BadCheatCode` as `0` is an invalid ECDSA private key.
 
+- `function ffi(string[] calldata) external returns (bytes memory)`
+Executes the arguments as a command in the system shell and returns stdout.  Note that this
+cheatcode means test authors can execute arbitrary code on user machines as part of a call to `dapp
+test`, for this reason all calls to `ffi` will fail unless the `--ffi` flag is passed.
+
 ## Contact
 
 You can find us in the DappHub chat at https://dapphub.chat/, especially the `#dev` channel.

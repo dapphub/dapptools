@@ -285,6 +285,7 @@ fromBlockchainCase' block tx preState postState =
          , vmoptCreate        = isCreate
          , vmoptStorageModel  = EVM.ConcreteS
          , vmoptTxAccessList  = txAccessMap tx
+         , vmoptAllowFFI      = False
          })
         checkState
         postState

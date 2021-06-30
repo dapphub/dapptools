@@ -7,6 +7,7 @@
 - Can now identify contracts with `immutable` by comparing bytecode modulo immutableReferences.
 - A new test runner for checking invariants against random reachable contract states.
 - z3 is now the default smt solver again
+- A new cheatcode `ffi(string[])` that executes an arbitrary command in the system shell
 
 ## 0.46.0 - 2021-04-29
 

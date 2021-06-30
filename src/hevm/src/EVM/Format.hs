@@ -247,10 +247,12 @@ showTrace dapp vm trace =
           "fetch contract " <> pack (show addr) <> pos
         PleaseFetchSlot addr slot _ ->
           "fetch storage slot " <> pack (show slot) <> " from " <> pack (show addr) <> pos
-        PleaseAskSMT _ _ _ ->
+        PleaseAskSMT {} ->
           "ask smt" <> pos
-        PleaseMakeUnique _ _ _ ->
+        PleaseMakeUnique {} ->
           "make unique value" <> pos
+        PleaseDoFFI cmd _ ->
+          "execute ffi " <> pack (show cmd) <> pos
 
     ErrorTrace e ->
       case e of

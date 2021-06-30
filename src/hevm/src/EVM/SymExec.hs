@@ -31,7 +31,6 @@ import Data.ByteString (ByteString, pack)
 import qualified Data.ByteString.Lazy as Lazy
 import qualified Data.ByteString as BS
 import Data.Text (Text, splitOn, unpack)
-import Control.Monad.State.Strict (runState, get, put, zipWithM)
 import qualified Control.Monad.State.Class as State
 import Control.Applicative
 
@@ -141,6 +140,7 @@ loadSymVM x initStore model addr callvalue' calldata' =
     , vmoptCreate = False
     , vmoptStorageModel = model
     , vmoptTxAccessList = mempty
+    , vmoptAllowFFI = False
     }) & set (env . contracts . at (createAddress ethrunAddress 1))
              (Just (contractWithStore x initStore))
 
@@ -346,7 +346,7 @@ verify preState maxIter rpcinfo maybepost = do
 -- | Compares two contract runtimes for trace equivalence by running two VMs and comparing the end states.
 equivalenceCheck :: ByteString -> ByteString -> Maybe Integer -> Maybe (Text, [AbiType]) -> Query (Either ([VM], [VM]) VM)
 equivalenceCheck bytecodeA bytecodeB maxiter signature' = do
-  let 
+  let
     bytecodeA' = if BS.null bytecodeA then BS.pack [0] else bytecodeA
     bytecodeB' = if BS.null bytecodeB then BS.pack [0] else bytecodeB
   preStateA <- abstractVM signature' [] bytecodeA' SymbolicS
