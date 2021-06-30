@@ -120,7 +120,7 @@ in
       dir = ./pass;
       name = "dappTestsShouldPass";
       shouldFail = false;
-      dappFlags = "--max-iterations 50 --smttimeout 600000 --fii";
+      dappFlags = "--max-iterations 50 --smttimeout 600000 --ffi";
     };
 
     shouldFail = let
