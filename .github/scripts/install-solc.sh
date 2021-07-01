@@ -38,13 +38,13 @@ fetch_solc_macos() {
 
 if [ "$HOST_OS" = "Linux" ]; then
   if [ "${SOLC_VER:-}" == "" ]; then
-    travis_retry fetch_solc_linux "0.6.12"
+    travis_retry fetch_solc_linux "0.8.6"
   else
     travis_retry fetch_solc_linux "$SOLC_VER"
   fi
 else
   if [ "${SOLC_VER:-}" == "" ]; then
-    travis_retry fetch_solc_macos "0.6.12"
+    travis_retry fetch_solc_macos "0.8.6"
   else
     travis_retry fetch_solc_macos "$SOLC_VER"
   fi
