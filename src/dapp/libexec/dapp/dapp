@@ -15,8 +15,6 @@
 ###   Testing options:
 ### verbosity=<number>   verbosity of 'dapp test' output (0-3)
 ### v,verbose            sets verbosity to 1
-### vv                   sets verbosity to 2
-### vvv                  sets verbosity to 3
 ### fuzz-runs=<number>   number of times to run fuzzing tests
 ### replay=<string>      rerun a particular test case
 ### m,match=<string>     only run test methods matching regex
@@ -62,8 +60,6 @@ extract              after building, write the .abi, .bin and .bin-runtime. Impl
   Testing options:
 verbosity=<number>   verbosity of 'dapp test' output (0-3)
 v,verbose            sets verbosity to 1
-vv                   sets verbosity to 2
-vvv                  sets verbosity to 3
 fuzz-runs=<number>   number of times to run fuzzing tests
 replay=<string>      rerun a particular test case
 m,match=<string>     only run test methods matching regex
