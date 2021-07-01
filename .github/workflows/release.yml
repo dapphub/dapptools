@@ -74,7 +74,7 @@ jobs:
           export LD_LIBRARY_PATH="${LD_LIBRARY_PATH}:$HOME/.local/lib"
           export PATH="${PATH}:$HOME/.local/bin"
 
-          cp "$HOME/.local/bin/solc-0.6.12" "$HOME/.local/bin/solc"
+          cp "$HOME/.local/bin/solc-0.8.6" "$HOME/.local/bin/solc"
           cd src/hevm && stack test --extra-include-dirs=$HOME/.local/include --extra-lib-dirs=$HOME/.local/lib && cd ../..
 
       - name: Amend and compress binaries (macOS)
