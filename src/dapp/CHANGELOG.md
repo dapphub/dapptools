@@ -4,11 +4,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## unreleased
+## [0.33.0] - 2021-07-01
 
-- A new type of test has been added invariant testing,
-which runs a test function against a random reachable contract state. More information in the [README](./README.md###invariant-testing).
+### Added
+
+- A new type of test has been added: invariant testing, which runs a test function against a random
+  reachable contract state. More information in the [README](./README.md###invariant-testing)
+- A new flag for `dapp test`, `--ffi` allows users to enable the `ffi()` cheatcode in their tests
+
+### Changed
+
 - solc 0.8.6 is now the default compiler version
+- updated `nixpkgs` to the `21.05` channel
 
 ## [0.32.2] - 2021-03-22
 
