@@ -131,57 +131,57 @@ contract ConstantinopleTests is DSTest {
     // https://github.com/ethereum/EIPs/blob/fde32dfd6b24bac7bfabf6c1ebe3f5a603d5ff4c/EIPS/eip-145.md
     function test_shl() public {
         uint z;
-        
+
         assembly {
             z := shl(0x00, 0x0000000000000000000000000000000000000000000000000000000000000001)
         }
         assertEq(z, 0x0000000000000000000000000000000000000000000000000000000000000001);
-        
+
         assembly {
             z := shl(0x01, 0x0000000000000000000000000000000000000000000000000000000000000001)
         }
         assertEq(z, 0x0000000000000000000000000000000000000000000000000000000000000002);
-        
+
         assembly {
             z := shl(0xff, 0x0000000000000000000000000000000000000000000000000000000000000001)
         }
         assertEq(z, 0x8000000000000000000000000000000000000000000000000000000000000000);
-        
+
         assembly {
             z := shl(0x0100, 0x0000000000000000000000000000000000000000000000000000000000000001)
         }
         assertEq(z, 0x0000000000000000000000000000000000000000000000000000000000000000);
-        
+
         assembly {
             z := shl(0x0101, 0x0000000000000000000000000000000000000000000000000000000000000001)
         }
         assertEq(z, 0x0000000000000000000000000000000000000000000000000000000000000000);
-        
+
         assembly {
             z := shl(0x00, 0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff)
         }
         assertEq(z, 0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff);
-        
+
         assembly {
             z := shl(0x01, 0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff)
         }
         assertEq(z, 0xfffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffe);
-        
+
         assembly {
             z := shl(0xff, 0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff)
         }
         assertEq(z, 0x8000000000000000000000000000000000000000000000000000000000000000);
-        
+
         assembly {
             z := shl(0x0100, 0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff)
         }
         assertEq(z, 0x0000000000000000000000000000000000000000000000000000000000000000);
-        
+
         assembly {
             z := shl(0x01, 0x0000000000000000000000000000000000000000000000000000000000000000)
         }
         assertEq(z, 0x0000000000000000000000000000000000000000000000000000000000000000);
-        
+
         assembly {
             z := shl(0x01, 0x7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff)
         }
@@ -252,82 +252,82 @@ contract ConstantinopleTests is DSTest {
 
         assembly {
             z := sar(0x00, 0x0000000000000000000000000000000000000000000000000000000000000001)
-        }    
+        }
         assertEq(bytes32(z), bytes32(0x0000000000000000000000000000000000000000000000000000000000000001));
 
         assembly {
             z := sar(0x01, 0x0000000000000000000000000000000000000000000000000000000000000001)
-        }    
+        }
         assertEq(bytes32(z), bytes32(0x0000000000000000000000000000000000000000000000000000000000000000));
 
         assembly {
             z := sar(0x01, 0x8000000000000000000000000000000000000000000000000000000000000000)
-        }    
+        }
         assertEq(bytes32(z), bytes32(0xc000000000000000000000000000000000000000000000000000000000000000));
 
         assembly {
             z := sar(0xff, 0x8000000000000000000000000000000000000000000000000000000000000000)
-        }    
+        }
         assertEq(bytes32(z), bytes32(0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff));
 
         assembly {
             z := sar(0x0100, 0x8000000000000000000000000000000000000000000000000000000000000000)
-        }    
+        }
         assertEq(bytes32(z), bytes32(0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff));
 
         assembly {
             z := sar(0x0101, 0x8000000000000000000000000000000000000000000000000000000000000000)
-        }    
+        }
         assertEq(bytes32(z), bytes32(0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff));
 
         assembly {
             z := sar(0x00, 0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff)
-        }    
+        }
         assertEq(bytes32(z), bytes32(0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff));
 
         assembly {
             z := sar(0x01, 0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff)
-        }    
+        }
         assertEq(bytes32(z), bytes32(0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff));
 
         assembly {
             z := sar(0xff, 0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff)
-        }    
+        }
         assertEq(bytes32(z), bytes32(0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff));
 
         assembly {
             z := sar(0x0100, 0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff)
-        }    
+        }
         assertEq(bytes32(z), bytes32(0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff));
 
         assembly {
             z := sar(0x01, 0x0000000000000000000000000000000000000000000000000000000000000000)
-        }    
+        }
         assertEq(bytes32(z), bytes32(0x0000000000000000000000000000000000000000000000000000000000000000));
 
         assembly {
             z := sar(0xfe, 0x4000000000000000000000000000000000000000000000000000000000000000)
-        }    
+        }
         assertEq(bytes32(z), bytes32(0x0000000000000000000000000000000000000000000000000000000000000001));
 
         assembly {
             z := sar(0xf8, 0x7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff)
-        }    
+        }
         assertEq(bytes32(z), bytes32(0x000000000000000000000000000000000000000000000000000000000000007f));
-    
+
         assembly {
             z := sar(0xfe, 0x7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff)
-        }    
+        }
         assertEq(bytes32(z), bytes32(0x0000000000000000000000000000000000000000000000000000000000000001));
-    
+
         assembly {
             z := sar(0xff, 0x7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff)
-        }    
+        }
         assertEq(bytes32(z), bytes32(0x0000000000000000000000000000000000000000000000000000000000000000));
-    
+
         assembly {
             z := sar(0x0100, 0x7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff)
-        }    
+        }
         assertEq(bytes32(z), bytes32(0x0000000000000000000000000000000000000000000000000000000000000000));
     }
 }

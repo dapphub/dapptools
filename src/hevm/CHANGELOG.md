@@ -6,8 +6,12 @@
 
 - Can now identify contracts with `immutable` by comparing bytecode modulo immutableReferences.
 - A new test runner for checking invariants against random reachable contract states.
+- `hevm symbolic` can search for solc 0.8 style assertion violations, and a new `--assertions` flag
+    has been added allowing users to customize which assertions should be reported
 - z3 is now the default smt solver again
 - A new cheatcode `ffi(string[])` that executes an arbitrary command in the system shell
+
+
 
 ## 0.46.0 - 2021-04-29
 

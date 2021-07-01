@@ -59,7 +59,7 @@ This creates two contracts, `Dapptutorial.sol` and ``Dapptutorial.t.sol` in the 
 For the sake of this tutorial, lets change `Dapptutorial.sol` to a simple vault with an eth bounty that can be accessed by giving the password 42:
 
 ```solidity
-pragma solidity ^0.6.7;
+pragma solidity ^0.8.6;
 
 contract Dapptutorial {
     receive() external payable {
@@ -196,8 +196,9 @@ For more reading on property based testing and symbolic execution, see [this tut
 
 While other forms of tests are always run against the post state of the `setUp()` function in the testing contract,
 it can be also be useful to check whether a property is satisfied at every possible contract state. This can be done with
-the `invariant*` testing type. When running an invariant test, hevm will invoke any state mutating function from all addresses returned by a call to `targetContracts()`, if such a function exists in the testing contracts. If no such method exists, it will invoke methods from any
-non-testing contract available after the `setUp()` function has been run, checking the `invariant*` after each run.
+the `invariant*` testing type. When running an invariant test, hevm will invoke any state mutating function from all addresses returned
+by a call to `targetContracts()`, if such a function exists in the testing contracts. If no such method exists, it will invoke methods from
+any non-testing contract available after the `setUp()` function has been run, checking the `invariant*` after each run.
 
 The `--depth` paramenter determines how many transactions deep each test will run, while the `--fuzz-runs` parameter
 determines how many times the whole process is repeated.

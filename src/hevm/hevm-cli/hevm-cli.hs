@@ -2,6 +2,8 @@
 
 {-# Language CPP #-}
 {-# Language DataKinds #-}
+{-# Language StandaloneDeriving #-}
+{-# Language DeriveAnyClass #-}
 {-# Language FlexibleInstances #-}
 {-# Language DeriveGeneric #-}
 {-# Language GADTs #-}
@@ -60,6 +62,7 @@ import Data.Text.Encoding         (encodeUtf8)
 import Data.Text.IO               (hPutStr)
 import Data.Maybe                 (fromMaybe, fromJust)
 import Data.Version               (showVersion)
+import Data.DoubleWord            (Word256)
 import Data.SBV hiding (Word, solver, verbose, name)
 import Data.SBV.Control hiding (Version, timeout, create)
 import System.IO                  (hFlush, stdout, stderr)
@@ -126,6 +129,7 @@ data Command w
       , maxIterations :: w ::: Maybe Integer      <?> "Number of times we may revisit a particular branching point"
       , solver        :: w ::: Maybe Text         <?> "Used SMT solver: z3 (default) or cvc4"
       , smtdebug      :: w ::: Bool               <?> "Print smt queries sent to the solver"
+      , assertions    :: w ::: Maybe [Word256]    <?> "Comma seperated list of solc panic codes to check for (default: everything except arithmetic overflow)"
       }
   | Equivalence -- prove equivalence between two programs
       { codeA         :: w ::: ByteString    <?> "Bytecode of the first program"
@@ -230,6 +234,9 @@ type URL = Text
 -- For some reason haskell can't derive a
 -- parseField instance for (Text, ByteString)
 instance Options.ParseField (Text, ByteString)
+
+deriving instance Options.ParseField Word256
+deriving instance Options.ParseField [Word256]
 
 instance Options.ParseRecord (Command Options.Wrapped) where
   parseRecord =
@@ -507,7 +514,8 @@ assert cmd = do
   else
     runSMTWithTimeOut (solver cmd) (smttimeout cmd) (smtdebug cmd) $ query $ do
       preState <- symvmFromCommand cmd
-      verify preState (maxIterations cmd) rpcinfo (Just checkAssertions) >>= \case
+      let errCodes = fromMaybe defaultPanicCodes (assertions cmd)
+      verify preState (maxIterations cmd) rpcinfo (Just $ checkAssertions errCodes) >>= \case
         Right tree -> do
           io $ putStrLn "Assertion violation found."
           showCounterexample preState maybesig

@@ -21,7 +21,7 @@ in
   , src
   , dapp ? pkgs.dapp
   , deps ? []
-  , solc ? pkgs.solc
+  , solc ? "${pkgs.solc}/bin/solc"
   , shouldFail ? false
   , dappFlags ? ""
   , doCheck ? true
@@ -29,7 +29,7 @@ in
     pkgs.stdenv.mkDerivation ( rec {
       inherit doCheck;
 
-      buildInputs = [ pkgs.jq solc dapp ];
+      buildInputs = [ pkgs.jq dapp ];
       passthru = {
         remappings = remappings deps;
         libPaths = libPaths deps;
@@ -48,6 +48,7 @@ in
           passthru.libPaths;
       buildPhase = ''
         mkdir -p out
+        export DAPP_SOLC=${solc}
         export DAPP_REMAPPINGS="$REMAPPINGS"
         export DAPP_SRC=$src
         export DAPP_OUT=out

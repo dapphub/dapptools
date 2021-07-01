@@ -3,7 +3,6 @@
 {-# Language ScopedTypeVariables #-}
 {-# Language LambdaCase #-}
 {-# Language QuasiQuotes #-}
-{-# Language TypeSynonymInstances #-}
 {-# Language FlexibleInstances #-}
 {-# Language GeneralizedNewtypeDeriving #-}
 {-# Language DataKinds #-}
@@ -18,7 +17,7 @@ import Prelude hiding (fail)
 
 import qualified Data.Text as Text
 import qualified Data.ByteString as BS
-import qualified Data.ByteString.Lazy as BS (fromStrict, toStrict)
+import qualified Data.ByteString.Lazy as BS (fromStrict)
 import qualified Data.ByteString.Base16 as Hex
 import Test.Tasty
 import Test.Tasty.QuickCheck
@@ -67,7 +66,7 @@ main = defaultMain $ testGroup "hevm"
     , testCase "Arithmetic" $ do
         SolidityCall "x = a + 1;"
           [AbiUInt 256 1] ===> AbiUInt 256 2
-        SolidityCall "x = a - 1;"
+        SolidityCall "unchecked { x = a - 1; }"
           [AbiUInt 8 0] ===> AbiUInt 8 255
 
     , testCase "keccak256()" $
@@ -252,7 +251,7 @@ main = defaultMain $ testGroup "hevm"
           }
           |]
         bs <- runSMTWith cvc4 $ query $ do
-          (Right _, vm) <- checkAssert factor (Just ("factor(uint256,uint256)", [AbiUIntType 256, AbiUIntType 256])) []
+          (Right _, vm) <- checkAssert defaultPanicCodes factor (Just ("factor(uint256,uint256)", [AbiUIntType 256, AbiUIntType 256])) []
           case view (state . calldata . _1) vm of
             SymbolicBuffer bs -> BS.pack <$> mapM (getValue.fromSized) bs
             ConcreteBuffer _ -> error "unexpected"
@@ -267,8 +266,10 @@ main = defaultMain $ testGroup "hevm"
           contract A {
             uint x;
             function f(uint256 y) public {
-               x += y;
-               x += y;
+               unchecked {
+                 x += y;
+                 x += y;
+               }
             }
           }
           |]
@@ -320,7 +321,7 @@ main = defaultMain $ testGroup "hevm"
           (Right _, vm) <- verifyContract c (Just ("f(uint256,uint256)", [AbiUIntType 256, AbiUIntType 256])) [] SymbolicS pre (Just post)
           case view (state . calldata . _1) vm of
             SymbolicBuffer bs -> BS.pack <$> mapM (getValue.fromSized) bs
-            ConcreteBuffer bs -> error "unexpected"
+            ConcreteBuffer _ -> error "unexpected"
 
         let [AbiUInt 256 x, AbiUInt 256 y] = decodeAbiValues [AbiUIntType 256, AbiUIntType 256] bs
         assertEqual "Catch storage collisions" x y
@@ -344,7 +345,7 @@ main = defaultMain $ testGroup "hevm"
               }
              }
             |]
-          (Left res, _) <- runSMTWith z3 $ query $ checkAssert c (Just ("deposit(uint256)", [AbiUIntType 256])) []
+          (Left res, _) <- runSMTWith z3 $ query $ checkAssert defaultPanicCodes c (Just ("deposit(uint256)", [AbiUIntType 256])) []
           putStrLn $ "successfully explored: " <> show (length res) <> " paths"
         ,
                 testCase "Deposit contract loop (cvc4)" $ do
@@ -366,7 +367,7 @@ main = defaultMain $ testGroup "hevm"
               }
              }
             |]
-          (Left res, _) <- runSMTWith cvc4 $ query $ checkAssert c (Just ("deposit(uint256)", [AbiUIntType 256])) []
+          (Left res, _) <- runSMTWith cvc4 $ query $ checkAssert defaultPanicCodes c (Just ("deposit(uint256)", [AbiUIntType 256])) []
           putStrLn $ "successfully explored: " <> show (length res) <> " paths"
         ,
         testCase "Deposit contract loop (error version)" $ do
@@ -389,7 +390,7 @@ main = defaultMain $ testGroup "hevm"
              }
             |]
           bs <- runSMT $ query $ do
-            (Right _, vm) <- checkAssert c (Just ("deposit(uint8)", [AbiUIntType 8])) []
+            (Right _, vm) <- checkAssert allPanicCodes c (Just ("deposit(uint8)", [AbiUIntType 8])) []
             case view (state . calldata . _1) vm of
               SymbolicBuffer bs -> BS.pack <$> mapM (getValue.fromSized) bs
               ConcreteBuffer _ -> error "unexpected"
@@ -408,7 +409,7 @@ main = defaultMain $ testGroup "hevm"
           |]
         (Left res, _) <- runSMTWith z3 $ do
           setTimeOut 5000
-          query $ checkAssert c Nothing []
+          query $ checkAssert defaultPanicCodes c Nothing []
         putStrLn $ "successfully explored: " <> show (length res) <> " paths"
         ,
 
@@ -421,7 +422,7 @@ main = defaultMain $ testGroup "hevm"
               }
             }
             |]
-          (Left res, _) <- runSMTWith cvc4 $ query $ checkAssert c (Just ("f(uint256,uint256)", [AbiUIntType 256, AbiUIntType 256])) []
+          (Left res, _) <- runSMTWith cvc4 $ query $ checkAssert defaultPanicCodes c (Just ("f(uint256,uint256)", [AbiUIntType 256, AbiUIntType 256])) []
           putStrLn $ "successfully explored: " <> show (length res) <> " paths"
         ,
         testCase "injectivity of keccak (32 bytes)" $ do
@@ -433,7 +434,7 @@ main = defaultMain $ testGroup "hevm"
               }
             }
             |]
-          (Left res, _) <- runSMTWith z3 $ query $ checkAssert c (Just ("f(uint256,uint256)", [AbiUIntType 256, AbiUIntType 256])) []
+          (Left res, _) <- runSMTWith z3 $ query $ checkAssert defaultPanicCodes c (Just ("f(uint256,uint256)", [AbiUIntType 256, AbiUIntType 256])) []
           putStrLn $ "successfully explored: " <> show (length res) <> " paths"
        ,
 
@@ -447,7 +448,7 @@ main = defaultMain $ testGroup "hevm"
             }
             |]
           bs <- runSMTWith z3 $ query $ do
-            (Right _, vm) <- checkAssert c (Just ("f(uint256,uint256,uint256,uint256)", replicate 4 (AbiUIntType 256))) []
+            (Right _, vm) <- checkAssert defaultPanicCodes c (Just ("f(uint256,uint256,uint256,uint256)", replicate 4 (AbiUIntType 256))) []
             case view (state . calldata . _1) vm of
               SymbolicBuffer bs -> BS.pack <$> mapM (getValue.fromSized) bs
               ConcreteBuffer _ -> error "unexpected"
@@ -479,7 +480,7 @@ main = defaultMain $ testGroup "hevm"
             |]
           Left res <- runSMTWith z3 $ do
             setTimeOut 5000
-            query $ fst <$> checkAssert c Nothing []
+            query $ fst <$> checkAssert defaultPanicCodes c Nothing []
           putStrLn $ "successfully explored: " <> show (length res) <> " paths"
 
        ,
@@ -496,8 +497,8 @@ main = defaultMain $ testGroup "hevm"
               }
             |]
           -- should find a counterexample
-          Right _ <- runSMTWith cvc4 $ query $ fst <$> checkAssert c (Just ("f(uint256,uint256)", [AbiUIntType 256, AbiUIntType 256])) []
-          putStrLn $ "found counterexample:"
+          Right _ <- runSMTWith cvc4 $ query $ fst <$> checkAssert defaultPanicCodes c (Just ("f(uint256,uint256)", [AbiUIntType 256, AbiUIntType 256])) []
+          putStrLn "found counterexample:"
 
 
       ,
@@ -520,7 +521,7 @@ main = defaultMain $ testGroup "hevm"
               aAddr = Addr 0x35D1b3F3D7966A1DFe207aa4514C12a259A0492B
           Just c <- solcRuntime "C" code
           Just a <- solcRuntime "A" code
-          Right cex <- runSMT $ query $ do
+          Right _ <- runSMT $ query $ do
             vm0 <- abstractVM (Just ("call_A()", [])) [] c SymbolicS
             store <- freshArray (show aAddr) Nothing
             let vm = vm0
@@ -528,8 +529,8 @@ main = defaultMain $ testGroup "hevm"
                   & over (env . contracts)
                        (Map.insert aAddr (initialContract (RuntimeCode $ ConcreteBuffer a) &
                                            set EVM.storage (EVM.Symbolic [] store)))
-            verify vm Nothing Nothing (Just checkAssertions)
-          putStrLn $ "found counterexample:"
+            verify vm Nothing Nothing (Just $ checkAssertions defaultPanicCodes)
+          putStrLn "found counterexample:"
       ,
          testCase "calling unique contracts (read from storage)" $ do
           let code =
@@ -549,11 +550,11 @@ main = defaultMain $ testGroup "hevm"
                   }
                 |]
           Just c <- solcRuntime "C" code
-          Right cex <- runSMT $ query $ do
+          Right _ <- runSMT $ query $ do
             vm0 <- abstractVM (Just ("call_A()", [])) [] c SymbolicS
             let vm = vm0 & set (state . callvalue) 0
-            verify vm Nothing Nothing (Just checkAssertions)
-          putStrLn $ "found counterexample:"
+            verify vm Nothing Nothing (Just $ checkAssertions defaultPanicCodes)
+          putStrLn "found counterexample:"
       ,
 
          testCase "keccak concrete and sym agree" $ do
@@ -571,15 +572,15 @@ main = defaultMain $ testGroup "hevm"
           Left _ <- runSMT $ query $ do
             vm0 <- abstractVM (Just ("kecc(uint256)", [AbiUIntType 256])) [] c SymbolicS
             let vm = vm0 & set (state . callvalue) 0
-            verify vm Nothing Nothing (Just checkAssertions)
-          putStrLn $ "found counterexample:"
+            verify vm Nothing Nothing (Just $ checkAssertions defaultPanicCodes)
+          putStrLn "found counterexample:"
 
       , testCase "safemath distributivity (yul)" $ do
           Left _ <- runSMTWith cvc4 $ query $ do
             let yulsafeDistributivity = hex "6355a79a6260003560e01c14156016576015601f565b5b60006000fd60a1565b603d602d604435600435607c565b6039602435600435607c565b605d565b6052604b604435602435605d565b600435607c565b141515605a57fe5b5b565b6000828201821115151560705760006000fd5b82820190505b92915050565b6000818384048302146000841417151560955760006000fd5b82820290505b92915050565b"
             vm <- abstractVM (Just ("distributivity(uint256,uint256,uint256)", [AbiUIntType 256, AbiUIntType 256, AbiUIntType 256])) [] yulsafeDistributivity SymbolicS
-            verify vm Nothing Nothing (Just checkAssertions)
-          putStrLn $ "Proven"
+            verify vm Nothing Nothing (Just $ checkAssertions defaultPanicCodes)
+          putStrLn "Proven"
 
       , testCase "safemath distributivity (sol)" $ do
           let code =
@@ -590,10 +591,14 @@ main = defaultMain $ testGroup "hevm"
                       }
 
                       function add(uint x, uint y) internal pure returns (uint z) {
-                          require((z = x + y) >= x, "ds-math-add-overflow");
+                          unchecked {
+                            require((z = x + y) >= x, "ds-math-add-overflow");
+                          }
                       }
                       function mul(uint x, uint y) internal pure returns (uint z) {
-                          require(y == 0 || (z = x * y) / y == x, "ds-math-mul-overflow");
+                          unchecked {
+                            require(y == 0 || (z = x * y) / y == x, "ds-math-mul-overflow");
+                          }
                       }
                  }
                 |]
@@ -601,8 +606,8 @@ main = defaultMain $ testGroup "hevm"
 
           Left _ <- runSMTWith z3 $ query $ do
             vm <- abstractVM (Just ("distributivity(uint256,uint256,uint256)", [AbiUIntType 256, AbiUIntType 256, AbiUIntType 256])) [] c SymbolicS
-            verify vm Nothing Nothing (Just checkAssertions)
-          putStrLn $ "Proven"
+            verify vm Nothing Nothing (Just $ checkAssertions defaultPanicCodes)
+          putStrLn "Proven"
 
     ]
   , testGroup "Equivalence checking"
@@ -620,7 +625,7 @@ main = defaultMain $ testGroup "hevm"
         let aPrgm = hex "602060006000376000805160008114601d5760018114602457fe6029565b8191506029565b600191505b50600160015250"
             bPrgm = hex "6020600060003760005160008114601c5760028114602057fe6021565b6021565b5b506001600152"
         runSMTWith z3 $ query $ do
-          Right counterexample <- equivalenceCheck aPrgm bPrgm Nothing Nothing
+          Right _ <- equivalenceCheck aPrgm bPrgm Nothing Nothing
           return ()
 
     ]

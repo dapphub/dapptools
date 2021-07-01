@@ -60,7 +60,7 @@ Usage: hevm symbolic [--code TEXT] [--calldata TEXT] [--address ADDR]
                      [--storage-model STORAGEMODEL] [--sig STRING]
                      [--arg STRING]... [--debug] [--get-models]
                      [--smttimeout INTEGER] [--max-iterations INTEGER]
-                     [--solver TEXT]
+                     [--solver TEXT] [--smtdebug] [--assertions [WORD256]]
 
 Available options:
   -h,--help                Show this help text
@@ -92,14 +92,27 @@ Available options:
   --debug                  Run interactively
   --get-models             Print example testcase for each execution path
   --smttimeout INTEGER     Timeout given to SMT solver in milliseconds
-  --max-iterations INTEGER Number of times we may revisit a particular branching
-                           point
+  --max-iterations INTEGER Number of times we may revisit a particular branching point
   --solver TEXT            Used SMT solver: z3 (default) or cvc4
+  --smtdebug               Print smt queries sent to the solver
+  --assertions [WORD256]   Comma seperated list of solc panic codes to check for (default: everything except arithmetic overflow)
 ```
 
 Run a symbolic execution against the given parameters, searching for assertion violations.
 
-If an `assert` is reachable, a counterexample will be returned.
+Counterexamples will be returned for any reachable assertion violations. Where an assertion
+violation is defined as either an execution of the invalid opcode (`0xfe`), or a revert with a
+message of the form `abi.encodeWithSelector('Panic(uint256)', errCode)` with `errCode` being one of
+the predefined solc assertion codes defined
+[here](https://docs.soliditylang.org/en/v0.8.6/control-structures.html?highlight=Panic#panic-via-assert-and-error-via-require).
+
+By default hevm ignores assertion violations that result from arithmetic overflow (`Panic(0x11)`),
+although this behaviour can be customised via the `--assertions` flag. For example, the following
+will return counterexmaples for arithmetic overflow (`0x11`) and user defined assertions (`0x01`):
+
+```
+hevm symbolic --code $CODE --assertions '[0x01, 0x11]'
+```
 
 `--debug` enters an interactive debugger where the user can navigate the full execution space.
 
