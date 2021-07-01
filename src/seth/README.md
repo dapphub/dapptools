@@ -281,7 +281,7 @@ arguments; for example, to check the balance of the MakerDAO fund:
     $ seth call $MKR_TOKEN "balanceOf(address)(uint)" $MKR_FUND
     0
 
-(See also [`token`] for a more convenient way to use ERC20 tokens.)
+(See also [`token`](https://github.com/dapphub/dapptools/tree/master/src/token) for a more convenient way to use ERC20 tokens.)
 
 You can also use [`seth logs`] to read event logs from a contract or
 [`seth code`] to get a contract's bytecode.
@@ -300,7 +300,7 @@ For example, to approve access to some of your [Dai] for the
     $ amount=$(seth --to-wei 0.5 ether)
     $ seth send $DAI "approve(address,uint256)" $OASIS $amount
 
-(Again, see [`token`] for a more convenient way to interact with
+(Again, see [`token`](https://github.com/dapphub/dapptools/tree/master/src/token) for a more convenient way to interact with
 ERC20 tokens.)
 
 See [`seth send`] for details on passing arguments, doing asynchronous
