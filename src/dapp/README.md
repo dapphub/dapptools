@@ -267,7 +267,7 @@ The `--verify` flag verifies the contract on etherscan (requires `ETHERSCAN_API_
 The commands of `dapp` can be customized with environment variables or flags.
 These variables can be set at the prompt or in a `.dapprc` file. 
 
-Below is a non-comprehensive list of some common configuration options:
+Below is a non-comprehensive list of some common configuration options (more can be found in the sourcecode):
 
 | Variable                   | Default                    | Synopsis                                                                                                                                   |
 |----------------------------|----------------------------|--------------------------------------------------------------------------------------------------------------------------------------------|
