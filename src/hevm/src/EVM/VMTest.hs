@@ -30,7 +30,7 @@ import Control.Monad
 
 import GHC.Stack
 
-import Data.Aeson ((.:), FromJSON (..))
+import Data.Aeson ((.:), (.:?), FromJSON (..))
 import Data.Foldable (fold)
 import Data.Map (Map)
 import Data.Maybe (fromMaybe, isNothing)
@@ -48,6 +48,7 @@ data Block = Block
   { blockCoinbase    :: Addr
   , blockDifficulty  :: W256
   , blockGasLimit    :: W256
+  , blockBaseFee     :: W256
   , blockNumber      :: W256
   , blockTimestamp   :: W256
   , blockTxs         :: [Transaction]
@@ -199,8 +200,9 @@ instance FromJSON Block where
     difficulty <- wordField v' "difficulty"
     gasLimit   <- wordField v' "gasLimit"
     number     <- wordField v' "number"
+    baseFee    <- fmap read <$> v' .:? "baseFeePerGas"
     timestamp  <- wordField v' "timestamp"
-    return $ Block coinbase difficulty gasLimit number timestamp txs
+    return $ Block coinbase difficulty gasLimit (fromMaybe 0 baseFee) number timestamp txs
   parseJSON invalid =
     JSON.typeMismatch "Block" invalid
 
@@ -248,7 +250,7 @@ errorFatal _ = False
 fromBlockchainCase :: BlockchainCase -> Either BlockchainError Case
 fromBlockchainCase (BlockchainCase blocks preState postState network) =
   case (blocks, network) of
-    ([block], "Berlin") -> case blockTxs block of
+    ([block], "London") -> case blockTxs block of
       [tx] -> fromBlockchainCase' block tx preState postState
       []        -> Left NoTxs
       _         -> Left TooManyTxs
@@ -260,7 +262,7 @@ fromBlockchainCase' :: Block -> Transaction
                        -> Either BlockchainError Case
 fromBlockchainCase' block tx preState postState =
   let isCreate = isNothing (txToAddr tx) in
-  case (sender 1 tx, checkTx tx preState) of
+  case (sender 1 tx, checkTx tx block preState) of
       (Nothing, _) -> Left SignatureUnverified
       (_, Nothing) -> Left (if isCreate then FailedCreate else InvalidTx)
       (Just origin, Just checkState) -> Right $ Case
@@ -272,6 +274,8 @@ fromBlockchainCase' block tx preState postState =
          , vmoptCaller        = litAddr origin
          , vmoptOrigin        = origin
          , vmoptGas           = txGasLimit tx - fromIntegral (txGasCost feeSchedule tx)
+         , vmoptBaseFee       = blockBaseFee block
+         , vmoptPriorityFee   = priorityFee tx (blockBaseFee block)
          , vmoptGaslimit      = txGasLimit tx
          , vmoptNumber        = blockNumber block
          , vmoptTimestamp     = litWord $ w256 $ blockTimestamp block
@@ -279,7 +283,7 @@ fromBlockchainCase' block tx preState postState =
          , vmoptDifficulty    = blockDifficulty block
          , vmoptMaxCodeSize   = 24576
          , vmoptBlockGaslimit = blockGasLimit block
-         , vmoptGasprice      = txGasPrice tx
+         , vmoptGasprice      = effectiveGasPrice
          , vmoptSchedule      = feeSchedule
          , vmoptChainId       = 1
          , vmoptCreate        = isCreate
@@ -297,27 +301,53 @@ fromBlockchainCase' block tx preState postState =
             theCode = if isCreate
                       then EVM.InitCode (ConcreteBuffer (txData tx))
                       else maybe (EVM.RuntimeCode mempty) (view contractcode) toCode
+            effectiveGasPrice = effectiveprice tx (blockBaseFee block)
             cd = if isCreate
                  then (mempty, 0)
                  else let l = num . BS.length $ txData tx
                       in (ConcreteBuffer $ txData tx, litWord l)
 
+effectiveprice :: Transaction -> W256 -> W256
+effectiveprice tx baseFee = priorityFee tx baseFee + baseFee
 
-validateTx :: Transaction -> Map Addr EVM.Contract -> Maybe ()
-validateTx tx cs = do
+priorityFee :: Transaction -> W256 -> W256
+priorityFee tx baseFee = let
+    (txPrioMax, txMaxFee) = case txType tx of
+               EIP1559Transaction ->
+                 let Just maxPrio = txMaxPriorityFeeGas tx
+                     Just maxFee = txMaxFeePerGas tx
+                 in (maxPrio, maxFee)
+               _ ->
+                 let Just gasPrice = txGasPrice tx
+                 in (gasPrice, gasPrice)
+  in min txPrioMax (txMaxFee - baseFee)
+
+maxBaseFee :: Transaction -> W256
+maxBaseFee tx =
+  case txType tx of
+     EIP1559Transaction ->
+       let Just maxFee = txMaxFeePerGas tx
+       in maxFee
+     _ ->
+       let Just gasPrice = txGasPrice tx
+       in gasPrice
+
+
+validateTx :: Transaction -> Block -> Map Addr EVM.Contract -> Maybe ()
+validateTx tx block cs = do
   origin        <- sender 1 tx
   originBalance <- (view balance) <$> view (at origin) cs
   originNonce   <- (view nonce)   <$> view (at origin) cs
-  let gasDeposit = w256 $ (txGasPrice tx) * (txGasLimit tx)
+  let gasDeposit = w256 $ (effectiveprice tx (blockBaseFee block)) * (txGasLimit tx)
   if gasDeposit + (w256 $ txValue tx) <= originBalance
-    && (w256 $ txNonce tx) == originNonce
+    && (w256 $ txNonce tx) == originNonce && blockBaseFee block <= maxBaseFee tx
   then Just ()
   else Nothing
 
-checkTx :: Transaction -> Map Addr EVM.Contract -> Maybe (Map Addr EVM.Contract)
-checkTx tx prestate = do
+checkTx :: Transaction -> Block -> Map Addr EVM.Contract -> Maybe (Map Addr EVM.Contract)
+checkTx tx block prestate = do
   origin <- sender 1 tx
-  validateTx tx prestate
+  validateTx tx block prestate
   let isCreate   = isNothing (txToAddr tx)
       senderNonce = EVM.wordValue $ view (accountAt origin . nonce) prestate
       toAddr      = fromMaybe (EVM.createAddress origin senderNonce) (txToAddr tx)

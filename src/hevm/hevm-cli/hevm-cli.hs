@@ -104,6 +104,8 @@ data Command w
       , gas           :: w ::: Maybe W256       <?> "Tx: gas amount"
       , number        :: w ::: Maybe W256       <?> "Block: number"
       , timestamp     :: w ::: Maybe W256       <?> "Block: timestamp"
+      , basefee       :: w ::: Maybe W256       <?> "Block: base fee"
+      , priorityFee   :: w ::: Maybe W256       <?> "Tx: priority fee"
       , gaslimit      :: w ::: Maybe W256       <?> "Tx: gas limit"
       , gasprice      :: w ::: Maybe W256       <?> "Tx: gas price"
       , create        :: w ::: Bool             <?> "Tx: creation"
@@ -153,6 +155,8 @@ data Command w
       , gas         :: w ::: Maybe W256       <?> "Tx: gas amount"
       , number      :: w ::: Maybe W256       <?> "Block: number"
       , timestamp   :: w ::: Maybe W256       <?> "Block: timestamp"
+      , basefee     :: w ::: Maybe W256       <?> "Block: base fee"
+      , priorityFee :: w ::: Maybe W256       <?> "Tx: priority fee"
       , gaslimit    :: w ::: Maybe W256       <?> "Tx: gas limit"
       , gasprice    :: w ::: Maybe W256       <?> "Tx: gas price"
       , create      :: w ::: Bool             <?> "Tx: creation"
@@ -698,12 +702,13 @@ vmFromCommand :: Command Options.Unwrapped -> IO EVM.VM
 vmFromCommand cmd = do
   withCache <- applyCache (state cmd, cache cmd)
 
-  (miner,ts,blockNum,diff) <- case rpc cmd of
-    Nothing -> return (0,0,0,0)
+  (miner,ts,baseFee,blockNum,diff) <- case rpc cmd of
+    Nothing -> return (0,0,0,0,0)
     Just url -> EVM.Fetch.fetchBlockFrom block' url >>= \case
       Nothing -> error "Could not fetch block"
       Just EVM.Block{..} -> return (_coinbase
                                    , wordValue $ forceLit _timestamp
+                                   , wordValue _baseFee
                                    , wordValue _number
                                    , wordValue _difficulty
                                    )
@@ -736,7 +741,7 @@ vmFromCommand cmd = do
     (_, _, Nothing) ->
       error "must provide at least (rpc + address) or code"
 
-  return $ VMTest.initTx $ withCache (vm0 miner ts blockNum diff contract)
+  return $ VMTest.initTx $ withCache (vm0 baseFee miner ts blockNum diff contract)
     where
         decipher = hexByteString "bytes" . strip0x
         block'   = maybe EVM.Fetch.Latest EVM.Fetch.BlockNumber (block cmd)
@@ -749,7 +754,7 @@ vmFromCommand cmd = do
               then addr address (createAddress origin' (word nonce 0))
               else addr address 0xacab
 
-        vm0 miner ts blockNum diff c = EVM.makeVm $ EVM.VMOpts
+        vm0 baseFee miner ts blockNum diff c = EVM.makeVm $ EVM.VMOpts
           { EVM.vmoptContract      = c
           , EVM.vmoptCalldata      = (calldata', litWord (num $ len calldata'))
           , EVM.vmoptValue         = w256lit value'
@@ -757,6 +762,8 @@ vmFromCommand cmd = do
           , EVM.vmoptCaller        = litAddr caller'
           , EVM.vmoptOrigin        = origin'
           , EVM.vmoptGas           = word gas 0
+          , EVM.vmoptBaseFee       = baseFee
+          , EVM.vmoptPriorityFee   = word priorityFee 0
           , EVM.vmoptGaslimit      = word gas 0
           , EVM.vmoptCoinbase      = addr coinbase miner
           , EVM.vmoptNumber        = word number blockNum
@@ -779,12 +786,13 @@ vmFromCommand cmd = do
 symvmFromCommand :: Command Options.Unwrapped -> Query EVM.VM
 symvmFromCommand cmd = do
 
-  (miner,blockNum,diff) <- case rpc cmd of
-    Nothing -> return (0,0,0)
+  (miner,blockNum,baseFee,diff) <- case rpc cmd of
+    Nothing -> return (0,0,0,0)
     Just url -> io $ EVM.Fetch.fetchBlockFrom block' url >>= \case
       Nothing -> error "Could not fetch block"
       Just EVM.Block{..} -> return (_coinbase
                                    , wordValue _number
+                                   , wordValue _baseFee
                                    , wordValue _difficulty
                                    )
 
@@ -844,7 +852,7 @@ symvmFromCommand cmd = do
     (_, _, Nothing) ->
       error "must provide at least (rpc + address) or code"
 
-  return $ (VMTest.initTx $ withCache $ vm0 miner ts blockNum diff cdlen calldata' callvalue' caller' contract')
+  return $ (VMTest.initTx $ withCache $ vm0 baseFee miner ts blockNum diff cdlen calldata' callvalue' caller' contract')
     & over EVM.constraints (<> [pathCond])
     & set (EVM.env . EVM.contracts . (ix address') . EVM.storage) store
 
@@ -856,7 +864,7 @@ symvmFromCommand cmd = do
     address' = if create cmd
           then addr address (createAddress origin' (word nonce 0))
           else addr address 0xacab
-    vm0 miner ts blockNum diff cdlen calldata' callvalue' caller' c = EVM.makeVm $ EVM.VMOpts
+    vm0 baseFee miner ts blockNum diff cdlen calldata' callvalue' caller' c = EVM.makeVm $ EVM.VMOpts
       { EVM.vmoptContract      = c
       , EVM.vmoptCalldata      = (calldata', cdlen)
       , EVM.vmoptValue         = callvalue'
@@ -865,6 +873,8 @@ symvmFromCommand cmd = do
       , EVM.vmoptOrigin        = origin'
       , EVM.vmoptGas           = word gas 0xffffffffffffffff
       , EVM.vmoptGaslimit      = word gas 0xffffffffffffffff
+      , EVM.vmoptBaseFee       = baseFee
+      , EVM.vmoptPriorityFee   = word priorityFee 0
       , EVM.vmoptCoinbase      = addr coinbase miner
       , EVM.vmoptNumber        = word number blockNum
       , EVM.vmoptTimestamp     = ts

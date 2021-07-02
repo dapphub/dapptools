@@ -92,6 +92,8 @@ data TestVMParams = TestVMParams
   , testOrigin        :: Addr
   , testGasCreate     :: W256
   , testGasCall       :: W256
+  , testBaseFee       :: W256
+  , testPriorityFee   :: W256
   , testBalanceCreate :: W256
   , testCoinbase      :: Addr
   , testNumber        :: W256
@@ -916,6 +918,8 @@ initialUnitTestVm (UnitTestOptions {..}) theContract =
            , vmoptTimestamp = litWord $ w256 testTimestamp
            , vmoptBlockGaslimit = testGaslimit
            , vmoptGasprice = testGasprice
+           , vmoptBaseFee = testBaseFee
+           , vmoptPriorityFee = testPriorityFee
            , vmoptMaxCodeSize = testMaxCodeSize
            , vmoptDifficulty = testDifficulty
            , vmoptSchedule = FeeSchedule.berlin
@@ -970,6 +974,8 @@ getParametersFromEnvironmentVariables rpc = do
     <*> getAddr "DAPP_TEST_CALLER" ethrunAddress
     <*> getAddr "DAPP_TEST_ORIGIN" ethrunAddress
     <*> getWord "DAPP_TEST_GAS_CREATE" defaultGasForCreating
+    <*> getWord "DAPP_TEST_BASEFEE" 0
+    <*> getWord "DAPP_TEST_PRIORITYFEE" 0
     <*> getWord "DAPP_TEST_GAS_CALL" defaultGasForInvoking
     <*> getWord "DAPP_TEST_BALANCE" defaultBalanceForTestContract
     <*> getAddr "DAPP_TEST_COINBASE" miner

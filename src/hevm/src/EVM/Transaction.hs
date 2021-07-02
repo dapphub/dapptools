@@ -29,12 +29,13 @@ data AccessListEntry = AccessListEntry {
 
 data TxType = LegacyTransaction
             | AccessListTransaction
+            | EIP1559Transaction
   deriving (Show, Eq)
 
 data Transaction = Transaction {
     txData     :: ByteString,
     txGasLimit :: W256,
-    txGasPrice :: W256,
+    txGasPrice :: Maybe W256,
     txNonce    :: W256,
     txR        :: W256,
     txS        :: W256,
@@ -42,12 +43,13 @@ data Transaction = Transaction {
     txV        :: W256,
     txValue    :: W256,
     txType     :: TxType,
-    txAccessList :: [AccessListEntry]
+    txAccessList :: [AccessListEntry],
+    txMaxPriorityFeeGas :: Maybe W256,
+    txMaxFeePerGas :: Maybe W256
 } deriving Show
 
--- utility function for getting a more useful representation of accesslistentries
+-- | utility function for getting a more useful representation of accesslistentries
 -- duplicates only matter for gas computation
--- ugly! could use a review....
 txAccessMap :: Transaction -> Map Addr [W256]
 txAccessMap tx = ((Map.fromListWith (++)) . makeTups) $ txAccessList tx
   where makeTups = map (\ale -> (accessAddress ale, accessStorageKeys ale))
@@ -70,23 +72,27 @@ signingData chainId tx =
       then eip155Data
       else normalData
     AccessListTransaction -> eip2930Data
+    EIP1559Transaction -> eip1559Data
   where v          = fromIntegral (txV tx)
         to'        = case txToAddr tx of
           Just a  -> BS $ word160Bytes a
           Nothing -> BS mempty
+        Just maxFee = txMaxFeePerGas tx
+        Just maxPrio = txMaxPriorityFeeGas tx
+        Just gasPrice = txGasPrice tx
         accessList = txAccessList tx
         rlpAccessList = EVM.RLP.List $ map (\accessEntry ->
-          EVM.RLP.List [BS $ word160Bytes (accessAddress accessEntry), 
+          EVM.RLP.List [BS $ word160Bytes (accessAddress accessEntry),
                         EVM.RLP.List $ map rlpWordFull $ accessStorageKeys accessEntry]
           ) accessList
         normalData = rlpList [rlpWord256 (txNonce tx),
-                              rlpWord256 (txGasPrice tx),
+                              rlpWord256 gasPrice,
                               rlpWord256 (txGasLimit tx),
                               to',
                               rlpWord256 (txValue tx),
                               BS (txData tx)]
         eip155Data = rlpList [rlpWord256 (txNonce tx),
-                              rlpWord256 (txGasPrice tx),
+                              rlpWord256 gasPrice,
                               rlpWord256 (txGasLimit tx),
                               to',
                               rlpWord256 (txValue tx),
@@ -94,22 +100,33 @@ signingData chainId tx =
                               rlpWord256 (fromIntegral chainId),
                               rlpWord256 0x0,
                               rlpWord256 0x0]
+        eip1559Data = cons 0x02 $ rlpList [
+          rlpWord256 (fromIntegral chainId),
+          rlpWord256 (txNonce tx),
+          rlpWord256 maxPrio,
+          rlpWord256 maxFee,
+          rlpWord256 (txGasLimit tx),
+          to',
+          rlpWord256 (txValue tx),
+          BS (txData tx),
+          rlpAccessList]
+
         eip2930Data = cons 0x01 $ rlpList [
           rlpWord256 (fromIntegral chainId),
           rlpWord256 (txNonce tx),
-          rlpWord256 (txGasPrice tx),
+          rlpWord256 gasPrice,
           rlpWord256 (txGasLimit tx),
-          to', 
+          to',
           rlpWord256 (txValue tx),
           BS (txData tx),
           rlpAccessList]
 
 accessListPrice :: FeeSchedule Integer -> [AccessListEntry] -> Integer
 accessListPrice fs al =
-    sum (map 
-      (\ale -> 
-        g_access_list_address fs + 
-        (g_access_list_storage_key fs * (toInteger . length) (accessStorageKeys ale))) 
+    sum (map
+      (\ale ->
+        g_access_list_address fs +
+        (g_access_list_storage_key fs * (toInteger . length) (accessStorageKeys ale)))
         al)
 
 txGasCost :: FeeSchedule Integer -> Transaction -> Integer
@@ -138,7 +155,9 @@ instance FromJSON Transaction where
   parseJSON (JSON.Object val) = do
     tdata    <- dataField val "data"
     gasLimit <- wordField val "gasLimit"
-    gasPrice <- wordField val "gasPrice"
+    gasPrice <- fmap read <$> val JSON..:? "gasPrice"
+    maxPrio  <- fmap read <$> val JSON..:? "maxPriorityFeePerGas"
+    maxFee   <- fmap read <$> val JSON..:? "maxFeePerGas"
     nonce    <- wordField val "nonce"
     r        <- wordField val "r"
     s        <- wordField val "s"
@@ -146,14 +165,16 @@ instance FromJSON Transaction where
     v        <- wordField val "v"
     value    <- wordField val "value"
     txType   <- fmap read <$> (val JSON..:? "type")
-    --let legacyTxn = Transaction tdata gasLimit gasPrice nonce r s toAddr v value
     case txType of
-      Just 0x00 -> return $ Transaction tdata gasLimit gasPrice nonce r s toAddr v value LegacyTransaction []
+      Just 0x00 -> return $ Transaction tdata gasLimit gasPrice nonce r s toAddr v value LegacyTransaction [] Nothing Nothing
       Just 0x01 -> do
         accessListEntries <- (val JSON..: "accessList") >>= parseJSONList
-        return $ Transaction tdata gasLimit gasPrice nonce r s toAddr v value AccessListTransaction accessListEntries
+        return $ Transaction tdata gasLimit gasPrice nonce r s toAddr v value AccessListTransaction accessListEntries Nothing Nothing
+      Just 0x02 -> do
+        accessListEntries <- (val JSON..: "accessList") >>= parseJSONList
+        return $ Transaction tdata gasLimit gasPrice nonce r s toAddr v value EIP1559Transaction accessListEntries maxPrio maxFee
       Just _ -> fail "unrecognized custom transaction type"
-      Nothing -> return $ Transaction tdata gasLimit gasPrice nonce r s toAddr v value LegacyTransaction []
+      Nothing -> return $ Transaction tdata gasLimit gasPrice nonce r s toAddr v value LegacyTransaction [] Nothing Nothing
   parseJSON invalid =
     JSON.typeMismatch "Transaction" invalid
 
