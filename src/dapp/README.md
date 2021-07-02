@@ -289,7 +289,7 @@ Below is a non-comprehensive list of some common configuration options (more can
 
 A global (always loaded) config file is located in `~/.dapprc`. A local `.dapprc` can also be defined in your project's root, which overrides variables in the global config.
 
-Whenever you run a `dapp` command the most local `.dapprc` available will be executed as a shell script automatically. This means you must prefix your configuration options with the `export` keyword like so:
+Whenever you run a `dapp` command the `.dapprc` files are sourced in order (global first, then the one in the current working directory, if it exists). If you wish to set configuration variables, you must use `export` as below:
 
 ```sh
 export DAPP_SOLC_VERSION=0.8.6
