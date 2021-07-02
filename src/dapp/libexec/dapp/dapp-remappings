@@ -53,7 +53,7 @@ function findRemappings(prefix) {
 
 function ls(dir) {
   try {
-    return require("fs").readdirSync(dir)
+    return require("fs").readdirSync(dir).sort()
   } catch (error) {
     return []
   }
