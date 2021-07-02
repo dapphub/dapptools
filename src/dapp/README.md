@@ -299,7 +299,7 @@ export DAPP_BUILD_OPTIMIZE_RUNS=1000000000
 export DAPP_TEST_VERBOSITY=1
 ```
 
-Since `.dapprc` is a interpreted as a shell script, you can add additional logic which will be run whenever you use `dapp`. For example if you wanted to fuzz for many iterations in CI and only a few locally you could add this to your `.dapprc`:
+Under the hood `.dapprc` is interpreted as a shell script, which means you can add additional scripting logic which will be run whenever you use `dapp`. For example if you wanted to fuzz for many iterations in CI and only a few locally you could add this to your `.dapprc`:
 
 ```sh
 if [ "$CI" == "true" ]
