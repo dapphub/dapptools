@@ -334,8 +334,9 @@ readCombinedJSON json = do
       let
         theRuntimeCode = toCode (x ^?! key "bin-runtime" . _String)
         theCreationCode = toCode (x ^?! key "bin" . _String)
-        abis =
-          toList ((x ^?! key "abi" . _String) ^?! _Array)
+        abis = toList $ case (x ^?! key "abi") ^? _Array of
+                 Just v -> v                                       -- solc >= 0.8
+                 Nothing -> (x ^?! key "abi" . _String) ^?! _Array -- solc <  0.8
       in SolcContract {
         _runtimeCode      = theRuntimeCode,
         _creationCode     = theCreationCode,
