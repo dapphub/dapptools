@@ -283,7 +283,7 @@ Below is a non-comprehensive list of some common configuration options (more can
 | `DAPP_LIB`                 | `lib`                      | Directory for installed Dapp packages                                                                                                             |
 | `DAPP_OUT`                 | `out`                      | Directory for compilation artifacts                                                                                                               |
 | `DAPP_ROOT`                | `.`                        | Root directory of compilation                                                                                                                     |
-| `DAPP_SOLC_VERSION`        | n/a                        | Solidity compiler version to use                                                                                                                  |
+| `DAPP_SOLC_VERSION`        | `0.8.6`                    | Solidity compiler version to use                                                                                                                  |
 | `DAPP_SOLC`                | n/a                        | solc binary to use                                                                                                                                |
 | `DAPP_LIBRARIES`           | automatically deployed     | Library addresses to link to                                                                                                                      |
 | `DAPP_SKIP_BUILD`          | n/a                        | Avoid compiling this time                                                                                                                         |
