@@ -311,15 +311,12 @@ fi
 ```
 
 ### Precedence
-
 There are multiple places to specify configuration options. If set in multiple places, they are read in this precedence:
 
 1. command line flags
-2. local .dapprc 
-3. global .dapprc
+2. local `.dapprc`
+3. global `.dapprc`
 4. locally set environment variables
-
-
 
 ### solc version
 
