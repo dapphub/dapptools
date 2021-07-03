@@ -357,22 +357,34 @@ verify preState maxIter rpcinfo maybepost = do
     (Just post) -> do
       let livePaths = pruneDeadPaths $ leaves tree
       -- can also do these queries individually (even concurrently!). Could save time and report multiple violations
-          postC = sOr $ fmap (\postState -> (sAnd (fst <$> view constraints postState)) .&& sNot (post (preState, postState))) livePaths
+          postcs = fmap (\postState -> (sAnd (fst <$> view constraints postState)) .&& sNot (post (preState, postState))) livePaths
       -- is there any path which can possibly violate
       -- the postcondition?
-      resetAssertions
-      constrain postC
-      io $ putStrLn "checking postcondition..."
-      checkSat >>= \case
-        Unk -> do io $ putStrLn "postcondition query timed out"
-                  return $ Left tree
-        Unsat -> do io $ putStrLn "Q.E.D."
-                    return $ Left tree
-        Sat -> return $ Right tree
-        DSat _ -> error "unexpected DSAT"
+      io $ putStrLn "checking postconditions..."
+      results <- mapM checkPost postcs
+
+      if (all (== Unsat) results)
+         then do
+           io $ putStrLn "Q.E.D."
+           return $ Left tree
+         else do
+          when (Unk `elem` results) (io $ putStrLn "postcondition query timed out")
+          -- construct a query for the full postcondition (model extraction will fail otherwise)
+          resetAssertions
+          constrain (sOr postcs)
+          checkSat >>= \case
+            Unk -> pure $ Right tree
+            Sat -> pure $ Right tree
+            Unsat -> error "internal error: unsat should be impossible here"
+            DSat _ -> error "internal error: unexpected DSat"
 
     Nothing -> do io $ putStrLn "Nothing to check"
                   return $ Left tree
+  where
+    checkPost postC = do
+      resetAssertions
+      constrain postC
+      checkSat
 
 -- | Compares two contract runtimes for trace equivalence by running two VMs and comparing the end states.
 equivalenceCheck :: ByteString -> ByteString -> Maybe Integer -> Maybe (Text, [AbiType]) -> Query (Either ([VM], [VM]) VM)
