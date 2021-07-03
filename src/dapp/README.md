@@ -289,15 +289,15 @@ Below is a non-comprehensive list of some common configuration options (more can
 | `DAPP_SKIP_BUILD`          | n/a                        | Avoid compiling this time                                                                                                                         |
 | `DAPP_LINK_TEST_LIBRARIES` | `1` when testing; else `0` | Compile with libraries                                                                                                                            |
 | `DAPP_VERIFY_CONTRACT`     | `yes`                      | Attempt Etherscan verification                                                                                                                    |
-| `DAPP_STANDARD_JSON`       | $(dapp mk-standard-json)   | [Solidity compilation options](https://docs.soliditylang.org/en/latest/using-the-compiler.html#compiler-input-and-output-json-description)        |
-| `DAPP_REMAPPINGS`          | $(dapp remappings)         | [Solidity remappings](https://docs.soliditylang.org/en/latest/using-the-compiler.html#path-remapping)                                             |
-| `DAPP_BUILD_OPTIMIZE`      | 0                          | Activate Solidity optimizer (0 or 1)                                                                                                              |
-| `DAPP_BUILD_OPTIMIZE_RUNS` | 200                        | Set the optimizer runs                                                                                                                            |
+| `DAPP_STANDARD_JSON`       | `$(dapp mk-standard-json)` | [Solidity compilation options](https://docs.soliditylang.org/en/latest/using-the-compiler.html#compiler-input-and-output-json-description)        |
+| `DAPP_REMAPPINGS`          | `$(dapp remappings)`       | [Solidity remappings](https://docs.soliditylang.org/en/latest/using-the-compiler.html#path-remapping)                                             |
+| `DAPP_BUILD_OPTIMIZE`      | `0`                        | Activate Solidity optimizer (`0` or `1`)                                                                                                          |
+| `DAPP_BUILD_OPTIMIZE_RUNS` | `200`                      | Set the optimizer runs                                                                                                                            |
 | `DAPP_TEST_MATCH`          | n/a                        | Only run test methods matching a regex                                                                                                            |
-| `DAPP_TEST_VERBOSITY`      | 0                          | Sets how much detail `dapp test` logs. Verbosity `1` shows traces for failing tests, `2` shows logs for all tests, `3` shows traces for all tests |
-| `DAPP_TEST_FUZZ_RUNS`      | 200                        | How many iterations to use for each property test in your project                                                                                 |
-| `DAPP_TEST_SMTTIMEOUT`     | 600000                     | How long to wait for symbolic tests to complete before terminating early                                                                          |
-| `DAPP_TEST_FFI `           | 0                          | Allow use of the ffi cheatcode in tests (0 or 1)                                                                                                  |
+| `DAPP_TEST_VERBOSITY`      | `0`                        | Sets how much detail `dapp test` logs. Verbosity `1` shows traces for failing tests, `2` shows logs for all tests, `3` shows traces for all tests |
+| `DAPP_TEST_FUZZ_RUNS`      | `200`                      | How many iterations to use for each property test in your project                                                                                 |
+| `DAPP_TEST_SMTTIMEOUT`     | `600000`                   | How long to wait for symbolic tests to complete before terminating early                                                                          |
+| `DAPP_TEST_FFI `           | `0`                        | Allow use of the ffi cheatcode in tests (`0` or `1`)                                                                                              |
 
 A global (always loaded) config file is located in `~/.dapprc`. A local `.dapprc` can also be defined in your project's root, which overrides variables in the global config.
 
