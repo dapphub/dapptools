@@ -265,7 +265,9 @@ The `--verify` flag verifies the contract on etherscan (requires `ETHERSCAN_API_
 ## Configuration
 
 The commands of `dapp` can be customized with environment variables or flags.
-These variables can be set at the prompt or in a `.dapprc` file.
+These variables can be set at the prompt or in a `.dapprc` file. 
+
+Below is a non-comprehensive list of some common configuration options (more can be found in the sourcecode):
 
 | Variable                   | Default                    | Synopsis                                                                                                                                   |
 |----------------------------|----------------------------|--------------------------------------------------------------------------------------------------------------------------------------------|
@@ -285,8 +287,36 @@ These variables can be set at the prompt or in a `.dapprc` file.
 | `DAPP_BUILD_OPTIMIZE`      | no                         | Activate Solidity optimizer                                                                                                                |
 | `DAPP_BUILD_OPTIMIZE_RUNS` | 200                        | Set the optimizer runs                                                                                                                     |
 
-A global (always loaded) config file is located in `~/.dapprc`.
-A local `.dapprc` can also be defined in your project's root, which overrides variables in the global config.
+A global (always loaded) config file is located in `~/.dapprc`. A local `.dapprc` can also be defined in your project's root, which overrides variables in the global config.
+
+Whenever you run a `dapp` command the `.dapprc` files are sourced in order (global first, then the one in the current working directory, if it exists). If you wish to set configuration variables, you must use `export` as below:
+
+```sh
+export DAPP_SOLC_VERSION=0.8.6
+export DAPP_REMAPPINGS=$(cat remappings.txt)
+export DAPP_BUILD_OPTIMIZE=1
+export DAPP_BUILD_OPTIMIZE_RUNS=1000000000
+export DAPP_TEST_VERBOSITY=1
+```
+
+Under the hood `.dapprc` is interpreted as a shell script, which means you can add additional scripting logic which will be run whenever you use `dapp`. For example if you wanted to fuzz for many iterations in CI and only a few locally you could add this to your `.dapprc`:
+
+```sh
+if [ "$CI" == "true" ]
+then 
+  export DAPP_TEST_FUZZ_RUNS=1000000 # In CI we want to fuzz for a long time.
+else
+  export DAPP_TEST_FUZZ_RUNS=1000 # When developing locally we only want to fuzz briefly. 
+fi
+```
+
+### Precedence
+There are multiple places to specify configuration options. If set in multiple places, they are read in this precedence:
+
+1. command line flags
+2. local `.dapprc`
+3. global `.dapprc`
+4. locally set environment variables
 
 ### solc version
 
