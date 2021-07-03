@@ -34,6 +34,7 @@
 ###
 ###   Deployment options:
 ### verify                     verify contract on etherscan
+### verify-multiple            multifile verification on etherscan
 ###
 ###   Contract verifying options:
 ### async                      don't wait for confirmation
@@ -79,6 +80,7 @@ smtdebug                   print the SMT queries produced by hevm
 
   Deployment options:
 verify                     verify contract on etherscan
+verify-multiple            multifile verification on etherscan
 
   Contract verifying options:
 async                      don't wait for confirmation
@@ -157,6 +159,7 @@ while [[ $1 ]]; do
        export HEVM_RPC=yes;;
 
     --verify)                 export DAPP_VERIFY_CONTRACT=yes;;
+    --verify-multiple)        export DAPP_VERIFY_CONTRACT_MULTIPLE=yes;;
 
     --async)                  export DAPP_ASYNC=yes;;
 

@@ -260,7 +260,7 @@ To deploy a contract, you can use `dapp create`:
 dapp create Dapptutorial [<constructorArgs>] [<options>]
 ```
 
-The `--verify` flag verifies the contract on etherscan (requires `ETHERSCAN_API_KEY`).
+The `--verify` and `--verify-multiple` flags verify the contract/s on etherscan (requires `ETHERSCAN_API_KEY`).
 
 ## Configuration
 
@@ -269,23 +269,24 @@ These variables can be set at the prompt or in a `.dapprc` file.
 
 Below is a non-comprehensive list of some common configuration options (more can be found in the sourcecode):
 
-| Variable                   | Default                    | Synopsis                                                                                                                                   |
-|----------------------------|----------------------------|--------------------------------------------------------------------------------------------------------------------------------------------|
-| `DAPP_SRC`                 | `src`                      | Project Solidity source directory                                                                                                          |
-| `DAPP_LIB`                 | `lib`                      | Directory for installed Dapp packages                                                                                                      |
-| `DAPP_OUT`                 | `out`                      | Directory for compilation artifacts                                                                                                        |
-| `DAPP_ROOT`                | `.`                        | Root directory of compilation                                                                                                              |
-| `DAPP_SOLC_VERSION`        | n/a                        | Solidity compiler version to use                                                                                                           |
-| `DAPP_SOLC`                | n/a                        | solc binary to use                                                                                                                         |
-| `DAPP_VERBOSE`             | n/a                        | Produce more `dapp test` output                                                                                                            |
-| `DAPP_LIBRARIES`           | automatically deployed     | Library addresses to link to                                                                                                               |
-| `DAPP_SKIP_BUILD`          | n/a                        | Avoid compiling this time                                                                                                                  |
-| `DAPP_LINK_TEST_LIBRARIES` | `1` when testing; else `0` | Compile with libraries                                                                                                                     |
-| `DAPP_VERIFY_CONTRACT`     | `yes`                      | Attempt Etherscan verification                                                                                                             |
-| `DAPP_STANDARD_JSON`       | $(dapp mk-standard-json)   | [Solidity compilation options](https://docs.soliditylang.org/en/latest/using-the-compiler.html#compiler-input-and-output-json-description) |
-| `DAPP_REMAPPINGS`          | $(dapp remappings)         | [Solidity remappings](https://docs.soliditylang.org/en/latest/using-the-compiler.html#path-remapping)                                      |
-| `DAPP_BUILD_OPTIMIZE`      | no                         | Activate Solidity optimizer                                                                                                                |
-| `DAPP_BUILD_OPTIMIZE_RUNS` | 200                        | Set the optimizer runs                                                                                                                     |
+| Variable                        | Default                    | Synopsis                                                                                                                              |
+|---------------------------------|----------------------------|---------------------------------------------------------------------------------------------------------------------------------------|
+| `DAPP_SRC`                      | `src`                      | Project Solidity source directory                                                                                                     |
+| `DAPP_LIB`                      | `lib`                      | Directory for installed Dapp packages                                                                                                 |
+| `DAPP_OUT`                      | `out`                      | Directory for compilation artifacts                                                                                                   |
+| `DAPP_ROOT`                     | `.`                        | Root directory of compilation                                                                                                         |
+| `DAPP_SOLC_VERSION`             | n/a                        | Solidity compiler version to use                                                                                                      |
+| `DAPP_SOLC`                     | n/a                        | solc binary to use                                                                                                                    |
+| `DAPP_VERBOSE`                  | n/a                        | Produce more `dapp test` output                                                                                                       |
+| `DAPP_LIBRARIES`                | automatically deployed     | Library addresses to link to                                                                                                          |
+| `DAPP_SKIP_BUILD`               | n/a                        | Avoid compiling this time                                                                                                             |
+| `DAPP_LINK_TEST_LIBRARIES`      | `1` when testing; else `0` | Compile with libraries                                                                                                                |
+| `DAPP_VERIFY_CONTRACT`          | `yes`                      | Attempt Etherscan verification                                                                                                        |
+| `DAPP_VERIFY_CONTRACT_MULTIPLE` | `yes`                      | Attempt Etherscan multifile verification                                                                                              |
+| `DAPP_STANDARD_JSON`            | $(dapp mk-standard-json)   | [Solidity compilation options](https://docs.soliditylang.org/en/latest/using-the-compiler.html#compiler-input-and-output-json-description) |
+| `DAPP_REMAPPINGS`               | $(dapp remappings)         | [Solidity remappings](https://docs.soliditylang.org/en/latest/using-the-compiler.html#path-remapping)                                 |
+| `DAPP_BUILD_OPTIMIZE`           | no                         | Activate Solidity optimizer                                                                                                           |
+| `DAPP_BUILD_OPTIMIZE_RUNS`      | 200                        | Set the optimizer runs                                                                                                                |
 
 A global (always loaded) config file is located in `~/.dapprc`. A local `.dapprc` can also be defined in your project's root, which overrides variables in the global config.
 
@@ -477,7 +478,7 @@ for key bindings for navigation.
     dapp-create -- deploy a compiled contract (--verify on Etherscan)
     Usage: dapp create <contractname> or
         dapp create <path>:<contractname>
-    Add --verify and export your ETHERSCAN_API_KEY to auto-verify on Etherscan
+    Add --verify or --verify-multiple and export your ETHERSCAN_API_KEY to auto-verify on Etherscan
 
 
 ### `dapp address`
@@ -524,7 +525,7 @@ Requires `ETHERSCAN_API_KEY` to be set.
 
 `seth chain` will be used to determine on which network the contract is to be verified.
 
-Automatically run when the `--verify` flag is passed to `dapp create`.
+Automatically run when the `--verify` or `--verify-multiple` flag is passed to `dapp create`.
 
 ### `dapp mk-standard-json`
 
@@ -537,3 +538,4 @@ The following environment variables can be used to override settings:
 - `DAPP_BUILD_OPTIMIZE`
 - `DAPP_BUILD_OPTIMIZE_RUNS`
 - `DAPP_LIBRARIES`
+- `DAPP_VERIFY_CONTRACT_MULTIPLE`

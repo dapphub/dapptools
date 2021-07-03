@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-### dapp-verify-contract -- verify contract source on etherscan
-### Usage: dapp verify-contract <path>:<contractname> <address> [constructorArgs]
+### dapp-verify-contracts -- verify contracts source on etherscan
+### Usage: dapp verify-contracts <path>:<contractname> <address> [constructorArgs]
 
 set -e
 
@@ -16,8 +16,8 @@ set -e
   exit 1
 }
 
-[[ $1 ]] || (dapp verify-contract --help >&2 && exit 1)
-[[ $2 ]] || (dapp verify-contract --help >&2 && exit 1)
+[[ $1 ]] || (dapp verify-contracts --help >&2 && exit 1)
+[[ $2 ]] || (dapp verify-contracts --help >&2 && exit 1)
 
 chain=$(seth chain)
 case "$chain" in
@@ -36,6 +36,7 @@ esac
 
 path=${1?contractname}
 name=${path#*:}
+contractName=$(basename "$path")
 address=${2?contractaddress}
 
 # combined-json has a sourceList field
@@ -46,9 +47,6 @@ else
 fi
 meta=$(jshon <<<"$contract" -e metadata -u)
 version=$(jshon <<<"$meta" -e compiler -e version -u)
-file=$(jshon <<<"$meta" -e settings -e compilationTarget -k)
-optimized=$(jshon <<<"$meta" -e settings -e optimizer -e enabled -u)
-runs=$(jshon <<<"$meta" -e settings -e optimizer -e runs -u)
 
 abi=$(jq '.["abi"]' -r <<< "$contract")
 type=$(seth --abi-constructor <<< "$abi")
@@ -81,27 +79,15 @@ if [[ $version_list != *"$version"* ]]; then
   fi
 fi
 
+# Standard Input JSON
 
-if [[ "$optimized" = "true" ]]; then
-  optimized=1
-else
-  optimized=0
-fi
+inputJSON=$(dapp mk-standard-json)
 
 params=(
-  "module=contract" "action=verifysourcecode"
-  "contractname=$name" "contractaddress=$address"
-  "optimizationUsed=$optimized" "runs=$runs"
-  "apikey=$ETHERSCAN_API_KEY"
-)
-
-source=$(hevm flatten --source-file "$file" --json-file "$DAPP_JSON" --dapp-root "$DAPP_ROOT")
-
-source=$(cat <<.
-// Verified using https://dapp.tools
-
-$source
-.
+"module=contract" "action=verifysourcecode"
+"contractname=$contractName" "contractaddress=$address"
+"codeformat=solidity-standard-json-input"
+"apikey=$ETHERSCAN_API_KEY"
 )
 
 query=$(printf "&%s" "${params[@]}")
@@ -110,10 +96,12 @@ count=0
 while [ $count -lt 5 ]; do
   sleep 10
 
-  response=$(curl -fsS "$ETHERSCAN_API_URL" -d "$query" \
+  response=$(curl --location --request POST "$ETHERSCAN_API_URL" \
+  --header 'Content-Type: application/x-www-form-urlencoded' \
+  -d "$query" \
   --data-urlencode "compilerversion=$version" \
-  --data-urlencode "sourceCode@"<(echo "$source") \
-  --data-urlencode "constructorArguements=$constructorArguments" -X POST)
+  --data-urlencode "sourceCode=$inputJSON" \
+  --data-urlencode "constructorArguements=$constructorArguments")
   # NOTE: the Arguements typo is in etherscan's API
 
   status=$(jshon <<<"$response" -e status -u)
