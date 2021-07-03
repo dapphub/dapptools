@@ -310,6 +310,14 @@ else
 fi
 ```
 
+### Precedence
+
+Configuration options are read in the following order, with later reads overriding earlier ones
+
+1. locally set environment variables
+2. global .dapprc
+3. local .dapprc 
+4. command line flags
 ### solc version
 
 You can specify a custom `solc` version to run within `dapp` with `dapp --use <arg>`.
