@@ -2,7 +2,7 @@
 # to our Haskell package extensions from other overlays, bypassing the
 # rest of our overlay.  This was necessary for rather obscure reasons.
 
-{ pkgs, lib, wrapped ? true }:
+{ pkgs, lib, wrapped ? true, shared ? false }:
 
 let
   stdenv = pkgs.stdenv;
@@ -57,11 +57,12 @@ in self-hs: super-hs:
       configureFlags = attrs.configureFlags ++ [
           "--ghc-option=-O2"
       ] ++
-      (if stdenv.isDarwin then [] else [
+      (if stdenv.isDarwin then [] else
+        if shared then [] else [
           "--enable-executable-static"
           "--extra-lib-dirs=${pkgs.gmp.override { withStatic = true; }}/lib"
           "--extra-lib-dirs=${pkgs.glibc.static}/lib"
-          "--extra-lib-dirs=${pkgs.libff}/lib"
+          "--extra-lib-dirs=${pkgs.libff.override { enableStatic = true; }}/lib"
           "--extra-lib-dirs=${pkgs.ncurses.override {enableStatic = true; }}/lib"
           "--extra-lib-dirs=${pkgs.zlib.static}/lib"
           "--extra-lib-dirs=${pkgs.libffi.overrideAttrs (old: { dontDisableStatic = true; })}/lib"

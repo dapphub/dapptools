@@ -21,6 +21,13 @@ in rec {
     );
   });
 
+  sharedHaskellPackages =
+    super.haskellPackages.override (old: {
+    overrides = lib.composeExtensions (old.overrides or (_: _: {})) (
+      import ./haskell.nix { inherit lib; pkgs = self; wrapped = false; shared = true; }
+    );
+  });
+
   solidityPackage = import ./nix/solidity-package.nix {
     inherit (self) pkgs;
   };

@@ -1,4 +1,4 @@
-{ lib, stdenv, fetchFromGitHub, cmake, boost, gmp, openssl, pkg-config }:
+{ lib, stdenv, fetchFromGitHub, cmake, boost, gmp, openssl, pkg-config, enableStatic ? false }:
 
 stdenv.mkDerivation rec {
   pname = "libff";
@@ -16,9 +16,9 @@ stdenv.mkDerivation rec {
 
   # CMake is hardcoded to always build static library which causes linker
   # failure for Haskell applications depending on haskellPackages.hevm on macOS.
-  postPatch = lib.optionalString stdenv.isDarwin ''
+  postPatch = if (!enableStatic) then ''
     substituteInPlace libff/CMakeLists.txt --replace "STATIC" "SHARED"
-  '';
+  '' else "";
 
   nativeBuildInputs = [ cmake pkg-config ];
   buildInputs = [ boost gmp openssl ];
