@@ -4,7 +4,7 @@
 
 As opposed to other tools, it does not use `rpc` to execute transactions. Instead,
 it invokes the `hevm` cli directly. This is faster, and allows for a lot of flexibility
-that isn't available in `rpc`, such as [fuzz testing](#dapp-test-flags), symbolic execution, or [cheat codes to modify mainnet state](../hevm/README.md#cheat-codes).
+that isn't available in `rpc`, such as [fuzz testing](#property-based-testing), [symbolic execution](#symbolically-executed-tests), or [cheat codes to modify mainnet state](../hevm/README.md#cheat-codes).
 
 <!-- START doctoc generated TOC please keep comment here to allow auto update -->
 <!-- DON'T EDIT THIS SECTION, INSTEAD RE-RUN doctoc TO UPDATE -->
