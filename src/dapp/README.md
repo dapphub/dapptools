@@ -312,12 +312,15 @@ fi
 
 ### Precedence
 
-Configuration options are read in the following order, with later reads overriding earlier ones
+There are multiple places to specify configuration options. If set in multiple places, they are read in this precedence:
 
-1. locally set environment variables
-2. global .dapprc
-3. local .dapprc 
-4. command line flags
+1. command line flags
+2. local .dapprc 
+3. global .dapprc
+4. locally set environment variables
+
+
+
 ### solc version
 
 You can specify a custom `solc` version to run within `dapp` with `dapp --use <arg>`.
