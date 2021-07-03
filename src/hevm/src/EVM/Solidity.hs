@@ -347,7 +347,7 @@ readCombinedJSON json = do
         _constructorInputs = mkConstructor abis,
         _abiMap       = mkAbiMap abis,
         _eventMap     = mkEventMap abis,
-        _storageLayout = mkStorageLayout $ x ^? key "storage-layout" . _String,
+        _storageLayout = mkStorageLayout $ x ^? key "storage-layout",
         _immutableReferences = mempty -- TODO: deprecate combined-json
       }
 
@@ -389,7 +389,7 @@ readStdJSON json = do
         _constructorInputs = mkConstructor abis,
         _abiMap        = mkAbiMap abis,
         _eventMap      = mkEventMap abis,
-        _storageLayout = mkStorageLayout $ x ^? key "storageLayout" . _String,
+        _storageLayout = mkStorageLayout $ x ^? key "storageLayout",
         _immutableReferences = fromMaybe mempty $
           do x' <- runtime ^? key "immutableReferences"
              case fromJSON x' of
@@ -444,7 +444,7 @@ mkConstructor abis =
       [] -> [] -- default constructor has zero inputs
       _  -> error "strange: contract has multiple constructors"
 
-mkStorageLayout :: Maybe Text -> Maybe (Map Text StorageItem)
+mkStorageLayout :: Maybe Value -> Maybe (Map Text StorageItem)
 mkStorageLayout Nothing = Nothing
 mkStorageLayout (Just json) = do
   items <- json ^? key "storage" . _Array
