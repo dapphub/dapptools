@@ -1,5 +1,11 @@
 # hevm changelog
 
+## Unreleased
+
+### Changed
+
+- The configuration variable `DAPP_TEST_BALANCE_CREATE` has been renamed to `DAPP_TEST_BALANCE`
+
 ## 0.47.0 - 2021-07-01
 
 - A new test runner for checking invariants against random reachable contract states.
