@@ -275,7 +275,9 @@ The `--verify` flag verifies the contract on etherscan (requires `ETHERSCAN_API_
 The commands of `dapp` can be customized with environment variables or flags.
 These variables can be set at the prompt or in a `.dapprc` file.
 
-Below is a non-comprehensive list of some common configuration options (more can be found in the sourcecode):
+Below is a list of the environment variables recognised by `dapp`. You can addionally control
+various block parameters when running unit tests by using the [hevm specific environment
+variables](../hevm/README.md#environment-variables).
 
 | Variable                   | Default                    | Synopsis                                                                                                                                          |
 | -------------------------- | -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -289,6 +291,7 @@ Below is a non-comprehensive list of some common configuration options (more can
 | `DAPP_SKIP_BUILD`          | n/a                        | Avoid compiling this time                                                                                                                         |
 | `DAPP_LINK_TEST_LIBRARIES` | `1` when testing; else `0` | Compile with libraries                                                                                                                            |
 | `DAPP_VERIFY_CONTRACT`     | `yes`                      | Attempt Etherscan verification                                                                                                                    |
+| `DAPP_ASYNC`               | n/a                        | Set to `yes` to skip waiting for etherscan verification to succeed                                                                                |
 | `DAPP_STANDARD_JSON`       | `$(dapp mk-standard-json)` | [Solidity compilation options](https://docs.soliditylang.org/en/latest/using-the-compiler.html#compiler-input-and-output-json-description)        |
 | `DAPP_REMAPPINGS`          | `$(dapp remappings)`       | [Solidity remappings](https://docs.soliditylang.org/en/latest/using-the-compiler.html#path-remapping)                                             |
 | `DAPP_BUILD_OPTIMIZE`      | `0`                        | Activate Solidity optimizer (`0` or `1`)                                                                                                          |
@@ -296,8 +299,18 @@ Below is a non-comprehensive list of some common configuration options (more can
 | `DAPP_TEST_MATCH`          | n/a                        | Only run test methods matching a regex                                                                                                            |
 | `DAPP_TEST_VERBOSITY`      | `0`                        | Sets how much detail `dapp test` logs. Verbosity `1` shows traces for failing tests, `2` shows logs for all tests, `3` shows traces for all tests |
 | `DAPP_TEST_FUZZ_RUNS`      | `200`                      | How many iterations to use for each property test in your project                                                                                 |
-| `DAPP_TEST_SMTTIMEOUT`     | `600000`                   | How long to wait for symbolic tests to complete before terminating early                                                                          |
+| `DAPP_TEST_SMTTIMEOUT`     | `600000`                   | Timeout passed to the smt solver for symbolic tests (in ms, and per smt query)                                                                    |
 | `DAPP_TEST_FFI `           | `0`                        | Allow use of the ffi cheatcode in tests (`0` or `1`)                                                                                              |
+| `HEVM_RPC`                 | n/a                        | Set to `yes` to have `hevm` fetch state from rpc when running unit tests                                                                          |
+| `ETH_RPC_URL`              | n/a                        | The url of the rpc server that should be used for any rpc calls                                                                                   |
+| `DAPP_TESTNET_RPC_PORT`    | `8545`                     | Which port to expose the rpc server on when running `dapp testnet`                                                                                |
+| `DAPP_TESTNET_RPC_ADDRESS` | `127.0.0.1`                | Which ip address to bind the rpc server to when running `dapp testnet`                                                                            |
+| `DAPP_TESTNET_CHAINID`     | `99`                       | Which chain id to use when running `dapp testnet`                                                                                                 |
+| `DAPP_TESTNET_PERIOD`      | `0`                        | Blocktime to use for `dapp testnet`. `0` means blocks are produced instantly as soon as a transaction is received                                 |
+| `DAPP_TESTNET_ACCOUNTS`    | `0`                        | How many extra accounts to create when running `dapp testnet`. (At least one is always created)                                                   |
+| `DAPP_TESTNET_gethdir`     | `$HOME/.dapp/testnet`      | Root directory that should be used for `dapp testnet` data                                                                                        |
+| `DAPP_TESTNET_SAVE`        | n/a                        | Name of the subdirecty under `${DAPP_TESTNET_gethdir}/snapshots` where the chain data from the current `dapp testnet` invocation should be saved  |
+| `DAPP_TESTNET_LOAD`        | n/a                        | Name of the subdirecty under `${DAPP_TESTNET_gethdir}/snapshots` from which `dapp testnet` chain data should be loaded                            |
 
 A global (always loaded) config file is located in `~/.dapprc`. A local `.dapprc` can also be defined in your project's root, which overrides variables in the global config.
 
@@ -324,7 +337,7 @@ fi
 
 ### Precedence
 
-There are multiple places to specify configuration options. If set in multiple places, they are read in this precedence:
+There are multiple places to specify configuration options. They are read with the following precedence:
 
 1. command line flags
 2. local `.dapprc`
