@@ -281,7 +281,7 @@ variables](../hevm/README.md#environment-variables).
 
 | Variable                   | Default                    | Synopsis                                                                                                                                          |
 | -------------------------- | -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `DAPP_SRC`                 | `src`                      | Project Solidity source directory                                                                                                                 |
+| `DAPP_SRC`                 | `src`                      | Directory for the project's Solidity contracts                                                                                                    |
 | `DAPP_LIB`                 | `lib`                      | Directory for installed Dapp packages                                                                                                             |
 | `DAPP_OUT`                 | `out`                      | Directory for compilation artifacts                                                                                                               |
 | `DAPP_ROOT`                | `.`                        | Root directory of compilation                                                                                                                     |
@@ -307,7 +307,7 @@ variables](../hevm/README.md#environment-variables).
 | `DAPP_TESTNET_RPC_ADDRESS` | `127.0.0.1`                | Which ip address to bind the rpc server to when running `dapp testnet`                                                                            |
 | `DAPP_TESTNET_CHAINID`     | `99`                       | Which chain id to use when running `dapp testnet`                                                                                                 |
 | `DAPP_TESTNET_PERIOD`      | `0`                        | Blocktime to use for `dapp testnet`. `0` means blocks are produced instantly as soon as a transaction is received                                 |
-| `DAPP_TESTNET_ACCOUNTS`    | `0`                        | How many extra accounts to create when running `dapp testnet`. (At least one is always created)                                                   |
+| `DAPP_TESTNET_ACCOUNTS`    | `0`                        | How many extra accounts to create when running `dapp testnet` (At least one is always created)                                                    |
 | `DAPP_TESTNET_gethdir`     | `$HOME/.dapp/testnet`      | Root directory that should be used for `dapp testnet` data                                                                                        |
 | `DAPP_TESTNET_SAVE`        | n/a                        | Name of the subdirecty under `${DAPP_TESTNET_gethdir}/snapshots` where the chain data from the current `dapp testnet` invocation should be saved  |
 | `DAPP_TESTNET_LOAD`        | n/a                        | Name of the subdirecty under `${DAPP_TESTNET_gethdir}/snapshots` from which `dapp testnet` chain data should be loaded                            |
