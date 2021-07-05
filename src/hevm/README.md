@@ -224,21 +224,22 @@ The `smttimeout`, `max-iterations` and `solver` options have the same semantics 
 
 ### Environment Variables
 
-These environment variables can be used to control block parameters
+These environment variables can be used to control block parameters:
 
-  - `DAPP_TEST_ADDRESS`
-  - `DAPP_TEST_CALLER`
-  - `DAPP_TEST_ORIGIN`
-  - `DAPP_TEST_GAS_CREATE`
-  - `DAPP_TEST_GAS_CALL`
-  - `DAPP_TEST_BALANCE_CREATE`
-  - `DAPP_TEST_BALANCE_CALL`
-  - `DAPP_TEST_COINBASE`
-  - `DAPP_TEST_NUMBER`
-  - `DAPP_TEST_TIMESTAMP`
-  - `DAPP_TEST_GAS_LIMIT`
-  - `DAPP_TEST_GAS_PRICE`
-  - `DAPP_TEST_DIFFICULTY`
+| Variable                   | Default                                      | Synopsis                                                                                                                        |
+| -------------------------- | -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| `DAPP_TEST_ADDRESS`        | `0xb4c79daB8f259C7Aee6E5b2Aa729821864227e84` | The address to deploy the test contract to
+| `DAPP_TEST_CALLER`         | `0x00a329c0648769a73afac7f9381e08fb43dbea72` | The address to set `msg.sender` to when calling into the test contract
+| `DAPP_TEST_ORIGIN`         | `0x00a329c0648769a73afac7f9381e08fb43dbea72` | The address to set `tx.orgin` to when calling into the test contract
+| `DAPP_TEST_GAS_CREATE`     | `0xffffffffffff`                             | The gas to provide when creating the testing contract
+| `DAPP_TEST_GAS_CALL`       | `0xffffffffffff`                             | The gas to provide to each call made to the testing contract
+| `DAPP_TEST_BALANCE`        | `0xffffffffffffffffffffffff`                 | The balance to provide to `DAPP_TEST_ADDRESS`
+| `DAPP_TEST_COINBASE`       | `0x0000000000000000000000000000000000000000` | The coinbase address. Will be set to the coinbase for the block at `DAPP_TEST_NUMBER` if rpc is enabled.
+| `DAPP_TEST_NUMBER`         | `0`                                          | The block number. Will be set to the latest block if rpc is enabled.
+| `DAPP_TEST_TIMESTAMP`      | `0`                                          | The block timestamp. Will be set to the timestamp for the block at `DAPP_TEST_NUMBER` if rpc is enabled.
+| `DAPP_TEST_GAS_LIMIT`      | `0`                                          | The gas limit to use.
+| `DAPP_TEST_GAS_PRICE`      | `0`                                          | The gas price to use.
+| `DAPP_TEST_DIFFICULTY`     | `0`                                          | The block difficulty. Will be set to the difficulty for the the block at `DAPP_TEST_NUMBER` if rpc is enabled.
 
 ## Installing
 
