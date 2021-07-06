@@ -93,7 +93,6 @@ data TestVMParams = TestVMParams
   , testGasCreate     :: W256
   , testGasCall       :: W256
   , testBalanceCreate :: W256
-  , testBalanceCall   :: W256
   , testCoinbase      :: Addr
   , testNumber        :: W256
   , testTimestamp     :: W256
@@ -110,11 +109,8 @@ defaultGasForCreating = 0xffffffffffff
 defaultGasForInvoking :: W256
 defaultGasForInvoking = 0xffffffffffff
 
-defaultBalanceForCreator :: W256
-defaultBalanceForCreator = 0xffffffffffffffffffffffff
-
-defaultBalanceForCreated :: W256
-defaultBalanceForCreated = 0xffffffffffffffffffffffff
+defaultBalanceForTestContract :: W256
+defaultBalanceForTestContract = 0xffffffffffffffffffffffff
 
 defaultMaxCodeSize :: W256
 defaultMaxCodeSize = 0xffffffff
@@ -975,8 +971,7 @@ getParametersFromEnvironmentVariables rpc = do
     <*> getAddr "DAPP_TEST_ORIGIN" ethrunAddress
     <*> getWord "DAPP_TEST_GAS_CREATE" defaultGasForCreating
     <*> getWord "DAPP_TEST_GAS_CALL" defaultGasForInvoking
-    <*> getWord "DAPP_TEST_BALANCE_CREATE" defaultBalanceForCreator
-    <*> getWord "DAPP_TEST_BALANCE_CALL" defaultBalanceForCreated
+    <*> getWord "DAPP_TEST_BALANCE" defaultBalanceForTestContract
     <*> getAddr "DAPP_TEST_COINBASE" miner
     <*> getWord "DAPP_TEST_NUMBER" blockNum
     <*> getWord "DAPP_TEST_TIMESTAMP" ts

@@ -8,6 +8,7 @@ that isn't available in `rpc`, such as [fuzz testing](#property-based-testing), 
 
 <!-- START doctoc generated TOC please keep comment here to allow auto update -->
 <!-- DON'T EDIT THIS SECTION, INSTEAD RE-RUN doctoc TO UPDATE -->
+
 **Table of Contents**
 
 - [Installing](#installing)
@@ -37,8 +38,7 @@ that isn't available in `rpc`, such as [fuzz testing](#property-based-testing), 
 
 <!-- END doctoc generated TOC please keep comment here to allow auto update -->
 
-Installing
-------------------------------------------------------------------------
+## Installing
 
 dapp is distributed as part of the [Dapp
 tools](https://github.com/dapphub/dapptools) suite.
@@ -46,10 +46,12 @@ tools](https://github.com/dapphub/dapptools) suite.
 ## Basic usage: a tutorial
 
 Lets create a new `dapp` project. We make a new directory and initialize the `dapp` skeleton structure:
+
 ```sh
 mkdir dapptutorial
 dapp init
 ```
+
 This creates two contracts, `Dapptutorial.sol` and ``Dapptutorial.t.sol` in the `src` subdirectory and installs our testing library `ds-test` in the `lib` subdirectory.
 
 `Dapptutorial.t.sol` is a testing contract with two trivial tests, which we can run with `dapp test`.
@@ -73,6 +75,7 @@ contract Dapptutorial {
 ```
 
 Compile the contract by running `dapp build`. If you didn't make any mistakes, you should simply see:
+
 ```
 + dapp clean
 + rm -rf out
@@ -131,6 +134,7 @@ Now lets try something more interesting - property based testing and symbolicall
 
 We can generailize our `test_withdraw` function to not use the hardcoded `1 ether`, but instead take
 the value as a parameter:
+
 ```solidity
 function test_withdraw(uint amount) public {
     address(dapptutorial).transfer(amount);
@@ -140,6 +144,7 @@ function test_withdraw(uint amount) public {
     assertEq(preBalance + amount, postBalance);
 }
 ```
+
 A test that takes at least one parameters is interpreted as a "property based test", or "fuzz test", and will
 be run multiple times with different values given to the parameters. The number of times each test is run can be
 configured by the `--fuzz-runs` flag and defaults to 100.
@@ -147,6 +152,7 @@ configured by the `--fuzz-runs` flag and defaults to 100.
 Running this test with `dapp test -v`, we see that this test actually fails with `error BalanceTooLow` for very high values of `amount`.
 
 By default, the testing contract is given a balance of `2**96` wei, so we have to restrict the type of `amount` to `uint96` to make sure we don't try to transfer more than we have:
+
 ```solidity
 function test_withdraw(uint96 amount) public {
     address(dapptutorial).transfer(amount);
@@ -179,6 +185,7 @@ function proveFail_withdraw(uint guess) public {
 ```
 
 When we run this with `dapp test`, we are given a counterexample:
+
 ```
 Failure: proveFail_withdraw(uint256)
 
@@ -221,9 +228,10 @@ You can test how your contract interacts with already deployed contracts by
 letting the testing state be fetched from rpc with the `--rpc` flag.
 
 Running `dapp test` with the `--rpc` flag enabled will cause every state fetching operation
-(such as SLOAD, EXTCODESIZE, CALL*, etc.) to request the state from `$ETH_RPC_URL`.
+(such as SLOAD, EXTCODESIZE, CALL\*, etc.) to request the state from `$ETH_RPC_URL`.
 
 For example, if you want to try out wrapping ETH you could define WETH in the `setUp()` function:
+
 ```solidity
 import "ds-test/test.sol";
 
@@ -265,27 +273,44 @@ The `--verify` flag verifies the contract on etherscan (requires `ETHERSCAN_API_
 ## Configuration
 
 The commands of `dapp` can be customized with environment variables or flags.
-These variables can be set at the prompt or in a `.dapprc` file. 
+These variables can be set at the prompt or in a `.dapprc` file.
 
-Below is a non-comprehensive list of some common configuration options (more can be found in the sourcecode):
+Below is a list of the environment variables recognised by `dapp`. You can addionally control
+various block parameters when running unit tests by using the [hevm specific environment
+variables](../hevm/README.md#environment-variables).
 
-| Variable                   | Default                    | Synopsis                                                                                                                                   |
-|----------------------------|----------------------------|--------------------------------------------------------------------------------------------------------------------------------------------|
-| `DAPP_SRC`                 | `src`                      | Project Solidity source directory                                                                                                          |
-| `DAPP_LIB`                 | `lib`                      | Directory for installed Dapp packages                                                                                                      |
-| `DAPP_OUT`                 | `out`                      | Directory for compilation artifacts                                                                                                        |
-| `DAPP_ROOT`                | `.`                        | Root directory of compilation                                                                                                              |
-| `DAPP_SOLC_VERSION`        | n/a                        | Solidity compiler version to use                                                                                                           |
-| `DAPP_SOLC`                | n/a                        | solc binary to use                                                                                                                         |
-| `DAPP_VERBOSE`             | n/a                        | Produce more `dapp test` output                                                                                                            |
-| `DAPP_LIBRARIES`           | automatically deployed     | Library addresses to link to                                                                                                               |
-| `DAPP_SKIP_BUILD`          | n/a                        | Avoid compiling this time                                                                                                                  |
-| `DAPP_LINK_TEST_LIBRARIES` | `1` when testing; else `0` | Compile with libraries                                                                                                                     |
-| `DAPP_VERIFY_CONTRACT`     | `yes`                      | Attempt Etherscan verification                                                                                                             |
-| `DAPP_STANDARD_JSON`       | $(dapp mk-standard-json)   | [Solidity compilation options](https://docs.soliditylang.org/en/latest/using-the-compiler.html#compiler-input-and-output-json-description) |
-| `DAPP_REMAPPINGS`          | $(dapp remappings)         | [Solidity remappings](https://docs.soliditylang.org/en/latest/using-the-compiler.html#path-remapping)                                      |
-| `DAPP_BUILD_OPTIMIZE`      | no                         | Activate Solidity optimizer                                                                                                                |
-| `DAPP_BUILD_OPTIMIZE_RUNS` | 200                        | Set the optimizer runs                                                                                                                     |
+| Variable                   | Default                    | Synopsis                                                                                                                                          |
+| -------------------------- | -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `DAPP_SRC`                 | `src`                      | Directory for the project's Solidity contracts                                                                                                    |
+| `DAPP_LIB`                 | `lib`                      | Directory for installed Dapp packages                                                                                                             |
+| `DAPP_OUT`                 | `out`                      | Directory for compilation artifacts                                                                                                               |
+| `DAPP_ROOT`                | `.`                        | Root directory of compilation                                                                                                                     |
+| `DAPP_SOLC_VERSION`        | `0.8.6`                    | Solidity compiler version to use                                                                                                                  |
+| `DAPP_SOLC`                | n/a                        | solc binary to use                                                                                                                                |
+| `DAPP_LIBRARIES`           | automatically deployed     | Library addresses to link to                                                                                                                      |
+| `DAPP_SKIP_BUILD`          | n/a                        | Avoid compiling this time                                                                                                                         |
+| `DAPP_LINK_TEST_LIBRARIES` | `1` when testing; else `0` | Compile with libraries                                                                                                                            |
+| `DAPP_VERIFY_CONTRACT`     | `yes`                      | Attempt Etherscan verification                                                                                                                    |
+| `DAPP_ASYNC`               | n/a                        | Set to `yes` to skip waiting for etherscan verification to succeed                                                                                |
+| `DAPP_STANDARD_JSON`       | `$(dapp mk-standard-json)` | [Solidity compilation options](https://docs.soliditylang.org/en/latest/using-the-compiler.html#compiler-input-and-output-json-description)        |
+| `DAPP_REMAPPINGS`          | `$(dapp remappings)`       | [Solidity remappings](https://docs.soliditylang.org/en/latest/using-the-compiler.html#path-remapping)                                             |
+| `DAPP_BUILD_OPTIMIZE`      | `0`                        | Activate Solidity optimizer (`0` or `1`)                                                                                                          |
+| `DAPP_BUILD_OPTIMIZE_RUNS` | `200`                      | Set the optimizer runs                                                                                                                            |
+| `DAPP_TEST_MATCH`          | n/a                        | Only run test methods matching a regex                                                                                                            |
+| `DAPP_TEST_VERBOSITY`      | `0`                        | Sets how much detail `dapp test` logs. Verbosity `1` shows traces for failing tests, `2` shows logs for all tests, `3` shows traces for all tests |
+| `DAPP_TEST_FUZZ_RUNS`      | `200`                      | How many iterations to use for each property test in your project                                                                                 |
+| `DAPP_TEST_SMTTIMEOUT`     | `600000`                   | Timeout passed to the smt solver for symbolic tests (in ms, and per smt query)                                                                    |
+| `DAPP_TEST_FFI `           | `0`                        | Allow use of the ffi cheatcode in tests (`0` or `1`)                                                                                              |
+| `HEVM_RPC`                 | n/a                        | Set to `yes` to have `hevm` fetch state from rpc when running unit tests                                                                          |
+| `ETH_RPC_URL`              | n/a                        | The url of the rpc server that should be used for any rpc calls                                                                                   |
+| `DAPP_TESTNET_RPC_PORT`    | `8545`                     | Which port to expose the rpc server on when running `dapp testnet`                                                                                |
+| `DAPP_TESTNET_RPC_ADDRESS` | `127.0.0.1`                | Which ip address to bind the rpc server to when running `dapp testnet`                                                                            |
+| `DAPP_TESTNET_CHAINID`     | `99`                       | Which chain id to use when running `dapp testnet`                                                                                                 |
+| `DAPP_TESTNET_PERIOD`      | `0`                        | Blocktime to use for `dapp testnet`. `0` means blocks are produced instantly as soon as a transaction is received                                 |
+| `DAPP_TESTNET_ACCOUNTS`    | `0`                        | How many extra accounts to create when running `dapp testnet` (At least one is always created)                                                    |
+| `DAPP_TESTNET_gethdir`     | `$HOME/.dapp/testnet`      | Root directory that should be used for `dapp testnet` data                                                                                        |
+| `DAPP_TESTNET_SAVE`        | n/a                        | Name of the subdirecty under `${DAPP_TESTNET_gethdir}/snapshots` where the chain data from the current `dapp testnet` invocation should be saved  |
+| `DAPP_TESTNET_LOAD`        | n/a                        | Name of the subdirecty under `${DAPP_TESTNET_gethdir}/snapshots` from which `dapp testnet` chain data should be loaded                            |
 
 A global (always loaded) config file is located in `~/.dapprc`. A local `.dapprc` can also be defined in your project's root, which overrides variables in the global config.
 
@@ -303,15 +328,16 @@ Under the hood `.dapprc` is interpreted as a shell script, which means you can a
 
 ```sh
 if [ "$CI" == "true" ]
-then 
+then
   export DAPP_TEST_FUZZ_RUNS=1000000 # In CI we want to fuzz for a long time.
 else
-  export DAPP_TEST_FUZZ_RUNS=1000 # When developing locally we only want to fuzz briefly. 
+  export DAPP_TEST_FUZZ_RUNS=1000 # When developing locally we only want to fuzz briefly.
 fi
 ```
 
 ### Precedence
-There are multiple places to specify configuration options. If set in multiple places, they are read in this precedence:
+
+There are multiple places to specify configuration options. They are read with the following precedence:
 
 1. command line flags
 2. local `.dapprc`
@@ -327,11 +353,14 @@ If the argument contains a `/`, it is interpreted as a path to a solc
 binary to be used.
 
 You can install any supported `solc` "standalone" (i.e. add it to your `$PATH`) with:
+
 ```sh
 nix-env -iA solc-versions.solc_x_y_z \
   -if https://github.com/dapphub/dapptools/tarball/master
 ```
+
 or
+
 ```sh
 nix-env -iA solc-static-versions.solc_x_y_z \
   -if https://github.com/dapphub/dapptools/tarball/master
@@ -343,7 +372,7 @@ For a list of the supported `solc` versions, check
 Versions of `solc` that haven't yet landed in nixpkgs can be found under the
 `unreleased` key: `solc-versions.unreleased.solc_x_y_z`.
 
-*(NOTE: not all versions are supported on macOS platforms.)*
+_(NOTE: not all versions are supported on macOS platforms.)_
 
 ## Commands
 
@@ -399,8 +428,8 @@ You can override this with the `DAPP_REMAPPINGS` environment variable.
         --solver <string>         name of the smt solver to use (either "z3" or "cvc4")
         --max-iterations <number> number of times we may revisit a particular branching point during symbolic execution
 
-
 dapp tests are written in Solidity using the `ds-test` module. To install it, run
+
 ```sh
 dapp install ds-test
 ```
@@ -479,7 +508,6 @@ for key bindings for navigation.
         dapp create <path>:<contractname>
     Add --verify and export your ETHERSCAN_API_KEY to auto-verify on Etherscan
 
-
 ### `dapp address`
 
     dapp-address -- determine address of newly generated contract
@@ -504,7 +532,6 @@ it. For an example, see [this repo](https://github.com/dapp-org/radicle-contract
     Usage: dapp update [<lib>]
 
 Updates a project submodule in the `lib` subdirectory.
-
 
 ### `dapp upgrade`
 

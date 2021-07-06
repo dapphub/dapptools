@@ -32,21 +32,21 @@ Note: some `hevm` commands (`dapp-test`) assume the use of the `ds-test` framewo
 
 ### Interactive debugger key bindings
 
-  - `Esc`: exit debugger
-  - `a`: step to start
-  - `e`: step to end
-  - `n`: step forwards by one instruction
-  - `p`: step backwards by one instruction
-  - `0`: choose the branch which does not jump
-  - `1`: choose the branch which does jump
-  - `N`: step to the next source position
-  - `P`: step previous source instruction
-  - `C-n`: step to the next source position and don't enter `CALL` or `CREATE`
-  - `C-p`: step previous source position without entering
-  - `m`: toggle memory view
-  - `Down` : step to next entry in the callstack / Scroll memory pane\n" <>
-  - `Up` : step to previous entry in the callstack / Scroll memory pane\n" <>
-  - `h`: show key-binding help
+- `Esc`: exit debugger
+- `a`: step to start
+- `e`: step to end
+- `n`: step forwards by one instruction
+- `p`: step backwards by one instruction
+- `0`: choose the branch which does not jump
+- `1`: choose the branch which does jump
+- `N`: step to the next source position
+- `P`: step previous source instruction
+- `C-n`: step to the next source position and don't enter `CALL` or `CREATE`
+- `C-p`: step previous source position without entering
+- `m`: toggle memory view
+- `Down` : step to next entry in the callstack / Scroll memory pane\n" <>
+- `Up` : step to previous entry in the callstack / Scroll memory pane\n" <>
+- `h`: show key-binding help
 
 ### `hevm symbolic`
 
@@ -124,16 +124,19 @@ If `--sig` is given, calldata is assumed to be of the form suggested by the func
 This is best illustrated through a few examples:
 
 Calldata specialized to the bytestring `0xa9059cbb` followed by 64 symbolic bytes:
+
 ```sh
 hevm symbolic --sig "transfer(address,uint256)" --code $(<dstoken.bin-runtime)
 ```
 
 Calldata specialized to the bytestring `0xa9059cbb0000000000000000000000007cfa93148b0b13d88c1dce8880bd4e175fb0dedf` followed by 32 symbolic bytes.
+
 ```sh
 hevm symbolic --sig "transfer(address,uint256)" --arg 0x7cFA93148B0B13d88c1DcE8880bd4e175fb0DeDF --code $(<dstoken.bin-runtime)
 ```
 
 Calldata specialized to the bytestring `0xa9059cbb` followed by 32 symbolic bytes, followed by the bytestring `0000000000000000000000000000000000000000000000000000000000000000`:
+
 ```sh
 hevm symbolic --sig "transfer(address,uint256)" --arg "<symbolic>" --arg 0 --code $(<dstoken.bin-runtime)
 ```
@@ -167,6 +170,7 @@ Usage: hevm exec [--code TEXT] [--calldata TEXT] [--address ADDR]
                  [--difficulty W256] [--debug] [--state STRING] [--rpc TEXT]
                  [--block W256] [--json-file STRING]
 ```
+
 Minimum required flags:
 
 `--code` or (`--rpc` and `--address`).
@@ -176,11 +180,13 @@ If the execution returns an output, it will be written to stdout.
 Exit code indicates whether the execution was successful or errored/reverted.
 
 Simple example usage:
+
 ```sh
 hevm exec --code 0x647175696e6550383480393834f3 --gas 0xff
 ```
 
 Debug a mainnet transaction (older transactions require archive node):
+
 ```sh
 export ETH_RPC_URL=https://mainnet.infura.io/v3/YOUR_API_KEY_HERE
 export TXHASH=0xd2235b9554e51e8ff5b3de62039d5ab6e591164b593d892e42b2ffe0e3e4e426
@@ -195,7 +201,6 @@ cd mystate && git init && git commit --allow-empty -m "init" && cd ..
 hevm exec --code 0x600160015500 --state mystate --gas 0xffffff
 cd mystate && git show HEAD
 ```
-
 
 ### `hevm equivalence`
 
@@ -224,21 +229,22 @@ The `smttimeout`, `max-iterations` and `solver` options have the same semantics 
 
 ### Environment Variables
 
-These environment variables can be used to control block parameters
+These environment variables can be used to control block parameters:
 
-  - `DAPP_TEST_ADDRESS`
-  - `DAPP_TEST_CALLER`
-  - `DAPP_TEST_ORIGIN`
-  - `DAPP_TEST_GAS_CREATE`
-  - `DAPP_TEST_GAS_CALL`
-  - `DAPP_TEST_BALANCE_CREATE`
-  - `DAPP_TEST_BALANCE_CALL`
-  - `DAPP_TEST_COINBASE`
-  - `DAPP_TEST_NUMBER`
-  - `DAPP_TEST_TIMESTAMP`
-  - `DAPP_TEST_GAS_LIMIT`
-  - `DAPP_TEST_GAS_PRICE`
-  - `DAPP_TEST_DIFFICULTY`
+| Variable               | Default                                      | Synopsis                                                                                                      |
+| ---------------------- | -------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| `DAPP_TEST_ADDRESS`    | `0xb4c79daB8f259C7Aee6E5b2Aa729821864227e84` | The address to deploy the test contract to                                                                    |
+| `DAPP_TEST_CALLER`     | `0x00a329c0648769a73afac7f9381e08fb43dbea72` | The address to set `msg.sender` to when calling into the test contract                                        |
+| `DAPP_TEST_ORIGIN`     | `0x00a329c0648769a73afac7f9381e08fb43dbea72` | The address to set `tx.orgin` to when calling into the test contract                                          |
+| `DAPP_TEST_GAS_CREATE` | `0xffffffffffff`                             | The gas to provide when creating the testing contract                                                         |
+| `DAPP_TEST_GAS_CALL`   | `0xffffffffffff`                             | The gas to provide to each call made to the testing contract                                                  |
+| `DAPP_TEST_BALANCE`    | `0xffffffffffffffffffffffff`                 | The balance to provide to `DAPP_TEST_ADDRESS`                                                                 |
+| `DAPP_TEST_COINBASE`   | `0x0000000000000000000000000000000000000000` | The coinbase address. Will be set to the coinbase for the block at `DAPP_TEST_NUMBER` if rpc is enabled       |
+| `DAPP_TEST_NUMBER`     | `0`                                          | The block number. Will be set to the latest block if rpc is enabled                                           |
+| `DAPP_TEST_TIMESTAMP`  | `0`                                          | The block timestamp. Will be set to the timestamp for the block at `DAPP_TEST_NUMBER` if rpc is enabled       |
+| `DAPP_TEST_GAS_LIMIT`  | `0`                                          | The gas limit to use                                                                                          |
+| `DAPP_TEST_GAS_PRICE`  | `0`                                          | The gas price to use                                                                                          |
+| `DAPP_TEST_DIFFICULTY` | `0`                                          | The block difficulty. Will be set to the difficulty for the the block at `DAPP_TEST_NUMBER` if rpc is enabled |
 
 ## Installing
 
@@ -291,28 +297,27 @@ Since Hevm is an EVM implementation mainly dedicated to testing and exploration,
 These can be accessed by calling into a contract (typically called `Hevm`) at address `0x7109709ECfa91a80626fF3989D68f67F5b1DD12D`, which implements the following methods:
 
 - `function warp(uint x) public`
-Sets the block timestamp to `x`.
+  Sets the block timestamp to `x`.
 
 - `function roll(uint x) public`
-Sets the block number to `x`.
+  Sets the block number to `x`.
 
 - `function store(address c, bytes32 loc, bytes32 val) public`
-Sets the slot `loc` of contract `c` to `val`.
+  Sets the slot `loc` of contract `c` to `val`.
 
 - `function load(address c, bytes32 loc) public returns (bytes32 val)`
-Reads the slot `loc` of contract `c`.
+  Reads the slot `loc` of contract `c`.
 
 - `function sign(uint sk, bytes32 digest) public returns (uint8 v, bytes32 r, bytes32 s)`
-Signs the `digest` using the private key `sk`. Note that signatures produced via `hevm.sign` will leak the private key.
+  Signs the `digest` using the private key `sk`. Note that signatures produced via `hevm.sign` will leak the private key.
 
 - `function addr(uint sk) public returns (address addr)`
-Derives an ethereum address from the private key `sk`. Note that `hevm.addr(0)` will fail with
-`BadCheatCode` as `0` is an invalid ECDSA private key.
+  Derives an ethereum address from the private key `sk`. Note that `hevm.addr(0)` will fail with
+  `BadCheatCode` as `0` is an invalid ECDSA private key.
 
 - `function ffi(string[] calldata) external returns (bytes memory)`
-Executes the arguments as a command in the system shell and returns stdout.  Note that this
-cheatcode means test authors can execute arbitrary code on user machines as part of a call to `dapp
-test`, for this reason all calls to `ffi` will fail unless the `--ffi` flag is passed.
+  Executes the arguments as a command in the system shell and returns stdout. Note that this
+  cheatcode means test authors can execute arbitrary code on user machines as part of a call to `dapp test`, for this reason all calls to `ffi` will fail unless the `--ffi` flag is passed.
 
 ## Contact
 
