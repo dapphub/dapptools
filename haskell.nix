@@ -13,26 +13,8 @@ in self-hs: super-hs:
       pkgs.haskell.lib.dontCheck
         (self-hs.callCabal2nix x y {});
 
-    sbv_prepatch = pkgs.haskell.lib.dontCheck (self-hs.callCabal2nix "sbv"
-      (builtins.fetchGit {
-        url = "https://github.com/LeventErkok/sbv";
-        rev = "b64905e2698c320ac14ffbad53325d33081839fb";
-      })
-      {inherit (pkgs) z3;});
-
   in {
     restless-git = dontCheck "restless-git" (./src/restless-git);
-
-    sbv = sbv_prepatch.overrideAttrs (attrs: {
-      postPatch = pkgs.lib.optionalString wrapped
-          ''
-             sed -i -e 's|"z3"|"${pkgs.z3}/bin/z3"|' Data/SBV/Provers/Z3.hs
-             sed -i -e 's|"cvc4"|"${pkgs.cvc4}/bin/cvc4"|' Data/SBV/Provers/CVC4.hs
-          '';
-      configureFlags = attrs.configureFlags ++ [
-        "--ghc-option=-O2"
-      ];
-    });
 
     hevm = pkgs.haskell.lib.dontHaddock ((
       self-hs.callCabal2nix "hevm" (./src/hevm) {
@@ -57,8 +39,7 @@ in self-hs: super-hs:
       configureFlags = attrs.configureFlags ++ [
           "--ghc-option=-O2"
       ] ++
-      (if stdenv.isDarwin then [] else
-        if shared then [] else [
+      (if stdenv.isDarwin then [] else [
           "--enable-executable-static"
           "--extra-lib-dirs=${pkgs.gmp.override { withStatic = true; }}/lib"
           "--extra-lib-dirs=${pkgs.glibc.static}/lib"
