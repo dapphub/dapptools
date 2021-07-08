@@ -245,8 +245,8 @@ instance Show Whiff where
       SGT x y     -> infix' " s> " x y
       IsZero x    -> "IsZero(" ++ show x ++ ")"
       SHL x y     -> infix' " << " x y
-      SHR x y     -> infix' " << " x y
-      SAR x y     -> infix' " a<< " x y
+      SHR x y     -> infix' " >> " x y
+      SAR x y     -> infix' " a>> " x y
       Add x y     -> infix' " + " x y
       Sub x y     -> infix' " - " x y
       Mul x y     -> infix' " * " x y
