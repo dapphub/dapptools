@@ -46,6 +46,8 @@ else
       -n 0 -i constantinopleBlock \
       -n 0 -i petersburgBlock \
       -n 0 -i istanbulBlock \
+      -n 0 -i berlinBlock \
+      -n 0 -i londonBlock \
       -n {} -n "$DAPP_TESTNET_PERIOD" -i period -n 3000 -i epoch -i clique \
       -i config \
     -s 0x1 -i difficulty \
