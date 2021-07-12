@@ -15,7 +15,6 @@ import EVM.Symbolic
 import EVM hiding (path)
 import qualified EVM.Fetch
 import qualified EVM.TTY
-import qualified EVM.Emacs
 import qualified EVM.Facts     as Facts
 import qualified EVM.Facts.Git as Git
 import qualified EVM.Stepper
@@ -133,12 +132,6 @@ ghciTty root path statePath =
         }
     EVM.TTY.main testOpts root path
 
-ghciEmacs :: IO ()
-ghciEmacs =
-  EVM.Emacs.main
-
-foo :: IO ()
-foo = ghciEmacs
 
 data VMTrace =
   VMTrace

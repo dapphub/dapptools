@@ -23,7 +23,6 @@ import qualified EVM.Fetch
 import qualified EVM.Flatten
 import qualified EVM.Stepper
 import qualified EVM.TTY
-import qualified EVM.Emacs
 import EVM.Dev (interpretWithTrace)
 
 #if MIN_VERSION_aeson(1, 0, 0)
@@ -210,7 +209,6 @@ data Command w
     , jsonFile   :: w ::: Maybe String <?> "Filename or path to dapp build output (default: out/*.solc.json)"
     , dappRoot   :: w ::: Maybe String <?> "Path to dapp project root directory (default: . )"
     }
-  | Emacs
   | Version
   | Rlp  -- RLP decode a string and print the result
   { decode :: w ::: ByteString <?> "RLP encoded hexstring"
@@ -339,8 +337,6 @@ main = do
               EVM.Flatten.flatten dapp (pack (sourceFile cmd))
             Nothing ->
               error ("Failed to read Solidity JSON for `" ++ theJson ++ "'")
-    Emacs ->
-      EVM.Emacs.main
     Rlp {} ->
       case rlpdecode $ hexByteString "--decode" $ strip0x $ decode cmd of
         Nothing -> error "Malformed RLP string"
