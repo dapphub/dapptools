@@ -623,7 +623,9 @@ initialUiVmStateForTest
   -> IO UiVmState
 initialUiVmStateForTest opts@UnitTestOptions{..} (theContractName, theTestName) = do
   let state' = fromMaybe (error "Internal Error: missing smtState") smtState
-  (buf, len) <- flip runReaderT state' $ SBV.runQueryT $ symCalldata theTestName types []
+  (buf, len) <- case test of
+    SymbolicTest _ -> flip runReaderT state' $ SBV.runQueryT $ symCalldata theTestName types []
+    _ -> return (error "unreachable", error "unreachable")
   let script = do
         Stepper.evm . pushTrace . EntryTrace $
           "test " <> theTestName <> " (" <> theContractName <> ")"
