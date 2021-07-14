@@ -269,9 +269,6 @@ whiffValue w = case w of
 
 -- | Special cases that have proven useful in practice
 simplifyCondition :: SBool -> Whiff -> SBool
-simplifyCondition _ (IsZero (IsZero (IsZero a))) = whiffValue a .== 0
-
-
 
 -- | Overflow safe math can be difficult for smt solvers to deal with,
 -- especially for 256-bit words. When we recognize terms arising from

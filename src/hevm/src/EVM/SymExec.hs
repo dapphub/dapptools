@@ -106,7 +106,7 @@ abstractVM typesignature concreteArgs x storagemodel = do
     case typesignature of
       Nothing -> do cd <- sbytes256
                     len <- freshVar_
-                    return (cd, var "calldataLength" len, (len .<= 256, Todo "calldatalength < 256" []))
+                    return (cd, var "calldataLength" len, (len .<= 256, Todo "calldatalength <= 256" []))
       Just (name, typs) -> do (cd, cdlen) <- symCalldata name typs concreteArgs
                               return (cd, S (Literal cdlen) (literal $ num cdlen), (sTrue, Todo "Trivial" []))
   symstore <- case storagemodel of
@@ -414,7 +414,7 @@ equivalenceCheck bytecodeA bytecodeB maxiter signature' = do
                 error $ "Unexpected symbolic argument at opcode: " <> maybe "??" show (vmOp a) <> ". Not supported (yet!)"
 
               (_, Just (VMFailure UnexpectedSymbolicArg)) ->
-                error $ "Unexpected symbolic argument at opcode: " <> maybe "??" show (vmOp a) <> ". Not supported (yet!)"
+                error $ "Unexpected symbolic argument at opcode: " <> maybe "??" show (vmOp b) <> ". Not supported (yet!)"
 
               (Just (VMFailure _), Just (VMFailure _)) -> sFalse
 
