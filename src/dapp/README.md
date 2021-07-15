@@ -357,7 +357,7 @@ nix-env -iA solc-static-versions.solc_x_y_z \
   -if https://github.com/dapphub/dapptools/tarball/master
 ```
 
-For a list of the supported `solc` versions, check [`solc-static-versions.nix`](https://github.com/dapphub/dapptools/blob/master/nix/solc-static-versions.nix).
+For a list of the supported `solc` versions, check [`solc-static-versions.nix`](/nix/solc-static-versions.nix).
 
 ## Commands
 
