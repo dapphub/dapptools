@@ -52,7 +52,7 @@ mkdir dapptutorial
 dapp init
 ```
 
-This creates two contracts, `Dapptutorial.sol` and ``Dapptutorial.t.sol` in the `src` subdirectory and installs our testing library `ds-test` in the `lib` subdirectory.
+This creates two contracts, `Dapptutorial.sol` and `Dapptutorial.t.sol` in the `src` subdirectory and installs our testing library `ds-test` in the `lib` subdirectory.
 
 `Dapptutorial.t.sol` is a testing contract with two trivial tests, which we can run with `dapp test`.
 
@@ -347,32 +347,19 @@ There are multiple places to specify configuration options. They are read with t
 ### solc version
 
 You can specify a custom `solc` version to run within `dapp` with `dapp --use <arg>`.
-If the argument is of the form `solc:x.y.z`, the appropriate solc version
-will temporarily installed.
-If the argument contains a `/`, it is interpreted as a path to a solc
-binary to be used.
+If the argument is of the form `solc:x.y.z`, the appropriate solc version will temporarily installed.
+If the argument contains a `/`, it is interpreted as a path to a solc binary to be used.
+
+You may also specify a solc version using the `DAPP_SOLC_VERSION` environment variable, which is equivalent to running `dapp --use solc:${DAPP_SOLC_VERSION}` manually.
 
 You can install any supported `solc` "standalone" (i.e. add it to your `$PATH`) with:
-
-```sh
-nix-env -iA solc-versions.solc_x_y_z \
-  -if https://github.com/dapphub/dapptools/tarball/master
-```
-
-or
 
 ```sh
 nix-env -iA solc-static-versions.solc_x_y_z \
   -if https://github.com/dapphub/dapptools/tarball/master
 ```
 
-For a list of the supported `solc` versions, check
-[`./nix/solc-versions.nix`](./nix/solc-versions.nix).
-
-Versions of `solc` that haven't yet landed in nixpkgs can be found under the
-`unreleased` key: `solc-versions.unreleased.solc_x_y_z`.
-
-_(NOTE: not all versions are supported on macOS platforms.)_
+For a list of the supported `solc` versions, check [`solc-static-versions.nix`](/nix/solc-static-versions.nix).
 
 ## Commands
 
