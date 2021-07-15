@@ -350,6 +350,8 @@ You can specify a custom `solc` version to run within `dapp` with `dapp --use <a
 If the argument is of the form `solc:x.y.z`, the appropriate solc version will temporarily installed.
 If the argument contains a `/`, it is interpreted as a path to a solc binary to be used.
 
+You may also specify a solc version using the `DAPP_SOLC_VERSION` environment variable, which is equivalent to running `dapp --use solc:${DAPP_SOLC_VERSION}` manually.
+
 You can install any supported `solc` "standalone" (i.e. add it to your `$PATH`) with:
 
 ```sh
