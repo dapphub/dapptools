@@ -259,13 +259,13 @@ whiffValue w = case w of
   Div x y       -> whiffValue x `sDiv` whiffValue y
   Mod x y       -> whiffValue x `sMod` whiffValue y
   Exp x y       -> whiffValue x .^ whiffValue y
-  Neg x         -> negate $ whiffValue x
+  Neg x         -> complement $ whiffValue x
   Var _ v       -> v
   FromKeccak (ConcreteBuffer bstr) -> literal $ num $ keccak bstr
   FromKeccak (SymbolicBuffer buf)  -> symkeccak' buf
   Literal x -> literal $ num $ x
   FromBytes buf -> rawVal $ readMemoryWord 0 buf
-  FromStorage ind arr -> readArray arr (whiffValue ind) 
+  FromStorage ind arr -> readArray arr (whiffValue ind)
 
 -- | Special cases that have proven useful in practice
 simplifyCondition :: SBool -> Whiff -> SBool
