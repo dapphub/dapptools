@@ -289,6 +289,32 @@ main = defaultMain $ testGroup "hevm"
         (Left res, _) <- runSMT $ query $ verifyContract c (Just ("f(uint256)", [AbiUIntType 256])) [] SymbolicS pre post
         putStrLn $ "successfully explored: " <> show (length res) <> " paths"
         ,
+        -- tests how whiffValue handles Neg via application of the triple IsZero simplification rule
+        -- regression test for: https://github.com/dapphub/dapptools/pull/698
+        testCase "Neg" $ do
+            let src =
+                  [i|
+                    object "Neg" {
+                      code {
+                        // Deploy the contract
+                        datacopy(0, dataoffset("runtime"), datasize("runtime"))
+                        return(0, datasize("runtime"))
+                      }
+                      object "runtime" {
+                        code {
+                          let v := calldataload(4)
+                          if iszero(iszero(and(v, not(0xffffffffffffffffffffffffffffffffffffffff)))) {
+                            invalid()
+                          }
+                        }
+                      }
+                    }
+                    |]
+            Just c <- yulRuntime "Neg" src
+            (Left res, _) <- runSMTWith z3 $ query $ checkAssert defaultPanicCodes c (Just ("hello(address)", [AbiAddressType])) []
+            putStrLn $ "successfully explored: " <> show (length res) <> " paths"
+        ,
+
         -- Inspired by these `msg.sender == to` token bugs
         -- which break linearity of totalSupply.
         testCase "catch storage collisions" $ do

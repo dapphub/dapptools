@@ -9,6 +9,9 @@ module EVM.Solidity
   ( solidity
   , solcRuntime
   , solidity'
+  , yul'
+  , yul
+  , yulRuntime
   , JumpType (..)
   , SolcContract (..)
   , StorageItem (..)
@@ -293,6 +296,20 @@ readSolc fp =
         sourceCache <- makeSourceCache sources asts
         return $! Just (contracts, sourceCache)
 
+yul :: Text -> Text -> IO (Maybe ByteString)
+yul contract src = do
+  (json, path) <- yul' src
+  let (Just c) = json ^?! key "contracts" ^?! key path ^? key contract
+  let bytecode = c ^?! key "evm" ^?! key "bytecode" ^?! key "object" . _String
+  pure $ toCode <$> (Just bytecode)
+
+yulRuntime :: Text -> Text -> IO (Maybe ByteString)
+yulRuntime contract src = do
+  (json, path) <- yul' src
+  let (Just c) = json ^?! key "contracts" ^?! key path ^? key contract
+  let bytecode = c ^?! key "evm" ^?! key "deployedBytecode" ^?! key "object" . _String
+  pure $ toCode <$> (Just bytecode)
+
 solidity :: Text -> Text -> IO (Maybe ByteString)
 solidity contract src = do
   (json, path) <- solidity' src
@@ -535,6 +552,25 @@ solidity' src = withSystemTempFile "hevm.sol" $ \path handle -> do
           }
         }
       }
+    }
+    |]
+  x <- pack <$>
+    readProcess
+      "solc"
+      ["--allow-paths", path, "--standard-json", (path <> ".json")]
+      ""
+  return (x, pack path)
+
+yul' :: Text -> IO (Text, Text)
+yul' src = withSystemTempFile "hevm.yul" $ \path handle -> do
+  hClose handle
+  writeFile path src
+  writeFile (path <> ".json")
+    [Here.i|
+    {
+      "language": "Yul",
+      "sources": { ${path}: { "urls": [ ${path} ] } },
+      "settings": { "outputSelection": { "*": { "*": ["*"], "": [ "*" ] } } }
     }
     |]
   x <- pack <$>
