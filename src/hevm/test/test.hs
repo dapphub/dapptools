@@ -291,7 +291,7 @@ main = defaultMain $ testGroup "hevm"
                     }
                     |]
             Just c <- yulRuntime "Neg" src
-            (Left res, _) <- runSMTWith z3 $ query $ checkAssert defaultPanicCodes c (Just ("hello(address)", [AbiAddressType])) []
+            (Left res, _) <- runSMTWith cvc4 $ query $ checkAssert defaultPanicCodes c (Just ("hello(address)", [AbiAddressType])) []
             putStrLn $ "successfully explored: " <> show (length res) <> " paths"
         ,
 
@@ -610,7 +610,7 @@ main = defaultMain $ testGroup "hevm"
                 |]
           Just c <- solcRuntime "C" code
 
-          Left _ <- runSMTWith z3 $ query $ do
+          Left _ <- runSMTWith cvc4 $ query $ do
             vm <- abstractVM (Just ("distributivity(uint256,uint256,uint256)", [AbiUIntType 256, AbiUIntType 256, AbiUIntType 256])) [] c SymbolicS
             verify vm Nothing Nothing (Just $ checkAssertions defaultPanicCodes)
           putStrLn "Proven"
