@@ -56,15 +56,15 @@ Contents
       * [Using Arrays](#using-arrays)
   * [Commands](#commands)
       * [`seth --abi-decode`]
+      * [`seth --calldata-decode`]
       * [`seth --from-ascii`]
       * [`seth --from-bin`]
       * [`seth --from-wei`]
-      * [`seth --to-wei`]
+      * [`seth --to-address`]
+      * [`seth --to-bytes32`]
       * [`seth --to-int256`]
       * [`seth --to-uint256`]
-      * [`seth --to-bytes32`]
-      * [`seth --to-address`]
-      * [`seth --calldata-decode`]
+      * [`seth --to-wei`]
       * [`seth age`]
       * [`seth balance`]
       * [`seth block`]
@@ -338,6 +338,12 @@ Extract return values from hex data.
 
 Decodes `<hexdata>` according to `<out-types>` (`<in-types>` are ignored).
 
+### `seth --calldata-decode`
+
+Decodes a calldata bytestring into a list of input arguments.
+
+    seth --calldata-decode <signature> <hexstring>
+
 ### `seth --from-ascii`
 
 Convert text data into hex data.
@@ -360,13 +366,17 @@ Convert a wei amount into another unit (ETH by default).
 
 The unit may be `wei`, `gwei`, `eth`, or `ether`.
 
-### `seth --to-wei`
+### `seth --to-address`
 
-Convert an ETH amount into wei.
+Convert an address into a checksummed address.
 
-    seth --to-wei <value> [<unit>]
+    seth --to-address <address>
 
-The unit may be `wei`, `gwei`, `eth`, or `ether`.
+### `seth --to-bytes32`
+
+Pad a hex string to the right with zeroes to 32 bytes.
+
+    seth --to-bytes32 <value>
 
 ### `seth --to-int256`
 
@@ -380,24 +390,13 @@ Convert a number into uint256 hex string with 0x prefix.
 
     seth --to-uint256 <value>
 
-### `seth --to-bytes32`
+### `seth --to-wei`
 
-Pad a hex string to the right with zeroes to 32 bytes.
+Convert an ETH amount into wei.
 
-    seth --to-bytes32 <value>
+    seth --to-wei <value> [<unit>]
 
-### `seth --to-address`
-
-Convert an address into a checksummed address.
-
-    seth --to-address <address>
-
-### `seth --calldata-decode`
-
-Decodes a calldata bytestring into a list of input arguments.
-
-    seth --calldata-decode <signature> <hexstring>
-
+The unit may be `wei`, `gwei`, `eth`, or `ether`.
 
 ### `seth age`
 
