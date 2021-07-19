@@ -165,7 +165,11 @@ you do not need to "unlock" your account in Geth or Parity.**
 Seth looks for keys in the standard directories of Geth and Parity.
 To configure a custom location for your key files, use the
 `ETH_KEYSTORE` variable or the `--keystore` flag. The
-`ETH_KEYSTORE` variable should point to a directory containing [JSON keystore wallet files](https://theethereum.wiki/w/index.php/Accounts,_Addresses,_Public_And_Private_Keys,_And_Tokens). Use `seth accounts` or `seth ls` to list out all wallets in the directory.
+`ETH_KEYSTORE` variable should point to a directory containing [JSON keystore wallet files](https://theethereum.wiki/w/index.php/Accounts,_Addresses,_Public_And_Private_Keys,_And_Tokens).
+If you would like to use an existing private key that you do not have a keystore file for,
+you may use [`ethsign import`](https://github.com/dapphub/dapptools/tree/master/src/ethsign).
+
+Use `seth accounts` or `seth ls` to list out all wallets in the directory.
 
 If your key is protected with a password, Seth will prompt you each
 time you make a transaction.  If you are confident in your computer
