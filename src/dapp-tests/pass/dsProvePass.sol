@@ -72,15 +72,6 @@ contract SolidityTest is DSTest, DSMath {
         assertEq(supply - amt, token.totalSupply());
     }
 
-    function prove_mul(uint128 x, uint128 y) public {
-        mul(x,y);
-    }
-
-    function prove_distributivity(uint120 x, uint120 y, uint120 z) public {
-        assertEq(mul(x, add(y, z)), add(mul(x, y), mul(x, z)));
-    }
-
-
     function prove_loop(uint n) public {
         uint counter = 0;
         for (uint i = 0; i < n; i++) {

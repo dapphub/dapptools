@@ -240,27 +240,7 @@ main = defaultMain $ testGroup "hevm"
           verifyContract safeAdd (Just ("add(uint256,uint256)", [AbiUIntType 256, AbiUIntType 256])) [] SymbolicS pre (Just post)
         putStrLn $ "successfully explored: " <> show (length res) <> " paths"
       ,
-        testCase "factorize 973013" $ do
-        Just factor <- solcRuntime "PrimalityCheck"
-          [i|
-          contract PrimalityCheck {
-            function factor(uint x, uint y) public pure  {
-                   require(1 < x && x < 973013 && 1 < y && y < 973013);
-                   assert(x*y != 973013);
-            }
-          }
-          |]
-        bs <- runSMTWith cvc4 $ query $ do
-          (Right _, vm) <- checkAssert defaultPanicCodes factor (Just ("factor(uint256,uint256)", [AbiUIntType 256, AbiUIntType 256])) []
-          case view (state . calldata . _1) vm of
-            SymbolicBuffer bs -> BS.pack <$> mapM (getValue.fromSized) bs
-            ConcreteBuffer _ -> error "unexpected"
-
-        let [AbiUInt 256 x, AbiUInt 256 y] = decodeAbiValues [AbiUIntType 256, AbiUIntType 256] bs
-        assertEqual "" True (x == 953 && y == 1021 || x == 1021 && y == 953)
-        ,
-
-        testCase "summary storage writes" $ do
+      testCase "summary storage writes" $ do
         Just c <- solcRuntime "A"
           [i|
           contract A {
@@ -311,7 +291,7 @@ main = defaultMain $ testGroup "hevm"
                     }
                     |]
             Just c <- yulRuntime "Neg" src
-            (Left res, _) <- runSMTWith z3 $ query $ checkAssert defaultPanicCodes c (Just ("hello(address)", [AbiAddressType])) []
+            (Left res, _) <- runSMTWith cvc4 $ query $ checkAssert defaultPanicCodes c (Just ("hello(address)", [AbiAddressType])) []
             putStrLn $ "successfully explored: " <> show (length res) <> " paths"
         ,
 
@@ -630,7 +610,7 @@ main = defaultMain $ testGroup "hevm"
                 |]
           Just c <- solcRuntime "C" code
 
-          Left _ <- runSMTWith z3 $ query $ do
+          Left _ <- runSMTWith cvc4 $ query $ do
             vm <- abstractVM (Just ("distributivity(uint256,uint256,uint256)", [AbiUIntType 256, AbiUIntType 256, AbiUIntType 256])) [] c SymbolicS
             verify vm Nothing Nothing (Just $ checkAssertions defaultPanicCodes)
           putStrLn "Proven"
