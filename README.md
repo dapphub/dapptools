@@ -62,7 +62,7 @@ We're also happy to answer any questions at https://dapphub.chat/.
 
 ## Examples
 
-Deploy a Hello world contract and call it:
+Deploy a 'Hello World' contract and call it:
 ```sh
 export ETH_RPC_URL=https://mainnet.infura.io/v3/$YOUR_API_KEY
 export ETH_FROM=$YOUR_ADDRESS
@@ -77,7 +77,7 @@ export ETH_RPC_URL=https://mainnet.infura.io/v3/$YOUR_API_KEY
 seth run-tx $(seth block latest transactions | jq .'[0]' -r) --debug
 ```
 
-If Vitaliks next transaction were a contract deployment, calculate the address it would be deployed at:
+If Vitalik's next transaction were a contract deployment, calculate the address it would be deployed at:
 ```
 export ETH_RPC_URL=https://mainnet.infura.io/v3/$YOUR_API_KEY
 dapp address 0xab5801a7d398351b8be11c439e05c5b3259aec9b $(seth nonce 0xab5801a7d398351b8be11c439e05c5b3259aec9b)
