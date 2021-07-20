@@ -60,14 +60,21 @@ Contents
       * [`seth --from-ascii`]
       * [`seth --from-bin`]
       * [`seth --from-wei`]
+      * [`seth --max-int`]
+      * [`seth --max-uint`]
+      * [`seth --min-int`]
       * [`seth --to-address`]
+      * [`seth --to-ascii`]
       * [`seth --to-bytes32`]
+      * [`seth --to-dec`]
+      * [`seth --to-hex`]
       * [`seth --to-int256`]
       * [`seth --to-uint256`]
       * [`seth --to-wei`]
       * [`seth age`]
       * [`seth balance`]
       * [`seth block`]
+      * [`seth block-number`]
       * [`seth bundle-source`]
       * [`seth call`]
       * [`seth calldata`]
@@ -366,17 +373,59 @@ Convert a wei amount into another unit (ETH by default).
 
 The unit may be `wei`, `gwei`, `eth`, or `ether`.
 
+### `seth --max-int`
+
+Returns the max signed integer with the specified number of bits.
+
+    seth --max-int [<bits>]
+
+Defaults to 256 bits.
+
+### `seth --max-uint`
+
+Returns the max unsigned integer with the specified number of bits.
+
+    seth --max-uint [<bits>]
+
+Defaults to 256 bits.
+
+### `seth --min-int`
+
+Returns the min signed integer with the specified number of bits.
+
+    seth --max-uint [<bits>]
+
+Defaults to 256 bits.
+
 ### `seth --to-address`
 
 Convert an address into a checksummed address.
 
     seth --to-address <address>
 
+### `seth --to-ascii`
+
+Convert hex data into text data.
+
+    seth --to-ascii <hexdata>
+
 ### `seth --to-bytes32`
 
 Pad a hex string to the right with zeroes to 32 bytes.
 
     seth --to-bytes32 <value>
+
+### `seth --to-dec`
+
+Convert a hex value with 0x prefix into a decimal number.
+
+    seth --to-dec <hexvalue>
+
+### `seth --to-hex`
+
+Convert a decimal number into a hex value.
+
+    seth --to-hex <value>
 
 ### `seth --to-int256`
 
@@ -418,7 +467,13 @@ Print a table of information about a specific block.
 
 If `<field>` is given, print only the value of that field.
 
-The `<block>` may be either a block hash or a block number.
+The `<block>` may be either `latest`, a block hash, or a block number.
+
+### `seth block-number`
+
+Returns the latest block number.
+
+    seth block-number
 
 ### `seth bundle-source`
 
