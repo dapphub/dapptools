@@ -2,16 +2,16 @@
 
 Hello!
 
-`dapptools` is a suite of Ethereum focused CLI tools following the unix design philosophy,
+`dapptools` is a suite of Ethereum focused CLI tools following the Unix design philosophy,
 favoring composability, configurability and extensibility.
 
 This repository contains the source code for several programs
 hand-crafted and maintained by DappHub, along with dependency management, courtesy of Nix.
 
-- [dapp](./src/dapp) - all you need Ethereum development tool. Build, test, fuzz, formally verify, debug & deploy solidity contracts.
+- [dapp](./src/dapp) - All you need Ethereum development tool. Build, test, fuzz, formally verify, debug & deploy solidity contracts.
 - [seth](./src/seth) - Ethereum CLI. Query contracts, send transactions, follow logs, slice & dice data.
 - [hevm](./src/hevm) - Testing oriented EVM implementation. Debug, fuzz, or symbolically execute code against local or mainnet state.
-- [ethsign](./src/ethsign) - sign Ethereum transactions from a local keystore or hardware wallet.
+- [ethsign](./src/ethsign) - Sign Ethereum transactions from a local keystore or hardware wallet.
 
 ## Installation
 
@@ -51,10 +51,10 @@ Most functionality is available out of the box, but for symbolic execution you w
 
 For more information about the tools, consult the individual README pages:
 
-[seth](./src/seth/README.md)
-[dapp](./src/dapp/README.md)
-[hevm](./src/dapp/README.md)
-[ethsign](./src/ethsign/README.md)
+- [seth](./src/seth/README.md)
+- [dapp](./src/dapp/README.md)
+- [hevm](./src/dapp/README.md)
+- [ethsign](./src/ethsign/README.md)
 
 or use the `--help` flag for any tool.
 
@@ -62,7 +62,7 @@ We're also happy to answer any questions at https://dapphub.chat/.
 
 ## Examples
 
-Deploy a Hello world contract and call it:
+Deploy a 'Hello World' contract and call it:
 ```sh
 export ETH_RPC_URL=https://mainnet.infura.io/v3/$YOUR_API_KEY
 export ETH_FROM=$YOUR_ADDRESS
@@ -77,7 +77,7 @@ export ETH_RPC_URL=https://mainnet.infura.io/v3/$YOUR_API_KEY
 seth run-tx $(seth block latest transactions | jq .'[0]' -r) --debug
 ```
 
-If Vitaliks next transaction were a contract deployment, calculate the address it would be deployed at:
+If Vitalik's next transaction were a contract deployment, calculate the address it would be deployed at:
 ```
 export ETH_RPC_URL=https://mainnet.infura.io/v3/$YOUR_API_KEY
 dapp address 0xab5801a7d398351b8be11c439e05c5b3259aec9b $(seth nonce 0xab5801a7d398351b8be11c439e05c5b3259aec9b)
@@ -94,5 +94,4 @@ hevm symbolic --address 0x6b175474e89094c44da98b954eedeac495271d0f --rpc $ETH_RP
 Contributions are always welcome! You may be interested in the 
 [architecture](./ARCHITECTURE.md) of this repository.
 
----
 [![built with nix](https://builtwithnix.org/badge.svg)](https://builtwithnix.org)

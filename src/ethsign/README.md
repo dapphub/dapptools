@@ -1,6 +1,6 @@
 # Ethsign
 
-Sign Ethereum transactions using a JSON keyfile or hardware wallet.
+Sign Ethereum transactions using a JSON keystore or hardware wallet.
 
 ## Usage
 
