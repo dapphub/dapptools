@@ -1,11 +1,10 @@
-Seth
-========================================================================
+# Seth
 
 Seth is an Ethereum client tool—like a "MetaMask for the command
 line"—maintained by [the DappHub collective].
 
-:older_woman: If you're a **command-line hacker**, Seth will make you
-go *"It's a Unix system—I know this!"*
+:older*woman: If you're a **command-line hacker**, Seth will make you
+go *"It's a Unix system—I know this!"\_
 
 :fax: If you're doing **blockchain automation**, Seth is an excellent
 base for deploy scripts, integration tests, and bots.
@@ -17,9 +16,9 @@ seth supports signing transactions with [Ledger Nano S] or Trezor
 hardware wallets—even if you use a remote RPC node like Infura's.
 
 > "One indicator I look for in a healthy open source project is how
-  many useful tools come out of its team as a side effect of their
-  efforts."
-  —[`@danfinlay`](https://twitter.com/danfinlay/status/942909341044162560)
+> many useful tools come out of its team as a side effect of their
+> efforts."
+> —[`@danfinlay`](https://twitter.com/danfinlay/status/942909341044162560)
 >
 > "Looks like a great set of CLI tools, very devopsy." —Andreas Antonopolous
 >
@@ -36,91 +35,88 @@ hardware wallets—even if you use a remote RPC node like Infura's.
 </div>
 <br />
 
-Contents
-------------------------------------------------------------------------
+## Contents
 
-  * [Installing](#installing)
-  * [Configuration](#configuration)
-      * [Example `.sethrc` file](#example-sethrc-file)
-      * [Connecting to the blockchain](#connecting-to-the-blockchain)
-      * [Key management and signing](#key-management-and-signing)
-      * [Hardware wallets](#hardware-wallets)
-      * [Your address](#your-address)
-  * [Basic usage: a tutorial](#basic-usage-a-tutorial)
-      * [Ether transactions](#ether-transactions)
-      * [Helper commands](#helper-commands)
-      * [Checking ether balances](#checking-ether-balances)
-      * [Reading from contracts](#reading-from-contracts)
-      * [Transacting with contracts](#transacting-with-contracts)
-      * [Using Strings](#using-strings)
-      * [Using Arrays](#using-arrays)
-  * [Commands](#commands)
-      * [`seth --abi-decode`]
-      * [`seth --calldata-decode`]
-      * [`seth --from-ascii`]
-      * [`seth --from-bin`]
-      * [`seth --from-wei`]
-      * [`seth --max-int`]
-      * [`seth --max-uint`]
-      * [`seth --min-int`]
-      * [`seth --to-address`]
-      * [`seth --to-ascii`]
-      * [`seth --to-bytes32`]
-      * [`seth --to-dec`]
-      * [`seth --to-hex`]
-      * [`seth --to-int256`]
-      * [`seth --to-uint256`]
-      * [`seth --to-wei`]
-      * [`seth age`]
-      * [`seth balance`]
-      * [`seth block`]
-      * [`seth block-number`]
-      * [`seth bundle-source`]
-      * [`seth call`]
-      * [`seth calldata`]
-      * [`seth chain`]
-      * [`seth chain-id`]
-      * [`seth code`]
-      * [`seth debug`]
-      * [`seth estimate`]
-      * [`seth etherscan-source`]
-      * [`seth events`]
-      * [`seth gas-price`]
-      * [`seth help`]
-      * [`seth keccak`]
-      * [`seth logs`]
-      * [`seth ls`]
-      * [`seth mktx`]
-      * [`seth nonce`]
-      * [`seth publish`]
-      * [`seth receipt`]
-      * [`seth run-tx`]
-      * [`seth send`]
-      * [`seth sign`]
-      * [`seth storage`]
-      * [`seth tx`]
+- [Installing](#installing)
+- [Configuration](#configuration)
+  - [Example `.sethrc` file](#example-sethrc-file)
+  - [Connecting to the blockchain](#connecting-to-the-blockchain)
+  - [Key management and signing](#key-management-and-signing)
+  - [Hardware wallets](#hardware-wallets)
+  - [Your address](#your-address)
+- [Basic usage: a tutorial](#basic-usage-a-tutorial)
+  - [Ether transactions](#ether-transactions)
+  - [Helper commands](#helper-commands)
+  - [Checking ether balances](#checking-ether-balances)
+  - [Reading from contracts](#reading-from-contracts)
+  - [Transacting with contracts](#transacting-with-contracts)
+  - [Using Strings](#using-strings)
+  - [Using Arrays](#using-arrays)
+- [Commands](#commands)
+  - [`seth --abi-decode`]
+  - [`seth --calldata-decode`]
+  - [`seth --from-ascii`]
+  - [`seth --from-bin`]
+  - [`seth --from-wei`]
+  - [`seth --max-int`]
+  - [`seth --max-uint`]
+  - [`seth --min-int`]
+  - [`seth --to-address`]
+  - [`seth --to-ascii`]
+  - [`seth --to-bytes32`]
+  - [`seth --to-dec`]
+  - [`seth --to-hex`]
+  - [`seth --to-int256`]
+  - [`seth --to-uint256`]
+  - [`seth --to-wei`]
+  - [`seth age`]
+  - [`seth balance`]
+  - [`seth block`]
+  - [`seth block-number`]
+  - [`seth bundle-source`]
+  - [`seth call`]
+  - [`seth calldata`]
+  - [`seth chain`]
+  - [`seth chain-id`]
+  - [`seth code`]
+  - [`seth debug`]
+  - [`seth estimate`]
+  - [`seth etherscan-source`]
+  - [`seth events`]
+  - [`seth gas-price`]
+  - [`seth help`]
+  - [`seth keccak`]
+  - [`seth logs`]
+  - [`seth ls`]
+  - [`seth mktx`]
+  - [`seth nonce`]
+  - [`seth publish`]
+  - [`seth receipt`]
+  - [`seth run-tx`]
+  - [`seth send`]
+  - [`seth sign`]
+  - [`seth storage`]
+  - [`seth tx`]
 
 <br />
 
-Installing
-------------------------------------------------------------------------
+## Installing
 
 Seth is distributed as part of the [Dapp
 tools](https://github.com/dapphub/dapptools) suite.
 
-Configuration
-------------------------------------------------------------------------
+## Configuration
 
 Seth has options that can be specified via command-line flags
 or environment variables.
 
 Seth looks in the following places for configuration, in descending order of precedence:
 
-* `./.sethrc`
-* `XDG_CONFIG_HOME/seth/sethrc`
-* `~/.sethrc`
+- `./.sethrc`
+- `XDG_CONFIG_HOME/seth/sethrc`
+- `~/.sethrc`
 
-The configuration is loaded as a shell script (Bash 4 syntax).  This is a convenient place to set default
+The configuration is loaded as a shell script (Bash 4 syntax). This is a convenient place to set default
 options by exporting environment variables.
 
 ### Example `.sethrc` file
@@ -154,7 +150,7 @@ or the flag `--rpc-url`.
 
 Alternatively, you can use a default remote node (operated by
 [Infura]) using the variable `SETH_CHAIN` or the flag `--chain` (or
-`-C`).  Allowed values: `ethlive` (aka `mainnet`), `ropsten`, `kovan`, `rinkeby`, and `goerli`.
+`-C`). Allowed values: `ethlive` (aka `mainnet`), `ropsten`, `kovan`, `rinkeby`, and `goerli`.
 
 Note: If you frequently use Seth with the Infura nodes, you should
 [sign up for an Infura API key](https://infura.io/register) and use your
@@ -165,8 +161,8 @@ custom URL:
 ### Key management and signing
 
 By default, Seth does not use the RPC node for key management or
-signing transactions.  Instead, it uses keys stored on your machine,
-as well as your Ledger Nano S hardware wallet (if present).  **Thus,
+signing transactions. Instead, it uses keys stored on your machine,
+as well as your Ledger Nano S hardware wallet (if present). **Thus,
 you do not need to "unlock" your account in Geth or Parity.**
 
 Seth looks for keys in the standard directories of Geth and Parity.
@@ -179,7 +175,7 @@ you may use [`ethsign import`](https://github.com/dapphub/dapptools/tree/master/
 Use `seth accounts` or `seth ls` to list out all wallets in the directory.
 
 If your key is protected with a password, Seth will prompt you each
-time you make a transaction.  If you are confident in your computer
+time you make a transaction. If you are confident in your computer
 security, and you want to (say) run a bot script, you can set the
 `ETH_PASSWORD` variable (flag: `--password`) to point to a file
 containing your password.
@@ -199,7 +195,7 @@ Seth will scan for [Ledger Nano S] hardware wallets by default.
 The Ledger wallet is only available to Seth while it is unlocked, in
 the Ethereum app, and with **browser mode off**.
 
-On Linux, you may have to enable some USB permissions.  See the
+On Linux, you may have to enable some USB permissions. See the
 [Ledger Wallet Linux instructions].
 
 When you use a sending address that belongs to the hardware wallet,
@@ -216,8 +212,7 @@ sending address from the `ETH_FROM` variable or the `--from` flag.
 
 <br />
 
-Basic usage: a tutorial
-------------------------------------------------------------------------
+## Basic usage: a tutorial
 
 This section assumes that you have something like the
 [example `.sethrc` file](#example-sethrc-file) specifying how to
@@ -240,12 +235,12 @@ Foundation's donation address]:
 ### Helper commands
 
 The `$(...)` shell syntax for ["command substitution"] is very useful
-with Seth.  It allows the output of one command to become a parameter
-to another.  An example follows.
+with Seth. It allows the output of one command to become a parameter
+to another. An example follows.
 
 Generally, you don't transact in terms of wei amounts, but in
-fractional amounts of ether.  You can convert an ether amount into a
-wei amount using [`seth --to-wei`].  Here, we send 1.5
+fractional amounts of ether. You can convert an ether amount into a
+wei amount using [`seth --to-wei`]. Here, we send 1.5
 ETH:
 
     $ fund=0xfB6916095ca1df60bB79Ce92cE3Ea74c37c5d359
@@ -338,8 +333,7 @@ to use variables (`$FOO`) in them.
 
 <br />
 
-Commands
-========================================================================
+# Commands
 
 ### `seth --abi-decode`
 
@@ -614,8 +608,7 @@ To use a JSON ABI file:
 
     export SETH_ABI=$(seth --decorate-abi $(cat abi.json))
 
-With `--follow`, the command blocks waiting for new events (like `tail
--f`).
+With `--follow`, the command blocks waiting for new events (like `tail -f`).
 
 See also [`seth logs`] which does not decode events.
 
@@ -730,7 +723,7 @@ Otherwise, wait for the receipt and print as with [`seth receipt`].
 
 With `--status` (which excludes `--async`), check the status field of
 the transaction receipt and exit with an error code if the transaction
-failed.  This is a post-Byzantium feature and will soon become the
+failed. This is a post-Byzantium feature and will soon become the
 default behavior.
 
 ### `seth sign`
@@ -741,7 +734,6 @@ Sign hexdata with the `'\x19Ethereum Signed Message:\n'` prefix using the `$ETH_
 account.
 
 See [`ethsign`](../ethsign/README.md) for more signing and key management options.
-
 
 ### `seth storage`
 
@@ -757,23 +749,13 @@ Print a table of information about a transaction.
 
 Show all fields unless `<field>` is given.
 
-
-
-
-[the DappHub collective]: https://dapphub.com
-
-[Ledger Nano S]: https://www.ledgerwallet.com/products/ledger-nano-s
-
-[Infura]: https://infura.io
-
+[the dapphub collective]: https://dapphub.com
+[ledger nano s]: https://www.ledgerwallet.com/products/ledger-nano-s
+[infura]: https://infura.io
 ["command substitution"]: https://www.gnu.org/software/bash/manual/html_node/Command-Substitution.html
-
-[Ethereum Foundation's donation address]: https://www.ethereum.org/donate
-
-[the Nix package manager]: https://nixos.org/nix
-
-[MakerDAO CDP utility]: https://github.com/makerdao/dai-cli
-
+[ethereum foundation's donation address]: https://www.ethereum.org/donate
+[the nix package manager]: https://nixos.org/nix
+[makerdao cdp utility]: https://github.com/makerdao/dai-cli
 [`seth --abi-decode`]: #seth---abi-decode
 [`seth --from-ascii`]: #seth---from-ascii
 [`seth --from-bin`]: #seth---from-bin
@@ -783,7 +765,14 @@ Show all fields unless `<field>` is given.
 [`seth --to-uint256`]: #seth---to-uint256
 [`seth --to-bytes32`]: #seth---to-bytes32
 [`seth --to-address`]: #seth---to-address
+[`seth --max-int`]: #seth---max-int
+[`seth --max-uint`]: #seth---max-uint
+[`seth --min-int`]: #seth---min-int
+[`seth --to-ascii`]: #seth---to-ascii
+[`seth --to-dec`]: #seth---to-dec
+[`seth --to-hex`]: #seth---to-hex
 [`seth --calldata-decode`]: #seth---calldata-decode
+[`seth block-number`]: #seth-block-number
 [`seth gas-price`]: #seth-gas-price
 [`seth abi`]: #seth-abi
 [`seth age`]: #seth-age
@@ -814,14 +803,10 @@ Show all fields unless `<field>` is given.
 [`seth sign`]: #seth-sign
 [`seth storage`]: #seth-storage
 [`seth tx`]: #seth-tx
-
-[`token`]: https://github.com/dapphub/token
-
-[MakerDAO]: https://makerdao.com
-[Dai stablecoin system]: https://makerdao.com
-[Dai]: https://makerdao.com
-[OasisDEX]: https://oasisdex.com
+[makerdao]: https://makerdao.com
+[dai stablecoin system]: https://makerdao.com
+[dai]: https://makerdao.com
+[oasisdex]: https://oasisdex.com
 [`ethsign`]: https://github.com/dapphub/dapptools/blob/master/src/ethsign/README.md
 [`hevm`]: https://github.com/dapphub/dapptools/blob/master/src/hevm/README.md
-
-[Ledger Wallet Linux instructions]: https://ledger.zendesk.com/hc/en-us/articles/115005165269-What-if-Ledger-Wallet-is-not-recognized-on-Linux-
+[ledger wallet linux instructions]: https://ledger.zendesk.com/hc/en-us/articles/115005165269-What-if-Ledger-Wallet-is-not-recognized-on-Linux-
