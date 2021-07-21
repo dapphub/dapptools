@@ -3,8 +3,8 @@
 Seth is an Ethereum client tool—like a "MetaMask for the command
 line"—maintained by [the DappHub collective].
 
-:older*woman: If you're a **command-line hacker**, Seth will make you
-go *"It's a Unix system—I know this!"\_
+:older_woman: If you're a **command-line hacker**, Seth will make you
+go "It's a Unix system—I know this!"
 
 :fax: If you're doing **blockchain automation**, Seth is an excellent
 base for deploy scripts, integration tests, and bots.
