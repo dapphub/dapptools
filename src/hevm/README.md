@@ -91,7 +91,7 @@ Available options:
   --arg STRING...          Values to encode
   --debug                  Run interactively
   --get-models             Print example testcase for each execution path
-  --smttimeout INTEGER     Timeout given to SMT solver in milliseconds
+  --smttimeout INTEGER     Timeout given to SMT solver in milliseconds (default: 600000)
   --max-iterations INTEGER Number of times we may revisit a particular branching point
   --solver TEXT            Used SMT solver: z3 (default) or cvc4
   --smtdebug               Print smt queries sent to the solver
