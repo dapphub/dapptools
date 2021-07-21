@@ -5,6 +5,7 @@
 ### Changed
 
 - The configuration variable `DAPP_TEST_BALANCE_CREATE` has been renamed to `DAPP_TEST_BALANCE`
+- Default `smttimeout` has been increased to 10 minutes.
 
 ## 0.47.0 - 2021-07-01
 
