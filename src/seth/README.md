@@ -56,18 +56,25 @@ Contents
       * [Using Arrays](#using-arrays)
   * [Commands](#commands)
       * [`seth --abi-decode`]
+      * [`seth --calldata-decode`]
       * [`seth --from-ascii`]
       * [`seth --from-bin`]
       * [`seth --from-wei`]
-      * [`seth --to-wei`]
+      * [`seth --max-int`]
+      * [`seth --max-uint`]
+      * [`seth --min-int`]
+      * [`seth --to-address`]
+      * [`seth --to-ascii`]
+      * [`seth --to-bytes32`]
+      * [`seth --to-dec`]
+      * [`seth --to-hex`]
       * [`seth --to-int256`]
       * [`seth --to-uint256`]
-      * [`seth --to-bytes32`]
-      * [`seth --to-address`]
-      * [`seth --calldata-decode`]
+      * [`seth --to-wei`]
       * [`seth age`]
       * [`seth balance`]
       * [`seth block`]
+      * [`seth block-number`]
       * [`seth bundle-source`]
       * [`seth call`]
       * [`seth calldata`]
@@ -342,6 +349,12 @@ Extract return values from hex data.
 
 Decodes `<hexdata>` according to `<out-types>` (`<in-types>` are ignored).
 
+### `seth --calldata-decode`
+
+Decodes a calldata bytestring into a list of input arguments.
+
+    seth --calldata-decode <signature> <hexstring>
+
 ### `seth --from-ascii`
 
 Convert text data into hex data.
@@ -364,13 +377,59 @@ Convert a wei amount into another unit (ETH by default).
 
 The unit may be `wei`, `gwei`, `eth`, or `ether`.
 
-### `seth --to-wei`
+### `seth --max-int`
 
-Convert an ETH amount into wei.
+Returns the max signed integer with the specified number of bits.
 
-    seth --to-wei <value> [<unit>]
+    seth --max-int [<bits>]
 
-The unit may be `wei`, `gwei`, `eth`, or `ether`.
+Defaults to 256 bits.
+
+### `seth --max-uint`
+
+Returns the max unsigned integer with the specified number of bits.
+
+    seth --max-uint [<bits>]
+
+Defaults to 256 bits.
+
+### `seth --min-int`
+
+Returns the min signed integer with the specified number of bits.
+
+    seth --max-uint [<bits>]
+
+Defaults to 256 bits.
+
+### `seth --to-address`
+
+Convert an address into a checksummed address.
+
+    seth --to-address <address>
+
+### `seth --to-ascii`
+
+Convert hex data into text data.
+
+    seth --to-ascii <hexdata>
+
+### `seth --to-bytes32`
+
+Pad a hex string to the right with zeroes to 32 bytes.
+
+    seth --to-bytes32 <value>
+
+### `seth --to-dec`
+
+Convert a hex value with 0x prefix into a decimal number.
+
+    seth --to-dec <hexvalue>
+
+### `seth --to-hex`
+
+Convert a decimal number into a hex value.
+
+    seth --to-hex <value>
 
 ### `seth --to-int256`
 
@@ -384,24 +443,13 @@ Convert a number into uint256 hex string with 0x prefix.
 
     seth --to-uint256 <value>
 
-### `seth --to-bytes32`
+### `seth --to-wei`
 
-Pad a hex string to the right with zeroes to 32 bytes.
+Convert an ETH amount into wei.
 
-    seth --to-bytes32 <value>
+    seth --to-wei <value> [<unit>]
 
-### `seth --to-address`
-
-Convert an address into a checksummed address.
-
-    seth --to-address <address>
-
-### `seth --calldata-decode`
-
-Decodes a calldata bytestring into a list of input arguments.
-
-    seth --calldata-decode <signature> <hexstring>
-
+The unit may be `wei`, `gwei`, `eth`, or `ether`.
 
 ### `seth age`
 
@@ -423,7 +471,13 @@ Print a table of information about a specific block.
 
 If `<field>` is given, print only the value of that field.
 
-The `<block>` may be either a block hash or a block number.
+The `<block>` may be either `latest`, a block hash, or a block number.
+
+### `seth block-number`
+
+Returns the latest block number.
+
+    seth block-number
 
 ### `seth bundle-source`
 
