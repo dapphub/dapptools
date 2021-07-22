@@ -516,12 +516,14 @@ assert cmd = do
       preState <- symvmFromCommand cmd
       let errCodes = fromMaybe defaultPanicCodes (assertions cmd)
       verify preState (maxIterations cmd) rpcinfo (Just $ checkAssertions errCodes) >>= \case
-        Right tree -> do
+        Cex tree -> do
           io $ putStrLn "Assertion violation found."
           showCounterexample preState maybesig
           treeShowing tree
           io $ exitWith (ExitFailure 1)
-        Left tree -> do
+        Perhaps -> do
+          io $ exitWith (ExitFailure 1)
+        Qed tree -> do
           io $ putStrLn $ "Explored: " <> show (length tree)
                        <> " branches without assertion violations"
           treeShowing tree

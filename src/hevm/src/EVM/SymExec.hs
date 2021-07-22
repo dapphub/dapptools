@@ -34,6 +34,10 @@ import Data.Text (Text, splitOn, unpack)
 import qualified Control.Monad.State.Class as State
 import Control.Applicative
 
+data VerifyResult = Qed (Tree BranchInfo)
+                  | Cex (Tree BranchInfo)
+                  | Perhaps
+
 -- | Convenience functions for generating large symbolic byte strings
 sbytes32, sbytes128, sbytes256, sbytes512, sbytes1024 :: Query ([SWord 8])
 sbytes32 = toBytes <$> freshVar_ @ (WordN 256)
@@ -151,7 +155,7 @@ data BranchInfo = BranchInfo
 
 doInterpret :: Fetch.Fetcher -> Maybe Integer -> VM -> Query (Tree BranchInfo)
 doInterpret fetcher maxIter vm = let
-      f (vm', cs) = Node (BranchInfo (if length cs == 0 then vm' else vm) Nothing) cs
+      f (vm', cs) = Node (BranchInfo (if null cs then vm' else vm) Nothing) cs
     in f <$> interpret' fetcher maxIter vm
 
 interpret' :: Fetch.Fetcher -> Maybe Integer -> VM -> Query (VM, [(Tree BranchInfo)])
@@ -239,7 +243,7 @@ interpret fetcher maxIter =
           case q of
             PleaseAskSMT _ _ continue -> do
               codelocation <- getCodeLocation <$> get
-              iteration <- num <$> fromMaybe 0 <$> use (iterations . at codelocation)
+              iteration <- num . fromMaybe 0 <$> use (iterations . at codelocation)
 
               -- if this is the first time we are branching at this point,
               -- explore both branches without consulting SMT.
@@ -266,7 +270,7 @@ maxIterationsReached vm (Just maxIter) =
 type Precondition = VM -> SBool
 type Postcondition = (VM, VM) -> SBool
 
-checkAssert :: [Word256] -> ByteString -> Maybe (Text, [AbiType]) -> [String] -> Query (Either (Tree BranchInfo) (Tree BranchInfo), VM)
+checkAssert :: [Word256] -> ByteString -> Maybe (Text, [AbiType]) -> [String] -> Query (VerifyResult, VM)
 checkAssert errs c signature' concreteArgs = verifyContract c signature' concreteArgs SymbolicS (const sTrue) (Just $ checkAssertions errs)
 
 {- |Checks if an assertion violation has been encountered
@@ -305,7 +309,7 @@ allPanicCodes = [ 0x00, 0x01, 0x11, 0x12, 0x21, 0x22, 0x31, 0x32, 0x41, 0x51 ]
 panicMsg :: Word256 -> ByteString
 panicMsg err = (selector "Panic(uint256)") <> (encodeAbiValue $ AbiUInt 256 err)
 
-verifyContract :: ByteString -> Maybe (Text, [AbiType]) -> [String] -> StorageModel -> Precondition -> Maybe Postcondition -> Query (Either (Tree BranchInfo) (Tree BranchInfo), VM)
+verifyContract :: ByteString -> Maybe (Text, [AbiType]) -> [String] -> StorageModel -> Precondition -> Maybe Postcondition -> Query (VerifyResult, VM)
 verifyContract theCode signature' concreteArgs storagemodel pre maybepost = do
     preStateRaw <- abstractVM signature' concreteArgs theCode  storagemodel
     -- add the pre condition to the pathconditions to ensure that we are only exploring valid paths
@@ -349,7 +353,7 @@ leaves (Node _ xs) = concatMap leaves xs
 -- | Symbolically execute the VM and check all endstates against the postcondition, if available.
 -- Returns `Right (Tree BranchInfo)` if the postcondition can be violated, or
 -- or `Left (Tree BranchInfo)`, if the postcondition holds for all endstates.
-verify :: VM -> Maybe Integer -> Maybe (Fetch.BlockNumber, Text) -> Maybe Postcondition -> Query (Either (Tree BranchInfo) (Tree BranchInfo))
+verify :: VM -> Maybe Integer -> Maybe (Fetch.BlockNumber, Text) -> Maybe Postcondition -> Query VerifyResult
 verify preState maxIter rpcinfo maybepost = do
   smtState <- queryState
   tree <- doInterpret (Fetch.oracle (Just smtState) rpcinfo False) maxIter preState
@@ -365,14 +369,14 @@ verify preState maxIter rpcinfo maybepost = do
       io $ putStrLn "checking postcondition..."
       checkSat >>= \case
         Unk -> do io $ putStrLn "postcondition query timed out"
-                  return $ Left tree
+                  return Perhaps
         Unsat -> do io $ putStrLn "Q.E.D."
-                    return $ Left tree
-        Sat -> return $ Right tree
+                    return $ Qed tree
+        Sat -> return $ Cex tree
         DSat _ -> error "unexpected DSAT"
 
     Nothing -> do io $ putStrLn "Nothing to check"
-                  return $ Left tree
+                  return $ Qed tree
 
 -- | Compares two contract runtimes for trace equivalence by running two VMs and comparing the end states.
 equivalenceCheck :: ByteString -> ByteString -> Maybe Integer -> Maybe (Text, [AbiType]) -> Query (Either ([VM], [VM]) VM)
