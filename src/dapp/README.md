@@ -197,9 +197,7 @@ Failure: proveFail_withdraw(uint256)
 
 which demonstrates that if we give the password `42`, it is possible to withdraw from the vault.
 
-When using symbolic execution for more complex tests, you may begin running into the SMT timeout, which bounds how long the hevm will
-try to execute a particular part of your code before bailing. If your tests begin failing with "`SMT Query Timeout!`", consider increasing
-it using the `--smttimeout` flag or `DAPP_TEST_SMTTIMEOUT` environment variable (the default timeout is 60000 ms).
+The symbolic execution engine is backed by an SMT solver. When symbolically executing more complex tests you may encounter test failures with an `SMT Query Timeout` message. In this case, consider increasing the smt timeout using the `--smttimeout` flag or `DAPP_TEST_SMTTIMEOUT` environment variable (the default timeout is 60000 ms). Note that this timeout is per smt query not per test, and that each test may execute multiple queries (at least one query for each potential path through the test method).
 
 For more reading on property based testing and symbolic execution, see [this tutorial on the Ethereum Foundation blog](https://fv.ethereum.org/2020/12/11/symbolic-execution-with-ds-test/).
 
