@@ -700,7 +700,7 @@ symRun opts@UnitTestOptions{..} concreteVm testName types = do
               then Right ()
               else Left (vm', prettyCd)
           Unsat -> return $ Right ()
-          Unk -> return $ Left (vm', "unknown; query timeout")
+          Unk -> return $ Left (vm', "SMT Query Timeout! Try setting a higher timeout with the --smttimeout flag or the DAPP_TEST_SMTTIMEOUT environment variable.")
           DSat _ -> error "Unexpected DSat"
 
     if null $ lefts results

@@ -197,6 +197,10 @@ Failure: proveFail_withdraw(uint256)
 
 which demonstrates that if we give the password `42`, it is possible to withdraw from the vault.
 
+When using symbolic execution for more complex tests, you may begin running into the SMT timeout, which bounds how long the hevm will
+try to execute a particular part of your code before bailing. If your tests begin failing with "`SMT Query Timeout!`", consider increasing
+it using the `--smttimeout` flag or `DAPP_TEST_SMTTIMEOUT` environment variable (the default timeout is 60000 ms).
+
 For more reading on property based testing and symbolic execution, see [this tutorial on the Ethereum Foundation blog](https://fv.ethereum.org/2020/12/11/symbolic-execution-with-ds-test/).
 
 ### Invariant testing
@@ -300,7 +304,7 @@ variables](../hevm/README.md#environment-variables).
 | `DAPP_TEST_VERBOSITY`      | `0`                        | Sets how much detail `dapp test` logs. Verbosity `1` shows traces for failing tests, `2` shows logs for all tests, `3` shows traces for all tests  |
 | `DAPP_TEST_FFI `           | `0`                        | Allow use of the ffi cheatcode in tests (`0` or `1`)                                                                                               |
 | `DAPP_TEST_FUZZ_RUNS`      | `200`                      | How many iterations to use for each property test in your project                                                                                  |
-| `DAPP_TEST_SMTTIMEOUT`     | `600000`                   | Timeout passed to the smt solver for symbolic tests (in ms, and per smt query)                                                                     |
+| `DAPP_TEST_SMTTIMEOUT`     | `60000`                    | Timeout passed to the smt solver for symbolic tests (in ms, and per smt query)                                                                     |
 | `DAPP_TEST_MAX_ITERATIONS` | n/a                        | The number of times hevm will revisit a particular branching point when symbolically executing                                                     |
 | `DAPP_TEST_SOLVER `        | `z3`                       | Solver to use for symbolic execution (`cvc4` or `z3`)                                                                                              |
 | `DAPP_TEST_MATCH `         | n/a                        | Regex used to determine test methods to run                                                                                                        |
@@ -417,7 +421,7 @@ You can override this with the `DAPP_REMAPPINGS` environment variable.
         --rpc-block <number>      block number (latest if not specified)
 
     SMT options:
-        --smttimeout <number>     timeout passed to the smt solver in ms (default 600000)
+        --smttimeout <number>     timeout passed to the smt solver in ms (default 60000)
         --solver <string>         name of the smt solver to use (either "z3" or "cvc4")
         --max-iterations <number> number of times we may revisit a particular branching point during symbolic execution
 
