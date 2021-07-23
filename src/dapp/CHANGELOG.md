@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## Unreleased
+
+### Changed
+
+- `dapp remappings` now issues a warning instead of failing with a hard error in case of mistmatched
+  package versions in the dependency tree
+
 ## [0.33.0] - 2021-07-01
 
 ### Added
