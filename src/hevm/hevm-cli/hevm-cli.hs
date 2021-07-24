@@ -420,16 +420,19 @@ equivalence cmd =
 
      void . runSMTWithTimeOut (solver cmd) (smttimeout cmd) (smtdebug cmd) . query $
        equivalenceCheck bytecodeA bytecodeB (maxIterations cmd) maybeSignature >>= \case
-         Right vm -> do io $ putStrLn "Not equal!"
-                        io $ putStrLn "Counterexample:"
-                        showCounterexample vm maybeSignature
-                        io exitFailure
-         Left (postAs, postBs) -> io $ do
+         Cex vm -> do
+           io $ putStrLn "Not equal!"
+           io $ putStrLn "Counterexample:"
+           showCounterexample vm maybeSignature
+           io exitFailure
+         Qed (postAs, postBs) -> io $ do
            putStrLn $ "Explored: " <> show (length postAs)
                        <> " execution paths of A and: "
                        <> show (length postBs) <> " paths of B."
            putStrLn "No discrepancies found."
-
+         Timeout () -> io $ do
+           putStrLn "Solver timeout!"
+           exitFailure
 
 -- cvc4 sets timeout via a commandline option instead of smtlib `(set-option)`
 runSMTWithTimeOut :: Maybe Text -> Maybe Integer -> Bool -> Symbolic a -> IO a
@@ -521,7 +524,7 @@ assert cmd = do
           showCounterexample preState maybesig
           treeShowing tree
           io $ exitWith (ExitFailure 1)
-        Perhaps -> do
+        Timeout _ -> do
           io $ exitWith (ExitFailure 1)
         Qed tree -> do
           io $ putStrLn $ "Explored: " <> show (length tree)

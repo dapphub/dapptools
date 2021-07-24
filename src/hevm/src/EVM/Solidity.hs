@@ -299,15 +299,17 @@ readSolc fp =
 yul :: Text -> Text -> IO (Maybe ByteString)
 yul contract src = do
   (json, path) <- yul' src
-  let (Just c) = json ^?! key "contracts" ^?! key path ^? key contract
-  let bytecode = c ^?! key "evm" ^?! key "bytecode" ^?! key "object" . _String
+  let (Just f) = json ^?! key "contracts" ^? key path
+      (Just c) = if not (Text.null contract) then f ^? key contract else f ^? key "object"
+      bytecode = c ^?! key "evm" ^?! key "bytecode" ^?! key "object" . _String
   pure $ toCode <$> (Just bytecode)
 
 yulRuntime :: Text -> Text -> IO (Maybe ByteString)
 yulRuntime contract src = do
   (json, path) <- yul' src
-  let (Just c) = json ^?! key "contracts" ^?! key path ^? key contract
-  let bytecode = c ^?! key "evm" ^?! key "deployedBytecode" ^?! key "object" . _String
+  let (Just f) = json ^?! key "contracts" ^? key path
+      (Just c) = if not (Text.null contract) then f ^? key contract else f ^? key "object"
+      bytecode = c ^?! key "evm" ^?! key "deployedBytecode" ^?! key "object" . _String
   pure $ toCode <$> (Just bytecode)
 
 solidity :: Text -> Text -> IO (Maybe ByteString)

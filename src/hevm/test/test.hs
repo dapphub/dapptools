@@ -22,6 +22,7 @@ import qualified Data.ByteString.Base16 as Hex
 import Test.Tasty
 import Test.Tasty.QuickCheck
 import Test.Tasty.HUnit
+import Test.Tasty.Runners
 
 import Control.Monad.State.Strict (execState, runState)
 import Control.Lens hiding (List, pre, (.>))
@@ -51,7 +52,15 @@ instance MonadFail Query where
     fail = io . fail
 
 main :: IO ()
-main = defaultMain $ testGroup "hevm"
+main = defaultMain tests
+
+-- | run a subset of tests in the repl. p is a tasty pattern:
+-- https://github.com/UnkindPartition/tasty/tree/ee6fe7136fbcc6312da51d7f1b396e1a2d16b98a#patterns
+runSubSet :: String -> IO ()
+runSubSet p = defaultMain . applyPattern p $ tests
+
+tests :: TestTree
+tests = testGroup "hevm"
   [ testGroup "ABI"
     [ testProperty "Put/get inverse" $ \x ->
         case runGetOrFail (getAbi (abiValueType x)) (runPut (putAbi x)) of
@@ -620,20 +629,29 @@ main = defaultMain $ testGroup "hevm"
     [
       testCase "yul optimized" $ do
         -- These yul programs are not equivalent: (try --calldata $(seth --to-uint256 2) for example)
-        --  A:                               B:
-        --  {                                {
-        --     calldatacopy(0, 0, 32)           calldatacopy(0, 0, 32)
-        --     switch mload(0)                  switch mload(0)
-        --     case 0 { }                       case 0 { }
-        --     case 1 { }                       case 2 { }
-        --     default { invalid() }            default { invalid() }
-        -- }                                 }
-        let aPrgm = hex "602060006000376000805160008114601d5760018114602457fe6029565b8191506029565b600191505b50600160015250"
-            bPrgm = hex "6020600060003760005160008114601c5760028114602057fe6021565b6021565b5b506001600152"
+        Just aPrgm <- yul ""
+          [i|
+          {
+              calldatacopy(0, 0, 32)
+              switch mload(0)
+              case 0 { }
+              case 1 { }
+              default { invalid() }
+          }
+          |]
+        Just bPrgm <- yul ""
+          [i|
+          {
+              calldatacopy(0, 0, 32)
+              switch mload(0)
+              case 0 { }
+              case 2 { }
+              default { invalid() }
+          }
+          |]
         runSMTWith z3 $ query $ do
-          Right _ <- equivalenceCheck aPrgm bPrgm Nothing Nothing
+          Cex _ <- equivalenceCheck aPrgm bPrgm Nothing Nothing
           return ()
-
     ]
   ]
   where
@@ -765,3 +783,5 @@ bothM f (a, a') = do
   b' <- f a'
   return (b, b')
 
+applyPattern :: String -> TestTree  -> TestTree
+applyPattern p = localOption (TestPattern (parseExpr p))

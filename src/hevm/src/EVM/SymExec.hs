@@ -16,7 +16,7 @@ import EVM.Stepper (Stepper)
 import qualified EVM.Stepper as Stepper
 import qualified Control.Monad.Operational as Operational
 import Control.Monad.State.Strict hiding (state)
-import Data.Maybe (catMaybes, fromMaybe)
+import Data.Maybe (catMaybes, fromMaybe, mapMaybe)
 import EVM.Types
 import EVM.Concrete (createAddress)
 import qualified EVM.FeeSchedule as FeeSchedule
@@ -34,9 +34,9 @@ import Data.Text (Text, splitOn, unpack)
 import qualified Control.Monad.State.Class as State
 import Control.Applicative
 
-data VerifyResult = Qed (Tree BranchInfo)
-                  | Cex (Tree BranchInfo)
-                  | Perhaps
+data ProofResult a b c = Qed a | Cex b | Timeout c
+type VerifyResult = ProofResult (Tree BranchInfo) (Tree BranchInfo) (Tree BranchInfo)
+type EquivalenceResult = ProofResult ([VM], [VM]) VM ()
 
 -- | Convenience functions for generating large symbolic byte strings
 sbytes32, sbytes128, sbytes256, sbytes512, sbytes1024 :: Query ([SWord 8])
@@ -362,6 +362,7 @@ verify preState maxIter rpcinfo maybepost = do
       let livePaths = pruneDeadPaths $ leaves tree
       -- can also do these queries individually (even concurrently!). Could save time and report multiple violations
           postC = sOr $ fmap (\postState -> (sAnd (fst <$> view constraints postState)) .&& sNot (post (preState, postState))) livePaths
+          maxReached = and $ mapMaybe (flip maxIterationsReached maxIter) livePaths
       -- is there any path which can possibly violate
       -- the postcondition?
       resetAssertions
@@ -369,9 +370,14 @@ verify preState maxIter rpcinfo maybepost = do
       io $ putStrLn "checking postcondition..."
       checkSat >>= \case
         Unk -> do io $ putStrLn "postcondition query timed out"
-                  return Perhaps
-        Unsat -> do io $ putStrLn "Q.E.D."
-                    return $ Qed tree
+                  return $ Timeout tree
+        Unsat -> do
+          if maxReached
+            then do
+              io $ putStrLn "WARNING: max iterations reached, execution halted prematurely"
+              io $ putStrLn "no postcondition violations discovered"
+            else io $ putStrLn "Q.E.D."
+          return $ Qed tree
         Sat -> return $ Cex tree
         DSat _ -> error "unexpected DSAT"
 
@@ -379,7 +385,7 @@ verify preState maxIter rpcinfo maybepost = do
                   return $ Qed tree
 
 -- | Compares two contract runtimes for trace equivalence by running two VMs and comparing the end states.
-equivalenceCheck :: ByteString -> ByteString -> Maybe Integer -> Maybe (Text, [AbiType]) -> Query (Either ([VM], [VM]) VM)
+equivalenceCheck :: ByteString -> ByteString -> Maybe Integer -> Maybe (Text, [AbiType]) -> Query EquivalenceResult
 equivalenceCheck bytecodeA bytecodeB maxiter signature' = do
   let
     bytecodeA' = if BS.null bytecodeA then BS.pack [0] else bytecodeA
@@ -432,9 +438,9 @@ equivalenceCheck bytecodeA bytecodeB maxiter signature' = do
   constrain $ sOr differingEndStates
 
   checkSat >>= \case
-     Unk -> error "solver said unknown!"
-     Sat -> return $ Right preStateA
-     Unsat -> return $ Left (leaves aVMs, leaves bVMs)
+     Unk -> return $ Timeout ()
+     Sat -> return $ Cex preStateA
+     Unsat -> return $ Qed (leaves aVMs, leaves bVMs)
      DSat _ -> error "unexpected DSAT"
 
 both' :: (a -> b) -> (a, a) -> (b, b)
