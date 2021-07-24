@@ -360,11 +360,11 @@ verify preState maxIter rpcinfo maybepost = do
   case maybepost of
     (Just post) -> do
       let livePaths = pruneDeadPaths $ leaves tree
-      -- can also do these queries individually (even concurrently!). Could save time and report multiple violations
+          -- have we hit max iterations for any path?
+          maxReached = or $ mapMaybe (flip maxIterationsReached maxIter) livePaths
+          -- is there any path which can possibly violate the postcondition?
+          -- can also do these queries individually (even concurrently!). Could save time and report multiple violations
           postC = sOr $ fmap (\postState -> (sAnd (fst <$> view constraints postState)) .&& sNot (post (preState, postState))) livePaths
-          maxReached = and $ mapMaybe (flip maxIterationsReached maxIter) livePaths
-      -- is there any path which can possibly violate
-      -- the postcondition?
       resetAssertions
       constrain postC
       io $ putStrLn "checking postcondition..."
