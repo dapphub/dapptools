@@ -5,6 +5,7 @@
 module EVM.Fetch where
 
 import Prelude hiding (Word)
+import Data.Scientific
 
 import EVM.ABI
 import EVM.Types    (Addr, w256, W256, hexText, Word, Buffer(..))
@@ -16,12 +17,12 @@ import qualified EVM
 
 import Control.Lens hiding ((.=))
 import Control.Monad.Reader
-import Control.Monad.Trans.Maybe
 import Data.SBV.Trans.Control
 import qualified Data.SBV.Internals as SBV
 import Data.SBV.Trans hiding (Word)
 import Data.Aeson
 import Data.Aeson.Lens
+import Control.Concurrent.Async
 import qualified Data.ByteString as BS
 import Data.Text (Text, unpack, pack)
 
@@ -34,6 +35,7 @@ import qualified Network.Wreq.Session as Session
 
 -- | Abstract representation of an RPC fetch request
 data RpcQuery a where
+  QueryAccount :: Addr         -> RpcQuery (BS.ByteString, W256, W256)
   QueryCode    :: Addr         -> RpcQuery BS.ByteString
   QueryBlock   ::                 RpcQuery Block
   QueryBalance :: Addr         -> RpcQuery W256
@@ -45,10 +47,10 @@ data BlockNumber = Latest | BlockNumber W256
 
 deriving instance Show (RpcQuery a)
 
-rpc :: String -> [Value] -> Value
-rpc method args = object
+rpc :: String -> [Value] -> Scientific -> Value
+rpc method args i = object
   [ "jsonrpc" .= ("2.0" :: String)
-  , "id"      .= Number 1
+  , "id"      .= Number i
   , "method"  .= method
   , "params"  .= args
   ]
@@ -79,27 +81,31 @@ fetchQuery
   -> RpcQuery a
   -> IO (Maybe a)
 fetchQuery n f q = do
-  x <- case q of
+  case q of
+    QueryAccount addr -> do
+        [m, m', m''] <- mapConcurrently (\(x, i) -> f (rpc x [toRPC addr, toRPC n] i)) [("eth_getCode", 1), ("eth_getBalance", 2), ("eth_getTransactionCount", 3)]
+        return $ liftM3 (\a b c ->
+          (hexText . view _String $ a,
+           readText . view _String $ b,
+           readText . view _String $ c)) m m' m''
     QueryCode addr -> do
-        m <- f (rpc "eth_getCode" [toRPC addr, toRPC n])
+        m <- f (rpc "eth_getCode" [toRPC addr, toRPC n] 1)
         return $ hexText . view _String <$> m
     QueryNonce addr -> do
-        m <- f (rpc "eth_getTransactionCount" [toRPC addr, toRPC n])
+        m <- f (rpc "eth_getTransactionCount" [toRPC addr, toRPC n] 1)
         return $ readText . view _String <$> m
     QueryBlock -> do
-      m <- f (rpc "eth_getBlockByNumber" [toRPC n, toRPC False])
+      m <- f (rpc "eth_getBlockByNumber" [toRPC n, toRPC False] 1)
       return $ m >>= parseBlock
     QueryBalance addr -> do
-        m <- f (rpc "eth_getBalance" [toRPC addr, toRPC n])
+        m <- f (rpc "eth_getBalance" [toRPC addr, toRPC n] 1)
         return $ readText . view _String <$> m
     QuerySlot addr slot -> do
-        m <- f (rpc "eth_getStorageAt" [toRPC addr, toRPC slot, toRPC n])
+        m <- f (rpc "eth_getStorageAt" [toRPC addr, toRPC slot, toRPC n] 1)
         return $ readText . view _String <$> m
     QueryChainId -> do
-        m <- f (rpc "eth_chainId" [toRPC n])
+        m <- f (rpc "eth_chainId" [toRPC n] 1)
         return $ readText . view _String <$> m
-  return x
-
 
 parseBlock :: (AsValue s, Show s) => s -> Maybe EVM.Block
 parseBlock j = do
@@ -117,20 +123,19 @@ fetchWithSession url sess x = do
 
 fetchContractWithSession
   :: BlockNumber -> Text -> Addr -> Session -> IO (Maybe Contract)
-fetchContractWithSession n url addr sess = runMaybeT $ do
+fetchContractWithSession n url addr sess =
   let
     fetch :: Show a => RpcQuery a -> IO (Maybe a)
     fetch = fetchQuery n (fetchWithSession url sess)
-
-  theCode    <- MaybeT $ fetch (QueryCode addr)
-  theNonce   <- MaybeT $ fetch (QueryNonce addr)
-  theBalance <- MaybeT $ fetch (QueryBalance addr)
-
-  return $
-    initialContract (EVM.RuntimeCode (ConcreteBuffer theCode))
-      & set nonce    (w256 theNonce)
-      & set balance  (w256 theBalance)
-      & set external True
+  in do
+   fetch (QueryAccount addr) >>= \case
+     Nothing -> return Nothing
+     Just (theCode, theBalance, theNonce) ->
+       return $ Just $ 
+          initialContract (EVM.RuntimeCode (ConcreteBuffer theCode))
+            & set nonce    (w256 theNonce)
+            & set balance  (w256 theBalance)
+            & set external True
 
 fetchSlotWithSession
   :: BlockNumber -> Text -> Session -> Addr -> W256 -> IO (Maybe Word)
