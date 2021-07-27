@@ -127,7 +127,7 @@ fetchContractWithSession n url addr sess =
   let
     fetch :: Show a => RpcQuery a -> IO (Maybe a)
     fetch = fetchQuery n (fetchWithSession url sess)
-  in do
+  in
    fetch (QueryAccount addr) >>= \case
      Nothing -> return Nothing
      Just (theCode, theBalance, theNonce) ->
