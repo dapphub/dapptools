@@ -431,7 +431,7 @@ equivalence cmd =
                        <> show (length postBs) <> " paths of B."
            putStrLn "No discrepancies found."
          Timeout () -> io $ do
-           putStrLn "Solver timeout!"
+           hPutStr stderr "Solver timeout!"
            exitFailure
 
 -- cvc4 sets timeout via a commandline option instead of smtlib `(set-option)`

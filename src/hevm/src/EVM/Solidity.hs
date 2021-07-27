@@ -300,7 +300,7 @@ yul :: Text -> Text -> IO (Maybe ByteString)
 yul contract src = do
   (json, path) <- yul' src
   let (Just f) = json ^?! key "contracts" ^? key path
-      (Just c) = if not (Text.null contract) then f ^? key contract else f ^? key "object"
+      (Just c) = f ^? key $ if Text.null contract then "object" else contract
       bytecode = c ^?! key "evm" ^?! key "bytecode" ^?! key "object" . _String
   pure $ toCode <$> (Just bytecode)
 
