@@ -69,7 +69,7 @@ contract Dapptutorial {
 
     function withdraw(uint password) public {
         require(password == 42, "Access denied!");
-        msg.sender.transfer(address(this).balance);
+        payable(msg.sender).transfer(address(this).balance);
     }
 }
 ```
