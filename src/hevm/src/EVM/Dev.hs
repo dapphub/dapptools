@@ -63,6 +63,7 @@ ghciTest root path statePath =
         { oracle = EVM.Fetch.zero
         , verbose = Nothing
         , maxIter = Nothing
+        , askSmtIters = Nothing
         , smtTimeout = Nothing
         , smtState = Nothing
         , solver = Nothing
@@ -73,7 +74,7 @@ ghciTest root path statePath =
         , dapp = emptyDapp
         , testParams = params
         , maxDepth = Nothing
-        , allowFFI = False
+        , ffiAllowed = False
         }
     readSolc path >>=
       \case
@@ -122,6 +123,7 @@ ghciTty root path statePath =
         { oracle = EVM.Fetch.zero
         , verbose = Nothing
         , maxIter = Nothing
+        , askSmtIters = Nothing
         , smtTimeout = Nothing
         , smtState = Nothing
         , solver = Nothing
@@ -132,7 +134,7 @@ ghciTty root path statePath =
         , dapp = emptyDapp
         , testParams = params
         , maxDepth = Nothing
-        , allowFFI = False
+        , ffiAllowed = False
         }
     EVM.TTY.main testOpts root path
 

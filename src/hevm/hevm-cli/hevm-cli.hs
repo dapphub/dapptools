@@ -130,16 +130,18 @@ data Command w
       , solver        :: w ::: Maybe Text         <?> "Used SMT solver: z3 (default) or cvc4"
       , smtdebug      :: w ::: Bool               <?> "Print smt queries sent to the solver"
       , assertions    :: w ::: Maybe [Word256]    <?> "Comma seperated list of solc panic codes to check for (default: everything except arithmetic overflow)"
+      , askSmtIterations :: w ::: Maybe Integer   <?> "Number of times we may revisit a particular branching point before we consult the smt solver to check reachability (default: 5)"
       }
   | Equivalence -- prove equivalence between two programs
-      { codeA         :: w ::: ByteString    <?> "Bytecode of the first program"
-      , codeB         :: w ::: ByteString    <?> "Bytecode of the second program"
-      , sig           :: w ::: Maybe Text    <?> "Signature of types to decode / encode"
-      , smttimeout    :: w ::: Maybe Integer <?> "Timeout given to SMT solver in milliseconds (default: 60000)"
-      , maxIterations :: w ::: Maybe Integer <?> "Number of times we may revisit a particular branching point"
-      , solver        :: w ::: Maybe Text    <?> "Used SMT solver: z3 (default) or cvc4"
-      , smtoutput     :: w ::: Bool          <?> "Print verbose smt output"
-      , smtdebug      :: w ::: Bool               <?> "Print smt queries sent to the solver"
+      { codeA         :: w ::: ByteString       <?> "Bytecode of the first program"
+      , codeB         :: w ::: ByteString       <?> "Bytecode of the second program"
+      , sig           :: w ::: Maybe Text       <?> "Signature of types to decode / encode"
+      , smttimeout    :: w ::: Maybe Integer    <?> "Timeout given to SMT solver in milliseconds (default: 60000)"
+      , maxIterations :: w ::: Maybe Integer    <?> "Number of times we may revisit a particular branching point"
+      , solver        :: w ::: Maybe Text       <?> "Used SMT solver: z3 (default) or cvc4"
+      , smtoutput     :: w ::: Bool             <?> "Print verbose smt output"
+      , smtdebug      :: w ::: Bool             <?> "Print smt queries sent to the solver"
+      , askSmtIterations :: w ::: Maybe Integer <?> "Number of times we may revisit a particular branching point before we consult the smt solver to check reachability (default: 5)"
       }
   | Exec -- Execute a given program with specified env & calldata
       { code        :: w ::: Maybe ByteString <?> "Program bytecode"
@@ -288,6 +290,7 @@ unitTestOptions cmd testFile = do
          Just url -> EVM.Fetch.oracle (Just state) (Just (block', url)) True
          Nothing  -> EVM.Fetch.oracle (Just state) Nothing True
     , EVM.UnitTest.maxIter = maxIterations cmd
+    , EVM.UnitTest.askSmtIters = askSmtIterationss cmd
     , EVM.UnitTest.smtTimeout = smttimeout cmd
     , EVM.UnitTest.solver = solver cmd
     , EVM.UnitTest.smtState = Just state
@@ -301,7 +304,7 @@ unitTestOptions cmd testFile = do
     , EVM.UnitTest.vmModifier = vmModifier
     , EVM.UnitTest.testParams = params
     , EVM.UnitTest.dapp = srcInfo
-    , EVM.UnitTest.allowFFI = ffi cmd
+    , EVM.UnitTest.ffiAllowed = ffi cmd
     }
 
 main :: IO ()
@@ -419,7 +422,7 @@ equivalence cmd =
                        return $ Just (view methodSignature method', snd <$> view methodInputs method')
 
      void . runSMTWithTimeOut (solver cmd) (smttimeout cmd) (smtdebug cmd) . query $
-       equivalenceCheck bytecodeA bytecodeB (maxIterations cmd) maybeSignature >>= \case
+       equivalenceCheck bytecodeA bytecodeB (maxIterations cmd) (askSmtIterations cmd) maybeSignature >>= \case
          Cex vm -> do
            io $ putStrLn "Not equal!"
            io $ putStrLn "Counterexample:"
@@ -518,7 +521,7 @@ assert cmd = do
     runSMTWithTimeOut (solver cmd) (smttimeout cmd) (smtdebug cmd) $ query $ do
       preState <- symvmFromCommand cmd
       let errCodes = fromMaybe defaultPanicCodes (assertions cmd)
-      verify preState (maxIterations cmd) rpcinfo (Just $ checkAssertions errCodes) >>= \case
+      verify preState (maxIterations cmd) (askSmtIterations cmd) rpcinfo (Just $ checkAssertions errCodes) >>= \case
         Cex tree -> do
           io $ putStrLn "Assertion violation found."
           showCounterexample preState maybesig

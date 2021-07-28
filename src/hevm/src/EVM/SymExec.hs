@@ -16,7 +16,7 @@ import EVM.Stepper (Stepper)
 import qualified EVM.Stepper as Stepper
 import qualified Control.Monad.Operational as Operational
 import Control.Monad.State.Strict hiding (state)
-import Data.Maybe (catMaybes, fromMaybe, mapMaybe)
+import Data.Maybe (catMaybes, fromMaybe)
 import EVM.Types
 import EVM.Concrete (createAddress)
 import qualified EVM.FeeSchedule as FeeSchedule
@@ -153,14 +153,14 @@ data BranchInfo = BranchInfo
     _branchCondition    :: Maybe Whiff
   }
 
-doInterpret :: Fetch.Fetcher -> Maybe Integer -> VM -> Query (Tree BranchInfo)
-doInterpret fetcher maxIter vm = let
+doInterpret :: Fetch.Fetcher -> Maybe Integer -> Maybe Integer -> VM -> Query (Tree BranchInfo)
+doInterpret fetcher maxIter askSmtIters vm = let
       f (vm', cs) = Node (BranchInfo (if null cs then vm' else vm) Nothing) cs
-    in f <$> interpret' fetcher maxIter vm
+    in f <$> interpret' fetcher maxIter askSmtIters vm
 
-interpret' :: Fetch.Fetcher -> Maybe Integer -> VM -> Query (VM, [(Tree BranchInfo)])
-interpret' fetcher maxIter vm = let
-  cont s = interpret' fetcher maxIter $ execState s vm
+interpret' :: Fetch.Fetcher -> Maybe Integer -> Maybe Integer -> VM -> Query (VM, [Tree BranchInfo])
+interpret' fetcher maxIter askSmtIters vm = let
+  cont s = interpret' fetcher maxIter askSmtIters $ execState s vm
   in case view EVM.result vm of
 
     Nothing -> cont exec1
@@ -170,7 +170,7 @@ interpret' fetcher maxIter vm = let
       iteration = num $ fromMaybe 0 $ view (iterations . at codelocation) vm
       -- as an optimization, we skip consulting smt
       -- if we've been at the location less than 5 times
-      in if iteration < (max (fromMaybe 0 maxIter) 5)
+      in if iteration < (fromMaybe 5 askSmtIters)
          then cont $ continue EVM.Unknown
          else io (fetcher q) >>= cont
 
@@ -183,10 +183,10 @@ interpret' fetcher maxIter vm = let
           rvm = execState (continue False) vm
           in do
             push 1
-            (leftvm, left) <- interpret' fetcher maxIter lvm
+            (leftvm, left) <- interpret' fetcher maxIter askSmtIters lvm
             pop 1
             push 1
-            (rightvm, right) <- interpret' fetcher maxIter rvm
+            (rightvm, right) <- interpret' fetcher maxIter askSmtIters rvm
             pop 1
             return (vm, [Node (BranchInfo leftvm (Just whiff)) left, Node (BranchInfo rightvm (Just whiff)) right])
         Just n -> cont $ continue (not n)
@@ -199,10 +199,11 @@ interpret' fetcher maxIter vm = let
 -- | returns a list of possible final evm states
 interpret
   :: Fetch.Fetcher
-  -> Maybe Integer --max iterations
+  -> Maybe Integer -- max iterations
+  -> Maybe Integer -- ask smt iterations
   -> Stepper a
   -> StateT VM Query [a]
-interpret fetcher maxIter =
+interpret fetcher maxIter askSmtIters =
   eval . Operational.view
 
   where
@@ -216,29 +217,29 @@ interpret fetcher maxIter =
     eval (action Operational.:>>= k) =
       case action of
         Stepper.Exec ->
-          exec >>= interpret fetcher maxIter . k
+          exec >>= interpret fetcher maxIter askSmtIters . k
         Stepper.Run ->
-          run >>= interpret fetcher maxIter . k
+          run >>= interpret fetcher maxIter askSmtIters . k
         Stepper.IOAct q ->
-          mapStateT io q >>= interpret fetcher maxIter . k
+          mapStateT io q >>= interpret fetcher maxIter askSmtIters . k
         Stepper.Ask (EVM.PleaseChoosePath _ continue) -> do
           vm <- get
           case maxIterationsReached vm maxIter of
             Nothing -> do
               push 1
-              a <- interpret fetcher maxIter (Stepper.evm (continue True) >>= k)
+              a <- interpret fetcher maxIter askSmtIters (Stepper.evm (continue True) >>= k)
               put vm
               pop 1
               push 1
-              b <- interpret fetcher maxIter (Stepper.evm (continue False) >>= k)
+              b <- interpret fetcher maxIter askSmtIters (Stepper.evm (continue False) >>= k)
               pop 1
               return $ a <> b
             Just n ->
-              interpret fetcher maxIter (Stepper.evm (continue (not n)) >>= k)
+              interpret fetcher maxIter askSmtIters (Stepper.evm (continue (not n)) >>= k)
         Stepper.Wait q -> do
           let performQuery = do
                 m <- liftIO (fetcher q)
-                interpret fetcher maxIter (Stepper.evm m >>= k)
+                interpret fetcher maxIter askSmtIters (Stepper.evm m >>= k)
 
           case q of
             PleaseAskSMT _ _ continue -> do
@@ -249,14 +250,14 @@ interpret fetcher maxIter =
               -- explore both branches without consulting SMT.
               -- Exploring too many branches is a lot cheaper than
               -- consulting our SMT solver.
-              if iteration < (max (fromMaybe 0 maxIter) 5)
-              then interpret fetcher maxIter (Stepper.evm (continue EVM.Unknown) >>= k)
+              if iteration < (fromMaybe 5 askSmtIters)
+              then interpret fetcher maxIter askSmtIters (Stepper.evm (continue EVM.Unknown) >>= k)
               else performQuery
 
             _ -> performQuery
 
         Stepper.EVM m ->
-          State.state (runState m) >>= interpret fetcher maxIter . k
+          State.state (runState m) >>= interpret fetcher maxIter askSmtIters . k
 
 maxIterationsReached :: VM -> Maybe Integer -> Maybe Bool
 maxIterationsReached _ Nothing = Nothing
@@ -314,7 +315,7 @@ verifyContract theCode signature' concreteArgs storagemodel pre maybepost = do
     preStateRaw <- abstractVM signature' concreteArgs theCode  storagemodel
     -- add the pre condition to the pathconditions to ensure that we are only exploring valid paths
     let preState = over constraints ((++) [(pre preStateRaw, Todo "assumptions" [])]) preStateRaw
-    v <- verify preState Nothing Nothing maybepost
+    v <- verify preState Nothing Nothing Nothing maybepost
     return (v, preState)
 
 pruneDeadPaths :: [VM] -> [VM]
@@ -351,17 +352,19 @@ leaves (Node x []) = [_vm x]
 leaves (Node _ xs) = concatMap leaves xs
 
 -- | Symbolically execute the VM and check all endstates against the postcondition, if available.
--- Returns `Right (Tree BranchInfo)` if the postcondition can be violated, or
--- or `Left (Tree BranchInfo)`, if the postcondition holds for all endstates.
-verify :: VM -> Maybe Integer -> Maybe (Fetch.BlockNumber, Text) -> Maybe Postcondition -> Query VerifyResult
-verify preState maxIter rpcinfo maybepost = do
+verify :: VM -> Maybe Integer -> Maybe Integer -> Maybe (Fetch.BlockNumber, Text) -> Maybe Postcondition -> Query VerifyResult
+verify preState maxIter askSmtIters rpcinfo maybepost = do
   smtState <- queryState
-  tree <- doInterpret (Fetch.oracle (Just smtState) rpcinfo False) maxIter preState
+  tree <- doInterpret (Fetch.oracle (Just smtState) rpcinfo False) maxIter askSmtIters preState
   case maybepost of
     (Just post) -> do
       let livePaths = pruneDeadPaths $ leaves tree
-          -- have we hit max iterations for any path?
-          maxReached = or $ mapMaybe (flip maxIterationsReached maxIter) livePaths
+          -- have we hit max iterations at any point in a given path
+          maxReached :: VM -> Bool
+          maxReached p = case maxIter of
+            Just maxI -> any (>= (fromInteger maxI)) (view iterations p)
+            Nothing -> False
+          --maxReached = or $ mapMaybe (flip maxIterationsReached maxIter) livePaths
           -- is there any path which can possibly violate the postcondition?
           -- can also do these queries individually (even concurrently!). Could save time and report multiple violations
           postC = sOr $ fmap (\postState -> (sAnd (fst <$> view constraints postState)) .&& sNot (post (preState, postState))) livePaths
@@ -372,10 +375,8 @@ verify preState maxIter rpcinfo maybepost = do
         Unk -> do io $ putStrLn "postcondition query timed out"
                   return $ Timeout tree
         Unsat -> do
-          if maxReached
-            then do
-              io $ putStrLn "WARNING: max iterations reached, execution halted prematurely"
-              io $ putStrLn "no postcondition violations discovered"
+          if any maxReached livePaths
+            then io $ putStrLn "WARNING: max iterations reached, execution halted prematurely"
             else io $ putStrLn "Q.E.D."
           return $ Qed tree
         Sat -> return $ Cex tree
@@ -385,8 +386,8 @@ verify preState maxIter rpcinfo maybepost = do
                   return $ Qed tree
 
 -- | Compares two contract runtimes for trace equivalence by running two VMs and comparing the end states.
-equivalenceCheck :: ByteString -> ByteString -> Maybe Integer -> Maybe (Text, [AbiType]) -> Query EquivalenceResult
-equivalenceCheck bytecodeA bytecodeB maxiter signature' = do
+equivalenceCheck :: ByteString -> ByteString -> Maybe Integer -> Maybe Integer -> Maybe (Text, [AbiType]) -> Query EquivalenceResult
+equivalenceCheck bytecodeA bytecodeB maxiter askSmtIters signature' = do
   let
     bytecodeA' = if BS.null bytecodeA then BS.pack [0] else bytecodeA
     bytecodeB' = if BS.null bytecodeB then BS.pack [0] else bytecodeB
@@ -402,10 +403,10 @@ equivalenceCheck bytecodeA bytecodeB maxiter signature' = do
 
   smtState <- queryState
   push 1
-  aVMs <- doInterpret (Fetch.oracle (Just smtState) Nothing False) maxiter preStateA
+  aVMs <- doInterpret (Fetch.oracle (Just smtState) Nothing False) maxiter askSmtIters preStateA
   pop 1
   push 1
-  bVMs <- doInterpret (Fetch.oracle (Just smtState) Nothing False) maxiter preStateB
+  bVMs <- doInterpret (Fetch.oracle (Just smtState) Nothing False) maxiter askSmtIters preStateB
   pop 1
   -- Check each pair of endstates for equality:
   let differingEndStates = uncurry distinct <$> [(a,b) | a <- pruneDeadPaths (leaves aVMs), b <- pruneDeadPaths (leaves bVMs)]

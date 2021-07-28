@@ -154,8 +154,8 @@ tests = testGroup "hevm"
 
   , testGroup "metadata stripper"
     [ testCase "it strips the metadata for solc => 0.6" $ do
-        let code = hexText "0x608060405234801561001057600080fd5b50600436106100365760003560e01c806317bf8bac1461003b578063acffee6b1461005d575b600080fd5b610043610067565b604051808215151515815260200191505060405180910390f35b610065610073565b005b60008060015414905090565b6000809054906101000a900473ffffffffffffffffffffffffffffffffffffffff1673ffffffffffffffffffffffffffffffffffffffff1663f8a8fd6d6040518163ffffffff1660e01b815260040160206040518083038186803b1580156100da57600080fd5b505afa1580156100ee573d6000803e3d6000fd5b505050506040513d602081101561010457600080fd5b810190808051906020019092919050505060018190555056fea265627a7a723158205d775f914dcb471365a430b5f5b2cfe819e615cbbb5b2f1ccc7da1fd802e43c364736f6c634300050b0032"
-            stripped = stripBytecodeMetadata code
+        let code' = hexText "0x608060405234801561001057600080fd5b50600436106100365760003560e01c806317bf8bac1461003b578063acffee6b1461005d575b600080fd5b610043610067565b604051808215151515815260200191505060405180910390f35b610065610073565b005b60008060015414905090565b6000809054906101000a900473ffffffffffffffffffffffffffffffffffffffff1673ffffffffffffffffffffffffffffffffffffffff1663f8a8fd6d6040518163ffffffff1660e01b815260040160206040518083038186803b1580156100da57600080fd5b505afa1580156100ee573d6000803e3d6000fd5b505050506040513d602081101561010457600080fd5b810190808051906020019092919050505060018190555056fea265627a7a723158205d775f914dcb471365a430b5f5b2cfe819e615cbbb5b2f1ccc7da1fd802e43c364736f6c634300050b0032"
+            stripped = stripBytecodeMetadata code'
         assertEqual "failed to strip metadata" (show (ByteStringS stripped)) "0x608060405234801561001057600080fd5b50600436106100365760003560e01c806317bf8bac1461003b578063acffee6b1461005d575b600080fd5b610043610067565b604051808215151515815260200191505060405180910390f35b610065610073565b005b60008060015414905090565b6000809054906101000a900473ffffffffffffffffffffffffffffffffffffffff1673ffffffffffffffffffffffffffffffffffffffff1663f8a8fd6d6040518163ffffffff1660e01b815260040160206040518083038186803b1580156100da57600080fd5b505afa1580156100ee573d6000803e3d6000fd5b505050506040513d602081101561010457600080fd5b810190808051906020019092919050505060018190555056fe"
     ,
       testCase "it strips the metadata and constructor args" $ do
@@ -169,10 +169,10 @@ tests = testGroup "hevm"
                 }
                 |]
 
-        (json, path) <- solidity' srccode
-        let Just (solc, _, _) = readJSON json
+        (json, path') <- solidity' srccode
+        let Just (solc', _, _) = readJSON json
             initCode :: ByteString
-            Just initCode = solc ^? ix (path <> ":A") . creationCode
+            Just initCode = solc' ^? ix (path' <> ":A") . creationCode
         -- add constructor arguments
         assertEqual "constructor args screwed up metadata stripping" (stripBytecodeMetadata (initCode <> encodeAbiValue (AbiUInt 256 1))) (stripBytecodeMetadata initCode)
     ]
@@ -518,7 +518,7 @@ tests = testGroup "hevm"
 
       ,
          testCase "multiple contracts" $ do
-          let code =
+          let code' =
                 [i|
                   contract C {
                     uint x;
@@ -534,8 +534,8 @@ tests = testGroup "hevm"
                   }
                 |]
               aAddr = Addr 0x35D1b3F3D7966A1DFe207aa4514C12a259A0492B
-          Just c <- solcRuntime "C" code
-          Just a <- solcRuntime "A" code
+          Just c <- solcRuntime "C" code'
+          Just a <- solcRuntime "A" code'
           Cex _ <- runSMT $ query $ do
             vm0 <- abstractVM (Just ("call_A()", [])) [] c SymbolicS
             store <- freshArray (show aAddr) Nothing
@@ -544,11 +544,11 @@ tests = testGroup "hevm"
                   & over (env . contracts)
                        (Map.insert aAddr (initialContract (RuntimeCode $ ConcreteBuffer a) &
                                            set EVM.storage (EVM.Symbolic [] store)))
-            verify vm Nothing Nothing (Just $ checkAssertions defaultPanicCodes)
+            verify vm Nothing Nothing Nothing (Just $ checkAssertions defaultPanicCodes)
           putStrLn "found counterexample:"
       ,
          testCase "calling unique contracts (read from storage)" $ do
-          let code =
+          let code' =
                 [i|
                   contract C {
                     uint x;
@@ -564,16 +564,16 @@ tests = testGroup "hevm"
                     uint public x;
                   }
                 |]
-          Just c <- solcRuntime "C" code
+          Just c <- solcRuntime "C" code'
           Cex _ <- runSMT $ query $ do
             vm0 <- abstractVM (Just ("call_A()", [])) [] c SymbolicS
             let vm = vm0 & set (state . callvalue) 0
-            verify vm Nothing Nothing (Just $ checkAssertions defaultPanicCodes)
+            verify vm Nothing Nothing Nothing (Just $ checkAssertions defaultPanicCodes)
           putStrLn "found counterexample:"
       ,
 
          testCase "keccak concrete and sym agree" $ do
-          let code =
+          let code' =
                 [i|
                   contract C {
                     function kecc(uint x) public pure {
@@ -583,22 +583,22 @@ tests = testGroup "hevm"
                     }
                   }
                 |]
-          Just c <- solcRuntime "C" code
+          Just c <- solcRuntime "C" code'
           Qed _ <- runSMT $ query $ do
             vm0 <- abstractVM (Just ("kecc(uint256)", [AbiUIntType 256])) [] c SymbolicS
             let vm = vm0 & set (state . callvalue) 0
-            verify vm Nothing Nothing (Just $ checkAssertions defaultPanicCodes)
+            verify vm Nothing Nothing Nothing (Just $ checkAssertions defaultPanicCodes)
           putStrLn "found counterexample:"
 
       , testCase "safemath distributivity (yul)" $ do
           Qed _ <- runSMTWith cvc4 $ query $ do
             let yulsafeDistributivity = hex "6355a79a6260003560e01c14156016576015601f565b5b60006000fd60a1565b603d602d604435600435607c565b6039602435600435607c565b605d565b6052604b604435602435605d565b600435607c565b141515605a57fe5b5b565b6000828201821115151560705760006000fd5b82820190505b92915050565b6000818384048302146000841417151560955760006000fd5b82820290505b92915050565b"
             vm <- abstractVM (Just ("distributivity(uint256,uint256,uint256)", [AbiUIntType 256, AbiUIntType 256, AbiUIntType 256])) [] yulsafeDistributivity SymbolicS
-            verify vm Nothing Nothing (Just $ checkAssertions defaultPanicCodes)
+            verify vm Nothing Nothing Nothing (Just $ checkAssertions defaultPanicCodes)
           putStrLn "Proven"
 
       , testCase "safemath distributivity (sol)" $ do
-          let code =
+          let code' =
                 [i|
                   contract C {
                       function distributivity(uint x, uint y, uint z) public {
@@ -617,11 +617,11 @@ tests = testGroup "hevm"
                       }
                  }
                 |]
-          Just c <- solcRuntime "C" code
+          Just c <- solcRuntime "C" code'
 
           Qed _ <- runSMTWith cvc4 $ query $ do
             vm <- abstractVM (Just ("distributivity(uint256,uint256,uint256)", [AbiUIntType 256, AbiUIntType 256, AbiUIntType 256])) [] c SymbolicS
-            verify vm Nothing Nothing (Just $ checkAssertions defaultPanicCodes)
+            verify vm Nothing Nothing Nothing (Just $ checkAssertions defaultPanicCodes)
           putStrLn "Proven"
 
     ]
@@ -650,7 +650,7 @@ tests = testGroup "hevm"
           }
           |]
         runSMTWith z3 $ query $ do
-          Cex _ <- equivalenceCheck aPrgm bPrgm Nothing Nothing
+          Cex _ <- equivalenceCheck aPrgm bPrgm Nothing Nothing Nothing
           return ()
     ]
   ]

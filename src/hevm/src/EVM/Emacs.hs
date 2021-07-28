@@ -505,20 +505,21 @@ defaultUnitTestOptions :: MonadIO m => m UnitTestOptions
 defaultUnitTestOptions = do
   params <- liftIO $ getParametersFromEnvironmentVariables Nothing
   pure UnitTestOptions
-    { oracle            = Fetch.zero
-    , verbose           = Nothing
-    , maxIter           = Nothing
-    , smtTimeout        = Nothing
-    , smtState          = Nothing
-    , solver            = Nothing
-    , match             = ""
-    , fuzzRuns          = 100
-    , replay            = Nothing
-    , vmModifier        = id
-    , dapp              = emptyDapp
-    , testParams        = params
-    , maxDepth          = Nothing
-    , allowFFI          = False
+    { oracle      = Fetch.zero
+    , verbose     = Nothing
+    , maxIter     = Nothing
+    , askSmtIters = Nothing
+    , smtTimeout  = Nothing
+    , smtState    = Nothing
+    , solver      = Nothing
+    , match       = ""
+    , fuzzRuns    = 100
+    , replay      = Nothing
+    , vmModifier  = id
+    , dapp        = emptyDapp
+    , testParams  = params
+    , maxDepth    = Nothing
+    , ffiAllowed  = False
     }
 
 initialStateForTest

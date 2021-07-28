@@ -234,20 +234,21 @@ runFromVM maxIter' dappinfo oracle' vm = do
 
   let
     opts = UnitTestOptions
-      { oracle            = oracle'
-      , verbose           = Nothing
-      , maxIter           = maxIter'
-      , smtTimeout        = Nothing
-      , smtState          = Nothing
-      , solver            = Nothing
-      , maxDepth          = Nothing
-      , match             = ""
-      , fuzzRuns          = 1
-      , replay            = error "irrelevant"
-      , vmModifier        = id
-      , testParams        = error "irrelevant"
-      , dapp              = dappinfo
-      , allowFFI          = False
+      { oracle        = oracle'
+      , verbose       = Nothing
+      , maxIter       = maxIter'
+      , askSmtIters   = Nothing
+      , smtTimeout    = Nothing
+      , smtState      = Nothing
+      , solver        = Nothing
+      , maxDepth      = Nothing
+      , match         = ""
+      , fuzzRuns      = 1
+      , replay        = error "irrelevant"
+      , vmModifier    = id
+      , testParams    = error "irrelevant"
+      , dapp          = dappinfo
+      , ffiAllowed    = False
       }
     ui0 = initUiVmState vm opts (void Stepper.execFully)
 
