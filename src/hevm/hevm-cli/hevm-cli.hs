@@ -290,7 +290,7 @@ unitTestOptions cmd testFile = do
          Just url -> EVM.Fetch.oracle (Just state) (Just (block', url)) True
          Nothing  -> EVM.Fetch.oracle (Just state) Nothing True
     , EVM.UnitTest.maxIter = maxIterations cmd
-    , EVM.UnitTest.askSmtIters = askSmtIterationss cmd
+    , EVM.UnitTest.askSmtIters = askSmtIterations cmd
     , EVM.UnitTest.smtTimeout = smttimeout cmd
     , EVM.UnitTest.solver = solver cmd
     , EVM.UnitTest.smtState = Just state
