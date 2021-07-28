@@ -118,8 +118,17 @@ in rec {
 
   # We use this to run private testnets without
   # the pesky transaction size limit.
-  go-ethereum-unlimited = super.go-ethereum.overrideAttrs (geth: rec {
-    name = "${geth.pname}-unlimited-${geth.version}";
+  go-ethereum-unlimited = (self.callPackage (import ./nix/geth.nix) {}).overrideAttrs (geth: rec {
+    version = "1.10.7";
+
+    src = super.fetchFromGitHub {
+      owner = "ethereum";
+      repo = "go-ethereum";
+      rev = "v${version}";
+      sha256 = "0a4l3xisw7d80l1plqk1rwzxiffwvwsvcm1345hzz2xpmxpkd6y4";
+    };
+
+    name = "${geth.pname}-unlimited-${version}";
     preConfigure = ''
       # Huge transaction calldata
       substituteInPlace core/tx_pool.go --replace 'return ErrOversizedData' ""
