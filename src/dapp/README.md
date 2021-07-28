@@ -94,7 +94,7 @@ contract DapptutorialTest is DSTest {
     }
 
     function test_withdraw() public {
-        address(dapptutorial).transfer(1 ether);
+        payable(address(dapptutorial)).transfer(1 ether);
         uint preBalance = address(this).balance;
         dapptutorial.withdraw(42);
         uint postBalance = address(this).balance;
@@ -102,7 +102,7 @@ contract DapptutorialTest is DSTest {
     }
 
     function testFail_withdraw_wrong_pass() public {
-        address(dapptutorial).transfer(1 ether);
+        payable(address(dapptutorial)).transfer(1 ether);
         uint preBalance = address(this).balance;
         dapptutorial.withdraw(1);
         uint postBalance = address(this).balance;
