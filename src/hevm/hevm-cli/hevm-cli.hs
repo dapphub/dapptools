@@ -185,11 +185,12 @@ data Command w
       , state         :: w ::: Maybe String             <?> "Path to state repository"
       , cache         :: w ::: Maybe String             <?> "Path to rpc cache repository"
       , match         :: w ::: Maybe String             <?> "Test case filter - only run methods matching regex"
-      , smttimeout    :: w ::: Maybe Integer            <?> "Timeout given to SMT solver in milliseconds (default: 60000)"
-      , maxIterations :: w ::: Maybe Integer            <?> "Number of times we may revisit a particular branching point"
       , solver        :: w ::: Maybe Text               <?> "Used SMT solver: z3 (default) or cvc4"
       , smtdebug      :: w ::: Bool                     <?> "Print smt queries sent to the solver"
       , ffi           :: w ::: Bool                     <?> "Allow the usage of the hevm.ffi() cheatcode (WARNING: this allows test authors to execute arbitrary code on your machine)"
+      , smttimeout    :: w ::: Maybe Integer            <?> "Timeout given to SMT solver in milliseconds (default: 60000)"
+      , maxIterations :: w ::: Maybe Integer            <?> "Number of times we may revisit a particular branching point"
+      , askSmtIterations :: w ::: Maybe Integer         <?> "Number of times we may revisit a particular branching point before we consult the smt solver to check reachability (default: 5)"
       }
   | BcTest -- Run an Ethereum Blockhain/GeneralState test
       { file      :: w ::: String    <?> "Path to .json test file"
