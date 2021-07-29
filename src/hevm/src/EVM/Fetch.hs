@@ -8,7 +8,6 @@ import Prelude hiding (Word)
 import Data.Scientific
 
 import EVM.ABI
-import Debug.Trace
 import EVM.Types    (Addr, w256, W256, hexText, Word, Buffer(..))
 import EVM.Symbolic (litWord)
 import EVM          (IsUnique(..), EVM, Contract, Block, initialContract, nonce, balance, external)
@@ -110,7 +109,6 @@ fetchQuery n f q = do
 
 parseBlock :: (AsValue s, Show s) => s -> Maybe EVM.Block
 parseBlock j = do
-  traceM (show j)
   coinbase   <- readText <$> j ^? key "miner" . _String
   timestamp  <- litWord . readText <$> j ^? key "timestamp" . _String
   number     <- readText <$> j ^? key "number" . _String
