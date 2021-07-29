@@ -239,6 +239,7 @@ These environment variables can be used to control block parameters:
 | `DAPP_TEST_GAS_CREATE` | `0xffffffffffff`                             | The gas to provide when creating the testing contract                                                         |
 | `DAPP_TEST_GAS_CALL`   | `0xffffffffffff`                             | The gas to provide to each call made to the testing contract                                                  |
 | `DAPP_TEST_BALANCE`    | `0xffffffffffffffffffffffff`                 | The balance to provide to `DAPP_TEST_ADDRESS`                                                                 |
+| `DAPP_TEST_NONCE  `    | `1`                                          | The initial nonce to use for `DAPP_TEST_ADDRESS`                                                              |
 | `DAPP_TEST_COINBASE`   | `0x0000000000000000000000000000000000000000` | The coinbase address. Will be set to the coinbase for the block at `DAPP_TEST_NUMBER` if rpc is enabled       |
 | `DAPP_TEST_NUMBER`     | `0`                                          | The block number. Will be set to the latest block if rpc is enabled                                           |
 | `DAPP_TEST_TIMESTAMP`  | `0`                                          | The block timestamp. Will be set to the timestamp for the block at `DAPP_TEST_NUMBER` if rpc is enabled       |

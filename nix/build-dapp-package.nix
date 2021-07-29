@@ -23,8 +23,9 @@ in
   , deps ? []
   , solc ? "${pkgs.solc}/bin/solc"
   , shouldFail ? false
-  , dappFlags ? ""
   , doCheck ? true
+  , dapprc ? ""
+  , testFlags ? ""
   , ... }@args:
     pkgs.stdenv.mkDerivation ( rec {
       inherit doCheck;
@@ -47,6 +48,7 @@ in
           '')
           passthru.libPaths;
       buildPhase = ''
+        source ${pkgs.writeText "dapprc" dapprc}
         mkdir -p out
         export DAPP_SOLC=${solc}
         export DAPP_REMAPPINGS="$REMAPPINGS"
@@ -59,7 +61,7 @@ in
       '';
 
       checkPhase = let
-        cmd = "DAPP_SKIP_BUILD=1 dapp test ${dappFlags}";
+        cmd = "DAPP_SKIP_BUILD=1 dapp test ${testFlags}";
       in
         if shouldFail
           then "${cmd} && exit 1 || echo 0"
