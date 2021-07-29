@@ -48,7 +48,7 @@ in
           '')
           passthru.libPaths;
       buildPhase = ''
-        source ${pkgs.writeText "dapprc" dapprc}
+        ln -s ${pkgs.writeText "dapprc" dapprc} ./.dapprc
         mkdir -p out
         export DAPP_SOLC=${solc}
         export DAPP_REMAPPINGS="$REMAPPINGS"
