@@ -30,10 +30,14 @@ Then install dapptools:
 ```
 curl https://dapp.tools/install | sh
 ```
+This configures the dapphub binary cache and installs the `dapp`, `solc`, `seth` and `hevm` executables.
 
-This configures the dapphub binary cache and installs the `dapp`, `solc`, `seth` and `hevm` executables. 
+**NOTE:** Arm support in the GHC haskell compiiler is still fairly bleeding edge, until this
+situation stabilises, users of M1 macs must run dapptools (and the installer!) under rosetta 2 (i.e.
+as an emulated x86 program).
 
-You can also install an individual tool with 
+
+You can also install an individual tool with
 ```sh
 nix-env -iA <tool> -f $(curl -sS https://api.github.com/repos/dapphub/dapptools/releases/latest | jq -r .tarball_url)
 ```
@@ -91,7 +95,7 @@ hevm symbolic --address 0x6b175474e89094c44da98b954eedeac495271d0f --rpc $ETH_RP
 
 ## Contributing
 
-Contributions are always welcome! You may be interested in the 
+Contributions are always welcome! You may be interested in the
 [architecture](./ARCHITECTURE.md) of this repository.
 
 [![built with nix](https://builtwithnix.org/badge.svg)](https://builtwithnix.org)
