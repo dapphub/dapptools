@@ -11,6 +11,12 @@ interface Hevm {
     function sign(uint256,bytes32) external returns (uint8,bytes32,bytes32);
     function addr(uint256) external returns (address);
     function ffi(string[] calldata) external returns (bytes memory);
+    function file(bytes32,uint) external;
+    function file(bytes32,address) external;
+    function file(bytes32,address,uint) external;
+    function file(bytes32,address,address) external;
+    function look(bytes32) external returns (uint);
+    function look(bytes32,address) external returns (uint);
 }
 
 contract HasStorage {
@@ -86,5 +92,55 @@ contract CheatCodes is DSTest {
 
         (string memory output) = abi.decode(hevm.ffi(inputs), (string));
         assertEq(output, "acab");
+    }
+
+    function testFileNonce(address who, uint n) public {
+        hevm.file("nonce", who, n);
+        assertEq(hevm.look("nonce", who), n);
+    }
+
+    function testBalance(address who, uint bal) public {
+        hevm.file("balance", who, bal);
+        assertEq(who.balance, bal);
+    }
+
+    function testAddress(address next) public {
+        hevm.file("address", address(this), next);
+        assertEq(address(this), next);
+    }
+
+    function proveCaller(address who) public {
+        hevm.file("caller", who);
+        assertEq(msg.sender, who);
+    }
+
+    function testOrigin(address who) public {
+        hevm.file("origin", who);
+        assertEq(tx.origin, who);
+    }
+
+    function testCoinbase(address who) public {
+        hevm.file("coinbase", who);
+        assertEq(block.coinbase, who);
+    }
+
+    function testGasPrice(uint price) public {
+        hevm.file("gasPrice", price);
+        assertEq(tx.gasprice, price);
+    }
+
+    function testTxGasLimit(uint limit) public {
+        hevm.file("txGasLimit", limit);
+        assertEq(hevm.look("txGasLimit"), limit);
+    }
+
+    function testBlockGasLimit(uint limit) public {
+        hevm.file("blockGasLimit", limit);
+        assertEq(block.gaslimit, limit);
+    }
+
+    function testBlockGasLimit(uint difficulty) public {
+        hevm.file("difficulty", difficulty);
+        assertEq(block.difficulty, difficulty);
     }
 }

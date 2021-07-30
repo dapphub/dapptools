@@ -52,7 +52,6 @@ import qualified Data.ByteArray       as BA
 import qualified Data.Map.Strict      as Map
 import qualified Data.Sequence        as Seq
 import qualified Data.Tree.Zipper     as Zipper
-import qualified Data.Vector          as V
 import qualified Data.Vector.Storable as Vector
 import qualified Data.Vector.Storable.Mutable as Vector
 
@@ -2012,6 +2011,82 @@ cheatActions =
                 assign (state . memory . word256At outOffset) res
           _ -> vmError (BadCheatCode sig),
 
+      action "file(bytes32,address,uint256)" $
+        \sig _ _ input -> case decodeStaticArgs input of
+          [what', addr, val] -> forceConcrete what' $ \(C _ (decodeUtf8 . BS.filter (/= 0) . word256Bytes -> what)) ->
+            makeUnique addr $ \(C _ (num -> who)) ->
+              case what of
+                "nonce" -> forceConcrete val $ \v -> assign (env . contracts . ix who . nonce) v
+                "balance" -> forceConcrete val $ \v -> assign (env . contracts . ix who . balance) v
+                _ -> vmError (BadCheatCode sig)
+          _ -> vmError (BadCheatCode sig),
+
+      action "file(bytes32,address,address)" $
+        \sig _ _ input -> case decodeStaticArgs input of
+          [what', old', new'] -> forceConcrete what' $ \(C _ (decodeUtf8 . BS.filter (/= 0) . word256Bytes -> what)) ->
+            makeUnique old' $ \(C _ (num -> old)) ->
+              makeUnique new' $ \(C _ (num -> new)) ->
+                case what of
+                  "address" -> do
+                    vm <- get
+                    let cs = view (env . contracts) vm
+                        c = Map.lookup old cs
+                    case c of
+                      Just c' -> assign (env . contracts) $ Map.insert new c' (Map.delete old cs)
+                      Nothing -> vmError (BadCheatCode sig)
+                  _ -> vmError (BadCheatCode sig)
+          _ -> vmError (BadCheatCode sig),
+
+      action "file(bytes32,address)" $
+        \sig _ _ input -> case decodeStaticArgs input of
+          [what', addr] -> forceConcrete what' $ \(C _ (decodeUtf8 . BS.filter (/= 0) . word256Bytes -> what)) ->
+            case what of
+              "caller" -> assign (frames . ix 0 . frameState . caller) (SAddr . sFromIntegral . rawVal $ addr)
+              "origin" -> makeUnique addr $ \(C _ (num -> who)) -> assign (tx . origin) who
+              "coinbase" -> makeUnique addr $ \(C _ (num -> who)) -> assign (block . coinbase) who
+              _ -> vmError (BadCheatCode sig)
+          _ -> vmError (BadCheatCode sig),
+
+      action "file(bytes32,uint256)" $
+        \sig _ _ input -> case decodeStaticArgs input of
+          [what', val'] -> forceConcrete2 (what', val') $ \((C _ (decodeUtf8 . BS.filter (/= 0) . word256Bytes -> what)), val) ->
+            case what of
+              "gasPrice" -> assign (tx . gasprice) val
+              "txGasLimit" -> assign (tx . txgaslimit) val
+              "blockGasLimit" -> assign (block . gaslimit) val
+              "difficulty" -> assign (block . difficulty) val
+              _ -> vmError (BadCheatCode sig)
+          _ -> vmError (BadCheatCode sig),
+
+      action "look(bytes32,address)" $
+        \sig outOffset _ input ->
+          case decodeStaticArgs input of
+            [what', who'] -> forceConcrete what' $ \(C _ (decodeUtf8 . BS.filter (/= 0) . word256Bytes -> what)) ->
+              makeUnique who' $ \(C _ (num -> who))-> do
+                case what of
+                  "nonce" -> do
+                    vm <- get
+                    case Map.lookup who $ view (env . contracts) vm of
+                      Just c' -> do
+                        let out = litWord (_nonce c')
+                        assign (state . returndata . word256At 0) out
+                        assign (state . memory . word256At outOffset) out
+                      _ -> vmError (BadCheatCode sig)
+                  _ -> vmError (BadCheatCode sig)
+            _ -> vmError (BadCheatCode sig),
+
+      action "look(bytes32)" $
+        \sig outOffset _ input -> case decodeStaticArgs input of
+            [what'] -> forceConcrete what' $ \(C _ (decodeUtf8 . BS.filter (/= 0) . word256Bytes -> what)) ->
+              case what of
+                "txGasLimit" -> do
+                  vm <- get
+                  let out = litWord $ view (tx . txgaslimit) vm
+                  assign (state . returndata . word256At 0) out
+                  assign (state . memory . word256At outOffset) out
+                _ -> vmError (BadCheatCode sig)
+            _ -> vmError (BadCheatCode sig),
+
       action "sign(uint256,bytes32)" $
         \sig outOffset _ input -> case decodeStaticArgs input of
           [sk, hash] ->
@@ -2300,7 +2375,7 @@ finishFrame how = do
             modifying burned (subtract remainingGas)
             modifying (state . gas) (+ remainingGas)
 
-          FeeSchedule {..} = view ( block . schedule ) oldVm
+          FeeSchedule {} = view ( block . schedule ) oldVm
 
       -- Now dispatch on whether we were creating or calling,
       -- and whether we shall return, revert, or error (six cases).
