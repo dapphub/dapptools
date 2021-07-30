@@ -47,8 +47,8 @@ loadDappInfo path file =
         _ ->
           error "nope, sorry"
 
-ghciTest :: String -> String -> Maybe String -> IO [Bool]
-ghciTest root path statePath =
+ghciTest :: String -> String -> Maybe Text -> Maybe Int -> Maybe String -> IO [Bool]
+ghciTest root path match verbosity statePath =
   withCurrentDirectory root $ do
     loadFacts <-
       case statePath of
@@ -61,12 +61,12 @@ ghciTest root path statePath =
     let
       opts = UnitTestOptions
         { oracle = EVM.Fetch.zero
-        , verbose = Nothing
+        , verbose = verbosity
         , maxIter = Nothing
         , smtTimeout = Nothing
         , smtState = Nothing
         , solver = Nothing
-        , match = ""
+        , match = fromMaybe ".*" match
         , fuzzRuns = 100
         , replay = Nothing
         , vmModifier = loadFacts
@@ -78,7 +78,7 @@ ghciTest root path statePath =
     readSolc path >>=
       \case
         Just (contractMap, _) -> do
-          let unitTests = findAllUnitTests (Map.elems contractMap)
+          let unitTests = findUnitTests (EVM.UnitTest.match opts) $ Map.elems contractMap
           results <- runSMT $ query $ concatMapM (runUnitTestContract opts contractMap) unitTests
           let (passing, _) = unzip results
           pure passing
