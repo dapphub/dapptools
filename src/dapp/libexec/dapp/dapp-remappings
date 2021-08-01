@@ -1,54 +1,23 @@
 #!/usr/bin/env node
-var PROGRAM_NAME = process.argv[1].replace(/.*\//, "")
-var pkg_src = {}, pkg_hash = {}
 
-findRemappings(".")
+console.log(buildRemappings(".").join("\n"))
 
-Object.keys(pkg_src).sort((a, b) => a.length - b.length).sort(
-  (a, b) => {
-    var depth = name => pkg_src[name].split("/").length
-    return depth(a) - depth(b)
-  }
-).forEach(name => {
-  console.log(`${name}/=${pkg_src[name]}/`)
-})
+function buildRemappings(prefix) {
+  const lib = `${prefix}/${process.env.DAPP_LIB}`
+  const ctx = `${prefix}/${process.env.DAPP_SRC}`
 
-function findRemappings(prefix) {
-  ls(`${prefix}/${process.env.DAPP_LIB}`).forEach(name => {
-    var lib = `${prefix}/${process.env.DAPP_LIB}`
-    var src = `${lib}/${name}/${process.env.DAPP_SRC}`.replace(/^.\//, "")
-
-    // Shortcut when we're ignoring all the Git hash stuff.
-    if (process.env.DAPP_IGNORE_HASHES) {
-      pkg_src[name] = src
-      findRemappings(`${lib}/${name}`)
-      return
-    }
-
-    if (ls(`${lib}/${name}`).includes(".git") != true) {
-      console.error(`${PROGRAM_NAME}: error: ${lib}/${name} is not a Git repository`)
-      console.error(`${PROGRAM_NAME}: error: try "dapp update" to initialize submodules`)
-      process.exit(1)
-    }
-
-    var hash = run("git", ["-C", src, "rev-parse", "HEAD"])
-
-    if (pkg_src[name]) {
-      if (hash != pkg_hash[name]) {
-        console.error(`${PROGRAM_NAME}: warning: mismatching packages:`)
-        console.error(`${PROGRAM_NAME}: warning: (1) ${pkg_src[name]}`)
-        console.error(`${PROGRAM_NAME}: warning: (2) ${src}`)
-        console.error(`${PROGRAM_NAME}: warning: using ${pkg_src[name]}. You can override this using \`DAPP_REMAPPINGS\``)
-      } else if (src.length < pkg_src[name].length) {
-        pkg_src[name] = src
-      }
-    } else {
-      pkg_src[name] = src
-      pkg_hash[name] = hash
-    }
-
-    findRemappings(`${lib}/${name}`)
+  const remappings = ls(lib).map(name => {
+    return `${normalize(ctx)}:${name}/=${normalize(lib)}/${name}/${process.env.DAPP_SRC}/`
   })
+
+  return ls(lib).map(name => {
+    return buildRemappings(`${lib}/${name}`)
+  }).concat(remappings).flat()
+}
+
+// strip the leading `.` or `./` from a path
+function normalize(path) {
+  return path.replace(/^\.\//, "").replace(/^\//, "")
 }
 
 function ls(dir) {
@@ -59,8 +28,3 @@ function ls(dir) {
   }
 }
 
-function run(cmd, args) {
-  return require("child_process").execFileSync(cmd, args, {
-    encoding: "utf-8"
-  })
-}

@@ -53,6 +53,15 @@ dapp_testnet() {
 
 dapp_testnet
 
+# tests the behaviour of the package local dapp remappings
+dapp_remappings() {
+    TMPDIR=$(mktemp -d)
+    git clone https://github.com/dapphub/remappings-test "$TMPDIR"
+    (cd "$TMPDIR" && dapp update && dapp test)
+}
+
+dapp_remappings
+
 test_hevm_symbolic() {
     solc --bin-runtime -o . --overwrite factor.sol
     # should find counterexample
