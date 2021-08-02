@@ -39,7 +39,7 @@ stdenv.mkDerivation rec {
   meta = {
     description = "Command-line client for talking to Ethereum nodes";
     homepage = https://github.com/dapphub/dapptools/src/seth/;
-    maintainers = [stdenv.lib.maintainers.dbrock];
+    maintainers = [lib.maintainers.dbrock];
     license = lib.licenses.gpl3;
     inherit version;
   };
