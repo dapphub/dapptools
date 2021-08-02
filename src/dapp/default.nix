@@ -39,7 +39,7 @@ stdenv.mkDerivation rec {
   meta = {
     description = "Simple tool for creating Ethereum-based dapps";
     homepage = https://github.com/dapphub/dapptools/src/dapp/;
-    maintainers = [stdenv.lib.maintainers.dbrock];
+    maintainers = [lib.maintainers.dbrock];
     license = lib.licenses.gpl3;
     inherit version;
   };

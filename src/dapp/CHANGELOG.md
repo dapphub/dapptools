@@ -8,6 +8,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- `dapp --use` now uses the solc binaries from https://binaries.soliditylang.org/ instead of the
+    versions built from source via nix
 - `dapp remappings` now issues a warning instead of failing with a hard error in case of mistmatched
   package versions in the dependency tree
 
