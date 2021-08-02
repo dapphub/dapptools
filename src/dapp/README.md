@@ -137,7 +137,7 @@ the value as a parameter:
 
 ```solidity
 function test_withdraw(uint amount) public {
-    address(dapptutorial).transfer(amount);
+    payable(address(dapptutorial)).transfer(amount);
     uint preBalance = address(this).balance;
     dapptutorial.withdraw(42);
     uint postBalance = address(this).balance;
@@ -155,7 +155,7 @@ By default, the testing contract is given a balance of `2**96` wei, so we have t
 
 ```solidity
 function test_withdraw(uint96 amount) public {
-    address(dapptutorial).transfer(amount);
+    payable(address(dapptutorial)).transfer(amount);
     uint preBalance = address(this).balance;
     dapptutorial.withdraw(42);
     uint postBalance = address(this).balance;
