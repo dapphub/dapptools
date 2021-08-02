@@ -14,17 +14,26 @@ interface Hevm {
     function file(bytes32,uint) external;
     function file(bytes32,address) external;
     function file(bytes32,address,uint) external;
-    function file(bytes32,address,address) external;
     function look(bytes32) external returns (uint);
     function look(bytes32,address) external returns (uint);
+    function replace(address,bytes calldata) external;
 }
 
 contract HasStorage {
     uint slot0 = 10;
 }
 
+contract Old {
+    uint constant public x = 10;
+}
+
+contract New {
+    uint constant public x = 100;
+}
+
 contract CheatCodes is DSTest {
     address store = address(new HasStorage());
+    Old target = new Old();
     Hevm hevm = Hevm(HEVM_ADDRESS);
 
     function test_warp_concrete(uint128 jump) public {
@@ -94,7 +103,7 @@ contract CheatCodes is DSTest {
         assertEq(output, "acab");
     }
 
-    function testFileNonce(address who, uint n) public {
+    function testNonce(address who, uint n) public {
         hevm.file("nonce", who, n);
         assertEq(hevm.look("nonce", who), n);
     }
@@ -104,9 +113,9 @@ contract CheatCodes is DSTest {
         assertEq(who.balance, bal);
     }
 
-    function testAddress(address next) public {
-        hevm.file("address", address(this), next);
-        assertEq(address(this), next);
+    function testReplace() public {
+        hevm.replace(address(target), type(New).runtimeCode);
+        assertEq(New(address(target)).x(), 100);
     }
 
     function proveCaller(address who) public {
@@ -139,8 +148,8 @@ contract CheatCodes is DSTest {
         assertEq(block.gaslimit, limit);
     }
 
-    function testBlockGasLimit(uint difficulty) public {
-        hevm.file("difficulty", difficulty);
+    function testDifficulty(uint difficulty) public {
+        hevm.file(bytes32("difficulty"), difficulty);
         assertEq(block.difficulty, difficulty);
     }
 }

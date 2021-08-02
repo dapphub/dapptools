@@ -127,7 +127,7 @@ in
       dir = ./pass;
       name = "dappTestsShouldPass";
       shouldFail = false;
-      testFlags = "--max-iterations 50 --smttimeout 600000 --ffi";
+      testFlags = "--max-iterations 50 --smttimeout 600000 --ffi -v";
     };
 
     envVars = let
@@ -141,6 +141,7 @@ in
       seth = "${pkgs.seth}/bin/seth";
     in pkgs.recurseIntoAttrs {
       # we get "hevm: insufficient balance for gas cost" if we run these together...
+      # maybe we need an env var to set the balance for the origin?
       origin = envVarTest "origin.sol" "export DAPP_TEST_ORIGIN=$(${seth} --to-hex 256)";
       rest = envVarTest "rest.sol" ''
         export DAPP_TEST_BALANCE=$(${seth} --to-wei 998877665544 ether)
