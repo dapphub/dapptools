@@ -56,11 +56,13 @@ Usage: hevm symbolic [--code TEXT] [--calldata TEXT] [--address ADDR]
                      [--value W256] [--nonce W256] [--gas W256] [--number W256]
                      [--timestamp W256] [--gaslimit W256] [--gasprice W256]
                      [--create] [--maxcodesize W256] [--difficulty W256]
-                     [--rpc TEXT] [--block W256] [--json-file STRING]
-                     [--storage-model STORAGEMODEL] [--sig STRING]
-                     [--arg STRING]... [--debug] [--get-models]
-                     [--smttimeout INTEGER] [--max-iterations INTEGER]
-                     [--solver TEXT] [--smtdebug] [--assertions [WORD256]]
+                     [--chainid W256] [--rpc TEXT] [--block W256]
+                     [--state STRING] [--cache STRING] [--json-file STRING]
+                     [--dapp-root STRING] [--storage-model STORAGEMODEL]
+                     [--sig TEXT] [--arg STRING]... [--debug] [--get-models]
+                     [--show-tree] [--smttimeout INTEGER]
+                     [--max-iterations INTEGER] [--solver TEXT] [--smtdebug]
+                     [--assertions [WORD256]] [--ask-smt-iterations INTEGER]
 
 Available options:
   -h,--help                Show this help text
@@ -80,22 +82,34 @@ Available options:
   --create                 Tx: creation
   --maxcodesize W256       Block: max code size
   --difficulty W256        Block: difficulty
+  --chainid W256           Env: chainId
   --rpc TEXT               Fetch state from a remote node
   --block W256             Block state is be fetched from
+  --state STRING           Path to state repository
+  --cache STRING           Path to rpc cache repository
   --json-file STRING       Filename or path to dapp build output (default:
                            out/*.solc.json)
+  --dapp-root STRING       Path to dapp project root directory (default: . )
   --storage-model STORAGEMODEL
                            Select storage model: ConcreteS, SymbolicS (default)
                            or InitialS
-  --sig STRING             Signature of types to decode / encode
-  --arg STRING...          Values to encode
+  --sig TEXT               Signature of types to decode / encode
+  --arg STRING             Values to encode
   --debug                  Run interactively
   --get-models             Print example testcase for each execution path
-  --smttimeout INTEGER     Timeout given to SMT solver in milliseconds (default: 60000)
-  --max-iterations INTEGER Number of times we may revisit a particular branching point
+  --show-tree              Print branches explored in tree view
+  --smttimeout INTEGER     Timeout given to SMT solver in milliseconds (default:
+                           60000)
+  --max-iterations INTEGER Number of times we may revisit a particular branching
+                           point
   --solver TEXT            Used SMT solver: z3 (default) or cvc4
   --smtdebug               Print smt queries sent to the solver
-  --assertions [WORD256]   Comma seperated list of solc panic codes to check for (default: everything except arithmetic overflow)
+  --assertions [WORD256]   Comma seperated list of solc panic codes to check for
+                           (default: everything except arithmetic overflow)
+  --ask-smt-iterations INTEGER
+                           Number of times we may revisit a particular branching
+                           point before we consult the smt solver to check
+                           reachability (default: 5)
 ```
 
 Run a symbolic execution against the given parameters, searching for assertion violations.
@@ -152,6 +166,17 @@ Storage can take one of three forms, defaulting to `SymbolicS` unless `--create`
 - `SymbolicS`: The default value of SLOAD is a symbolic value without further constraints. SLOAD and SSTORE can operate on symbolic locations.
 - `InitialS`: The default value of SLOAD is zero. SLOAD and SSTORE can operate on symbolic locations.
 - `ConcreteS`: Storage defaults to zero or fetched from an rpc node if `--rpc` is provided. SLOAD or SSTOREs on symbolic locations will result in a runtime error.
+
+`hevm` uses an eager approach for symbolic execution, meaning that it will first attempt to explore
+all branches in the program (without querying the smt solver to check if they are reachable or not).
+Once the full execution tree has been explored, the postcondition is checked against all leaves, and
+the solver is invoked to check reachability for branches where a postcondition violation could
+occur. While our tests have shown this approach to be significantly faster, when applied without
+limits it would always result in infitie exploration of code involving loops, so after some
+predefined number of iterations (controlled by the `--ask-smt-iterations` flag), the solver will be
+invoked to check whether a given loop branch is reachable. In cases where the number of loop
+iterations is known in advance, you may be able to speed up execution by setting this flag to an
+appropriate value.
 
 Minimum required flags:
 
