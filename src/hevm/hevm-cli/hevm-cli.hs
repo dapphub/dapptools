@@ -315,7 +315,7 @@ main = do
     root = fromMaybe "." (dappRoot cmd)
   case cmd of
     Version {} -> putStrLn (showVersion Paths.version)
-    Symbolic {} -> assert cmd
+    Symbolic {} -> withCurrentDirectory root $ assert cmd
     Equivalence {} -> equivalence cmd
     Exec {} ->
       launchExec cmd
