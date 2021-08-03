@@ -6,6 +6,9 @@
 
 - The configuration variable `DAPP_TEST_BALANCE_CREATE` has been renamed to `DAPP_TEST_BALANCE`
 - Default `smttimeout` has been increased to 1 minute.
+- Contract fetching now happens asynchronously.
+- Fixed no contract definition crashes
+- Removed NoSuchContract failures
 
 ## 0.47.0 - 2021-07-01
 
