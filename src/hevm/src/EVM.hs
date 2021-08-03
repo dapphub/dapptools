@@ -1620,9 +1620,9 @@ askSMT codeloc (condition, whiff) continue = do
                      condition' (fst <$> pathconds) choosePath
 
    where condition' = simplifyCondition condition whiff
-     -- Only one path is possible
 
          choosePath :: BranchCondition -> EVM ()
+         -- Only one path is possible
          choosePath (Case v) = do assign result Nothing
                                   pushTo constraints $ if v then (condition', whiff) else (sNot condition', IsZero whiff)
                                   iteration <- use (iterations . at codeloc . non 0)

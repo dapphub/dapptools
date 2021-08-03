@@ -6,6 +6,9 @@
 
 - The configuration variable `DAPP_TEST_BALANCE_CREATE` has been renamed to `DAPP_TEST_BALANCE`
 - Default `smttimeout` has been increased to 1 minute.
+- A new flag has been added to hevm (`--ask-smt-iterations`) that controls the number of iterations
+  at which the symbolic execution engine will stop eager evaluation and begin to query the smt
+  solver whether a given branch is reachable or not.
 - Contract fetching now happens asynchronously.
 - Fixed no contract definition crashes
 - Removed NoSuchContract failures

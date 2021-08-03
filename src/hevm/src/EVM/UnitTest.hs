@@ -70,20 +70,21 @@ import qualified Data.Vector as Vector
 import Test.QuickCheck hiding (verbose)
 
 data UnitTestOptions = UnitTestOptions
-  { oracle     :: EVM.Query -> IO (EVM ())
-  , verbose    :: Maybe Int
-  , maxIter    :: Maybe Integer
-  , maxDepth   :: Maybe Int
-  , smtTimeout :: Maybe Integer
-  , smtState   :: Maybe SBV.State
-  , solver     :: Maybe Text
-  , match      :: Text
-  , fuzzRuns   :: Int
-  , replay     :: Maybe (Text, BSLazy.ByteString)
-  , vmModifier :: VM -> VM
-  , dapp       :: DappInfo
-  , testParams :: TestVMParams
-  , allowFFI   :: Bool
+  { oracle      :: EVM.Query -> IO (EVM ())
+  , verbose     :: Maybe Int
+  , maxIter     :: Maybe Integer
+  , askSmtIters :: Maybe Integer
+  , maxDepth    :: Maybe Int
+  , smtTimeout  :: Maybe Integer
+  , smtState    :: Maybe SBV.State
+  , solver      :: Maybe Text
+  , match       :: Text
+  , fuzzRuns    :: Int
+  , replay      :: Maybe (Text, BSLazy.ByteString)
+  , vmModifier  :: VM -> VM
+  , dapp        :: DappInfo
+  , testParams  :: TestVMParams
+  , ffiAllowed  :: Bool
   }
 
 data TestVMParams = TestVMParams
@@ -437,7 +438,7 @@ runUnitTestContract
 
 
 runTest :: UnitTestOptions -> VM -> (Test, [AbiType]) -> SBV.Query (Text, Either Text Text, VM)
-runTest opts@UnitTestOptions{..} vm (ConcreteTest testName, []) = liftIO $ runOne opts vm testName emptyAbi
+runTest opts@UnitTestOptions{} vm (ConcreteTest testName, []) = liftIO $ runOne opts vm testName emptyAbi
 runTest opts@UnitTestOptions{..} vm (ConcreteTest testName, types) = liftIO $ case replay of
   Nothing ->
     fuzzRun opts vm testName types
@@ -535,9 +536,9 @@ explorationStepper _ _ _ _ _ _  = error "malformed rlp"
 
 getTargetContracts :: UnitTestOptions -> Stepper [Addr]
 getTargetContracts UnitTestOptions{..} = do
-  vm <- Stepper.evm $ get
-  let Just contract = currentContract vm
-      theAbi = view abiMap $ fromJust $ lookupCode (view contractcode contract) dapp
+  vm <- Stepper.evm get
+  let Just contract' = currentContract vm
+      theAbi = view abiMap $ fromJust $ lookupCode (view contractcode contract') dapp
       setUp  = abiKeccak (encodeUtf8 "targetContracts()")
   case Map.lookup setUp theAbi of
     Nothing -> return []
@@ -664,7 +665,7 @@ symRun opts@UnitTestOptions{..} concreteVm testName types = do
 
     -- get all posible postVMs for the test method
     allPaths <- fst <$> runStateT
-        (EVM.SymExec.interpret oracle maxIter (execSymTest opts testName cd')) vm
+        (EVM.SymExec.interpret oracle maxIter askSmtIters (execSymTest opts testName cd')) vm
     let consistentPaths = flip filter allPaths $
           \(_, vm') -> case view result vm' of
             Just (VMFailure DeadPath) -> False
@@ -923,7 +924,7 @@ initialUnitTestVm (UnitTestOptions {..}) theContract =
            , vmoptCreate = True
            , vmoptStorageModel = ConcreteS -- TODO: support RPC
            , vmoptTxAccessList = mempty -- TODO: support unit test access lists???
-           , vmoptAllowFFI = allowFFI
+           , vmoptAllowFFI = ffiAllowed
            }
     creator =
       initialContract (RuntimeCode mempty)

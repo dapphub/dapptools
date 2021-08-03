@@ -130,16 +130,18 @@ data Command w
       , solver        :: w ::: Maybe Text         <?> "Used SMT solver: z3 (default) or cvc4"
       , smtdebug      :: w ::: Bool               <?> "Print smt queries sent to the solver"
       , assertions    :: w ::: Maybe [Word256]    <?> "Comma seperated list of solc panic codes to check for (default: everything except arithmetic overflow)"
+      , askSmtIterations :: w ::: Maybe Integer   <?> "Number of times we may revisit a particular branching point before we consult the smt solver to check reachability (default: 5)"
       }
   | Equivalence -- prove equivalence between two programs
-      { codeA         :: w ::: ByteString    <?> "Bytecode of the first program"
-      , codeB         :: w ::: ByteString    <?> "Bytecode of the second program"
-      , sig           :: w ::: Maybe Text    <?> "Signature of types to decode / encode"
-      , smttimeout    :: w ::: Maybe Integer <?> "Timeout given to SMT solver in milliseconds (default: 60000)"
-      , maxIterations :: w ::: Maybe Integer <?> "Number of times we may revisit a particular branching point"
-      , solver        :: w ::: Maybe Text    <?> "Used SMT solver: z3 (default) or cvc4"
-      , smtoutput     :: w ::: Bool          <?> "Print verbose smt output"
-      , smtdebug      :: w ::: Bool               <?> "Print smt queries sent to the solver"
+      { codeA         :: w ::: ByteString       <?> "Bytecode of the first program"
+      , codeB         :: w ::: ByteString       <?> "Bytecode of the second program"
+      , sig           :: w ::: Maybe Text       <?> "Signature of types to decode / encode"
+      , smttimeout    :: w ::: Maybe Integer    <?> "Timeout given to SMT solver in milliseconds (default: 60000)"
+      , maxIterations :: w ::: Maybe Integer    <?> "Number of times we may revisit a particular branching point"
+      , solver        :: w ::: Maybe Text       <?> "Used SMT solver: z3 (default) or cvc4"
+      , smtoutput     :: w ::: Bool             <?> "Print verbose smt output"
+      , smtdebug      :: w ::: Bool             <?> "Print smt queries sent to the solver"
+      , askSmtIterations :: w ::: Maybe Integer <?> "Number of times we may revisit a particular branching point before we consult the smt solver to check reachability (default: 5)"
       }
   | Exec -- Execute a given program with specified env & calldata
       { code        :: w ::: Maybe ByteString <?> "Program bytecode"
@@ -183,11 +185,12 @@ data Command w
       , state         :: w ::: Maybe String             <?> "Path to state repository"
       , cache         :: w ::: Maybe String             <?> "Path to rpc cache repository"
       , match         :: w ::: Maybe String             <?> "Test case filter - only run methods matching regex"
-      , smttimeout    :: w ::: Maybe Integer            <?> "Timeout given to SMT solver in milliseconds (default: 60000)"
-      , maxIterations :: w ::: Maybe Integer            <?> "Number of times we may revisit a particular branching point"
       , solver        :: w ::: Maybe Text               <?> "Used SMT solver: z3 (default) or cvc4"
       , smtdebug      :: w ::: Bool                     <?> "Print smt queries sent to the solver"
       , ffi           :: w ::: Bool                     <?> "Allow the usage of the hevm.ffi() cheatcode (WARNING: this allows test authors to execute arbitrary code on your machine)"
+      , smttimeout    :: w ::: Maybe Integer            <?> "Timeout given to SMT solver in milliseconds (default: 60000)"
+      , maxIterations :: w ::: Maybe Integer            <?> "Number of times we may revisit a particular branching point"
+      , askSmtIterations :: w ::: Maybe Integer         <?> "Number of times we may revisit a particular branching point before we consult the smt solver to check reachability (default: 5)"
       }
   | BcTest -- Run an Ethereum Blockhain/GeneralState test
       { file      :: w ::: String    <?> "Path to .json test file"
@@ -288,6 +291,7 @@ unitTestOptions cmd testFile = do
          Just url -> EVM.Fetch.oracle (Just state) (Just (block', url)) True
          Nothing  -> EVM.Fetch.oracle (Just state) Nothing True
     , EVM.UnitTest.maxIter = maxIterations cmd
+    , EVM.UnitTest.askSmtIters = askSmtIterations cmd
     , EVM.UnitTest.smtTimeout = smttimeout cmd
     , EVM.UnitTest.solver = solver cmd
     , EVM.UnitTest.smtState = Just state
@@ -301,7 +305,7 @@ unitTestOptions cmd testFile = do
     , EVM.UnitTest.vmModifier = vmModifier
     , EVM.UnitTest.testParams = params
     , EVM.UnitTest.dapp = srcInfo
-    , EVM.UnitTest.allowFFI = ffi cmd
+    , EVM.UnitTest.ffiAllowed = ffi cmd
     }
 
 main :: IO ()
@@ -311,7 +315,7 @@ main = do
     root = fromMaybe "." (dappRoot cmd)
   case cmd of
     Version {} -> putStrLn (showVersion Paths.version)
-    Symbolic {} -> assert cmd
+    Symbolic {} -> withCurrentDirectory root $ assert cmd
     Equivalence {} -> equivalence cmd
     Exec {} ->
       launchExec cmd
@@ -419,17 +423,20 @@ equivalence cmd =
                        return $ Just (view methodSignature method', snd <$> view methodInputs method')
 
      void . runSMTWithTimeOut (solver cmd) (smttimeout cmd) (smtdebug cmd) . query $
-       equivalenceCheck bytecodeA bytecodeB (maxIterations cmd) maybeSignature >>= \case
-         Right vm -> do io $ putStrLn "Not equal!"
-                        io $ putStrLn "Counterexample:"
-                        showCounterexample vm maybeSignature
-                        io exitFailure
-         Left (postAs, postBs) -> io $ do
+       equivalenceCheck bytecodeA bytecodeB (maxIterations cmd) (askSmtIterations cmd) maybeSignature >>= \case
+         Cex vm -> do
+           io $ putStrLn "Not equal!"
+           io $ putStrLn "Counterexample:"
+           showCounterexample vm maybeSignature
+           io exitFailure
+         Qed (postAs, postBs) -> io $ do
            putStrLn $ "Explored: " <> show (length postAs)
                        <> " execution paths of A and: "
                        <> show (length postBs) <> " paths of B."
            putStrLn "No discrepancies found."
-
+         Timeout () -> io $ do
+           hPutStr stderr "Solver timeout!"
+           exitFailure
 
 -- cvc4 sets timeout via a commandline option instead of smtlib `(set-option)`
 runSMTWithTimeOut :: Maybe Text -> Maybe Integer -> Bool -> Symbolic a -> IO a
@@ -515,13 +522,15 @@ assert cmd = do
     runSMTWithTimeOut (solver cmd) (smttimeout cmd) (smtdebug cmd) $ query $ do
       preState <- symvmFromCommand cmd
       let errCodes = fromMaybe defaultPanicCodes (assertions cmd)
-      verify preState (maxIterations cmd) rpcinfo (Just $ checkAssertions errCodes) >>= \case
-        Right tree -> do
+      verify preState (maxIterations cmd) (askSmtIterations cmd) rpcinfo (Just $ checkAssertions errCodes) >>= \case
+        Cex tree -> do
           io $ putStrLn "Assertion violation found."
           showCounterexample preState maybesig
           treeShowing tree
           io $ exitWith (ExitFailure 1)
-        Left tree -> do
+        Timeout _ -> do
+          io $ exitWith (ExitFailure 1)
+        Qed tree -> do
           io $ putStrLn $ "Explored: " <> show (length tree)
                        <> " branches without assertion violations"
           treeShowing tree
