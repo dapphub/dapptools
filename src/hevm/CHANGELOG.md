@@ -2,8 +2,11 @@
 
 ## Unreleased
 
+## 0.48.0 - 2021-08-03
+
 ### Changed
 
+- Updated to London hard fork!
 - The configuration variable `DAPP_TEST_BALANCE_CREATE` has been renamed to `DAPP_TEST_BALANCE`
 - Default `smttimeout` has been increased to 1 minute.
 - A new flag has been added to hevm (`--ask-smt-iterations`) that controls the number of iterations
