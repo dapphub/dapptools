@@ -75,7 +75,6 @@ data Error
   | StackUnderrun
   | BadJumpDestination
   | Revert ByteString
-  | NoSuchContract Addr
   | OutOfGas Word Word
   | BadCheatCode (Maybe Word32)
   | StackLimitExceeded
@@ -1652,12 +1651,7 @@ fetchAccount addr continue =
               (\c -> do assign (cache . fetched . at addr) (Just c)
                         assign (env . contracts . at addr) (Just c)
                         assign result Nothing
-                        tryContinue c)
-  where
-    tryContinue c =
-      if (view external c) && (accountEmpty c)
-        then vmError . NoSuchContract $ addr
-        else continue c
+                        continue c)
 
 readStorage :: Storage -> SymWord -> Maybe (SymWord)
 readStorage (Symbolic _ s) (S w loc) = Just $ S (FromStorage w s) $ readArray s loc
@@ -2086,11 +2080,7 @@ delegateCall this gasGiven (SAddr xTo) (SAddr xContext) xValue xInOffset xInSize
         callChecks this gasGiven xContext' xTo' xValue xInOffset xInSize xOutOffset xOutSize xs $
         \xGas -> do
           vm0 <- get
-          fetchAccount xTo' . const $
-            preuse (env . contracts . ix xTo') >>= \case
-              Nothing ->
-                vmError (NoSuchContract xTo')
-              Just target -> do
+          fetchAccount xTo' $ \target ->
                 burn xGas $ do
                   let newContext = CallContext
                                     { callContextTarget    = xTo'

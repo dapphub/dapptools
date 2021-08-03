@@ -47,7 +47,6 @@ import Prelude hiding (Word)
 import Control.Lens    (view, set, at, ix, (&), over, assign)
 import Control.Monad.State.Strict (execState, when)
 import Data.ByteString (ByteString)
-import Data.Monoid     ((<>))
 import Data.Ord        (comparing)
 import Data.Set        (Set)
 import Text.Read       (readMaybe)
@@ -119,7 +118,7 @@ contractFacts a x = case view bytecode x of
     , NonceFact   a (view nonce x)
     , CodeFact    a b
     ]
-  SymbolicBuffer b ->
+  SymbolicBuffer _ ->
     -- here simply ignore storing the bytecode
     storageFacts a x ++
     [ BalanceFact a (view balance x)

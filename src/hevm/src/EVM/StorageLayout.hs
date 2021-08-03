@@ -6,7 +6,7 @@ import EVM.Dapp (DappInfo, dappAstSrcMap, dappAstIdMap)
 import EVM.Solidity (SolcContract, creationSrcmap, SlotType(..))
 import EVM.ABI (AbiType (..), parseTypeName)
 
-import Data.Aeson (Value (Number))
+import Data.Aeson (Value (..))
 import Data.Aeson.Lens
 
 import Control.Lens
@@ -43,7 +43,7 @@ storageLayout dapp solc =
   let
     root :: Value
     root =
-      fromMaybe (error "no contract definition AST")
+      fromMaybe Null
         (findContractDefinition dapp solc)
   in
     case preview ( key "attributes"
