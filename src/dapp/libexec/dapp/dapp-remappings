@@ -1,18 +1,59 @@
 #!/usr/bin/env node
+const PROGRAM_NAME = process.argv[1].replace(/.*\//, "")
 
-console.log(buildRemappings(".").join("\n"))
+const tree = buildDependencyTree(".")
+console.log(buildRemappings(deduplicate(mapHashes(tree), tree)).join("\n"))
 
-function buildRemappings(prefix) {
+// builds a in memory representation of the projects dependency tree
+//
+// A node in the tree looks like this:
+//
+//   {
+//     name: "",
+//     path: "",
+//     hash: "",
+//     deps: []
+//   }
+function buildDependencyTree(prefix) {
+  if (ls(prefix).includes(".git") != true) {
+    console.error(`${PROGRAM_NAME}: error: ${prefix} is not a Git repository`)
+    console.error(`${PROGRAM_NAME}: error: try "dapp update" to initialize submodules`)
+    process.exit(1)
+  }
+
   const lib = `${prefix}/${process.env.DAPP_LIB}`
-  const ctx = `${prefix}/${process.env.DAPP_SRC}`
+  return {
+    name: prefix.split("/").pop(),
+    path: normalize(`${prefix}/${process.env.DAPP_SRC}`),
+    hash: run("git", ["-C", prefix, "rev-parse", "HEAD"]),
+    deps: ls(lib).map(p => buildDependencyTree(`${lib}/${p}`))
+  }
+}
 
-  const remappings = ls(lib).map(name => {
-    return `${normalize(ctx)}:${name}/=${normalize(lib)}/${name}/${process.env.DAPP_SRC}/`
+// walk tree and build remappings
+function buildRemappings(pkg) {
+  const remappings = pkg.deps.map(dep => {
+    return `${pkg.path}/:${dep.name}/=${dep.path}/`
   })
+  return pkg.deps.map(buildRemappings).concat(remappings).flat()
+}
 
-  return ls(lib).map(name => {
-    return buildRemappings(`${lib}/${name}`)
-  }).concat(remappings).flat()
+// walk tree and build a mapping from hash => path
+function mapHashes(pkg) {
+  const go = (mapping, dep) => {
+    mapping[dep.hash] = dep.path
+    return dep.deps.reduce(go, mapping)
+  }
+  return tree.deps.reduce(go, { [pkg.hash]: pkg.path })
+}
+
+// walk tree and rewrite paths so that all packages with the same hash have the same path
+function deduplicate(mapping, pkg) {
+  return {
+    ...pkg,
+    path: mapping[pkg.hash],
+    deps: pkg.deps.map(dep => deduplicate(mapping, dep))
+  }
 }
 
 // strip the leading `.` or `./` from a path
@@ -28,3 +69,8 @@ function ls(dir) {
   }
 }
 
+function run(cmd, args) {
+  return require("child_process").execFileSync(cmd, args, {
+    encoding: "utf-8"
+  })
+}

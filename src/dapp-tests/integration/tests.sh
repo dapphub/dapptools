@@ -55,9 +55,10 @@ dapp_testnet
 
 # tests the behaviour of the package local dapp remappings
 dapp_remappings() {
+    REV="fde82bd3319f7a1407a21553d120927d99a95f26"
     TMPDIR=$(mktemp -d)
     git clone https://github.com/dapphub/remappings-test "$TMPDIR"
-    (cd "$TMPDIR" && dapp update && dapp test)
+    (cd "$TMPDIR" && git checkout "$REV" && dapp update && dapp test)
 }
 
 dapp_remappings
