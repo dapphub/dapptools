@@ -364,7 +364,6 @@ verify preState maxIter askSmtIters rpcinfo maybepost = do
           maxReached p = case maxIter of
             Just maxI -> any (>= (fromInteger maxI)) (view iterations p)
             Nothing -> False
-          --maxReached = or $ mapMaybe (flip maxIterationsReached maxIter) livePaths
           -- is there any path which can possibly violate the postcondition?
           -- can also do these queries individually (even concurrently!). Could save time and report multiple violations
           postC = sOr $ fmap (\postState -> (sAnd (fst <$> view constraints postState)) .&& sNot (post (preState, postState))) livePaths
