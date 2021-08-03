@@ -975,9 +975,9 @@ getParametersFromEnvironmentVariables rpc = do
     <*> getAddr "DAPP_TEST_CALLER" ethrunAddress
     <*> getAddr "DAPP_TEST_ORIGIN" ethrunAddress
     <*> getWord "DAPP_TEST_GAS_CREATE" defaultGasForCreating
+    <*> getWord "DAPP_TEST_GAS_CALL" defaultGasForInvoking
     <*> getWord "DAPP_TEST_BASEFEE" 0
     <*> getWord "DAPP_TEST_PRIORITYFEE" 0
-    <*> getWord "DAPP_TEST_GAS_CALL" defaultGasForInvoking
     <*> getWord "DAPP_TEST_BALANCE" defaultBalanceForTestContract
     <*> getAddr "DAPP_TEST_COINBASE" miner
     <*> getWord "DAPP_TEST_NUMBER" blockNum
