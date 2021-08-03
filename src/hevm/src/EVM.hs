@@ -2076,11 +2076,13 @@ cheatActions =
           CAbi vals -> case vals of
             [AbiAddress usr, AbiBytesDynamic (ConcreteBuffer -> newCode)] -> do
               vm <- get
-              -- TODO: make error messages nice here
-              when (usr == (view (state . codeContract) vm)) $ vmError (BadCheatCode sig)
-              assign (env . contracts . (ix usr) . contractcode) $ RuntimeCode newCode
-              assign (env . contracts . (ix usr) . codeOps) $ mkCodeOps newCode
-              assign (env . contracts . (ix usr) . opIxMap) $ mkOpIxMap newCode
+              if usr == (view (state . codeContract) vm)
+                 then vmError (BadCheatCode sig)
+                 else do
+                   assign (env . contracts . (ix usr) . codeOps) $ mkCodeOps newCode
+                   assign (env . contracts . (ix usr) . opIxMap) $ mkOpIxMap newCode
+                   assign (env . contracts . (ix usr) . contractcode) $ RuntimeCode newCode
+                   assign (cache . fetched . (ix usr) . contractcode) $ RuntimeCode newCode
             _ -> vmError (BadCheatCode sig)
           _ -> vmError (BadCheatCode sig),
 
