@@ -114,11 +114,10 @@ let
     deps = [ ds-test ds-thing ];
   };
 
-  runTest = { dir, shouldFail, name, dappFlags?"" }: pkgs.buildDappPackage {
-    inherit name shouldFail;
+  runTest = { dir, shouldFail, name, dapprc ? "", testFlags ? "" }: pkgs.buildDappPackage {
+    inherit name shouldFail testFlags dapprc;
     solc=solc-0_6_7;
     src = dir;
-    dappFlags = "${dappFlags}";
     deps = [ ds-test ds-token ds-math ];
     checkInputs = with pkgs; [ hevm jq seth dapp solc ];
   };
@@ -128,7 +127,36 @@ in
       dir = ./pass;
       name = "dappTestsShouldPass";
       shouldFail = false;
-      dappFlags = "--max-iterations 50 --smttimeout 600000 --ffi";
+      testFlags = "--max-iterations 50 --smttimeout 600000 --ffi -v";
+    };
+
+    envVars = let
+      envVarTest = match : dapprc : runTest {
+        testFlags = "--match ${match}";
+        dir = ./env;
+        name = "dappTestEnvVar";
+        shouldFail = false;
+        inherit dapprc;
+      };
+      seth = "${pkgs.seth}/bin/seth";
+    in pkgs.recurseIntoAttrs {
+      # we get "hevm: insufficient balance for gas cost" if we run these together...
+      # maybe we need an env var to set the balance for the origin?
+      origin = envVarTest "origin.sol" "export DAPP_TEST_ORIGIN=$(${seth} --to-hex 256)";
+      rest = envVarTest "rest.sol" ''
+        export DAPP_TEST_BALANCE=$(${seth} --to-wei 998877665544 ether)
+        export DAPP_TEST_ADDRESS=$(${seth} --to-hex 256)
+        export DAPP_TEST_CALLER=$(${seth} --to-hex 100)
+        export DAPP_TEST_GAS_CREATE=$(${seth} --to-wei 4.20 ether)
+        export DAPP_TEST_GAS_CALL=$(${seth} --to-wei 0.69 ether)
+        export DAPP_TEST_NONCE=100
+        export DAPP_TEST_COINBASE=$(${seth} --to-hex 666)
+        export DAPP_TEST_NUMBER=420
+        export DAPP_TEST_TIMESTAMP=69
+        export DAPP_TEST_GAS_LIMIT=$(${seth} --to-wei 4206966 ether)
+        export DAPP_TEST_GAS_PRICE=100
+        export DAPP_TEST_DIFFICULTY=600
+      '';
     };
 
     shouldFail = let
@@ -136,7 +164,7 @@ in
         dir = ./fail;
         shouldFail = true;
         name = "dappTestsShouldFail-${match}";
-        dappFlags = "--match ${match} --smttimeout 600000";
+        testFlags = "--match ${match} --smttimeout 600000";
       };
     in pkgs.recurseIntoAttrs {
       prove-add = fail "prove_add";
@@ -155,7 +183,7 @@ in
       solc = solc-0_6_7;
       src = dss-src;
       name = "dss";
-      dappFlags = "--match '[^dai].t.sol'";
+      testFlags = "--match '[^dai].t.sol'";
       deps = [ ds-test ds-token ds-value ];
     };
   }

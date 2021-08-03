@@ -556,3 +556,6 @@ abiKeccak =
 
 concatMapM :: Monad m => (a -> m [b]) -> [a] -> m [b]
 concatMapM f xs = liftM concat (mapM f xs)
+
+utf8Word :: W256 -> Text
+utf8Word = Text.decodeUtf8 . BS.filter (/= 0) . word256Bytes

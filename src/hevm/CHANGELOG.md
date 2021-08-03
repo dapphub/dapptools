@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Added
+
+- A new configuration variable `DAPP_TEST_NONCE` has been added that allows control over the nonce of the testing contract
+
 ### Changed
 
 - The configuration variable `DAPP_TEST_BALANCE_CREATE` has been renamed to `DAPP_TEST_BALANCE`

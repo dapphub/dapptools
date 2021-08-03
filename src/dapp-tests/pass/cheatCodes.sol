@@ -11,14 +11,29 @@ interface Hevm {
     function sign(uint256,bytes32) external returns (uint8,bytes32,bytes32);
     function addr(uint256) external returns (address);
     function ffi(string[] calldata) external returns (bytes memory);
+    function file(bytes32,uint) external;
+    function file(bytes32,address) external;
+    function file(bytes32,address,uint) external;
+    function look(bytes32) external returns (uint);
+    function look(bytes32,address) external returns (uint);
+    function replace(address,bytes calldata) external;
 }
 
 contract HasStorage {
     uint slot0 = 10;
 }
 
+contract Old {
+    uint constant public x = 10;
+}
+
+contract New {
+    uint constant public x = 100;
+}
+
 contract CheatCodes is DSTest {
     address store = address(new HasStorage());
+    Old target = new Old();
     Hevm hevm = Hevm(HEVM_ADDRESS);
 
     function test_warp_concrete(uint128 jump) public {
@@ -86,5 +101,55 @@ contract CheatCodes is DSTest {
 
         (string memory output) = abi.decode(hevm.ffi(inputs), (string));
         assertEq(output, "acab");
+    }
+
+    function testNonce(address who, uint n) public {
+        hevm.file("nonce", who, n);
+        assertEq(hevm.look("nonce", who), n);
+    }
+
+    function testBalance(address who, uint bal) public {
+        hevm.file("balance", who, bal);
+        assertEq(who.balance, bal);
+    }
+
+    function testReplace() public {
+        hevm.replace(address(target), type(New).runtimeCode);
+        assertEq(New(address(target)).x(), 100);
+    }
+
+    function proveCaller(address who) public {
+        hevm.file("caller", who);
+        assertEq(msg.sender, who);
+    }
+
+    function testOrigin(address who) public {
+        hevm.file("origin", who);
+        assertEq(tx.origin, who);
+    }
+
+    function testCoinbase(address who) public {
+        hevm.file("coinbase", who);
+        assertEq(block.coinbase, who);
+    }
+
+    function testGasPrice(uint price) public {
+        hevm.file("gasPrice", price);
+        assertEq(tx.gasprice, price);
+    }
+
+    function testTxGasLimit(uint limit) public {
+        hevm.file("txGasLimit", limit);
+        assertEq(hevm.look("txGasLimit"), limit);
+    }
+
+    function testBlockGasLimit(uint limit) public {
+        hevm.file("blockGasLimit", limit);
+        assertEq(block.gaslimit, limit);
+    }
+
+    function testDifficulty(uint difficulty) public {
+        hevm.file(bytes32("difficulty"), difficulty);
+        assertEq(block.difficulty, difficulty);
     }
 }

@@ -88,20 +88,21 @@ data UnitTestOptions = UnitTestOptions
   }
 
 data TestVMParams = TestVMParams
-  { testAddress       :: Addr
-  , testCaller        :: Addr
-  , testOrigin        :: Addr
-  , testGasCreate     :: W256
-  , testGasCall       :: W256
-  , testBalanceCreate :: W256
-  , testCoinbase      :: Addr
-  , testNumber        :: W256
-  , testTimestamp     :: W256
-  , testGaslimit      :: W256
-  , testGasprice      :: W256
-  , testMaxCodeSize   :: W256
-  , testDifficulty    :: W256
-  , testChainId       :: W256
+  { testAddress     :: Addr
+  , testNonce       :: W256
+  , testCaller      :: Addr
+  , testOrigin      :: Addr
+  , testGasCreate   :: W256
+  , testGasCall     :: W256
+  , testBalance     :: W256
+  , testCoinbase    :: Addr
+  , testNumber      :: W256
+  , testTimestamp   :: W256
+  , testGaslimit    :: W256
+  , testGasprice    :: W256
+  , testMaxCodeSize :: W256
+  , testDifficulty  :: W256
+  , testChainId     :: W256
   }
 
 defaultGasForCreating :: W256
@@ -112,6 +113,9 @@ defaultGasForInvoking = 0xffffffffffff
 
 defaultBalanceForTestContract :: W256
 defaultBalanceForTestContract = 0xffffffffffffffffffffffff
+
+defaultNonceForTestContract :: W256
+defaultNonceForTestContract = 1
 
 defaultMaxCodeSize :: W256
 defaultMaxCodeSize = 0xffffffff
@@ -136,7 +140,10 @@ initializeUnitTest UnitTestOptions { .. } theContract = do
 
   Stepper.evm $ do
     -- Give a balance to the test target
-    env . contracts . ix addr . balance += w256 (testBalanceCreate testParams)
+    env . contracts . ix addr . balance += w256 (testBalance testParams)
+
+    -- Set the test targets nonce
+    env . contracts . ix addr . nonce .= w256 (testNonce testParams)
 
     -- call setUp(), if it exists, to initialize the test contract
     let theAbi = view abiMap theContract
@@ -928,8 +935,8 @@ initialUnitTestVm (UnitTestOptions {..}) theContract =
            }
     creator =
       initialContract (RuntimeCode mempty)
-        & set nonce 1
-        & set balance (w256 testBalanceCreate)
+        & set nonce (w256 testNonce)
+        & set balance (w256 testBalance)
   in vm
     & set (env . contracts . at ethrunAddress) (Just creator)
 
@@ -968,6 +975,7 @@ getParametersFromEnvironmentVariables rpc = do
 
   TestVMParams
     <$> getAddr "DAPP_TEST_ADDRESS" (createAddress ethrunAddress 1)
+    <*> getWord "DAPP_TEST_NONCE" defaultNonceForTestContract
     <*> getAddr "DAPP_TEST_CALLER" ethrunAddress
     <*> getAddr "DAPP_TEST_ORIGIN" ethrunAddress
     <*> getWord "DAPP_TEST_GAS_CREATE" defaultGasForCreating

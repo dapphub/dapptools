@@ -52,7 +52,6 @@ import qualified Data.ByteArray       as BA
 import qualified Data.Map.Strict      as Map
 import qualified Data.Sequence        as Seq
 import qualified Data.Tree.Zipper     as Zipper
-import qualified Data.Vector          as V
 import qualified Data.Vector.Storable as Vector
 import qualified Data.Vector.Storable.Mutable as Vector
 
@@ -2006,6 +2005,81 @@ cheatActions =
                 assign (state . memory . word256At outOffset) res
           _ -> vmError (BadCheatCode sig),
 
+      action "file(bytes32,address,uint256)" $
+        \sig _ _ input -> case decodeStaticArgs input of
+          [what', addr, val] -> forceConcrete what' $ \(C _ (utf8Word -> what)) ->
+            makeUnique addr $ \(C _ (num -> usr)) -> fetchAccount usr $ \_ ->
+              case what of
+                "nonce" -> forceConcrete val $ \v -> assign (env . contracts . ix usr . nonce) v
+                "balance" -> forceConcrete val $ \v -> assign (env . contracts . ix usr . balance) v
+                _ -> vmError (BadCheatCode sig)
+          _ -> vmError (BadCheatCode sig),
+
+      action "file(bytes32,address)" $
+        \sig _ _ input -> case decodeStaticArgs input of
+          [what', addr] -> forceConcrete what' $ \(C _ (utf8Word -> what)) ->
+            case what of
+              "caller" -> assign (state . caller) (SAddr . sFromIntegral . rawVal $ addr)
+              "origin" -> makeUnique addr $ \(C _ (num -> who)) -> assign (tx . origin) who
+              "coinbase" -> makeUnique addr $ \(C _ (num -> who)) -> assign (block . coinbase) who
+              _ -> vmError (BadCheatCode sig)
+          _ -> vmError (BadCheatCode sig),
+
+      action "file(bytes32,uint256)" $
+        \sig _ _ input -> case decodeStaticArgs input of
+          [what', val'] -> forceConcrete2 (what', val') $ \((C _ (utf8Word -> what)), val) ->
+            case what of
+              "gasPrice" -> assign (tx . gasprice) val
+              "txGasLimit" -> assign (tx . txgaslimit) val
+              "blockGasLimit" -> assign (block . gaslimit) val
+              "difficulty" -> assign (block . difficulty) val
+              _ -> vmError (BadCheatCode sig)
+          _ -> vmError (BadCheatCode sig),
+
+      action "look(bytes32,address)" $
+        \sig outOffset _ input ->
+          case decodeStaticArgs input of
+            [what', who'] -> forceConcrete what' $ \(C _ (utf8Word -> what)) ->
+              makeUnique who' $ \(C _ (num -> who))-> do
+                case what of
+                  "nonce" -> do
+                    vm <- get
+                    case Map.lookup who $ view (env . contracts) vm of
+                      Just c' -> do
+                        let out = litWord (_nonce c')
+                        assign (state . returndata . word256At 0) out
+                        assign (state . memory . word256At outOffset) out
+                      _ -> vmError (BadCheatCode sig)
+                  _ -> vmError (BadCheatCode sig)
+            _ -> vmError (BadCheatCode sig),
+
+      action "look(bytes32)" $
+        \sig outOffset _ input -> case decodeStaticArgs input of
+            [what'] -> forceConcrete what' $ \(C _ (utf8Word -> what)) ->
+              case what of
+                "txGasLimit" -> do
+                  vm <- get
+                  let out = litWord $ view (tx . txgaslimit) vm
+                  assign (state . returndata . word256At 0) out
+                  assign (state . memory . word256At outOffset) out
+                _ -> vmError (BadCheatCode sig)
+            _ -> vmError (BadCheatCode sig),
+
+      action "replace(address,bytes)" $
+        \sig _ _ input -> case decodeBuffer [AbiAddressType, AbiBytesDynamicType] input of
+          CAbi vals -> case vals of
+            [AbiAddress usr, AbiBytesDynamic (ConcreteBuffer -> newCode)] -> do
+              vm <- get
+              if usr == (view (state . codeContract) vm)
+                 then vmError (BadCheatCode sig)
+                 else do
+                   assign (env . contracts . (ix usr) . codeOps) $ mkCodeOps newCode
+                   assign (env . contracts . (ix usr) . opIxMap) $ mkOpIxMap newCode
+                   assign (env . contracts . (ix usr) . contractcode) $ RuntimeCode newCode
+                   assign (cache . fetched . (ix usr) . contractcode) $ RuntimeCode newCode
+            _ -> vmError (BadCheatCode sig)
+          _ -> vmError (BadCheatCode sig),
+
       action "sign(uint256,bytes32)" $
         \sig outOffset _ input -> case decodeStaticArgs input of
           [sk, hash] ->
@@ -2290,7 +2364,7 @@ finishFrame how = do
             modifying burned (subtract remainingGas)
             modifying (state . gas) (+ remainingGas)
 
-          FeeSchedule {..} = view ( block . schedule ) oldVm
+          FeeSchedule {} = view ( block . schedule ) oldVm
 
       -- Now dispatch on whether we were creating or calling,
       -- and whether we shall return, revert, or error (six cases).
@@ -2542,15 +2616,14 @@ checkJump x xs = do
   self <- use (state . codeContract)
   theCodeOps <- use (env . contracts . ix self . codeOps)
   theOpIxMap <- use (env . contracts . ix self . opIxMap)
-  if x < num (len theCode) && 0x5b == (fromMaybe (error "tried to jump to symbolic code location") $ unliteral $ EVM.Symbolic.index (num x) theCode)
-    then
-      if OpJumpdest == snd (theCodeOps RegularVector.! (theOpIxMap Vector.! num x))
-      then do
-        state . stack .= xs
-        state . pc .= num x
-      else
-        vmError BadJumpDestination
-    else vmError BadJumpDestination
+  if x < num (len theCode)
+     && 0x5b == (fromMaybe (error "tried to jump to symbolic code location") $ unliteral $ EVM.Symbolic.index (num x) theCode)
+     && OpJumpdest == snd (theCodeOps RegularVector.! (theOpIxMap Vector.! num x))
+  then do
+    state . stack .= xs
+    state . pc .= num x
+  else do
+    vmError BadJumpDestination
 
 opSize :: Word8 -> Int
 opSize x | x >= 0x60 && x <= 0x7f = num x - 0x60 + 2
