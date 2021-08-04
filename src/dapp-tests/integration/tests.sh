@@ -63,6 +63,17 @@ dapp_remappings() {
 
 dapp_remappings
 
+# tests dapp remappings on a large legacy project with many implicit imports
+dapp_remappings_compat() {
+    REV="bc6d7657f0f5190f65051543199e1b47bf29932b"
+    TMPDIR=$(mktemp -d)
+    git clone https://github.com/dapp-org/tinlake-tests "$TMPDIR"
+    export DAPP_ALLOW_IMPLICIT_IMPORTS=yes
+    (cd "$TMPDIR" && git checkout "$REV" && dapp update && dapp --use solc:0.7.6 build)
+}
+
+dapp_remappings_compat
+
 test_hevm_symbolic() {
     solc --bin-runtime -o . --overwrite factor.sol
     # should find counterexample

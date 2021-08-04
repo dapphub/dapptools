@@ -25,10 +25,20 @@ function buildDependencyTree(prefix) {
 
 // walk tree and build remappings
 function buildRemappings(pkg) {
-  const remappings = pkg.deps.map(dep => {
-    return `${pkg.path}/:${dep.name}/=${dep.path}/`
-  })
-  return pkg.deps.map(buildRemappings).concat(remappings).flat()
+  const paths = mapHashes(pkg)
+
+  let implicits = []
+  if (process.env.DAPP_ALLOW_IMPLICIT_IMPORTS == "yes") {
+    const directs = pkg.deps.map(p => p.name)
+    // get the transitive deps with exactly one version that are not direct deps
+    const uniques = Object.entries(pkg.deps.reduce(buildVersionMap, {}))
+                          .filter(([name, vs]) => vs.size == 1 && !directs.includes(name))
+    // build remappings that allow importing these deps from `pkg`
+    implicits = uniques.map(([name, v]) => `${pkg.path}/:${name}/=${paths[([...v][0])]}/`)
+  }
+
+  const remappings = pkg.deps.map(dep => `${pkg.path}/:${dep.name}/=${dep.path}/`)
+  return pkg.deps.map(buildRemappings).concat(remappings).concat(implicits).flat()
 }
 
 // walk tree and rewrite paths so that all packages with the same hash have the same path
@@ -47,6 +57,21 @@ function mapHashes(pkg) {
   return pkg.deps.reduce(go, { [pkg.hash]: pkg.path })
 }
 
+// folds over a dependency tree with map as the accumlator and builds a mapping
+// from package name to a set of discovered package verions
+function buildVersionMap(map, pkg) {
+  const update = (map, dep) => {
+    map[dep.name] == undefined
+      ? map[dep.name] = new Set([dep.hash])
+      : map[dep.name].add(dep.hash)
+    return map
+  }
+
+  return pkg.deps.reduce((versions, dep) => {
+    return update(versions, dep)
+  }, update(map, pkg))
+}
+
 // strip the leading `.` or `./` from a path
 function normalize(path) {
   return path.replace(/^\.\//, "").replace(/^\//, "")
@@ -56,9 +81,9 @@ function normalize(path) {
 // availalbe (because it's faster), or falls back to a sha256sum of the directory contents if needed
 function hash(dir) {
   if (ls(dir).includes(".git")) {
-    return run("git", ["-C", dir, "rev-parse", "HEAD"])
+    return run("git", ["-C", dir, "rev-parse", "HEAD"]).trim()
   } else {
-    return run("bash", ["-c", `rg --files ${dir} | sort | xargs sha256sum | sha256sum`])
+    return run("bash", ["-c", `rg --files ${dir} | sort | xargs sha256sum | sha256sum | cut -d' ' -f1`]).trim()
   }
 }
 
