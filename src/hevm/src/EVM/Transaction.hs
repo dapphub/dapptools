@@ -135,7 +135,7 @@ txGasCost fs tx =
       zeroBytes    = BS.count 0 calldata
       nonZeroBytes = BS.length calldata - zeroBytes
       baseCost     = g_transaction fs
-        + if isNothing (txToAddr tx) then g_txcreate fs else 0
+        + (if isNothing (txToAddr tx) then g_txcreate fs else 0)
         + (accessListPrice fs $ txAccessList tx)
       zeroCost     = g_txdatazero fs
       nonZeroCost  = g_txdatanonzero fs
@@ -144,8 +144,6 @@ txGasCost fs tx =
 instance FromJSON AccessListEntry where
   parseJSON (JSON.Object val) = do
     accessAddress_ <- addrField val "address"
-    --storageKeys <- (val JSON..: "storageKeys")
-    --accessStorageKeys_ <- JSON.listParser (JSON.withText "W256" (return . readNull 0 . Text.unpack)) storageKeys
     accessStorageKeys_ <- (val JSON..: "storageKeys") >>= parseJSONList
     return $ AccessListEntry accessAddress_ accessStorageKeys_
   parseJSON invalid =
