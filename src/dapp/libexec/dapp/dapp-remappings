@@ -14,17 +14,11 @@ console.log(buildRemappings(deduplicate(buildDependencyTree("."))).join("\n"))
 //     deps: []
 //   }
 function buildDependencyTree(prefix) {
-  if (ls(prefix).includes(".git") != true) {
-    console.error(`${PROGRAM_NAME}: error: ${prefix} is not a Git repository`)
-    console.error(`${PROGRAM_NAME}: error: try "dapp update" to initialize submodules`)
-    process.exit(1)
-  }
-
   const lib = `${prefix}/${process.env.DAPP_LIB}`
   return {
     name: prefix.split("/").pop(),
     path: normalize(`${prefix}/${process.env.DAPP_SRC}`),
-    hash: run("git", ["-C", prefix, "rev-parse", "HEAD"]),
+    hash: hash(prefix),
     deps: ls(lib).map(p => buildDependencyTree(`${lib}/${p}`))
   }
 }
@@ -56,6 +50,16 @@ function mapHashes(pkg) {
 // strip the leading `.` or `./` from a path
 function normalize(path) {
   return path.replace(/^\.\//, "").replace(/^\//, "")
+}
+
+// computes the hash of the contents of a given directory, uses the git hash if
+// availalbe (because it's faster), or falls back to a sha256sum of the directory contents if needed
+function hash(dir) {
+  if (ls(dir).includes(".git")) {
+    return run("git", ["-C", dir, "rev-parse", "HEAD"])
+  } else {
+    return run("bash", ["-c", `rg --files ${dir} | sort | xargs sha256sum | sha256sum`])
+  }
 }
 
 function ls(dir) {
