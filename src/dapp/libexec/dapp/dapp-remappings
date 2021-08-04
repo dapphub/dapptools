@@ -1,8 +1,7 @@
 #!/usr/bin/env node
 const PROGRAM_NAME = process.argv[1].replace(/.*\//, "")
 
-const tree = buildDependencyTree(".")
-console.log(buildRemappings(deduplicate(mapHashes(tree), tree)).join("\n"))
+console.log(buildRemappings(deduplicate(buildDependencyTree("."))).join("\n"))
 
 // builds a in memory representation of the projects dependency tree
 //
@@ -38,22 +37,20 @@ function buildRemappings(pkg) {
   return pkg.deps.map(buildRemappings).concat(remappings).flat()
 }
 
+// walk tree and rewrite paths so that all packages with the same hash have the same path
+function deduplicate(pkg) {
+  const mapping = mapHashes(pkg)
+  const go = p => ({ ...p, path: mapping[p.hash], deps: p.deps.map(go) })
+  return go(pkg)
+}
+
 // walk tree and build a mapping from hash => path
 function mapHashes(pkg) {
   const go = (mapping, dep) => {
     mapping[dep.hash] = dep.path
     return dep.deps.reduce(go, mapping)
   }
-  return tree.deps.reduce(go, { [pkg.hash]: pkg.path })
-}
-
-// walk tree and rewrite paths so that all packages with the same hash have the same path
-function deduplicate(mapping, pkg) {
-  return {
-    ...pkg,
-    path: mapping[pkg.hash],
-    deps: pkg.deps.map(dep => deduplicate(mapping, dep))
-  }
+  return pkg.deps.reduce(go, { [pkg.hash]: pkg.path })
 }
 
 // strip the leading `.` or `./` from a path
