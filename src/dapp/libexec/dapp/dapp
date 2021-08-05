@@ -111,13 +111,6 @@ if ! [[ $DAPP_INIT ]]; then
   [[ $(pwd) != ~ && -e .dapprc ]] && . .dapprc
 fi
 
-export DAPP_SRC=${DAPP_SRC-src}
-export DAPP_LIB=${DAPP_LIB-lib}
-export DAPP_OUT=${DAPP_OUT-out}
-export DAPP_JSON=${DAPP_JSON-${DAPP_OUT}/dapp.sol.json}
-export DAPP_ROOT=${DAPP_ROOT-.}
-export DAPP_REMAPPINGS=${DAPP_REMAPPINGS-"$(dapp-remappings)"}
-
 if [[ $2 = --help ]]; then
   exec "${0##*/}" help -- "$1"
 elif [[ $DAPP_SOLC_VERSION ]]; then
@@ -183,6 +176,13 @@ while [[ $1 ]]; do
     *) printf "${0##*/}: internal error: %q\\n" "$1"; exit 1
   esac; shift
 done
+
+export DAPP_SRC=${DAPP_SRC-src}
+export DAPP_LIB=${DAPP_LIB-lib}
+export DAPP_OUT=${DAPP_OUT-out}
+export DAPP_JSON=${DAPP_JSON-${DAPP_OUT}/dapp.sol.json}
+export DAPP_ROOT=${DAPP_ROOT-.}
+export DAPP_REMAPPINGS=${DAPP_REMAPPINGS-"$(dapp-remappings)"}
 
 if ! [ -x "$(command -v "${0##*/}-${1-help}")" ]; then
     # look for approximate matches
