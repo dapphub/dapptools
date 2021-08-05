@@ -25,15 +25,16 @@ function buildDependencyTree(prefix) {
 
 // walk tree and build remappings
 function buildRemappings(pkg) {
-  const paths = mapHashes(pkg)
 
   let implicits = []
-  if (process.env.DAPP_ALLOW_IMPLICIT_IMPORTS == "yes") {
+  if (process.env.DAPP_ALLOW_TRANSITIVE_IMPORTS == "1") {
+    // get the names of the direct dependencies
     const directs = pkg.deps.map(p => p.name)
     // get the transitive deps with exactly one version that are not direct deps
     const uniques = Object.entries(pkg.deps.reduce(buildVersionMap, {}))
                           .filter(([name, vs]) => vs.size == 1 && !directs.includes(name))
     // build remappings that allow importing these deps from `pkg`
+    const paths = mapHashes(pkg)
     implicits = uniques.map(([name, v]) => `${pkg.path}/:${name}/=${paths[([...v][0])]}/`)
   }
 
@@ -67,9 +68,7 @@ function buildVersionMap(map, pkg) {
     return map
   }
 
-  return pkg.deps.reduce((versions, dep) => {
-    return update(versions, dep)
-  }, update(map, pkg))
+  return pkg.deps.reduce(update, update(map, pkg))
 }
 
 // strip the leading `.` or `./` from a path
