@@ -40,7 +40,7 @@ in self-hs: super-hs:
           "--ghc-option=-O2"
       ] ++
       (if stdenv.isDarwin then [] else
-          if shared then [] else [
+       if shared then [] else [
           "--enable-executable-static"
           "--extra-lib-dirs=${pkgs.gmp.override { withStatic = true; }}/lib"
           "--extra-lib-dirs=${pkgs.glibc.static}/lib"
