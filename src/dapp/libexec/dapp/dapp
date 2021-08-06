@@ -16,11 +16,13 @@
 ### verbosity=<number>   verbosity of 'dapp test' output (0-3)
 ### v,verbose            sets verbosity to 1
 ### fuzz-runs=<number>   number of times to run fuzzing tests
+### depth=<number>       number of transactions to sequence per invariant cycle
 ### replay=<string>      rerun a particular test case
 ### m,match=<string>     only run test methods matching regex
 ### cache=<string>       use the cache at directory
 ### ffi                  allow the use of the ffi cheatcode (WARNING: allows test authors to execute arbitrary code on your machine)
-###
+### coverage             print coverage data
+
 ###   RPC options:
 ### rpc                  fetch remote state via ETH_RPC_URL
 ### rpc-url=<string>     fetch remote state via <url>
@@ -61,10 +63,12 @@ extract              after building, write the .abi, .bin and .bin-runtime. Impl
 verbosity=<number>   verbosity of 'dapp test' output (0-3)
 v,verbose            sets verbosity to 1
 fuzz-runs=<number>   number of times to run fuzzing tests
+depth=<number>       number of transactions to sequence per invariant cycle
 replay=<string>      rerun a particular test case
 m,match=<string>     only run test methods matching regex
 cache=<string>       use the cache at directory
 ffi                  allow the use of the ffi cheatcode (WARNING: allows test authors to execute arbitrary code on your machine)
+coverage             print coverage data
 
   RPC options:
 rpc                  fetch remote state via ETH_RPC_URL
@@ -142,11 +146,13 @@ while [[ $1 ]]; do
     -v|--verbose)             export DAPP_TEST_VERBOSITY=1;;
     --verbosity)       shift; export DAPP_TEST_VERBOSITY=$1;;
     --fuzz-runs)       shift; export DAPP_TEST_FUZZ_RUNS=$1;;
+    --depth)           shift; export DAPP_TEST_DEPTH=$1;;
 
     --smttimeout)      shift; export DAPP_TEST_SMTTIMEOUT=$1;;
     --solver)          shift; export DAPP_TEST_SOLVER=$1;;
     --max-iterations)  shift; export DAPP_TEST_MAX_ITERATIONS=$1;;
-    --smtdebug)               export DAPP_TEST_SMTDEBUG=$1;;
+    --smtdebug)               export DAPP_TEST_SMTDEBUG=1;;
+    --coverage)               export DAPP_TEST_COVERAGE=1;;
 
     --replay)          shift; export DAPP_TEST_REPLAY=$1;;
     --cache)           shift; export DAPP_TEST_CACHE=$1;;
