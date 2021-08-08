@@ -16,15 +16,22 @@ have hevm || {
   exit 1
 }
 
+opts=$(dapp --hevm-opts "$0" "$@")
+
+# Link libraries by default.
+export DAPP_LINK_TEST_LIBRARIES=${DAPP_LINK_TEST_LIBRARIES-1}
+
 cd "$DAPP_ROOT"
-# Make sure the dapp is built with libraries linked.
-( set -x; DAPP_LINK_TEST_LIBRARIES=1 dapp build || exit )
+( set -x; dapp build || exit )
 
-# Create the state directory for linked libraries.
+# Make a state dir for linked libraries if needed.
 
-state=$(dapp --make-library-state)
-function clean() { rm -rf "$state"; }
-trap clean EXIT
+if [ "$DAPP_LINK_TEST_LIBRARIES" = 1 ] ; then
+    state=$(dapp --make-library-state)
+    opts+=("--state ${state}")
+    function clean() { rm -rf "$state"; }
+    trap clean EXIT
+fi
 
 # Make sure we know which JSON file to target.
 
@@ -50,8 +57,5 @@ elif [[ "${#jsons[@]}" -eq 0 ]]; then
   echo >&2 "${0##*/}: error: No compilation outputs; nothing to debug."
 fi
 
-# Launch the debugger!
-
-opts=$(dapp --hevm-opts "$0" "$@")
 # shellcheck disable=SC2068
-(set -x; hevm dapp-test --debug --dapp-root="$DAPP_ROOT" --state="$state" --json-file="$target" ${opts[@]})
+(set -x; hevm dapp-test --debug --dapp-root="$DAPP_ROOT" --json-file="$target" ${opts[@]})
