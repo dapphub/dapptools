@@ -16,15 +16,19 @@ have hevm || {
   exit 1
 }
 
+# Link libraries by default.
+export DAPP_LINK_TEST_LIBRARIES=${DAPP_LINK_TEST_LIBRARIES-1}
+
 cd "$DAPP_ROOT"
-# Make sure the dapp is built with libraries linked.
-( set -x; DAPP_LINK_TEST_LIBRARIES=1 dapp build || exit )
+( set -x; dapp build || exit )
 
-# Create the state directory for linked libraries.
+# Make a state dir for linked libraries if needed.
 
-state=$(dapp --make-library-state)
-function clean() { rm -rf "$state"; }
-trap clean EXIT
+if [ "$DAPP_LINK_TEST_LIBRARIES" = 1 ] ; then
+    state=$(dapp --make-library-state)
+    function clean() { rm -rf "$state"; }
+    trap clean EXIT
+fi
 
 # Make sure we know which JSON file to target.
 
