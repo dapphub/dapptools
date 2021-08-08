@@ -3,8 +3,10 @@
 ### Usage: dapp test [<options>]
 ###
 ### Options:
-###   -v, --verbose             trace ouput for failing tests
+###   -v, --verbose             trace output for failing tests
+###   --coverage                print coverage data
 ###   --fuzz-runs <number>      number of times to run fuzzing tests
+###   --depth <number>          number of transactions to sequence per invariant cycle
 ###   --replay <string>         rerun a particular test case
 ###   -m, --match <string>      only run test methods matching regex
 ###

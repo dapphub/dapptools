@@ -209,7 +209,7 @@ the `invariant*` testing type. When running an invariant test, hevm will invoke 
 by a call to `targetContracts()`, if such a function exists in the testing contracts. If no such method exists, it will invoke methods from
 any non-testing contract available after the `setUp()` function has been run, checking the `invariant*` after each run.
 
-The `--depth` paramenter determines how many transactions deep each test will run, while the `--fuzz-runs` parameter
+The `--depth` parameter determines how many transactions deep each test will run, while the `--fuzz-runs` parameter
 determines how many times the whole process is repeated.
 
 Note that a revert in any of the randomly generated call will not trigger a test failure. The goal of invariant tests is to find a state change that results in a violation of the assertions defined in the body of the test method, and since reverts do not result in a state change, they can be safely ignored. Reverts within the body of the `invariant*` test method will however still cause a test failure.
@@ -291,6 +291,7 @@ variables](../hevm/README.md#environment-variables).
 | `DAPP_SOLC`                | n/a                        | solc binary to use                                                                                                                                 |
 | `DAPP_LIBRARIES`           | automatically deployed     | Library addresses to link to                                                                                                                       |
 | `DAPP_SKIP_BUILD`          | n/a                        | Avoid compiling this time                                                                                                                          |
+| `DAPP_COVERAGE`            | n/a                        | Print coverage data                                                                                                                                |
 | `DAPP_LINK_TEST_LIBRARIES` | `1` when testing; else `0` | Compile with libraries                                                                                                                             |
 | `DAPP_VERIFY_CONTRACT`     | `yes`                      | Attempt Etherscan verification                                                                                                                     |
 | `DAPP_ASYNC`               | n/a                        | Set to `yes` to skip waiting for etherscan verification to succeed                                                                                 |
@@ -302,6 +303,7 @@ variables](../hevm/README.md#environment-variables).
 | `DAPP_TEST_VERBOSITY`      | `0`                        | Sets how much detail `dapp test` logs. Verbosity `1` shows traces for failing tests, `2` shows logs for all tests, `3` shows traces for all tests  |
 | `DAPP_TEST_FFI `           | `0`                        | Allow use of the ffi cheatcode in tests (`0` or `1`)                                                                                               |
 | `DAPP_TEST_FUZZ_RUNS`      | `200`                      | How many iterations to use for each property test in your project                                                                                  |
+| `DAPP_TEST_DEPTH`          | `20`                       | Number of transactions to sequence per invariant cycle                                                                                             |
 | `DAPP_TEST_SMTTIMEOUT`     | `60000`                    | Timeout passed to the smt solver for symbolic tests (in ms, and per smt query)                                                                     |
 | `DAPP_TEST_MAX_ITERATIONS` | n/a                        | The number of times hevm will revisit a particular branching point when symbolically executing                                                     |
 | `DAPP_TEST_SOLVER `        | `z3`                       | Solver to use for symbolic execution (`cvc4` or `z3`)                                                                                              |
@@ -407,8 +409,10 @@ You can override this with the `DAPP_REMAPPINGS` environment variable.
     Usage: dapp test [<options>]
 
     Options:
-        -v, --verbose             trace ouput for failing tests
+        -v, --verbose             trace output for failing tests
+        --coverage                print coverage data
         --verbosity <number>      sets the verbosity to <number>
+        --depth=<number>          number of transactions to sequence per invariant cycle
         --fuzz-runs <number>      number of times to run fuzzing tests
         --replay <string>         rerun a particular test case
         -m, --match <string>      only run test methods matching regex
