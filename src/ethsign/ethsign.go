@@ -12,6 +12,7 @@ import (
   "github.com/ethereum/go-ethereum/rlp"
 
   "os"
+  "math/big"
   "fmt"
   "io/ioutil"
   "strings"
@@ -339,6 +340,14 @@ func main() {
           Usage: "gas limit",
         },
         cli.StringFlag{
+          Name: "prio-fee",
+          Usage: "max priority fee per gas",
+        },
+        cli.StringFlag{
+          Name: "max-fee",
+          Usage: "max fee per gas",
+        },
+        cli.StringFlag{
           Name: "value",
           Usage: "transaction value",
         },
@@ -349,12 +358,21 @@ func main() {
       },
       Action: func(c *cli.Context) error {
         requireds := []string{
-          "nonce", "value", "gas-price", "gas-limit", "chain-id", "from",
+          "nonce", "value", "gas-limit", "chain-id", "from",
         }
 
         for _, required := range(requireds) {
           if c.String(required) == "" {
             return cli.NewExitError("ethsign: missing required parameter --" + required, 1)
+          }
+        }
+
+        // TODO: could support tx type 1 at some point
+        txtype := types.LegacyTxType;
+        if (c.String("gas-price") == "") {
+          txtype = types.DynamicFeeTxType;
+          if (c.String("max-fee") == "" || c.String("prio-fee") == "") {
+            return cli.NewExitError("ethsign: --gas-price or (--max-fee --prio-fee) required", 1)
           }
         }
 
@@ -371,10 +389,22 @@ func main() {
         to := common.HexToAddress(c.String("to"))
         from := common.HexToAddress(c.String("from"))
         nonce := math.MustParseUint64(c.String("nonce"))
-        gasPrice := math.MustParseBig256(c.String("gas-price"))
         gasLimit := math.MustParseUint64(c.String("gas-limit"))
         value := math.MustParseBig256(c.String("value"))
         chainID := math.MustParseBig256(c.String("chain-id"))
+
+        var (
+          gasPrice *big.Int
+          maxFee   *big.Int 
+          maxPrio  *big.Int
+        )
+
+        if (txtype == types.LegacyTxType) {
+          gasPrice = math.MustParseBig256(c.String("gas-price"))
+        } else if (txtype == types.DynamicFeeTxType) {
+          maxFee  = math.MustParseBig256(c.String("max-fee"))
+          maxPrio = math.MustParseBig256(c.String("max-prio"))
+        }
 
         dataString := c.String("data")
         if dataString == "" {
@@ -388,9 +418,33 @@ func main() {
 
         var tx *types.Transaction
         if create {
-          tx = types.NewContractCreation(nonce, value, gasLimit, gasPrice, data)
+          if (txtype == types.LegacyTxType) {
+            tx = types.NewContractCreation(nonce, value, gasLimit, gasPrice, data)
+          } else if (txtype == types.DynamicFeeTxType) {
+            tx = types.NewTx(&types.DynamicFeeTx{
+              Nonce:     nonce,
+              To:        &common.Address{},
+              Value:     value,
+              Gas:       gasLimit,
+              GasFeeCap: maxFee,
+              GasTipCap: maxPrio,
+              Data:      data,
+            })
+          }
         } else {
-          tx = types.NewTransaction(nonce, to, value, gasLimit, gasPrice, data)
+          if (txtype == types.LegacyTxType) {
+            tx = types.NewTransaction(nonce, to, value, gasLimit, gasPrice, data)
+          } else if (txtype == types.DynamicFeeTxType) {
+            tx = types.NewTx(&types.DynamicFeeTx{
+              Nonce:     nonce,
+              To:        &to,
+              Value:     value,
+              Gas:       gasLimit,
+              GasFeeCap: maxFee,
+              GasTipCap: maxPrio,
+              Data:      data,
+            })
+          }
         }
 
         signed, err := wallet.SignTxWithPassphrase(*acct, passphrase, tx, chainID)
