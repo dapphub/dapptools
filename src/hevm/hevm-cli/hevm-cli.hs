@@ -593,17 +593,17 @@ dappCoverage opts _ solcFile =
         let
           dapp = dappInfo "." contractMap sourceCache
           f (k, vs) = do
-            putStr "***** hevm coverage for "
+            putStr ("\x1b[0m" ++ "hevm coverage for ") -- Prefixed with color reset
             putStrLn (unpack k)
             putStrLn ""
             forM_ vs $ \(n, bs) -> do
               case ByteString.find (\x -> x /= 0x9 && x /= 0x20 && x /= 0x7d) bs of
-                Nothing -> putStr "..... "
+                Nothing -> putStr "\x1b[33m" -- Yellow (Coverage status isn't relevant)
                 Just _ ->
                   case n of
-                    -1 -> putStr ";;;;; "
-                    0  -> putStr "##### "
-                    _  -> putStr "      "
+                    -1 -> putStr "\x1b[33m" -- Yellow (Coverage status isn't relevant)
+                    0  -> putStr "\x1b[31m" -- Red (Uncovered)
+                    _  -> putStr "\x1b[32m" -- Green (Covered)
               Char8.putStrLn bs
             putStrLn ""
 
