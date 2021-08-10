@@ -598,10 +598,10 @@ dappCoverage opts _ solcFile =
             putStrLn ""
             forM_ vs $ \(n, bs) -> do
               case ByteString.find (\x -> x /= 0x9 && x /= 0x20 && x /= 0x7d) bs of
-                Nothing -> putStr "\x1b[33m" -- Yellow (Coverage status isn't relevant)
+                Nothing -> putStr "\x1b[38;5;240m" -- Gray (Coverage status isn't relevant)
                 Just _ ->
                   case n of
-                    -1 -> putStr "\x1b[33m" -- Yellow (Coverage status isn't relevant)
+                    -1 -> putStr "\x1b[38;5;240m" -- Gray (Coverage status isn't relevant)
                     0  -> putStr "\x1b[31m" -- Red (Uncovered)
                     _  -> putStr "\x1b[32m" -- Green (Covered)
               Char8.putStrLn bs
