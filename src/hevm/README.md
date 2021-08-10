@@ -242,7 +242,7 @@ If left out, calldata is a fully abstract buffer of at most 256 bytes.
 
 ```
 Usage: hevm dapp-test [--json-file STRING] [--dapp-root STRING] [--debug]
-                      [--fuzz-runs INT] [--replay (TEXT,BYTESTRING)]
+                      [--fuzz-runs INT] [--replay (TEXT,BYTESTRING)] [--depth INT]
                       [--rpc TEXT] [--verbose INT] [--coverage] [--state STRING]
                       [--match STRING] [--smttimeout INT] [--max-iterations INT]
                       [--solver STRING] [--cache STRING]
