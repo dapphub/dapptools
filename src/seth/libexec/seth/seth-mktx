@@ -30,7 +30,7 @@ fi
 
 if [[ $ETH_GAS_PRICE ]]; then
   args+=(--gas-price "$ETH_GAS_PRICE")
-else if [[ $ETH_PRIO_FEE ]] && [[ $ETH_MAX_FEE ]]; then
+elif [[ $ETH_PRIO_FEE ]] && [[ $ETH_MAX_FEE ]]; then
   args+=(--prio-fee "$ETH_PRIO_FEE")
   args+=(--max-fee "$ETH_MAX_FEE")
 else
