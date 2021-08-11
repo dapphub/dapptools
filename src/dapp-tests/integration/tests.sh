@@ -48,7 +48,7 @@ dapp_testnet() {
   [[ $(seth run-tx "$TX") = 0x ]] || error
 
   # dynamic fee transaction (EIP-1559)
-  seth send "$A_ADDR" "off()" --gas 0xffff --password /dev/null --from "$ACC" --keystore "$TMPDIR"/8545/keystore --prio-fee 2 'gwei' --max-price 10 'gwei' --async
+  seth send "$A_ADDR" "off()" --gas 0xffff --password /dev/null --from "$ACC" --keystore "$TMPDIR"/8545/keystore --prio-fee 2 'gwei' --max-fee 10 'gwei' --async
 }
 
 dapp_testnet
