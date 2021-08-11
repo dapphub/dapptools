@@ -10,6 +10,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - seth bundle-source writes the contents of standard-json to the current directory to enable better sourcemaps for multi-file etherscan source code.
 
+### Added 
+
+- Dynamic transaction fee format transactions (EIP-1559) supported by introducing flags `--max-fee` and `--prio-fee` to seth and corresponding environment variables `ETH_MAX_FEE`, `ETH_PRIO_FEE` to seth and ethsign. If `--gas-price` is provided (or `ETH_GAS_PRICE`) is set, legacy transactions will be used.
+
+### Changed
+
+- `--gas-price` must be explicitly set: seth will no longer ask the rpc client for appriopriate pricing.
+
 ## [0.10.1] - 2021-03-22
 
 ### Added

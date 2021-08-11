@@ -703,17 +703,19 @@ Sign and publish a transaction to the blockchain.
     seth send [<options>] --create <code> <sig> [<args>]
     seth send [<options>] --create <code> [<data>]
 
-| Flag          | Variable        | Default      | Synopsis        |
-| ------------- | --------------- | ------------ | --------------- |
-| `--block`     | `ETH_BLOCK`     | `latest`     | block number    |
-| `--from`      | `ETH_FROM`      | n/a          | sender          |
-| `--gas`       | `ETH_GAS`       | node decides | gas quantity    |
-| `--gas-price` | `ETH_GAS_PRICE` | node decides | gas price       |
-| `--value`     | `ETH_VALUE`     | `0`          | ether value     |
-| `--create`    | `SETH_CREATE`   |              | create contract |
-| `--resend`    | `SETH_RESEND`   |              | reuse nonce     |
-| `--async`     | `SETH_ASYNC`    |              | don't wait      |
-| `--status`    | `SETH_STATUS`   |              | check success   |
+| Flag          | Variable        | Default      | Synopsis                          |
+| ------------- | --------------- | ------------ | ---------------                   |
+| `--block`     | `ETH_BLOCK`     | `latest`     | block number                      |
+| `--from`      | `ETH_FROM`      | n/a          | sender                            |
+| `--gas`       | `ETH_GAS`       | node decides | gas quantity                      |
+| `--gas-price` | `ETH_GAS_PRICE` |              | gas price                         |
+| `--max-fee`   | `ETH_MAX_FEE`   |              | max net gas cost                  |
+| `--prio-fee`  | `ETH_PRIO_FEE`  |              | EIP-1559 priority fee (miner tip) |
+| `--value`     | `ETH_VALUE`     | `0`          | ether value                       |
+| `--create`    | `SETH_CREATE`   |              | create contract                   |
+| `--resend`    | `SETH_RESEND`   |              | reuse nonce                       |
+| `--async`     | `SETH_ASYNC`    |              | don't wait                        |
+| `--status`    | `SETH_STATUS`   |              | check success                     |
 
 See [Key management and signing](#key-management-and-signing) for
 details on how Seth signs transactions.
@@ -725,6 +727,9 @@ With `--status` (which excludes `--async`), check the status field of
 the transaction receipt and exit with an error code if the transaction
 failed. This is a post-Byzantium feature and will soon become the
 default behavior.
+
+If `--gas-price` is provided (or `ETH_GAS_PRICE`) is set, legacy transactions will be used.
+For dynamic fee transactions (EIP-1559), `--max-fee` and `--prio-fee` is required.
 
 ### `seth sign`
 
