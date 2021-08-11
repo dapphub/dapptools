@@ -786,7 +786,7 @@ Show all fields unless `<field>` is given.
 [`seth abi`]: #seth-abi
 [`seth age`]: #seth-age
 [`seth balance`]: #seth-balance
-[`seth balance`]: #seth-balance
+[`seth basefee`]: #seth-basefee
 [`seth block`]: #seth-block
 [`seth bundle-source`]: #seth-bundle-source
 [`seth call`]: #seth-call
