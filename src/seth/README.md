@@ -71,6 +71,7 @@ hardware wallets—even if you use a remote RPC node like Infura's.
   - [`seth --to-wei`]
   - [`seth age`]
   - [`seth balance`]
+  - [`seth basefee`]
   - [`seth block`]
   - [`seth block-number`]
   - [`seth bundle-source`]
@@ -456,6 +457,14 @@ Show the timestamp of a block (the latest block by default).
 Show the ether balance of an account.
 
     seth balance [--block <block>] <account>
+
+### `seth basefee`
+
+Show the basefee of a block (the latest block by default).
+
+    seth basefee [<block>]
+
+If no `<block>` number is given, defaults to `latest`.
 
 ### `seth block`
 
