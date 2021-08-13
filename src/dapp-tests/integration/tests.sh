@@ -42,13 +42,13 @@ dapp_testnet() {
 
   [[ $(seth code "$A_ADDR") = "$HEVM_RET" ]] || error
 
-  TX=$(seth send "$A_ADDR" "off()" --gas 0xffff --password /dev/null --from "$ACC" --keystore "$TMPDIR"/8545/keystore --async --gas-price 0)
+  TX=$(seth send "$A_ADDR" "off()" --gas 0xffff --password /dev/null --from "$ACC" --keystore "$TMPDIR"/8545/keystore --async)
 
   # since we have one tx per block, seth run-tx and seth debug are equivalent
   [[ $(seth run-tx "$TX") = 0x ]] || error
 
   # dynamic fee transaction (EIP-1559)
-  seth send "$A_ADDR" "off()" --gas 0xffff --password /dev/null --from "$ACC" --keystore "$TMPDIR"/8545/keystore --prio-fee 2 'gwei' --max-fee 10 'gwei' --async
+  seth send "$A_ADDR" "off()" --gas 0xffff --password /dev/null --from "$ACC" --keystore "$TMPDIR"/8545/keystore --prio-fee 2 'gwei' --gas-price 10 'gwei' --async
 }
 
 dapp_testnet

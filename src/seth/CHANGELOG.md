@@ -12,7 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added 
 
-- Dynamic transaction fee format transactions (EIP-1559) supported by introducing flags `--max-fee` and `--prio-fee` to seth and corresponding environment variables `ETH_MAX_FEE`, `ETH_PRIO_FEE` to seth and ethsign. If `--gas-price` is provided (or `ETH_GAS_PRICE`) is set, legacy transactions will be used.
+- Dynamic transaction fee format transactions (EIP-1559) supported by introducing the flag `--prio-fee` and corresponding environment variable `ETH_PRIO_FEE` to seth and ethsign. If `--prio-fee` is provided (or `ETH_PRIO_FEE`) is set, 1559 transaction will be used and `--gas-price` will reflect the maximum gas price, rather than the absolute gas price.
 
 ### Changed
 

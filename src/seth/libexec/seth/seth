@@ -19,7 +19,6 @@
 ###    -F, --from=<sender>        account to send transaction from
 ###    -G, --gas=<number>         number of gas units to provide
 ###    -P, --gas-price=<number>   price (in wei) of each gas unit
-###    --max-fee=<number>         max net price (in wei) of each gas unit
 ###    --max-prio=<number>        max priority fee (miner tip) in wei per gas
 ###    -N, --nonce=<number>       nonce value to use for the transaction
 ###    -V, --value=<number>       amount (in wei) of ETH to send
@@ -73,7 +72,6 @@ keystore=dir         local keystore directory
 F,from=address       account to send transaction from
 G,gas=number         number of gas units to provide
 P,gas-price=number   price (in wei) of each gas unit
-max-fee=number       max net price (in wei) of each gas unit
 max-prio=number      max priority fee (miner tip) in wei per gas
 
 N,nonce=number       nonce value to use for the transaction
@@ -158,8 +156,6 @@ while [[ $1 ]]; do
     -G|--gas)        shift; export ETH_GAS=$1;;
     -P|--gas-price)  shift;
       export ETH_GAS_PRICE=$(seth --to-wei ${1%gwei} ${1##*([0-9])});;
-    --max-fee)       shift;
-      export ETH_MAX_FEE=$(seth --to-wei ${1%gwei} ${1##*([0-9])});;
     --prio-fee)      shift;
       export ETH_PRIO_FEE=$(seth --to-wei ${1%gwei} ${1##*([0-9])});;
     -N|--nonce)      shift; export ETH_NONCE=$1;;

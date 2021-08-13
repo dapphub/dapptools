@@ -344,10 +344,6 @@ func main() {
           Usage: "max priority fee per gas",
         },
         cli.StringFlag{
-          Name: "max-fee",
-          Usage: "max fee per gas",
-        },
-        cli.StringFlag{
           Name: "value",
           Usage: "transaction value",
         },
@@ -358,7 +354,7 @@ func main() {
       },
       Action: func(c *cli.Context) error {
         requireds := []string{
-          "nonce", "value", "gas-limit", "chain-id", "from",
+          "nonce", "value", "gas-limit", "gas-price", "chain-id", "from",
         }
 
         for _, required := range(requireds) {
@@ -369,11 +365,8 @@ func main() {
 
         // TODO: could support tx type 1 at some point
         txtype := types.LegacyTxType;
-        if (c.String("gas-price") == "") {
+        if (c.String("prio-fee") != "") {
           txtype = types.DynamicFeeTxType;
-          if (c.String("max-fee") == "" || c.String("prio-fee") == "") {
-            return cli.NewExitError("ethsign: --gas-price or (--max-fee --prio-fee) required", 1)
-          }
         }
 
         create := c.Bool("create")
@@ -392,18 +385,14 @@ func main() {
         gasLimit := math.MustParseUint64(c.String("gas-limit"))
         value := math.MustParseBig256(c.String("value"))
         chainID := math.MustParseBig256(c.String("chain-id"))
+        gasPrice := math.MustParseBig256(c.String("gas-price"))
 
         var (
-          gasPrice *big.Int
-          maxFee   *big.Int 
-          maxPrio  *big.Int
+          prioFee  *big.Int
         )
 
-        if (txtype == types.LegacyTxType) {
-          gasPrice = math.MustParseBig256(c.String("gas-price"))
-        } else if (txtype == types.DynamicFeeTxType) {
-          maxFee  = math.MustParseBig256(c.String("max-fee"))
-          maxPrio = math.MustParseBig256(c.String("max-prio"))
+        if (txtype == types.DynamicFeeTxType) {
+          prioFee = math.MustParseBig256(c.String("prio-fee"))
         }
 
         dataString := c.String("data")
@@ -426,8 +415,8 @@ func main() {
               To:        &common.Address{},
               Value:     value,
               Gas:       gasLimit,
-              GasFeeCap: maxFee,
-              GasTipCap: maxPrio,
+              GasFeeCap: gasPrice,
+              GasTipCap: prioFee,
               Data:      data,
             })
           }
@@ -440,8 +429,8 @@ func main() {
               To:        &to,
               Value:     value,
               Gas:       gasLimit,
-              GasFeeCap: maxFee,
-              GasTipCap: maxPrio,
+              GasFeeCap: gasPrice,
+              GasTipCap: prioFee,
               Data:      data,
             })
           }
