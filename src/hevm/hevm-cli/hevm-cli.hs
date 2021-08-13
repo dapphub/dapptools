@@ -617,10 +617,10 @@ dappCoverage opts _ solcFile =
 
 shouldPrintCoverage :: Maybe Text -> Text -> Bool
 shouldPrintCoverage (Just covMatch) file = regexMatches covMatch file
-shouldPrintCoverage Nothing file = not (isCoverageIrrelevant file)
+shouldPrintCoverage Nothing file = not (isTestOrLib file)
 
-isCoverageIrrelevant :: Text -> Bool
-isCoverageIrrelevant file = isAnyPrefixOf ["src/test/", "src/tests/", "lib/"] file || Text.isSuffixOf ".t.sol" file
+isTestOrLib :: Text -> Bool
+isTestOrLib file = isAnyPrefixOf ["src/test/", "src/tests/", "lib/"] file || Text.isSuffixOf ".t.sol" file
 
 isAnyPrefixOf :: [Text] -> Text -> Bool
 isAnyPrefixOf [] _ = False
