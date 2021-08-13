@@ -29,6 +29,7 @@ module EVM.Solidity
   , methodMutability
   , abiMap
   , eventMap
+  , errorMap
   , storageLayout
   , contractName
   , constructorInputs
