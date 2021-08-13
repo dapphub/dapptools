@@ -90,6 +90,7 @@ hardware wallets—even if you use a remote RPC node like Infura's.
   - [`seth logs`]
   - [`seth ls`]
   - [`seth mktx`]
+  - [`seth namehash`]
   - [`seth nonce`]
   - [`seth publish`]
   - [`seth receipt`]
@@ -663,6 +664,12 @@ Options are as for [`seth send`] but no transaction is published.
 
 See also [`seth publish`] for publishing a signed transaction.
 
+### `seth namehash`
+
+Print the ENS namehash of the provided name.
+
+    seth namehash <name>
+
 ### `seth nonce`
 
 Show the number of transactions successfully sent from an address (its
@@ -804,6 +811,7 @@ Show all fields unless `<field>` is given.
 [`seth ls`]: #seth-ls
 [`seth ls`]: #seth-ls
 [`seth mktx`]: #seth-mktx
+[`seth namehash`]: #seth-namehash
 [`seth nonce`]: #seth-nonce
 [`seth publish`]: #seth-publish
 [`seth receipt`]: #seth-receipt
