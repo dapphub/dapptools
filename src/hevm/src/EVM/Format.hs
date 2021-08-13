@@ -124,9 +124,10 @@ showCall ts (ConcreteBuffer bs) = showValues ts $ ConcreteBuffer (BS.drop 4 bs)
 showError :: (?context :: DappContext) => ByteString -> Text
 showError bs =
   let dappinfo = view contextInfo ?context
-  in case Map.lookup (word bs) (view dappErrorMap dappinfo) of
+      bs4 = BS.take 4 bs
+  in case Map.lookup (word bs4) (view dappErrorMap dappinfo) of
       Just (SolError errName ts) -> errName <> " " <> showCall ts (ConcreteBuffer bs)
-      Nothing -> case BS.take 4 bs of
+      Nothing -> case bs4 of
                   -- Method ID for Error(string)
                   "\b\195y\160" -> showCall [AbiStringType] (ConcreteBuffer bs)
                   _             -> formatBinary bs
