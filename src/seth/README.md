@@ -94,6 +94,7 @@ hardware wallets—even if you use a remote RPC node like Infura's.
   - [`seth nonce`]
   - [`seth publish`]
   - [`seth receipt`]
+  - [`seth resolve-name`]
   - [`seth run-tx`]
   - [`seth send`]
   - [`seth sign`]
@@ -697,6 +698,14 @@ is specified.
 Unless `--async` is given, wait indefinitely for the receipt
 to appear.
 
+### `seth resolve-name`
+
+Print the address the provided ENS name resolves to. If the name is not
+owned or does not have a resolver configured, an `invalid data for function output`
+error will be thrown.
+
+    seth resolve-name <name>
+
 ### `seth run-tx`
 
 Execute a transaction using `hevm`.
@@ -815,6 +824,7 @@ Show all fields unless `<field>` is given.
 [`seth nonce`]: #seth-nonce
 [`seth publish`]: #seth-publish
 [`seth receipt`]: #seth-receipt
+[`seth resolve-name`]: #seth-resolve-name
 [`seth run-tx`]: #seth-run-tx
 [`seth send`]: #seth-send
 [`seth sign`]: #seth-sign
