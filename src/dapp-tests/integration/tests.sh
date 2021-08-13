@@ -292,3 +292,73 @@ test_hexdata_3() {
   [[ $(seth --to-hexdata 0xCA:0xfe:0x) = "0xcafe" ]] || error
 }
 test_hexdata_3
+
+# SETH ENS TESTS
+# Tests for resolve-name and lookup-address may break in the future as they are dependent on mainnet state
+# Infura ID source: https://github.com/ethers-io/ethers.js/blob/0d40156fcba5be155aa5def71bcdb95b9c11d889/packages/providers/src.ts/infura-provider.ts#L17
+ETH_RPC_URL=https://mainnet.infura.io/v3/84842078b09946638c03157f83405213
+
+test_namehash_1() {
+    local output
+    output=$(seth namehash)
+    [[ $output = "0x0000000000000000000000000000000000000000000000000000000000000000" ]] || error
+}
+test_namehash_1
+
+test_namehash_2() {
+    local output
+    output=$(seth namehash eth)
+    [[ $output = "0x93cdeb708b7545dc668eb9280176169d1c33cfd8ed6f04690a0bcc88a93fc4ae" ]] || error
+}
+test_namehash_2
+
+test_namehash_3() {
+    local output
+    output=$(seth namehash ricmoo.firefly.eth)
+    [[ $output = "0x0bcad17ecf260d6506c6b97768bdc2acfb6694445d27ffd3f9c1cfbee4a9bd6d" ]] || error
+}
+test_namehash_3
+
+test_namehash_4() {
+    local output
+    output=$(seth namehash ricmoo.xyz)
+    [[ $output = "0x7d56aa46358ba2f8b77d8e05bcabdd2358370dcf34e87810f8cea77ecb3fc57d" ]] || error
+}
+test_namehash_4
+
+test_namehash_5() {
+    [[ $(seth namehash eth) = $(seth namehash ETH) ]] || error
+}
+test_namehash_5
+
+test_namehash_6() {
+    [[ $(seth namehash ricmoo.firefly.eth) = $(seth namehash RicMOO.FireFly.eTH) ]] || error
+}
+test_namehash_6
+
+test-resolve-name1() {
+    # using example from ethers docs: https://docs.ethers.io/v5/single-page/#/v5/api/providers/provider/-%23-Provider-ResolveName
+    local output
+    output=$(seth resolve-name ricmoo.eth --rpc-url=$ETH_RPC_URL)
+    [[ $output = "0x5555763613a12D8F3e73be831DFf8598089d3dCa" ]] || error
+}
+test-resolve-name1
+
+test-resolve-name2() {
+    [[ $(seth resolve-name ricmoo.eth --rpc-url=$ETH_RPC_URL) = $(seth resolve-name rICmOO.etH --rpc-url=$ETH_RPC_URL) ]] || error
+}
+test-resolve-name2
+
+test-lookup-address1() {
+    # using example from ethers docs: https://docs.ethers.io/v5/single-page/#/v5/api/providers/provider/-%23-Provider-lookupAddress
+    local output
+    output=$(seth lookup-address 0x5555763613a12D8F3e73be831DFf8598089d3dCa --rpc-url=$ETH_RPC_URL)
+    [[ $output = "ricmoo.eth" ]] || error
+}
+test-lookup-address1
+
+test-lookup-address2() {
+    [[ $(seth lookup-address 0x5555763613a12D8F3e73be831DFf8598089d3dCa --rpc-url=$ETH_RPC_URL) \
+     = $(seth lookup-address 0x5555763613a12d8f3e73be831dff8598089d3dca --rpc-url=$ETH_RPC_URL) ]] || error
+}
+test-lookup-address2
