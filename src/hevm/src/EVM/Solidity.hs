@@ -144,6 +144,7 @@ data SolcContract = SolcContract
   , _constructorInputs :: [(Text, AbiType)]
   , _abiMap           :: Map Word32 Method
   , _eventMap         :: Map W256 Event
+  , _errorMap         :: Map W256 SolError
   , _immutableReferences :: Map W256 [Reference]
   , _storageLayout    :: Maybe (Map Text StorageItem)
   , _runtimeSrcmap    :: Seq SrcMap
@@ -367,6 +368,7 @@ readCombinedJSON json = do
         _constructorInputs = mkConstructor abis,
         _abiMap       = mkAbiMap abis,
         _eventMap     = mkEventMap abis,
+        _errorMap     = mkErrorMap abis,
         _storageLayout = mkStorageLayout $ x ^? key "storage-layout",
         _immutableReferences = mempty -- TODO: deprecate combined-json
       }
@@ -409,6 +411,7 @@ readStdJSON json = do
         _constructorInputs = mkConstructor abis,
         _abiMap        = mkAbiMap abis,
         _eventMap      = mkEventMap abis,
+        _errorMap      = mkErrorMap abis,
         _storageLayout = mkStorageLayout $ x ^? key "storageLayout",
         _immutableReferences = fromMaybe mempty $
           do x' <- runtime ^? key "immutableReferences"
@@ -449,6 +452,19 @@ mkEventMap abis = Map.fromList $
      , if y ^?! key "indexed" . _Bool
        then Indexed
        else NotIndexed ))
+       (toList $ abi ^?! key "inputs" . _Array))
+     )
+  in f <$> relevant
+
+mkErrorMap :: [Value] -> Map W256 SolError
+mkErrorMap abis = Map.fromList $
+  let
+    relevant = filter (\y -> "error" == y ^?! key "type" . _String) abis
+    f abi =
+     ( keccak (encodeUtf8 (signature abi))
+     , SolError
+       (abi ^?! key "name" . _String)
+       (map (\y -> ( force "internal error: type" (parseTypeName' y)))
        (toList $ abi ^?! key "inputs" . _Array))
      )
   in f <$> relevant
