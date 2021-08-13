@@ -624,9 +624,7 @@ isTestOrLib file = isAnyPrefixOf ["src/test/", "src/tests/", "lib/"] file || Tex
 
 isAnyPrefixOf :: [Text] -> Text -> Bool
 isAnyPrefixOf [] _ = False
-isAnyPrefixOf (x:xs) t
-  | Text.isPrefixOf x t = True
-  | otherwise = isAnyPrefixOf xs t
+isAnyPrefixOf prefixes t = any (flip Text.isPrefixOf t) prefixes
 
 launchExec :: Command Options.Unwrapped -> IO ()
 launchExec cmd = do
