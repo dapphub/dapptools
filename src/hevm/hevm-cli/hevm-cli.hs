@@ -190,7 +190,7 @@ data Command w
       , state         :: w ::: Maybe String             <?> "Path to state repository"
       , cache         :: w ::: Maybe String             <?> "Path to rpc cache repository"
       , match         :: w ::: Maybe String             <?> "Test case filter - only run methods matching regex"
-      , covMatch      :: w ::: Maybe String             <?> "Coverage filter - only show coverage for files matching regex"
+      , covMatch      :: w ::: Maybe String             <?> "Coverage filter - only print coverage for files matching regex"
       , solver        :: w ::: Maybe Text               <?> "Used SMT solver: z3 (default) or cvc4"
       , smtdebug      :: w ::: Bool                     <?> "Print smt queries sent to the solver"
       , ffi           :: w ::: Bool                     <?> "Allow the usage of the hevm.ffi() cheatcode (WARNING: this allows test authors to execute arbitrary code on your machine)"

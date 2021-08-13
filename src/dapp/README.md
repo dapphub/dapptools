@@ -416,6 +416,7 @@ You can override this with the `DAPP_REMAPPINGS` environment variable.
         --fuzz-runs <number>      number of times to run fuzzing tests
         --replay <string>         rerun a particular test case
         -m, --match <string>      only run test methods matching regex
+        --cov-match <string>      only print coverage for files matching regex
 
     RPC options:
         --rpc                     fetch remote state via ETH_RPC_URL

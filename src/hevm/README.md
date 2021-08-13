@@ -245,7 +245,7 @@ Usage: hevm dapp-test [--json-file STRING] [--dapp-root STRING] [--debug]
                       [--fuzz-runs INT] [--replay (TEXT,BYTESTRING)] [--depth INT]
                       [--rpc TEXT] [--verbose INT] [--coverage] [--state STRING]
                       [--match STRING] [--smttimeout INT] [--max-iterations INT]
-                      [--solver STRING] [--cache STRING]
+                      [--solver STRING] [--cache STRING] [--cov-match STRING]
 ```
 
 Run any ds-test testing functions. Run under the hood whenever `dapp test` or `dapp debug` is called. Testing functions prefixed with `test` will be executed concretely. If concrete test functions have been given arguments, they will be randomly instantiated and run `--fuzz-runs` number of times. If testing functions are prefixed with `prove` they will be symbolically executed. In `--debug` mode, property based tests will not be available unless given specific arguments using `--replay`.
