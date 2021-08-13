@@ -88,6 +88,7 @@ hardware wallets—even if you use a remote RPC node like Infura's.
   - [`seth help`]
   - [`seth keccak`]
   - [`seth logs`]
+  - [`seth lookup-address`]
   - [`seth ls`]
   - [`seth mktx`]
   - [`seth namehash`]
@@ -647,6 +648,15 @@ With `--follow`, the command blocks waiting for new events
 See also [`seth events`] which decodes logs using an
 ABI specification.
 
+### `seth lookup-address`
+
+Print the address the provided ENS name resolves to. If the name is not
+owned or does not have a resolver configured, an `invalid data for
+function output` error will be thrown. An error will also be thrown
+if the forward and reverse resolution do not match.
+
+    seth lookup-address <address>
+
 ### `seth ls`
 
 Display a list of your accounts and their ether balances.
@@ -817,7 +827,7 @@ Show all fields unless `<field>` is given.
 [`seth help`]: #seth-help
 [`seth keccak`]: #seth-keccak
 [`seth logs`]: #seth-logs
-[`seth ls`]: #seth-ls
+[`seth lookup-address`]: #seth-lookup-address
 [`seth ls`]: #seth-ls
 [`seth mktx`]: #seth-mktx
 [`seth namehash`]: #seth-namehash
