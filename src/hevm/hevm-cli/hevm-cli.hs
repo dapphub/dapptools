@@ -622,9 +622,8 @@ shouldPrintCoverage Nothing file = not (isTestOrLib file)
 isTestOrLib :: Text -> Bool
 isTestOrLib file = isAnyPrefixOf ["src/test/", "src/tests/", "lib/"] file || Text.isSuffixOf ".t.sol" file
 
-isAnyPrefixOf :: [Text] -> Text -> Bool
-isAnyPrefixOf [] _ = False
-isAnyPrefixOf prefixes t = any (flip Text.isPrefixOf t) prefixes
+areAnyPrefixOf :: [Text] -> Text -> Bool
+areAnyPrefixOf prefixes t = any (flip Text.isPrefixOf t) prefixes
 
 launchExec :: Command Options.Unwrapped -> IO ()
 launchExec cmd = do
