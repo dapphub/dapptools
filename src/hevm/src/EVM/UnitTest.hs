@@ -78,6 +78,7 @@ data UnitTestOptions = UnitTestOptions
   , smtTimeout  :: Maybe Integer
   , smtState    :: Maybe SBV.State
   , solver      :: Maybe Text
+  , covMatch    :: Maybe Text
   , match       :: Text
   , fuzzRuns    :: Int
   , replay      :: Maybe (Text, BSLazy.ByteString)

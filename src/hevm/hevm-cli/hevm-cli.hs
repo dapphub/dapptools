@@ -38,7 +38,7 @@ import EVM.Types hiding (word)
 import EVM.UnitTest (UnitTestOptions, coverageReport, coverageForUnitTestContract)
 import EVM.UnitTest (runUnitTestContract)
 import EVM.UnitTest (getParametersFromEnvironmentVariables, testNumber)
-import EVM.Dapp (findUnitTests, dappInfo, DappInfo, emptyDapp)
+import EVM.Dapp (findUnitTests, dappInfo, DappInfo, emptyDapp, regexMatches)
 import EVM.Format (showTraceTree, showTree', renderTree, showBranchInfoWithAbi, showLeafInfo)
 import EVM.RLP (rlpdecode)
 import qualified EVM.Patricia as Patricia
@@ -82,6 +82,7 @@ import qualified Data.ByteString        as ByteString
 import qualified Data.ByteString.Char8  as Char8
 import qualified Data.ByteString.Lazy   as LazyByteString
 import qualified Data.Map               as Map
+import qualified Data.Text              as Text
 import qualified System.Timeout         as Timeout
 
 import qualified Paths_hevm      as Paths
@@ -189,6 +190,7 @@ data Command w
       , state         :: w ::: Maybe String             <?> "Path to state repository"
       , cache         :: w ::: Maybe String             <?> "Path to rpc cache repository"
       , match         :: w ::: Maybe String             <?> "Test case filter - only run methods matching regex"
+      , covMatch      :: w ::: Maybe String             <?> "Coverage filter - only show coverage for files matching regex"
       , solver        :: w ::: Maybe Text               <?> "Used SMT solver: z3 (default) or cvc4"
       , smtdebug      :: w ::: Bool                     <?> "Print smt queries sent to the solver"
       , ffi           :: w ::: Bool                     <?> "Allow the usage of the hevm.ffi() cheatcode (WARNING: this allows test authors to execute arbitrary code on your machine)"
@@ -298,6 +300,7 @@ unitTestOptions cmd testFile = do
     , EVM.UnitTest.askSmtIters = askSmtIterations cmd
     , EVM.UnitTest.smtTimeout = smttimeout cmd
     , EVM.UnitTest.solver = solver cmd
+    , EVM.UnitTest.covMatch = covMatch cmd >>= pure . pack
     , EVM.UnitTest.smtState = Just state
     , EVM.UnitTest.verbose = verbose cmd
     , EVM.UnitTest.match = pack $ fromMaybe ".*" (match cmd)
@@ -593,23 +596,31 @@ dappCoverage opts _ solcFile =
         let
           dapp = dappInfo "." contractMap sourceCache
           f (k, vs) = do
-            putStr ("\x1b[0m" ++ "————— hevm coverage for ") -- Prefixed with color reset
-            putStrLn (unpack k ++ " —————")
-            putStrLn ""
-            forM_ vs $ \(n, bs) -> do
-              case ByteString.find (\x -> x /= 0x9 && x /= 0x20 && x /= 0x7d) bs of
-                Nothing -> putStr "\x1b[38;5;240m" -- Gray (Coverage status isn't relevant)
-                Just _ ->
-                  case n of
-                    -1 -> putStr "\x1b[38;5;240m" -- Gray (Coverage status isn't relevant)
-                    0  -> putStr "\x1b[31m" -- Red (Uncovered)
-                    _  -> putStr "\x1b[32m" -- Green (Covered)
-              Char8.putStrLn bs
-            putStrLn ""
-
+            if shouldPrintCoverage (EVM.UnitTest.covMatch opts) k then do
+              putStr ("\x1b[0m" ++ "————— hevm coverage for ") -- Prefixed with color reset
+              putStrLn (unpack k ++ " —————")
+              putStrLn ""
+              forM_ vs $ \(n, bs) -> do
+                case ByteString.find (\x -> x /= 0x9 && x /= 0x20 && x /= 0x7d) bs of
+                  Nothing -> putStr "\x1b[38;5;240m" -- Gray (Coverage status isn't relevant)
+                  Just _ ->
+                    case n of
+                      -1 -> putStr "\x1b[38;5;240m" -- Gray (Coverage status isn't relevant)
+                      0  -> putStr "\x1b[31m" -- Red (Uncovered)
+                      _  -> putStr "\x1b[32m" -- Green (Covered)
+                Char8.putStrLn bs
+              putStrLn ""
+            else pure ()
         mapM_ f (Map.toList (coverageReport dapp covs))
       Nothing ->
         error ("Failed to read Solidity JSON for `" ++ solcFile ++ "'")
+
+shouldPrintCoverage :: Maybe Text -> Text -> Bool
+shouldPrintCoverage (Just covMatch) name = regexMatches covMatch name
+shouldPrintCoverage Nothing name = not (isCoverageIrrelevant name)
+
+isCoverageIrrelevant :: Text -> Bool
+isCoverageIrrelevant name = Text.isPrefixOf "src/external/" name || Text.isPrefixOf "src/tests/" name || Text.isPrefixOf "src/test/" name || Text.isPrefixOf "lib/" name || Text.isSuffixOf ".t.sol" name
 
 launchExec :: Command Options.Unwrapped -> IO ()
 launchExec cmd = do
