@@ -681,6 +681,10 @@ Print the ENS namehash of the provided name.
 
     seth namehash <name>
 
+ENS names are converted to lowercase before hashing, but note this is
+not the complete [normalization process](https://docs.ens.domains/contract-api-reference/name-processing#normalising-names),
+so users must ensure the ENS names they enter are properly formatted.
+
 ### `seth nonce`
 
 Show the number of transactions successfully sent from an address (its
@@ -715,6 +719,10 @@ owned or does not have a resolver configured, an `invalid data for function outp
 error will be thrown.
 
     seth resolve-name <name>
+
+ENS names are converted to lowercase before hashing, but note this is
+not the complete [normalization process](https://docs.ens.domains/contract-api-reference/name-processing#normalising-names),
+so users must ensure the ENS names they enter are properly formatted.
 
 ### `seth run-tx`
 
