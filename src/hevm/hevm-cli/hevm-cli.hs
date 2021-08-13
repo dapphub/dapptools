@@ -620,7 +620,7 @@ shouldPrintCoverage (Just covMatch) file = regexMatches covMatch file
 shouldPrintCoverage Nothing file = not (isTestOrLib file)
 
 isTestOrLib :: Text -> Bool
-isTestOrLib file = isAnyPrefixOf ["src/test/", "src/tests/", "lib/"] file || Text.isSuffixOf ".t.sol" file
+isTestOrLib file = Text.isSuffixOf ".t.sol" file || isAnyPrefixOf ["src/test/", "src/tests/", "lib/"] file
 
 areAnyPrefixOf :: [Text] -> Text -> Bool
 areAnyPrefixOf prefixes t = any (flip Text.isPrefixOf t) prefixes
