@@ -616,11 +616,17 @@ dappCoverage opts _ solcFile =
         error ("Failed to read Solidity JSON for `" ++ solcFile ++ "'")
 
 shouldPrintCoverage :: Maybe Text -> Text -> Bool
-shouldPrintCoverage (Just covMatch) name = regexMatches covMatch name
-shouldPrintCoverage Nothing name = not (isCoverageIrrelevant name)
+shouldPrintCoverage (Just covMatch) file = regexMatches covMatch file
+shouldPrintCoverage Nothing file = not (isCoverageIrrelevant file)
 
 isCoverageIrrelevant :: Text -> Bool
-isCoverageIrrelevant name = Text.isPrefixOf "src/external/" name || Text.isPrefixOf "src/tests/" name || Text.isPrefixOf "src/test/" name || Text.isPrefixOf "lib/" name || Text.isSuffixOf ".t.sol" name
+isCoverageIrrelevant file = isAnyPrefixOf ["src/test/", "src/tests/", "lib/"] file || Text.isSuffixOf ".t.sol" file
+
+isAnyPrefixOf :: [Text] -> Text -> Bool
+isAnyPrefixOf [] _ = False
+isAnyPrefixOf (x:xs) t
+  | Text.isPrefixOf x t = True
+  | otherwise = isAnyPrefixOf xs t
 
 launchExec :: Command Options.Unwrapped -> IO ()
 launchExec cmd = do
