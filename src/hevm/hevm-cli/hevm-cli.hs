@@ -300,7 +300,7 @@ unitTestOptions cmd testFile = do
     , EVM.UnitTest.askSmtIters = askSmtIterations cmd
     , EVM.UnitTest.smtTimeout = smttimeout cmd
     , EVM.UnitTest.solver = solver cmd
-    , EVM.UnitTest.covMatch = covMatch cmd >>= pure . pack
+    , EVM.UnitTest.covMatch = pack <$> covMatch cmd
     , EVM.UnitTest.smtState = Just state
     , EVM.UnitTest.verbose = verbose cmd
     , EVM.UnitTest.match = pack $ fromMaybe ".*" (match cmd)
