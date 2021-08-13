@@ -596,7 +596,7 @@ dappCoverage opts _ solcFile =
         let
           dapp = dappInfo "." contractMap sourceCache
           f (k, vs) = do
-            if shouldPrintCoverage (EVM.UnitTest.covMatch opts) k then do
+            when (shouldPrintCoverage (EVM.UnitTest.covMatch opts) k) $ do
               putStr ("\x1b[0m" ++ "————— hevm coverage for ") -- Prefixed with color reset
               putStrLn (unpack k ++ " —————")
               putStrLn ""
@@ -610,7 +610,6 @@ dappCoverage opts _ solcFile =
                       _  -> putStr "\x1b[32m" -- Green (Covered)
                 Char8.putStrLn bs
               putStrLn ""
-            else pure ()
         mapM_ f (Map.toList (coverageReport dapp covs))
       Nothing ->
         error ("Failed to read Solidity JSON for `" ++ solcFile ++ "'")
