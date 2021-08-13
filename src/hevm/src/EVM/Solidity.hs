@@ -462,13 +462,16 @@ mkErrorMap abis = Map.fromList $
   let
     relevant = filter (\y -> "error" == y ^?! key "type" . _String) abis
     f abi =
-     ( keccak (encodeUtf8 (signature abi))
+     ( stripKeccak $ keccak (encodeUtf8 (signature abi))
      , SolError
        (abi ^?! key "name" . _String)
        (map (\y -> ( force "internal error: type" (parseTypeName' y)))
        (toList $ abi ^?! key "inputs" . _Array))
      )
   in f <$> relevant
+  where
+    stripKeccak :: W256 -> W256
+    stripKeccak = read . take 10 . show
 
 mkConstructor :: [Value] -> [(Text, AbiType)]
 mkConstructor abis =
