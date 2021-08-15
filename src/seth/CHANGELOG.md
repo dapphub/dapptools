@@ -16,7 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- `--gas-price` must be explicitly set: seth will no longer ask the rpc client for appriopriate pricing.
+- `--gas-price` will be used as `max-fee` when `--prio-fee` is set
 
 ## [0.10.1] - 2021-03-22
 
