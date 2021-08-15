@@ -57,7 +57,7 @@ For more information about the tools, consult the individual README pages:
 
 - [seth](./src/seth/README.md)
 - [dapp](./src/dapp/README.md)
-- [hevm](./src/dapp/README.md)
+- [hevm](./src/hevm/README.md)
 - [ethsign](./src/ethsign/README.md)
 
 or use the `--help` flag for any tool.

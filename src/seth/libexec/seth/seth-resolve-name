@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+### seth-resolve-name -- returns the address the provided ENS name resolves to
+### Usage: seth resolve-name <name>
+###
+### Print the address the provided ENS name resolves to. If the name is not
+### owned or does not have a resolver configured, an `invalid data for
+### function output` error will be thrown
+
+set -e
+shopt -s extglob
+[[ $# -lt 2 ]] || seth --fail-usage "$0"
+
+# verify chain ID
+chainid=$(seth chain-id)
+if [[ $chainid != @(1|3|4|5) ]]; then
+  seth --fail "${0##*/}: error: using chain ID $chainid, but ENS lookups are only supported for chain IDs 1, 3, 4, and 5"
+fi
+
+# get namehash
+namehash=$(seth namehash $1)
+
+# resolve name
+ENS_REGISTRY=${SETH_ENS_REGISTRY:-'0x00000000000C2E074eC69A0dFb2997BA6C7d2e1e'} # same on all supported networks
+resolver=$(seth call $ENS_REGISTRY "resolver(bytes32)(address)" $namehash)
+address=$(seth call $resolver "addr(bytes32)(address)" $namehash)
+echo $address

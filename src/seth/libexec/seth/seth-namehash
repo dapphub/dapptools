@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+### seth-namehash -- returns the ENS namehash of the provided name
+### Usage: seth namehash <name>
+###
+### Print the ENS namehash of the provided name
+
+set -e
+[[ $# -lt 2 ]] || seth --fail-usage "$0"
+
+# ENS namehash process is defined at https://docs.ens.domains/contract-api-reference/name-processing#hashing-names
+namehash() {
+  if [[ $# == 0 ]]; then
+    seth --to-bytes32 0
+  else
+    seth keccak $(namehash "${@:2}")$(seth keccak "$1" | cut -c3-)
+  fi
+}
+
+namelower=$(echo $1 | tr "[:upper:]" "[:lower:]") # to lowercase
+name=${namelower//./ } # convert input from period delimited to space delimited
+namehash=$(namehash $name)
+echo $namehash

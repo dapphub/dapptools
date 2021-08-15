@@ -88,11 +88,14 @@ hardware wallets—even if you use a remote RPC node like Infura's.
   - [`seth help`]
   - [`seth keccak`]
   - [`seth logs`]
+  - [`seth lookup-address`]
   - [`seth ls`]
   - [`seth mktx`]
+  - [`seth namehash`]
   - [`seth nonce`]
   - [`seth publish`]
   - [`seth receipt`]
+  - [`seth resolve-name`]
   - [`seth run-tx`]
   - [`seth send`]
   - [`seth sign`]
@@ -645,6 +648,15 @@ With `--follow`, the command blocks waiting for new events
 See also [`seth events`] which decodes logs using an
 ABI specification.
 
+### `seth lookup-address`
+
+Print the address the provided ENS name resolves to. If the name is not
+owned or does not have a resolver configured, an `invalid data for
+function output` error will be thrown. An error will also be thrown
+if the forward and reverse resolution do not match.
+
+    seth lookup-address <address>
+
 ### `seth ls`
 
 Display a list of your accounts and their ether balances.
@@ -662,6 +674,16 @@ Make and signs a transaction without publishing it.
 Options are as for [`seth send`] but no transaction is published.
 
 See also [`seth publish`] for publishing a signed transaction.
+
+### `seth namehash`
+
+Print the ENS namehash of the provided name.
+
+    seth namehash <name>
+
+ENS names are converted to lowercase before hashing, but note this is
+not the complete [normalization process](https://docs.ens.domains/contract-api-reference/name-processing#normalising-names),
+so users must ensure the ENS names they enter are properly formatted.
 
 ### `seth nonce`
 
@@ -689,6 +711,18 @@ is specified.
 
 Unless `--async` is given, wait indefinitely for the receipt
 to appear.
+
+### `seth resolve-name`
+
+Print the address the provided ENS name resolves to. If the name is not
+owned or does not have a resolver configured, an `invalid data for function output`
+error will be thrown.
+
+    seth resolve-name <name>
+
+ENS names are converted to lowercase before hashing, but note this is
+not the complete [normalization process](https://docs.ens.domains/contract-api-reference/name-processing#normalising-names),
+so users must ensure the ENS names they enter are properly formatted.
 
 ### `seth run-tx`
 
@@ -801,12 +835,14 @@ Show all fields unless `<field>` is given.
 [`seth help`]: #seth-help
 [`seth keccak`]: #seth-keccak
 [`seth logs`]: #seth-logs
-[`seth ls`]: #seth-ls
+[`seth lookup-address`]: #seth-lookup-address
 [`seth ls`]: #seth-ls
 [`seth mktx`]: #seth-mktx
+[`seth namehash`]: #seth-namehash
 [`seth nonce`]: #seth-nonce
 [`seth publish`]: #seth-publish
 [`seth receipt`]: #seth-receipt
+[`seth resolve-name`]: #seth-resolve-name
 [`seth run-tx`]: #seth-run-tx
 [`seth send`]: #seth-send
 [`seth sign`]: #seth-sign

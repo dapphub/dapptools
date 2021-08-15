@@ -292,3 +292,78 @@ test_hexdata_3() {
   [[ $(seth --to-hexdata 0xCA:0xfe:0x) = "0xcafe" ]] || error
 }
 test_hexdata_3
+
+# SETH ENS TESTS
+# Tests for resolve-name and lookup-address use a Rinkeby name that's been registered for 100 years and will not be changed
+# Infura ID source: https://github.com/ethers-io/ethers.js/blob/0d40156fcba5be155aa5def71bcdb95b9c11d889/packages/providers/src.ts/infura-provider.ts#L17
+ETH_RPC_URL=https://rinkeby.infura.io/v3/84842078b09946638c03157f83405213
+
+test_namehash_1() {
+    local output
+    output=$(seth namehash)
+    [[ $output = "0x0000000000000000000000000000000000000000000000000000000000000000" ]] || error
+}
+test_namehash_1
+
+test_namehash_2() {
+    local output
+    output=$(seth namehash eth)
+    [[ $output = "0x93cdeb708b7545dc668eb9280176169d1c33cfd8ed6f04690a0bcc88a93fc4ae" ]] || error
+}
+test_namehash_2
+
+test_namehash_3() {
+    local output
+    output=$(seth namehash ricmoo.firefly.eth)
+    [[ $output = "0x0bcad17ecf260d6506c6b97768bdc2acfb6694445d27ffd3f9c1cfbee4a9bd6d" ]] || error
+}
+test_namehash_3
+
+test_namehash_4() {
+    local output
+    output=$(seth namehash seth-test.eth)
+    [[ $output = "0xc639cb4715c456d2cc8523ee5568222dbae3551e2a42c61a7da4db3ec28ab9e9" ]] || error
+}
+test_namehash_4
+
+test_namehash_5() {
+    [[ $(seth namehash eth) = $(seth namehash ETH) ]] || error
+}
+test_namehash_5
+
+test_namehash_6() {
+    [[ $(seth namehash ricmoo.firefly.eth) = $(seth namehash RicMOO.FireFly.eTH) ]] || error
+}
+test_namehash_6
+
+test_namehash_7() {
+    [[ $(seth namehash seth-test.eth) = $(seth namehash sEtH-tESt.etH) ]] || error
+}
+test_namehash_7
+
+test-resolve-name1() {
+    # using example from ethers docs: https://docs.ethers.io/v5/single-page/#/v5/api/providers/provider/-%23-Provider-ResolveName
+    local output
+    output=$(seth resolve-name seth-test.eth --rpc-url=$ETH_RPC_URL)
+    [[ $output = "0x49c92F2cE8F876b070b114a6B2F8A60b83c281Ad" ]] || error
+}
+test-resolve-name1
+
+test-resolve-name2() {
+    [[ $(seth resolve-name seth-test.eth --rpc-url=$ETH_RPC_URL) = $(seth resolve-name sEtH-tESt.etH --rpc-url=$ETH_RPC_URL) ]] || error
+}
+test-resolve-name2
+
+test-lookup-address1() {
+    # using example from ethers docs: https://docs.ethers.io/v5/single-page/#/v5/api/providers/provider/-%23-Provider-lookupAddress
+    local output
+    output=$(seth lookup-address 0x49c92F2cE8F876b070b114a6B2F8A60b83c281Ad --rpc-url=$ETH_RPC_URL)
+    [[ $output = "seth-test.eth" ]] || error
+}
+test-lookup-address1
+
+test-lookup-address2() {
+    [[ $(seth lookup-address 0x49c92F2cE8F876b070b114a6B2F8A60b83c281Ad --rpc-url=$ETH_RPC_URL) \
+     = $(seth lookup-address 0x49c92f2ce8f876b070b114a6b2f8a60b83c281ad --rpc-url=$ETH_RPC_URL) ]] || error
+}
+test-lookup-address2
