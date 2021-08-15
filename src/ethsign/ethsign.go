@@ -354,7 +354,7 @@ func main() {
       },
       Action: func(c *cli.Context) error {
         requireds := []string{
-          "nonce", "value", "gas-limit", "gas-price", "chain-id", "from",
+          "nonce", "value", "gas-price", "gas-limit", "chain-id", "from",
         }
 
         for _, required := range(requireds) {
