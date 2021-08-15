@@ -156,7 +156,7 @@ while [[ $1 ]]; do
     -G|--gas)        shift; export ETH_GAS=$1;;
     -P|--gas-price)  shift;
       export ETH_GAS_PRICE=$(seth --to-wei ${1%gwei} ${1##*([0-9])});;
-    --prio-fee)      shift;
+    -T|--prio-fee)   shift;
       export ETH_PRIO_FEE=$(seth --to-wei ${1%gwei} ${1##*([0-9])});;
     -N|--nonce)      shift; export ETH_NONCE=$1;;
     -V|--value)      shift; export ETH_VALUE=$1;;
