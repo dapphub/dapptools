@@ -709,7 +709,6 @@ Sign and publish a transaction to the blockchain.
 | `--from`      | `ETH_FROM`      | n/a          | sender                            |
 | `--gas`       | `ETH_GAS`       | node decides | gas quantity                      |
 | `--gas-price` | `ETH_GAS_PRICE` |              | gas price                         |
-| `--max-fee`   | `ETH_MAX_FEE`   |              | max net gas cost                  |
 | `--prio-fee`  | `ETH_PRIO_FEE`  |              | EIP-1559 priority fee (miner tip) |
 | `--value`     | `ETH_VALUE`     | `0`          | ether value                       |
 | `--create`    | `SETH_CREATE`   |              | create contract                   |
