@@ -728,7 +728,7 @@ failed. This is a post-Byzantium feature and will soon become the
 default behavior.
 
 If `--gas-price` is provided (or `ETH_GAS_PRICE`) is set, legacy transactions will be used.
-For dynamic fee transactions (EIP-1559), `--max-fee` and `--prio-fee` is required.
+For dynamic fee transactions (EIP-1559), `--prio-fee` is required.
 
 ### `seth sign`
 
