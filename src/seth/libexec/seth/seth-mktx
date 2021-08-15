@@ -31,9 +31,6 @@ fi
 
 if [[ $ETH_PRIO_FEE ]]; then
   args+=(--prio-fee "$ETH_PRIO_FEE")
-else
-  echo >&2 "required: gas price or (max prio and max fee)"         
-  seth --fail-usage "$0"
 fi
 
 
