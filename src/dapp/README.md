@@ -306,8 +306,9 @@ variables](../hevm/README.md#environment-variables).
 | `DAPP_TEST_DEPTH`          | `20`                       | Number of transactions to sequence per invariant cycle                                                                                             |
 | `DAPP_TEST_SMTTIMEOUT`     | `60000`                    | Timeout passed to the smt solver for symbolic tests (in ms, and per smt query)                                                                     |
 | `DAPP_TEST_MAX_ITERATIONS` | n/a                        | The number of times hevm will revisit a particular branching point when symbolically executing                                                     |
-| `DAPP_TEST_SOLVER `        | `z3`                       | Solver to use for symbolic execution (`cvc4` or `z3`)                                                                                              |
-| `DAPP_TEST_MATCH `         | n/a                        | Regex used to determine test methods to run                                                                                                        |
+| `DAPP_TEST_SOLVER`         | `z3`                       | Solver to use for symbolic execution (`cvc4` or `z3`)                                                                                              |
+| `DAPP_TEST_MATCH`          | n/a                        | Regex used to determine test methods to run                                                                                                        |
+| `DAPP_TEST_COV_MATCH`      | n/a                        | Regex used to determine which files to print coverage reports for. Prints all imported files by default (excluding tests and libs).                |
 | `DAPP_TEST_REPLAY`         | n/a                        | Calldata for a specific property test case to replay in the debugger                                                                               |
 | `HEVM_RPC`                 | n/a                        | Set to `yes` to have `hevm` fetch state from rpc when running unit tests                                                                           |
 | `ETH_RPC_URL`              | n/a                        | The url of the rpc server that should be used for any rpc calls                                                                                    |
@@ -416,6 +417,7 @@ You can override this with the `DAPP_REMAPPINGS` environment variable.
         --fuzz-runs <number>      number of times to run fuzzing tests
         --replay <string>         rerun a particular test case
         -m, --match <string>      only run test methods matching regex
+        --cov-match <string>      only print coverage for files matching regex
 
     RPC options:
         --rpc                     fetch remote state via ETH_RPC_URL
