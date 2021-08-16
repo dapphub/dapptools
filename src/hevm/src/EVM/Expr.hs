@@ -166,8 +166,8 @@ instance Show ExprC where
   show (ECTodo str cs)       = "todo \"" ++ str ++  "\"\n[" ++ (intercalate "\n," (indent <$> show <$> cs)) ++ "\n]"
   show (ECLiteral x)         = "0x" ++ (showHex x "")
   show (ECPointer1 str expr) = "ptr:W256 \"" ++ str ++ "\" [\n" ++ (show expr) ++ "\n]"
-  show (ECVar str t)         = "var:" ++ (show t) ++ " " ++ str
-  show (ECSig str sig)       = "sig:W256 \"" ++ str ++ "\" 0x" ++ (showHex sig "")
+  show (ECVar str t)         = "var " ++ str ++ ": " ++ (show t) 
+  show (ECSig str sig)       = "sig \"" ++ str ++ "\" 0x" ++ (showHex sig "")
   show (EC str t cs)         = str ++ ":" ++ (show t) ++ "\n[" ++ (intercalate "\n," (indent <$> show <$> cs)) ++ "\n]"
 
 
@@ -218,8 +218,8 @@ toExpr :: ExprC -> Expr
 toExpr (ECTodo str as)                        = (Todo str (toExpr <$> as))
 toExpr (ECLiteral n)                          = (Literal n)
 toExpr (ECPointer1 str a)                     = (Pointer1 str (toExpr a))
-toExpr (ECVar w t)                            = (Var w t)
-toExpr (ECSig w s)                            = (Sig w s)
+toExpr (ECVar str t)                          = (Var str t)
+toExpr (ECSig str s)                          = (Sig str s)
 toExpr (EC "Lambda"       _ [ a, b ])         = (Lambda (toExpr a) (toExpr b))
 toExpr (EC "And"          _ [ a, b ])         = (And  (toExpr a) (toExpr b))
 toExpr (EC "Or"           _ [ a, b ])         = (Or   (toExpr a) (toExpr b))

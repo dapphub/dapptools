@@ -293,31 +293,50 @@ fixExpr w =
 
 simpExpr :: (?ctx :: ExprContext) => ExprC -> ExprC
 
--- ABI - semantic information
--- propagate method information
-simpExpr (EC "ITE" ta
-  [ (EC "IsZero" _
-    cs@[ EC "Eq" tb
-      [ ECLiteral sigHash
-      , EC "SHR" _
-        [ EC "ReadWord" _
-          [ ECLiteral 0
-          , ECVar "Calldata" _]
-        , ECLiteral 0xe0 ] ] ])
-  , case_notfound
-  , case_found ])
-  -- todo construct new ?ctx with method
-  = case Map.lookup (num sigHash) (view abimap ?ctx) of
-  Nothing     -> (EC "ITE" ta (simpExpr <$> cs))
-  Just method -> let
-    signature = unpack $ _methodSignature method
-    clean_sig = signature
-    case_notfound_cont = simpExpr case_notfound
-    in let
-      -- todo how to do this with lenses
-      ?ctx = set methodctx (Just method) ?ctx
-    in (EC "ITE" ta [EC "Eq" ECTBool [ECVar "signature" (ECTWord 32), ECSig clean_sig sigHash], simpExpr case_found, case_notfound_cont ])
+simpExpr (EC "ITE" _
+  [ c
+  , EC "ITE" tt
+    [ c'
+    , a'
+    , (EC "Bottom" _ _)
+    ]
+  , b@(EC "Bottom" _ _)
+  ])
+  = (EC "ITE" tt
+    [ EC "And" ECTBool [ simpExpr c, simpExpr c']
+    , simpExpr a'
+    , simpExpr b
+    ])
 
+simpExpr (EC "ITE" ta
+  [ c
+  , EC "Bottom" tb tc
+  , b]) 
+  = (EC "ITE" ta
+  [ EC "IsZero" ECTBool [ simpExpr c ]
+  , simpExpr b
+  , EC "Bottom" tb tc 
+  ])
+
+simpExpr (EC "ITE" tc
+  [ c
+  , EC "Return" tp [a, b]
+  , EC "Return" tq [m, n]
+  ])
+  = (EC "Return" tp 
+  [ EC "ITE" tc
+    [ c
+    , simpExpr a
+    , simpExpr m
+    ]
+  , EC "ITE" tq
+    [ c
+    , simpExpr b
+    , simpExpr n
+    ]
+  ])
+
+-- ? set ctx?
 simpExpr (EC "ITE" ta cs@[EC "Eq" tb [ECVar "signature" (ECTWord 32), ECSig clean_sig sigHash], case_found, case_notfound ])
   = case Map.lookup (num sigHash) (view abimap ?ctx) of
     Nothing     -> (EC "ITE" ta (simpExpr <$> cs))
@@ -326,6 +345,57 @@ simpExpr (EC "ITE" ta cs@[EC "Eq" tb [ECVar "signature" (ECTWord 32), ECSig clea
       in let
       ?ctx = set methodctx (Just method) ?ctx
       in (EC "ITE" ta [EC "Eq" tb [ECVar "signature" (ECTWord 32), ECSig clean_sig sigHash], simpExpr case_found, case_notfound_cont ])
+
+-- general ITE cleanup, needs to be last
+simpExpr (EC "ITE" ta 
+  cs@([ c
+  , a
+  , b
+  ]))
+  | a == b    = c
+  | otherwise = (EC "ITE" ta (simpExpr <$> cs))
+
+
+simpExpr (EC "Eq" tb
+      [ ECLiteral sigHash
+      , cs@(EC "SHR" _
+        [ EC "ReadWord" _
+          [ ECLiteral 0
+          , ECVar "Calldata" _]
+        , ECLiteral 0xe0 ]) ])
+  = case Map.lookup (num sigHash) (view abimap ?ctx) of
+      Nothing      -> (EC "Eq" tb [ ECLiteral sigHash, simpExpr cs])
+      Just method  -> let
+        signature = unpack $ _methodSignature method
+        clean_sig = signature
+        in let
+          ?ctx = set methodctx (Just method) ?ctx
+          in (EC "Eq" ECTBool [ECVar "signature" (ECTWord 32), ECSig clean_sig sigHash])
+
+-- ABI - semantic information
+-- propagate method information
+-- simpExpr (EC "ITE" ta
+--   [ (EC "IsZero" _
+--     cs@[ EC "Eq" tb
+--       [ ECLiteral sigHash
+--       , EC "SHR" _
+--         [ EC "ReadWord" _
+--           [ ECLiteral 0
+--           , ECVar "Calldata" _]
+--         , ECLiteral 0xe0 ] ] ])
+--   , case_notfound
+--   , case_found ])
+--   -- todo construct new ?ctx with method
+--   = case Map.lookup (num sigHash) (view abimap ?ctx) of
+--   Nothing     -> (EC "ITE" ta (simpExpr <$> cs))
+--   Just method -> let
+--     signature = unpack $ _methodSignature method
+--     clean_sig = signature
+--     case_notfound_cont = simpExpr case_notfound
+--     in let
+--       -- todo how to do this with lenses
+--       ?ctx = set methodctx (Just method) ?ctx
+--     in (EC "ITE" ta [EC "Eq" ECTBool [ECVar "signature" (ECTWord 32), ECSig clean_sig sigHash], simpExpr case_found, case_notfound_cont ])
 
 simpExpr e@(EC "ReadWord" ta
   [ ECLiteral offset
@@ -434,25 +504,14 @@ simpExpr (EC "Add" ta [ECLiteral x, ECLiteral y])
 --  TODO - the 'other part' can also be a Bottom
 -- simpExpr (EC "ITE" tt [c, a@(EC "Bottom" _ _), b])
 --   = trace "s5" $ (EC "ITE" tt [ EC "IsZero" ECTBool [c], b, a ])
-simpExpr (EC "ITE" _
-  [ c
-  , EC "ITE" tt
-    [ c'
-    , a'
-    , (EC "Bottom" _ _)
-    ]
-  , b@(EC "Bottom" _ _)
-  ])
-  = (EC "ITE" tt
-    [ EC "And" ECTBool [c, c']
-    , a'
-    , b
-    ])
+
+
+
 simpExpr (EC "IsZero" _ [EC "IsZero" _ [e@(EC "IsZero" _ _)]])
   = simpExpr e
 simpExpr (EC "IsZero" _ [EC "IsZero" _ [e@(EC _ ECTBool _)]])
   = simpExpr e
 
 -- fold default cases
-simpExpr (EC t tt cs)               = EC t  tt (simpExpr <$> cs)
+simpExpr (EC t tt cs)               = EC t tt (simpExpr <$> cs)
 simpExpr x                          = x

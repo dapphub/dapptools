@@ -382,8 +382,8 @@ leaves (Node _ xs) = concatMap leaves xs
 verify :: VM -> Maybe Integer -> Maybe (Fetch.BlockNumber, Text) -> Maybe Postcondition -> Query (Either Expr Expr)
 verify preState maxIter rpcinfo maybepost = do
   smtState <- queryState
-  tree <- interpret'' (Fetch.oracle (Just smtState) rpcinfo False) maxIter preState
-  return $ Left tree
+  expr <- interpret'' (Fetch.oracle (Just smtState) rpcinfo False) maxIter preState
+  return $ Left expr
   -- case maybepost of
   --   (Just post) -> do
   --     let livePaths = pruneDeadPaths $ leaves tree

@@ -10,6 +10,7 @@ let
     buildInputs = with pkgs.haskellPackages; [
       cabal-install
       haskell-language-server
+      pkgs.cvc4
     ];
     withHoogle = true;
   };
