@@ -513,6 +513,7 @@ defaultUnitTestOptions = do
     , smtState    = Nothing
     , solver      = Nothing
     , match       = ""
+    , covMatch    = Nothing
     , fuzzRuns    = 100
     , replay      = Nothing
     , vmModifier  = id
