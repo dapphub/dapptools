@@ -535,7 +535,8 @@ assert cmd = do
           showCounterexample preState maybesig
           treeShowing tree
           io $ exitWith (ExitFailure 1)
-        Timeout _ -> do
+        Timeout tree -> do
+          treeShowing tree
           io $ exitWith (ExitFailure 1)
         Qed tree -> do
           io $ putStrLn $ "Explored: " <> show (length tree)
