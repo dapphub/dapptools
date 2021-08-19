@@ -149,6 +149,7 @@ in
       try-ffi = fail "testBadFFI";
       invariant-first = fail "invariantFirst";
       invariant-test-usr-bal = fail "invariantTestUserBal";
+      invariant-test-initial-inv-call = fail "invariantCount";
     };
 
     dss = pkgs.buildDappPackage {
