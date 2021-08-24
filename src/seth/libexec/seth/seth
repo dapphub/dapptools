@@ -19,7 +19,7 @@
 ###    -F, --from=<sender>        account to send transaction from
 ###    -G, --gas=<number>         number of gas units to provide
 ###    -P, --gas-price=<number>   price (in wei) of each gas unit
-###    -T, --prio-fee               max priority fee (miner tip) in wei per gas
+###    -T, --prio-fee            max priority fee (miner tip) in wei per gas
 ###    -N, --nonce=<number>       nonce value to use for the transaction
 ###    -V, --value=<number>       amount (in wei) of ETH to send
 ###    -S, --password=<file>      password for non-interactive signing
