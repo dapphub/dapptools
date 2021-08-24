@@ -9,7 +9,6 @@ import (
   "github.com/ethereum/go-ethereum/accounts/usbwallet"
   "github.com/ethereum/go-ethereum/core/types"
   "github.com/ethereum/go-ethereum/crypto"
-  "github.com/ethereum/go-ethereum/rlp"
 
   "os"
   "math/big"
@@ -446,7 +445,7 @@ func main() {
           v, r, s := signed.RawSignatureValues()
           fmt.Println(fmt.Sprintf("0x%064x%064x%02x", r, s, v))
         }else{
-          encoded, _ := rlp.EncodeToBytes(signed)
+          encoded, _ := signed.MarshalBinary()
           fmt.Println(hexutil.Encode(encoded[:]))
         }
         return nil
