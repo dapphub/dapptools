@@ -24,6 +24,7 @@ import Data.Aeson
 import Data.Aeson.Lens
 import qualified Data.ByteString as BS
 import Data.Text (Text, unpack, pack)
+import Data.Maybe (fromMaybe)
 
 import qualified Data.Vector as RegularVector
 import Network.Wreq
@@ -107,9 +108,9 @@ parseBlock j = do
   timestamp  <- litWord . readText <$> j ^? key "timestamp" . _String
   number     <- readText <$> j ^? key "number" . _String
   difficulty <- readText <$> j ^? key "difficulty" . _String
-  baseFee    <- readText <$> j ^? key "baseFeePerGas" . _String
+  let baseFee = readText <$> j ^? key "baseFeePerGas" . _String
   -- default codesize, default gas limit, default feescedule
-  return $ EVM.Block coinbase timestamp number difficulty 0xffffffff baseFee 0xffffffff FeeSchedule.berlin
+  return $ EVM.Block coinbase timestamp number difficulty 0xffffffff (fromMaybe 0 baseFee) 0xffffffff FeeSchedule.berlin
 
 fetchWithSession :: Text -> Session -> Value -> IO (Maybe Value)
 fetchWithSession url sess x = do
