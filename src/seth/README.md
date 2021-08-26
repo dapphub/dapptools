@@ -520,7 +520,7 @@ optionally passing additional hex `<data>` or structured `<sig>` and
 | --------- | ----------- | -------- | ---------------------- |
 | `--block` | `ETH_BLOCK` | `latest` | block number           |
 | `--from`  | `ETH_FROM`  | n/a      | simulated sender       |
-| `--gas`   | `ETH_GAS`   | n/a      | simulated gas quantity |
+| `--gas`   | `ETH_GAS`   | `200000` | simulated gas quantity |
 | `--value` | `ETH_VALUE` | `0`      | simulated ether value  |
 
 By default, calls are made to the defined RPC node. With `--hevm`, calls
@@ -750,7 +750,7 @@ Sign and publish a transaction to the blockchain.
 | ------------- | --------------- | ------------ | --------------- |
 | `--block`     | `ETH_BLOCK`     | `latest`     | block number    |
 | `--from`      | `ETH_FROM`      | n/a          | sender          |
-| `--gas`       | `ETH_GAS`       | node decides | gas quantity    |
+| `--gas`       | `ETH_GAS`       | `200000`     | gas quantity    |
 | `--gas-price` | `ETH_GAS_PRICE` | node decides | gas price       |
 | `--value`     | `ETH_VALUE`     | `0`          | ether value     |
 | `--create`    | `SETH_CREATE`   |              | create contract |
