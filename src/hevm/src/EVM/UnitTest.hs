@@ -78,6 +78,7 @@ data UnitTestOptions = UnitTestOptions
   , smtTimeout  :: Maybe Integer
   , smtState    :: Maybe SBV.State
   , solver      :: Maybe Text
+  , covMatch    :: Maybe Text
   , match       :: Text
   , fuzzRuns    :: Int
   , replay      :: Maybe (Text, BSLazy.ByteString)
@@ -465,6 +466,14 @@ decodeCalls b = fromMaybe (error "could not decode replay data") $ do
   List v <- rlpdecode $ BSLazy.toStrict b
   return $ flip fmap v $ \(List [BS caller', BS target, BS cd, BS ts]) -> (num (word caller'), num (word target), cd, word ts)
 
+-- | Runs an invariant test, calls the invariant before execution begins
+initialExplorationStepper :: UnitTestOptions -> ABIMethod -> [ExploreTx] -> [Addr] -> Int -> Stepper (Bool, RLP)
+initialExplorationStepper opts'' testName replayData targets i = do
+  let history = List []
+  x <- runUnitTest opts'' testName emptyAbi
+  if x
+  then explorationStepper opts'' testName replayData targets history i
+  else pure (False, history)
 
 explorationStepper :: UnitTestOptions -> ABIMethod -> [ExploreTx] -> [Addr] -> RLP -> Int -> Stepper (Bool, RLP)
 explorationStepper _ _ _ _ history 0  = return (True, history)
@@ -563,11 +572,11 @@ exploreRun opts@UnitTestOptions{..} initialVm testName replayTxs = do
     then
     foldM (\a@((success, _), _) _ ->
                        if success
-                       then runStateT (EVM.Stepper.interpret oracle (explorationStepper opts testName [] targets (List []) depth)) initialVm
+                       then runStateT (EVM.Stepper.interpret oracle (initialExplorationStepper opts testName [] targets depth)) initialVm
                        else pure a)
                        ((True, (List [])), initialVm)  -- no canonical "post vm"
                        [0..fuzzRuns]
-    else runStateT (EVM.Stepper.interpret oracle (explorationStepper opts testName replayTxs targets (List []) (length replayTxs))) initialVm
+    else runStateT (EVM.Stepper.interpret oracle (initialExplorationStepper opts testName replayTxs targets (length replayTxs))) initialVm
   if x
   then return ("\x1b[32m[PASS]\x1b[0m " <> testName <>  " (runs: " <> (pack $ show fuzzRuns) <>", depth: " <> pack (show depth) <> ")",
                Right (passOutput vm' opts testName), vm') -- no canonical "post vm"

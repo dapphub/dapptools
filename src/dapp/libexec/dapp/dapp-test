@@ -9,6 +9,7 @@
 ###   --depth <number>          number of transactions to sequence per invariant cycle
 ###   --replay <string>         rerun a particular test case
 ###   -m, --match <string>      only run test methods matching regex
+###   --cov-match <string>      only print coverage for files matching regex
 ###
 ### RPC options:
 ###   --rpc                     fetch remote state via ETH_RPC_URL

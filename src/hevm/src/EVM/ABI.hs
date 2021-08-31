@@ -35,6 +35,7 @@ module EVM.ABI
   , AbiVals (..)
   , abiKind
   , Event (..)
+  , SolError (..)
   , Anonymity (..)
   , Indexed (..)
   , putAbi
@@ -147,6 +148,8 @@ data Anonymity = Anonymous | NotAnonymous
 data Indexed   = Indexed   | NotIndexed
   deriving (Show, Ord, Eq, Generic)
 data Event     = Event Text Anonymity [(AbiType, Indexed)]
+  deriving (Show, Ord, Eq, Generic)
+data SolError  = SolError Text [AbiType]
   deriving (Show, Ord, Eq, Generic)
 
 abiKind :: AbiType -> AbiKind

@@ -6,6 +6,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## unreleased
 
+### Added
+
+- `seth basefee` command returns basefee for the latest block, or any block with `[blocknumber]` parameter
+
 ### Fixed
 
 - seth bundle-source writes the contents of standard-json to the current directory to enable better sourcemaps for multi-file etherscan source code.

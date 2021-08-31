@@ -58,6 +58,7 @@ ghciTest root path statePath =
           facts <- Git.loadFacts (Git.RepoAt repoPath)
           pure (flip Facts.apply facts)
     params <- getParametersFromEnvironmentVariables Nothing
+    dapp <- loadDappInfo root path
     let
       opts = UnitTestOptions
         { oracle = EVM.Fetch.zero
@@ -68,10 +69,11 @@ ghciTest root path statePath =
         , smtState = Nothing
         , solver = Nothing
         , match = ""
+        , covMatch = Nothing
         , fuzzRuns = 100
         , replay = Nothing
         , vmModifier = loadFacts
-        , dapp = emptyDapp
+        , dapp = dapp
         , testParams = params
         , maxDepth = Nothing
         , ffiAllowed = False
@@ -128,6 +130,7 @@ ghciTty root path statePath =
         , smtState = Nothing
         , solver = Nothing
         , match = ""
+        , covMatch = Nothing
         , fuzzRuns = 100
         , replay = Nothing
         , vmModifier = loadFacts

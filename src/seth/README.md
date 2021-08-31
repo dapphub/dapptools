@@ -71,6 +71,7 @@ hardware wallets—even if you use a remote RPC node like Infura's.
   - [`seth --to-wei`]
   - [`seth age`]
   - [`seth balance`]
+  - [`seth basefee`]
   - [`seth block`]
   - [`seth block-number`]
   - [`seth bundle-source`]
@@ -87,11 +88,14 @@ hardware wallets—even if you use a remote RPC node like Infura's.
   - [`seth help`]
   - [`seth keccak`]
   - [`seth logs`]
+  - [`seth lookup-address`]
   - [`seth ls`]
   - [`seth mktx`]
+  - [`seth namehash`]
   - [`seth nonce`]
   - [`seth publish`]
   - [`seth receipt`]
+  - [`seth resolve-name`]
   - [`seth run-tx`]
   - [`seth send`]
   - [`seth sign`]
@@ -457,6 +461,14 @@ Show the ether balance of an account.
 
     seth balance [--block <block>] <account>
 
+### `seth basefee`
+
+Show the basefee of a block (the latest block by default).
+
+    seth basefee [<block>]
+
+If no `<block>` number is given, defaults to `latest`.
+
 ### `seth block`
 
 Print a table of information about a specific block.
@@ -508,7 +520,7 @@ optionally passing additional hex `<data>` or structured `<sig>` and
 | --------- | ----------- | -------- | ---------------------- |
 | `--block` | `ETH_BLOCK` | `latest` | block number           |
 | `--from`  | `ETH_FROM`  | n/a      | simulated sender       |
-| `--gas`   | `ETH_GAS`   | n/a      | simulated gas quantity |
+| `--gas`   | `ETH_GAS`   | `200000` | simulated gas quantity |
 | `--value` | `ETH_VALUE` | `0`      | simulated ether value  |
 
 By default, calls are made to the defined RPC node. With `--hevm`, calls
@@ -636,6 +648,15 @@ With `--follow`, the command blocks waiting for new events
 See also [`seth events`] which decodes logs using an
 ABI specification.
 
+### `seth lookup-address`
+
+Print the address the provided ENS name resolves to. If the name is not
+owned or does not have a resolver configured, an `invalid data for
+function output` error will be thrown. An error will also be thrown
+if the forward and reverse resolution do not match.
+
+    seth lookup-address <address>
+
 ### `seth ls`
 
 Display a list of your accounts and their ether balances.
@@ -653,6 +674,16 @@ Make and signs a transaction without publishing it.
 Options are as for [`seth send`] but no transaction is published.
 
 See also [`seth publish`] for publishing a signed transaction.
+
+### `seth namehash`
+
+Print the ENS namehash of the provided name.
+
+    seth namehash <name>
+
+ENS names are converted to lowercase before hashing, but note this is
+not the complete [normalization process](https://docs.ens.domains/contract-api-reference/name-processing#normalising-names),
+so users must ensure the ENS names they enter are properly formatted.
 
 ### `seth nonce`
 
@@ -681,6 +712,18 @@ is specified.
 Unless `--async` is given, wait indefinitely for the receipt
 to appear.
 
+### `seth resolve-name`
+
+Print the address the provided ENS name resolves to. If the name is not
+owned or does not have a resolver configured, an `invalid data for function output`
+error will be thrown.
+
+    seth resolve-name <name>
+
+ENS names are converted to lowercase before hashing, but note this is
+not the complete [normalization process](https://docs.ens.domains/contract-api-reference/name-processing#normalising-names),
+so users must ensure the ENS names they enter are properly formatted.
+
 ### `seth run-tx`
 
 Execute a transaction using `hevm`.
@@ -707,7 +750,7 @@ Sign and publish a transaction to the blockchain.
 | ------------- | --------------- | ------------ | ---------------                   |
 | `--block`     | `ETH_BLOCK`     | `latest`     | block number                      |
 | `--from`      | `ETH_FROM`      | n/a          | sender                            |
-| `--gas`       | `ETH_GAS`       | node decides | gas quantity                      |
+| `--gas`       | `ETH_GAS`       | `200000`     | gas quantity                      |
 | `--gas-price` | `ETH_GAS_PRICE` |              | gas price                         |
 | `--prio-fee`  | `ETH_PRIO_FEE`  |              | EIP-1559 priority fee (miner tip) |
 | `--value`     | `ETH_VALUE`     | `0`          | ether value                       |
@@ -715,6 +758,7 @@ Sign and publish a transaction to the blockchain.
 | `--resend`    | `SETH_RESEND`   |              | reuse nonce                       |
 | `--async`     | `SETH_ASYNC`    |              | don't wait                        |
 | `--status`    | `SETH_STATUS`   |              | check success                     |
+
 
 See [Key management and signing](#key-management-and-signing) for
 details on how Seth signs transactions.
@@ -781,7 +825,7 @@ Show all fields unless `<field>` is given.
 [`seth abi`]: #seth-abi
 [`seth age`]: #seth-age
 [`seth balance`]: #seth-balance
-[`seth balance`]: #seth-balance
+[`seth basefee`]: #seth-basefee
 [`seth block`]: #seth-block
 [`seth bundle-source`]: #seth-bundle-source
 [`seth call`]: #seth-call
@@ -796,12 +840,14 @@ Show all fields unless `<field>` is given.
 [`seth help`]: #seth-help
 [`seth keccak`]: #seth-keccak
 [`seth logs`]: #seth-logs
-[`seth ls`]: #seth-ls
+[`seth lookup-address`]: #seth-lookup-address
 [`seth ls`]: #seth-ls
 [`seth mktx`]: #seth-mktx
+[`seth namehash`]: #seth-namehash
 [`seth nonce`]: #seth-nonce
 [`seth publish`]: #seth-publish
 [`seth receipt`]: #seth-receipt
+[`seth resolve-name`]: #seth-resolve-name
 [`seth run-tx`]: #seth-run-tx
 [`seth send`]: #seth-send
 [`seth sign`]: #seth-sign

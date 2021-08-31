@@ -24,7 +24,6 @@ import EVM.Op
 import EVM.Solidity hiding (storageLayout)
 import EVM.Types hiding (padRight)
 import EVM.UnitTest
-import EVM.RLP (RLP(..))
 import EVM.StorageLayout
 
 import EVM.Stepper (Stepper)
@@ -249,6 +248,7 @@ runFromVM maxIter' dappinfo oracle' vm = do
       , testParams    = error "irrelevant"
       , dapp          = dappinfo
       , ffiAllowed    = False
+      , covMatch       = Nothing
       }
     ui0 = initUiVmState vm opts (void Stepper.execFully)
 
@@ -645,12 +645,12 @@ initialUiVmStateForTest opts@UnitTestOptions{..} (theContractName, theTestName) 
             void (execSymTest opts theTestName (SymbolicBuffer buf, w256lit len))
           InvariantTest _ -> do
             targets <- getTargetContracts opts
-            let randomRun = explorationStepper opts theTestName [] targets (List []) (fromMaybe 20 maxDepth)
+            let randomRun = initialExplorationStepper opts theTestName [] targets (fromMaybe 20 maxDepth)
             void $ case replay of
               Nothing -> randomRun
               Just (sig, cd) ->
                 if theTestName == sig
-                then explorationStepper opts theTestName (decodeCalls cd) targets (List []) (length (decodeCalls cd))
+                then initialExplorationStepper opts theTestName (decodeCalls cd) targets (length (decodeCalls cd))
                 else randomRun
   pure $ initUiVmState vm0 opts script
   where

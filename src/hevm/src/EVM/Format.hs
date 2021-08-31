@@ -5,16 +5,16 @@ module EVM.Format where
 
 import Prelude hiding (Word)
 import qualified EVM
-import EVM.Dapp (DappInfo (..), dappSolcByHash, dappAbiMap, showTraceLocation, dappEventMap)
+import EVM.Dapp (DappInfo (..), dappSolcByHash, dappAbiMap, showTraceLocation, dappEventMap, dappErrorMap)
 import EVM.Dapp (DappContext (..), contextInfo, contextEnv)
 import EVM.Concrete ( wordValue )
 import EVM (VM, VMResult(..), cheatCode, traceForest, traceData, Error (..), result)
 import EVM (Trace, TraceData (..), Log (..), Query (..), FrameContext (..), Storage(..))
 import EVM.SymExec
 import EVM.Symbolic (len, litWord)
-import EVM.Types (maybeLitWord, Word (..), Whiff(..), SymWord(..), W256 (..), num)
+import EVM.Types (maybeLitWord, Word (..), Whiff(..), SymWord(..), W256 (..), num, word)
 import EVM.Types (Addr, Buffer(..), ByteStringS(..))
-import EVM.ABI (AbiValue (..), Event (..), AbiType (..))
+import EVM.ABI (AbiValue (..), Event (..), AbiType (..), SolError (..))
 import EVM.ABI (Indexed (NotIndexed), getAbiSeq)
 import EVM.ABI (parseTypeName, formatString)
 import EVM.Solidity (SolcContract(..), contractName, abiMap)
@@ -122,11 +122,15 @@ showCall ts (SymbolicBuffer bs) = showValues ts $ SymbolicBuffer (drop 4 bs)
 showCall ts (ConcreteBuffer bs) = showValues ts $ ConcreteBuffer (BS.drop 4 bs)
 
 showError :: (?context :: DappContext) => ByteString -> Text
-showError bs = case BS.take 4 bs of
-  -- Method ID for Error(string)
-  "\b\195y\160" -> showCall [AbiStringType] (ConcreteBuffer bs)
-  _             -> formatBinary bs
-
+showError bs =
+  let dappinfo = view contextInfo ?context
+      bs4 = BS.take 4 bs
+  in case Map.lookup (word bs4) (view dappErrorMap dappinfo) of
+      Just (SolError errName ts) -> errName <> " " <> showCall ts (ConcreteBuffer bs)
+      Nothing -> case bs4 of
+                  -- Method ID for Error(string)
+                  "\b\195y\160" -> showCall [AbiStringType] (ConcreteBuffer bs)
+                  _             -> formatBinary bs
 
 -- the conditions under which bytes will be decoded and rendered as a string
 isPrintable :: ByteString -> Bool

@@ -5,7 +5,6 @@
 module EVM.Fetch where
 
 import Prelude hiding (Word)
-import Data.Scientific
 
 import EVM.ABI
 import EVM.Types    (Addr, w256, W256, hexText, Word, Buffer(..))
@@ -17,14 +16,15 @@ import qualified EVM
 
 import Control.Lens hiding ((.=))
 import Control.Monad.Reader
+import Control.Monad.Trans.Maybe
 import Data.SBV.Trans.Control
 import qualified Data.SBV.Internals as SBV
 import Data.SBV.Trans hiding (Word)
 import Data.Aeson
 import Data.Aeson.Lens
-import Control.Concurrent.Async
 import qualified Data.ByteString as BS
 import Data.Text (Text, unpack, pack)
+import Data.Maybe (fromMaybe)
 
 import qualified Data.Vector as RegularVector
 import Network.Wreq
@@ -35,7 +35,6 @@ import qualified Network.Wreq.Session as Session
 
 -- | Abstract representation of an RPC fetch request
 data RpcQuery a where
-  QueryAccount :: Addr         -> RpcQuery (BS.ByteString, W256, W256)
   QueryCode    :: Addr         -> RpcQuery BS.ByteString
   QueryBlock   ::                 RpcQuery Block
   QueryBalance :: Addr         -> RpcQuery W256
@@ -47,10 +46,10 @@ data BlockNumber = Latest | BlockNumber W256
 
 deriving instance Show (RpcQuery a)
 
-rpc :: String -> [Value] -> Scientific -> Value
-rpc method args i = object
+rpc :: String -> [Value] -> Value
+rpc method args = object
   [ "jsonrpc" .= ("2.0" :: String)
-  , "id"      .= Number i
+  , "id"      .= Number 1
   , "method"  .= method
   , "params"  .= args
   ]
@@ -81,31 +80,27 @@ fetchQuery
   -> RpcQuery a
   -> IO (Maybe a)
 fetchQuery n f q = do
-  case q of
-    QueryAccount addr -> do
-        [m, m', m''] <- mapConcurrently (\(x, i) -> f (rpc x [toRPC addr, toRPC n] i)) [("eth_getCode", 1), ("eth_getBalance", 2), ("eth_getTransactionCount", 3)]
-        return $ liftM3 (\a b c ->
-          (hexText . view _String $ a,
-           readText . view _String $ b,
-           readText . view _String $ c)) m m' m''
+  x <- case q of
     QueryCode addr -> do
-        m <- f (rpc "eth_getCode" [toRPC addr, toRPC n] 1)
+        m <- f (rpc "eth_getCode" [toRPC addr, toRPC n])
         return $ hexText . view _String <$> m
     QueryNonce addr -> do
-        m <- f (rpc "eth_getTransactionCount" [toRPC addr, toRPC n] 1)
+        m <- f (rpc "eth_getTransactionCount" [toRPC addr, toRPC n])
         return $ readText . view _String <$> m
     QueryBlock -> do
-      m <- f (rpc "eth_getBlockByNumber" [toRPC n, toRPC False] 1)
+      m <- f (rpc "eth_getBlockByNumber" [toRPC n, toRPC False])
       return $ m >>= parseBlock
     QueryBalance addr -> do
-        m <- f (rpc "eth_getBalance" [toRPC addr, toRPC n] 1)
+        m <- f (rpc "eth_getBalance" [toRPC addr, toRPC n])
         return $ readText . view _String <$> m
     QuerySlot addr slot -> do
-        m <- f (rpc "eth_getStorageAt" [toRPC addr, toRPC slot, toRPC n] 1)
+        m <- f (rpc "eth_getStorageAt" [toRPC addr, toRPC slot, toRPC n])
         return $ readText . view _String <$> m
     QueryChainId -> do
-        m <- f (rpc "eth_chainId" [toRPC n] 1)
+        m <- f (rpc "eth_chainId" [toRPC n])
         return $ readText . view _String <$> m
+  return x
+
 
 parseBlock :: (AsValue s, Show s) => s -> Maybe EVM.Block
 parseBlock j = do
@@ -113,9 +108,9 @@ parseBlock j = do
   timestamp  <- litWord . readText <$> j ^? key "timestamp" . _String
   number     <- readText <$> j ^? key "number" . _String
   difficulty <- readText <$> j ^? key "difficulty" . _String
-  baseFee    <- readText <$> j ^? key "baseFeePerGas" . _String
+  let baseFee = readText <$> j ^? key "baseFeePerGas" . _String
   -- default codesize, default gas limit, default feescedule
-  return $ EVM.Block coinbase timestamp number difficulty 0xffffffff baseFee 0xffffffff FeeSchedule.berlin
+  return $ EVM.Block coinbase timestamp number difficulty 0xffffffff (fromMaybe 0 baseFee) 0xffffffff FeeSchedule.berlin
 
 fetchWithSession :: Text -> Session -> Value -> IO (Maybe Value)
 fetchWithSession url sess x = do
@@ -124,19 +119,20 @@ fetchWithSession url sess x = do
 
 fetchContractWithSession
   :: BlockNumber -> Text -> Addr -> Session -> IO (Maybe Contract)
-fetchContractWithSession n url addr sess =
+fetchContractWithSession n url addr sess = runMaybeT $ do
   let
     fetch :: Show a => RpcQuery a -> IO (Maybe a)
     fetch = fetchQuery n (fetchWithSession url sess)
-  in
-   fetch (QueryAccount addr) >>= \case
-     Nothing -> return Nothing
-     Just (theCode, theBalance, theNonce) ->
-       return $ Just $ 
-          initialContract (EVM.RuntimeCode (ConcreteBuffer theCode))
-            & set nonce    (w256 theNonce)
-            & set balance  (w256 theBalance)
-            & set external True
+
+  theCode    <- MaybeT $ fetch (QueryCode addr)
+  theNonce   <- MaybeT $ fetch (QueryNonce addr)
+  theBalance <- MaybeT $ fetch (QueryBalance addr)
+
+  return $
+    initialContract (EVM.RuntimeCode (ConcreteBuffer theCode))
+      & set nonce    (w256 theNonce)
+      & set balance  (w256 theBalance)
+      & set external True
 
 fetchSlotWithSession
   :: BlockNumber -> Text -> Session -> Addr -> W256 -> IO (Maybe Word)
