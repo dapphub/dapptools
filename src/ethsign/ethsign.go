@@ -9,9 +9,9 @@ import (
   "github.com/ethereum/go-ethereum/accounts/usbwallet"
   "github.com/ethereum/go-ethereum/core/types"
   "github.com/ethereum/go-ethereum/crypto"
-  "github.com/ethereum/go-ethereum/rlp"
 
   "os"
+  "math/big"
   "fmt"
   "io/ioutil"
   "strings"
@@ -339,6 +339,10 @@ func main() {
           Usage: "gas limit",
         },
         cli.StringFlag{
+          Name: "prio-fee",
+          Usage: "max priority fee per gas",
+        },
+        cli.StringFlag{
           Name: "value",
           Usage: "transaction value",
         },
@@ -358,6 +362,12 @@ func main() {
           }
         }
 
+        // TODO: could support tx type 1 at some point
+        txtype := types.LegacyTxType;
+        if (c.String("prio-fee") != "") {
+          txtype = types.DynamicFeeTxType;
+        }
+
         create := c.Bool("create")
 
         if (c.String("to") == "" && !create) || (c.String("to") != "" && create) {
@@ -371,10 +381,18 @@ func main() {
         to := common.HexToAddress(c.String("to"))
         from := common.HexToAddress(c.String("from"))
         nonce := math.MustParseUint64(c.String("nonce"))
-        gasPrice := math.MustParseBig256(c.String("gas-price"))
         gasLimit := math.MustParseUint64(c.String("gas-limit"))
         value := math.MustParseBig256(c.String("value"))
         chainID := math.MustParseBig256(c.String("chain-id"))
+        gasPrice := math.MustParseBig256(c.String("gas-price"))
+
+        var (
+          prioFee  *big.Int
+        )
+
+        if (txtype == types.DynamicFeeTxType) {
+          prioFee = math.MustParseBig256(c.String("prio-fee"))
+        }
 
         dataString := c.String("data")
         if dataString == "" {
@@ -388,9 +406,33 @@ func main() {
 
         var tx *types.Transaction
         if create {
-          tx = types.NewContractCreation(nonce, value, gasLimit, gasPrice, data)
+          if (txtype == types.LegacyTxType) {
+            tx = types.NewContractCreation(nonce, value, gasLimit, gasPrice, data)
+          } else if (txtype == types.DynamicFeeTxType) {
+            tx = types.NewTx(&types.DynamicFeeTx{
+              Nonce:     nonce,
+              To:        &common.Address{},
+              Value:     value,
+              Gas:       gasLimit,
+              GasFeeCap: gasPrice,
+              GasTipCap: prioFee,
+              Data:      data,
+            })
+          }
         } else {
-          tx = types.NewTransaction(nonce, to, value, gasLimit, gasPrice, data)
+          if (txtype == types.LegacyTxType) {
+            tx = types.NewTransaction(nonce, to, value, gasLimit, gasPrice, data)
+          } else if (txtype == types.DynamicFeeTxType) {
+            tx = types.NewTx(&types.DynamicFeeTx{
+              Nonce:     nonce,
+              To:        &to,
+              Value:     value,
+              Gas:       gasLimit,
+              GasFeeCap: gasPrice,
+              GasTipCap: prioFee,
+              Data:      data,
+            })
+          }
         }
 
         signed, err := wallet.SignTxWithPassphrase(*acct, passphrase, tx, chainID)
@@ -403,7 +445,7 @@ func main() {
           v, r, s := signed.RawSignatureValues()
           fmt.Println(fmt.Sprintf("0x%064x%064x%02x", r, s, v))
         }else{
-          encoded, _ := rlp.EncodeToBytes(signed)
+          encoded, _ := signed.MarshalBinary()
           fmt.Println(hexutil.Encode(encoded[:]))
         }
         return nil

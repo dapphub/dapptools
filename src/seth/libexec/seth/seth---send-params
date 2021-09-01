@@ -19,6 +19,12 @@ param() {
 
 param ETH_FROM       from      --address
 param ETH_GAS        gas
-param ETH_GAS_PRICE  gasPrice  --wei
 param ETH_NONCE      nonce
 param ETH_VALUE      value     --wei
+
+if [[ $ETH_PRIO_FEE ]]; then
+  param ETH_GAS_PRICE  maxFeePerGas  --wei
+  param ETH_PRIO_FEE   maxPriorityFeePerGas --wei
+else
+  param ETH_GAS_PRICE  gasPrice  --wei
+fi

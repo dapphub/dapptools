@@ -29,6 +29,10 @@ else
   args+=(--to "$(seth --to-address "$1")")
 fi
 
+if [[ $ETH_PRIO_FEE ]]; then
+  args+=(--prio-fee "$ETH_PRIO_FEE")
+fi
+
 if [ -n "$ETH_PASSWORD" ]; then args+=(--passphrase-file "$ETH_PASSWORD"); fi
 
 tx=$([[ $SETH_VERBOSE ]] && set -x; ethsign tx "${args[@]}")

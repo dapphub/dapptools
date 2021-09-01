@@ -6,7 +6,7 @@ buildGoModule rec {
 
   src = ./.;
 
-  vendorSha256 = "1p7gkpv88v6swz8dpjvrzfaa2jkpr5xw26bd3rjazv5wcs6ipwy7";
+  vendorSha256 = "1zbsq1lyqinyzv5x4p1xgkxsyb7y92fbmf44gyaix34xrag5s27m";
   runVend = true;
 
   meta = {
