@@ -105,13 +105,17 @@ jobs:
       - uses: actions/download-artifact@master
         with:
           name: hevm-macOS
-          path: hevm-macOS.tar.gz
+          path: hevm-macOS
+
+      - name: Rename macOS artifact
+        run: |
+          mv ./hevm-macOS/hevm.tar.gz ./hevm-macOS/hevm-macOS.tar.gz
 
       - name: Release
         uses: softprops/action-gh-release@v1
         with:
           files: |
             ./hevmLinux/bin/hevm
-            hevm-macOS.tar.gz
+            ./hevm-macOS/hevm-macOS.tar.gz
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
