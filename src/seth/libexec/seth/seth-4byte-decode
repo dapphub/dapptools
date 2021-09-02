@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+### seth-4byte-decode -- querys 4byte.directory to find a matching signature, then decodes the calldata with it
+### Usage: seth 4byte-decode <calldata>
+###
+### Querys 4byte.directory to find matching signatures and prompts the user to to select one. The selected
+### signature will be used to decode the calldata.
+
+set -e
+[[ $# -eq 1 ]] || seth --fail-usage "$0"
+
+sigs=$(curl -s "https://www.4byte.directory/api/v1/signatures/?hex_signature=${1:0:10}" | jq '.results[] | .text_signature' )
+PS3="Select a function signature by number: "
+
+select sig in $sigs; do
+  break
+done
+
+sig="${sig//\"}" # remove leading and trailing quotes from JSON
+echo ""
+
+seth --calldata-decode $sig $1

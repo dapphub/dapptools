@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+### seth-slot -- Prints the slot number for the specified mapping type and input data
+### Usage: seth slot <fromtype> <totype> <fromvalue> <slot> [<lang>]
+###
+### Prints the slot number for the specified mapping type and input data. For example,
+### the balances mapping in DAI is slot 2, so to find the slot where the balance 
+### is stored for <account>, use
+###     seth-slot address uint256 <account> 2
+
+set -e
+
+if [[ $5 = 'vyper' || $5 = 'vy' || $5 = 'v' ]]; then
+  # note: not guaranteed to work for all Vyper versions since storage layout is not yet stable
+  # more info: https://twitter.com/big_tech_sux/status/1420159854170152963
+  echo $(seth keccak $(seth abi-encode "x($2,$1)" $4 $3));
+else
+  echo $(seth keccak $(seth abi-encode "x($1,$2)" $3 $4));
+fi
