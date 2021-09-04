@@ -31,4 +31,4 @@ done
   exit 1
 }
 
-echo $(<"$DAPP_JSON" jq .contracts.\""${name[0]}"\".\""${1#*:}"\")
+echo "$(<"$DAPP_JSON" jq .contracts.\""${name[0]}"\".\""${1#*:}"\")"
