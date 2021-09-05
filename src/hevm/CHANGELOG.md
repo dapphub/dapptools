@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Contract feching happens synchronously again.
+- Invariants checked before calling methods from targetContracts.
+- Support for 0.8.4 custom error types in stack traces
+
 ## 0.48.0 - 2021-08-03
 
 ### Changed
