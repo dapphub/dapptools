@@ -18,9 +18,14 @@ param() {
 }
 
 param ETH_FROM       from      --address
-param ETH_GAS        gas
 param ETH_NONCE      nonce
 param ETH_VALUE      value     --wei
+
+# skip setting ETH_GAS if the NO_GAS var is provided, useful e.g. when
+# doing gas estimation since the gas field should be empty
+if [[ -z $NO_GAS ]]; then
+    param ETH_GAS        gas
+fi
 
 if [[ $ETH_PRIO_FEE ]]; then
   param ETH_GAS_PRICE  maxFeePerGas  --wei
