@@ -13,6 +13,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `--coverage` flag for `dapp test` to generate coverage via hevm
 - `dapp debug` respects the `DAPP_LINK_TEST_LIBRARIES` environment variable.
 
+### Changed
+
+- Dapp debug respects DAPP_LINK_TEST_LIBRARIES 
+
+### Fixed
+
+- Fix quotation bug in `dapp replay`
+
 ## [0.34.0] - 2021-08-03
 
 ### Changed
