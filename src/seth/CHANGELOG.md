@@ -4,15 +4,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## unreleased
+## Unreleased
 
 ### Added
 
 - `seth basefee` command returns basefee for the latest block, or any block with `[blocknumber]` parameter
+- `seth namehash <name>` to get the ENS namehash of a name
+- `seth resolve-name <name>` to resolve an ENS name to an address
+- `seth lookup-address <address>` to lookup the ENS name an address reverse resolves to
 
 ### Fixed
 
 - seth bundle-source writes the contents of standard-json to the current directory to enable better sourcemaps for multi-file etherscan source code.
+- fix `--use` bug
 
 ### Added 
 
