@@ -22,6 +22,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Fix `--use` bug
 - `seth bundle-source` writes the contents of standard-json to the current directory to enable better sourcemaps for multi-file etherscan source code.
+- `seth estimate` no longer sets a gas limit when estimating gas
 
 ## [0.10.1] - 2021-03-22
 
