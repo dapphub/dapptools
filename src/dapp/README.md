@@ -45,7 +45,7 @@ tools](https://github.com/dapphub/dapptools) suite.
 
 ## Basic usage: a tutorial
 
-Lets create a new `dapp` project. We make a new directory and initialize the `dapp` skeleton structure:
+Let's create a new `dapp` project. We make a new directory and initialize the `dapp` skeleton structure:
 
 ```sh
 mkdir dapptutorial
@@ -58,7 +58,7 @@ This creates two contracts, `Dapptutorial.sol` and `Dapptutorial.t.sol` in the `
 
 ### Building
 
-For the sake of this tutorial, lets change `Dapptutorial.sol` to a simple vault with an eth bounty that can be accessed by giving the password 42:
+For the sake of this tutorial, let's change `Dapptutorial.sol` to a simple vault with an eth bounty that can be accessed by giving the password 42:
 
 ```solidity
 pragma solidity ^0.8.6;
@@ -130,7 +130,7 @@ or enter the interactive debugger by running `dapp debug`.
 
 ### Property based testing
 
-Now lets try something more interesting - property based testing and symbolically executed tests.
+Now let's try something more interesting - property based testing and symbolically executed tests.
 
 We can generailize our `test_withdraw` function to not use the hardcoded `1 ether`, but instead take
 the value as a parameter:
