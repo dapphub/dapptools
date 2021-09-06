@@ -23,7 +23,7 @@ param ETH_VALUE      value     --wei
 
 # skip setting ETH_GAS if the NO_GAS var is provided, useful e.g. when
 # doing gas estimation since the gas field should be empty
-if [[ -z $NO_GAS ]]; then
+if [[ -z $SETH_PARAMS_NO_GAS ]]; then
     param ETH_GAS        gas
 fi
 
