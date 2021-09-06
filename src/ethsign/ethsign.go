@@ -649,24 +649,16 @@ func main() {
       Name: "import",
       Usage: "import hexadecimal private key into keystore",
       Flags: []cli.Flag{
-        cli.StringFlag{
-          Name:  "keystore",
+        cli.StringSliceFlag{
+          Name:  "key-store",
           Usage: "path to keystore",
+          EnvVar: "ETH_KEYSTORE",
+          Value: &defaultKeyStores,
         },
       },
       Action: func(c *cli.Context) error {
-        requireds := []string{
-          "keystore",
-        }
-
-        for _, required := range requireds {
-          if c.String(required) == "" {
-            return cli.NewExitError("ethsign: missing required parameter --"+required, 1)
-          }
-        }
-
         ks := keystore.NewKeyStore(
-          c.String("keystore"),
+          c.String("key-store"),
           keystore.StandardScryptN, keystore.StandardScryptP)
 
         fmt.Fprintf(os.Stderr, "Private key as 64 hexadecimal digits (not echoed): ")
