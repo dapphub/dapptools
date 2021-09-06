@@ -45,6 +45,7 @@ deploy :; dapp create $type
 .
 
 create "src/$type.sol" <<.
+// SPDX-License-Identifier: GPL-3.0-or-later
 pragma solidity ^${solc_version};
 
 contract $type {
@@ -52,6 +53,7 @@ contract $type {
 .
 
 create "src/$type.t.sol" <<.
+// SPDX-License-Identifier: GPL-3.0-or-later
 pragma solidity ^${solc_version};
 
 import "ds-test/test.sol";
