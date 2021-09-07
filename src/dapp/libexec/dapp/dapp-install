@@ -17,7 +17,7 @@ fi
 while read -r unparsed name url; do
   # get the tag/branch/rev from the repo name if it's specified after the URL with
   # an '@' delimiter.
-  IFS='@' read -ra repo <<< $name
+  IFS='@' read -ra repo <<< "$name"
   name=${repo[0]}
   if [ -z ${repo[1]+x} ]; then
       params="--set-branch ${repo[1]}";
@@ -25,7 +25,7 @@ while read -r unparsed name url; do
       params=""
   fi
 
-  (set -x; git submodule add --force $params "$url" "lib/$name")
+  (set -x; git submodule add --force "$params" "$url" "lib/$name")
   (set -x; git submodule update --init --recursive "lib/$name")
   (set -x; git commit -m "dapp install $unparsed")
 done <<<"$deps"
