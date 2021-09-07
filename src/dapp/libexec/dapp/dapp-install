@@ -23,7 +23,7 @@ while read -r unparsed name url; do
 
   (set -x; git submodule add --force "$url" "lib/$name")
   # checkout the tag if specified
-  if [ $tag ]; then
+  if [ "$tag" ]; then
     (set -x; cd "lib/$name" && git checkout "$tag" && cd -)
   fi
   (set -x; git submodule update --init --recursive "lib/$name")
