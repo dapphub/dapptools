@@ -13,6 +13,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `seth resolve-name <name>` to resolve an ENS name to an address
 - `seth lookup-address <address>` to lookup the ENS name an address reverse resolves to
 - Dynamic transaction fee format transactions (EIP-1559) supported by introducing the flag `--prio-fee` and corresponding environment variable `ETH_PRIO_FEE` to seth and ethsign. If `--prio-fee` is provided (or `ETH_PRIO_FEE`) is set, 1559 transaction will be used and `--gas-price` will reflect the maximum gas price, rather than the absolute gas price.
+- If `ETH_RPC_ACCOUNTS` is set and the account corresponding to `ETH_FROM` exists in the keystore,
+Seth will sign the transaction locally and then publish it signed (previously it'd always send it to the node)
 
 ### Changed
 

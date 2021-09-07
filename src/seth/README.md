@@ -189,6 +189,10 @@ the `ETH_RPC_ACCOUNTS` variable or use the `--rpc-accounts` flag.
 This probably means you need to use Geth's or Parity's account
 management tools to "unlock" your account.
 
+If both `ETH_RPC_ACCOUNTS` and `ETH_FROM` are set, Seth will first check if the
+provided account is in the keystore and only use the RPC node's signer if the
+account does not exist.
+
 Note: Seth uses the [`ethsign`] tool for signing transactions.
 This tool uses Geth as a library.
 
