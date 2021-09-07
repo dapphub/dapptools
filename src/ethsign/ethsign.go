@@ -41,16 +41,13 @@ func rawSignHash(data []byte) []byte {
   return crypto.Keccak256([]byte(msg))
 }
 
-func getWallets(c *cli.Context, defaultKeyStores cli.StringSlice) []accounts.Wallet {
+func getWallets(c *cli.Context, defaultKeyStore string) []accounts.Wallet {
   backends := []accounts.Backend{}
 
-  paths := c.StringSlice("key-store")
-
-  for _, x := range(paths) {
-    ks := keystore.NewKeyStore(
-      x, keystore.StandardScryptN, keystore.StandardScryptP)
-    backends = append(backends, ks)
-  }
+  path := c.String("key-store")
+  ks := keystore.NewKeyStore(
+      path, keystore.StandardScryptN, keystore.StandardScryptP)
+      backends = append(backends, ks)
 
   if ledgerhub, err := usbwallet.NewLedgerHub(); err != nil {
     fmt.Fprintf(os.Stderr, "ethsign: failed to look for USB Ledgers")
@@ -73,9 +70,9 @@ func getWallets(c *cli.Context, defaultKeyStores cli.StringSlice) []accounts.Wal
   return manager.Wallets()
 }
 
-func getWalletData(c *cli.Context, defaultHDPaths cli.StringSlice, defaultKeyStores cli.StringSlice, from common.Address) (*accounts.Account, string, accounts.Wallet, error) {
+func getWalletData(c *cli.Context, defaultHDPaths cli.StringSlice, defaultKeyStore string, from common.Address) (*accounts.Account, string, accounts.Wallet, error) {
 
-  wallets := getWallets(c, defaultKeyStores)
+  wallets := getWallets(c, defaultKeyStore)
 
   var wallet accounts.Wallet
   var acct *accounts.Account
@@ -194,23 +191,13 @@ func main() {
     "m/44'/60'/0'/%d",   // aka "ledger legacy"
   }
 
-  var defaultKeyStores cli.StringSlice
+  var defaultKeyStore string
   if runtime.GOOS == "darwin" {
-    defaultKeyStores = []string{
-      os.Getenv("HOME") + "/Library/Ethereum/keystore",
-      os.Getenv("HOME") + "/Library/Application Support/io.parity.ethereum/keys/ethereum",
-    }
+    defaultKeyStore = os.Getenv("HOME") + "/Library/Ethereum/keystore"
   } else if runtime.GOOS == "windows" {
-    // XXX: I'm not sure these paths are correct, but they are from geth/parity wikis.
-    defaultKeyStores = []string{
-      os.Getenv("APPDATA") + "/Ethereum/keystore",
-      os.Getenv("APPDATA") + "/Parity/Ethereum/keys",
-    }
+    defaultKeyStore = os.Getenv("APPDATA") + "/Ethereum/keystore"
   } else {
-    defaultKeyStores = []string{
-      os.Getenv("HOME") + "/.ethereum/keystore",
-      os.Getenv("HOME") + "/.local/share/io.parity.ethereum/keys/ethereum",
-    }
+    defaultKeyStore = os.Getenv("HOME") + "/.ethereum/keystore"
   }
 
   app := cli.NewApp()
@@ -223,11 +210,11 @@ func main() {
       Aliases: []string{"ls"},
       Usage: "list accounts in keystore and USB wallets",
       Flags: []cli.Flag{
-        cli.StringSliceFlag{
+        cli.StringFlag{
           Name: "key-store",
           Usage: "path to key store",
           EnvVar: "ETH_KEYSTORE",
-          Value: &defaultKeyStores,
+          Value: defaultKeyStore,
         },
         cli.StringFlag{
           Name: "hd-path",
@@ -242,7 +229,7 @@ func main() {
         },
       },
       Action: func(c *cli.Context) error {
-        wallets := getWallets(c, defaultKeyStores)
+        wallets := getWallets(c, defaultKeyStore)
         for _, x := range(wallets) {
           if x.URL().Scheme == "keystore" {
             for _, y := range(x.Accounts()) {
@@ -284,11 +271,11 @@ func main() {
       Aliases: []string{"tx"},
       Usage: "make a signed transaction",
       Flags: []cli.Flag{
-        cli.StringSliceFlag{
+        cli.StringFlag{
           Name: "key-store",
           Usage: "path to key store",
           EnvVar: "ETH_KEYSTORE",
-          Value: &defaultKeyStores,
+          Value: defaultKeyStore,
         },
         cli.StringFlag{
           Name: "hd-path",
@@ -399,7 +386,7 @@ func main() {
           dataString = "0x"
         }
         data := hexutil.MustDecode(dataString)
-        acct, passphrase, wallet, err := getWalletData(c, defaultHDPaths, defaultKeyStores, from)
+        acct, passphrase, wallet, err := getWalletData(c, defaultHDPaths, defaultKeyStore, from)
         if err !=nil {
           return err
         }
@@ -457,11 +444,11 @@ func main() {
       Aliases: []string{"msg"},
       Usage:   "sign arbitrary data with header prefix",
       Flags: []cli.Flag{
-        cli.StringSliceFlag{
+        cli.StringFlag{
           Name:   "key-store",
           Usage:  "path to key store",
           EnvVar: "ETH_KEYSTORE",
-          Value: &defaultKeyStores,
+          Value: defaultKeyStore,
         },
         cli.StringFlag{
           Name: "hd-path",
@@ -511,7 +498,7 @@ func main() {
         }
         data := hexutil.MustDecode(dataString)
 
-        acct, passphrase, wallet, err := getWalletData(c, defaultHDPaths, defaultKeyStores, from)
+        acct, passphrase, wallet, err := getWalletData(c, defaultHDPaths, defaultKeyStore, from)
         if err !=nil {
           return err
         }
@@ -649,11 +636,11 @@ func main() {
       Name: "import",
       Usage: "import hexadecimal private key into keystore",
       Flags: []cli.Flag{
-        cli.StringSliceFlag{
+        cli.StringFlag{
           Name:  "key-store",
           Usage: "path to keystore",
           EnvVar: "ETH_KEYSTORE",
-          Value: &defaultKeyStores,
+          Value: defaultKeyStore,
         },
       },
       Action: func(c *cli.Context) error {
