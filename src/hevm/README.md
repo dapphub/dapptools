@@ -267,8 +267,8 @@ These environment variables can be used to control block parameters:
 | `DAPP_TEST_COINBASE`   | `0x0000000000000000000000000000000000000000` | The coinbase address. Will be set to the coinbase for the block at `DAPP_TEST_NUMBER` if rpc is enabled       |
 | `DAPP_TEST_NUMBER`     | `0`                                          | The block number. Will be set to the latest block if rpc is enabled                                           |
 | `DAPP_TEST_TIMESTAMP`  | `0`                                          | The block timestamp. Will be set to the timestamp for the block at `DAPP_TEST_NUMBER` if rpc is enabled       |
-| `DAPP_TEST_GAS_LIMIT`  | `0`                                          | The block gas limit to use.                                                                                   |
-| `DAPP_TEST_GAS_PRICE`  | `0`                                          | The gas price to use.                                                                                         |
+| `DAPP_TEST_GAS_LIMIT`  | `0`                                          | The block gas limit to use                                                                                    |
+| `DAPP_TEST_GAS_PRICE`  | `0`                                          | The gas price to use                                                                                          |
 | `DAPP_TEST_DIFFICULTY` | `0`                                          | The block difficulty. Will be set to the difficulty for the the block at `DAPP_TEST_NUMBER` if rpc is enabled |
 
 ## Installing
