@@ -14,10 +14,10 @@ console.log(buildRemappings(deduplicate(buildDependencyTree("."))).join("\n"))
 //     deps: []
 //   }
 function buildDependencyTree(prefix) {
-  const lib = `${prefix}/${process.env.DAPP_LIB}`
+  const lib = `${prefix}/${normalize(process.env.DAPP_LIB)}`
   return {
     name: prefix.split("/").pop(),
-    path: normalize(`${prefix}/${process.env.DAPP_SRC}`),
+    path: normalize(`${prefix}/${normalize(process.env.DAPP_SRC)}`),
     hash: hash(prefix),
     deps: ls(lib).map(p => buildDependencyTree(`${lib}/${p}`))
   }
