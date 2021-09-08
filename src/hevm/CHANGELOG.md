@@ -11,6 +11,10 @@
 - Contract feching happens synchronously again.
 - Invariants checked before calling methods from targetContracts.
 
+### Fixed
+
+- The block gas limit and basefee are now correctly fetched when running tests via rpc
+
 ## 0.48.0 - 2021-08-03
 
 ### Changed
