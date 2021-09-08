@@ -70,7 +70,7 @@ func getWallets(c *cli.Context) []accounts.Wallet {
 	return manager.Wallets()
 }
 
-func getWalletData(c *cli.Context, defaultHDPaths cli.StringSlice, defaultKeyStore string, from common.Address) (*accounts.Account, string, accounts.Wallet, error) {
+func getWalletData(c *cli.Context, defaultHDPaths cli.StringSlice, from common.Address) (*accounts.Account, string, accounts.Wallet, error) {
 
 	wallets := getWallets(c)
 
@@ -386,7 +386,7 @@ func main() {
 					dataString = "0x"
 				}
 				data := hexutil.MustDecode(dataString)
-				acct, passphrase, wallet, err := getWalletData(c, defaultHDPaths, defaultKeyStore, from)
+				acct, passphrase, wallet, err := getWalletData(c, defaultHDPaths, from)
 				if err != nil {
 					return err
 				}
@@ -498,7 +498,7 @@ func main() {
 				}
 				data := hexutil.MustDecode(dataString)
 
-				acct, passphrase, wallet, err := getWalletData(c, defaultHDPaths, defaultKeyStore, from)
+				acct, passphrase, wallet, err := getWalletData(c, defaultHDPaths, from)
 				if err != nil {
 					return err
 				}
