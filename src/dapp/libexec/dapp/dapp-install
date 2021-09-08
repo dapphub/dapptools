@@ -7,7 +7,7 @@
 ###   - a path to a repo in another Github org (org-name/repo-name)
 set -e
 
-# dapp --sanity "$0"
+dapp --sanity "$0"
 deps=$(dapp --parse-deps "$@")
 if [[ -z "$deps" ]]; then
   dapp help install
