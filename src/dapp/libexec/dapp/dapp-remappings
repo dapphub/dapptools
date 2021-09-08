@@ -20,7 +20,7 @@ function findRemappings(prefix) {
     
     // If the file has an extension, ignore.
     if (name.includes(".")) {
-      return;
+      return
     }
 
     // Shortcut when we're ignoring all the Git hash stuff.
