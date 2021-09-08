@@ -965,15 +965,17 @@ getParametersFromEnvironmentVariables :: Maybe Text -> IO TestVMParams
 getParametersFromEnvironmentVariables rpc = do
   block' <- maybe EVM.Fetch.Latest (EVM.Fetch.BlockNumber . read) <$> (lookupEnv "DAPP_TEST_NUMBER")
 
-  (miner,ts,blockNum,diff) <-
+  (miner,ts,blockNum,diff,limit,base) <-
     case rpc of
-      Nothing  -> return (0,0,0,0)
+      Nothing  -> return (0,0,0,0,0,0)
       Just url -> EVM.Fetch.fetchBlockFrom block' url >>= \case
         Nothing -> error "Could not fetch block"
         Just EVM.Block{..} -> return (  _coinbase
                                       , wordValue $ forceLit _timestamp
                                       , wordValue _number
                                       , wordValue _difficulty
+                                      , wordValue _gaslimit
+                                      , wordValue _baseFee
                                       )
   let
     getWord s def = maybe def read <$> lookupEnv s
@@ -985,13 +987,13 @@ getParametersFromEnvironmentVariables rpc = do
     <*> getAddr "DAPP_TEST_ORIGIN" ethrunAddress
     <*> getWord "DAPP_TEST_GAS_CREATE" defaultGasForCreating
     <*> getWord "DAPP_TEST_GAS_CALL" defaultGasForInvoking
-    <*> getWord "DAPP_TEST_BASEFEE" 0
+    <*> getWord "DAPP_TEST_BASEFEE" base
     <*> getWord "DAPP_TEST_PRIORITYFEE" 0
     <*> getWord "DAPP_TEST_BALANCE" defaultBalanceForTestContract
     <*> getAddr "DAPP_TEST_COINBASE" miner
     <*> getWord "DAPP_TEST_NUMBER" blockNum
     <*> getWord "DAPP_TEST_TIMESTAMP" ts
-    <*> getWord "DAPP_TEST_GAS_LIMIT" 0
+    <*> getWord "DAPP_TEST_GAS_LIMIT" limit
     <*> getWord "DAPP_TEST_GAS_PRICE" 0
     <*> getWord "DAPP_TEST_MAXCODESIZE" defaultMaxCodeSize
     <*> getWord "DAPP_TEST_DIFFICULTY" diff
