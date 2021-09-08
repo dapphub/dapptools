@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## Unreleased
+## [0.11.0] - 2021-09-08
 
 ### Added
 
@@ -19,6 +19,8 @@ Seth will sign the transaction locally and then publish it signed (previously it
 ### Changed
 
 - `--gas-price` will be used as `max-fee` when `--prio-fee` is set
+- [BREAKING] seth will no longer search Parity / OpenEthereum related keystores by default. These
+    keystores can still be searched by setting the `ETH_KEYSTORE` environment variable.
 
 ### Fixed
 
@@ -30,7 +32,7 @@ Seth will sign the transaction locally and then publish it signed (previously it
 
 ### Added
 
-- Thanks to an upgrade in ethsign, seth is more likely to find your ledger live 
+- Thanks to an upgrade in ethsign, seth is more likely to find your ledger live
 account without having to set `ETH_HDPATH`.
 
 ### Changed
