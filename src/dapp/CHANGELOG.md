@@ -16,7 +16,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- Dapp debug respects DAPP_LINK_TEST_LIBRARIES 
+- Dapp debug respects `DAPP_LINK_TEST_LIBRARIES`
+- Dapp remappings ignores files containing `.` in `DAPP_LIB`
 
 ### Fixed
 
