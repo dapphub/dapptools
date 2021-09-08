@@ -31,7 +31,7 @@ while read -r unparsed name url; do
     # edit the .gitmodules file to note the version tag. we do
     # this just for introspection reasons (inspecting your dep versions),
     # and it provides no actual functionality
-    git config -f .gitmodules submodule.lib/$name.version $tag
+    git config -f .gitmodules submodule.lib/"$name".version "$tag"
     git add .gitmodules
   fi
   (set -x; git commit -m "dapp install $unparsed")
