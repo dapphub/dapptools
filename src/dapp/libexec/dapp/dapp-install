@@ -28,7 +28,7 @@ while read -r unparsed name url; do
   if [ "$tag" ]; then
     # checkout the tag
     (set -x; cd "lib/$name" && git checkout --recurse-submodules "$tag" && cd -)
-    git add lib/
+    git add "lib/$name"
   fi
   (set -x; git commit -m "dapp install $unparsed")
 done <<<"$deps"
