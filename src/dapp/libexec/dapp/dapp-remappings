@@ -52,7 +52,11 @@ function deduplicate(pkg) {
 // walk tree and build a mapping from hash => path
 function mapHashes(pkg) {
   const go = (mapping, dep) => {
-    mapping[dep.hash] = dep.path
+    // we collect the shortest path (aka closest to the root) for each dep
+    if (mapping[dep.hash] == undefined || dep.path.length < mapping[dep.hash].length) {
+      mapping[dep.hash] = dep.path
+    }
+
     return dep.deps.reduce(go, mapping)
   }
   return pkg.deps.reduce(go, { [pkg.hash]: pkg.path })
