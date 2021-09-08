@@ -17,6 +17,11 @@ function findRemappings(prefix) {
   ls(`${prefix}/${process.env.DAPP_LIB}`).forEach(name => {
     var lib = `${prefix}/${process.env.DAPP_LIB}`
     var src = `${lib}/${name}/${process.env.DAPP_SRC}`.replace(/^.\//, "")
+    
+    // If the file has an extension, ignore.
+    if (name.includes(".")) {
+      return;
+    }
 
     // Shortcut when we're ignoring all the Git hash stuff.
     if (process.env.DAPP_IGNORE_HASHES) {
