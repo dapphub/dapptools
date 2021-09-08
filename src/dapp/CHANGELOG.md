@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `DAPP_TEST_DEPTH` env var to control `--depth`
 - `--coverage` flag for `dapp test` to generate coverage via hevm
 - `dapp debug` respects the `DAPP_LINK_TEST_LIBRARIES` environment variable.
+- `dapp install` accepts URLs with git tags, branches or revs specified as `<url>@<tag>`
 
 ### Changed
 

@@ -523,6 +523,10 @@ for key bindings for navigation.
     - the URL of a Dapphub repo (https://github.com/dapphub/ds-foo)
     - a path to a repo in another Github org (org-name/repo-name)
 
+You can also specify a version (or branch / commit hash) for the repository by
+suffixing the URL with `@<version>`. `dapp install` will then proceed to
+clone the repository and then `git checkout --recurse-submodules $version`.
+
 If the project you want to install does not follow the typical `dapp` project structure,
 you may need to configure the `DAPP_REMAPPINGS` environment variable to be able to find
 it. For an example, see [this repo](https://github.com/dapp-org/radicle-contracts-tests/).
