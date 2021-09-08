@@ -41,7 +41,7 @@ func rawSignHash(data []byte) []byte {
   return crypto.Keccak256([]byte(msg))
 }
 
-func getWallets(c *cli.Context, defaultKeyStore string) []accounts.Wallet {
+func getWallets(c *cli.Context) []accounts.Wallet {
   backends := []accounts.Backend{}
 
   path := c.String("key-store")
@@ -72,7 +72,7 @@ func getWallets(c *cli.Context, defaultKeyStore string) []accounts.Wallet {
 
 func getWalletData(c *cli.Context, defaultHDPaths cli.StringSlice, defaultKeyStore string, from common.Address) (*accounts.Account, string, accounts.Wallet, error) {
 
-  wallets := getWallets(c, defaultKeyStore)
+  wallets := getWallets(c)
 
   var wallet accounts.Wallet
   var acct *accounts.Account
@@ -229,7 +229,7 @@ func main() {
         },
       },
       Action: func(c *cli.Context) error {
-        wallets := getWallets(c, defaultKeyStore)
+        wallets := getWallets(c)
         for _, x := range(wallets) {
           if x.URL().Scheme == "keystore" {
             for _, y := range(x.Accounts()) {
