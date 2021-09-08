@@ -7,7 +7,7 @@
 ###   - a path to a repo in another Github org (org-name/repo-name)
 set -e
 
-dapp --sanity "$0"
+# dapp --sanity "$0"
 deps=$(dapp --parse-deps "$@")
 if [[ -z "$deps" ]]; then
   dapp help install
@@ -20,12 +20,14 @@ while read -r unparsed name url; do
   IFS='@' read -ra repo <<< "$url"
   url=${repo[0]}
   tag=${repo[1]}
+  # strip the tag from the name
+  name=${name%@*}
 
   (set -x; git submodule add --force "$url" "lib/$name")
-  # checkout the tag if specified
+  (set -x; git submodule update --init --recursive "lib/$name")
   if [ "$tag" ]; then
+    # checkout the tag
     (set -x; cd "lib/$name" && git checkout "$tag" && cd -)
   fi
-  (set -x; git submodule update --init --recursive "lib/$name")
   (set -x; git commit -m "dapp install $unparsed")
 done <<<"$deps"
