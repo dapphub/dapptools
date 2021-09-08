@@ -27,7 +27,8 @@ while read -r unparsed name url; do
   (set -x; git submodule update --init --recursive "lib/$name")
   if [ "$tag" ]; then
     # checkout the tag
-    (set -x; cd "lib/$name" && git checkout "$tag" && cd -)
+    (set -x; cd "lib/$name" && git checkout --recurse-submodules "$tag" && cd -)
+    git add lib/
     # edit the .gitmodules file to note the version tag. we do
     # this just for introspection reasons (inspecting your dep versions),
     # and it provides no actual functionality
