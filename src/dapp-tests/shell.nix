@@ -8,11 +8,11 @@ let
     hypothesis
     pytest
     # other python packages you want
-  ]; 
+  ];
   python-with-pkgs = python3.withPackages my-python-packages;
 in
 
 mkShell {
   name = "dapp-tests";
-  buildInputs = [ killall cacert bashInteractive curl dapp gnumake hevm procps seth solc go-ethereum python-with-pkgs ];
+  buildInputs = [ killall cacert bashInteractive curl dapp git gnumake hevm procps seth solc go-ethereum python-with-pkgs ];
 }

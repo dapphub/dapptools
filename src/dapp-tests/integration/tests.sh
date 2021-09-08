@@ -53,6 +53,26 @@ dapp_testnet() {
 
 dapp_testnet
 
+# tests the behaviour of the package local dapp remappings
+dapp_remappings() {
+    REV="fde82bd3319f7a1407a21553d120927d99a95f26"
+    TMPDIR=$(mktemp -d)
+    git clone https://github.com/dapphub/remappings-test "$TMPDIR"
+    (cd "$TMPDIR" && git checkout "$REV" && dapp update && dapp test)
+}
+
+dapp_remappings
+
+# tests dapp remappings on a large legacy project with many transitive imports
+dapp_remappings_compat() {
+    REV="bc6d7657f0f5190f65051543199e1b47bf29932b"
+    TMPDIR=$(mktemp -d)
+    git clone https://github.com/dapp-org/tinlake-tests "$TMPDIR"
+    (cd "$TMPDIR" && git checkout "$REV" && dapp update && dapp --use solc:0.7.6 build --allow-transitive-imports)
+}
+
+dapp_remappings_compat
+
 test_hevm_symbolic() {
     solc --bin-runtime -o . --overwrite factor.sol
     # should find counterexample

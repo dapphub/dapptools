@@ -9,8 +9,6 @@ that isn't available in `rpc`, such as [fuzz testing](#property-based-testing), 
 <!-- START doctoc generated TOC please keep comment here to allow auto update -->
 <!-- DON'T EDIT THIS SECTION, INSTEAD RE-RUN doctoc TO UPDATE -->
 
-**Table of Contents**
-
 - [Installing](#installing)
 - [Basic usage: a tutorial](#basic-usage-a-tutorial)
   - [Building](#building)
@@ -21,7 +19,12 @@ that isn't available in `rpc`, such as [fuzz testing](#property-based-testing), 
   - [Testing against RPC state](#testing-against-rpc-state)
   - [Deployment](#deployment)
 - [Configuration](#configuration)
+  - [Precedence](#precedence)
   - [solc version](#solc-version)
+- [Package Structure and Dependency Management](#package-structure-and-dependency-management)
+  - [Import Syntax](#import-syntax)
+  - [Deduplication](#deduplication)
+  - [Importing from Transitive Dependencies](#importing-from-transitive-dependencies)
 - [Commands](#commands)
   - [`dapp init`](#dapp-init)
   - [`dapp build`](#dapp-build)
@@ -34,6 +37,7 @@ that isn't available in `rpc`, such as [fuzz testing](#property-based-testing), 
   - [`dapp upgrade`](#dapp-upgrade)
   - [`dapp testnet`](#dapp-testnet)
   - [`dapp verify-contract`](#dapp-verify-contract)
+  - [`dapp remappings`](#dapp-remappings)
   - [`dapp mk-standard-json`](#dapp-mk-standard-json)
 
 <!-- END doctoc generated TOC please keep comment here to allow auto update -->
@@ -281,47 +285,48 @@ Below is a list of the environment variables recognized by `dapp`. You can addit
 various block parameters when running unit tests by using the [hevm specific environment
 variables](../hevm/README.md#environment-variables).
 
-| Variable                   | Default                    | Synopsis                                                                                                                                           |
-| -------------------------- | -------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `DAPP_SRC`                 | `src`                      | Directory for the project's Solidity contracts                                                                                                     |
-| `DAPP_LIB`                 | `lib`                      | Directory for installed Dapp packages                                                                                                              |
-| `DAPP_OUT`                 | `out`                      | Directory for compilation artifacts                                                                                                                |
-| `DAPP_ROOT`                | `.`                        | Root directory of compilation                                                                                                                      |
-| `DAPP_SOLC_VERSION`        | `0.8.6`                    | Solidity compiler version to use                                                                                                                   |
-| `DAPP_SOLC`                | n/a                        | solc binary to use                                                                                                                                 |
-| `DAPP_LIBRARIES`           | automatically deployed     | Library addresses to link to                                                                                                                       |
-| `DAPP_SKIP_BUILD`          | n/a                        | Avoid compiling this time                                                                                                                          |
-| `DAPP_COVERAGE`            | n/a                        | Print coverage data                                                                                                                                |
-| `DAPP_LINK_TEST_LIBRARIES` | `1` when testing; else `0` | Compile with libraries                                                                                                                             |
-| `DAPP_VERIFY_CONTRACT`     | `yes`                      | Attempt Etherscan verification                                                                                                                     |
-| `DAPP_ASYNC`               | n/a                        | Set to `yes` to skip waiting for etherscan verification to succeed                                                                                 |
-| `DAPP_STANDARD_JSON`       | `$(dapp mk-standard-json)` | [Solidity compilation options](https://docs.soliditylang.org/en/latest/using-the-compiler.html#compiler-input-and-output-json-description)         |
-| `DAPP_REMAPPINGS`          | `$(dapp remappings)`       | [Solidity remappings](https://docs.soliditylang.org/en/latest/using-the-compiler.html#path-remapping)                                              |
-| `DAPP_BUILD_OPTIMIZE`      | `0`                        | Activate Solidity optimizer (`0` or `1`)                                                                                                           |
-| `DAPP_BUILD_OPTIMIZE_RUNS` | `200`                      | Set the optimizer runs                                                                                                                             |
-| `DAPP_TEST_MATCH`          | n/a                        | Only run test methods matching a regex                                                                                                             |
-| `DAPP_TEST_VERBOSITY`      | `0`                        | Sets how much detail `dapp test` logs. Verbosity `1` shows traces for failing tests, `2` shows logs for all tests, `3` shows traces for all tests  |
-| `DAPP_TEST_FFI `           | `0`                        | Allow use of the ffi cheatcode in tests (`0` or `1`)                                                                                               |
-| `DAPP_TEST_FUZZ_RUNS`      | `200`                      | How many iterations to use for each property test in your project                                                                                  |
-| `DAPP_TEST_DEPTH`          | `20`                       | Number of transactions to sequence per invariant cycle                                                                                             |
-| `DAPP_TEST_SMTTIMEOUT`     | `60000`                    | Timeout passed to the smt solver for symbolic tests (in ms, and per smt query)                                                                     |
-| `DAPP_TEST_MAX_ITERATIONS` | n/a                        | The number of times hevm will revisit a particular branching point when symbolically executing                                                     |
-| `DAPP_TEST_SOLVER`         | `z3`                       | Solver to use for symbolic execution (`cvc4` or `z3`)                                                                                              |
-| `DAPP_TEST_MATCH`          | n/a                        | Regex used to determine test methods to run                                                                                                        |
-| `DAPP_TEST_COV_MATCH`      | n/a                        | Regex used to determine which files to print coverage reports for. Prints all imported files by default (excluding tests and libs).                |
-| `DAPP_TEST_REPLAY`         | n/a                        | Calldata for a specific property test case to replay in the debugger                                                                               |
-| `HEVM_RPC`                 | n/a                        | Set to `yes` to have `hevm` fetch state from rpc when running unit tests                                                                           |
-| `ETH_RPC_URL`              | n/a                        | The url of the rpc server that should be used for any rpc calls                                                                                    |
-| `DAPP_TESTNET_RPC_PORT`    | `8545`                     | Which port to expose the rpc server on when running `dapp testnet`                                                                                 |
-| `DAPP_TESTNET_RPC_ADDRESS` | `127.0.0.1`                | Which ip address to bind the rpc server to when running `dapp testnet`                                                                             |
-| `DAPP_TESTNET_CHAINID`     | `99`                       | Which chain id to use when running `dapp testnet`                                                                                                  |
-| `DAPP_TESTNET_PERIOD`      | `0`                        | Blocktime to use for `dapp testnet`. `0` means blocks are produced instantly as soon as a transaction is received                                  |
-| `DAPP_TESTNET_ACCOUNTS`    | `0`                        | How many extra accounts to create when running `dapp testnet` (At least one is always created)                                                     |
-| `DAPP_TESTNET_gethdir`     | `$HOME/.dapp/testnet`      | Root directory that should be used for `dapp testnet` data                                                                                         |
-| `DAPP_TESTNET_SAVE`        | n/a                        | Name of the subdirectory under `${DAPP_TESTNET_gethdir}/snapshots` where the chain data from the current `dapp testnet` invocation should be saved |
-| `DAPP_TESTNET_LOAD`        | n/a                        | Name of the subdirectory under `${DAPP_TESTNET_gethdir}/snapshots` from which `dapp testnet` chain data should be loaded                           |
-| `DAPP_BUILD_EXTRACT`       | n/a                        | Set to a non null value to output `.abi`, `.bin` and `.bin-runtime` when using `dapp build`. Uses legacy build mode                                |
-| `DAPP_BUILD_LEGACY`        | n/a                        | Set to a non null value to compile using the `--combined-json` flag. This is provided for compatibility with older workflows                       |
+| Variable                       | Default                    | Synopsis                                                                                                                                           |
+| ------------------------------ | -------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `DAPP_SRC`                     | `src`                      | Directory for the project's Solidity contracts                                                                                                     |
+| `DAPP_LIB`                     | `lib`                      | Directory for installed Dapp packages                                                                                                              |
+| `DAPP_OUT`                     | `out`                      | Directory for compilation artifacts                                                                                                                |
+| `DAPP_ROOT`                    | `.`                        | Root directory of compilation                                                                                                                      |
+| `DAPP_SOLC_VERSION`            | `0.8.6`                    | Solidity compiler version to use                                                                                                                   |
+| `DAPP_SOLC`                    | n/a                        | solc binary to use                                                                                                                                 |
+| `DAPP_LIBRARIES`               | automatically deployed     | Library addresses to link to                                                                                                                       |
+| `DAPP_SKIP_BUILD`              | n/a                        | Avoid compiling this time                                                                                                                          |
+| `DAPP_COVERAGE`                | n/a                        | Print coverage data                                                                                                                                |
+| `DAPP_LINK_TEST_LIBRARIES`     | `1` when testing; else `0` | Compile with libraries                                                                                                                             |
+| `DAPP_VERIFY_CONTRACT`         | `yes`                      | Attempt Etherscan verification                                                                                                                     |
+| `DAPP_ASYNC`                   | n/a                        | Set to `yes` to skip waiting for etherscan verification to succeed                                                                                 |
+| `DAPP_ALLOW_TRANSITIVE_IMPORTS`| n/a                        | Set to `1` to allow imports using the short syntax from transitive dependencies                                                                    |
+| `DAPP_STANDARD_JSON`           | `$(dapp mk-standard-json)` | [Solidity compilation options](https://docs.soliditylang.org/en/latest/using-the-compiler.html#compiler-input-and-output-json-description)         |
+| `DAPP_REMAPPINGS`              | `$(dapp remappings)`       | [Solidity remappings](https://docs.soliditylang.org/en/latest/using-the-compiler.html#path-remapping)                                              |
+| `DAPP_BUILD_OPTIMIZE`          | `0`                        | Activate Solidity optimizer (`0` or `1`)                                                                                                           |
+| `DAPP_BUILD_OPTIMIZE_RUNS`     | `200`                      | Set the optimizer runs                                                                                                                             |
+| `DAPP_TEST_MATCH`              | n/a                        | Only run test methods matching a regex                                                                                                             |
+| `DAPP_TEST_VERBOSITY`          | `0`                        | Sets how much detail `dapp test` logs. Verbosity `1` shows traces for failing tests, `2` shows logs for all tests, `3` shows traces for all tests  |
+| `DAPP_TEST_FFI `               | `0`                        | Allow use of the ffi cheatcode in tests (`0` or `1`)                                                                                               |
+| `DAPP_TEST_FUZZ_RUNS`          | `200`                      | How many iterations to use for each property test in your project                                                                                  |
+| `DAPP_TEST_DEPTH`              | `20`                       | Number of transactions to sequence per invariant cycle                                                                                             |
+| `DAPP_TEST_SMTTIMEOUT`         | `60000`                    | Timeout passed to the smt solver for symbolic tests (in ms, and per smt query)                                                                     |
+| `DAPP_TEST_MAX_ITERATIONS`     | n/a                        | The number of times hevm will revisit a particular branching point when symbolically executing                                                     |
+| `DAPP_TEST_SOLVER`             | `z3`                       | Solver to use for symbolic execution (`cvc4` or `z3`)                                                                                              |
+| `DAPP_TEST_MATCH`              | n/a                        | Regex used to determine test methods to run                                                                                                        |
+| `DAPP_TEST_COV_MATCH`          | n/a                        | Regex used to determine which files to print coverage reports for. Prints all imported files by default (excluding tests and libs).                |
+| `DAPP_TEST_REPLAY`             | n/a                        | Calldata for a specific property test case to replay in the debugger                                                                               |
+| `HEVM_RPC`                     | n/a                        | Set to `yes` to have `hevm` fetch state from rpc when running unit tests                                                                           |
+| `ETH_RPC_URL`                  | n/a                        | The url of the rpc server that should be used for any rpc calls                                                                                    |
+| `DAPP_TESTNET_RPC_PORT`        | `8545`                     | Which port to expose the rpc server on when running `dapp testnet`                                                                                 |
+| `DAPP_TESTNET_RPC_ADDRESS`     | `127.0.0.1`                | Which ip address to bind the rpc server to when running `dapp testnet`                                                                             |
+| `DAPP_TESTNET_CHAINID`         | `99`                       | Which chain id to use when running `dapp testnet`                                                                                                  |
+| `DAPP_TESTNET_PERIOD`          | `0`                        | Blocktime to use for `dapp testnet`. `0` means blocks are produced instantly as soon as a transaction is received                                  |
+| `DAPP_TESTNET_ACCOUNTS`        | `0`                        | How many extra accounts to create when running `dapp testnet` (At least one is always created)                                                     |
+| `DAPP_TESTNET_gethdir`         | `$HOME/.dapp/testnet`      | Root directory that should be used for `dapp testnet` data                                                                                         |
+| `DAPP_TESTNET_SAVE`            | n/a                        | Name of the subdirectory under `${DAPP_TESTNET_gethdir}/snapshots` where the chain data from the current `dapp testnet` invocation should be saved |
+| `DAPP_TESTNET_LOAD`            | n/a                        | Name of the subdirectory under `${DAPP_TESTNET_gethdir}/snapshots` from which `dapp testnet` chain data should be loaded                           |
+| `DAPP_BUILD_EXTRACT`           | n/a                        | Set to a non null value to output `.abi`, `.bin` and `.bin-runtime` when using `dapp build`. Uses legacy build mode                                |
+| `DAPP_BUILD_LEGACY`            | n/a                        | Set to a non null value to compile using the `--combined-json` flag. This is provided for compatibility with older workflows                       |
 
 A global (always loaded) config file is located in `~/.dapprc`. A local `.dapprc` can also be defined in your project's root, which overrides variables in the global config.
 
@@ -372,6 +377,105 @@ nix-env -iA solc-static-versions.solc_x_y_z \
 
 For a list of the supported `solc` versions, check [`solc-static-versions.nix`](/nix/solc-static-versions.nix).
 
+## Package Structure and Dependency Management
+
+`dapp` packages have a libraries directory (by default under `lib`) where dependencies are stored as
+git submodules, and a source diretory (by default under `src`) where the source code is stored.
+
+If you want to add a new dependency to the project you can install it to the lib dir as a submodule
+using [`dapp install`](#dapp-install). Dependencies can be uninstalled using [`dapp uninstall`](#dapp-uninstall),
+and upgraded to the latest version with [`dapp upgrade`](#dapp-upgrade). Running [`dapp update`](#dapp-update)
+will recursively fetch all the project submodules.
+
+As dependencies are just git submodules under the hood you can also use the standard git tooling to
+modify dependencies, e.g. check out a specific branch or commit, update the remote, or examine
+the commit history.
+
+You can use the `DAPP_SRC` and `DAPP_LIB` variables to customize the location of the source and
+library directories.
+
+### Import Syntax
+
+Projects compiled with `dapp build` can use a shortened import syntax to refer to packages in their
+local `lib` directory.
+
+An import of the form `import "<PACKAGE_NAME>/<SOURCE_FILE>"` will effectivley desugar to `import
+"<LIB_DIR>/<PACKAGE_NAME>/<SRC_DIR>/<SOURCE_FILE>"`, where `<LIB_DIR>` is always the location of the
+current packages library directory.
+
+To put it more concretely, consider the following project layout:
+
+```
+├── lib
+│   ├── ds-auth
+│   │   ├── lib
+│   │   │   └── ds-test
+│   │   │       └── src
+│   │   │           └── test.sol
+│   │   └── src
+│   │       ├── auth.sol
+│   │       └── auth.t.sol
+│   │            import {DSTest} from "ds-test/test.sol"
+│   └── ds-test
+│       └── src
+│           └── test.sol
+└── src
+    └── test.t.sol
+         import {DSTest} from "ds-test/test.sol"
+         import {DSAuth} from "ds-auth/auth.sol"
+```
+
+Both `test.t.sol` and `auth.t.sol` import an instance of `DSTest` using exactly the same syntax,
+however, each will resolve to a different path in the dependency tree:
+
+- `auth.t.sol`: resolves to `import {DSTest} from "lib/ds-auth/lib/ds-test/src/test.sol"`
+- `test.t.sol`: resolves to `import {DSTest} from "lib/ds-test/src/test.sol"`
+
+### Deduplication
+
+`solc` treats identical contracts imported from different paths on disk as distinct, and this can
+cause compiler errors due to name clashes when two copies of the same contract are present in an
+inheritance hieracry.
+
+For this reason imports of contracts from identical package versions are always resolved to the same
+path on disk, e.g. in the example above, if both `ds-test` packages had an identical git hash, the
+imports would both resolve to `import {DSTest} from "lib/ds-test/src/test.sol"`.
+
+### Importing from Transitive Dependencies
+
+By default imports from transitive dependencies are forbidden, i.e. each package can only import
+using the shortened syntax from a dependency that lives in it's local `lib` dir (standard solc
+relative imports are of course still valid).
+
+This was however allowed in older versions, and a legacy compatibility flag is provided that should
+allow compilation of older `dapp` projects that rely on this behaviour: `--allow-transitive-imports`.
+This flag allows imports from transitive dependencies if there exists a single version of that
+package throughout the entire dependency tree for the current package.
+
+As an example, consider the following project:
+
+```
+├── lib
+│   └── ds-auth
+│       ├── lib
+│       │   └── ds-test
+│       │       └── src
+│       │           └── test.sol
+│       └── src
+│           ├── auth.sol
+│           └── auth.t.sol
+│               import {DSTest} from "ds-test/test.sol"
+└── src
+    └── test.t.sol
+         import {DSTest} from "ds-test/test.sol"
+         import {DSAuth} from "ds-auth/auth.sol"
+```
+
+Compilation would fail with a plain `dapp build` as there is no `ds-test` project in the top level
+`lib` directory. However if we try again with `dapp build --allow-transitive-imports`, compilation
+will succeed as the import of `ds-test/test.sol` from the top level is resolved to
+`lib/ds-auth/lib/ds-test/src/test.sol`.
+
 ## Commands
 
 ### `dapp init`
@@ -401,7 +505,7 @@ The compiler options of the build are generated by the [`dapp mk-standard-json`]
 which infers most options from the project structure. For more customizability, you can define your own configuration json
 by setting the file to the environment variable `DAPP_STANDARD_JSON`.
 
-By default, `dapp build` uses [`dapp remappings`](#dapp-remappings) to resolve Solidity import paths.
+By default, `dapp build` uses [`dapp remappings`](#dapp-remappings) to resolve Solidity import paths (see also [Package Structure and Dependency Management](#package-structure-and-dependency-management)).
 
 You can override this with the `DAPP_REMAPPINGS` environment variable.
 
@@ -557,6 +661,63 @@ Requires `ETHERSCAN_API_KEY` to be set.
 `seth chain` will be used to determine on which network the contract is to be verified.
 
 Automatically run when the `--verify` flag is passed to `dapp create`.
+
+### `dapp remappings`
+
+Generates the [solc compiler
+remappings](https://docs.soliditylang.org/en/v0.8.6/path-resolution.html?highlight=remappings#import-remapping).
+These resolve the dapp style imports (e.g. `import "ds-test/test.sol"`) into concrete paths on disk
+(e.g. `lib/ds-test/src/test.sol`).
+
+Remappings are generated in the following format: `<context>:<prefix>=<target>`, where `context`
+defines the prefix of the on disk locations where the remappings will be applied, the `prefix`
+defines the prefix of an import path that will be remapped, and `target` defines the result of the
+remapping.
+
+For example a remapping of the form: `src/:ds-test/=lib/ds-test/src/` will apply to any file under
+the root `src` directory, and will remap any import starting with `ds-test/` into an import starting
+with `lib/ds-test/src/`.
+
+By default a unique set of remappings are generated for each `src` dir in the dependency tree that
+remap imports into the local `lib` dir for that package.
+
+For example, given the following project structure:
+
+```
+├── lib
+│   ├── ds-auth
+│   │   ├── lib
+│   │   │   └── ds-test
+│   │   │       └── src
+│   │   │           └── test.sol
+│   │   └── src
+│   │       ├── auth.sol
+│   │       └── auth.t.sol
+│   └── ds-test
+│       └── src
+│           └── test.sol
+└── src
+    └── test.t.sol
+```
+
+`dapp remappings` would generate the following remappings:
+
+```
+lib/ds-auth/src/:ds-test/=lib/ds-auth/lib/ds-test/src/
+src/:ds-auth/=lib/ds-auth/src/
+src/:ds-test/=lib/ds-test/src/
+```
+
+Imports to identical package versions are deduplicated to always resolve to the same on disk
+location (this helps to avoid some solc compiler errors when multiple instances of the same project
+are present in an inheritance hierarchy), so if both instances of `ds-test` have the same git hash,
+the following remappings would be generated:
+
+```
+lib/ds-auth/src/:ds-test/=lib/ds-test/src/
+src/:ds-auth/=lib/ds-auth/src/
+src/:ds-test/=lib/ds-test/src/
+```
 
 ### `dapp mk-standard-json`
 

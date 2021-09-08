@@ -11,12 +11,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `DAPP_TEST_DEPTH` env var to control `--depth`
 - `--coverage` flag for `dapp test` to generate coverage via hevm
-- `dapp debug` respects the `DAPP_LINK_TEST_LIBRARIES` environment variable.
 - `dapp install` accepts URLs with git tags, branches or revs specified as `<url>@<tag>`
 
 ### Changed
 
-- Dapp debug respects DAPP_LINK_TEST_LIBRARIES 
+- `dapp debug` respects the `DAPP_LINK_TEST_LIBRARIES` environment variable.
 
 ### Fixed
 
@@ -28,9 +27,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `hevm` bumped to london hard fork.
 - `dapp --use` now uses the solc binaries from https://binaries.soliditylang.org/ instead of the
-  versions built from source via nix
-- `dapp remappings` now issues a warning instead of failing with a hard error in case of mistmatched
-  package versions in the dependency tree
+    versions built from source via nix
+- `dapp remappings` now generates a unique set of remappings for each package in the dependency
+    tree that point into that pacakge's lib dir, allowing for multiple versions of the same package
+    to coexist in the dependency tree. More information in the [README](./README.md#package-structure-and-dependency-management).
 
 ## [0.33.0] - 2021-07-01
 
