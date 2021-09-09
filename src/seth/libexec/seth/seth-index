@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-### seth-slot -- Prints the slot number for the specified mapping type and input data
-### Usage: seth slot <fromtype> <totype> <fromvalue> <slot> [<lang>]
+### seth-index -- Prints the slot number for the specified mapping type and input data
+### Usage: seth index <fromtype> <totype> <fromvalue> <slot> [<lang>]
 ###
 ### Prints the slot number for the specified mapping type and input data. For example,
 ### the balances mapping in DAI is slot 2, so to find the slot where the balance 
 ### is stored for <account>, use
-###     seth-slot address uint256 <account> 2
+###     seth-index address uint256 <account> 2
 
 set -e
 
