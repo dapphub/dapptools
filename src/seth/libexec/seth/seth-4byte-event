@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 ### seth-4byte-event -- prints the response from querying 4byte.directory for a given function topic
-### Usage: seth 4byte-event <topic>
+### Usage: seth 4byte-event <topic> [<options>]
 ###
 ### Takes a 32 byte topic and prints the response from querying 4byte.directory for that topic
 
