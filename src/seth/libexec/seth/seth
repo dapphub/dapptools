@@ -50,6 +50,9 @@
 ###    --source=<file>            path to combined.json source
 ###    --state=<dir>              directory to store hevm state in
 ###
+### Options for seth-4byte-decode(1):
+###
+###    --id                       'earliest' or 'latest' or the ID number of a particular signature
 ###
 ### Other options:
 ###
@@ -105,6 +108,9 @@ no-src               don't fetch contract source
 
   Options for seth-bundle-source(1):
 D,dir=directory      directory to store output
+
+  Options for seth-4byte-decode(1):
+id=string|number     'earliest' or 'latest' or the ID number of a particular signature
 
   Other options:
 async                do not wait for transaction receipt

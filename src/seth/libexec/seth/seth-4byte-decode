@@ -26,10 +26,10 @@ else
   length=${#sigarray[@]}
 
   # parse the provided ID
-  if [[ $SETH_4BYTE_ID = 'earliest' ]]; then
+  if [[ $SETH_4BYTE_ID = earliest ]]; then
     # first one added to 4byte is the last in the array
     sig=${sigarray[$length-1]}
-  elif [[ $SETH_4BYTE_ID = 'latest' ]]; then
+  elif [[ $SETH_4BYTE_ID = latest ]]; then
      # last one added to 4byte is the first in the array
      sig=${sigarray[0]}
   else
