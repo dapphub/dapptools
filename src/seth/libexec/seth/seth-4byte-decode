@@ -15,6 +15,7 @@ if [[ -z $SETH_4BYTE_ID ]]; then
   select sig in $sigs; do
     break
   done
+  echo "" # add a line break for easier reading
 else
   # Function signature ID was specified, so parse results without user input
   results=$(curl -s "https://www.4byte.directory/api/v1/signatures/?hex_signature=${1:0:10}" | jq .results[] )
@@ -48,6 +49,5 @@ elif [[ $SETH_VERBOSE ]]; then
 fi
 
 # Remove leading and trailing quotes from JSON, then decode
-echo ""
 sig="${sig//\"}"
 seth --calldata-decode $sig $1
