@@ -19,8 +19,8 @@ function findRemappings(prefix) {
     var path = `${lib}/${name}`
     var src = `${path}/${process.env.DAPP_SRC}`.replace(/^.\//, "")
     
-    // If the path is a file, return early.
-    if (isFile(path)) {
+    // If the path is a not a directory, return early.
+    if (!isDir(path)) {
       return
     }
 
@@ -65,8 +65,12 @@ function ls(dir) {
   }
 }
 
-function isFile(path) {
-  return require("fs").lstatSync(path).isFile()
+function isDir(path) {
+  try {
+    return require("fs").lstatSync(path).isDirectory()
+  } catch (error) {
+    return false;
+  }
 }
 
 function run(cmd, args) {
