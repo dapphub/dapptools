@@ -3,7 +3,6 @@
 ### Print the name of the current chain (`ethlive', `kovan', etc).
 set -e
 genesis=$(seth block 0 hash)
-echo $genesis
 case $genesis in
   0xd4e56740f876aef8c010b86a40d5f56745a118d0906a34e69aec8c0db1cb8fa3)
     case $(seth block 1920000 hash 2>/dev/null || echo null) in
