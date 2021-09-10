@@ -1,6 +1,6 @@
 # hevm changelog
 
-## Unreleased
+## [0.48.1] - 2021-09-08
 
 ### Added
 
