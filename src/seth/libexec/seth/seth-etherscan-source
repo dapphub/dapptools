@@ -30,7 +30,7 @@ case "$chain" in
     URL="${ETHERSCAN_API_URL:-https://api-$chain.etherscan.io}"
     ;;
   optimism)
-    URL="${ETHERSCAN_API_URL:-https://api-optimismistic.etherscan.io}"
+    URL="${ETHERSCAN_API_URL:-https://api-optimistic.etherscan.io}"
     ;;
   bsctest)
     URL="${ETHERSCAN_API_URL:-https://api-testnet.bscscan.com}"
