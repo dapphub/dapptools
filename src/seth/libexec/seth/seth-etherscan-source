@@ -29,8 +29,11 @@ case "$chain" in
   ropsten|kovan|rinkeby|goerli)
     URL="${ETHERSCAN_API_URL:-https://api-$chain.etherscan.io}"
     ;;
-  optimism)
+  optimism-mainnet)
     URL="${ETHERSCAN_API_URL:-https://api-optimistic.etherscan.io}"
+    ;;
+  optimism-kovan)
+    URL="${ETHERSCAN_API_URL:-https://https://api-kovan-optimistic.etherscan.io/}"
     ;;
   bsctest)
     URL="${ETHERSCAN_API_URL:-https://api-testnet.bscscan.com}"
@@ -39,7 +42,7 @@ case "$chain" in
     URL="${ETHERSCAN_API_URL:-https://api.bscscan.com}"
     ;;
   *)
-    echo >&2 "Source fetching only works on mainnet, ropsten, kovan, rinkeby, goerli, and optimism."
+    echo >&2 "Source fetching only works on mainnet, ropsten, kovan, rinkeby, goerli, optimism-mainnet, and optimism-kovan."
     exit 1
 esac
 

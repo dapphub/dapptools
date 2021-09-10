@@ -3,6 +3,7 @@
 ### Print the name of the current chain (`ethlive', `kovan', etc).
 set -e
 genesis=$(seth block 0 hash)
+echo $genesis
 case $genesis in
   0xd4e56740f876aef8c010b86a40d5f56745a118d0906a34e69aec8c0db1cb8fa3)
     case $(seth block 1920000 hash 2>/dev/null || echo null) in
@@ -16,7 +17,9 @@ case $genesis in
   0x41941023680923e0fe4d74a34bdac8141f2540e3ae90623718e47d66d1ca4a2d)
     echo ropsten;;
   0x39e1b9259598b65c8c71d1ea153de17e89222e64e8b271213dfb92c231f7fb88)
-    echo optimism;;
+    echo optimism-mainnet;;
+  0x2510549c5c30f15472b55dbae139122e2e593f824217eefc7a53f78698ac5c1e)
+    echo optimism-kovan;;
   0x0cd786a2425d16f152c658316c423e6ce1181e15c3295826d7c9904cba9ce303)
     echo morden;;
   0x6341fd3daf94b748c72ced5a5b26028f2474f5f00d824504e4fa37a75767e177)
