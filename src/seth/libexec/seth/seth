@@ -214,6 +214,10 @@ if [[ $SETH_CHAIN ]]; then
         ~/{.local/share,Library/Application\ Support}/io.parity.ethereum/keys/"$SETH_CHAIN"/
       )
       ;;
+    optimism)
+      eth_rpc_url=https://optimism-mainnet.infura.io/$INFURA_KEY
+      export ETHERSCAN_API_URL=https://api-optimistic.etherscan.io/api
+      ;;
     bsctest)
       eth_rpc_url=https://data-seed-prebsc-2-s1.binance.org:8545/
       export ETHERSCAN_API_URL=https://api-testnet.bscscan.com/api
