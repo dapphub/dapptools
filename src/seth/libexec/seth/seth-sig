@@ -5,5 +5,20 @@
 ### Returns: 0x2e1a7d4d
 set -e
 [[ $# = 1 ]] || seth --fail-usage "$0"
-method=$(seth keccak "$1")
-echo "${method:0:10}"
+
+# Get ABI from input
+abi=$(seth --abi-function-json "$1")
+inputs=$(echo $abi | jq '.inputs[] | .type')
+
+# Generate dummy args
+args=()
+for input in $inputs; do
+  type="${input//\"}" # remove leading and trailing quotes from the JSON
+  end=${type: -2} # get the last two characters to check for array types
+  [ $end = "[]"  ] && arg="[]" || arg=0 # use [] for array types and 0 otherwise
+  args+=(--arg "$arg")
+done
+
+# Use dummy args generate calldata and only keep the function selector
+calldata=$(hevm abiencode --abi "$abi" "${args[@]}")
+echo "${calldata:0:10}"

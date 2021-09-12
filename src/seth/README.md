@@ -69,6 +69,10 @@ hardware wallets—even if you use a remote RPC node like Infura's.
   - [`seth --to-int256`]
   - [`seth --to-uint256`]
   - [`seth --to-wei`]
+  - [`seth 4byte`]
+  - [`seth 4byte-decode`]
+  - [`seth 4byte-event`]
+  - [`seth abi-encode`]
   - [`seth age`]
   - [`seth balance`]
   - [`seth basefee`]
@@ -85,7 +89,7 @@ hardware wallets—even if you use a remote RPC node like Infura's.
   - [`seth etherscan-source`]
   - [`seth events`]
   - [`seth gas-price`]
-  - [`seth help`]
+  - [`seth index`]
   - [`seth keccak`]
   - [`seth logs`]
   - [`seth lookup-address`]
@@ -452,6 +456,46 @@ Convert an ETH amount into wei.
 
 The unit may be `wei`, `gwei`, `eth`, or `ether`.
 
+### `seth 4byte`
+
+Prints the response from querying [4byte.directory](https://www.4byte.directory/) for a given function signature
+
+    seth 4byte <calldata> [<options>]
+
+Any calldata appended after the function signature will be stripped before querying 4byte.directory.
+
+By default, just the signatures will be printed, but the `-v` flag can be used to print the full JSON response.
+
+### `seth 4byte-decode`
+
+Queries [4byte.directory](https://www.4byte.directory/) for matching function signatures, uses one to decode the calldata, and prints the decoded calldata.
+
+    seth 4byte-decode <calldata> [<options>]
+
+By default, the user will be prompted to select a function signature to use for decoding the calldata.
+
+The `--id` flag can be passed to bypass interactive mode.
+Use `--id earliest` or `--id latest` to use the oldest and newest functions in the 4byte.directory database, respectively.
+Use `--id <number>` to select a function signature by it's ID in the 4byte.directory database.
+
+### `seth 4byte-event`
+
+Prints the response from querying [4byte.directory](https://www.4byte.directory/) for a given event topic
+
+    seth 4byte-event <topic> [<options>]
+
+By default, just the signatures will be printed, but the `-v` flag can be used to print the full JSON response.
+
+### `seth abi-encode`
+
+Prints the ABI encoded values without the function signature
+
+    seth abi-encode <sig> [<args>]
+
+ABI encode values based on a provided function signature, slice off the leading the function signature,
+and print the result. It does not matter what the name of the function is, as only the types and values
+affect the output.
+
 ### `seth age`
 
 Show the timestamp of a block (the latest block by default).
@@ -630,6 +674,17 @@ See also [`seth logs`] which does not decode events.
 ### `seth gas-price`
 
 Reads the current gas price at target chain.
+
+### `seth index`
+
+Prints the slot number for the specified mapping type and input data
+
+    seth index <fromtype> <totype> <fromvalue> <slot> [<lang>]
+
+`lang` will default to Solidity when not specified.
+To compute the slot for Vyper instead, specify `v`, `vy`, or `vyper`.
+
+Result is not guaranteed to be accurate for all Vyper versions since the Vyper storage layout is not yet stable.
 
 ### `seth keccak`
 
@@ -825,6 +880,10 @@ Show all fields unless `<field>` is given.
 [`seth --calldata-decode`]: #seth---calldata-decode
 [`seth block-number`]: #seth-block-number
 [`seth gas-price`]: #seth-gas-price
+[`seth 4byte`]: #seth-4byte
+[`seth 4byte-decode`]: #seth-4byte-decode
+[`seth 4byte-event`]: #seth-4byte-event
+[`seth abi-encode`]: #seth-abi-encode
 [`seth abi`]: #seth-abi
 [`seth age`]: #seth-age
 [`seth balance`]: #seth-balance
@@ -841,6 +900,7 @@ Show all fields unless `<field>` is given.
 [`seth etherscan-source`]: #seth-etherscan-source
 [`seth events`]: #seth-events
 [`seth help`]: #seth-help
+[`seth index`]: #seth-index
 [`seth keccak`]: #seth-keccak
 [`seth logs`]: #seth-logs
 [`seth lookup-address`]: #seth-lookup-address
