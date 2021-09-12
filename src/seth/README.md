@@ -488,9 +488,13 @@ By default, just the signatures will be printed, but the `-v` flag can be used t
 
 ### `seth abi-encode`
 
-Show the timestamp of a block (the latest block by default).
+Prints the ABI encoded values without the function signature
 
-    seth age [--block <block>]
+    seth abi-encode <sig> [<args>]
+
+ABI encode values based on a provided function signature, slice off the leading the function signature,
+and print the result. It does not matter what the name of the function is, as only the types and values
+affect the output.
 
 ### `seth age`
 
@@ -673,9 +677,14 @@ Reads the current gas price at target chain.
 
 ### `seth index`
 
-Show the timestamp of a block (the latest block by default).
+Prints the slot number for the specified mapping type and input data
 
-    seth age [--block <block>]
+    seth index <fromtype> <totype> <fromvalue> <slot> [<lang>]
+
+`lang` will default to Solidity when not specified.
+To compute the slot for Vyper instead, specify `v`, `vy`, or `vyper`.
+
+Result is not guaranteed to be accurate for all Vyper versions since the Vyper storage layout is not yet stable.
 
 ### `seth keccak`
 

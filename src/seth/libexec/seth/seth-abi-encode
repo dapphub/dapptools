@@ -3,7 +3,7 @@
 ### Usage: seth abi-encode <sig> [<args>]
 ###
 ### ABI encode values based on a provided function signature, slice off the leading the function signature,
-### and print the result. It does not matter what the name of the function signature is, as only the values
+### and print the result. It does not matter what the name of the function is, as only the types and values
 ### affect the output.
 
 set -e
