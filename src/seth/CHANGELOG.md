@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - `seth --to-wei` now uses eth instead of wei as the default unit for conversions
+- `seth 4byte` command returns the response from querying [4byte.directory](https://www.4byte.directory/) for a given function signature
+- `seth 4byte-decode` command queries 4byte.directory for matching function signatures, uses one to decode the calldata, and prints the decoded calldata
+- `seth 4byte-event` command returns the response from querying 4byte.directory for a given event topic
+- `seth abi-encode` command returns the ABI encoded values without the function signature
+- `seth index` command returns the slot number for the specified mapping type and input data
 
 ## [0.11.0] - 2021-09-08
 
