@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## Unreleased
+
+### Changed
+
+- Dapp remappings ignores non-directories in `DAPP_LIB`
+
 ## [0.34.1] - 2021-09-08
 
 ### Added
@@ -17,7 +23,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - Dapp debug respects `DAPP_LINK_TEST_LIBRARIES`
-- Dapp remappings ignores non-directories in `DAPP_LIB`
 
 ### Fixed
 
