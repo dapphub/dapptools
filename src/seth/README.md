@@ -57,6 +57,7 @@ hardware wallets—even if you use a remote RPC node like Infura's.
   - [`seth --calldata-decode`]
   - [`seth --from-ascii`]
   - [`seth --from-bin`]
+  - [`seth --from-fix`]
   - [`seth --from-wei`]
   - [`seth --max-int`]
   - [`seth --max-uint`]
@@ -65,6 +66,7 @@ hardware wallets—even if you use a remote RPC node like Infura's.
   - [`seth --to-ascii`]
   - [`seth --to-bytes32`]
   - [`seth --to-dec`]
+  - [`seth --to-fix`]
   - [`seth --to-hex`]
   - [`seth --to-int256`]
   - [`seth --to-uint256`]
@@ -374,6 +376,14 @@ Convert binary data into hex data.
 
 Reads binary data from standard input and prints it as hex data.
 
+### `seth --from-fix`
+
+Convert fixed point numbers into parsed integers with the specified number of decimals.
+
+    seth --from-fix <decimals> <value>
+
+For example, use `seth --to-fix 6 1` to convert 1 USDC into the parsed quantity of 1,000,000 USDC
+
 ### `seth --from-wei`
 
 Convert a wei amount into another unit (ETH by default).
@@ -429,6 +439,14 @@ Pad a hex string to the right with zeroes to 32 bytes.
 Convert a hex value with 0x prefix into a decimal number.
 
     seth --to-dec <hexvalue>
+
+### `seth --to-fix`
+
+Convert parsed integers into fixed point with the specified number of decimals.
+
+    seth --to-fix <decimals> <value>
+
+For example, use `seth --to-fix 6 1000000` to convert the parsed amount of 1,000,000 USDC into a formatted amount of 1 USDC.
 
 ### `seth --to-hex`
 
@@ -865,7 +883,9 @@ Show all fields unless `<field>` is given.
 [`seth --abi-decode`]: #seth---abi-decode
 [`seth --from-ascii`]: #seth---from-ascii
 [`seth --from-bin`]: #seth---from-bin
+[`seth --from-fix`]: #seth---from-fix
 [`seth --from-wei`]: #seth---from-wei
+[`seth --to-fix`]: #seth---to-fix
 [`seth --to-wei`]: #seth---to-wei
 [`seth --to-int256`]: #seth---to-int256
 [`seth --to-uint256`]: #seth---to-uint256

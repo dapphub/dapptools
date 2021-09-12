@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `seth 4byte-event` command returns the response from querying 4byte.directory for a given event topic
 - `seth abi-encode` command returns the ABI encoded values without the function signature
 - `seth index` command returns the slot number for the specified mapping type and input data
+- `seth --from-fix` command converts fixed point numbers into parsed integers with the specified number of decimals
 
 ## [0.11.0] - 2021-09-08
 
