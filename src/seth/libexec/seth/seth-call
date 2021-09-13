@@ -58,7 +58,7 @@ else
 
   opts+=(--rpc "$ETH_RPC_URL")
   opts+=(--caller "${ETH_FROM:=0x0000000000000000000000000000000000000000}")
-  opts+=(--value  "$(seth --to-wei "${ETH_VALUE:-0}")")
+  opts+=(--value  "$(seth --to-wei "${ETH_VALUE:-0}" wei)")
   opts+=(--nonce  "${ETH_NONCE:-$(seth nonce "$ETH_FROM")}")
   opts+=(--origin "${ETH_ORIGIN:-${ETH_FROM}}")
 
