@@ -708,8 +708,8 @@ ABI specification.
 
 ### `seth lookup-address`
 
-Print the address the provided ENS name resolves to. If the name is not
-owned or does not have a resolver configured, an `invalid data for
+Print the ENS name the provided address reverse resolves to. If the name is
+not owned or does not have a resolver configured, an `invalid data for
 function output` error will be thrown. An error will also be thrown
 if the forward and reverse resolution do not match.
 
