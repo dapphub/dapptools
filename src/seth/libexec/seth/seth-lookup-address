@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-### seth-resolve-name -- returns the address the provided ENS name resolves to
-### Usage: seth resolve-name <name>
+### seth-lookup-address -- returns the ENS name the provided address reverse resolves to
+### Usage: seth lookup-address <name>
 ###
-### Print the address the provided ENS name resolves to. If the name is not
-### owned or does not have a resolver configured, an `invalid data for
+### Print the ENS name the provided address reverse resolves to. If the name is
+### not owned or does not have a resolver configured, an `invalid data for
 ### function output` error will be thrown. An error will also be thrown
-### if the forward and reverse resolution do not match 
+### if the forward and reverse resolution do not match.
 
 set -e
 shopt -s extglob
