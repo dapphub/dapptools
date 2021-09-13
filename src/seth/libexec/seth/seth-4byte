@@ -11,7 +11,7 @@ set -e
 [[ $# -eq 1 ]] || seth --fail-usage "$0"
 
 if [[ $SETH_VERBOSE ]]; then
-  curl -s "https://www.4byte.directory/api/v1/signatures/?hex_signature=${1:0:10}" | jq .
+  curl -s "https://www.4byte.directory/api/v1/signatures/?hex_signature=${1:0:10}" | jq -r .
 else
-  curl -s "https://www.4byte.directory/api/v1/signatures/?hex_signature=${1:0:10}" | jq '.results[] | .text_signature' 
+  curl -s "https://www.4byte.directory/api/v1/signatures/?hex_signature=${1:0:10}" | jq -r '.results[] | .text_signature' 
 fi
