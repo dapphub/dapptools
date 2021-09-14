@@ -140,9 +140,7 @@ findUnitTests match =
       Nothing -> []
       Just _  ->
         let testNames = unitTestMethodsFiltered (regexMatches match) c
-        in if BS.null (view runtimeCode c)
-           then []
-           else [(view contractName c, testNames) | not (null testNames)]
+        in [(view contractName c, testNames) | not (BS.null (view runtimeCode c)) && not (null testNames)]
 
 unitTestMethodsFiltered :: (Text -> Bool) -> (SolcContract -> [(Test, [AbiType])])
 unitTestMethodsFiltered matcher c =
