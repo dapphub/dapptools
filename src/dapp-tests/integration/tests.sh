@@ -370,3 +370,46 @@ test-lookup-address2() {
      = $(seth lookup-address 0x49c92f2ce8f876b070b114a6b2f8a60b83c281ad --rpc-url=$ETH_RPC_URL) ]] || error
 }
 test-lookup-address2
+
+# SETH FIXED POINT TESTS
+# seth --from-fix
+test-from-fix1() {
+    [[ $(seth --from-fix 6 1) = 1000000 ]] || error
+}
+test-from-fix1
+
+test-from-fix2() {
+    [[ $(seth --from-fix 18 1) = 1000000000000000000 ]] || error
+}
+test-from-fix2
+
+test-from-fix3() {
+    [[ $(seth --from-fix 6 1.2345) = 1234500 ]] || error
+}
+test-from-fix3
+
+test-from-fix4() {
+    [[ $(seth --from-fix 18 1.23456789) = 1234567890000000000 ]] || error
+}
+test-from-fix4
+
+# seth --to-fix
+test-to-fix1() {
+    [[ $(seth --to-fix 6 1000000) = 1.000000 ]] || error
+}
+test-to-fix1
+
+test-to-fix2() {
+    [[ $(seth --to-fix 18 1000000000000000000) = 1.000000000000000000 ]] || error
+}
+test-to-fix2
+
+test-to-fix3() {
+    [[ $(seth --to-fix 6 1234500) = 1.234500 ]] || error
+}
+test-to-fix3
+
+test-to-fix4() {
+    [[ $(seth --to-fix 18 1234567890000000000) = 1.234567890000000000 ]] || error
+}
+test-to-fix4
