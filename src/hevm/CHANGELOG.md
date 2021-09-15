@@ -14,6 +14,7 @@
 ### Fixed
 
 - The block gas limit and basefee are now correctly fetched when running tests via rpc
+- Test contracts with no code (e.g. `abstract` contracts) are now skipped
 
 ## 0.48.0 - 2021-08-03
 
