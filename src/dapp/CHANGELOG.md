@@ -11,6 +11,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Dapp remappings ignores non-directories in `DAPP_LIB`
 
+### Fixed
+
+- Dapp can correctly parse replay strings from invariant tests
+
 ## [0.34.1] - 2021-09-08
 
 ### Added

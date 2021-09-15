@@ -1,5 +1,12 @@
 # hevm changelog
 
+## Unreleased
+
+## Fixed
+
+- Test contracts with no code (e.g. `abstract` contracts) are now skipped
+- Replay data for invariant tests is now displayed in a form that does not cause errors when used with `dapp test --replay`
+
 ## [0.48.1] - 2021-09-08
 
 ### Added
@@ -14,7 +21,6 @@
 ### Fixed
 
 - The block gas limit and basefee are now correctly fetched when running tests via rpc
-- Test contracts with no code (e.g. `abstract` contracts) are now skipped
 
 ## 0.48.0 - 2021-08-03
 
