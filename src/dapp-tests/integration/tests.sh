@@ -49,6 +49,10 @@ dapp_testnet() {
 
   # dynamic fee transaction (EIP-1559)
   seth send "$A_ADDR" "on()" --gas 0xffff --password /dev/null --from "$ACC" --keystore "$TMPDIR"/8545/keystore --prio-fee 2gwei --gas-price 10gwei
+
+  B_ADDR=$(seth send --create 0x647175696e6550383480393834f3 --gas 0xffff --password /dev/null --from "$ACC" --keystore "$TMPDIR"/8545/keystore --prio-fee 2gwei --gas-price 10gwei)
+
+  [[ $(seth code "$B_ADDR") = 0x647175696e6550383480393834f3 ]] || error
 }
 
 dapp_testnet

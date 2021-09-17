@@ -398,7 +398,7 @@ func main() {
 					} else if txtype == types.DynamicFeeTxType {
 						tx = types.NewTx(&types.DynamicFeeTx{
 							Nonce:     nonce,
-							To:        &common.Address{},
+							To:        nil,
 							Value:     value,
 							Gas:       gasLimit,
 							GasFeeCap: gasPrice,
