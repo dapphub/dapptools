@@ -370,3 +370,9 @@ test-lookup-address2() {
      = $(seth lookup-address 0x49c92f2ce8f876b070b114a6b2f8a60b83c281ad --rpc-url=$ETH_RPC_URL) ]] || error
 }
 test-lookup-address2
+
+test-4byte() {
+    [[ $(seth 4byte a9059cbb | tail -n 1) = "transfer(address,uint256)" ]] || error
+}
+
+test-4byte
