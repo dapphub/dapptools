@@ -49,9 +49,51 @@ dapp_testnet() {
 
   # dynamic fee transaction (EIP-1559)
   seth send "$A_ADDR" "on()" --gas 0xffff --password /dev/null --from "$ACC" --keystore "$TMPDIR"/8545/keystore --prio-fee 2gwei --gas-price 10gwei
+
+  # clean up
+  killall geth
 }
 
 dapp_testnet
+
+# checks that seth send works with both checksummed and unchecksummed addresses
+seth_send_address_formats() {
+  TMPDIR=$(mktemp -d)
+
+  dapp testnet --dir "$TMPDIR" &
+  # give it a few secs to start up
+  sleep 180
+  read -r ACC BAL <<< "$(seth ls --keystore "$TMPDIR/8545/keystore")"
+
+  lower=$(echo "$ACC" | tr '[:upper:]' '[:lower:]')
+  export ETH_GAS=0xffff
+
+  zero=0x0000000000000000000000000000000000000000
+
+  # with checksummed
+  tx=$(seth send "$zero" --from "$ACC" --password /dev/null --value "$(seth --to-wei 1 ether)" --keystore "$TMPDIR"/8545/keystore --async)
+  [[ $(seth tx "$tx" from) = "$lower" ]]
+
+  # without checksum
+  tx=$(seth send "$zero" --from "$lower" --password /dev/null --value "$(seth --to-wei 1 ether)" --keystore "$TMPDIR"/8545/keystore --async)
+  [[ $(seth tx "$tx" from) = "$lower" ]]
+
+  # try again with eth_rpc_accounts
+  export ETH_RPC_ACCOUNTS=true
+
+  # with checksummed
+  tx=$(seth send "$zero" --from "$ACC" --password /dev/null --value "$(seth --to-wei 1 ether)" --keystore "$TMPDIR"/8545/keystore --async)
+  [[ $(seth tx "$tx" from) = "$lower" ]]
+
+  # without checksum
+  tx=$(seth send "$zero" --from "$lower" --password /dev/null --value "$(seth --to-wei 1 ether)" --keystore "$TMPDIR"/8545/keystore --async)
+  [[ $(seth tx "$tx" from) = "$lower" ]]
+
+  # clean up
+  killall geth
+}
+
+seth_send_address_formats
 
 test_hevm_symbolic() {
     solc --bin-runtime -o . --overwrite factor.sol

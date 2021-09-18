@@ -58,7 +58,7 @@ function signAndSend() {
 
 if [[ -z $ETH_RPC_ACCOUNTS ]]; then
   signAndSend
-elif ethsign ls | grep -q $ETH_FROM; then
+elif ethsign ls | grep -qI "$ETH_FROM"; then
   signAndSend
 else
   tx=$(seth rpc eth_sendTransaction -- "${jshon[@]}")

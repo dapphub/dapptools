@@ -14,6 +14,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `seth abi-encode` command returns the ABI encoded values without the function signature
 - `seth index` command returns the slot number for the specified mapping type and input data
 
+### Fixed
+
+- Address lookup no longer fails if `ETH_RPC_ACCOUNTS` is set, and `ETH_FROM` is an unchecksummed address
+
 ## [0.11.0] - 2021-09-08
 
 ### Added
