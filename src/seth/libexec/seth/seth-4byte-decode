@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-### seth-4byte-decode -- querys 4byte.directory to find a matching signature, then decodes the calldata with it
+### seth-4byte-decode -- queries 4byte.directory to find a matching signature, then decodes the calldata with it
 ### Usage: seth 4byte-decode <calldata> [<options>]
 ###
 ### Queries 4byte.directory to find matching signatures and prompts the user to to select one. The selected

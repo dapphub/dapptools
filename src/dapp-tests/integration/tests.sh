@@ -49,9 +49,51 @@ dapp_testnet() {
 
   # dynamic fee transaction (EIP-1559)
   seth send "$A_ADDR" "on()" --gas 0xffff --password /dev/null --from "$ACC" --keystore "$TMPDIR"/8545/keystore --prio-fee 2gwei --gas-price 10gwei
+
+  # clean up
+  killall geth
 }
 
 dapp_testnet
+
+# checks that seth send works with both checksummed and unchecksummed addresses
+seth_send_address_formats() {
+  TMPDIR=$(mktemp -d)
+
+  dapp testnet --dir "$TMPDIR" &
+  # give it a few secs to start up
+  sleep 180
+  read -r ACC BAL <<< "$(seth ls --keystore "$TMPDIR/8545/keystore")"
+
+  lower=$(echo "$ACC" | tr '[:upper:]' '[:lower:]')
+  export ETH_GAS=0xffff
+
+  zero=0x0000000000000000000000000000000000000000
+
+  # with checksummed
+  tx=$(seth send "$zero" --from "$ACC" --password /dev/null --value "$(seth --to-wei 1 ether)" --keystore "$TMPDIR"/8545/keystore --async)
+  [[ $(seth tx "$tx" from) = "$lower" ]]
+
+  # without checksum
+  tx=$(seth send "$zero" --from "$lower" --password /dev/null --value "$(seth --to-wei 1 ether)" --keystore "$TMPDIR"/8545/keystore --async)
+  [[ $(seth tx "$tx" from) = "$lower" ]]
+
+  # try again with eth_rpc_accounts
+  export ETH_RPC_ACCOUNTS=true
+
+  # with checksummed
+  tx=$(seth send "$zero" --from "$ACC" --password /dev/null --value "$(seth --to-wei 1 ether)" --keystore "$TMPDIR"/8545/keystore --async)
+  [[ $(seth tx "$tx" from) = "$lower" ]]
+
+  # without checksum
+  tx=$(seth send "$zero" --from "$lower" --password /dev/null --value "$(seth --to-wei 1 ether)" --keystore "$TMPDIR"/8545/keystore --async)
+  [[ $(seth tx "$tx" from) = "$lower" ]]
+
+  # clean up
+  killall geth
+}
+
+seth_send_address_formats
 
 test_hevm_symbolic() {
     solc --bin-runtime -o . --overwrite factor.sol
@@ -371,8 +413,52 @@ test-lookup-address2() {
 }
 test-lookup-address2
 
+# SETH 4BYTE TESTS
+# seth 4byte
 test-4byte() {
     [[ $(seth 4byte a9059cbb | tail -n 1) = "transfer(address,uint256)" ]] || error
 }
-
 test-4byte
+
+# SETH FIXED POINT TESTS
+# seth --from-fix
+test-from-fix1() {
+    [[ $(seth --from-fix 6 1) = 1000000 ]] || error
+}
+test-from-fix1
+
+test-from-fix2() {
+    [[ $(seth --from-fix 18 1) = 1000000000000000000 ]] || error
+}
+test-from-fix2
+
+test-from-fix3() {
+    [[ $(seth --from-fix 6 1.2345) = 1234500 ]] || error
+}
+test-from-fix3
+
+test-from-fix4() {
+    [[ $(seth --from-fix 18 1.23456789) = 1234567890000000000 ]] || error
+}
+test-from-fix4
+
+# seth --to-fix
+test-to-fix1() {
+    [[ $(seth --to-fix 6 1000000) = 1.000000 ]] || error
+}
+test-to-fix1
+
+test-to-fix2() {
+    [[ $(seth --to-fix 18 1000000000000000000) = 1.000000000000000000 ]] || error
+}
+test-to-fix2
+
+test-to-fix3() {
+    [[ $(seth --to-fix 6 1234500) = 1.234500 ]] || error
+}
+test-to-fix3
+
+test-to-fix4() {
+    [[ $(seth --to-fix 18 1234567890000000000) = 1.234567890000000000 ]] || error
+}
+test-to-fix4
