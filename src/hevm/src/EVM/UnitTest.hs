@@ -581,7 +581,7 @@ exploreRun opts@UnitTestOptions{..} initialVm testName replayTxs = do
   then return ("\x1b[32m[PASS]\x1b[0m " <> testName <>  " (runs: " <> (pack $ show fuzzRuns) <>", depth: " <> pack (show depth) <> ")",
                Right (passOutput vm' opts testName), vm') -- no canonical "post vm"
   else let replayText = if null replayTxs
-                        then "\nReplay data: '(" <> pack (show testName) <> ", " <> pack (show (show (ByteStringS $ rlpencode counterex))) <> ")'"
+                        then "\nReplay data: '(" <> pack (show testName) <> "," <> pack (show (show (ByteStringS $ rlpencode counterex))) <> ")'"
                         else " (replayed)"
        in return ("\x1b[31m[FAIL]\x1b[0m " <> testName <> replayText, Left  (failOutput vm' opts testName), vm')
 
