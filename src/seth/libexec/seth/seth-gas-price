@@ -1,3 +1,47 @@
 #!/usr/bin/env bash
 set -e
-seth rpc eth_gasPrice
+
+if command -v tput > /dev/null 2>&1; then
+  if [ $(($(tput colors 2> /dev/null))) -ge 8 ]; then
+    # Enable colors
+    TPUT_RESET="$(tput sgr 0)"
+    TPUT_YELLOW="$(tput setaf 3)"
+    TPUT_RED="$(tput setaf 1)"
+    TPUT_BLUE="$(tput setaf 4)"
+    TPUT_GREEN="$(tput setaf 2)"
+    TPUT_WHITE="$(tput setaf 7)"
+    TPUT_BOLD="$(tput bold)"
+  fi
+fi
+
+
+GASNOW_RESPONSE=$(curl -s https://www.gasnow.org/api/v3/gas/price)
+response=$(jq '.code' <<< $GASNOW_RESPONSE)
+  if [[ $response != "200" ]]; then
+    echo "Could not get gas information from ${TPUT_BOLD}gasnow.org${TPUT_RESET}: https://www.gasnow.org"
+    echo "response code: $response"
+ else
+   rapid=$(( $(jq '.data.rapid' <<< $GASNOW_RESPONSE) / 1000000000 ))
+   fast=$(( $(jq '.data.fast' <<< $GASNW_RESPONSE) / 1000000000 ))
+   standard=$(( $(jq '.data.standard' <<< $GASNOW_RESPONSE) / 1000000000 ))
+   slow=$(( $(jq '.data.slow' <<< $GASNOW_RESPONSE) / 1000000000 ))
+   echo "Gas prices from ${TPUT_BOLD}gasnow.org${TPUT_RESET}: https://www.gasnow.org"
+   echo " \
+   ${TPUT_RED}Rapid: $rapid gwei ${TPUT_RESET}
+   ${TPUT_YELLOW}Fast: $fast gwei
+   ${TPUT_BLUE}Standard: $standard gwei
+   ${TPUT_GREEN}Slow: $slow gwei${TPUT_RESET}" | column -t
+fi
+PROVIDER_GAS_PRICE=$(( $(seth rpc eth_gasPrice) / 1000000000 ))
+if [[ $PROVIDER_GAS_PRICE -ge $rapid ]];then
+  COLOR=${TPUT_RED}
+elif [[ $PROVIDER_GAS_PRICE -ge $fast ]];then
+  COLOR=${TPUT_YELLOW}
+elif [[  $PROVIDER_GAS_PRICE -ge $standard ]];then
+    COLOR=${TPUT_BLUE}
+else
+    COLOR=${TPUT_GREEN}
+fi
+echo "Gas price from your RPC endpoint: ${COLOR}${PROVIDER_GAS_PRICE} gwei${TPUT_RESET}"
+
+O
