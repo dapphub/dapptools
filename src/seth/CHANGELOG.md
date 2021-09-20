@@ -6,6 +6,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+### Fixed
+
+Contract creations with Dynamic fee transactions.
+
+
 ### Changed
 
 - `seth 4byte` command returns the response from querying [4byte.directory](https://www.4byte.directory/) for a given function signature
