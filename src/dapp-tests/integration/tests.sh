@@ -578,29 +578,36 @@ test_to_fix4() {
 test_run_tx_source_fetching() {
     ETH_RPC_URL=$ARCHIVE_NODE_URL
     trace=$(mktemp)
+    err=$(mktemp)
+
+    # prints a message when source is not available
+    seth run-tx 0xc1511d7fcc498ae8236a18a67786701e6980dcf641b72bcfd4c2a3cd45fb209c --trace 1> "$trace" 2> "$err"
+    assert "grep -q 'Contract source code not verified' $err"
+    assert "grep -q 'delegatecall 0xAa1c1B3BbbB59930a4E88F87345B8C513cc56Fa6::0x526327f2' $trace"
 
     # seth pulls from etherscan by default
-    seth run-tx 0x41ccbab4d7d0cd55f481df7fce449986364bf13e655dddfb30aa9b38a4340db7 --trace > "$trace" 2>&1
-    assert "grep -q 'UniswapV2Pair@0x28d2DF1E3481Ba90D75E14b9C02cea85b7d6FA2C' $trace" "did not pull source by default"
-    assert "grep -q 'PairCreated(UniswapV2Pair@0x28d2DF1E3481Ba90D75E14b9C02cea85b7d6FA2C, 51691)' $trace" "did not pull source by default"
+    seth run-tx 0x41ccbab4d7d0cd55f481df7fce449986364bf13e655dddfb30aa9b38a4340db7 --trace > "$trace"
+    assert "grep -q 'UniswapV2Pair@0x28d2DF1E3481Ba90D75E14b9C02cea85b7d6FA2C' $trace"
+    assert "grep -q 'PairCreated(UniswapV2Pair@0x28d2DF1E3481Ba90D75E14b9C02cea85b7d6FA2C, 51691)' $trace"
 
-    # seth does not pull from etherscan if ETHERSCAN_API_KEY is unset
-    DAPP_JSON=/dev/null seth run-tx 0x41ccbab4d7d0cd55f481df7fce449986364bf13e655dddfb30aa9b38a4340db7 --trace > "$trace" 2>&1
-    assert "grep -q 'call 0x28d2DF1E3481Ba90D75E14b9C02cea85b7d6FA2C::0x485cc9550000000000000000000000007fa7df4' $trace"
-    assert "grep -q 'log3(0xd3648bd0f6ba80134a33ba9275ac585d9d315f0ad8355cddefde31afa28d0e9, 0xffffffffffffffff' $trace"
-
-    # seth does not pull from etherscan if DAPP_JSON is set
-    DAPP_JSON=/dev/null seth run-tx 0x41ccbab4d7d0cd55f481df7fce449986364bf13e655dddfb30aa9b38a4340db7 --trace > "$trace" 2>&1
+    # seth does not pull from etherscan if --source is passed
+    seth run-tx 0x41ccbab4d7d0cd55f481df7fce449986364bf13e655dddfb30aa9b38a4340db7 --trace --source /dev/null > "$trace"
     assert "grep -q 'call 0x28d2DF1E3481Ba90D75E14b9C02cea85b7d6FA2C::0x485cc9550000000000000000000000007fa7df4' $trace"
     assert "grep -q 'log3(0xd3648bd0f6ba80134a33ba9275ac585d9d315f0ad8355cddefde31afa28d0e9, 0xffffffffffffffff' $trace"
 
     # seth does not pull from etherscan if --no-src is passed at the command line
-    seth run-tx 0x41ccbab4d7d0cd55f481df7fce449986364bf13e655dddfb30aa9b38a4340db7 --trace --no-src > "$trace" 2>&1
+    seth run-tx 0x41ccbab4d7d0cd55f481df7fce449986364bf13e655dddfb30aa9b38a4340db7 --trace --no-src > "$trace"
     assert "grep -q 'call 0x28d2DF1E3481Ba90D75E14b9C02cea85b7d6FA2C::0x485cc9550000000000000000000000007fa7df4' $trace"
     assert "grep -q 'log3(0xd3648bd0f6ba80134a33ba9275ac585d9d315f0ad8355cddefde31afa28d0e9, 0xffffffffffffffff' $trace"
 
     # seth does not pull from etherscan if SETH_NOSRC is set to "yes"
-    SETH_NOSRC=yes seth run-tx 0x41ccbab4d7d0cd55f481df7fce449986364bf13e655dddfb30aa9b38a4340db7 --trace > "$trace" 2>&1
+    SETH_NOSRC=yes seth run-tx 0x41ccbab4d7d0cd55f481df7fce449986364bf13e655dddfb30aa9b38a4340db7 --trace > "$trace"
+    assert "grep -q 'call 0x28d2DF1E3481Ba90D75E14b9C02cea85b7d6FA2C::0x485cc9550000000000000000000000007fa7df4' $trace"
+    assert "grep -q 'log3(0xd3648bd0f6ba80134a33ba9275ac585d9d315f0ad8355cddefde31afa28d0e9, 0xffffffffffffffff' $trace"
+
+    # seth does not pull from etherscan if ETHERSCAN_API_KEY is unset
+    unset ETHERSCAN_API_KEY
+    seth run-tx 0x41ccbab4d7d0cd55f481df7fce449986364bf13e655dddfb30aa9b38a4340db7 --trace > "$trace"
     assert "grep -q 'call 0x28d2DF1E3481Ba90D75E14b9C02cea85b7d6FA2C::0x485cc9550000000000000000000000007fa7df4' $trace"
     assert "grep -q 'log3(0xd3648bd0f6ba80134a33ba9275ac585d9d315f0ad8355cddefde31afa28d0e9, 0xffffffffffffffff' $trace"
 }

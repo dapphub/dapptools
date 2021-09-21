@@ -5,9 +5,13 @@
 ###
 ### Run a transaction with hevm in the environment of the given transaction.
 ###
+### Attempts to fetch contract source from etherscan if `ETHERSCAN_API_KEY` is set.
+###
 ### With `--state dir`, load and save state from `dir`
 ### With `--trace`, print the call trace of the transaction.
 ### With `--debug`, execute with hevm's interactive debugger
+### With `--no-src`, do not attempt to fetch contract source from etherscan
+### With `--source`, manually supply a solc compiler output json (implies --no-src)
 set -e
 
 # if the argument begins with 0x, we assume it to be a tx hash
