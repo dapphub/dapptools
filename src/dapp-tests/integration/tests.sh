@@ -15,22 +15,26 @@ TESTNET_SLEEP=5
 
 # we spin up a new testnet instance and share it between all tests
 setup_suite() {
-  TMPDIR=$(mktemp -d)
+    if [[ -z "$SKIP_SETUP" ]]; then
+        TMPDIR=$(mktemp -d)
 
-  dapp testnet --dir "$TMPDIR" &
-  # give it a few secs to start up
-  sleep "$TESTNET_SLEEP"
+        dapp testnet --dir "$TMPDIR" &
+        # give it a few secs to start up
+        sleep "$TESTNET_SLEEP"
 
-  export ETH_RPC_URL="http://127.0.0.1:8545"
-  export ETH_KEYSTORE="$TMPDIR/8545/keystore"
-  export ETH_PASSWORD=/dev/null
-  read -r ROOT _ <<< "$(seth ls --keystore "$TMPDIR/8545/keystore")"
+        export ETH_RPC_URL="http://127.0.0.1:8545"
+        export ETH_KEYSTORE="$TMPDIR/8545/keystore"
+        export ETH_PASSWORD=/dev/null
+        read -r ROOT _ <<< "$(seth ls --keystore "$TMPDIR/8545/keystore")"
+    fi
 }
 
 # cleanup the testnet
 teardown_suite() {
-    killall geth
-    rm -rf "$TMPDIR"
+    if [[ -z "$SKIP_SETUP" ]]; then
+        killall geth
+        rm -rf "$TMPDIR"
+    fi
 }
 
 # ------------------------------------------------
@@ -72,14 +76,28 @@ CONTRACTS="$SCRIPT_DIR/contracts"
 #                 GENERATORS
 # ------------------------------------------------
 
+mod() {
+    bc <<< "$1%$2"
+}
+
+hex2dec() {
+    echo "ibase=16;${1^^}" | bc | tr -d '\\\n'
+}
+
+byte() {
+    hexdump -n 1 -e '1/1 "%08X" 1 "\n"' /dev/urandom
+}
+
 bytes32() {
     hexdump -n 32 -e '4/8 "%08X" 1 "\n"' /dev/urandom
 }
 
+uint8() {
+    hex2dec "$(byte)"
+}
+
 uint256() {
-    local b32
-    b32=$(bytes32)
-    echo "ibase=16;${b32^^}" | bc | tr -d '\\\n'
+    hex2dec "$(bytes32)"
 }
 
 alpha() {
@@ -251,6 +269,30 @@ test_hex_roundtrip() {
       input="0x$(bytes32)"
       lower=$(echo "$input" | tr '[:upper:]' '[:lower:]')
       assert_equals "$lower" "$(seth --to-hex "$(seth --to-dec "$input")")"
+    done
+}
+
+test_to_fix_roundtrip() {
+    for _ in $(seq $FUZZ_RUNS); do
+      local input digits
+      input="$(uint256)"
+      digits="$(mod "$(uint8)" 77)" # 78 decimal digits in max uint256
+      assert_equals "$input" "$(seth --from-fix "$digits" "$(seth --to-fix "$digits" "$input")")"
+    done
+}
+
+test_from_fix_roundtrip() {
+    for _ in $(seq $FUZZ_RUNS); do
+      local input digits
+      input="$(uint256)"
+      length="${#input}"
+      digits="$(mod "$(uint8)" 77)" # 78 decimal digits in max uint256
+
+      [[ $digits -ge $length ]] && continue
+      whole_digits=$(bc <<< "$length - $digits" | tr -d '\\\n')
+      input="${input:0:whole_digits}.${input:$whole_digits:$length}"
+
+      assert_equals "$input" "$(seth --to-fix "$digits" "$(seth --from-fix "$digits" "$input")")"
     done
 }
 
