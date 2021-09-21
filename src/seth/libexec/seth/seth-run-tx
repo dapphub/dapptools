@@ -28,6 +28,11 @@ else
   opts+=(--address "$TO" --calldata "$DATA")
 fi
 
+if [[ -n "$ETHERSCAN_API_KEY" && -z "$DAPP_JSON"  && "$SETH_NOSRC" != yes ]]; then
+    DAPP_JSON=$(mktemp)
+    seth bundle-source "$TO" > "$DAPP_JSON" || :
+fi
+
 opts+=(--caller "$(<<< "$tx" seth --field from)" )
 opts+=(--origin "$(<<< "$tx" seth --field from)")
 opts+=(--value  "$(<<< "$tx" seth --field value)")

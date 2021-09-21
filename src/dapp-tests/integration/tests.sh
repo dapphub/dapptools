@@ -6,8 +6,12 @@ set -euo pipefail
 #                CONFIGURATION
 # ------------------------------------------------
 
-FUZZ_RUNS=100
-TESTNET_SLEEP=5
+SKIP_SETUP=${SKIP_SETUP:-0}
+FUZZ_RUNS=${FUZZ_RUNS:-100}
+TESTNET_SLEEP=${TESTNET_SLEEP:-5}
+ETHERSCAN_API_KEY=${ETHERSCAN_API_KEY:-15IS6MMRAYB19NZN9VHH6H6P57892Z664M}
+RINKEBY_RPC_URL=${RINKEBY_RPC_URL:-https://rinkeby.infura.io/v3/84842078b09946638c03157f83405213}
+ARCHIVE_NODE_URL=${ARCHIVE_NODE_URL:-https://eth-mainnet.alchemyapi.io/v2/vpeKFsEF6PHifHzdtcwXSDbhV3ym5Ro4}
 
 # ------------------------------------------------
 #                SHARED SETUP
@@ -15,7 +19,7 @@ TESTNET_SLEEP=5
 
 # we spin up a new testnet instance and share it between all tests
 setup_suite() {
-    if [[ -z "$SKIP_SETUP" ]]; then
+    if [[ "$SKIP_SETUP" != 1 ]]; then
         TMPDIR=$(mktemp -d)
 
         dapp testnet --dir "$TMPDIR" &
@@ -31,7 +35,7 @@ setup_suite() {
 
 # cleanup the testnet
 teardown_suite() {
-    if [[ -z "$SKIP_SETUP" ]]; then
+    if [[ "$SKIP_SETUP" != 1 ]]; then
         killall geth
         rm -rf "$TMPDIR"
     fi
@@ -40,10 +44,6 @@ teardown_suite() {
 # ------------------------------------------------
 #                TEST HELPERS
 # ------------------------------------------------
-
-# Tests for resolve-name and lookup-address use a Rinkeby name that's been registered for 100 years and will not be changed
-# Infura ID source: https://github.com/ethers-io/ethers.js/blob/0d40156fcba5be155aa5def71bcdb95b9c11d889/packages/providers/src.ts/infura-provider.ts#L17
-RINKEBY_RPC_URL=https://rinkeby.infura.io/v3/84842078b09946638c03157f83405213
 
 # generates a new account and gives it some eth, returns the address
 fresh_account() {
@@ -135,7 +135,7 @@ test_smoke() {
     TX=$(seth send "$A_ADDR" "off()" --gas 0xffff --password /dev/null --from "$account" --keystore "$TMPDIR"/8545/keystore --async)
 
     # since we have one tx per block, seth run-tx and seth debug are equivalent
-    assert_equals 0x "$(seth run-tx "$TX")"
+    assert_equals 0x "$(seth run-tx "$TX" --no-src)"
 
     # dynamic fee transactions (EIP-1559)
     seth send "$A_ADDR" "on()" \
@@ -150,7 +150,7 @@ test_smoke() {
         --create 0x647175696e6550383480393834f3 \
         --gas 0xffff \
         --password /dev/null \
-        --from "$ACC" \
+        --from "$account" \
         --keystore "$TMPDIR"/8545/keystore \
         --prio-fee 2gwei \
         --gas-price 10gwei)
@@ -572,4 +572,35 @@ test_to_fix3() {
 
 test_to_fix4() {
     assert_equals 1.234567890000000000 "$(seth --to-fix 18 1234567890000000000)"
+}
+
+# SETH RUN-TX TESTS
+test_run_tx_source_fetching() {
+    ETH_RPC_URL=$ARCHIVE_NODE_URL
+    trace=$(mktemp)
+
+    # seth pulls from etherscan by default
+    seth run-tx 0x41ccbab4d7d0cd55f481df7fce449986364bf13e655dddfb30aa9b38a4340db7 --trace > "$trace" 2>&1
+    assert "grep -q 'UniswapV2Pair@0x28d2DF1E3481Ba90D75E14b9C02cea85b7d6FA2C' $trace" "did not pull source by default"
+    assert "grep -q 'PairCreated(UniswapV2Pair@0x28d2DF1E3481Ba90D75E14b9C02cea85b7d6FA2C, 51691)' $trace" "did not pull source by default"
+
+    # seth does not pull from etherscan if ETHERSCAN_API_KEY is unset
+    DAPP_JSON=/dev/null seth run-tx 0x41ccbab4d7d0cd55f481df7fce449986364bf13e655dddfb30aa9b38a4340db7 --trace > "$trace" 2>&1
+    assert "grep -q 'call 0x28d2DF1E3481Ba90D75E14b9C02cea85b7d6FA2C::0x485cc9550000000000000000000000007fa7df4' $trace"
+    assert "grep -q 'log3(0xd3648bd0f6ba80134a33ba9275ac585d9d315f0ad8355cddefde31afa28d0e9, 0xffffffffffffffff' $trace"
+
+    # seth does not pull from etherscan if DAPP_JSON is set
+    DAPP_JSON=/dev/null seth run-tx 0x41ccbab4d7d0cd55f481df7fce449986364bf13e655dddfb30aa9b38a4340db7 --trace > "$trace" 2>&1
+    assert "grep -q 'call 0x28d2DF1E3481Ba90D75E14b9C02cea85b7d6FA2C::0x485cc9550000000000000000000000007fa7df4' $trace"
+    assert "grep -q 'log3(0xd3648bd0f6ba80134a33ba9275ac585d9d315f0ad8355cddefde31afa28d0e9, 0xffffffffffffffff' $trace"
+
+    # seth does not pull from etherscan if --no-src is passed at the command line
+    seth run-tx 0x41ccbab4d7d0cd55f481df7fce449986364bf13e655dddfb30aa9b38a4340db7 --trace --no-src > "$trace" 2>&1
+    assert "grep -q 'call 0x28d2DF1E3481Ba90D75E14b9C02cea85b7d6FA2C::0x485cc9550000000000000000000000007fa7df4' $trace"
+    assert "grep -q 'log3(0xd3648bd0f6ba80134a33ba9275ac585d9d315f0ad8355cddefde31afa28d0e9, 0xffffffffffffffff' $trace"
+
+    # seth does not pull from etherscan if SETH_NOSRC is set to "yes"
+    SETH_NOSRC=yes seth run-tx 0x41ccbab4d7d0cd55f481df7fce449986364bf13e655dddfb30aa9b38a4340db7 --trace > "$trace" 2>&1
+    assert "grep -q 'call 0x28d2DF1E3481Ba90D75E14b9C02cea85b7d6FA2C::0x485cc9550000000000000000000000007fa7df4' $trace"
+    assert "grep -q 'log3(0xd3648bd0f6ba80134a33ba9275ac585d9d315f0ad8355cddefde31afa28d0e9, 0xffffffffffffffff' $trace"
 }
