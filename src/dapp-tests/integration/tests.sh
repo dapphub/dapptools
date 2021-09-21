@@ -417,6 +417,13 @@ test-lookup-address2() {
 }
 test-lookup-address2
 
+# SETH 4BYTE TESTS
+# seth 4byte
+test-4byte() {
+    [[ $(seth 4byte a9059cbb | tail -n 1) = "transfer(address,uint256)" ]] || error
+}
+test-4byte
+
 # SETH FIXED POINT TESTS
 # seth --from-fix
 test-from-fix1() {
