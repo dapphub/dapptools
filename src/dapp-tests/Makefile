@@ -1,5 +1,5 @@
 test:
 	pytest --hypothesis-show-statistics integration/diff-fuzz.py
-	integration/tests.sh
+	bash_unit integration/tests.sh
 
 .PHONY: test
