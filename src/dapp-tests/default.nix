@@ -1,6 +1,7 @@
 { pkgs }:
 
 let
+  solc-0_8_6 = "${pkgs.solc-static-versions.solc_0_8_6}/bin/solc-0.8.6";
   solc-0_7_6 = "${pkgs.solc-static-versions.solc_0_7_6}/bin/solc-0.7.6";
   solc-0_6_7 = "${pkgs.solc-static-versions.solc_0_6_7}/bin/solc-0.6.7";
 
@@ -129,6 +130,18 @@ in
       name = "dappTestsShouldPass";
       shouldFail = false;
       dappFlags = "--max-iterations 50 --smttimeout 600000 --ffi";
+    };
+
+    libraries0_8 = pkgs.buildDappPackage {
+      name = "libraries-0.8";
+      shouldFail = false;
+      solc=solc-0_8_6;
+      src = pkgs.runCommand "src" {} ''
+        mkdir -p $out
+        cp ${./pass/libraries.sol} $out/libraries.sol;
+      '';
+      deps = [ ds-test ];
+      checkInputs = with pkgs; [ hevm jq seth dapp solc ];
     };
 
     shouldFail = let

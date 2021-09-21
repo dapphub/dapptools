@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - Dapp can correctly parse replay strings from invariant tests
+- Libraries are properly linked when compiling with solc >= 0.7
 
 ## [0.34.1] - 2021-09-08
 
