@@ -6,11 +6,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
-### Fixed
-
-Contract creations with Dynamic fee transactions.
-
-
 ### Changed
 
 - `seth 4byte` command returns the response from querying [4byte.directory](https://www.4byte.directory/) for a given function signature
@@ -19,10 +14,13 @@ Contract creations with Dynamic fee transactions.
 - `seth abi-encode` command returns the ABI encoded values without the function signature
 - `seth index` command returns the slot number for the specified mapping type and input data
 - `seth --from-fix` command converts fixed point numbers into parsed integers with the specified number of decimals
+- `seth run-tx` now fetches contract source from etherscan if `ETHERSCAN_API_KEY` is set
 
 ### Fixed
 
 - Address lookup no longer fails if `ETH_RPC_ACCOUNTS` is set, and `ETH_FROM` is an unchecksummed address
+- Contract creations with Dynamic fee transactions
+- Trace output from `seth run-tx --trace` is now output to `stdout`
 
 ## [0.11.0] - 2021-09-08
 
