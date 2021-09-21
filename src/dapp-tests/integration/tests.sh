@@ -3,6 +3,13 @@
 set -euo pipefail
 
 # ------------------------------------------------
+#                CONFIGURATION
+# ------------------------------------------------
+
+FUZZ_RUNS=100
+TESTNET_SLEEP=5
+
+# ------------------------------------------------
 #                SHARED SETUP
 # ------------------------------------------------
 
@@ -12,7 +19,7 @@ setup_suite() {
 
   dapp testnet --dir "$TMPDIR" &
   # give it a few secs to start up
-  sleep 5
+  sleep "$TESTNET_SLEEP"
 
   export ETH_RPC_URL="http://127.0.0.1:8545"
   export ETH_KEYSTORE="$TMPDIR/8545/keystore"
@@ -62,6 +69,26 @@ SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
 CONTRACTS="$SCRIPT_DIR/contracts"
 
 # ------------------------------------------------
+#                 GENERATORS
+# ------------------------------------------------
+
+bytes32() {
+    hexdump -n 32 -e '4/8 "%08X" 1 "\n"' /dev/urandom
+}
+
+uint256() {
+    local b32
+    b32=$(bytes32)
+    echo "ibase=16;${b32^^}" | bc | tr -d '\\\n'
+}
+
+alpha() {
+    local size
+    size=$1
+    tr -dc '[:alpha:]' < /dev/urandom | fold -w "${1:-$size}" | head -n 1
+}
+
+# ------------------------------------------------
 #                   TESTS
 # ------------------------------------------------
 
@@ -70,67 +97,75 @@ CONTRACTS="$SCRIPT_DIR/contracts"
 # `seth run-tx`
 # `hevm exec`
 test_smoke() {
-  account=$(fresh_account)
+    local account
+    account=$(fresh_account)
 
-  # Deploy a simple contract:
-  solc --bin --bin-runtime "$CONTRACTS/stateful.sol" -o "$TMPDIR"
+    # Deploy a simple contract:
+    solc --bin --bin-runtime "$CONTRACTS/stateful.sol" -o "$TMPDIR"
 
-  A_ADDR=$(seth send --create "$(<"$TMPDIR"/A.bin)" "constructor(uint y)" 1 --from "$account" --keystore "$TMPDIR"/8545/keystore --password /dev/null --gas 0xffffff)
+    A_ADDR=$(seth send --create "$(<"$TMPDIR"/A.bin)" "constructor(uint y)" 1 --from "$account" --keystore "$TMPDIR"/8545/keystore --password /dev/null --gas 0xffffff)
 
-  # Compare deployed code with what solc gives us
-  assert_equals 0x"$(cat "$TMPDIR"/A.bin-runtime)" "$(seth code "$A_ADDR")"
+    # Compare deployed code with what solc gives us
+    assert_equals 0x"$(cat "$TMPDIR"/A.bin-runtime)" "$(seth code "$A_ADDR")"
 
-  # And with what hevm gives us
-  EXTRA_CALLDATA=$(seth --to-uint256 1)
-  HEVM_RET=$(hevm exec --code "$(<"$TMPDIR"/A.bin)""${EXTRA_CALLDATA/0x/}" --gas 0xffffff)
+    # And with what hevm gives us
+    EXTRA_CALLDATA=$(seth --to-uint256 1)
+    HEVM_RET=$(hevm exec --code "$(<"$TMPDIR"/A.bin)""${EXTRA_CALLDATA/0x/}" --gas 0xffffff)
 
-  assert_equals "$HEVM_RET" "$(seth code "$A_ADDR")"
+    assert_equals "$HEVM_RET" "$(seth code "$A_ADDR")"
 
-  TX=$(seth send "$A_ADDR" "off()" --gas 0xffff --password /dev/null --from "$account" --keystore "$TMPDIR"/8545/keystore --async)
+    TX=$(seth send "$A_ADDR" "off()" --gas 0xffff --password /dev/null --from "$account" --keystore "$TMPDIR"/8545/keystore --async)
 
-  # since we have one tx per block, seth run-tx and seth debug are equivalent
-  assert_equals 0x "$(seth run-tx "$TX")" = 0x
+    # since we have one tx per block, seth run-tx and seth debug are equivalent
+    assert_equals 0x "$(seth run-tx "$TX")"
 
-  # dynamic fee transactions (EIP-1559)
-  seth send "$A_ADDR" "on()" --gas 0xffff --password /dev/null --from "$ACC" --keystore "$TMPDIR"/8545/keystore --prio-fee 2gwei --gas-price 10gwei
+    # dynamic fee transactions (EIP-1559)
+    seth send "$A_ADDR" "on()" \
+        --gas 0xffff \
+        --password /dev/null \
+        --from "$account" \
+        --keystore "$TMPDIR"/8545/keystore \
+        --prio-fee 2gwei \
+        --gas-price 10gwei
 
-  B_ADDR=$(seth send --create 0x647175696e6550383480393834f3 --gas 0xffff --password /dev/null --from "$ACC" --keystore "$TMPDIR"/8545/keystore --prio-fee 2gwei --gas-price 10gwei)
+    B_ADDR=$(seth send \
+        --create 0x647175696e6550383480393834f3 \
+        --gas 0xffff \
+        --password /dev/null \
+        --from "$ACC" \
+        --keystore "$TMPDIR"/8545/keystore \
+        --prio-fee 2gwei \
+        --gas-price 10gwei)
 
-  assert_equals 0x647175696e6550383480393834f3 "$(seth code "$B_ADDR")"
+    assert_equals 0x647175696e6550383480393834f3 "$(seth code "$B_ADDR")"
 }
 
 # checks that seth send works with both checksummed and unchecksummed addresses
 test_seth_send_address_formats() {
-  TMPDIR=$(mktemp -d)
+    local account
+    account=$(fresh_account)
 
-  dapp testnet --dir "$TMPDIR" &
-  # give it a few secs to start up
-  sleep 180
-  read -r ACC BAL <<< "$(seth ls --keystore "$TMPDIR/8545/keystore")"
+    lower=$(echo "$account" | tr '[:upper:]' '[:lower:]')
+    export ETH_GAS=0xffff
 
-  lower=$(echo "$ACC" | tr '[:upper:]' '[:lower:]')
-  export ETH_GAS=0xffff
+    # with checksummed
+    tx=$(seth send "$ZERO" --from "$ACC" --password /dev/null --value "$(seth --to-wei 1 ether)" --keystore "$TMPDIR"/8545/keystore --async)
+    assert_equals "$lower" "$(seth tx "$tx" from)"
 
-  zero=0x0000000000000000000000000000000000000000
+    # without checksum
+    tx=$(seth send "$ZERO" --from "$lower" --password /dev/null --value "$(seth --to-wei 1 ether)" --keystore "$TMPDIR"/8545/keystore --async)
+    assert_equals "$lower" "$(seth tx "$tx" from)"
 
-  # with checksummed
-  tx=$(seth send "$zero" --from "$ACC" --password /dev/null --value "$(seth --to-wei 1 ether)" --keystore "$TMPDIR"/8545/keystore --async)
-  assert_equals "$lower" "$(seth tx "$tx" from)"
+    # try again with eth_rpc_accounts
+    export ETH_RPC_ACCOUNTS=true
 
-  # without checksum
-  tx=$(seth send "$zero" --from "$lower" --password /dev/null --value "$(seth --to-wei 1 ether)" --keystore "$TMPDIR"/8545/keystore --async)
-  assert_equals "$lower" "$(seth tx "$tx" from)"
+    # with checksummed
+    tx=$(seth send "$ZERO" --from "$ACC" --password /dev/null --value "$(seth --to-wei 1 ether)" --keystore "$TMPDIR"/8545/keystore --async)
+    assert_equals "$lower" "$(seth tx "$tx" from)"
 
-  # try again with eth_rpc_accounts
-  export ETH_RPC_ACCOUNTS=true
-
-  # with checksummed
-  tx=$(seth send "$zero" --from "$ACC" --password /dev/null --value "$(seth --to-wei 1 ether)" --keystore "$TMPDIR"/8545/keystore --async)
-  assert_equals "$lower" "$(seth tx "$tx" from)"
-
-  # without checksum
-  tx=$(seth send "$zero" --from "$lower" --password /dev/null --value "$(seth --to-wei 1 ether)" --keystore "$TMPDIR"/8545/keystore --async)
-  assert_equals "$lower" "$(seth tx "$tx" from)"
+    # without checksum
+    tx=$(seth send "$ZERO" --from "$lower" --password /dev/null --value "$(seth --to-wei 1 ether)" --keystore "$TMPDIR"/8545/keystore --async)
+    assert_equals "$lower" "$(seth tx "$tx" from)"
 }
 
 
@@ -200,6 +235,23 @@ test_block_1() {
     txs=$(seth block 2 transactions)
     assert_equals 1 "$(echo "$txs" | jq length)"
     assert_equals "$tx" "$(echo "$txs" | jq -r '.[0]')"
+}
+
+test_decimal_roundtrip() {
+    for _ in $(seq $FUZZ_RUNS); do
+      local input
+      input=$(uint256)
+      assert_equals "$input" "$(seth --to-dec "$(seth --to-hex "$input")")"
+    done
+}
+
+test_hex_roundtrip() {
+    for _ in $(seq $FUZZ_RUNS); do
+      local input
+      input="0x$(bytes32)"
+      lower=$(echo "$input" | tr '[:upper:]' '[:lower:]')
+      assert_equals "$lower" "$(seth --to-hex "$(seth --to-dec "$input")")"
+    done
 }
 
 test_calldata_1() {
