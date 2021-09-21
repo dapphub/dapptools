@@ -802,16 +802,17 @@ so users must ensure the ENS names they enter are properly formatted.
 
 ### `seth run-tx`
 
-Execute a transaction using `hevm`.
+Run a transaction with hevm in the environment of the given transaction.
 
     seth run-tx <tx-hash> [<options>]
 
+Attempts to fetch contract source from etherscan if `ETHERSCAN_API_KEY` is set.
+
 With `--state dir`, load and save state from `dir`
-With `--trace`, run in headless mode and print the call trace of the transaction.
+With `--trace`, print the call trace of the transaction.
 With `--debug`, execute with hevm's interactive debugger
-Use `--source=<filename>` to pass source information for a more illuminating experience.
-Source files can be fetched remotely via [`seth bundle-source`],
-but you can use the output of [`dapp build`](../dapp/README.md#dapp-build) here.
+With `--no-src`, do not attempt to fetch contract source from etherscan
+With `--source=<filename>`, manually supply a solc compiler output json (implies `--no-src`)
 
 ### `seth send`
 
