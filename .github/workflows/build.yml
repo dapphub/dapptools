@@ -26,7 +26,7 @@ jobs:
           name: dapp
           signingKey: '${{ secrets.CACHIX_SIGNING_KEY }}'
       - name: run dapp tests
-        run: nix-shell --pure src/dapp-tests/shell.nix --command 'make --directory src/dapp-tests'
+        run: nix-shell --pure src/dapp-tests/shell.nix --command 'make ci --directory src/dapp-tests'
       - name: run hevm symbolic tests
         run: nix-build -j 1 -A hevm-tests
       - run: nix-collect-garbage
