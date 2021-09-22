@@ -576,37 +576,53 @@ test_to_fix4() {
 # SETH RUN-TX TESTS
 test_run_tx_source_fetching() {
     ETH_RPC_URL=$ARCHIVE_NODE_URL
+    local trace err
     trace=$(mktemp)
     err=$(mktemp)
 
     # prints a message when source is not available
     seth run-tx 0xc1511d7fcc498ae8236a18a67786701e6980dcf641b72bcfd4c2a3cd45fb209c --trace 1> "$trace" 2> "$err"
-    assert "grep -q 'Contract source code not verified' $err"
-    assert "grep -q 'delegatecall 0xAa1c1B3BbbB59930a4E88F87345B8C513cc56Fa6::0x526327f2' $trace"
+    assert "grep -q 'Contract source code not verified' $err" "1"
+    assert "grep -q 'delegatecall 0xAa1c1B3BbbB59930a4E88F87345B8C513cc56Fa6::0x526327f2' $trace" "2"
 
-    # seth pulls from etherscan by default
+    local prefiles
+    prefiles=$(ls)
+
+    # seth pulls from etherscan by default (flattened)
     seth run-tx 0x41ccbab4d7d0cd55f481df7fce449986364bf13e655dddfb30aa9b38a4340db7 --trace > "$trace"
-    assert "grep -q 'UniswapV2Pair@0x28d2DF1E3481Ba90D75E14b9C02cea85b7d6FA2C' $trace"
-    assert "grep -q 'PairCreated(UniswapV2Pair@0x28d2DF1E3481Ba90D75E14b9C02cea85b7d6FA2C, 51691)' $trace"
+    assert "grep -q 'UniswapV2Pair@0x28d2DF1E3481Ba90D75E14b9C02cea85b7d6FA2C' $trace" "3"
+    assert "grep -q 'PairCreated(UniswapV2Pair@0x28d2DF1E3481Ba90D75E14b9C02cea85b7d6FA2C, 51691)' $trace" "4"
+
+    # seth does not write any files to the cwd
+    assert_equals "$prefiles" "$(ls)"
+
+    # seth pulls from etherscan by default (stdjson)
+    seth run-tx 0x5da4bf1e5988cf94fd96d2c1dd3f420d2cea1aebe8d1e1c10dd9fe78a2147798 --trace > "$trace"
+    assert "grep -q 'ownerOf' $trace" "5"
+    assert "grep -q 'iFeather@0xD1edDfcc4596CC8bD0bd7495beaB9B979fc50336' $trace" "6"
+    assert "grep -q 'Transfer()' $trace" "7"
+
+    # seth does not write any files to the cwd
+    assert_equals "$prefiles" "$(ls)"
 
     # seth does not pull from etherscan if --source is passed
     seth run-tx 0x41ccbab4d7d0cd55f481df7fce449986364bf13e655dddfb30aa9b38a4340db7 --trace --source /dev/null > "$trace"
-    assert "grep -q 'call 0x28d2DF1E3481Ba90D75E14b9C02cea85b7d6FA2C::0x485cc9550000000000000000000000007fa7df4' $trace"
-    assert "grep -q 'log3(0xd3648bd0f6ba80134a33ba9275ac585d9d315f0ad8355cddefde31afa28d0e9, 0xffffffffffffffff' $trace"
+    assert "grep -q 'call 0x28d2DF1E3481Ba90D75E14b9C02cea85b7d6FA2C::0x485cc9550000000000000000000000007fa7df4' $trace" "8"
+    assert "grep -q 'log3(0xd3648bd0f6ba80134a33ba9275ac585d9d315f0ad8355cddefde31afa28d0e9, 0xffffffffffffffff' $trace" "9"
 
     # seth does not pull from etherscan if --no-src is passed at the command line
     seth run-tx 0x41ccbab4d7d0cd55f481df7fce449986364bf13e655dddfb30aa9b38a4340db7 --trace --no-src > "$trace"
-    assert "grep -q 'call 0x28d2DF1E3481Ba90D75E14b9C02cea85b7d6FA2C::0x485cc9550000000000000000000000007fa7df4' $trace"
-    assert "grep -q 'log3(0xd3648bd0f6ba80134a33ba9275ac585d9d315f0ad8355cddefde31afa28d0e9, 0xffffffffffffffff' $trace"
+    assert "grep -q 'call 0x28d2DF1E3481Ba90D75E14b9C02cea85b7d6FA2C::0x485cc9550000000000000000000000007fa7df4' $trace" "10"
+    assert "grep -q 'log3(0xd3648bd0f6ba80134a33ba9275ac585d9d315f0ad8355cddefde31afa28d0e9, 0xffffffffffffffff' $trace" "11"
 
     # seth does not pull from etherscan if SETH_NOSRC is set to "yes"
     SETH_NOSRC=yes seth run-tx 0x41ccbab4d7d0cd55f481df7fce449986364bf13e655dddfb30aa9b38a4340db7 --trace > "$trace"
-    assert "grep -q 'call 0x28d2DF1E3481Ba90D75E14b9C02cea85b7d6FA2C::0x485cc9550000000000000000000000007fa7df4' $trace"
-    assert "grep -q 'log3(0xd3648bd0f6ba80134a33ba9275ac585d9d315f0ad8355cddefde31afa28d0e9, 0xffffffffffffffff' $trace"
+    assert "grep -q 'call 0x28d2DF1E3481Ba90D75E14b9C02cea85b7d6FA2C::0x485cc9550000000000000000000000007fa7df4' $trace" "12"
+    assert "grep -q 'log3(0xd3648bd0f6ba80134a33ba9275ac585d9d315f0ad8355cddefde31afa28d0e9, 0xffffffffffffffff' $trace" "13"
 
     # seth does not pull from etherscan if ETHERSCAN_API_KEY is unset
     unset ETHERSCAN_API_KEY
     seth run-tx 0x41ccbab4d7d0cd55f481df7fce449986364bf13e655dddfb30aa9b38a4340db7 --trace > "$trace"
-    assert "grep -q 'call 0x28d2DF1E3481Ba90D75E14b9C02cea85b7d6FA2C::0x485cc9550000000000000000000000007fa7df4' $trace"
-    assert "grep -q 'log3(0xd3648bd0f6ba80134a33ba9275ac585d9d315f0ad8355cddefde31afa28d0e9, 0xffffffffffffffff' $trace"
+    assert "grep -q 'call 0x28d2DF1E3481Ba90D75E14b9C02cea85b7d6FA2C::0x485cc9550000000000000000000000007fa7df4' $trace" "14"
+    assert "grep -q 'log3(0xd3648bd0f6ba80134a33ba9275ac585d9d315f0ad8355cddefde31afa28d0e9, 0xffffffffffffffff' $trace" "15"
 }

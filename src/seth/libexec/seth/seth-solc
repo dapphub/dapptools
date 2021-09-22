@@ -8,11 +8,14 @@
 ###   - DAPP_SOLC_OPTIMIZE_RUNS (default 200)
 ###   - DAPP_SOLC_JSON (must be provided if <source-file> not specified)
 ###
+### You can pass --dir to control the directory in which compilation will occur (default cwd)
+###
 set -e
 
 OPTIMIZE=${DAPP_SOLC_OPTIMIZE:-false}
 RUNS=${DAPP_SOLC_OPTIMIZE_RUNS:-200}
 SOLC=${DAPP_SOLC:-solc}
+SETH_DIR=${SETH_DIR:-.}
 
 if [[ -z "$DAPP_SOLC_JSON" && -z "$1" ]]; then
   seth --fail "must provide either .sol input file or DAPP_SOLC_JSON standard json"
@@ -49,4 +52,4 @@ JSON="$(<<<"$JSON" jq '.
   ')"
 
 ( [[ $SETH_VERBOSE ]] && set -x;
-  echo "$JSON" | $SOLC --standard-json --allow-paths "$(realpath $1)" | jq . )
+  cd "$SETH_DIR" && echo "$JSON" | $SOLC --standard-json --allow-paths "$(realpath "${1:-.}")" | jq . )
