@@ -273,7 +273,10 @@ test_to_fix_roundtrip() {
     for _ in $(seq "$FUZZ_RUNS"); do
       local input digits
       input="$(uint256)"
-      digits="$(mod "$(uint8)" 77)" # 78 decimal digits in max uint256
+
+      length="${#input}"
+      digits="$(mod "$(uint8)" "$length")"
+
       assert_equals "$input" "$(seth --from-fix "$digits" "$(seth --to-fix "$digits" "$input")")"
     done
 }
@@ -282,10 +285,10 @@ test_from_fix_roundtrip() {
     for _ in $(seq "$FUZZ_RUNS"); do
       local input digits
       input="$(uint256)"
-      length="${#input}"
-      digits="$(mod "$(uint8)" 77)" # 78 decimal digits in max uint256
 
-      [[ $digits -ge $length ]] && continue
+      length="${#input}"
+      digits="$(mod "$(uint8)" "$length")"
+
       whole_digits=$(bc <<< "$length - $digits" | tr -d '\\\n')
       input="${input:0:whole_digits}.${input:$whole_digits:$length}"
 
