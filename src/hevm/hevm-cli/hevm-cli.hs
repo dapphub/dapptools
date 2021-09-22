@@ -632,7 +632,7 @@ launchExec cmd = do
   case optsMode cmd of
     Run -> do
       vm' <- execStateT (EVM.Stepper.interpret fetcher . void $ EVM.Stepper.execFully) vm
-      when (trace cmd) $ hPutStr stdout $ showTraceTree dapp vm'
+      when (trace cmd) $ hPutStr stderr (showTraceTree dapp vm')
       case view EVM.result vm' of
         Nothing ->
           error "internal error; no EVM result"
