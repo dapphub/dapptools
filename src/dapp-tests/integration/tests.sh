@@ -6,12 +6,12 @@ set -euo pipefail
 #                CONFIGURATION
 # ------------------------------------------------
 
-SKIP_SETUP=${SKIP_SETUP:-0}
-FUZZ_RUNS=${FUZZ_RUNS:-100}
-TESTNET_SLEEP=${TESTNET_SLEEP:-5}
-ETHERSCAN_API_KEY=${ETHERSCAN_API_KEY:-15IS6MMRAYB19NZN9VHH6H6P57892Z664M}
-RINKEBY_RPC_URL=${RINKEBY_RPC_URL:-https://rinkeby.infura.io/v3/84842078b09946638c03157f83405213}
-ARCHIVE_NODE_URL=${ARCHIVE_NODE_URL:-https://eth-mainnet.alchemyapi.io/v2/vpeKFsEF6PHifHzdtcwXSDbhV3ym5Ro4}
+export SKIP_SETUP=${SKIP_SETUP:-0}
+export FUZZ_RUNS=${FUZZ_RUNS:-100}
+export TESTNET_SLEEP=${TESTNET_SLEEP:-5}
+export RINKEBY_RPC_URL=${RINKEBY_RPC_URL:-https://rinkeby.infura.io/v3/84842078b09946638c03157f83405213}
+export ARCHIVE_NODE_URL=${ARCHIVE_NODE_URL:-https://eth-mainnet.alchemyapi.io/v2/vpeKFsEF6PHifHzdtcwXSDbhV3ym5Ro4}
+export ETHERSCAN_API_KEY=${ETHERSCAN_API_KEY:-15IS6MMRAYB19NZN9VHH6H6P57892Z664M}
 
 # ------------------------------------------------
 #                SHARED SETUP
@@ -20,16 +20,17 @@ ARCHIVE_NODE_URL=${ARCHIVE_NODE_URL:-https://eth-mainnet.alchemyapi.io/v2/vpeKFs
 # we spin up a new testnet instance and share it between all tests
 setup_suite() {
     if [[ "$SKIP_SETUP" != 1 ]]; then
-        TMPDIR=$(mktemp -d)
+        export GETHDIR
+        GETHDIR=$(mktemp -d)
 
-        dapp testnet --dir "$TMPDIR" &
+        dapp testnet --dir "$GETHDIR" &
         # give it a few secs to start up
         sleep "$TESTNET_SLEEP"
 
         export ETH_RPC_URL="http://127.0.0.1:8545"
-        export ETH_KEYSTORE="$TMPDIR/8545/keystore"
+        export ETH_KEYSTORE="$GETHDIR/8545/keystore"
         export ETH_PASSWORD=/dev/null
-        read -r ROOT _ <<< "$(seth ls --keystore "$TMPDIR/8545/keystore")"
+        read -r ROOT _ <<< "$(seth ls --keystore "$GETHDIR/8545/keystore")"
     fi
 }
 
@@ -37,7 +38,7 @@ setup_suite() {
 teardown_suite() {
     if [[ "$SKIP_SETUP" != 1 ]]; then
         killall geth
-        rm -rf "$TMPDIR"
+        rm -rf "$GETHDIR"
     fi
 }
 
@@ -115,24 +116,25 @@ alpha() {
 # `seth run-tx`
 # `hevm exec`
 test_smoke() {
-    local account
+    local account bytecode
     account=$(fresh_account)
+    bytecode=$(mktemp -d)
 
     # Deploy a simple contract:
-    solc --bin --bin-runtime "$CONTRACTS/stateful.sol" -o "$TMPDIR"
+    solc --bin --bin-runtime "$CONTRACTS/stateful.sol" -o "$bytecode"
 
-    A_ADDR=$(seth send --create "$(<"$TMPDIR"/A.bin)" "constructor(uint y)" 1 --from "$account" --keystore "$TMPDIR"/8545/keystore --password /dev/null --gas 0xffffff)
+    A_ADDR=$(seth send --create "$(<"$bytecode"/A.bin)" "constructor(uint y)" 1 --from "$account" --gas 0xffffff)
 
     # Compare deployed code with what solc gives us
-    assert_equals 0x"$(cat "$TMPDIR"/A.bin-runtime)" "$(seth code "$A_ADDR")"
+    assert_equals 0x"$(cat "$bytecode"/A.bin-runtime)" "$(seth code "$A_ADDR")"
 
     # And with what hevm gives us
     EXTRA_CALLDATA=$(seth --to-uint256 1)
-    HEVM_RET=$(hevm exec --code "$(<"$TMPDIR"/A.bin)""${EXTRA_CALLDATA/0x/}" --gas 0xffffff)
+    HEVM_RET=$(hevm exec --code "$(<"$bytecode"/A.bin)""${EXTRA_CALLDATA/0x/}" --gas 0xffffff)
 
     assert_equals "$HEVM_RET" "$(seth code "$A_ADDR")"
 
-    TX=$(seth send "$A_ADDR" "off()" --gas 0xffff --password /dev/null --from "$account" --keystore "$TMPDIR"/8545/keystore --async)
+    TX=$(seth send "$A_ADDR" "off()" --gas 0xffff --password /dev/null --from "$account" --async)
 
     # since we have one tx per block, seth run-tx and seth debug are equivalent
     assert_equals 0x "$(seth run-tx "$TX" --no-src)"
@@ -142,16 +144,13 @@ test_smoke() {
         --gas 0xffff \
         --password /dev/null \
         --from "$account" \
-        --keystore "$TMPDIR"/8545/keystore \
         --prio-fee 2gwei \
         --gas-price 10gwei
 
-    B_ADDR=$(seth send \
-        --create 0x647175696e6550383480393834f3 \
+    B_ADDR=$(seth send --create 0x647175696e6550383480393834f3 \
         --gas 0xffff \
         --password /dev/null \
         --from "$account" \
-        --keystore "$TMPDIR"/8545/keystore \
         --prio-fee 2gwei \
         --gas-price 10gwei)
 
@@ -167,22 +166,22 @@ test_seth_send_address_formats() {
     export ETH_GAS=0xffff
 
     # with checksummed
-    tx=$(seth send "$ZERO" --from "$acc" --password /dev/null --value "$(seth --to-wei 1 ether)" --keystore "$TMPDIR"/8545/keystore --async)
+    tx=$(seth send "$ZERO" --from "$acc" --password /dev/null --value "$(seth --to-wei 1 ether)" --async)
     assert_equals "$lower" "$(seth tx "$tx" from)"
 
     # without checksum
-    tx=$(seth send "$ZERO" --from "$lower" --password /dev/null --value "$(seth --to-wei 1 ether)" --keystore "$TMPDIR"/8545/keystore --async)
+    tx=$(seth send "$ZERO" --from "$lower" --password /dev/null --value "$(seth --to-wei 1 ether)" --async)
     assert_equals "$lower" "$(seth tx "$tx" from)"
 
     # try again with eth_rpc_accounts
     export ETH_RPC_ACCOUNTS=true
 
     # with checksummed
-    tx=$(seth send "$ZERO" --from "$acc" --password /dev/null --value "$(seth --to-wei 1 ether)" --keystore "$TMPDIR"/8545/keystore --async)
+    tx=$(seth send "$ZERO" --from "$acc" --password /dev/null --value "$(seth --to-wei 1 ether)" --async)
     assert_equals "$lower" "$(seth tx "$tx" from)"
 
     # without checksum
-    tx=$(seth send "$ZERO" --from "$lower" --password /dev/null --value "$(seth --to-wei 1 ether)" --keystore "$TMPDIR"/8545/keystore --async)
+    tx=$(seth send "$ZERO" --from "$lower" --password /dev/null --value "$(seth --to-wei 1 ether)" --async)
     assert_equals "$lower" "$(seth tx "$tx" from)"
 }
 
@@ -205,14 +204,14 @@ test_hevm_symbolic() {
 }
 
 test_custom_solc_json() {
-    TMPDIR=$(mktemp -d)
+    tmp=$(mktemp -d)
 
     # copy source file
-    mkdir -p "$TMPDIR/src"
-    cp "$CONTRACTS/factor.sol" "$TMPDIR/src"
+    mkdir -p "$tmp/src"
+    cp "$CONTRACTS/factor.sol" "$tmp/src"
 
     # init dapp project
-    cd "$TMPDIR" || exit
+    cd "$tmp" || exit
     export GIT_CONFIG_NOSYSTEM=1
     export GIT_AUTHOR_NAME=dapp
     export GIT_AUTHOR_EMAIL=dapp@hub.lol
@@ -256,7 +255,7 @@ test_block_1() {
 }
 
 test_decimal_roundtrip() {
-    for _ in $(seq $FUZZ_RUNS); do
+    for _ in $(seq "$FUZZ_RUNS"); do
       local input
       input=$(uint256)
       assert_equals "$input" "$(seth --to-dec "$(seth --to-hex "$input")")"
@@ -264,7 +263,7 @@ test_decimal_roundtrip() {
 }
 
 test_hex_roundtrip() {
-    for _ in $(seq $FUZZ_RUNS); do
+    for _ in $(seq "$FUZZ_RUNS"); do
       local input
       input="0x$(bytes32)"
       lower=$(echo "$input" | tr '[:upper:]' '[:lower:]')
@@ -273,7 +272,7 @@ test_hex_roundtrip() {
 }
 
 test_to_fix_roundtrip() {
-    for _ in $(seq $FUZZ_RUNS); do
+    for _ in $(seq "$FUZZ_RUNS"); do
       local input digits
       input="$(uint256)"
       digits="$(mod "$(uint8)" 77)" # 78 decimal digits in max uint256
@@ -282,7 +281,7 @@ test_to_fix_roundtrip() {
 }
 
 test_from_fix_roundtrip() {
-    for _ in $(seq $FUZZ_RUNS); do
+    for _ in $(seq "$FUZZ_RUNS"); do
       local input digits
       input="$(uint256)"
       length="${#input}"
@@ -516,21 +515,21 @@ test_resolve_name1() {
 
 test_resolve_name2() {
     assert_equals \
-      "$(seth resolve-name seth-test.eth --rpc-url=$RINKEBY_RPC_URL)" \
-      "$(seth resolve-name sEtH-tESt.etH --rpc-url=$RINKEBY_RPC_URL)"
+      "$(seth resolve-name seth-test.eth --rpc-url="$RINKEBY_RPC_URL")" \
+      "$(seth resolve-name sEtH-tESt.etH --rpc-url="$RINKEBY_RPC_URL")"
 }
 
 test_lookup_address1() {
     # using example from ethers docs: https://docs.ethers.io/v5/single-page/#/v5/api/providers/provider/-%23-Provider-lookupAddress
     local output
-    output=$(seth lookup-address 0x49c92F2cE8F876b070b114a6B2F8A60b83c281Ad --rpc-url=$RINKEBY_RPC_URL)
+    output=$(seth lookup-address 0x49c92F2cE8F876b070b114a6B2F8A60b83c281Ad --rpc-url="$RINKEBY_RPC_URL")
     assert_equals "seth-test.eth" "$output"
 }
 
 test_lookup_address2() {
     assert_equals \
-      "$(seth lookup-address 0x49c92F2cE8F876b070b114a6B2F8A60b83c281Ad --rpc-url=$RINKEBY_RPC_URL)" \
-      "$(seth lookup-address 0x49c92f2ce8f876b070b114a6b2f8a60b83c281ad --rpc-url=$RINKEBY_RPC_URL)"
+      "$(seth lookup-address 0x49c92F2cE8F876b070b114a6B2F8A60b83c281Ad --rpc-url="$RINKEBY_RPC_URL")" \
+      "$(seth lookup-address 0x49c92f2ce8f876b070b114a6b2f8a60b83c281ad --rpc-url="$RINKEBY_RPC_URL")"
 }
 
 # SETH 4BYTE TESTS
