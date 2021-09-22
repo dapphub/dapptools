@@ -8,8 +8,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-Contract creations with Dynamic fee transactions.
-
+- Contract creations with Dynamic fee transactions.
+- `seth debug` correctly executes transactions.
 
 ### Changed
 
