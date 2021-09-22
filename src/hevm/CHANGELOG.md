@@ -4,7 +4,6 @@
 
 ## Fixed
 
-- Trace output from `hevm exec --trace` is now output to `stdout`
 - Test contracts with no code (e.g. `abstract` contracts) are now skipped
 - Replay data for invariant tests is now displayed in a form that does not cause errors when used with `dapp test --replay`
 
