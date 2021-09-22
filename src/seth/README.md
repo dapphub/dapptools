@@ -560,6 +560,8 @@ provide source maps in calls to [`seth run-tx`] or [`hevm exec --debug --rpc`](.
 
 Requires the `ETHERSCAN_API_KEY` environment variable to be set.
 
+Use `--dir` to control the directory in which compilation occurs (defaults to current working directory)
+
 ### `seth call`
 
 Call a contract without updating the blockchain.
