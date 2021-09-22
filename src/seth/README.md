@@ -386,7 +386,7 @@ For example, use `seth --to-fix 6 1` to convert 1 USDC into the parsed quantity 
 
 ### `seth --from-wei`
 
-Convert a wei amount into another unit (ETH by default).
+Convert a wei amount into another unit (wei by default).
 
     seth --from-wei <value> [<unit>]
 
