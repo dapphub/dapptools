@@ -161,13 +161,13 @@ test_smoke() {
 # checks that seth send works with both checksummed and unchecksummed addresses
 test_seth_send_address_formats() {
     local account
-    account=$(fresh_account)
+    acc=$(fresh_account)
 
-    lower=$(echo "$account" | tr '[:upper:]' '[:lower:]')
+    lower=$(echo "$acc" | tr '[:upper:]' '[:lower:]')
     export ETH_GAS=0xffff
 
     # with checksummed
-    tx=$(seth send "$ZERO" --from "$ACC" --password /dev/null --value "$(seth --to-wei 1 ether)" --keystore "$TMPDIR"/8545/keystore --async)
+    tx=$(seth send "$ZERO" --from "$acc" --password /dev/null --value "$(seth --to-wei 1 ether)" --keystore "$TMPDIR"/8545/keystore --async)
     assert_equals "$lower" "$(seth tx "$tx" from)"
 
     # without checksum
@@ -178,7 +178,7 @@ test_seth_send_address_formats() {
     export ETH_RPC_ACCOUNTS=true
 
     # with checksummed
-    tx=$(seth send "$ZERO" --from "$ACC" --password /dev/null --value "$(seth --to-wei 1 ether)" --keystore "$TMPDIR"/8545/keystore --async)
+    tx=$(seth send "$ZERO" --from "$acc" --password /dev/null --value "$(seth --to-wei 1 ether)" --keystore "$TMPDIR"/8545/keystore --async)
     assert_equals "$lower" "$(seth tx "$tx" from)"
 
     # without checksum
