@@ -167,4 +167,6 @@ opString (i, o) = let showPc x | x < 0x10 = '0' : showHex x ""
   OpLog x -> "LOG" ++ show x
   OpPush x -> "PUSH " ++ show x
   OpRevert -> "REVERT"
-  OpUnknown x -> "UNKNOWN " ++ show x
+  OpUnknown x -> case x of
+    254 -> "INVALID"
+    _ -> "UNKNOWN " ++ (showHex x "")
