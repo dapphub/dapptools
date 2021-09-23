@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## Changed
+
+- `bytesX` arguments to `hevm abiencode` are automatically padded
+
 ## Fixed
 
 - Test contracts with no code (e.g. `abstract` contracts) are now skipped
