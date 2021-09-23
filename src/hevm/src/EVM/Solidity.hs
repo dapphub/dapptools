@@ -58,6 +58,7 @@ module EVM.Solidity
   , lineSubrange
   , astIdMap
   , astSrcMap
+  , containsLinkerHole
 ) where
 
 import EVM.ABI
@@ -532,10 +533,15 @@ parseMethodInput x =
   , force "internal error: method type" (parseTypeName' x)
   )
 
+containsLinkerHole :: Text -> Bool
+containsLinkerHole = regexMatches "__\\$[a-z0-9]{34}\\$__"
+
 toCode :: Text -> ByteString
 toCode t = case BS16.decode (encodeUtf8 t) of
   Right d -> d
-  Left e -> error e
+  Left e -> if containsLinkerHole t
+            then error "unlinked libraries detected in bytecode"
+            else error e
 
 solidity' :: Text -> IO (Text, Text)
 solidity' src = withSystemTempFile "hevm.sol" $ \path handle -> do
