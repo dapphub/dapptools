@@ -1,5 +1,7 @@
 #! /usr/bin/env bash
 
+set -eo pipefail
+
 # ------------------------------------------------
 #                CONFIGURATION
 # ------------------------------------------------
@@ -459,6 +461,46 @@ test_calldata_19() {
 
     assert_equals "0xc2985578" "$output"
 }
+
+test_calldata_20() {
+    local output
+    output=$(seth calldata 'foo(bytes32, bytes4, bytes16)' '0x' '0x' '0x')
+
+    assert_equals "0x223f0b6000000000000000000000000000000000000000000000000000000000000000200000000000000000000000000000000000000000000000000000000000000003000000000000000000000000000000000000000000000000000000000000006000000000000000000000000000000000000000000000000000000000000000a000000000000000000000000000000000000000000000000000000000000000e000000000000000000000000000000000000000000000000000000000000000052020686579000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000373616400000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000" "$output"
+}
+
+test_sig_1() {
+    assert_equals "0xd2ce7d65" "$(seth sig 'outboundTransfer(address,address,uint256,uint256,uint256,bytes)')"
+}
+
+test_sig_2() {
+    assert_equals "0x6a4f4b05" "$(seth sig 'setKeepers(address[],bool[])')"
+}
+
+test_sig_3() {
+    assert_equals "0xf837dc72" "$(seth sig 'payAll(bytes12,uint128)')"
+}
+
+test_sig_4() {
+    assert_equals "0xd2ce7d65" "$(seth sig 'outboundTransfer(address,address,uint,uint,uint,bytes memory)')"
+}
+
+test_sig_fuzz() {
+    echo
+    for _ in $(seq "$FUZZ_RUNS"); do
+      id=$(mod "$(uint256)" 236272)
+      sig=$(curl -s "https://www.4byte.directory/api/v1/signatures/$id/")
+      [[ "$sig" == '{"detail":"Not found."}' ]] && continue
+      text=$(echo "$sig" | jq -r .text_signature)
+      hex=$(echo "$sig" | jq -r .hex_signature)
+      echo "checking ($id): $text"
+
+      local actual
+      actual=$(seth sig "$text")
+      assert_equals "$hex" "$actual"
+    done
+}
+
 
 test_keccak_1() {
   local output
