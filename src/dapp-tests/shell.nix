@@ -14,5 +14,25 @@ in
 
 mkShell {
   name = "dapp-tests";
-  buildInputs = [ killall bash_unit cacert bashInteractive curl dapp gnumake hevm procps seth solc go-ethereum python-with-pkgs ];
+  buildInputs = [
+    bashInteractive
+    bash_unit
+    bc
+    cacert
+    coreutils
+    curl
+    dapp
+    gnumake
+    go-ethereum
+    hevm
+    jq
+    killall
+    procps
+    python-with-pkgs
+    seth
+    solc
+    util-linux
+    which
+  ];
+  LANG="en_US.UTF-8";
 }
