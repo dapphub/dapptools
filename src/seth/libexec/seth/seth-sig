@@ -17,8 +17,10 @@ for input in $inputs; do
   end=${type: -2} # get the last two characters to check for array types
   if [[ "$end" = "[]" ]]; then
     arg="[]"
-  elif [[ "$type" =~ ^bytes[0-9]+$ || "$type" =~ ^byte$ ]]; then
+  elif [[ "$type" =~ ^byte.*$ ]]; then
     arg="0x"
+  elif [[ "$type" =~ ^string$ ]]; then
+    arg='""'
   else
     arg=0
   fi
