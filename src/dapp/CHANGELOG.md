@@ -19,6 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Dapp can correctly parse replay strings from invariant tests
 - Libraries are properly linked when compiling with solc >= 0.7
+- `dapp --use` will now find solc versions that have been installed systemwide on nixos
 
 ## [0.34.1] - 2021-09-08
 

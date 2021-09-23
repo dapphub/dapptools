@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 Contract creations with Dynamic fee transactions.
+- `seth --use` will now find solc versions that have been installed systemwide on nixos
 
 
 ### Changed
