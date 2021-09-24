@@ -101,6 +101,8 @@ in rec {
 
   libff = self.callPackage (import ./nix/libff.nix) {};
 
+  depend = self.callPackage (import ./src/depend) {};
+
   jays = (
     self.pkgs.haskell.lib.justStaticExecutables
       (self.haskellPackages.callCabal2nix "jays" (./src/jays) {})
