@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"sync"
 	"syscall"
 
 	"github.com/urfave/cli/v2"
@@ -123,7 +124,6 @@ func main() {
 				Name:  "build",
 				Usage: "run all build plans",
 				Action: func(c *cli.Context) error {
-					// TODO: make me parallel
 					// TODO: make me incremental
 					// TODO: handle multiple solc versions
 
@@ -132,19 +132,51 @@ func main() {
 						return err
 					}
 
+					var wg sync.WaitGroup
+					wg.Add(len(plans))
+					solcErrors := map[Error]bool{}
+					goErrors := make(chan error)
+					mutex := &sync.Mutex{}
 					for _, plan := range plans {
-						//fmt.Println(strings.Split(plan)[1:].))
-						out := fmt.Sprintf("out/%s", filepath.Join(strings.Split(plan, "/")[1:]...))
+						go func(plan string) {
+							defer wg.Done()
+							out := fmt.Sprintf("out/%s", filepath.Join(strings.Split(plan, "/")[1:]...))
 
-						stdout, stderr, code := run("solc", "--allow-paths", ".", "--standard-json", plan)
-						if code != 0 {
-							return errors.New(fmt.Sprintln("solc:", stderr))
-						}
+							stdout, stderr, code := run("solc", "--allow-paths", ".", "--standard-json", plan)
+							if code != 0 {
+								goErrors <- errors.New(fmt.Sprintln("solc:", stderr))
+								return
+							}
 
-						err = writeFile(out, []byte(stdout))
-						if err != nil {
-							return err
-						}
+							var output CompilerOutput
+							if err := json.Unmarshal([]byte(stdout), &output); err != nil {
+								goErrors <- err
+								return
+							}
+
+							for _, e := range output.Errors {
+								mutex.Lock()
+								solcErrors[e] = true
+								mutex.Unlock()
+							}
+
+							err = writeFile(out, []byte(stdout))
+							if err != nil {
+								goErrors <- err
+								return
+							}
+						}(plan)
+					}
+
+					wg.Wait()
+					close(goErrors)
+
+					for e := range goErrors {
+						fmt.Println("error:", e)
+					}
+
+					for e, _ := range solcErrors {
+						fmt.Println(colorize(e.FormattedMessage))
 					}
 
 					return nil
@@ -187,6 +219,21 @@ type OptimizerSettings struct {
 	Enabled bool `json:"enabled"`
 	Runs    uint `json:"runs"`
 }
+
+type CompilerOutput struct {
+	Errors []Error `json:"errors"`
+}
+
+type Error struct {
+	Kind             string `json:"type"`
+	Severity         string `json:"severity"`
+	ErrorCode        string `json:"errorCode"`
+	FormattedMessage string `json:"formattedMessage"`
+}
+
+var Reset = "\033[0m"
+var Red = "\033[31m"
+var Yellow = "\033[33m"
 
 // -- parsing --
 
@@ -360,6 +407,18 @@ func getFilesByExt(root string, ext string) ([]string, error) {
 func exists(path string) bool {
 	_, err := os.Stat(path)
 	return !os.IsNotExist(err)
+}
+
+func colorize(err string) string {
+	out := err
+
+	re := regexp.MustCompile(`^(Warning:)`)
+	out = re.ReplaceAllString(out, fmt.Sprintf("%s$1%s", Yellow, Reset))
+
+	re = regexp.MustCompile(`^([A-Z][A-Za-z]+Error:)`)
+	out = re.ReplaceAllString(out, fmt.Sprintf("%s$1%s", Red, Reset))
+
+	return out
 }
 
 func isGitHash(h string) bool {
