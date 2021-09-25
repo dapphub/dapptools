@@ -2,16 +2,16 @@ package main
 
 import (
 	"bytes"
-	"syscall"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"os/exec"
-	"strings"
-	"regexp"
 	"path/filepath"
-	"io/fs"
-	"encoding/json"
+	"regexp"
+	"strings"
+	"syscall"
 
 	"github.com/urfave/cli/v2"
 )
@@ -83,13 +83,19 @@ func main() {
 				Action: func(c *cli.Context) error {
 					// gather all the files in src
 					srcs, err := getFilesByExt("src", ".sol")
-					if err != nil { return err }
+					if err != nil {
+						return err
+					}
 
 					libs, err := getFilesByExt("lib", ".sol")
-					if err != nil { return err }
+					if err != nil {
+						return err
+					}
 
 					remppings, err := mkRemappings("lib")
-					if err != nil { return err }
+					if err != nil {
+						return err
+					}
 
 					// for each output file build a compiler input json
 					inputs := map[string]InputJSON{}
@@ -100,10 +106,14 @@ func main() {
 					// write the inputs as json
 					for k, v := range inputs {
 						j, e := json.Marshal(v)
-						if e != nil { return e }
+						if e != nil {
+							return e
+						}
 
 						e = writeFile(fmt.Sprintf("%s/%s.json", "plans", k), j)
-						if e != nil { return e }
+						if e != nil {
+							return e
+						}
 					}
 
 					return nil
@@ -118,7 +128,9 @@ func main() {
 					// TODO: handle multiple solc versions
 
 					plans, err := getFilesByExt("plans", ".json")
-					if err != nil { return err }
+					if err != nil {
+						return err
+					}
 
 					for _, plan := range plans {
 						//fmt.Println(strings.Split(plan)[1:].))
@@ -130,7 +142,9 @@ func main() {
 						}
 
 						err = writeFile(out, []byte(stdout))
-						if err != nil { return err }
+						if err != nil {
+							return err
+						}
 					}
 
 					return nil
@@ -153,17 +167,17 @@ type SourceFile struct {
 }
 
 type InputJSON struct {
-    Language string `json:"language"`
-	Sources map[string]SourceFile `json:"sources"`
-	Settings SolcSettings `json:"settings"`
+	Language string                `json:"language"`
+	Sources  map[string]SourceFile `json:"sources"`
+	Settings SolcSettings          `json:"settings"`
 }
 
 type SolcSettings struct {
-	Remappings []string `json:"remappings"`
-	Optimizer OptimizerSettings `json:"optimizer"`
-	EvmVersion string `json:"evmVersion"`
-	Libraries LibrarySettings `json:"libraries"`
-	OutputSelection OutputSelection `json:"outputSelection"`
+	Remappings      []string          `json:"remappings"`
+	Optimizer       OptimizerSettings `json:"optimizer"`
+	EvmVersion      string            `json:"evmVersion"`
+	Libraries       LibrarySettings   `json:"libraries"`
+	OutputSelection OutputSelection   `json:"outputSelection"`
 }
 
 type LibrarySettings map[string](map[string]string)
@@ -171,7 +185,7 @@ type OutputSelection map[string](map[string][]string)
 
 type OptimizerSettings struct {
 	Enabled bool `json:"enabled"`
-	Runs uint `json:"runs"`
+	Runs    uint `json:"runs"`
 }
 
 // -- parsing --
@@ -202,8 +216,8 @@ func parseUrl(url string) (string, string, error) {
 func mkSources(sources []string) map[string]SourceFile {
 	out := map[string]SourceFile{}
 	for _, s := range sources {
-		urls := []string{ s }
-		out[s] = SourceFile{ Urls: urls }
+		urls := []string{s}
+		out[s] = SourceFile{Urls: urls}
 	}
 	return out
 }
@@ -211,19 +225,19 @@ func mkSources(sources []string) map[string]SourceFile {
 func mkInputJSON(srcs []string, remappings []string, output string) InputJSON {
 	return InputJSON{
 		Language: "Solidity",
-		Sources: mkSources(srcs),
-		Settings: SolcSettings {
+		Sources:  mkSources(srcs),
+		Settings: SolcSettings{
 			Remappings: remappings,
 			Optimizer: OptimizerSettings{
 				Enabled: true,
-				Runs: 200,
+				Runs:    200,
 			},
 			EvmVersion: "berlin",
-			Libraries: LibrarySettings{},
+			Libraries:  LibrarySettings{},
 			OutputSelection: OutputSelection{
-				output: map[string][]string {
-					"*": []string { "*" },
-					"": []string { "*" },
+				output: map[string][]string{
+					"*": []string{"*"},
+					"":  []string{"*"},
 				},
 			},
 		},
@@ -233,7 +247,9 @@ func mkInputJSON(srcs []string, remappings []string, output string) InputJSON {
 func mkRemappings(path string) ([]string, error) {
 	// list dirs in path
 	dirs, err := listSubDirs(path)
-	if err != nil { return nil, err }
+	if err != nil {
+		return nil, err
+	}
 
 	remappings := []string{}
 	for _, dir := range dirs {
@@ -260,7 +276,9 @@ func mkRemappings(path string) ([]string, error) {
 
 func listSubDirs(path string) ([]string, error) {
 	files, err := os.ReadDir(path)
-	if err != nil { return nil, err }
+	if err != nil {
+		return nil, err
+	}
 
 	dirs := []string{}
 	for _, file := range files {
@@ -275,20 +293,20 @@ func listSubDirs(path string) ([]string, error) {
 func run(name string, args ...string) (string, string, int) {
 	cmd := exec.Command(name, args...)
 
-    var stdout, stderr bytes.Buffer
-    cmd.Stdout = &stdout
-    cmd.Stderr = &stderr
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
 
 	var waitStatus syscall.WaitStatus
 	if err := cmd.Run(); err != nil {
-	  if exitError, ok := err.(*exec.ExitError); ok {
-		waitStatus = exitError.Sys().(syscall.WaitStatus)
-	  }
+		if exitError, ok := err.(*exec.ExitError); ok {
+			waitStatus = exitError.Sys().(syscall.WaitStatus)
+		}
 	} else {
-	  waitStatus = cmd.ProcessState.Sys().(syscall.WaitStatus)
+		waitStatus = cmd.ProcessState.Sys().(syscall.WaitStatus)
 	}
 
-    return string(stdout.Bytes()), string(stderr.Bytes()), waitStatus.ExitStatus()
+	return string(stdout.Bytes()), string(stderr.Bytes()), waitStatus.ExitStatus()
 
 }
 
@@ -296,24 +314,26 @@ func writeFile(path string, bytes []byte) error {
 	dir := filepath.Dir(path)
 	if !exists(dir) {
 		err := os.MkdirAll(dir, 0755)
-		if err != nil { return err }
+		if err != nil {
+			return err
+		}
 	}
 
 	f, err := os.Create(path)
-    if err != nil {
+	if err != nil {
 		return err
 	}
 
-    _, err = f.Write(bytes)
-    if err != nil {
-        f.Close()
-        return err
-    }
+	_, err = f.Write(bytes)
+	if err != nil {
+		f.Close()
+		return err
+	}
 
-    err = f.Close()
-    if err != nil {
-        return err
-    }
+	err = f.Close()
+	if err != nil {
+		return err
+	}
 
 	return nil
 }
@@ -321,11 +341,13 @@ func writeFile(path string, bytes []byte) error {
 func getFilesByExt(root string, ext string) ([]string, error) {
 	var files []string
 	err := filepath.WalkDir(root, func(s string, d fs.DirEntry, e error) error {
-	  if e != nil { return e }
-	  if filepath.Ext(d.Name()) == ext {
-		 files = append(files, s)
-	  }
-	  return nil
+		if e != nil {
+			return e
+		}
+		if filepath.Ext(d.Name()) == ext {
+			files = append(files, s)
+		}
+		return nil
 	})
 
 	if err != nil {
