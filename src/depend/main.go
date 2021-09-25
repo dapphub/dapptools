@@ -88,12 +88,7 @@ func main() {
 						return err
 					}
 
-					libs, err := getFilesByExt("lib", ".sol")
-					if err != nil {
-						return err
-					}
-
-					remppings, err := mkRemappings("lib")
+					remappings, err := mkRemappings("lib")
 					if err != nil {
 						return err
 					}
@@ -101,7 +96,11 @@ func main() {
 					// for each output file build a compiler input json
 					inputs := map[string]InputJSON{}
 					for _, out := range srcs {
-						inputs[out] = mkInputJSON(append(srcs, libs...), remppings, out)
+						ins, err := closure(out, remappings)
+						if err != nil {
+							return err
+						}
+						inputs[out] = mkInputJSON(ins, remappings, out)
 					}
 
 					// write the inputs as json
@@ -132,53 +131,85 @@ func main() {
 						return err
 					}
 
+
+					errs := make(chan error)
+					// we use a set here since we may build the same contract many times
+					solcErrors := map[Error]bool{}
+					mutex := &sync.Mutex{}
+
+					// build all plans in parallel
 					var wg sync.WaitGroup
 					wg.Add(len(plans))
-					solcErrors := map[Error]bool{}
-					goErrors := make(chan error)
-					mutex := &sync.Mutex{}
 					for _, plan := range plans {
-						go func(plan string) {
+
+						// find path to solc binary
+						solc, err := solcFor(plan)
+						if err != nil {
+							return err
+						}
+
+						// spawn build in a new goroutine
+						go func(plan string, solc string) {
 							defer wg.Done()
 							out := fmt.Sprintf("out/%s", filepath.Join(strings.Split(plan, "/")[1:]...))
 
-							stdout, stderr, code := run("solc", "--allow-paths", ".", "--standard-json", plan)
+							fmt.Println("building:", plan)
+
+							// call solc
+							stdout, stderr, code := run(solc, "--allow-paths", ".", "--standard-json", plan)
 							if code != 0 {
-								goErrors <- errors.New(fmt.Sprintln("solc:", stderr))
+								errs <- errors.New(fmt.Sprintln("solc:", stderr))
 								return
 							}
 
+							// extract errors
 							var output CompilerOutput
 							if err := json.Unmarshal([]byte(stdout), &output); err != nil {
-								goErrors <- err
+								fmt.Println(stdout)
+								errs <- err
 								return
 							}
 
-							for _, e := range output.Errors {
+							// collect errors
+							if len(output.Errors) > 0 {
 								mutex.Lock()
-								solcErrors[e] = true
+								for _, e := range output.Errors {
+									solcErrors[e] = true
+								}
 								mutex.Unlock()
 							}
 
+							// serialize compiler output
 							err = writeFile(out, []byte(stdout))
 							if err != nil {
-								goErrors <- err
+								errs <- err
 								return
 							}
-						}(plan)
+
+							errs <- nil
+						}(plan, solc)
+					}
+					// display any internal errors
+					code := 0
+					for range plans {
+						e := <-errs
+						if e != nil {
+							fmt.Println("error:", e)
+							code = 1
+						}
 					}
 
 					wg.Wait()
-					close(goErrors)
 
-					for e := range goErrors {
-						fmt.Println("error:", e)
-					}
-
-					for e, _ := range solcErrors {
+					// display solc diagnostics
+					for e := range solcErrors {
 						fmt.Println(colorize(e.FormattedMessage))
 					}
 
+					// fail if internal errors encountered
+					if code != 0 {
+						os.Exit(code)
+					}
 					return nil
 				},
 			},
@@ -258,6 +289,111 @@ func parseUrl(url string) (string, string, error) {
 	return repo, version, nil
 }
 
+// -- solc version management --
+
+func solcBin(version string) (string, error) {
+	// fetch the derivation we need from dapptools
+	attrVersion := strings.Replace(strings.Replace(version, "-", "_", -1), ".", "_", -1)
+	drv, stderr, code := run(
+		"nix-instantiate",
+		"-A", fmt.Sprintf("solc-static-versions.solc_%s", attrVersion),
+		"https://github.com/dapphub/dapptools/archive/master.tar.gz",
+	)
+	if code != 0 {
+		return "", errors.New(fmt.Sprintln("nix-instantiate:", stderr))
+	}
+
+	// realise the derivation and add a gc root
+	path, stderr, code := run(
+		"nix-store",
+		"--realise",
+		"--indirect",
+		"--add-root", fmt.Sprintf(".dep/solcs/solc-%s", version),
+		strings.TrimSpace(drv),
+	)
+	if code != 0 {
+		return "", errors.New(fmt.Sprintln("nix-store:", stderr))
+	}
+
+	return fmt.Sprintf("%s/bin/solc-%s", strings.TrimSpace(path), version), nil
+}
+
+func solcBinForFile(file string) (string, error) {
+	version, err := solcVersionForFile(file)
+	if err != nil {
+		return "", err
+	}
+
+	solc, err := solcBin(version)
+	if err != nil {
+		return "", err
+	}
+
+	return solc, nil
+}
+
+func solcVersionForFile(file string) (string, error) {
+	contents, err := os.ReadFile(file)
+	if err != nil {
+		return "", err
+	}
+
+	re := regexp.MustCompile(`pragma solidity ([0-9]\.[0-9]\.[0-9]);`)
+	matches := re.FindSubmatch(contents)
+	if len(matches) != 2 {
+		return "", errors.New(fmt.Sprintln("missing version specifier in:", file))
+	}
+
+	return string(matches[1]), nil
+}
+
+func solcBinForPlan(plan string) (string, error) {
+	contents, err := os.ReadFile(plan)
+	if err != nil {
+		return "", err
+	}
+
+	var input InputJSON
+	if err := json.Unmarshal([]byte(contents), &input); err != nil {
+		return "", err
+	}
+
+	version, err := solcVersionForPlan(input)
+	if err != nil {
+		return "", err
+	}
+
+	solc, err := solcBin(version)
+	if err != nil {
+		return "", err
+	}
+
+	return solc, nil
+}
+
+// only supports exact version specifiers atm
+func solcVersionForPlan(plan InputJSON) (string, error) {
+	versions := map[string]bool{}
+	for f := range plan.Settings.OutputSelection {
+		v, err := solcVersionForFile(f)
+		if err != nil {
+			return "", err
+		}
+		versions[v] = true
+	}
+
+	vs := []string{}
+	for v := range versions {
+		vs = append(vs, v)
+	}
+
+	if len(vs) != 1 {
+		return "", errors.New("compiler pragma mismatch")
+	}
+
+	return vs[0], nil
+}
+
 // -- planning --
 
 func mkSources(sources []string) map[string]SourceFile {
@@ -283,8 +419,8 @@ func mkInputJSON(srcs []string, remappings []string, output string) InputJSON {
 			Libraries:  LibrarySettings{},
 			OutputSelection: OutputSelection{
 				output: map[string][]string{
-					"*": []string{"*"},
-					"":  []string{"*"},
+					"*": {"*"},
+					"":  {"*"},
 				},
 			},
 		},
@@ -317,6 +453,30 @@ func mkRemappings(path string) ([]string, error) {
 	}
 
 	return remappings, nil
+}
+
+func closure(file string, remappings []string) ([]string, error) {
+	solc, err := solcBinForFile(file)
+	if err != nil {
+		return nil, err
+	}
+
+	// we ask solc to parse the file, and then from this we can extract the names of all files in the import graph
+	args := append([]string{"--ast-compact-json", "--allow-paths=."}, append(remappings, file)...)
+	stdout, stderr, code := run(solc, args...)
+	if code != 0 {
+		return nil, errors.New(fmt.Sprintln("solc:", stderr))
+	}
+
+	re := regexp.MustCompile(`======= (.+\.sol) =======`)
+	matches := re.FindAllStringSubmatch(stdout, -1)
+
+	files := []string{}
+	for _, m := range matches {
+		files = append(files, m[1])
+	}
+
+	return files, nil
 }
 
 // -- utils --
@@ -415,7 +575,7 @@ func colorize(err string) string {
 	re := regexp.MustCompile(`^(Warning:)`)
 	out = re.ReplaceAllString(out, fmt.Sprintf("%s$1%s", Yellow, Reset))
 
-	re = regexp.MustCompile(`^([A-Z][A-Za-z]+Error:)`)
+	re = regexp.MustCompile(`^([A-Za-z]*Error:)`)
 	out = re.ReplaceAllString(out, fmt.Sprintf("%s$1%s", Red, Reset))
 
 	return out
