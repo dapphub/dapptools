@@ -27,6 +27,13 @@ info() {
   echo >&2 "$FLAGS" "${0##*/}: $ARGS"
 }
 
+colorize() {
+    awk '{
+gsub("Warning:", "\033[1;33m&\033[0m");
+gsub(".*Error:", "\033[1;31m&\033[0m");
+print }'
+}
+
 cd "$DAPP_ROOT"
 
 # use a custom path if DAPP_SOLC is set
@@ -68,7 +75,7 @@ if [[ -z "$DAPP_BUILD_LEGACY" && -z "$DAPP_BUILD_EXTRACT" ]]; then
 
     # pipe errors to stderr
     jq -r 'if .errors then .errors | map(."formattedMessage") | @sh else empty end' "$DAPP_JSON" \
-        | sed -e "s/' //g" -e "s/'//g" 1>&2
+        | sed -e "s/' //g" -e "s/'//g" -e 's/\\\(.\)\\/\1 /g' | colorize 1>&2
     # if sources is empty, the compilation failed
     [[ $(jq -r '.sources' "$DAPP_JSON") = "null" ||  $(jq -r '.sources' "$DAPP_JSON") = {} ]] && exit 1 || exit 0
 

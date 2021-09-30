@@ -47,6 +47,7 @@
 ###
 ###    --debug                    run in hevm interactive mode
 ###    --trace                    dump a trace to stderr
+###    --no-src                   don't try to fetch contract source
 ###    --source=<file>            path to combined.json source
 ###    --state=<dir>              directory to store hevm state in
 ###

@@ -5,9 +5,13 @@
 ###
 ### Run a transaction with hevm in the environment of the given transaction.
 ###
+### Attempts to fetch contract source from etherscan if `ETHERSCAN_API_KEY` is set.
+###
 ### With `--state dir`, load and save state from `dir`
 ### With `--trace`, print the call trace of the transaction.
 ### With `--debug`, execute with hevm's interactive debugger
+### With `--no-src`, do not attempt to fetch contract source from etherscan
+### With `--source`, manually supply a solc compiler output json (implies --no-src)
 set -e
 
 # if the argument begins with 0x, we assume it to be a tx hash
@@ -28,6 +32,12 @@ else
   opts+=(--address "$TO" --calldata "$DATA")
 fi
 
+if [[ -n "$ETHERSCAN_API_KEY" && -z "$DAPP_JSON"  && "$SETH_NOSRC" != yes ]]; then
+    TMP=$(mktemp -d)
+    DAPP_JSON="$TMP/solc.out.json"
+    seth bundle-source --dir "$TMP" "$TO" > "$DAPP_JSON" || :
+fi
+
 opts+=(--caller "$(<<< "$tx" seth --field from)" )
 opts+=(--origin "$(<<< "$tx" seth --field from)")
 opts+=(--value  "$(<<< "$tx" seth --field value)")
@@ -44,4 +54,4 @@ opts+=(--chainid   "${ETH_CHAINID:-$(seth rpc eth_chainId | seth --to-dec)}")
 [[ "$HEVM_TRACE" ]] && opts+=(--trace)
 [[ "$DAPP_JSON" ]]  && opts+=(--json-file "$DAPP_JSON")
 
-([[ $SETH_VERBOSE ]] && set -x; hevm exec "${opts[@]}")
+([[ $SETH_VERBOSE ]] && set -x; [[ $DAPP_JSON ]] && cd "$TMP"; hevm exec "${opts[@]}")

@@ -1,13 +1,15 @@
 #! /usr/bin/env bash
 
-set -euo pipefail
-
 # ------------------------------------------------
 #                CONFIGURATION
 # ------------------------------------------------
 
-FUZZ_RUNS=100
-TESTNET_SLEEP=5
+export SKIP_SETUP=${SKIP_SETUP:-0}
+export FUZZ_RUNS=${FUZZ_RUNS:-100}
+export TESTNET_SLEEP=${TESTNET_SLEEP:-5}
+export RINKEBY_RPC_URL=${RINKEBY_RPC_URL:-https://rinkeby.infura.io/v3/84842078b09946638c03157f83405213}
+export ARCHIVE_NODE_URL=${ARCHIVE_NODE_URL:-https://eth-mainnet.alchemyapi.io/v2/vpeKFsEF6PHifHzdtcwXSDbhV3ym5Ro4}
+export ETHERSCAN_API_KEY=${ETHERSCAN_API_KEY:-15IS6MMRAYB19NZN9VHH6H6P57892Z664M}
 
 # ------------------------------------------------
 #                SHARED SETUP
@@ -15,35 +17,32 @@ TESTNET_SLEEP=5
 
 # we spin up a new testnet instance and share it between all tests
 setup_suite() {
-    if [[ -z "$SKIP_SETUP" ]]; then
-        TMPDIR=$(mktemp -d)
+    if [[ "$SKIP_SETUP" != 1 ]]; then
+        export GETHDIR
+        GETHDIR=$(mktemp -d)
 
-        dapp testnet --dir "$TMPDIR" &
+        dapp testnet --dir "$GETHDIR" &
         # give it a few secs to start up
         sleep "$TESTNET_SLEEP"
 
         export ETH_RPC_URL="http://127.0.0.1:8545"
-        export ETH_KEYSTORE="$TMPDIR/8545/keystore"
+        export ETH_KEYSTORE="$GETHDIR/8545/keystore"
         export ETH_PASSWORD=/dev/null
-        read -r ROOT _ <<< "$(seth ls --keystore "$TMPDIR/8545/keystore")"
+        read -r ROOT _ <<< "$(seth ls --keystore "$GETHDIR/8545/keystore")"
     fi
 }
 
 # cleanup the testnet
 teardown_suite() {
-    if [[ -z "$SKIP_SETUP" ]]; then
+    if [[ "$SKIP_SETUP" != 1 ]]; then
         killall geth
-        rm -rf "$TMPDIR"
+        rm -rf "$GETHDIR"
     fi
 }
 
 # ------------------------------------------------
 #                TEST HELPERS
 # ------------------------------------------------
-
-# Tests for resolve-name and lookup-address use a Rinkeby name that's been registered for 100 years and will not be changed
-# Infura ID source: https://github.com/ethers-io/ethers.js/blob/0d40156fcba5be155aa5def71bcdb95b9c11d889/packages/providers/src.ts/infura-provider.ts#L17
-RINKEBY_RPC_URL=https://rinkeby.infura.io/v3/84842078b09946638c03157f83405213
 
 # generates a new account and gives it some eth, returns the address
 fresh_account() {
@@ -115,43 +114,41 @@ alpha() {
 # `seth run-tx`
 # `hevm exec`
 test_smoke() {
-    local account
+    local account bytecode
     account=$(fresh_account)
+    bytecode=$(mktemp -d)
 
     # Deploy a simple contract:
-    solc --bin --bin-runtime "$CONTRACTS/stateful.sol" -o "$TMPDIR"
+    solc --bin --bin-runtime "$CONTRACTS/stateful.sol" -o "$bytecode"
 
-    A_ADDR=$(seth send --create "$(<"$TMPDIR"/A.bin)" "constructor(uint y)" 1 --from "$account" --keystore "$TMPDIR"/8545/keystore --password /dev/null --gas 0xffffff)
+    A_ADDR=$(seth send --create "$(<"$bytecode"/A.bin)" "constructor(uint y)" 1 --from "$account" --gas 0xffffff)
 
     # Compare deployed code with what solc gives us
-    assert_equals 0x"$(cat "$TMPDIR"/A.bin-runtime)" "$(seth code "$A_ADDR")"
+    assert_equals 0x"$(cat "$bytecode"/A.bin-runtime)" "$(seth code "$A_ADDR")"
 
     # And with what hevm gives us
     EXTRA_CALLDATA=$(seth --to-uint256 1)
-    HEVM_RET=$(hevm exec --code "$(<"$TMPDIR"/A.bin)""${EXTRA_CALLDATA/0x/}" --gas 0xffffff)
+    HEVM_RET=$(hevm exec --code "$(<"$bytecode"/A.bin)""${EXTRA_CALLDATA/0x/}" --gas 0xffffff)
 
     assert_equals "$HEVM_RET" "$(seth code "$A_ADDR")"
 
-    TX=$(seth send "$A_ADDR" "off()" --gas 0xffff --password /dev/null --from "$account" --keystore "$TMPDIR"/8545/keystore --async)
+    TX=$(seth send "$A_ADDR" "off()" --gas 0xffff --password /dev/null --from "$account" --async)
 
     # since we have one tx per block, seth run-tx and seth debug are equivalent
-    assert_equals 0x "$(seth run-tx "$TX")"
+    assert_equals 0x "$(seth run-tx "$TX" --no-src)"
 
     # dynamic fee transactions (EIP-1559)
     seth send "$A_ADDR" "on()" \
         --gas 0xffff \
         --password /dev/null \
         --from "$account" \
-        --keystore "$TMPDIR"/8545/keystore \
         --prio-fee 2gwei \
         --gas-price 10gwei
 
-    B_ADDR=$(seth send \
-        --create 0x647175696e6550383480393834f3 \
+    B_ADDR=$(seth send --create 0x647175696e6550383480393834f3 \
         --gas 0xffff \
         --password /dev/null \
-        --from "$ACC" \
-        --keystore "$TMPDIR"/8545/keystore \
+        --from "$account" \
         --prio-fee 2gwei \
         --gas-price 10gwei)
 
@@ -161,28 +158,28 @@ test_smoke() {
 # checks that seth send works with both checksummed and unchecksummed addresses
 test_seth_send_address_formats() {
     local account
-    account=$(fresh_account)
+    acc=$(fresh_account)
 
-    lower=$(echo "$account" | tr '[:upper:]' '[:lower:]')
+    lower=$(echo "$acc" | tr '[:upper:]' '[:lower:]')
     export ETH_GAS=0xffff
 
     # with checksummed
-    tx=$(seth send "$ZERO" --from "$ACC" --password /dev/null --value "$(seth --to-wei 1 ether)" --keystore "$TMPDIR"/8545/keystore --async)
+    tx=$(seth send "$ZERO" --from "$acc" --password /dev/null --value "$(seth --to-wei 1 ether)" --async)
     assert_equals "$lower" "$(seth tx "$tx" from)"
 
     # without checksum
-    tx=$(seth send "$ZERO" --from "$lower" --password /dev/null --value "$(seth --to-wei 1 ether)" --keystore "$TMPDIR"/8545/keystore --async)
+    tx=$(seth send "$ZERO" --from "$lower" --password /dev/null --value "$(seth --to-wei 1 ether)" --async)
     assert_equals "$lower" "$(seth tx "$tx" from)"
 
     # try again with eth_rpc_accounts
     export ETH_RPC_ACCOUNTS=true
 
     # with checksummed
-    tx=$(seth send "$ZERO" --from "$ACC" --password /dev/null --value "$(seth --to-wei 1 ether)" --keystore "$TMPDIR"/8545/keystore --async)
+    tx=$(seth send "$ZERO" --from "$acc" --password /dev/null --value "$(seth --to-wei 1 ether)" --async)
     assert_equals "$lower" "$(seth tx "$tx" from)"
 
     # without checksum
-    tx=$(seth send "$ZERO" --from "$lower" --password /dev/null --value "$(seth --to-wei 1 ether)" --keystore "$TMPDIR"/8545/keystore --async)
+    tx=$(seth send "$ZERO" --from "$lower" --password /dev/null --value "$(seth --to-wei 1 ether)" --async)
     assert_equals "$lower" "$(seth tx "$tx" from)"
 }
 
@@ -192,27 +189,27 @@ test_hevm_symbolic() {
 
     solc --bin-runtime -o . --overwrite "$CONTRACTS/factor.sol"
     # should find counterexample
-    hevm symbolic --code "$(<A.bin-runtime)" --sig "factor(uint x, uint y)" --smttimeout 40000 --solver cvc4 && error || echo "hevm success: found counterexample"
-    hevm symbolic --code "$(<"$CONTRACTS/dstoken.bin-runtime")" --sig "transferFrom(address, address, uint)" --get-models
+    hevm symbolic --code "$(<A.bin-runtime)" --sig "factor(uint x, uint y)" --smttimeout 40000 --solver cvc4 && fail || echo "hevm success: found counterexample"
+    hevm symbolic --code "$(<"$CONTRACTS/dstoken.bin-runtime")" --sig "transferFrom(address, address, uint)" --get-models &> /dev/null || fail
 
     solc --bin-runtime -o . --overwrite "$CONTRACTS/token.sol"
     # This one explores all paths (cvc4 is better at this)
-    hevm symbolic --code "$(<Token.bin-runtime)" --solver cvc4
+    hevm symbolic --code "$(<Token.bin-runtime)" --solver cvc4 || fail
 
     # The contracts A and B should be equivalent:
     solc --bin-runtime -o . --overwrite "$CONTRACTS/AB.sol"
-    hevm equivalence --code-a "$(<A.bin-runtime)" --code-b "$(<B.bin-runtime)" --solver cvc4
+    hevm equivalence --code-a "$(<A.bin-runtime)" --code-b "$(<B.bin-runtime)" --solver cvc4 || fail
 }
 
 test_custom_solc_json() {
-    TMPDIR=$(mktemp -d)
+    tmp=$(mktemp -d)
 
     # copy source file
-    mkdir -p "$TMPDIR/src"
-    cp "$CONTRACTS/factor.sol" "$TMPDIR/src"
+    mkdir -p "$tmp/src"
+    cp "$CONTRACTS/factor.sol" "$tmp/src"
 
     # init dapp project
-    cd "$TMPDIR" || exit
+    cd "$tmp" || exit
     export GIT_CONFIG_NOSYSTEM=1
     export GIT_AUTHOR_NAME=dapp
     export GIT_AUTHOR_EMAIL=dapp@hub.lol
@@ -256,7 +253,7 @@ test_block_1() {
 }
 
 test_decimal_roundtrip() {
-    for _ in $(seq $FUZZ_RUNS); do
+    for _ in $(seq "$FUZZ_RUNS"); do
       local input
       input=$(uint256)
       assert_equals "$input" "$(seth --to-dec "$(seth --to-hex "$input")")"
@@ -264,7 +261,7 @@ test_decimal_roundtrip() {
 }
 
 test_hex_roundtrip() {
-    for _ in $(seq $FUZZ_RUNS); do
+    for _ in $(seq "$FUZZ_RUNS"); do
       local input
       input="0x$(bytes32)"
       lower=$(echo "$input" | tr '[:upper:]' '[:lower:]')
@@ -273,22 +270,25 @@ test_hex_roundtrip() {
 }
 
 test_to_fix_roundtrip() {
-    for _ in $(seq $FUZZ_RUNS); do
+    for _ in $(seq "$FUZZ_RUNS"); do
       local input digits
       input="$(uint256)"
-      digits="$(mod "$(uint8)" 77)" # 78 decimal digits in max uint256
+
+      length="${#input}"
+      digits="$(mod "$(uint8)" "$length")"
+
       assert_equals "$input" "$(seth --from-fix "$digits" "$(seth --to-fix "$digits" "$input")")"
     done
 }
 
 test_from_fix_roundtrip() {
-    for _ in $(seq $FUZZ_RUNS); do
+    for _ in $(seq "$FUZZ_RUNS"); do
       local input digits
       input="$(uint256)"
-      length="${#input}"
-      digits="$(mod "$(uint8)" 77)" # 78 decimal digits in max uint256
 
-      [[ $digits -ge $length ]] && continue
+      length="${#input}"
+      digits="$(mod "$(uint8)" "$length")"
+
       whole_digits=$(bc <<< "$length - $digits" | tr -d '\\\n')
       input="${input:0:whole_digits}.${input:$whole_digits:$length}"
 
@@ -516,21 +516,21 @@ test_resolve_name1() {
 
 test_resolve_name2() {
     assert_equals \
-      "$(seth resolve-name seth-test.eth --rpc-url=$RINKEBY_RPC_URL)" \
-      "$(seth resolve-name sEtH-tESt.etH --rpc-url=$RINKEBY_RPC_URL)"
+      "$(seth resolve-name seth-test.eth --rpc-url="$RINKEBY_RPC_URL")" \
+      "$(seth resolve-name sEtH-tESt.etH --rpc-url="$RINKEBY_RPC_URL")"
 }
 
 test_lookup_address1() {
     # using example from ethers docs: https://docs.ethers.io/v5/single-page/#/v5/api/providers/provider/-%23-Provider-lookupAddress
     local output
-    output=$(seth lookup-address 0x49c92F2cE8F876b070b114a6B2F8A60b83c281Ad --rpc-url=$RINKEBY_RPC_URL)
+    output=$(seth lookup-address 0x49c92F2cE8F876b070b114a6B2F8A60b83c281Ad --rpc-url="$RINKEBY_RPC_URL")
     assert_equals "seth-test.eth" "$output"
 }
 
 test_lookup_address2() {
     assert_equals \
-      "$(seth lookup-address 0x49c92F2cE8F876b070b114a6B2F8A60b83c281Ad --rpc-url=$RINKEBY_RPC_URL)" \
-      "$(seth lookup-address 0x49c92f2ce8f876b070b114a6b2f8a60b83c281ad --rpc-url=$RINKEBY_RPC_URL)"
+      "$(seth lookup-address 0x49c92F2cE8F876b070b114a6B2F8A60b83c281Ad --rpc-url="$RINKEBY_RPC_URL")" \
+      "$(seth lookup-address 0x49c92f2ce8f876b070b114a6b2f8a60b83c281ad --rpc-url="$RINKEBY_RPC_URL")"
 }
 
 # SETH 4BYTE TESTS
@@ -572,4 +572,64 @@ test_to_fix3() {
 
 test_to_fix4() {
     assert_equals 1.234567890000000000 "$(seth --to-fix 18 1234567890000000000)"
+}
+
+# SETH RUN-TX TESTS
+test_run_tx_source_fetching() {
+    export ETH_RPC_URL=$ARCHIVE_NODE_URL
+    local out err
+    out=$(mktemp)
+    err=$(mktemp)
+
+    # prints a message when source is not available
+    seth run-tx 0xc1511d7fcc498ae8236a18a67786701e6980dcf641b72bcfd4c2a3cd45fb209c --trace 1> "$out" 2> "$err"
+    assert "grep -q 'Contract source code not verified' $err" 1
+    assert "grep -q 'delegatecall 0xAa1c1B3BbbB59930a4E88F87345B8C513cc56Fa6::0x526327f2' $err" 2
+    assert_equals "0x188fffa3a6cd08bdcc3d5bf4add2a2c0ac5e9d94a278ea1630187b3da583a1f0" "$(cat "$out")"
+
+    local prefiles
+    prefiles=$(ls)
+
+    # seth pulls from etherscan by default (flattened)
+    seth run-tx 0x41ccbab4d7d0cd55f481df7fce449986364bf13e655dddfb30aa9b38a4340db7 --trace 1> "$out" 2> "$err"
+    assert "grep -q 'UniswapV2Pair@0x28d2DF1E3481Ba90D75E14b9C02cea85b7d6FA2C' $err" 3
+    assert "grep -q 'PairCreated(UniswapV2Pair@0x28d2DF1E3481Ba90D75E14b9C02cea85b7d6FA2C, 51691)' $err" 4
+    assert_equals "0x00000000000000000000000028d2df1e3481ba90d75e14b9c02cea85b7d6fa2c" "$(cat "$out")"
+
+    # seth does not write any files to the cwd
+    assert_equals "$prefiles" "$(ls)"
+
+    # seth pulls from etherscan by default (stdjson)
+    seth run-tx 0x5da4bf1e5988cf94fd96d2c1dd3f420d2cea1aebe8d1e1c10dd9fe78a2147798 --trace 1> "$out" 2> "$err"
+    assert "grep -q 'ownerOf' $err" 5
+    assert "grep -q 'iFeather@0xD1edDfcc4596CC8bD0bd7495beaB9B979fc50336' $err" 6
+    assert_equals "0x" "$(cat "$out")"
+
+    # seth does not write any files to the cwd
+    assert_equals "$prefiles" "$(ls)"
+
+    # seth does not pull from etherscan if --source is passed
+    seth run-tx 0x41ccbab4d7d0cd55f481df7fce449986364bf13e655dddfb30aa9b38a4340db7 --trace --source /dev/null 1> "$out" 2> "$err"
+    assert "grep -q 'call 0x28d2DF1E3481Ba90D75E14b9C02cea85b7d6FA2C::0x485cc9550000000000000000000000007fa7df4' $err" 7
+    assert "grep -q 'log3(0xd3648bd0f6ba80134a33ba9275ac585d9d315f0ad8355cddefde31afa28d0e9, 0xffffffffffffffff' $err" 8
+    assert_equals "0x00000000000000000000000028d2df1e3481ba90d75e14b9c02cea85b7d6fa2c" "$(cat "$out")"
+
+    # seth does not pull from etherscan if --no-src is passed at the command line
+    seth run-tx 0x41ccbab4d7d0cd55f481df7fce449986364bf13e655dddfb30aa9b38a4340db7 --trace --no-src 1> "$out" 2> "$err"
+    assert "grep -q 'call 0x28d2DF1E3481Ba90D75E14b9C02cea85b7d6FA2C::0x485cc9550000000000000000000000007fa7df4' $err" 9
+    assert "grep -q 'log3(0xd3648bd0f6ba80134a33ba9275ac585d9d315f0ad8355cddefde31afa28d0e9, 0xffffffffffffffff' $err" 10
+    assert_equals "0x00000000000000000000000028d2df1e3481ba90d75e14b9c02cea85b7d6fa2c" "$(cat "$out")"
+
+    # seth does not pull from etherscan if SETH_NOSRC is set to "yes"
+    SETH_NOSRC=yes seth run-tx 0x41ccbab4d7d0cd55f481df7fce449986364bf13e655dddfb30aa9b38a4340db7 --trace 1> "$out" 2> "$err"
+    assert "grep -q 'call 0x28d2DF1E3481Ba90D75E14b9C02cea85b7d6FA2C::0x485cc9550000000000000000000000007fa7df4' $err" 11
+    assert "grep -q 'log3(0xd3648bd0f6ba80134a33ba9275ac585d9d315f0ad8355cddefde31afa28d0e9, 0xffffffffffffffff' $err" 12
+    assert_equals "0x00000000000000000000000028d2df1e3481ba90d75e14b9c02cea85b7d6fa2c" "$(cat "$out")"
+
+    # seth does not pull from etherscan if ETHERSCAN_API_KEY is unset
+    unset ETHERSCAN_API_KEY
+    seth run-tx 0x41ccbab4d7d0cd55f481df7fce449986364bf13e655dddfb30aa9b38a4340db7 --trace 1> "$out" 2> "$err"
+    assert "grep -q 'call 0x28d2DF1E3481Ba90D75E14b9C02cea85b7d6FA2C::0x485cc9550000000000000000000000007fa7df4' $err" 13
+    assert "grep -q 'log3(0xd3648bd0f6ba80134a33ba9275ac585d9d315f0ad8355cddefde31afa28d0e9, 0xffffffffffffffff' $err" 14
+    assert_equals "0x00000000000000000000000028d2df1e3481ba90d75e14b9c02cea85b7d6fa2c" "$(cat "$out")"
 }
