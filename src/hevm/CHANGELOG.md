@@ -2,6 +2,26 @@
 
 ## Unreleased
 
+## Fixed
+
+- Test contracts with no code (e.g. `abstract` contracts) are now skipped
+- Replay data for invariant tests is now displayed in a form that does not cause errors when used with `dapp test --replay`
+
+## [0.48.1] - 2021-09-08
+
+### Added
+
+- Support for 0.8.4 custom error types in stack traces
+
+### Changed
+
+- Contract feching happens synchronously again.
+- Invariants checked before calling methods from targetContracts.
+
+### Fixed
+
+- The block gas limit and basefee are now correctly fetched when running tests via rpc
+
 ## 0.48.0 - 2021-08-03
 
 ### Changed
@@ -17,6 +37,8 @@
 - Removed NoSuchContract failures
 
 ## 0.47.0 - 2021-07-01
+
+### Added
 
 - A new test runner for checking invariants against random reachable contract states.
 - `hevm symbolic` can search for solc 0.8 style assertion violations, and a new `--assertions` flag

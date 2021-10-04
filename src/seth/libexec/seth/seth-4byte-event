@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+### seth-4byte-event -- prints the response from querying 4byte.directory for a given function topic
+### Usage: seth 4byte-event <topic> [<options>]
+###
+### Takes a 32 byte topic and prints the response from querying 4byte.directory for that topic
+
+set -e
+[[ $# -eq 1 ]] || seth --fail-usage "$0"
+
+if [[ $SETH_VERBOSE ]]; then
+  curl -s "https://www.4byte.directory/api/v1/event-signatures/?hex_signature=$1" | jq .
+else
+  curl -s "https://www.4byte.directory/api/v1/event-signatures/?hex_signature=$1" | jq '.results[] | .text_signature' 
+fi

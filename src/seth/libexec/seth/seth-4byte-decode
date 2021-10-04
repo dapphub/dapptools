@@ -1,0 +1,53 @@
+#!/usr/bin/env bash
+### seth-4byte-decode -- queries 4byte.directory to find a matching signature, then decodes the calldata with it
+### Usage: seth 4byte-decode <calldata> [<options>]
+###
+### Queries 4byte.directory to find matching signatures and prompts the user to to select one. The selected
+### signature will be used to decode the calldata.
+
+set -e
+[[ $# -eq 1 ]] || seth --fail-usage "$0"
+
+if [[ -z $SETH_4BYTE_ID ]]; then
+  # Function signature ID not specified, prompt user to choose a signature
+  sigs=$(curl -s "https://www.4byte.directory/api/v1/signatures/?hex_signature=${1:0:10}" | jq '.results[] | .text_signature' )
+  PS3="Select a function signature by number: "
+  select sig in $sigs; do
+    break
+  done
+  echo "" # add a line break for easier reading
+else
+  # Function signature ID was specified, so parse results without user input
+  results=$(curl -s "https://www.4byte.directory/api/v1/signatures/?hex_signature=${1:0:10}" | jq .results[] )
+  sigs=$(echo $results | jq '.text_signature')
+
+  # sigs is a string so split it into an array
+  sigarray=()
+  for sig in $sigs; do sigarray+=($sig); done
+  length=${#sigarray[@]}
+
+  # parse the provided ID
+  if [[ $SETH_4BYTE_ID = earliest ]]; then
+    # first one added to 4byte is the last in the array
+    sig=${sigarray[$length-1]}
+  elif [[ $SETH_4BYTE_ID = latest ]]; then
+     # last one added to 4byte is the first in the array
+     sig=${sigarray[0]}
+  else
+    # specific ID number provided (if using this option, you may be better off with `seth --calldata-decode`)
+    query=". | select(.id==$SETH_4BYTE_ID) | .text_signature"
+    sig=$(echo $results | jq "$query")
+  fi
+fi
+
+# Exit if no sig found
+if [[ -z $sig ]]; then
+  echo >&2 "seth 4byte-decode: no signature found"
+  exit 1
+elif [[ $SETH_VERBOSE ]]; then
+  echo "signature: $sig"
+fi
+
+# Remove leading and trailing quotes from JSON, then decode
+sig="${sig//\"}"
+seth --calldata-decode $sig $1

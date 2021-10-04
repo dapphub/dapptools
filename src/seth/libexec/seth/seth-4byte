@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+### seth-4byte -- prints the response from querying 4byte.directory for a given function signature
+### Usage: seth 4byte <calldata> [<options>]
+###
+### Takes a 4 byte function signature and prints matching functions from 4byte.directory. This will also strip
+### any appended calldata after the first four bytes
+###
+### When the --verbose option is used, the full JSON response is printed, otherwise just text signatures are printed
+
+set -e
+[[ $# -eq 1 ]] || seth --fail-usage "$0"
+
+if [[ $SETH_VERBOSE ]]; then
+  curl -s "https://www.4byte.directory/api/v1/signatures/?hex_signature=${1:0:10}" | jq .
+else
+  curl -s "https://www.4byte.directory/api/v1/signatures/?hex_signature=${1:0:10}" | jq -r '.results[] | .text_signature' 
+fi

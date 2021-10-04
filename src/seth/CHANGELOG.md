@@ -4,29 +4,52 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## unreleased
+## Unreleased
+
+### Changed
+
+- `seth 4byte` command returns the response from querying [4byte.directory](https://www.4byte.directory/) for a given function signature
+- `seth 4byte-decode` command queries 4byte.directory for matching function signatures, uses one to decode the calldata, and prints the decoded calldata
+- `seth 4byte-event` command returns the response from querying 4byte.directory for a given event topic
+- `seth abi-encode` command returns the ABI encoded values without the function signature
+- `seth index` command returns the slot number for the specified mapping type and input data
+- `seth --from-fix` command converts fixed point numbers into parsed integers with the specified number of decimals
+- `seth run-tx` now fetches contract source from etherscan if `ETHERSCAN_API_KEY` is set
+
+### Fixed
+
+- Address lookup no longer fails if `ETH_RPC_ACCOUNTS` is set, and `ETH_FROM` is an unchecksummed address
+- Contract creations with Dynamic fee transactions
+
+## [0.11.0] - 2021-09-08
 
 ### Added
 
 - `seth basefee` command returns basefee for the latest block, or any block with `[blocknumber]` parameter
-
-### Fixed
-
-- seth bundle-source writes the contents of standard-json to the current directory to enable better sourcemaps for multi-file etherscan source code.
-
-### Added 
-
+- `seth namehash <name>` to get the ENS namehash of a name
+- `seth resolve-name <name>` to resolve an ENS name to an address
+- `seth lookup-address <address>` to lookup the ENS name an address reverse resolves to
 - Dynamic transaction fee format transactions (EIP-1559) supported by introducing the flag `--prio-fee` and corresponding environment variable `ETH_PRIO_FEE` to seth and ethsign. If `--prio-fee` is provided (or `ETH_PRIO_FEE`) is set, 1559 transaction will be used and `--gas-price` will reflect the maximum gas price, rather than the absolute gas price.
+- If `ETH_RPC_ACCOUNTS` is set and the account corresponding to `ETH_FROM` exists in the keystore,
+Seth will sign the transaction locally and then publish it signed (previously it'd always send it to the node)
 
 ### Changed
 
 - `--gas-price` will be used as `max-fee` when `--prio-fee` is set
+- [BREAKING] seth will no longer search Parity / OpenEthereum related keystores by default. These
+    keystores can still be searched by setting the `ETH_KEYSTORE` environment variable.
+
+### Fixed
+
+- Fix `--use` bug
+- `seth bundle-source` writes the contents of standard-json to the current directory to enable better sourcemaps for multi-file etherscan source code.
+- `seth estimate` no longer sets a gas limit when estimating gas
 
 ## [0.10.1] - 2021-03-22
 
 ### Added
 
-- Thanks to an upgrade in ethsign, seth is more likely to find your ledger live 
+- Thanks to an upgrade in ethsign, seth is more likely to find your ledger live
 account without having to set `ETH_HDPATH`.
 
 ### Changed

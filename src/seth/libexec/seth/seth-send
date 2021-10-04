@@ -51,9 +51,15 @@ jshon+=(-n {})
 jshon+=($(seth --send-params))
 jshon+=(-i append)
 
-if [[ -z $ETH_RPC_ACCOUNTS ]]; then
+function signAndSend() {
   tx=$(seth mktx "$TO" "$DATA")
   tx=$(seth publish "$tx")
+}
+
+if [[ -z $ETH_RPC_ACCOUNTS ]]; then
+  signAndSend
+elif ethsign ls | grep -qI "$ETH_FROM"; then
+  signAndSend
 else
   tx=$(seth rpc eth_sendTransaction -- "${jshon[@]}")
 fi

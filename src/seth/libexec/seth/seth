@@ -47,9 +47,13 @@
 ###
 ###    --debug                    run in hevm interactive mode
 ###    --trace                    dump a trace to stderr
+###    --no-src                   don't try to fetch contract source
 ###    --source=<file>            path to combined.json source
 ###    --state=<dir>              directory to store hevm state in
 ###
+### Options for seth-4byte-decode(1):
+###
+###    --id                       'earliest' or 'latest' or the ID number of a particular signature
 ###
 ### Other options:
 ###
@@ -105,6 +109,9 @@ no-src               don't fetch contract source
 
   Options for seth-bundle-source(1):
 D,dir=directory      directory to store output
+
+  Options for seth-4byte-decode(1):
+id=string|number     'earliest' or 'latest' or the ID number of a particular signature
 
   Other options:
 async                do not wait for transaction receipt
@@ -185,6 +192,7 @@ while [[ $1 ]]; do
        --async)             export SETH_ASYNC=yes;;
        --follow)            export SETH_FOLLOW=yes;;
     -j|--json)              export SETH_JSON=yes;;
+       --id)         shift; export SETH_4BYTE_ID=$1;;
 
     *) printf "${0##*/}: internal error: %q\\n" "$1"; exit 1
   esac; shift
@@ -213,6 +221,18 @@ if [[ $SETH_CHAIN ]]; then
         ~/{.ethereum,Library/Ethereum}/"$SETH_CHAIN"/keystore/
         ~/{.local/share,Library/Application\ Support}/io.parity.ethereum/keys/"$SETH_CHAIN"/
       )
+      ;;
+    optimism-mainnet)
+      eth_rpc_url=https://optimism-mainnet.infura.io/$INFURA_KEY
+      export ETHERSCAN_API_URL=https://api-optimistic.etherscan.io/api
+      ;;
+    optimism-kovan)
+      eth_rpc_url=https://optimism-kovan.infura.io/$INFURA_KEY
+      export ETHERSCAN_API_URL=https://api-kovan-optimistic.etherscan.io/api
+      ;;
+    arbitrum-mainnet)
+      eth_rpc_url=https://arbitrum-mainnet.infura.io/$INFURA_KEY
+      export ETHERSCAN_API_URL=https://api.arbiscan.io/api
       ;;
     bsctest)
       eth_rpc_url=https://data-seed-prebsc-2-s1.binance.org:8545/

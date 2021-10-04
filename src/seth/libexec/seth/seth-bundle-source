@@ -4,6 +4,8 @@
 ###
 ### Requires an etherscan api key
 ###
+### Use `--dir` to control where the contract source is written (default is cwd)
+###
 set -e
 
 [[ -z "$1" ]] && seth --fail-usage
@@ -17,24 +19,26 @@ SOLC_VERSION=${SOLC_VERSION/+*}
 
 SOURCE="$(jq -r '.SourceCode' <<< "$ETHERSCAN_SRC" | tr -d '\r')"
 
+SETH_DIR=${SETH_DIR:-.}
+
 case "$SOURCE" in
   \{*\})  # standard-json
     # for some reason etherscan surrounds the actual json with '{}'
     SOURCE="${SOURCE/#\{\{/\{}"
     SOURCE="${SOURCE/%\}\}/\}}"
 
-    # write all source files in the local directory
+    # write all source files to SETH_DIR
     for x in $(echo "$SOURCE" | jq '.sources | keys | .[]' -r); do
-        mkdir -p "$(dirname "$x")"
-        echo "$SOURCE" | jq ".sources.\"$x\".content" -r > $x
+        mkdir -p "$SETH_DIR/$(dirname "$x")"
+        echo "$SOURCE" | jq ".sources.\"$x\".content" -r > "$SETH_DIR/$x"
     done;
     export DAPP_SOLC_JSON="$SOURCE"
-    seth --use solc:"${SOLC_VERSION}" solc
+    seth --use solc:"${SOLC_VERSION}" solc --dir "$SETH_DIR"
     ;;
 
   *)  # flattened file
     NAME="$(jq -r '.ContractName' <<< "$ETHERSCAN_SRC")"
-    FILE="${SETH_DIR:-.}/${NAME}.sol"
+    FILE="$SETH_DIR/$NAME.sol"
     echo "$SOURCE" > "$FILE"
     OPT=$(jq -r '.OptimizationUsed' <<< "$ETHERSCAN_SRC")
     if [[ "$OPT" -ne  0 ]]; then

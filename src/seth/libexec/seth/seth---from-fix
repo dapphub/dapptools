@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+### seth---from-fix -- convert fixed point into specified number of decimals
+### Usage: seth --from-fix <decimals> <wei>
+set -e
+[[ $# -eq 2 ]] || seth --fail-usage "$0"
+
+decimals=$1
+number=$2
+
+bc <<<"$number * 10 ^ $decimals / 1" | tr -d '\\\n' # dividing by 1 ensures integer output

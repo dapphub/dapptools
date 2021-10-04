@@ -33,7 +33,7 @@ jshon+=(-n {})
 [[ $TO ]] && jshon+=(-s "$TO" -i to)
 jshon+=(-s "$DATA" -i data)
 # shellcheck disable=SC2207
-jshon+=($(seth --send-params))
+jshon+=($(SETH_PARAMS_NO_GAS=1 seth --send-params))
 jshon+=(-i append)
 [[ $ETH_BLOCK = [0-9]* ]] && ETH_BLOCK=$(seth --to-hex "$ETH_BLOCK")
 : "${ETH_BLOCK:=latest}" # geth doesn't like this argument

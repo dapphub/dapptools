@@ -9,9 +9,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- The output from `dapp build` now uses color to differentiate warnings and errors
+
+### Changed
+
+- Dapp remappings ignores non-directories in `DAPP_LIB`
+
+### Fixed
+
+- Dapp can correctly parse replay strings from invariant tests
+- Libraries are properly linked when compiling with solc >= 0.7
+
+## [0.34.1] - 2021-09-08
+
+### Added
+
 - `DAPP_TEST_DEPTH` env var to control `--depth`
 - `--coverage` flag for `dapp test` to generate coverage via hevm
 - `dapp debug` respects the `DAPP_LINK_TEST_LIBRARIES` environment variable.
+- `dapp install` accepts URLs with git tags, branches or revs specified as `<url>@<tag>`
+
+### Changed
+
+- Dapp debug respects `DAPP_LINK_TEST_LIBRARIES`
+
+### Fixed
+
+- Fix quotation bug in `dapp replay`
 
 ## [0.34.0] - 2021-08-03
 

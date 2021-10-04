@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+### seth-index -- Prints the slot number for the specified mapping type and input data
+### Usage: seth index <fromtype> <totype> <fromvalue> <slot> [<lang>]
+###
+### Prints the slot number for the specified mapping type and input data. For example,
+### the balances mapping in DAI is slot 2, so to find the slot where the balance 
+### is stored for <account>, use
+###     seth-index address uint256 <account> 2
+###
+### `lang` will default to Solidity when not specified. To use Vyper, enter `v`, `vy`,
+### or `vyper`. The above example cna be repeated for a Vyper token with
+###     seth-index address uint256 <account> 2 vyper
+
+set -e
+[[ $# -eq 4 ]] || [[ $# -eq 5 ]] || seth --fail-usage "$0"
+
+if [[ $5 = 'vyper' || $5 = 'vy' || $5 = 'v' ]]; then
+  # note: not guaranteed to be accurate for all Vyper versions since storage layout is not yet stable
+  # more info: https://twitter.com/big_tech_sux/status/1420159854170152963
+  echo >&2 "${0##*/}: warning: not guaranteed to be accurate for all Vyper versions since storage layout is not yet stable"
+  echo $(seth keccak $(seth abi-encode "x($2,$1)" $4 $3));
+else
+  echo $(seth keccak $(seth abi-encode "x($1,$2)" $3 $4));
+fi

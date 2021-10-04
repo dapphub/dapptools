@@ -60,8 +60,9 @@ else:
     addresses=[]
     for lib in os.getenv('DAPP_LIBRARIES')[1:].split(' '):
         f,c,addr = lib.split(':')
-        tmpljson["settings"]["libraries"][""][f + ":" + c] = addr
-
+        if f not in tmpljson["settings"]["libraries"]:
+            tmpljson["settings"]["libraries"][f] = {}
+        tmpljson["settings"]["libraries"][f][c] = addr
 
 tmpljson["settings"]["outputSelection"]={}
 tmpljson["settings"]["outputSelection"]["*"]={}

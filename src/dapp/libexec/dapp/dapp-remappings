@@ -16,17 +16,23 @@ Object.keys(pkg_src).sort((a, b) => a.length - b.length).sort(
 function findRemappings(prefix) {
   ls(`${prefix}/${process.env.DAPP_LIB}`).forEach(name => {
     var lib = `${prefix}/${process.env.DAPP_LIB}`
-    var src = `${lib}/${name}/${process.env.DAPP_SRC}`.replace(/^.\//, "")
+    var path = `${lib}/${name}`
+    var src = `${path}/${process.env.DAPP_SRC}`.replace(/^.\//, "")
+    
+    // If the path is a not a directory, return early.
+    if (!isDir(path)) {
+      return
+    }
 
     // Shortcut when we're ignoring all the Git hash stuff.
     if (process.env.DAPP_IGNORE_HASHES) {
       pkg_src[name] = src
-      findRemappings(`${lib}/${name}`)
+      findRemappings(path)
       return
     }
 
-    if (ls(`${lib}/${name}`).includes(".git") != true) {
-      console.error(`${PROGRAM_NAME}: error: ${lib}/${name} is not a Git repository`)
+    if (ls(path).includes(".git") != true) {
+      console.error(`${PROGRAM_NAME}: error: ${path} is not a Git repository`)
       console.error(`${PROGRAM_NAME}: error: try "dapp update" to initialize submodules`)
       process.exit(1)
     }
@@ -47,7 +53,7 @@ function findRemappings(prefix) {
       pkg_hash[name] = hash
     }
 
-    findRemappings(`${lib}/${name}`)
+    findRemappings(path)
   })
 }
 
@@ -56,6 +62,14 @@ function ls(dir) {
     return require("fs").readdirSync(dir).sort()
   } catch (error) {
     return []
+  }
+}
+
+function isDir(path) {
+  try {
+    return require("fs").lstatSync(path).isDirectory()
+  } catch (error) {
+    return false;
   }
 }
 

@@ -45,7 +45,7 @@ tools](https://github.com/dapphub/dapptools) suite.
 
 ## Basic usage: a tutorial
 
-Lets create a new `dapp` project. We make a new directory and initialize the `dapp` skeleton structure:
+Let's create a new `dapp` project. We make a new directory and initialize the `dapp` skeleton structure:
 
 ```sh
 mkdir dapptutorial
@@ -58,7 +58,7 @@ This creates two contracts, `Dapptutorial.sol` and `Dapptutorial.t.sol` in the `
 
 ### Building
 
-For the sake of this tutorial, lets change `Dapptutorial.sol` to a simple vault with an eth bounty that can be accessed by giving the password 42:
+For the sake of this tutorial, let's change `Dapptutorial.sol` to a simple vault with an eth bounty that can be accessed by giving the password 42:
 
 ```solidity
 pragma solidity ^0.8.6;
@@ -130,7 +130,7 @@ or enter the interactive debugger by running `dapp debug`.
 
 ### Property based testing
 
-Now lets try something more interesting - property based testing and symbolically executed tests.
+Now let's try something more interesting - property based testing and symbolically executed tests.
 
 We can generailize our `test_withdraw` function to not use the hardcoded `1 ether`, but instead take
 the value as a parameter:
@@ -523,6 +523,10 @@ for key bindings for navigation.
     - the URL of a Dapphub repo (https://github.com/dapphub/ds-foo)
     - a path to a repo in another Github org (org-name/repo-name)
 
+You can also specify a version (or branch / commit hash) for the repository by
+suffixing the URL with `@<version>`. `dapp install` will then proceed to
+clone the repository and then `git checkout --recurse-submodules $version`.
+
 If the project you want to install does not follow the typical `dapp` project structure,
 you may need to configure the `DAPP_REMAPPINGS` environment variable to be able to find
 it. For an example, see [this repo](https://github.com/dapp-org/radicle-contracts-tests/).
@@ -547,6 +551,8 @@ Spins up a geth testnet.
 
     dapp-verify-contract -- verify contract source on etherscan
     Usage: dapp verify-contract <path>:<contractname> <address> [constructorArgs]
+    
+Example: `dapp verify-contract src/auth/authorities/RolesAuthority.sol:RolesAuthority 0x9ed0e..`
 
 Requires `ETHERSCAN_API_KEY` to be set.
 

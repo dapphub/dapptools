@@ -13,8 +13,22 @@ if [[ -z "$deps" ]]; then
   dapp help install
   exit
 fi
+
 while read -r unparsed name url; do
+  # get the tag/branch/rev from the repo name if it's specified after the URL with
+  # an '@' delimiter.
+  IFS='@' read -ra repo <<< "$url"
+  url=${repo[0]}
+  tag=${repo[1]}
+  # strip the tag from the name
+  name=${name%@*}
+
   (set -x; git submodule add --force "$url" "lib/$name")
   (set -x; git submodule update --init --recursive "lib/$name")
+  if [ "$tag" ]; then
+    # checkout the tag
+    (set -x; cd "lib/$name" && git checkout --recurse-submodules "$tag" && cd -)
+    git add "lib/$name"
+  fi
   (set -x; git commit -m "dapp install $unparsed")
 done <<<"$deps"

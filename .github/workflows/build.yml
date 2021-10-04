@@ -20,13 +20,16 @@ jobs:
       - uses: actions/checkout@v2
       # v12
       - uses: cachix/install-nix-action@v12
+        with:
+          # https://discourse.nixos.org/t/understanding-binutils-darwin-wrapper-nix-support-bad-substitution/11475/2
+          nix_path: nixpkgs=channel:nixos-unstable
       # v8
       - uses: cachix/cachix-action@v8
         with:
           name: dapp
           signingKey: '${{ secrets.CACHIX_SIGNING_KEY }}'
       - name: run dapp tests
-        run: nix-shell --pure src/dapp-tests/shell.nix --command 'make --directory src/dapp-tests'
+        run: nix-shell --pure src/dapp-tests/shell.nix --command 'make ci --directory src/dapp-tests'
       - name: run hevm symbolic tests
         run: nix-build -j 1 -A hevm-tests
       - run: nix-collect-garbage

@@ -7,9 +7,9 @@ for x; do
   # matches strings like foo/bar
   if [[ ${x:?} =~ ^[^/]+/([^/]+)$ ]]; then
     echo "$x" "${BASH_REMATCH[1]}" "https://github.com/$x"
-  # matches strings like foo@bar, foo:bar or /foo/bar
-  elif [[ $x =~ .*[@:/](.*) ]]; then
-    name=${BASH_REMATCH[1]%.*}
+  # matches strings like foo:bar or /foo/bar
+  elif [[ $x =~ .*[:/](.*) ]]; then
+    name=${BASH_REMATCH[1]}
     echo "$x" "${name:?}" "$x"
   else
     echo "$x" "$x" "https://github.com/dapphub/$x"

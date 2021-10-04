@@ -57,6 +57,7 @@ hardware wallets—even if you use a remote RPC node like Infura's.
   - [`seth --calldata-decode`]
   - [`seth --from-ascii`]
   - [`seth --from-bin`]
+  - [`seth --from-fix`]
   - [`seth --from-wei`]
   - [`seth --max-int`]
   - [`seth --max-uint`]
@@ -65,10 +66,15 @@ hardware wallets—even if you use a remote RPC node like Infura's.
   - [`seth --to-ascii`]
   - [`seth --to-bytes32`]
   - [`seth --to-dec`]
+  - [`seth --to-fix`]
   - [`seth --to-hex`]
   - [`seth --to-int256`]
   - [`seth --to-uint256`]
   - [`seth --to-wei`]
+  - [`seth 4byte`]
+  - [`seth 4byte-decode`]
+  - [`seth 4byte-event`]
+  - [`seth abi-encode`]
   - [`seth age`]
   - [`seth balance`]
   - [`seth basefee`]
@@ -85,7 +91,7 @@ hardware wallets—even if you use a remote RPC node like Infura's.
   - [`seth etherscan-source`]
   - [`seth events`]
   - [`seth gas-price`]
-  - [`seth help`]
+  - [`seth index`]
   - [`seth keccak`]
   - [`seth logs`]
   - [`seth lookup-address`]
@@ -189,6 +195,9 @@ the `ETH_RPC_ACCOUNTS` variable or use the `--rpc-accounts` flag.
 This probably means you need to use Geth's or Parity's account
 management tools to "unlock" your account.
 
+If both `ETH_RPC_ACCOUNTS` and `ETH_FROM` are set, `seth` will first check if the
+provided account can be found in the keystore, or in any connected hardware
+wallet, and only use the RPC node's signer if the account does not exist.
 Note: Seth uses the [`ethsign`] tool for signing transactions.
 This tool uses Geth as a library.
 
@@ -367,9 +376,17 @@ Convert binary data into hex data.
 
 Reads binary data from standard input and prints it as hex data.
 
+### `seth --from-fix`
+
+Convert fixed point numbers into parsed integers with the specified number of decimals.
+
+    seth --from-fix <decimals> <value>
+
+For example, use `seth --to-fix 6 1` to convert 1 USDC into the parsed quantity of 1,000,000 USDC
+
 ### `seth --from-wei`
 
-Convert a wei amount into another unit (ETH by default).
+Convert a wei amount into another unit (wei by default).
 
     seth --from-wei <value> [<unit>]
 
@@ -423,6 +440,14 @@ Convert a hex value with 0x prefix into a decimal number.
 
     seth --to-dec <hexvalue>
 
+### `seth --to-fix`
+
+Convert parsed integers into fixed point with the specified number of decimals.
+
+    seth --to-fix <decimals> <value>
+
+For example, use `seth --to-fix 6 1000000` to convert the parsed amount of 1,000,000 USDC into a formatted amount of 1 USDC.
+
 ### `seth --to-hex`
 
 Convert a decimal number into a hex value.
@@ -448,6 +473,46 @@ Convert an ETH amount into wei.
     seth --to-wei <value> [<unit>]
 
 The unit may be `wei`, `gwei`, `eth`, or `ether`.
+
+### `seth 4byte`
+
+Prints the response from querying [4byte.directory](https://www.4byte.directory/) for a given function signature
+
+    seth 4byte <calldata> [<options>]
+
+Any calldata appended after the function signature will be stripped before querying 4byte.directory.
+
+By default, just the signatures will be printed, but the `-v` flag can be used to print the full JSON response.
+
+### `seth 4byte-decode`
+
+Queries [4byte.directory](https://www.4byte.directory/) for matching function signatures, uses one to decode the calldata, and prints the decoded calldata.
+
+    seth 4byte-decode <calldata> [<options>]
+
+By default, the user will be prompted to select a function signature to use for decoding the calldata.
+
+The `--id` flag can be passed to bypass interactive mode.
+Use `--id earliest` or `--id latest` to use the oldest and newest functions in the 4byte.directory database, respectively.
+Use `--id <number>` to select a function signature by it's ID in the 4byte.directory database.
+
+### `seth 4byte-event`
+
+Prints the response from querying [4byte.directory](https://www.4byte.directory/) for a given event topic
+
+    seth 4byte-event <topic> [<options>]
+
+By default, just the signatures will be printed, but the `-v` flag can be used to print the full JSON response.
+
+### `seth abi-encode`
+
+Prints the ABI encoded values without the function signature
+
+    seth abi-encode <sig> [<args>]
+
+ABI encode values based on a provided function signature, slice off the leading the function signature,
+and print the result. It does not matter what the name of the function is, as only the types and values
+affect the output.
 
 ### `seth age`
 
@@ -494,6 +559,8 @@ provide source maps in calls to [`seth run-tx`] or [`hevm exec --debug --rpc`](.
     seth bundle-source <address>
 
 Requires the `ETHERSCAN_API_KEY` environment variable to be set.
+
+Use `--dir` to control the directory in which compilation occurs (defaults to current working directory)
 
 ### `seth call`
 
@@ -557,7 +624,7 @@ Print the symbolic name of the current blockchain by checking the
 genesis block hash.
 
 Outputs one of `ethlive`, `etclive`, `kovan`, `ropsten`, `goerli`, `morden`,
-`rinkeby`, or `unknown`.
+`rinkeby`, `optimism-mainnet`, `optimism-kovan`, `arbitrum-mainnet`, `bsc`, `bsctest`, `kotti`, or `unknown`.
 
 ### `seth chain-id`
 
@@ -628,6 +695,17 @@ See also [`seth logs`] which does not decode events.
 
 Reads the current gas price at target chain.
 
+### `seth index`
+
+Prints the slot number for the specified mapping type and input data
+
+    seth index <fromtype> <totype> <fromvalue> <slot> [<lang>]
+
+`lang` will default to Solidity when not specified.
+To compute the slot for Vyper instead, specify `v`, `vy`, or `vyper`.
+
+Result is not guaranteed to be accurate for all Vyper versions since the Vyper storage layout is not yet stable.
+
 ### `seth keccak`
 
 Print the Keccak-256 hash of an arbitrary piece of data.
@@ -650,8 +728,8 @@ ABI specification.
 
 ### `seth lookup-address`
 
-Print the address the provided ENS name resolves to. If the name is not
-owned or does not have a resolver configured, an `invalid data for
+Print the ENS name the provided address reverse resolves to. If the name is
+not owned or does not have a resolver configured, an `invalid data for
 function output` error will be thrown. An error will also be thrown
 if the forward and reverse resolution do not match.
 
@@ -726,16 +804,17 @@ so users must ensure the ENS names they enter are properly formatted.
 
 ### `seth run-tx`
 
-Execute a transaction using `hevm`.
+Run a transaction with hevm in the environment of the given transaction.
 
     seth run-tx <tx-hash> [<options>]
 
+Attempts to fetch contract source from etherscan if `ETHERSCAN_API_KEY` is set.
+
 With `--state dir`, load and save state from `dir`
-With `--trace`, run in headless mode and print the call trace of the transaction.
+With `--trace`, print the call trace of the transaction.
 With `--debug`, execute with hevm's interactive debugger
-Use `--source=<filename>` to pass source information for a more illuminating experience.
-Source files can be fetched remotely via [`seth bundle-source`],
-but you can use the output of [`dapp build`](../dapp/README.md#dapp-build) here.
+With `--no-src`, do not attempt to fetch contract source from etherscan
+With `--source=<filename>`, manually supply a solc compiler output json (implies `--no-src`)
 
 ### `seth send`
 
@@ -807,7 +886,9 @@ Show all fields unless `<field>` is given.
 [`seth --abi-decode`]: #seth---abi-decode
 [`seth --from-ascii`]: #seth---from-ascii
 [`seth --from-bin`]: #seth---from-bin
+[`seth --from-fix`]: #seth---from-fix
 [`seth --from-wei`]: #seth---from-wei
+[`seth --to-fix`]: #seth---to-fix
 [`seth --to-wei`]: #seth---to-wei
 [`seth --to-int256`]: #seth---to-int256
 [`seth --to-uint256`]: #seth---to-uint256
@@ -822,6 +903,10 @@ Show all fields unless `<field>` is given.
 [`seth --calldata-decode`]: #seth---calldata-decode
 [`seth block-number`]: #seth-block-number
 [`seth gas-price`]: #seth-gas-price
+[`seth 4byte`]: #seth-4byte
+[`seth 4byte-decode`]: #seth-4byte-decode
+[`seth 4byte-event`]: #seth-4byte-event
+[`seth abi-encode`]: #seth-abi-encode
 [`seth abi`]: #seth-abi
 [`seth age`]: #seth-age
 [`seth balance`]: #seth-balance
@@ -838,6 +923,7 @@ Show all fields unless `<field>` is given.
 [`seth etherscan-source`]: #seth-etherscan-source
 [`seth events`]: #seth-events
 [`seth help`]: #seth-help
+[`seth index`]: #seth-index
 [`seth keccak`]: #seth-keccak
 [`seth logs`]: #seth-logs
 [`seth lookup-address`]: #seth-lookup-address
