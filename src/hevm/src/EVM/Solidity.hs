@@ -540,7 +540,7 @@ toCode t = case BS16.decode (encodeUtf8 t) of
 solidity' :: Text -> IO (Text, Text)
 solidity' src = withSystemTempFile "hevm.sol" $ \path handle -> do
   hClose handle
-  writeFile path ("//SPDX-License-Identifier: UNLICENSED\n" <> "pragma solidity ^0.8.6;\n" <> src)
+  writeFile path ("//SPDX-License-Identifier: UNLICENSED\n" <> "pragma solidity ^0.8.9;\n" <> src)
   writeFile (path <> ".json")
     [Here.i|
     {
