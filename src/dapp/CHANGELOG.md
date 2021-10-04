@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- solc 0.8.9 is now the default compiler version
 - Dapp remappings ignores non-directories in `DAPP_LIB`
 
 ### Fixed
