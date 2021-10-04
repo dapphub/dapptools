@@ -159,4 +159,24 @@ in rec {
   secp256k1 = super.secp256k1.overrideDerivation (_: {
     dontDisableStatic = true;
   });
+
+  universalmutator = with super.python3Packages; buildPythonPackage rec {
+    pname = "universalmutator";
+    version = "1.0.12";
+
+    format = "wheel";
+
+    propagatedBuildInputs = [ python-Levenshtein setuptools ];
+
+    src = fetchPypi {
+      inherit pname version format;
+      python = "py3";
+      sha256 = "sha256-HHJuoqlKPV3aus+fZE+pAzeoiTNPrXO+Put5TyCmAOc=";
+    };
+
+    meta = with lib; {
+      maintainers = with maintainers; [ xwvvvvwx ];
+      description = "regex based mutation testing tool";
+    };
+  };
 }
