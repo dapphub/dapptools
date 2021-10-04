@@ -118,7 +118,7 @@ Counterexamples will be returned for any reachable assertion violations. Where a
 violation is defined as either an execution of the invalid opcode (`0xfe`), or a revert with a
 message of the form `abi.encodeWithSelector('Panic(uint256)', errCode)` with `errCode` being one of
 the predefined solc assertion codes defined
-[here](https://docs.soliditylang.org/en/v0.8.9/control-structures.html#panic-via-assert-and-error-via-require).
+[here](https://docs.soliditylang.org/en/latest/control-structures.html#panic-via-assert-and-error-via-require).
 
 By default hevm ignores assertion violations that result from arithmetic overflow (`Panic(0x11)`),
 although this behaviour can be customised via the `--assertions` flag. For example, the following
