@@ -132,14 +132,6 @@ let
     "redundantAssignEliminator/for_continue_3.yul"
     "controlFlowSimplifier/terminating_for_revert.yul"
 
-    # --- invalid test ---
-    # https://github.com/ethereum/solidity/issues/9500
-
-    "commonSubexpressionEliminator/object_access.yul"
-    "expressionSplitter/object_access.yul"
-    "fullSuite/stack_compressor_msize.yul"
-    "varNameCleaner/function_names.yul"
-
     # --- stack too deep ---
 
     "fullSuite/abi2.yul"
