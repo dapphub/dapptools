@@ -176,7 +176,7 @@ We can symbolically explore all possibilities to find the one that lets us withd
 
 ```solidity
 function proveFail_withdraw(uint guess) public {
-    address(dapptutorial).transfer(1 ether);
+    payable(address(dapptutorial)).transfer(1 ether);
     uint preBalance = address(this).balance;
     dapptutorial.withdraw(guess);
     uint postBalance = address(this).balance;
