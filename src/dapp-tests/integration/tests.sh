@@ -485,6 +485,10 @@ test_sig_4() {
     assert_equals "0xd2ce7d65" "$(seth sig 'outboundTransfer(address,address,uint,uint,uint,bytes memory)')"
 }
 
+test_sig_5() {
+    assert_equals "0xe548799c" "$(seth sig 'registerCrowdsale(address,address,uint256[8])')"
+}
+
 test_sig_fuzz() {
     echo
     for _ in $(seq "$FUZZ_RUNS"); do
