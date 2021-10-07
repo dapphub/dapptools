@@ -10,7 +10,8 @@ module EVM.Flatten (flatten) where
 -- This module is mostly independent from the rest of Hevm,
 -- using only the source code metadata support modules.
 
-import EVM.Dapp (DappInfo, dappSources, regexMatches)
+import EVM.Dapp (DappInfo, dappSources)
+import EVM.Types (regexMatches)
 import EVM.Solidity (sourceAsts)
 import EVM.Demand (demand)
 
@@ -218,7 +219,7 @@ joinLicenses asts =
 maximalPragma :: [Value] -> Text
 maximalPragma asts = (
     case mapMaybe versions asts of
-      [] -> "" -- allow for no pragma 
+      [] -> "" -- allow for no pragma
       xs ->
         "pragma solidity "
           <> pack (show (rangeIntersection xs))

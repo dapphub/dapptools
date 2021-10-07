@@ -7,7 +7,7 @@ import EVM (Trace, traceContract, traceOpIx, ContractCode(..), Contract(..), cod
 import EVM.ABI (Event, AbiType, SolError)
 import EVM.Debug (srcMapCodePos)
 import EVM.Solidity
-import EVM.Types (W256, abiKeccak, keccak, Buffer(..), Addr)
+import EVM.Types (W256, abiKeccak, keccak, Buffer(..), Addr, regexMatches)
 import EVM.Concrete
 
 import Data.ByteString (ByteString)
@@ -26,8 +26,6 @@ import Control.Lens
 
 import Data.List (find)
 import qualified Data.Map        as Map
-import qualified Data.Sequence   as Seq
-import qualified Text.Regex.TDFA as Regex
 
 data DappInfo = DappInfo
   { _dappRoot       :: FilePath
@@ -121,17 +119,6 @@ mkTest sig
   | "prove" `isPrefixOf` sig = Just (SymbolicTest sig)
   | "invariant" `isPrefixOf` sig = Just (InvariantTest sig)
   | otherwise = Nothing
-
-regexMatches :: Text -> Text -> Bool
-regexMatches regexSource =
-  let
-    compOpts =
-      Regex.defaultCompOpt { Regex.lastStarGreedy = True }
-    execOpts =
-      Regex.defaultExecOpt { Regex.captureGroups = False }
-    regex = Regex.makeRegexOpts compOpts execOpts (unpack regexSource)
-  in
-    Regex.matchTest regex . Seq.fromList . unpack
 
 findUnitTests :: Text -> ([SolcContract] -> [(Text, [(Test, [AbiType])])])
 findUnitTests match =

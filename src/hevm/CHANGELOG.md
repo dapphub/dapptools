@@ -2,7 +2,12 @@
 
 ## Unreleased
 
-## Fixed
+### Changed
+
+- Clearer display for the invalid opcode (`0xfe`) in debug view
+- Better error messages when trying to deploy unlinked bytecode
+
+### Fixed
 
 - Test contracts with no code (e.g. `abstract` contracts) are now skipped
 - Replay data for invariant tests is now displayed in a form that does not cause errors when used with `dapp test --replay`
