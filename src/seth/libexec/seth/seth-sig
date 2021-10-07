@@ -14,7 +14,7 @@ inputs=$(echo "$abi" | jq '.inputs[] | .type')
 args=()
 for input in $inputs; do
   type="${input//\"}" # remove leading and trailing quotes from the JSON
-  end=${type: -1} # get the last two characters to check for array types
+  end=${type: -1} # get the last character to check for array types
   if [[ "$end" = "]" ]]; then
     arg="[]"
   elif [[ "$type" =~ ^byte.*$ ]]; then
