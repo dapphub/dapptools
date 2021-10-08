@@ -134,8 +134,7 @@ let
 
     # --- invalid test ---
     # https://github.com/ethereum/solidity/issues/9500
-    # https://github.com/ethereum/solidity/issues/12090
-    "circularReferencesPruner/nested_same_name.yul"
+
     "commonSubexpressionEliminator/object_access.yul"
     "expressionSplitter/object_access.yul"
     "fullSuite/stack_compressor_msize.yul"
