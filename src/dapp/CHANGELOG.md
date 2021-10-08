@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - The output from `dapp build` now uses color to differentiate warnings and errors
+- Support for solc 0.8.9/0.8.8
 
 ### Changed
 
