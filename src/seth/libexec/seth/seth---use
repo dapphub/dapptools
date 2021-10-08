@@ -49,10 +49,13 @@ shift
 
 if [[ -z "$bin" ]]; then
   echo >&2 "${0##*/}: Could not find ${solc} in your path or nix store."
+
+  [ -x "$(command -v nix)" ] || echo >&2 "${0##*/}: nix is not installed, unable to fetch ${solc}"; exit 1
+
   echo >&2 "Temporarily installing ${solc}..."
   echo >&2 "Tip: run \`nix-env -f https://github.com/dapphub/dapptools/archive/master.tar.gz -iA solc-static-versions.${solc//[-.]/_}\` for a lasting installation of this version."
   seth --nix-run "seth.override {solc = pkgs.runCommand \"solc\" { } \"mkdir -p \$out/bin; ln -s \${solc-static-versions.${solc//[-.]/_}}/bin/${solc} \$out/bin/solc\";}" seth "$@"
-
+  exit 0
 else
   set -e
   SOLCBIN="$(realpath -e "${bin}")"
