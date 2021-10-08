@@ -1,6 +1,6 @@
 { pkgs }:
 let
-  solc = "${pkgs.solc-static-versions.solc_0_8_9}/bin/solc-0.8.9";
+  solc = "${pkgs.solc-static-versions.solc_0_8_6}/bin/solc-0.8.6";
   solidity = pkgs.fetchFromGitHub {
     owner = "ethereum";
     repo = "solidity";
