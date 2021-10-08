@@ -61,7 +61,7 @@ This creates two contracts, `Dapptutorial.sol` and `Dapptutorial.t.sol` in the `
 For the sake of this tutorial, let's change `Dapptutorial.sol` to a simple vault with an eth bounty that can be accessed by giving the password 42:
 
 ```solidity
-pragma solidity ^0.8.9;
+pragma solidity ^0.8.6;
 
 contract Dapptutorial {
     receive() external payable {
@@ -287,7 +287,7 @@ variables](../hevm/README.md#environment-variables).
 | `DAPP_LIB`                 | `lib`                      | Directory for installed Dapp packages                                                                                                              |
 | `DAPP_OUT`                 | `out`                      | Directory for compilation artifacts                                                                                                                |
 | `DAPP_ROOT`                | `.`                        | Root directory of compilation                                                                                                                      |
-| `DAPP_SOLC_VERSION`        | `0.8.9`                    | Solidity compiler version to use                                                                                                                   |
+| `DAPP_SOLC_VERSION`        | `0.8.6`                    | Solidity compiler version to use                                                                                                                   |
 | `DAPP_SOLC`                | n/a                        | solc binary to use                                                                                                                                 |
 | `DAPP_LIBRARIES`           | automatically deployed     | Library addresses to link to                                                                                                                       |
 | `DAPP_SKIP_BUILD`          | n/a                        | Avoid compiling this time                                                                                                                          |
@@ -328,7 +328,7 @@ A global (always loaded) config file is located in `~/.dapprc`. A local `.dapprc
 Whenever you run a `dapp` command the `.dapprc` files are sourced in order (global first, then the one in the current working directory, if it exists). If you wish to set configuration variables, you must use `export` as below:
 
 ```sh
-export DAPP_SOLC_VERSION=0.8.9
+export DAPP_SOLC_VERSION=0.8.6
 export DAPP_REMAPPINGS=$(cat remappings.txt)
 export DAPP_BUILD_OPTIMIZE=1
 export DAPP_BUILD_OPTIMIZE_RUNS=1000000000
@@ -551,7 +551,7 @@ Spins up a geth testnet.
 
     dapp-verify-contract -- verify contract source on etherscan
     Usage: dapp verify-contract <path>:<contractname> <address> [constructorArgs]
-
+    
 Example: `dapp verify-contract src/auth/authorities/RolesAuthority.sol:RolesAuthority 0x9ed0e..`
 
 Requires `ETHERSCAN_API_KEY` to be set.
