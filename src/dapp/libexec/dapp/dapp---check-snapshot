@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+set -e
+dapp test | grep 'gas:' > .gas-snapshot-temp
+if diff .gas-snapshot .gas-snapshot-temp > /dev/null
+then
+   rm .gas-snapshot-temp
+   exit 0
+else
+    diff .gas-snapshot .gas-snapshot-temp
+fi
+exit 1

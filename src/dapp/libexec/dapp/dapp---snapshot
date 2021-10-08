@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+set -e
+dapp test | grep 'gas:' > .gas-snapshot
+exit 0
