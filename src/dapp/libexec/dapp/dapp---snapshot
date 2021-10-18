@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
 set -e
-dapp test | grep 'gas:' > .gas-snapshot
+
+# Saves the output of dapp test to .gas-snapshot
+dapp test | grep 'gas:' | cut -d " " -f 2-4 > .gas-snapshot
 exit 0
