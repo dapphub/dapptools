@@ -174,8 +174,8 @@ showTraceTree dapp vm =
       traces = fmap (fmap (unpack . showTrace dapp vm)) forest
   in pack $ concatMap showTree traces
 
-unindexed :: [(AbiType, Indexed)] -> [AbiType]
-unindexed ts = [t | (t, NotIndexed) <- ts]
+unindexed :: [(Text, AbiType, Indexed)] -> [AbiType]
+unindexed ts = [t | (_, t, NotIndexed) <- ts]
 
 showTrace :: DappInfo -> VM -> Trace -> Text
 showTrace dapp vm trace =
