@@ -50,7 +50,7 @@ for i in "${txs[@]}"; do
 
   if [[ "$1" = "$hash" ]]; then
     echo -e >&2 "\r${0##*/}: info: transaction ($j/$index)"
-    seth run-tx "$tx" --state "$state" --debug "${opts[@]}"
+    seth run-tx "$hash" --state "$state" --debug "${opts[@]}"
     tidy
     break
   else
@@ -58,7 +58,7 @@ for i in "${txs[@]}"; do
       echo -e  >&2 "\r${0##*/}: info: transaction ($j/$index)" ||
       echo -en >&2 "\r${0##*/}: info: transaction ($j/$index)"
     # exit code 2 means REVERT or otherwise acceptable failure
-    seth run-tx "$tx" --state "$state" --timestamp "$timestamp" > /dev/null ||
+    seth run-tx "$hash" --state "$state" --timestamp "$timestamp" > /dev/null ||
       [[ $? == 2 ]] ||
       (tidy; echo ""; seth --fail "${0##*/}: error: hevm error while executing tx: $hash")
     j=$((j + 1))

@@ -1,8 +1,18 @@
-# hevm changelog
+# Changelog
+
+All notable changes to this project will be documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## Unreleased
 
-## Fixed
+### Changed
+
+- Clearer display for the invalid opcode (`0xfe`) in debug view
+- Better error messages when trying to deploy unlinked bytecode
+
+### Fixed
 
 - Test contracts with no code (e.g. `abstract` contracts) are now skipped
 - Replay data for invariant tests is now displayed in a form that does not cause errors when used with `dapp test --replay`

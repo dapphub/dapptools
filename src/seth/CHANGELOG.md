@@ -20,6 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Address lookup no longer fails if `ETH_RPC_ACCOUNTS` is set, and `ETH_FROM` is an unchecksummed address
 - Contract creations with Dynamic fee transactions
+- `seth debug` correctly executes transactions
 
 ## [0.11.0] - 2021-09-08
 

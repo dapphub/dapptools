@@ -30,6 +30,7 @@ that isn't available in `rpc`, such as [fuzz testing](#property-based-testing), 
   - [`dapp create`](#dapp-create)
   - [`dapp address`](#dapp-address)
   - [`dapp install`](#dapp-install)
+  - [`dapp uninstall`](#dapp-uninstall)
   - [`dapp update`](#dapp-update)
   - [`dapp upgrade`](#dapp-upgrade)
   - [`dapp testnet`](#dapp-testnet)
@@ -176,7 +177,7 @@ We can symbolically explore all possibilities to find the one that lets us withd
 
 ```solidity
 function proveFail_withdraw(uint guess) public {
-    address(dapptutorial).transfer(1 ether);
+    payable(address(dapptutorial)).transfer(1 ether);
     uint preBalance = address(this).balance;
     dapptutorial.withdraw(guess);
     uint postBalance = address(this).balance;
@@ -530,6 +531,12 @@ clone the repository and then `git checkout --recurse-submodules $version`.
 If the project you want to install does not follow the typical `dapp` project structure,
 you may need to configure the `DAPP_REMAPPINGS` environment variable to be able to find
 it. For an example, see [this repo](https://github.com/dapp-org/radicle-contracts-tests/).
+
+
+### `dapp uninstall`
+
+    dapp-uninstall -- remove a smart contract library
+    Usage: dapp uninstall <lib>
 
 ### `dapp update`
 
