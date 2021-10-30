@@ -2,5 +2,5 @@
 set -e
 
 # Saves the output of dapp test to .gas-snapshot
-dapp test | grep 'gas:' | cut -d " " -f 2-4 > .gas-snapshot
+DAPP_TEST_FUZZ_RUNS=0 dapp test | grep 'gas:' | cut -d " " -f 2-4 > .gas-snapshot
 exit 0
