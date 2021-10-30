@@ -11,6 +11,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - The output from `dapp build` now uses color to differentiate warnings and errors
 
+- `dapp snapshot` and `dapp check-snapshot` commands to snapshot test gas usage.
+
 ### Changed
 
 - Dapp remappings ignores non-directories in `DAPP_LIB`
