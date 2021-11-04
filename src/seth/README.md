@@ -624,7 +624,7 @@ Print the symbolic name of the current blockchain by checking the
 genesis block hash.
 
 Outputs one of `ethlive`, `etclive`, `kovan`, `ropsten`, `goerli`, `morden`,
-`rinkeby`, `optimism-mainnet`, `optimism-kovan`, `arbitrum-mainnet`, `bsc`, `bsctest`, `kotti`, or `unknown`.
+`rinkeby`, `optimism-mainnet`, `optimism-kovan`, `arbitrum-mainnet`, `bsc`, `bsctest`, `kotti`, `polygon`, or `unknown`.
 
 ### `seth chain-id`
 
