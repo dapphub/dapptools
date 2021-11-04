@@ -20,6 +20,8 @@ set -e
 [[ $2 ]] || (dapp verify-contract --help >&2 && exit 1)
 
 chain=$(seth chain)
+echo "chain: $chain"
+
 case "$chain" in
   ethlive|mainnet)
     export ETHERSCAN_API_URL=https://api.etherscan.io/api
