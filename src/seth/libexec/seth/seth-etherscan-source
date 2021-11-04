@@ -52,11 +52,8 @@ case "$chain" in
     exit 1
 esac
 
-echo "URL: $URL"
-
 
 RESPONSE=$(seth curl "${URL}/api?module=contract&action=getsourcecode&address=${ADDR}&apikey=${ETHERSCAN_API_KEY}" | seth --show-json)
-echo "RESPONSE: $RESPONSE"
 
 MSG=$(echo "$RESPONSE" | seth --field message)
 
