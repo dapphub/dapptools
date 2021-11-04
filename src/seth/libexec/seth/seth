@@ -242,6 +242,10 @@ if [[ $SETH_CHAIN ]]; then
       eth_rpc_url=https://bsc-dataseed3.binance.org/
       export ETHERSCAN_API_URL=https://api.bscscan.com/api
       ;;
+    polygon)
+      eth_rpc_url=https://polygon-rpc.com/
+      export ETHERSCAN_API_URL=https://api.polygonscan.com/api
+      ;;
     *)
       echo >&2 "${0##*/}: error: unknown chain: \\'$SETH_CHAIN'"
       exit 1
