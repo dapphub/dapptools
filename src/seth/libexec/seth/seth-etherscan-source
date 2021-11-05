@@ -44,8 +44,11 @@ case "$chain" in
   bsc)
     URL="${ETHERSCAN_API_URL:-https://api.bscscan.com}"
     ;;
+  polygon)
+    URL="${ETHERSCAN_API_URL:-https://api.polygonscan.com}"
+    ;;
   *)
-    echo >&2 "Source fetching only works on mainnet, ropsten, kovan, rinkeby, goerli, optimism-mainnet, optimism-kovan, and arbitrum-mainnet."
+    echo >&2 "Source fetching only works on mainnet, ropsten, kovan, rinkeby, goerli, optimism-mainnet, optimism-kovan, arbitrum-mainnet, and polygon."
     exit 1
 esac
 

@@ -33,6 +33,8 @@ case $genesis in
     echo bsctest;;
   0x0d21840abff46b96c84b2ac9e10e4f5cdaeb5693cb665db62a2f3b02d2d57b5b)
     echo bsc;;
+  0xa9c28ce2141b56c474f1dc504bee9b01eb1bd7d1a507580d5519d4437a97de1b)
+    echo polygon;;
   *)
     echo unknown;;
 esac
