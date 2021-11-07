@@ -15,6 +15,10 @@ fi
 
 data=${data:-0x}
 
+if [[ -z "$SETH_CREATE" ]]; then
+  TO=$(seth --to-address "$1")
+fi
+
 if [[ -z "$ETH_GAS" ]]; then
   jshon+=(-n {})
   [[ $TO ]] && jshon+=(-s "$TO" -i to)
@@ -38,7 +42,7 @@ args=(
 if [[ $SETH_CREATE ]]; then
   args+=(--create)
 else
-  args+=(--to "$(seth --to-address "$1")")
+  args+=(--to "$TO")
 fi
 
 if [[ $ETH_PRIO_FEE ]]; then
