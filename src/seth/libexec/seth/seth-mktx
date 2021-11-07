@@ -23,7 +23,6 @@ if [[ -z "$ETH_GAS" ]]; then
   jshon+=(-n {})
   [[ $TO ]] && jshon+=(-s "$TO" -i to)
   jshon+=(-s "$data" -i data)
-  # shellcheck disable=SC2207
   jshon+=($(SETH_PARAMS_NO_GAS=1 seth --send-params))
   jshon+=(-i append)
   ETH_GAS=$(seth rpc eth_estimateGas -- "${jshon[@]}")

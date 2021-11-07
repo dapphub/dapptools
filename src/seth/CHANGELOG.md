@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `seth index` command returns the slot number for the specified mapping type and input data
 - `seth --from-fix` command converts fixed point numbers into parsed integers with the specified number of decimals
 - `seth run-tx` now fetches contract source from etherscan if `ETHERSCAN_API_KEY` is set
+- `seth mktx` now estimates gas limit eth `ETH_GAS` is not set
 
 ### Fixed
 
