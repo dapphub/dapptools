@@ -450,10 +450,13 @@ mkEventMap abis = Map.fromList $
        (case abi ^?! key "anonymous" . _Bool of
          True -> Anonymous
          False -> NotAnonymous)
-       (map (\y -> ( force "internal error: type" (parseTypeName' y)
-     , if y ^?! key "indexed" . _Bool
-       then Indexed
-       else NotIndexed ))
+       (map (\y ->
+        ( y ^?! key "name" . _String
+        , force "internal error: type" (parseTypeName' y)
+        , if y ^?! key "indexed" . _Bool
+          then Indexed
+          else NotIndexed
+        ))
        (toList $ abi ^?! key "inputs" . _Array))
      )
   in f <$> relevant
