@@ -22,9 +22,6 @@ if [[ -z "$ETH_GAS" ]]; then
   # shellcheck disable=SC2207
   jshon+=($(SETH_PARAMS_NO_GAS=1 seth --send-params))
   jshon+=(-i append)
-  [[ $ETH_BLOCK = [0-9]* ]] && ETH_BLOCK=$(seth --to-hex "$ETH_BLOCK")
-  : "${ETH_BLOCK:=latest}" # geth doesn't like this argument
-  [[ $ETH_BLOCK = latest ]] || jshon+=(-s "$ETH_BLOCK" -i append)
   ETH_GAS=$(seth rpc eth_estimateGas -- "${jshon[@]}")
 fi
 
