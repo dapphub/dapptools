@@ -23,8 +23,6 @@ set -e
 
 [[ $ETH_FROM ]] ||
 seth --fail "${0##*/}: error: \`ETH_FROM' not set; send from which account?"
-[[ $ETH_GAS ]] ||
-echo >&2 "${0##*/}: warning: \`ETH_GAS' not set; using estimated gas amount"
 if [[ $SETH_RESEND ]]; then
   nonce=$(seth nonce "$ETH_FROM")
   export ETH_NONCE=$nonce

@@ -238,7 +238,6 @@ wei—the smallest possible amount of ether—to the [Ethereum
 Foundation's donation address]:
 
     $ seth send --value 1 0xfB6916095ca1df60bB79Ce92cE3Ea74c37c5d359
-    seth-send: warning: `ETH_GAS' not set; using estimated gas amount
     Ethereum account passphrase (not echoed):
     seth-send: Published transaction with 0 bytes of calldata.
     seth-send: 0xe428d4bb148ded426777ae892578507e4f394f608ad9d3a9d0229e8348ba72e3
