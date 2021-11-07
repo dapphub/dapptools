@@ -24,7 +24,7 @@ jobs:
           # https://discourse.nixos.org/t/understanding-binutils-darwin-wrapper-nix-support-bad-substitution/11475/2
           nix_path: nixpkgs=channel:nixos-unstable
       # v8
-      - uses: cachix/cachix-action@v8
+      - uses: cachix/cachix-action@v10
         with:
           name: dapp
           signingKey: '${{ secrets.CACHIX_SIGNING_KEY }}'
