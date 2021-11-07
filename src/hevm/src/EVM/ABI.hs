@@ -147,7 +147,7 @@ data Anonymity = Anonymous | NotAnonymous
   deriving (Show, Ord, Eq, Generic)
 data Indexed   = Indexed   | NotIndexed
   deriving (Show, Ord, Eq, Generic)
-data Event     = Event Text Anonymity [(AbiType, Indexed)]
+data Event     = Event Text Anonymity [(Text, AbiType, Indexed)]
   deriving (Show, Ord, Eq, Generic)
 data SolError  = SolError Text [AbiType]
   deriving (Show, Ord, Eq, Generic)
