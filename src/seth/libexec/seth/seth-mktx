@@ -17,7 +17,7 @@ data=${data:-0x}
 
 if [[ -z "$ETH_GAS" ]]; then
   if [[ $SETH_CREATE ]]; then
-    ETH_GAS=$(seth estimate --create $ETH_FROM $data)
+    ETH_GAS=$(seth estimate --create $data)
   else
     ETH_GAS=$(seth estimate $ETH_FROM $data)
   fi
