@@ -659,6 +659,7 @@ node's gas estimation.
     seth estimate [<options>] <to> <sig> [<args>]
     seth estimate [<options>] --create <code> <sig> [<args>]
     seth estimate [<options>] --create <code> <data>
+    seth estimate [<options>] --create <data>
 
 Options are similar to [`seth send`], but no transaction is published.
 
