@@ -44,7 +44,7 @@ fi
 
 if [[ -z "$ETH_GAS" ]]; then
   if [[ $SETH_CREATE ]]; then
-    ETH_GAS=$(seth estimate --create $DATA)
+    ETH_GAS=$(seth estimate --create ${$DATA:-0x})
   else
     ETH_GAS=$(seth estimate $TO $DATA)
   fi
