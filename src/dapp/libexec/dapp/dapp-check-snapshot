@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+### dapp-check-snapshot -- check snapshot is up to date
+### Usage: dapp check-snapshot
+set -e
+
+# Uses the output of dapp test to compare with dapp snapshot
+DIFF="$(diff .gas-snapshot <(dapp test --fuzz-runs 0 | grep 'gas:' | cut -d " " -f 2-4))"
+
+if [ -n "$DIFF" ]
+then
+   echo "$DIFF"
+   exit 1
+fi

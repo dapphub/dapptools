@@ -225,6 +225,34 @@ test_custom_solc_json() {
     assert "[[ -f out/dapp.sol.json ]]"
 }
 
+test_gas_snapshots() {
+    tmp=$(mktemp -d)
+
+    # copy source file
+    mkdir -p "$tmp/src"
+    cp "$CONTRACTS/factor.sol" "$tmp/src"
+
+    # init dapp project
+    cd "$tmp" || exit
+    export GIT_CONFIG_NOSYSTEM=1
+    export GIT_AUTHOR_NAME=dapp
+    export GIT_AUTHOR_EMAIL=dapp@hub.lol
+    export GIT_COMMITTER_NAME=$GIT_AUTHOR_NAME
+    export GIT_COMMITTER_EMAIL=$GIT_AUTHOR_EMAIL
+    dapp init
+
+    # test with snapshots
+    dapp snapshot
+    assert "[[ -f .gas-snapshot ]]"
+
+    # test check snapshots
+    dapp check-snapshot || fail
+
+    # check that check snapshots fails if we change the snapshot
+    echo this_will_change_the_snapshot > .gas-snapshot
+    dapp check-snapshot && fail || echo "dapp success: snapshot diff detected"
+}
+
 test_nonce_1() {
     local account
     account=$(fresh_account)

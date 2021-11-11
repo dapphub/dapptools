@@ -545,6 +545,20 @@ it. For an example, see [this repo](https://github.com/dapp-org/radicle-contract
 
 Updates a project submodule in the `lib` subdirectory.
 
+### `dapp snapshot`
+
+    dapp-snapshot -- creates a snapshot of each test's gas usage
+    Usage: dapp snapshot
+
+Saves a snapshot of each concrete test's gas usage in a `.gas-snapshot` file.
+
+### `dapp check-snapshot`
+
+    dapp-check-snapshot -- check snapshot is up to date
+    Usage: dapp check-snapshot
+
+Runs `dapp snapshot` and exits with an error code if its output does not match the current `.gas-snapshot` file.
+
 ### `dapp upgrade`
 
     dapp-upgrade -- pull & commit all upstream lib changes
@@ -558,7 +572,7 @@ Spins up a geth testnet.
 
     dapp-verify-contract -- verify contract source on etherscan
     Usage: dapp verify-contract <path>:<contractname> <address> [constructorArgs]
-    
+
 Example: `dapp verify-contract src/auth/authorities/RolesAuthority.sol:RolesAuthority 0x9ed0e..`
 
 Requires `ETHERSCAN_API_KEY` to be set.

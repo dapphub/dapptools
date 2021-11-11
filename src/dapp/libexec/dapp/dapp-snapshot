@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+### dapp-snapshot -- creates a snapshot of each test's gas usage
+### Usage: dapp snapshot
+set -e
+
+# Saves the output of dapp test to .gas-snapshot
+dapp test --fuzz-runs 0 | grep 'gas:' | cut -d " " -f 2-4 > .gas-snapshot
