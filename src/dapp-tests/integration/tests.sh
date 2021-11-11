@@ -250,7 +250,7 @@ test_gas_snapshots() {
 
     # check that check snapshots fails if we change the snapshot
     echo this_will_change_the_snapshot > .gas-snapshot
-    dapp check-snapshot && fail
+    dapp check-snapshot && fail || echo "dapp success: snapshot diff detected"
 }
 
 test_nonce_1() {
