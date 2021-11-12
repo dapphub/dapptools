@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+### Added
+
+- Support for solc 0.8.10
+
 ### Changed
 
 - Clearer display for the invalid opcode (`0xfe`) in debug view
