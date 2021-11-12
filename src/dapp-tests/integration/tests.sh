@@ -489,7 +489,13 @@ test_sig_5() {
     assert_equals "0xe548799c" "$(seth sig 'registerCrowdsale(address,address,uint256[8])')"
 }
 
-test_sig_fuzz() {
+# tuples currently broken: https://github.com/dapphub/dapptools/issues/861
+todo_sig_6() {
+    assert_equals "0x5cc5e3d9" "$(seth sig 'createIncentive((address,address,uint256,uint256,address),uint256)')"
+}
+
+# ignored for now due to https://github.com/dapphub/dapptools/issues/861
+todo_sig_fuzz() {
     echo
     for _ in $(seq "$FUZZ_RUNS"); do
       id=$(mod "$(uint256)" 236272)
@@ -504,7 +510,6 @@ test_sig_fuzz() {
       assert_equals "$hex" "$actual"
     done
 }
-
 
 test_keccak_1() {
   local output

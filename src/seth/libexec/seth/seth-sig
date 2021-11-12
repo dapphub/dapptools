@@ -17,6 +17,9 @@ for input in $inputs; do
   end=${type: -1} # get the last character to check for array types
   if [[ "$end" = "]" ]]; then
     arg="[]"
+  elif [[ "$end" = ")" ]]; then
+    echo "tuple types are not currently supported"
+    exit 1
   elif [[ "$type" =~ ^byte.*$ ]]; then
     arg="0x"
   elif [[ "$type" =~ ^string$ ]]; then
