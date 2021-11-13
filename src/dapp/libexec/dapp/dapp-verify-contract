@@ -29,9 +29,13 @@ case "$chain" in
     export ETHERSCAN_API_URL=https://api-$chain.etherscan.io/api
     export ETHERSCAN_URL=https://$chain.etherscan.io/address
     ;;
-  polygon|polygon-mumbai)
+  polygon)
     export ETHERSCAN_API_URL=https://api.polygonscan.com/api
     export ETHERSCAN_URL=https://polygonscan.com/address
+    ;;
+  polygon-mumbai)
+    export ETHERSCAN_API_URL=https://api-tesnet.polygonscan.com/api
+    export ETHERSCAN_URL=https://mumbai.polygonscan.com/address
     ;;
   *)
     echo >&2 "Verification only works on mainnet, ropsten, kovan, rinkeby, goerli, and polygon."
