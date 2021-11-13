@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Clearer display for the invalid opcode (`0xfe`) in debug view
 - Better error messages when trying to deploy unlinked bytecode
+- `bytesX` arguments to `hevm abiencode` are automatically padded
 
 ### Fixed
 

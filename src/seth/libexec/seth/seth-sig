@@ -8,14 +8,22 @@ set -e
 
 # Get ABI from input
 abi=$(seth --abi-function-json "$1")
-inputs=$(echo $abi | jq '.inputs[] | .type')
+inputs=$(echo "$abi" | jq '.inputs[] | .type')
 
 # Generate dummy args
 args=()
 for input in $inputs; do
   type="${input//\"}" # remove leading and trailing quotes from the JSON
-  end=${type: -2} # get the last two characters to check for array types
-  [ $end = "[]"  ] && arg="[]" || arg=0 # use [] for array types and 0 otherwise
+  end=${type: -1} # get the last character to check for array types
+  if [[ "$end" = "]" ]]; then
+    arg="[]"
+  elif [[ "$type" =~ ^byte.*$ ]]; then
+    arg="0x"
+  elif [[ "$type" =~ ^string$ ]]; then
+    arg='""'
+  else
+    arg=0
+  fi
   args+=(--arg "$arg")
 done
 

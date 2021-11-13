@@ -463,6 +463,9 @@ padLeft n xs = BS.replicate (n - BS.length xs) 0 <> xs
 padRight :: Int -> ByteString -> ByteString
 padRight n xs = xs <> BS.replicate (n - BS.length xs) 0
 
+padRight' :: Int -> String -> String
+padRight' n xs = xs <> replicate (n - length xs) '0'
+
 -- | Right padding  / truncating
 truncpad :: Int -> [SWord 8] -> [SWord 8]
 truncpad n xs = if m > n then take n xs

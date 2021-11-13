@@ -483,9 +483,13 @@ instance Read Boolz where
   readsPrec n (_:t) = readsPrec n t
 
 makeAbiValue :: AbiType -> String -> AbiValue
-makeAbiValue typ str = case readP_to_S (parseAbiValue typ) str of
+makeAbiValue typ str = case readP_to_S (parseAbiValue typ) (padStr str) of
   [(val,"")] -> val
   _ -> error $  "could not parse abi argument: " ++ str ++ " : " ++ show typ
+  where
+    padStr = case typ of
+      (AbiBytesType n) -> padRight' (2 * n + 2) -- +2 is for the 0x prefix
+      _ -> id
 
 parseAbiValue :: AbiType -> ReadP AbiValue
 parseAbiValue (AbiUIntType n) = do W256 w <- readS_to_P reads
