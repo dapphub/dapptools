@@ -44,7 +44,7 @@ case "$chain" in
   bsc)
     URL="${ETHERSCAN_API_URL:-https://api.bscscan.com}"
     ;;
-  polygon)
+  polygon|polygon-mumbai)
     URL="${ETHERSCAN_API_URL:-https://api.polygonscan.com}"
     ;;
   *)
