@@ -83,6 +83,7 @@ tmpljson["settings"]["outputSelection"]["*"]["*"]=[
 
 tmpljson["settings"]["outputSelection"]["*"][""] = ["ast"]
 
-tmpljson.pop('modelCheckerSettings', None)
+if os.getenv('DAPP_SMTCHECKER') is None or os.getenv('DAPP_SMTCHECKER') != '1':
+    tmpljson["settings"].pop('modelChecker', None)
 
 print(json.dumps(tmpljson))
