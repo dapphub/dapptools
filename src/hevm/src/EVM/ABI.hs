@@ -512,7 +512,27 @@ parseAbiValue (AbiArrayDynamicType typ) =
 parseAbiValue (AbiArrayType n typ) =
   AbiArray n typ <$> do a <- listP (parseAbiValue typ)
                         return $ Vector.fromList a
-parseAbiValue (AbiTupleType _) = error "tuple types not supported"
+parseAbiValue (AbiTupleType types) =
+  AbiTuple <$> do args <- tupleP [parseAbiValue typ | typ <- Vector.toList types]
+                  return $ Vector.fromList args
+
+tupleP :: [ReadP a] -> ReadP [a]
+tupleP parsers = between (char '(') (char ')') (argP parsers)
+
+argP :: [ReadP a] -> ReadP [a]
+argP [] = do return []
+argP (p:[]) = do
+  skipSpaces
+  arg <- p
+  skipSpaces
+  return [arg]
+argP (p:ps) = do
+  skipSpaces
+  arg <- p
+  skipSpaces
+  char ','
+  args <- argP ps
+  return (arg:args)
 
 listP :: ReadP a -> ReadP [a]
 listP parser = between (char '[') (char ']') ((do skipSpaces
