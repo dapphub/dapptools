@@ -225,6 +225,19 @@ function invariant_totalSupply() public {
 
 If a counterexample is found, it can be replayed or analyzed in the debugger using the `--replay` flag.
 
+### SMTChecker testing
+
+If you are using the standard JSON input mode and its field `settings.modelChecker.engine` is `all`, `bmc` or `chc`, [Solidity's SMTChecker](https://docs.soliditylang.org/en/latest/smtchecker.html) will be invoked when you run `dapp build`.
+If you wish to use that mode, these steps are recommended:
+
+- Run the usual compilation
+- Generate a separate input JSON with the SMTChecker enabled: `export DAPP_SMTCHECKER=1 && dapp mk-standard-json &> dapp_smtchecker.json`
+- Modify `settings.modelChecker` in the new JSON input accordingly. It is recommended that you use the [contracts field](https://docs.soliditylang.org/en/latest/smtchecker.html#verified-contracts) `settings.modelChecker.contracts` to specify the main contracts you want to verify.
+- Tell `dapp` to use the new JSON as input: `export DAPP_STANDARD_JSON=./dapp_smtchecker.json`
+- Run `dapp build`
+
+You may also want to change the `settings.modelChecker.timeout` and/or other fields in different runs.
+
 ### Testing against RPC state
 
 You can test how your contract interacts with already deployed contracts by
@@ -297,6 +310,7 @@ variables](../hevm/README.md#environment-variables).
 | `DAPP_VERIFY_CONTRACT`     | `yes`                      | Attempt Etherscan verification                                                                                                                     |
 | `DAPP_ASYNC`               | n/a                        | Set to `yes` to skip waiting for etherscan verification to succeed                                                                                 |
 | `DAPP_STANDARD_JSON`       | `$(dapp mk-standard-json)` | [Solidity compilation options](https://docs.soliditylang.org/en/latest/using-the-compiler.html#compiler-input-and-output-json-description)         |
+| `DAPP_SMTCHECKER`          | n/a                        | Set to `1` to output the default model checker settings when using `dapp mk-standard-json`. Running `dapp build` will invoke the SMTChecker.       |
 | `DAPP_REMAPPINGS`          | `$(dapp remappings)`       | [Solidity remappings](https://docs.soliditylang.org/en/latest/using-the-compiler.html#path-remapping)                                              |
 | `DAPP_BUILD_OPTIMIZE`      | `0`                        | Activate Solidity optimizer (`0` or `1`)                                                                                                           |
 | `DAPP_BUILD_OPTIMIZE_RUNS` | `200`                      | Set the optimizer runs                                                                                                                             |
@@ -592,3 +606,4 @@ The following environment variables can be used to override settings:
 - `DAPP_BUILD_OPTIMIZE`
 - `DAPP_BUILD_OPTIMIZE_RUNS`
 - `DAPP_LIBRARIES`
+- `DAPP_SMTCHECKER`
