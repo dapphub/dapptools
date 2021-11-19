@@ -90,6 +90,7 @@ library
     tree-view                         >= 0.5 && < 0.6,
     abstract-par                      >= 0.3.3 && < 0.4,
     aeson                             >= 1.5.6 && < 1.6,
+    aeson-pretty,
     bytestring                        >= 0.10.8 && < 0.11,
     scientific                        >= 0.3.6 && < 0.4,
     binary                            >= 0.8.6 && < 0.9,
@@ -164,6 +165,7 @@ executable hevm
   build-depends:
     QuickCheck,
     aeson,
+    aeson-pretty,
     ansi-wl-pprint,
     async,
     base,

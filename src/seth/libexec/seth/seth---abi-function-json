@@ -1,9 +1,4 @@
 #!/usr/bin/env bash
+# todo: remove? redundant now that seth abi handles this all
 set -e
-if [[ $1 = *\)\(* ]]; then
-  sig=${1/)(/) public returns (}
-else
-  sig="$1 public"
-fi
-
-seth abi "function $sig" | jq '.[0]' -c
+seth abi "$1" | jq -c
