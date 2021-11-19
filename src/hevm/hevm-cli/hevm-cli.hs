@@ -230,8 +230,9 @@ data Command w
   , arg  :: w ::: [String]     <?> "Values to encode"
   }
   | Abidecode
-  { abi      :: w ::: Maybe String     <?> "Signature of types to decode / encode"
-  , calldata :: w ::: Maybe ByteString <?> "Tx: calldata"
+  { abi        :: w ::: Maybe String     <?> "Signature of types to decode / encode"
+  , calldata   :: w ::: Maybe ByteString <?> "Tx: calldata"
+  , returndata :: w ::: Maybe ByteString <?> "returndata"
   }
   | Normalise
   { abi  :: w ::: Maybe String <?> "Signature of types to decode / encode"
@@ -340,7 +341,7 @@ main = do
     Abiencode {} ->
       print . ByteStringS $ abiencode (abi cmd) (arg cmd)
     Abidecode {} ->
-      print $ abidecode (abi cmd) (calldata cmd)
+      print $ abidecode (abi cmd) (calldata cmd) (returndata cmd)
     Normalise {} ->
       print $ normaliseSig (abi cmd)
     Selector {} ->
@@ -990,12 +991,33 @@ normaliseSig :: Maybe String -> Text
 normaliseSig Nothing = error "missing required argument: abi"
 normaliseSig (Just abi) = fst $ parseAbi abi
 
-abidecode :: Maybe String -> Maybe ByteString -> String
-abidecode Nothing _ = error "missing required argument: abi"
-abidecode (Just abi) (Just cd) =
-  let (_, types) = parseAbi abi
-      values = decodeAbiValue (AbiTupleType (V.fromList types)) (Lazy.fromStrict cd)
+abidecode :: Maybe String -> Maybe ByteString -> Maybe ByteString -> String
+abidecode Nothing _ _ = error "missing required argument: abi"
+abidecode _ Nothing Nothing = error "must provide either calldata or returndata"
+abidecode (Just abi) (Just calldata) Nothing =
+  let (sig, types) = parseAbi abi
+      abiSelector  = strip0x (selector sig)
+      (dataSelector, dataBody) =
+        ByteString.splitAt 4 (hexByteString "--calldata" $ strip0x $ calldata)
+      values = decodeAbiValue (AbiTupleType (V.fromList types)) (Lazy.fromStrict $ dataBody)
+  in
+    if (abiSelector == dataSelector) then
+      show values
+    else
+      error $ "abi and calldata signatures do not match."
+           <> "\nabi:      " <> show (ByteStringS abiSelector)
+           <> "\ncalldata: " <> show (ByteStringS dataSelector)
+
+abidecode (Just abi) Nothing (Just returndata) =
+  let (_, types) = parseAbiOutputs abi
+      dataBody = hexByteString "--returndata" $ strip0x $ returndata
+      values = decodeAbiValue (AbiTupleType (V.fromList types)) (Lazy.fromStrict $ dataBody)
   in show values
+
+abidecode (Just abi) (Just calldata) (Just returndata) =
+  let inputs  = abidecode (Just abi) (Just calldata) Nothing
+      outputs = abidecode (Just abi) Nothing (Just returndata)
+  in inputs <> " -> " <> outputs
 
 abiselector :: Maybe String -> ByteString
 abiselector Nothing = error "missing required argument: abi"
@@ -1010,6 +1032,18 @@ parseAbi abi =
       case parseSolidityAbi abi of
         Left e -> error $ "could not parse abi fragment. result: " ++ e
         Right (FunctionFragment name types _ _) ->
+          let sig = pack $ name <> (show (AbiTupleType (V.fromList types)))
+          in (sig, types)
+
+parseAbiOutputs :: String -> (Text, [AbiType])
+parseAbiOutputs abi =
+  case (abi ^? key "outputs" . _Array) of
+    Just outputs ->
+      (signature abi, snd <$> parseMethodInput <$> V.toList outputs)
+    Nothing ->
+      case parseSolidityAbi abi of
+        Left e -> error $ "could not parse abi fragment. result: " ++ e
+        Right (FunctionFragment name _ types _) ->
           let sig = pack $ name <> (show (AbiTupleType (V.fromList types)))
           in (sig, types)
 
