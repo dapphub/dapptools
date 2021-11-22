@@ -34,6 +34,7 @@ import EVM.SymExec
 import EVM.Debug
 import EVM.ABI
 import EVM.Solidity
+import EVM.SolidityABI
 import EVM.Types hiding (word)
 import EVM.UnitTest (UnitTestOptions, coverageReport, coverageForUnitTestContract)
 import EVM.UnitTest (runUnitTestContract)
@@ -228,6 +229,16 @@ data Command w
   { abi  :: w ::: Maybe String <?> "Signature of types to decode / encode"
   , arg  :: w ::: [String]     <?> "Values to encode"
   }
+  | Abidecode
+  { abi      :: w ::: Maybe String     <?> "Signature of types to decode / encode"
+  , calldata :: w ::: Maybe ByteString <?> "Tx: calldata"
+  }
+  | Normalise
+  { abi  :: w ::: Maybe String <?> "Signature of types to decode / encode"
+  }
+  | Selector
+  { abi :: w ::: Maybe String <?> "Signature of types to decode / encode"
+  }
   | MerkleTest -- Insert a set of key values and check against the given root
   { file :: w ::: String <?> "Path to .json test file"
   }
@@ -328,6 +339,12 @@ main = do
       launchExec cmd
     Abiencode {} ->
       print . ByteStringS $ abiencode (abi cmd) (arg cmd)
+    Abidecode {} ->
+      print $ abidecode (abi cmd) (calldata cmd)
+    Normalise {} ->
+      print $ normaliseSig (abi cmd)
+    Selector {} ->
+      print . ByteStringS $ abiselector (abi cmd)
     BcTest {} ->
       launchTest cmd
     DappTest {} ->
@@ -968,14 +985,35 @@ runVMTest diffmode mode timelimit (name, x) =
 
 #endif
 
-parseAbi :: (AsValue s) => s -> (Text, [AbiType])
-parseAbi abijson =
-  (signature abijson, snd
-    <$> parseMethodInput
-    <$> V.toList
-      (fromMaybe (error "Malformed function abi") (abijson ^? key "inputs" . _Array)))
 
-abiencode :: (AsValue s) => Maybe s -> [String] -> ByteString
+normaliseSig :: Maybe String -> Text
+normaliseSig Nothing = error "missing required argument: abi"
+normaliseSig (Just abi) = fst $ parseAbi abi
+
+abidecode :: Maybe String -> Maybe ByteString -> String
+abidecode Nothing _ = error "missing required argument: abi"
+abidecode (Just abi) (Just cd) =
+  let (_, types) = parseAbi abi
+      values = decodeAbiValue (AbiTupleType (V.fromList types)) (Lazy.fromStrict cd)
+  in show values
+
+abiselector :: Maybe String -> ByteString
+abiselector Nothing = error "missing required argument: abi"
+abiselector (Just abi) = selector $ fst $ parseAbi abi
+
+parseAbi :: String -> (Text, [AbiType])
+parseAbi abi =
+  case (abi ^? key "inputs" . _Array) of
+    Just inputs ->
+      (signature abi, snd <$> parseMethodInput <$> V.toList inputs)
+    Nothing ->
+      case parseSolidityAbi abi of
+        Left e -> error $ "could not parse abi fragment. result: " ++ e
+        Right (FunctionFragment name types _ _) ->
+          let sig = pack $ name <> (show (AbiTupleType (V.fromList types)))
+          in (sig, types)
+
+abiencode :: Maybe String -> [String] -> ByteString
 abiencode Nothing _ = error "missing required argument: abi"
 abiencode (Just abijson) args =
   let (sig', declarations) = parseAbi abijson

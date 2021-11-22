@@ -2,14 +2,17 @@
 let
   inherit (dapphub) pkgs;
 
-
   drv = pkgs.haskellPackages.shellFor {
     packages = p: [
       p.hevm
     ];
-    buildInputs = with pkgs.haskellPackages; [
+    buildInputs = with pkgs.haskellPackages; with pkgs; [
+      ghci
+      ghcid
       cabal-install
       haskell-language-server
+      bc coreutils curl ethsign git gnused nix jq hevm jshon nodejs tre perl solc
+      gnugrep
     ];
     withHoogle = true;
   };
