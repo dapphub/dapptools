@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-### seth---abi-decode -- extract return values from hexdata
-### Usage: seth --abi-decode <name>(<in-types>)(<out-types) <hexdata>
+### seth---calldata-decode -- extract calldata values from hexdata
+### Usage: seth --calldata-decode <name>(<in-types>)(<out-types) <hexdata>
 ###
-### Decode <hexdata> according to <out-types> (<in-types> are ignored).
+### Decode <hexdata> according to <in-types> (<out-types> are ignored).
 hevm abidecode --abi "$1" --calldata "$2"
