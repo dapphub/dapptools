@@ -1006,10 +1006,10 @@ abidecode (Just abi) (Just calldata) Nothing =
       abiSelector  = strip0x (selector sig)
       (dataSelector, dataBody) =
         ByteString.splitAt 4 (hexByteString "--calldata" $ strip0x $ calldata)
-      values = decodeAbiValue (AbiTupleType (V.fromList types)) (Lazy.fromStrict $ dataBody)
+      AbiTuple (values) = decodeAbiValue (AbiTupleType (V.fromList types)) (Lazy.fromStrict $ dataBody)
   in
     if (abiSelector == dataSelector) then
-      pack $ show values
+      pack $ intercalate "\n" (show <$> V.toList values)
     else
       error $ "abi and calldata signatures do not match."
            <> "\nabi:      " <> show (ByteStringS abiSelector)
@@ -1018,13 +1018,13 @@ abidecode (Just abi) (Just calldata) Nothing =
 abidecode (Just abi) Nothing (Just returndata) =
   let (_, types) = parseAbiOutputs abi
       dataBody = hexByteString "--returndata" $ strip0x $ returndata
-      values = decodeAbiValue (AbiTupleType (V.fromList types)) (Lazy.fromStrict $ dataBody)
-  in pack $ show values
+      AbiTuple values = decodeAbiValue (AbiTupleType (V.fromList types)) (Lazy.fromStrict $ dataBody)
+  in pack $ intercalate "\n" (show <$> V.toList values)
 
 abidecode (Just abi) (Just calldata) (Just returndata) =
   let inputs  = abidecode (Just abi) (Just calldata) Nothing
       outputs = abidecode (Just abi) Nothing (Just returndata)
-  in inputs <> " -> " <> outputs
+  in inputs <> "\n->\n" <> outputs
 
 abiselector :: String -> ByteString
 abiselector abi = selector $ fst $ parseAbi abi
