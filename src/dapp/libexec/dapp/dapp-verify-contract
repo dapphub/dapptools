@@ -38,7 +38,7 @@ case "$chain" in
     export ETHERSCAN_URL=https://mumbai.polygonscan.com/address
     ;;
   *)
-    echo >&2 "Verification only works on mainnet, ropsten, kovan, rinkeby, goerli, and polygon."
+    echo >&2 "Verification only works on mainnet, ropsten, kovan, rinkeby, goerli, polygon and polygon-mumbai."
     exit 1
 esac
 
