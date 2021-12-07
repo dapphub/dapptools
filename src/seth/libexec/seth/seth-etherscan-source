@@ -50,8 +50,14 @@ case "$chain" in
   polygon-mumbai)
     URL="${ETHERSCAN_API_URL:-https://api-testnet.polygonscan.com}"
     ;;
+  avalanche)
+    URL="${ETHERSCAN_API_URL:-https://api.snowtrace.io}"
+    ;;
+  avalanche-fuji)
+    URL="${ETHERSCAN_API_URL:-https://api-testnet.snowtrace.io}"
+    ;;
   *)
-    echo >&2 "Source fetching only works on mainnet, ropsten, kovan, rinkeby, goerli, optimism-mainnet, optimism-kovan, arbitrum-mainnet, and polygon."
+    echo >&2 "Source fetching only works on mainnet, ropsten, kovan, rinkeby, goerli, optimism-mainnet, optimism-kovan, arbitrum-mainnet, polygon, avalanche and avalanche-fuji."
     exit 1
 esac
 

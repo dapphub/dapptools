@@ -246,6 +246,14 @@ if [[ $SETH_CHAIN ]]; then
       eth_rpc_url=https://polygon-rpc.com/
       export ETHERSCAN_API_URL=https://api.polygonscan.com/api
       ;;
+    avalanche)
+      eth_rpc_url=https://api.avax.network/ext/bc/C/rpc
+      export ETHERSCAN_API_URL=https://api.snowtrace.io/api
+      ;;
+    avalanche-fuji)
+      eth_rpc_url=https://api.avax-test.network/ext/bc/C/rpc
+      export ETHERSCAN_API_URL=https://api-testnet.snowtrace.io/api
+      ;;
     *)
       echo >&2 "${0##*/}: error: unknown chain: \\'$SETH_CHAIN'"
       exit 1
