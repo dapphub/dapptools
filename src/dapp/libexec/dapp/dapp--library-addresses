@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+sender=0x00a329c0648769a73afac7f9381e08fb43dbea72
+nonce=48576
+mapfile -t libraries < <(dapp --find-libraries)
+
+for lib in "${libraries[@]}"; do
+   address=$(dapp address "$sender" "$nonce")
+   links+=" $lib:$address"
+   ((nonce++))
+done
+
+echo $links
