@@ -44,6 +44,7 @@ case "$chain" in
   fantom)
     export ETHERSCAN_API_URL=https://api.ftmscan.com/api
     export ETHERSCAN_URL=https://ftmscan.com/address
+    ;;
   *)
     echo >&2 "Verification only works on mainnet, ropsten, kovan, rinkeby, goerli, polygon, and fantom."
     exit 1
