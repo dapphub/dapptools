@@ -8,7 +8,7 @@ The dependencies of each tool is set as `buildInputs` in the `default.nix` file.
 
 `dapp` and `seth` are similarly structured as a collection of short scripts,
 mostly written in bash. The main entrypoint for any invocation of `seth` or `dapp`
-is a dispatch script, `./src/seth/libexec/seth/seth` and `./src/seth/libexec/dapp/dapp` respectively, which parses any flags given, setting their values to the appropriate environment variable,
+is a dispatch script, `./src/seth/libexec/seth/seth` and `./src/dapp/libexec/dapp/dapp` respectively, which parses any flags given, setting their values to the appropriate environment variable,
 and dispatches to the appropriate subcommand.
 
 Much of the heavy lifting in `dapptools` is done in `hevm`. To get a feel of how it is structured,
