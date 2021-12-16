@@ -7,7 +7,7 @@ from hypothesis.strategies import binary
 
 
 @settings(
-    deadline=2000,
+    deadline=10000,
     phases=[Phase.explicit, Phase.reuse]
 )
 @given(binary(min_size=1))
