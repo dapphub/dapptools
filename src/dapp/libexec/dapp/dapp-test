@@ -56,4 +56,9 @@ export GIT_COMMITTER_NAME=$GIT_AUTHOR_NAME
 export GIT_COMMITTER_EMAIL=$GIT_AUTHOR_EMAIL
 
 # shellcheck disable=SC2068
-hevm dapp-test --dapp-root="${DAPP_ROOT}" --json-file="${DAPP_JSON}" ${opts[@]}
+testreport=$(hevm dapp-test --dapp-root="${DAPP_ROOT}" --json-file="${DAPP_JSON}" ${opts[@]} | tee /dev/tty)
+
+passCount=$(echo $testreport | grep -c "\[PASS]") || true
+failCount=$(echo $testreport | grep -c "\[FAIL]") || true
+
+echo Test results: "$passCount" passed, "$failCount" failed
