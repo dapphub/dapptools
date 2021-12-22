@@ -37,6 +37,8 @@ case $genesis in
     echo polygon;;
   0x7b66506a9ebdbf30d32b43c5f15a3b1216269a1ec3a75aa3182b86176a2b1ca7)
     echo polygon-mumbai;;
+  0x00000000000003e83fddf1e9330f0a8691d9f0b2af57b38c3bb85488488a40df)
+    echo fantom;;
   *)
     echo unknown;;
 esac
