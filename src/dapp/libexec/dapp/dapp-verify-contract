@@ -45,8 +45,16 @@ case "$chain" in
     export ETHERSCAN_API_URL=https://api.ftmscan.com/api
     export ETHERSCAN_URL=https://ftmscan.com/address
     ;;
+  arbitrum-mainnet)
+    export ETHERSCAN_API_URL=https://api.arbiscan.io/api
+    export ETHERSCAN_URL=https://arbiscan.io/address
+    ;;
+  arbitrum-rinkeby)
+    export ETHERSCAN_API_URL=https://api-testnet.arbiscan.io/api
+    export ETHERSCAN_URL=https://testnet.arbiscan.io/address
+    ;;
   *)
-    echo >&2 "Verification only works on mainnet, ropsten, kovan, rinkeby, goerli, polygon, and fantom."
+    echo >&2 "Verification only works on mainnet, ropsten, kovan, rinkeby, goerli, polygon, fantom, and arbitrum."
     exit 1
 esac
 

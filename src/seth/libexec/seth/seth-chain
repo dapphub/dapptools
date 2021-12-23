@@ -20,7 +20,16 @@ case $genesis in
   0x02adc9b449ff5f2467b8c674ece7ff9b21319d76c4ad62a67a70d552655927e5)
     echo optimism-kovan;;
   0x7ee576b35482195fc49205cec9af72ce14f003b9ae69f6ba0faef4514be8b442)
-    echo arbitrum-mainnet;;
+    # arbitrum mainnet and arbitrum rinkeby have the same genesis block
+    # use the next block to discriminate between the two
+    case $(seth block 1 hash 2>/dev/null || echo null) in
+      0xe0594250efac73640aeff78ec40aaaaa87f91edb54e5af926ee71a32ef32da34)
+        echo arbitrum-mainnet;;
+      0x5b754d2c394d7e8852f5ef8ef97314cb4b566b027e5b943bee2b0b2d53fdc43e)
+        echo arbitrum-rinkeby;;
+      *)
+        echo unknown;;
+    esac;;
   0x0cd786a2425d16f152c658316c423e6ce1181e15c3295826d7c9904cba9ce303)
     echo morden;;
   0x6341fd3daf94b748c72ced5a5b26028f2474f5f00d824504e4fa37a75767e177)
