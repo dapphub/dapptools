@@ -38,6 +38,9 @@ case "$chain" in
   arbitrum-mainnet)
     URL="${ETHERSCAN_API_URL:-https://api.arbiscan.io}"
     ;;
+  arbitrum-rinkeby)
+    URL="${ETHERSCAN_API_URL:-https://api-testnet.arbiscan.io}"
+    ;;
   bsctest)
     URL="${ETHERSCAN_API_URL:-https://api-testnet.bscscan.com}"
     ;;
