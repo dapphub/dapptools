@@ -48,6 +48,15 @@ case $genesis in
     echo polygon-mumbai;;
   0x00000000000003e83fddf1e9330f0a8691d9f0b2af57b38c3bb85488488a40df)
     echo fantom;;
+  0x31ced5b9beb7f8782b014660da0cb18cc409f121f408186886e1ca3e8eeca96b)
+    case $(seth block 1 hash 2>/dev/null || echo null) in
+      0xdcfce25a3318f7e6ac4d5ae7f9f3644e39b2ad411ef218d04ca65fec4a1bf737)
+        echo avax-mainnet;;
+      0x738639479dc82d199365626f90caa82f7eafcfe9ed354b456fb3d294597ceb53)
+        echo avax-fuji;;
+      *)
+        echo unknown;;
+    esac;;
   *)
     echo unknown;;
 esac
