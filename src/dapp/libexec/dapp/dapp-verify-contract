@@ -29,6 +29,10 @@ case "$chain" in
     export ETHERSCAN_API_URL=https://api-$chain.etherscan.io/api
     export ETHERSCAN_URL=https://$chain.etherscan.io/address
     ;;
+  optimism-mainnet)
+    export ETHERSCAN_API_URL=https://api-optimistic.etherscan.io/api
+    export ETHERSCAN_URL=https://optimistic.etherscan.io/address
+    ;;
   optimism-kovan)
     export ETHERSCAN_API_URL=https://api-kovan-optimistic.etherscan.io/api
     export ETHERSCAN_URL=https://kovan-optimistic.etherscan.io/address
