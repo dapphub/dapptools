@@ -382,7 +382,7 @@ Convert fixed point numbers into parsed integers with the specified number of de
 
     seth --from-fix <decimals> <value>
 
-For example, use `seth --to-fix 6 1` to convert 1 USDC into the parsed quantity of 1,000,000 USDC
+For example, use `seth --from-fix 6 1` to convert 1 USDC into the parsed quantity of 1,000,000 USDC
 
 ### `seth --from-wei`
 
