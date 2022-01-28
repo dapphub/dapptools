@@ -71,7 +71,7 @@ in rec {
         import (self.pkgs.fetchFromGitHub {
           inherit owner rev sha256;
           repo = "nixpkgs";
-        }) {};
+        }) { inherit (super) system; };
       in
         self.pkgs.recurseIntoAttrs (
           fetchSolcVersions { owner = "NixOS";   attr = super.system; }
