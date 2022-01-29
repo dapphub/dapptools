@@ -68,7 +68,7 @@ library
   autogen-modules:
     Paths_hevm
   ghc-options:
-    -Wall -Wno-deprecations
+    -Wall -Wno-deprecations -Wno-unticked-promoted-constructors
   extra-libraries:
     secp256k1, ff
   c-sources:
