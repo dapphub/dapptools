@@ -8,10 +8,9 @@
   Memory and storage are both represented as a sequence of sequenced writes on top of some base state.
   In the case of Memory that base state is always empty, but in the case of Storage it can be either empty (for init code) or abstract, for runtime code.
 
-  Calldata is immutable, so we can simply represent it as an slice without needing to keep track of which state is being read from
+  Calldata is immutable, so we can simply represent it as an slice from the calldata buffer in a particular frame
   Returndata is represented as a slice of a particular memory expression, allowing returndata in the current call frame to reference memory from the sub call frame.
 
-  TODO: probably we need some capture avoidance / freshness stuff for memory / calldata? Maybe debruijn indicies for call frames?
   TODO: how do we compose the subcall into the new storage / logs?
 -}
 module Expr where
@@ -76,12 +75,8 @@ data Expr (a :: EType) where
                  -> Expr Memory -- memory
                  -> Expr W256   -- result
 
-  -- context
-  Address        :: Expr W256
-  Balance        :: Expr W256
+  -- block context
   Origin         :: Expr W256
-  Caller         :: Expr W256
-  CallValue      :: Expr W256
   BlockHash      :: Expr W256
   Coinbase       :: Expr W256
   Timestamp      :: Expr W256
@@ -89,15 +84,40 @@ data Expr (a :: EType) where
   Difficulty     :: Expr W256
   GasLimit       :: Expr W256
   ChainId        :: Expr W256
-  SelfBalance    :: Expr W256
   BaseFee        :: Expr W256
-  Pc             :: Expr W256
-  Gas            :: Expr W256
+
+  -- frame context
+  CallValue      :: Int          -- frame idx
+                 -> Expr W256
+
+  Caller         :: Int          -- frame idx
+                 -> Expr W256
+
+  Address        :: Int          -- frame idx
+                 -> Expr W256
+
+  Balance        :: Int          -- frame idx
+                 -> Int          -- PC (in case we're checking the current contract)
+                 -> Expr W256    -- address
+                 -> Expr W256
+
+  SelfBalance    :: Int          -- frame idx
+                 -> Int          -- PC
+                 -> Expr W256
+
+  Gas            :: Int          -- frame idx
+                 -> Int          -- PC
+                 -> Expr W256
 
   -- calldata
-  CalldataLoad   :: Expr W256 -> Expr W256
   CalldataSize   :: Expr W256
-  CalldataCopy   :: Expr W256    -- dst offset
+
+  CalldataLoad   :: Int          -- frame idx
+                 -> Expr W256    -- data idx
+                 -> Expr W256    -- result
+
+  CalldataCopy   :: Int          -- frame idx
+                 -> Expr W256    -- dst offset
                  -> Expr W256    -- src offset
                  -> Expr W256    -- size
                  -> Expr Memory  -- old memory
@@ -182,37 +202,30 @@ data Expr (a :: EType) where
                  -> Expr W256    -- offset
                  -> Expr W256    -- size
                  -> Expr Memory  -- memory
-                 -> Expr Logs    -- old logs
-                 -> Expr Logs    -- new logs
-                 -> Expr Storage -- old storage
-                 -> Expr Storage -- new storage
-                 -> Expr W256
+                 -> Expr Logs    -- logs
+                 -> Expr Storage -- storage
+                 -> Expr W256    -- address
 
   Create2        :: Expr W256    -- value
                  -> Expr W256    -- offset
                  -> Expr W256    -- size
                  -> Expr W256    -- salt
                  -> Expr Memory  -- memory
-                 -> Expr Logs    -- old logs
-                 -> Expr Logs    -- new logs
-                 -> Expr Storage -- old storage
-                 -> Expr Storage -- new storage
+                 -> Expr Logs    -- logs
+                 -> Expr Storage -- storage
                  -> Expr W256    -- address
 
   -- Calls
-  Call           :: Expr W256       -- gas
-                 -> Expr W256       -- address
-                 -> Expr W256       -- value
-                 -> Expr W256       -- args offset
-                 -> Expr W256       -- args size
-                 -> Expr W256       -- ret offset
-                 -> Expr W256       -- ret size
-                 -> Expr Logs       -- old logs
-                 -> Expr Logs       -- new logs
-                 -> Expr Storage    -- old storage
-                 -> Expr Storage    -- new storage
-                 -> Expr Returndata -- return data
-                 -> Expr W256       -- success
+  Call           :: Expr W256         -- gas
+                 -> Maybe (Expr W256) -- target
+                 -> Expr W256         -- value
+                 -> Expr W256         -- args offset
+                 -> Expr W256         -- args size
+                 -> Expr W256         -- ret offset
+                 -> Expr W256         -- ret size
+                 -> Expr Logs         -- logs
+                 -> Expr Storage      -- storage
+                 -> Expr W256         -- success
 
   CallCode       :: Expr W256       -- gas
                  -> Expr W256       -- address
@@ -221,11 +234,8 @@ data Expr (a :: EType) where
                  -> Expr W256       -- args size
                  -> Expr W256       -- ret offset
                  -> Expr W256       -- ret size
-                 -> Expr Logs       -- old logs
-                 -> Expr Logs       -- new logs
-                 -> Expr Storage    -- old storage
-                 -> Expr Storage    -- new storage
-                 -> Expr Returndata -- return data
+                 -> Expr Logs       -- logs
+                 -> Expr Storage    -- storage
                  -> Expr W256       -- success
 
   DelegeateCall  :: Expr W256       -- gas
@@ -235,11 +245,8 @@ data Expr (a :: EType) where
                  -> Expr W256       -- args size
                  -> Expr W256       -- ret offset
                  -> Expr W256       -- ret size
-                 -> Expr Logs       -- old logs
-                 -> Expr Logs       -- new logs
-                 -> Expr Storage    -- old storage
-                 -> Expr Storage    -- new storage
-                 -> Expr Returndata -- return data
+                 -> Expr Logs       -- logs
+                 -> Expr Storage    -- storage
                  -> Expr W256       -- success
 
   -- memory
