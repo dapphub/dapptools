@@ -15,15 +15,7 @@ hand-crafted and maintained by DappHub, along with dependency management, courte
 
 ## Installation
 
-Install Nix if you haven't already:
-
-```sh
-# user must be in sudoers
-curl -L https://nixos.org/nix/install | sh
-
-# Run this or login again to use Nix
-. "$HOME/.nix-profile/etc/profile.d/nix.sh"
-```
+Install Nix if you haven't already by going to [NixOS's official download page](https://nixos.org/download.html#nix-install-linux). Once on the page, make sure to select your OS on the left to pull up the installation command for your OS.
 
 Then install dapptools:
 
