@@ -67,7 +67,7 @@ readMemoryWord (C _ i) m =
                               (8 * (31 - n))) (n - 1)
     w = go (0 :: W256) (31 :: Int)
   in {-# SCC "readMemoryWord" #-}
-    C (Literal w) w
+    C (Lit w) w
 
 readMemoryWord32 :: Word -> ByteString -> Word
 readMemoryWord32 (C _ i) m =
@@ -86,8 +86,8 @@ setMemoryByte :: Word -> Word8 -> ByteString -> ByteString
 setMemoryByte (C _ i) x =
   writeMemory (BS.singleton x) 1 0 (num i)
 
-keccakBlob :: ByteString -> Word
-keccakBlob x = C (FromKeccak (ConcreteBuffer x)) (keccak x)
+--keccakBlob :: ByteString -> Word
+--keccakBlob x = C (FromKeccak (ConcreteBuffer x)) (keccak x)
 
 -- Copied from the standard library just to get specialization.
 -- We also use bit operations instead of modulo and multiply.

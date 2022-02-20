@@ -19,7 +19,6 @@ import Data.SBV hiding (Word, output, Unknown)
 import Data.Proxy (Proxy(..))
 import Data.Text (unpack)
 import Data.Text.Encoding (decodeUtf8, encodeUtf8)
-import qualified Data.Vector as V
 import EVM.ABI
 import EVM.Types
 import EVM.Solidity
@@ -97,7 +96,7 @@ deriving instance Show Error
 -- | The possible result states of a VM
 data VMResult
   = VMFailure Error -- ^ An operation failed
-  | VMSuccess Buffer -- ^ Reached STOP, RETURN, or end-of-code
+  | VMSuccess (Expr Buf) -- ^ Reached STOP, RETURN, or end-of-code
 
 deriving instance Show VMResult
 
@@ -132,7 +131,7 @@ data TraceData
   | QueryTrace Query
   | ErrorTrace Error
   | EntryTrace Text
-  | ReturnTrace Buffer FrameContext
+  | ReturnTrace (Expr Buf) FrameContext
   deriving (Show)
 
 -- | Queries halt execution until resolved through RPC calls or SMT queries
@@ -243,7 +242,7 @@ data FrameContext
     , callContextSize      :: Word
     , callContextCodehash  :: W256
     , callContextAbi       :: Maybe Word
-    , callContextData      :: Buffer
+    , callContextData      :: Expr Buf
     , callContextReversion :: Map Addr Contract
     , callContextSubState  :: SubState
     }
@@ -253,16 +252,16 @@ data FrameContext
 data FrameState = FrameState
   { _contract     :: Addr
   , _codeContract :: Addr
-  , _code         :: Buffer
+  , _code         :: ByteString -- Buffer TODO: why was this a buffer before? Isn't this always concrete
   , _pc           :: Int
   , _stack        :: [SymWord]
-  , _memory       :: Buffer
+  , _memory       :: Expr Memory
   , _memorySize   :: Int
-  , _calldata     :: (Buffer, SymWord)
+  , _calldata     :: Expr Buf
   , _callvalue    :: SymWord
   , _caller       :: SAddr
   , _gas          :: Word
-  , _returndata   :: Buffer
+  , _returndata   :: Expr Buf
   , _static       :: Bool
   }
   deriving (Show)
@@ -296,6 +295,7 @@ data SubState = SubState
 -- post-creation, and code in these two modes is treated differently
 -- by instructions like @EXTCODEHASH@, so we distinguish these two
 -- code types.
+-- TODO: make this a bytestring too?
 data ContractCode
   = InitCode Buffer     -- ^ "Constructor" code, during contract creation
   | RuntimeCode Buffer  -- ^ "Instance" code, after contract creation
@@ -734,7 +734,8 @@ exec1 = do
                     accessMemoryRange fees xOffset xSize $ do
                       (hash@(S _ hash'), invMap, bytes) <- case readMemory xOffset xSize vm of
                                          ConcreteBuffer bs -> do
-                                           pure (litWord $ keccakBlob bs, Map.singleton (keccakBlob bs) bs, litBytes bs)
+                                           let hash' = C (Keccak (getExpr xOffset) (getExpr xSize) (getExpr (view memory state))) (keccak bs)
+                                           pure (litWord hash', Map.singleton hash' bs, litBytes bs)
                                          SymbolicBuffer bs -> do
                                            let hash' = symkeccak' bs
                                            return (S (FromKeccak $ SymbolicBuffer bs) hash', mempty, bs)

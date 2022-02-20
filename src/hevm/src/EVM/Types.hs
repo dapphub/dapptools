@@ -1,9 +1,11 @@
 {-# Language CPP #-}
 {-# Language TemplateHaskell #-}
 {-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE GADTs #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE DefaultSignatures #-}
 {-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE StandaloneDeriving #-}
 
 module EVM.Types where
 
@@ -13,14 +15,13 @@ import Data.Aeson
 import Crypto.Hash
 import Data.SBV hiding (Word)
 import Data.Kind
+import Data.Map (Map)
 import Data.Bifunctor (first)
 import Data.Char
-import Data.List (intercalate)
 import Data.ByteString (ByteString)
 import Data.ByteString.Base16 as BS16
 import Data.ByteString.Builder (byteStringHex, toLazyByteString)
 import Data.ByteString.Lazy (toStrict)
-import Control.Monad.State.Strict (liftM)
 import qualified Data.ByteString.Char8  as Char8
 import Data.DoubleWord
 import Data.DoubleWord.TH
@@ -38,6 +39,7 @@ import qualified Data.Text            as Text
 import qualified Data.Text.Encoding   as Text
 import qualified Data.Sequence        as Seq
 import qualified Text.Regex.TDFA      as Regex
+import qualified Data.Map             as Map
 import qualified Text.Read
 
 -- Some stuff for "generic programming", needed to create Word512
@@ -58,7 +60,7 @@ newtype W256 = W256 Word256
     , Bits, FiniteBits, Bounded, Generic
     )
 
-data Word = C Whiff W256 --maybe to remove completely in the future
+data Word = C (Expr EWord) W256 --maybe to remove completely in the future
 
 instance Show Word where
   show (C _ x) = show x
@@ -66,20 +68,20 @@ instance Show Word where
 instance Read Word where
   readsPrec n s =
     case readsPrec n s of
-      [(x, r)] -> [(C (Literal x) x, r)]
+      [(x, r)] -> [(C (Lit x) x, r)]
       _ -> []
 
 w256 :: W256 -> Word
-w256 w = C (Literal w) w
+w256 w = C (Lit w) w
 
 instance Bits Word where
   (C a x) .&. (C b y) = C (And a b) (x .&. y)
   (C a x) .|. (C b y) = C (Or  a b) (x .|. y)
-  (C a x) `xor` (C b y) = C (Todo "xor" [a, b]) (x `xor` y)
-  complement (C a x) = C (Neg a) (complement x)
-  shiftL (C a x) i = C (SHL a (Literal $ fromIntegral i)) (shiftL x i)
-  shiftR (C a x) i = C (SHR a (Literal $ fromIntegral i)) (shiftR x i)
-  rotate (C a x) i = C (Todo "rotate " [a]) (rotate x i) -- unused.
+  (C a x) `xor` (C b y) = C (Xor a b) (x `xor` y)
+  complement (C a x) = C (Not a) (complement x)
+  shiftL (C a x) i = C (SHL a (Lit $ fromIntegral i)) (shiftL x i)
+  shiftR (C a x) i = C (SHR a (Lit $ fromIntegral i)) (shiftR x i)
+  rotate (C a x) i = C (Todo "rotate " a) (rotate x i) -- unused.
   bitSize (C _ x) = bitSize x
   bitSizeMaybe (C _ x) = bitSizeMaybe x
   isSigned (C _ x) = isSigned x
@@ -112,16 +114,330 @@ instance Integral Word where
 instance Num Word where
   (C a x) + (C b y) = C (Add a b) (x + y)
   (C a x) * (C b y) = C (Mul a b) (x * y)
-  abs (C a x) = C (Todo "abs" [a]) (abs x)
-  signum (C a x) = C (Todo "signum" [a]) (signum x)
-  fromInteger x = C (Literal (fromInteger x)) (fromInteger x)
-  negate (C a x) = C (Sub (Literal 0) a) (negate x)
+  abs (C a x) = C (Todo "abs" a) (abs x)
+  signum (C a x) = C (Todo "signum" a) (signum x)
+  fromInteger x = C (Lit (fromInteger x)) (fromInteger x)
+  negate (C a x) = C (Sub (Lit 0) a) (negate x)
 
 instance Real Word where
   toRational (C _ x) = toRational x
 
 instance Ord Word where
   compare (C _ x) (C _ y) = compare x y
+
+{- |
+  Expr implements an abstract respresentation of an EVM program
+
+  This type can give insight into the provenance of a term which is useful,
+  both for the aesthetic purpose of printing terms in a richer way, but also to
+  allow optimizations on the AST instead of letting the SMT solver do all the
+  heavy lifting.
+
+  Memory, calldata, and returndata are all represented as `Buf` expressions:
+  i.e. a sequence of writes on top of some dynamically sized bytestring. Writes
+  can be sequences on top of empty buffers (`EmptyBuf`), a non empty concrete
+  buffer (`ConcreteBuf`) or on a fully abstract buffer (`AbstractBuf`). Note
+  that the shared usage of `Buf` does allow for the construction of some badly
+  typed Expr instances (e.g. an MSTORE on top of the contents of calldata
+  instead of some previous instance of memory), we accept this for now for the
+  sake of simplifying the Expr type.
+
+  Storage expressions are similar, but instead of writing regions of bytes, we
+  write a word to a particular key in a given addresses storage. Note that as
+  with a Buf, writes can be sequenced on top of concrete, empty and fully
+  abstract starting states.
+
+  Logs are also represented as a sequence of writes, but unlike Buf and Storage
+  expressions, Log writes are always sequenced on an empty starting point, and
+  overwriting is not allowed.
+
+  One important principle is that of local context: e.g. each term representing
+  a write to a Buf / Storage / Logs will always contain a copy of the state
+  that is being added to, this ensures that all context relevant to a given
+  operation is contained within the term that represents that operation.
+
+  TODO: figure out how to attach knowledge to a term (e.g. on the potential bounds of a given word).
+  TODO: should we introduce types to represent e.g. bool returns from bitwise ops? can this just be a special case of the above todo?
+-}
+
+-- phantom type tags for AST construction
+data EType
+  = Buf
+  | Storage
+  | Logs
+  | EWord
+  | End
+
+-- add type level list of constraints
+data Expr (a :: EType) where
+
+  -- hacks :(
+  -- this is unfortunately required as some of the haskell instance types (e.g.
+  -- Num) allow for the construction of expressions that contain operations
+  -- that are not valid EVM (e.g. rotate / neg). Hopefully this can be removed.
+  Todo           :: String -> Expr EWord -> Expr EWord
+
+  -- identifiers
+  Lit            :: W256   -> Expr EWord
+  Var            :: String -> Expr EWord
+
+  -- control flow
+  Invalid        :: Expr End
+  SelfDestruct   :: Expr EWord   -> Expr End
+  Revert         :: String       -> Expr End
+  Stop           :: Expr Storage -> Expr End
+  Return         :: Expr Buf     -> Expr Storage -> Expr End
+  -- TODO: this is probably wrong
+  ITE            :: Expr EWord   -> Expr EWord   -> Expr EWord -> Expr EWord
+
+  -- integers
+  Add            :: Expr EWord -> Expr EWord -> Expr EWord
+  Sub            :: Expr EWord -> Expr EWord -> Expr EWord
+  Mul            :: Expr EWord -> Expr EWord -> Expr EWord
+  Div            :: Expr EWord -> Expr EWord -> Expr EWord
+  SDiv           :: Expr EWord -> Expr EWord -> Expr EWord
+  Mod            :: Expr EWord -> Expr EWord -> Expr EWord
+  SMod           :: Expr EWord -> Expr EWord -> Expr EWord
+  AddMod         :: Expr EWord -> Expr EWord -> Expr EWord
+  MulMod         :: Expr EWord -> Expr EWord -> Expr EWord
+  Exp            :: Expr EWord -> Expr EWord -> Expr EWord
+  Sex            :: Expr EWord -> Expr EWord
+
+  -- booleans
+  LT             :: Expr EWord -> Expr EWord -> Expr EWord
+  GT             :: Expr EWord -> Expr EWord -> Expr EWord
+  SLT            :: Expr EWord -> Expr EWord -> Expr EWord
+  SGT            :: Expr EWord -> Expr EWord -> Expr EWord
+  Eq             :: Expr EWord -> Expr EWord -> Expr EWord
+  IsZero         :: Expr EWord -> Expr EWord -> Expr EWord
+
+  -- bits
+  And            :: Expr EWord -> Expr EWord -> Expr EWord
+  Or             :: Expr EWord -> Expr EWord -> Expr EWord
+  Xor            :: Expr EWord -> Expr EWord -> Expr EWord
+  Not            :: Expr EWord -> Expr EWord
+  SHL            :: Expr EWord -> Expr EWord -> Expr EWord
+  SHR            :: Expr EWord -> Expr EWord -> Expr EWord
+  SAR            :: Expr EWord -> Expr EWord -> Expr EWord
+
+  -- keccak
+  Keccak         :: Expr EWord         -- offset
+                 -> Expr EWord         -- size
+                 -> Expr Buf           -- memory
+                 -> Expr EWord         -- result
+
+  -- block context
+  Origin         :: Expr EWord
+  BlockHash      :: Expr EWord
+  Coinbase       :: Expr EWord
+  Timestamp      :: Expr EWord
+  Number         :: Expr EWord
+  Difficulty     :: Expr EWord
+  GasLimit       :: Expr EWord
+  ChainId        :: Expr EWord
+  BaseFee        :: Expr EWord
+
+  -- frame context
+  CallValue      :: Int                -- frame idx
+                 -> Expr EWord
+
+  Caller         :: Int                -- frame idx
+                 -> Expr EWord
+
+  Address        :: Int                -- frame idx
+                 -> Expr EWord
+
+  Balance        :: Int                -- frame idx
+                 -> Int                -- PC (in case we're checking the current contract)
+                 -> Expr EWord         -- address
+                 -> Expr EWord
+
+  SelfBalance    :: Int                -- frame idx
+                 -> Int                -- PC
+                 -> Expr EWord
+
+  Gas            :: Int                -- frame idx
+                 -> Int                -- PC
+                 -> Expr EWord
+
+  -- calldata
+  CalldataSize   :: Expr EWord
+
+  CalldataLoad   :: Expr EWord         -- idx
+                 -> Expr Buf           -- calldata
+                 -> Expr EWord         -- result
+
+  CalldataCopy   :: Expr EWord         -- dst offset
+                 -> Expr EWord         -- src offset
+                 -> Expr EWord         -- size
+                 -> Expr Buf           -- calldata
+                 -> Expr Buf           -- old memory
+                 -> Expr Buf           -- new memory
+
+  -- code
+  CodeSize       :: Expr EWord         -- address
+                 -> Expr EWord         -- size
+
+  ExtCodeHash    :: Expr EWord         -- address
+                 -> Expr EWord         -- size
+
+  CodeCopy       :: Expr EWord         -- address
+                 -> Expr EWord         -- dst offset
+                 -> Expr EWord         -- src offset
+                 -> Expr EWord         -- size
+                 -> Expr Buf           -- old memory
+                 -> Expr Buf           -- new memory
+
+  -- returndata
+  ReturndataSize :: Expr EWord
+
+  ReturndataCopy :: Expr EWord         -- dst offset
+                 -> Expr EWord         -- src offset
+                 -> Expr EWord         -- size
+                 -> Expr Buf           -- returndata
+                 -> Expr Buf           -- old mem
+                 -> Expr Buf           -- new mem
+
+  -- logs
+  EmptyLog       :: Expr Logs
+
+  Log0           :: Expr EWord         -- offset
+                 -> Expr EWord         -- size
+                 -> Expr Buf           -- memory
+                 -> Expr Logs          -- old logs
+                 -> Expr Logs          -- new logs
+
+  Log1           :: Expr EWord         -- offset
+                 -> Expr EWord         -- size
+                 -> Expr EWord         -- topic
+                 -> Expr Buf           -- memory
+                 -> Expr Logs          -- old logs
+                 -> Expr Logs          -- new logs
+
+  Log2           :: Expr EWord         -- offset
+                 -> Expr EWord         -- size
+                 -> Expr EWord         -- topic 1
+                 -> Expr EWord         -- topic 2
+                 -> Expr Buf           -- memory
+                 -> Expr Logs          -- old logs
+                 -> Expr Logs          -- new logs
+
+  Log3           :: Expr EWord         -- offset
+                 -> Expr EWord         -- size
+                 -> Expr EWord         -- topic 1
+                 -> Expr EWord         -- topic 2
+                 -> Expr EWord         -- topic 3
+                 -> Expr Buf           -- memory
+                 -> Expr Logs          -- old logs
+                 -> Expr Logs          -- new logs
+
+  Log4           :: Expr EWord         -- offset
+                 -> Expr EWord         -- size
+                 -> Expr EWord         -- topic 1
+                 -> Expr EWord         -- topic 2
+                 -> Expr EWord         -- topic 3
+                 -> Expr EWord         -- topic 4
+                 -> Expr Buf           -- memory
+                 -> Expr Logs          -- old logs
+                 -> Expr Logs          -- new logs
+
+  -- Contract Creation
+  Create         :: Expr EWord         -- value
+                 -> Expr EWord         -- offset
+                 -> Expr EWord         -- size
+                 -> Expr Buf           -- memory
+                 -> Expr Logs          -- logs
+                 -> Expr Storage       -- storage
+                 -> Expr EWord         -- address
+
+  Create2        :: Expr EWord         -- value
+                 -> Expr EWord         -- offset
+                 -> Expr EWord         -- size
+                 -> Expr EWord         -- salt
+                 -> Expr Buf           -- memory
+                 -> Expr Logs          -- logs
+                 -> Expr Storage       -- storage
+                 -> Expr EWord         -- address
+
+  -- Calls
+  Call           :: Expr EWord         -- gas
+                 -> Maybe (Expr EWord) -- target
+                 -> Expr EWord         -- value
+                 -> Expr EWord         -- args offset
+                 -> Expr EWord         -- args size
+                 -> Expr EWord         -- ret offset
+                 -> Expr EWord         -- ret size
+                 -> Expr Logs          -- logs
+                 -> Expr Storage       -- storage
+                 -> Expr EWord         -- success
+
+  CallCode       :: Expr EWord         -- gas
+                 -> Expr EWord         -- address
+                 -> Expr EWord         -- value
+                 -> Expr EWord         -- args offset
+                 -> Expr EWord         -- args size
+                 -> Expr EWord         -- ret offset
+                 -> Expr EWord         -- ret size
+                 -> Expr Logs          -- logs
+                 -> Expr Storage       -- storage
+                 -> Expr EWord         -- success
+
+  DelegeateCall  :: Expr EWord         -- gas
+                 -> Expr EWord         -- address
+                 -> Expr EWord         -- value
+                 -> Expr EWord         -- args offset
+                 -> Expr EWord         -- args size
+                 -> Expr EWord         -- ret offset
+                 -> Expr EWord         -- ret size
+                 -> Expr Logs          -- logs
+                 -> Expr Storage       -- storage
+                 -> Expr EWord         -- success
+
+  -- memory
+  MLoad          :: Expr EWord         -- index
+                 -> Expr Buf           -- memory
+                 -> Expr EWord         -- result
+
+  MStore         :: Expr EWord         -- dst offset
+                 -> Expr EWord         -- value
+                 -> Expr Buf           -- prev memory
+                 -> Expr Buf           -- new memory
+
+  MStore8        :: Expr EWord         -- dst offset
+                 -> Expr EWord         -- value
+                 -> Expr Buf           -- prev memory
+                 -> Expr Buf           -- new memory
+
+  MSize          :: Expr EWord
+
+  -- storage
+  SLoad          :: Expr EWord         -- address
+                 -> Expr EWord         -- index
+                 -> Expr Storage       -- storage
+                 -> Expr EWord         -- result
+
+  SStore         :: Expr EWord         -- address
+                 -> Expr EWord         -- index
+                 -> Expr EWord         -- value
+                 -> Expr Storage       -- old storage
+                 -> Expr Storage       -- new storae
+
+  EmptyStore     :: Expr Storage
+  ConcreteStore  :: Map Addr (Map Word Word) -> Expr Storage
+  AbstractStore  :: Expr Storage
+
+  -- buffers
+  EmptyBuf       :: Expr Buf
+  ConcreteBuf    :: ByteString -> Expr Buf
+  AbstractBuf    :: Expr Buf
+
+deriving instance Show (Expr a)
+
+getExpr :: SymWord -> Expr EWord
+getExpr (S e _) = e
+
+getExpr' :: Word -> Expr EWord
+getExpr' (C e _) = e
 
 newtype ByteStringS = ByteStringS ByteString deriving (Eq)
 
@@ -136,13 +452,13 @@ instance JSON.ToJSON ByteStringS where
 
 -- | Symbolic words of 256 bits, possibly annotated with additional
 --   "insightful" information
-data SymWord = S Whiff (SWord 256)
+data SymWord = S (Expr EWord) (SWord 256)
 
 instance Show SymWord where
   show (S w _) = show w
 
 var :: String -> SWord 256 -> SymWord
-var name x = S (Var name x) x
+var name = S (Var name)
 
 -- | Custom instances for SymWord, many of which have direct
 -- analogues for concrete words defined in Concrete.hs
@@ -152,19 +468,19 @@ instance EqSymbolic SymWord where
 instance Num SymWord where
   (S a x) + (S b y) = S (Add a b) (x + y)
   (S a x) * (S b y) = S (Mul a b) (x * y)
-  abs (S a x) = S (Todo "abs" [a]) (abs x)
-  signum (S a x) = S (Todo "signum" [a]) (signum x)
-  fromInteger x = S (Literal (fromInteger x)) (fromInteger x)
-  negate (S a x) = S (Neg a) (negate x)
+  abs (S a x) = S (Todo "abs" a) (abs x)
+  signum (S a x) = S (Todo "signum" a) (signum x)
+  fromInteger x = S (Lit (fromInteger x)) (fromInteger x)
+  negate (S a x) = S (Todo "negate" a) (negate x)
 
 instance Bits SymWord where
   (S a x) .&. (S b y) = S (And a b) (x .&. y)
   (S a x) .|. (S b y) = S (Or  a b) (x .|. y)
-  (S a x) `xor` (S b y) = S (Todo "xor" [a, b]) (x `xor` y)
-  complement (S a x) = S (Neg a) (complement x)
-  shiftL (S a x) i = S (SHL a (Literal $ fromIntegral i)) (shiftL x i)
-  shiftR (S a x) i = S (SHR a (Literal $ fromIntegral i)) (shiftR x i)
-  rotate (S a x) i = S (Todo "rotate " [a]) (rotate x i) -- unused.
+  (S a x) `xor` (S b y) = S (Xor a b) (x `xor` y)
+  complement (S a x) = S (Not a) (complement x)
+  shiftL (S a x) i = S (SHL a (Lit $ fromIntegral i)) (shiftL x i)
+  shiftR (S a x) i = S (SHR a (Lit $ fromIntegral i)) (shiftR x i)
+  rotate (S a x) i = S (Todo "rotate " a) (rotate x i) -- unused.
   bitSize (S _ x) = bitSize x
   bitSizeMaybe (S _ x) = bitSizeMaybe x
   isSigned (S _ x) = isSigned x
@@ -182,8 +498,8 @@ instance SDivisible SymWord where
 
 -- | Instead of supporting a Mergeable instance directly,
 -- we use one which carries the Whiff around:
-iteWhiff :: Whiff -> SBool -> SWord 256 -> SWord 256 -> SymWord
-iteWhiff w b x y = S w (ite b x y)
+iteExpr :: (Expr EWord) -> SBool -> SWord 256 -> SWord 256 -> SymWord
+iteExpr e b x y = S e (ite b x y)
 
 instance Bounded SymWord where
   minBound = w256lit minBound
@@ -195,72 +511,6 @@ instance Eq SymWord where
 instance Enum SymWord where
   toEnum i = w256lit (toEnum i)
   fromEnum (S _ x) = fromEnum x
-
--- | This type can give insight into the provenance of a term
--- which is useful, both for the aesthetic purpose of printing
--- terms in a richer way, but also do optimizations on the AST
--- instead of letting the SMT solver do all the heavy lifting.
-data Whiff =
-  Todo String [Whiff]
-  -- booleans / bits
-  | And  Whiff Whiff
-  | Or   Whiff Whiff
-  | Eq   Whiff Whiff
-  | LT   Whiff Whiff
-  | GT   Whiff Whiff
-  | SLT  Whiff Whiff
-  | SGT  Whiff Whiff
-  | IsZero Whiff
-  | ITE Whiff Whiff Whiff
-  -- bits
-  | SHL Whiff Whiff
-  | SHR Whiff Whiff
-  | SAR Whiff Whiff
-
-  -- integers
-  | Add  Whiff Whiff
-  | Sub  Whiff Whiff
-  | Mul  Whiff Whiff
-  | Div  Whiff Whiff
-  | Mod  Whiff Whiff
-  | Exp  Whiff Whiff
-  | Neg  Whiff
-  | FromKeccak Buffer
-  | FromBytes Buffer
-  | FromStorage Whiff (SArray (WordN 256) (WordN 256))
-  | Literal W256
-  | Var String (SWord 256)
-
-instance Show Whiff where
-  show w =
-    let
-      infix' s x y = show x ++ s ++ show y
-    in case w of
-      Todo s args -> s ++ "(" ++ (intercalate "," (show <$> args)) ++ ")"
-      And x y     -> infix' " and " x y
-      Or x y      -> infix' " or " x y
-      ITE b x y  -> "if " ++ show b ++ " then " ++ show x ++ " else " ++ show y
-      Eq x y      -> infix' " == " x y
-      LT x y      -> infix' " < " x y
-      GT x y      -> infix' " > " x y
-      SLT x y     -> infix' " s< " x y
-      SGT x y     -> infix' " s> " x y
-      IsZero x    -> "IsZero(" ++ show x ++ ")"
-      SHL x y     -> infix' " << " x y
-      SHR x y     -> infix' " >> " x y
-      SAR x y     -> infix' " a>> " x y
-      Add x y     -> infix' " + " x y
-      Sub x y     -> infix' " - " x y
-      Mul x y     -> infix' " * " x y
-      Div x y     -> infix' " / " x y
-      Mod x y     -> infix' " % " x y
-      Exp x y     -> infix' " ** " x y
-      Neg x       -> "not " ++ show x
-      Var v _     -> v
-      FromKeccak buf -> "keccak(" ++ show buf ++ ")"
-      Literal x -> show x
-      FromBytes buf -> "FromBuffer " ++ show buf
-      FromStorage l _ -> "SLOAD(" ++ show l ++ ")"
 
 newtype Addr = Addr { addressWord160 :: Word160 }
   deriving (Num, Integral, Real, Ord, Enum, Eq, Bits, Generic)
@@ -308,7 +558,7 @@ instance (ToSizzleBV Addr)
 instance (FromSizzleBV (WordN 160))
 
 w256lit :: W256 -> SymWord
-w256lit x = S (Literal x) $ literal $ toSizzle x
+w256lit x = S (Lit x) $ literal $ toSizzle x
 
 litBytes :: ByteString -> [SWord 8]
 litBytes bs = fmap (toSized . literal) (BS.unpack bs)
@@ -561,7 +811,7 @@ abiKeccak =
 -- Utils
 
 concatMapM :: Monad m => (a -> m [b]) -> [a] -> m [b]
-concatMapM f xs = liftM concat (mapM f xs)
+concatMapM f xs = fmap concat (mapM f xs)
 
 regexMatches :: Text -> Text -> Bool
 regexMatches regexSource =

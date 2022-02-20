@@ -5,13 +5,15 @@
 {- |
   Expr implements an abstract respresentation of an EVM program
 
-  Memory and storage are both represented as a sequence of sequenced writes on top of some base state.
+  This type can give insight into the provenance of a term which is useful, both for the aesthetic purpose of printing terms in a richer way, but also do optimizations on the AST instead of letting the SMT solver do all the heavy lifting.
+
+  Memory and storage are both represented as a sequence of writes on top of some base state.
   In the case of Memory that base state is always empty, but in the case of Storage it can be either empty (for init code) or abstract, for runtime code.
 
   Calldata is immutable, so we can simply represent it as an slice from the calldata buffer in a particular frame
   Returndata is represented as a slice of a particular memory expression, allowing returndata in the current call frame to reference memory from the sub call frame.
 -}
-module Expr where
+module EVM.Expr where
 
 import Data.DoubleWord (Word256)
 
@@ -21,260 +23,260 @@ data EType
   | Storage
   | Returndata
   | Logs
-  | W256
+  | EWord
   | End
 
 data Expr (a :: EType) where
 
   -- identifiers
-  Lit            :: Word256 -> Expr W256
-  Var            :: String  -> Expr W256
+  Lit            :: Word256 -> Expr EWord
+  Var            :: String  -> Expr EWord
 
   -- control flow
   Invalid        :: Expr End
-  SelfDestruct   :: Expr W256       -> Expr End
-  Revert         :: String          -> Expr End
-  Stop           :: Expr Storage    -> Expr End
-  Return         :: Expr Returndata -> Expr Storage -> Expr End
-  ITE            :: Expr W256       -> Expr W256    -> Expr W256 -> Expr W256
+  SelfDestruct   :: Expr EWord       -> Expr End
+  Revert         :: String           -> Expr End
+  Stop           :: Expr Storage     -> Expr End
+  Return         :: Expr Returndata  -> Expr Storage -> Expr End
+  ITE            :: Expr EWord       -> Expr EWord   -> Expr EWord -> Expr EWord
 
   -- integers
-  Add            :: Expr W256 -> Expr W256 -> Expr W256
-  Sub            :: Expr W256 -> Expr W256 -> Expr W256
-  Mul            :: Expr W256 -> Expr W256 -> Expr W256
-  Div            :: Expr W256 -> Expr W256 -> Expr W256
-  SDiv           :: Expr W256 -> Expr W256 -> Expr W256
-  Mod            :: Expr W256 -> Expr W256 -> Expr W256
-  SMod           :: Expr W256 -> Expr W256 -> Expr W256
-  AddMod         :: Expr W256 -> Expr W256 -> Expr W256
-  MulMod         :: Expr W256 -> Expr W256 -> Expr W256
-  Exp            :: Expr W256 -> Expr W256 -> Expr W256
-  Sex            :: Expr W256 -> Expr W256
+  Add            :: Expr EWord -> Expr EWord -> Expr EWord
+  Sub            :: Expr EWord -> Expr EWord -> Expr EWord
+  Mul            :: Expr EWord -> Expr EWord -> Expr EWord
+  Div            :: Expr EWord -> Expr EWord -> Expr EWord
+  SDiv           :: Expr EWord -> Expr EWord -> Expr EWord
+  Mod            :: Expr EWord -> Expr EWord -> Expr EWord
+  SMod           :: Expr EWord -> Expr EWord -> Expr EWord
+  AddMod         :: Expr EWord -> Expr EWord -> Expr EWord
+  MulMod         :: Expr EWord -> Expr EWord -> Expr EWord
+  Exp            :: Expr EWord -> Expr EWord -> Expr EWord
+  Sex            :: Expr EWord -> Expr EWord
 
   -- booleans
-  LT             :: Expr W256 -> Expr W256 -> Expr W256
-  GT             :: Expr W256 -> Expr W256 -> Expr W256
-  SLT            :: Expr W256 -> Expr W256 -> Expr W256
-  SGT            :: Expr W256 -> Expr W256 -> Expr W256
-  Eq             :: Expr W256 -> Expr W256 -> Expr W256
-  IsZero         :: Expr W256 -> Expr W256 -> Expr W256
+  LT             :: Expr EWord -> Expr EWord -> Expr EWord
+  GT             :: Expr EWord -> Expr EWord -> Expr EWord
+  SLT            :: Expr EWord -> Expr EWord -> Expr EWord
+  SGT            :: Expr EWord -> Expr EWord -> Expr EWord
+  Eq             :: Expr EWord -> Expr EWord -> Expr EWord
+  IsZero         :: Expr EWord -> Expr EWord -> Expr EWord
 
   -- bits
-  And            :: Expr W256 -> Expr W256 -> Expr W256
-  Or             :: Expr W256 -> Expr W256 -> Expr W256
-  Xor            :: Expr W256 -> Expr W256 -> Expr W256
-  Not            :: Expr W256 -> Expr W256
-  SHL            :: Expr W256 -> Expr W256 -> Expr W256
-  SHR            :: Expr W256 -> Expr W256 -> Expr W256
-  SAR            :: Expr W256 -> Expr W256 -> Expr W256
+  And            :: Expr EWord -> Expr EWord -> Expr EWord
+  Or             :: Expr EWord -> Expr EWord -> Expr EWord
+  Xor            :: Expr EWord -> Expr EWord -> Expr EWord
+  Not            :: Expr EWord -> Expr EWord
+  SHL            :: Expr EWord -> Expr EWord -> Expr EWord
+  SHR            :: Expr EWord -> Expr EWord -> Expr EWord
+  SAR            :: Expr EWord -> Expr EWord -> Expr EWord
 
   -- keccak
-  Keccak         :: Expr W256         -- offset
-                 -> Expr W256         -- size
+  Keccak         :: Expr EWord        -- offset
+                 -> Expr EWord        -- size
                  -> Expr Memory       -- memory
-                 -> Expr W256         -- result
+                 -> Expr EWord        -- result
 
   -- block context
-  Origin         :: Expr W256
-  BlockHash      :: Expr W256
-  Coinbase       :: Expr W256
-  Timestamp      :: Expr W256
-  Number         :: Expr W256
-  Difficulty     :: Expr W256
-  GasLimit       :: Expr W256
-  ChainId        :: Expr W256
-  BaseFee        :: Expr W256
+  Origin         :: Expr EWord
+  BlockHash      :: Expr EWord
+  Coinbase       :: Expr EWord
+  Timestamp      :: Expr EWord
+  Number         :: Expr EWord
+  Difficulty     :: Expr EWord
+  GasLimit       :: Expr EWord
+  ChainId        :: Expr EWord
+  BaseFee        :: Expr EWord
 
   -- frame context
   CallValue      :: Int               -- frame idx
-                 -> Expr W256
+                 -> Expr EWord
 
   Caller         :: Int               -- frame idx
-                 -> Expr W256
+                 -> Expr EWord
 
   Address        :: Int               -- frame idx
-                 -> Expr W256
+                 -> Expr EWord
 
   Balance        :: Int               -- frame idx
                  -> Int               -- PC (in case we're checking the current contract)
-                 -> Expr W256         -- address
-                 -> Expr W256
+                 -> Expr EWord        -- address
+                 -> Expr EWord
 
   SelfBalance    :: Int               -- frame idx
                  -> Int               -- PC
-                 -> Expr W256
+                 -> Expr EWord
 
   Gas            :: Int               -- frame idx
                  -> Int               -- PC
-                 -> Expr W256
+                 -> Expr EWord
 
   -- calldata
-  CalldataSize   :: Expr W256
+  CalldataSize   :: Expr EWord
 
-  CalldataLoad   :: Int               -- frame idx
-                 -> Expr W256         -- data idx
-                 -> Expr W256         -- result
+  CalldataLoad   :: Int                -- frame idx
+                 -> Expr EWord         -- data idx
+                 -> Expr EWord         -- result
 
-  CalldataCopy   :: Int               -- frame idx
-                 -> Expr W256         -- dst offset
-                 -> Expr W256         -- src offset
-                 -> Expr W256         -- size
-                 -> Expr Memory       -- old memory
-                 -> Expr Memory       -- new memory
+  CalldataCopy   :: Int                -- frame idx
+                 -> Expr EWord         -- dst offset
+                 -> Expr EWord         -- src offset
+                 -> Expr EWord         -- size
+                 -> Expr Memory        -- old memory
+                 -> Expr Memory        -- new memory
 
   -- code
-  CodeSize       :: Expr W256         -- address
-                 -> Expr W256         -- size
+  CodeSize       :: Expr EWord         -- address
+                 -> Expr EWord         -- size
 
-  ExtCodeHash    :: Expr W256         -- address
-                 -> Expr W256         -- size
+  ExtCodeHash    :: Expr EWord         -- address
+                 -> Expr EWord         -- size
 
-  CodeCopy       :: Expr W256         -- address
-                 -> Expr W256         -- dst offset
-                 -> Expr W256         -- src offset
-                 -> Expr W256         -- size
-                 -> Expr Memory       -- old memory
-                 -> Expr Memory       -- new memory
+  CodeCopy       :: Expr EWord         -- address
+                 -> Expr EWord         -- dst offset
+                 -> Expr EWord         -- src offset
+                 -> Expr EWord         -- size
+                 -> Expr Memory        -- old memory
+                 -> Expr Memory        -- new memory
 
   -- returndata
-  ReturndataSize :: Expr W256
-  ReturndataCopy :: Expr W256         -- dst offset
-                 -> Expr W256         -- src offset
-                 -> Expr W256         -- size
-                 -> Expr Returndata   -- returndata
-                 -> Expr Memory       -- old mem
-                 -> Expr Memory       -- new mem
+  ReturndataSize :: Expr EWord
+  ReturndataCopy :: Expr EWord         -- dst offset
+                 -> Expr EWord         -- src offset
+                 -> Expr EWord         -- size
+                 -> Expr Returndata    -- returndata
+                 -> Expr Memory        -- old mem
+                 -> Expr Memory        -- new mem
 
   EmptyRet       :: Expr Returndata
-  WriteRet       :: Expr W256         -- offset
-                 -> Expr W256         -- size
-                 -> Expr Memory       -- memory
-                 -> Expr Returndata   -- new returndata
+  WriteRet       :: Expr EWord         -- offset
+                 -> Expr EWord         -- size
+                 -> Expr Memory        -- memory
+                 -> Expr Returndata    -- new returndata
 
   -- logs
   EmptyLog       :: Expr Logs
 
-  Log0           :: Expr W256         -- offset
-                 -> Expr W256         -- size
-                 -> Expr Memory       -- memory
-                 -> Expr Logs         -- old logs
-                 -> Expr Logs         -- new logs
+  Log0           :: Expr EWord         -- offset
+                 -> Expr EWord         -- size
+                 -> Expr Memory        -- memory
+                 -> Expr Logs          -- old logs
+                 -> Expr Logs          -- new logs
 
-  Log1           :: Expr W256         -- offset
-                 -> Expr W256         -- size
-                 -> Expr W256         -- topic
-                 -> Expr Memory       -- memory
-                 -> Expr Logs         -- old logs
-                 -> Expr Logs         -- new logs
+  Log1           :: Expr EWord         -- offset
+                 -> Expr EWord         -- size
+                 -> Expr EWord         -- topic
+                 -> Expr Memory        -- memory
+                 -> Expr Logs          -- old logs
+                 -> Expr Logs          -- new logs
 
-  Log2           :: Expr W256         -- offset
-                 -> Expr W256         -- size
-                 -> Expr W256         -- topic 1
-                 -> Expr W256         -- topic 2
-                 -> Expr Memory       -- memory
-                 -> Expr Logs         -- old logs
-                 -> Expr Logs         -- new logs
+  Log2           :: Expr EWord         -- offset
+                 -> Expr EWord         -- size
+                 -> Expr EWord         -- topic 1
+                 -> Expr EWord         -- topic 2
+                 -> Expr Memory        -- memory
+                 -> Expr Logs          -- old logs
+                 -> Expr Logs          -- new logs
 
-  Log3           :: Expr W256         -- offset
-                 -> Expr W256         -- size
-                 -> Expr W256         -- topic 1
-                 -> Expr W256         -- topic 2
-                 -> Expr W256         -- topic 3
-                 -> Expr Memory       -- memory
-                 -> Expr Logs         -- old logs
-                 -> Expr Logs         -- new logs
+  Log3           :: Expr EWord         -- offset
+                 -> Expr EWord         -- size
+                 -> Expr EWord         -- topic 1
+                 -> Expr EWord         -- topic 2
+                 -> Expr EWord         -- topic 3
+                 -> Expr Memory        -- memory
+                 -> Expr Logs          -- old logs
+                 -> Expr Logs          -- new logs
 
-  Log4           :: Expr W256         -- offset
-                 -> Expr W256         -- size
-                 -> Expr W256         -- topic 1
-                 -> Expr W256         -- topic 2
-                 -> Expr W256         -- topic 3
-                 -> Expr W256         -- topic 4
-                 -> Expr Memory       -- memory
-                 -> Expr Logs         -- old logs
-                 -> Expr Logs         -- new logs
+  Log4           :: Expr EWord         -- offset
+                 -> Expr EWord         -- size
+                 -> Expr EWord         -- topic 1
+                 -> Expr EWord         -- topic 2
+                 -> Expr EWord         -- topic 3
+                 -> Expr EWord         -- topic 4
+                 -> Expr Memory        -- memory
+                 -> Expr Logs          -- old logs
+                 -> Expr Logs          -- new logs
 
   -- Contract Creation
-  Create         :: Expr W256         -- value
-                 -> Expr W256         -- offset
-                 -> Expr W256         -- size
-                 -> Expr Memory       -- memory
-                 -> Expr Logs         -- logs
-                 -> Expr Storage      -- storage
-                 -> Expr W256         -- address
+  Create         :: Expr EWord         -- value
+                 -> Expr EWord         -- offset
+                 -> Expr EWord         -- size
+                 -> Expr Memory        -- memory
+                 -> Expr Logs          -- logs
+                 -> Expr Storage       -- storage
+                 -> Expr EWord         -- address
 
-  Create2        :: Expr W256         -- value
-                 -> Expr W256         -- offset
-                 -> Expr W256         -- size
-                 -> Expr W256         -- salt
-                 -> Expr Memory       -- memory
-                 -> Expr Logs         -- logs
-                 -> Expr Storage      -- storage
-                 -> Expr W256         -- address
+  Create2        :: Expr EWord         -- value
+                 -> Expr EWord         -- offset
+                 -> Expr EWord         -- size
+                 -> Expr EWord         -- salt
+                 -> Expr Memory        -- memory
+                 -> Expr Logs          -- logs
+                 -> Expr Storage       -- storage
+                 -> Expr EWord         -- address
 
   -- Calls
-  Call           :: Expr W256         -- gas
-                 -> Maybe (Expr W256) -- target
-                 -> Expr W256         -- value
-                 -> Expr W256         -- args offset
-                 -> Expr W256         -- args size
-                 -> Expr W256         -- ret offset
-                 -> Expr W256         -- ret size
-                 -> Expr Logs         -- logs
-                 -> Expr Storage      -- storage
-                 -> Expr W256         -- success
+  Call           :: Expr EWord         -- gas
+                 -> Maybe (Expr EWord) -- target
+                 -> Expr EWord         -- value
+                 -> Expr EWord         -- args offset
+                 -> Expr EWord         -- args size
+                 -> Expr EWord         -- ret offset
+                 -> Expr EWord         -- ret size
+                 -> Expr Logs          -- logs
+                 -> Expr Storage       -- storage
+                 -> Expr EWord         -- success
 
-  CallCode       :: Expr W256         -- gas
-                 -> Expr W256         -- address
-                 -> Expr W256         -- value
-                 -> Expr W256         -- args offset
-                 -> Expr W256         -- args size
-                 -> Expr W256         -- ret offset
-                 -> Expr W256         -- ret size
-                 -> Expr Logs         -- logs
-                 -> Expr Storage      -- storage
-                 -> Expr W256         -- success
+  CallCode       :: Expr EWord         -- gas
+                 -> Expr EWord         -- address
+                 -> Expr EWord         -- value
+                 -> Expr EWord         -- args offset
+                 -> Expr EWord         -- args size
+                 -> Expr EWord         -- ret offset
+                 -> Expr EWord         -- ret size
+                 -> Expr Logs          -- logs
+                 -> Expr Storage       -- storage
+                 -> Expr EWord         -- success
 
-  DelegeateCall  :: Expr W256         -- gas
-                 -> Expr W256         -- address
-                 -> Expr W256         -- value
-                 -> Expr W256         -- args offset
-                 -> Expr W256         -- args size
-                 -> Expr W256         -- ret offset
-                 -> Expr W256         -- ret size
-                 -> Expr Logs         -- logs
-                 -> Expr Storage      -- storage
-                 -> Expr W256         -- success
+  DelegeateCall  :: Expr EWord         -- gas
+                 -> Expr EWord         -- address
+                 -> Expr EWord         -- value
+                 -> Expr EWord         -- args offset
+                 -> Expr EWord         -- args size
+                 -> Expr EWord         -- ret offset
+                 -> Expr EWord         -- ret size
+                 -> Expr Logs          -- logs
+                 -> Expr Storage       -- storage
+                 -> Expr EWord         -- success
 
   -- memory
-  MLoad          :: Expr W256         -- index
-                 -> Expr Memory       -- memory
-                 -> Expr W256         -- result
+  MLoad          :: Expr EWord         -- index
+                 -> Expr Memory        -- memory
+                 -> Expr EWord         -- result
 
-  MStore         :: Expr W256         -- dst offset
-                 -> Expr W256         -- value
-                 -> Expr Memory       -- prev memory
-                 -> Expr Memory       -- new memory
+  MStore         :: Expr EWord         -- dst offset
+                 -> Expr EWord         -- value
+                 -> Expr Memory        -- prev memory
+                 -> Expr Memory        -- new memory
 
-  MStore8        :: Expr W256         -- dst offset
-                 -> Expr W256         -- value
-                 -> Expr Memory       -- prev memory
-                 -> Expr Memory       -- new memory
+  MStore8        :: Expr EWord         -- dst offset
+                 -> Expr EWord         -- value
+                 -> Expr Memory        -- prev memory
+                 -> Expr Memory        -- new memory
 
   EmptyMem       :: Expr Memory
-  MSize          :: Expr W256
+  MSize          :: Expr EWord
 
   -- storage
-  SLoad          :: Expr W256         -- address
-                 -> Expr W256         -- index
-                 -> Expr Storage      -- storage
-                 -> Expr W256         -- result
+  SLoad          :: Expr EWord         -- address
+                 -> Expr EWord         -- index
+                 -> Expr Storage       -- storage
+                 -> Expr EWord         -- result
 
-  SStore         :: Expr W256         -- address
-                 -> Expr W256         -- index
-                 -> Expr W256         -- value
-                 -> Expr Storage      -- old storage
-                 -> Expr Storage      -- new storae
+  SStore         :: Expr EWord         -- address
+                 -> Expr EWord         -- index
+                 -> Expr EWord         -- value
+                 -> Expr Storage       -- old storage
+                 -> Expr Storage       -- new storae
 
   EmptyStore     :: Expr Storage
   AbstractStore  :: Expr Storage
