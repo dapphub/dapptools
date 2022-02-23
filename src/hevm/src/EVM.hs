@@ -21,7 +21,7 @@ import Data.Text.Encoding (decodeUtf8, encodeUtf8)
 import EVM.ABI
 import EVM.Types
 import EVM.Solidity
-import EVM.Concrete (createAddress, wordValue, keccakBlob, create2Address, readMemoryWord)
+import EVM.Concrete (createAddress, create2Address)
 import EVM.Symbolic
 import EVM.Op
 import EVM.FeeSchedule (FeeSchedule (..))
@@ -39,6 +39,7 @@ import Data.Maybe                   (fromMaybe)
 import Data.Sequence                (Seq)
 import Data.Vector.Storable         (Vector)
 import Data.Foldable                (toList)
+import Data.Word                    (Word8, Word32)
 
 import Data.Tree
 import Data.List (find)
@@ -67,13 +68,13 @@ import Crypto.PubKey.ECC.Generate (generateQ)
 
 -- | EVM failure modes
 data Error
-  = BalanceTooLow Word Word
+  = BalanceTooLow W256 W256
   | UnrecognizedOpcode Word8
   | SelfDestruction
   | StackUnderrun
   | BadJumpDestination
   | Revert ByteString
-  | OutOfGas Word Word
+  | OutOfGas W256 W256
   | BadCheatCode (Maybe Word32)
   | StackLimitExceeded
   | IllegalOverflow
@@ -82,14 +83,14 @@ data Error
   | StateChangeWhileStatic
   | InvalidMemoryAccess
   | CallDepthLimitReached
-  | MaxCodeSizeExceeded Word Word
+  | MaxCodeSizeExceeded W256 W256
   | InvalidFormat
   | PrecompileFailure
   | UnexpectedSymbolicArg
   | DeadPath
-  | NotUnique Whiff
+  | NotUnique (Expr EWord)
   | SMTTimeout
-  | FFI AbiVals
+  | FFI [AbiValue]
 deriving instance Show Error
 
 -- | The possible result states of a VM
@@ -107,11 +108,10 @@ data VM = VM
   , _env            :: Env
   , _block          :: Block
   , _tx             :: TxState
-  , _logs           :: Seq Log
+  , _logs           :: Expr Logs
   , _traces         :: Zipper.TreePos Zipper.Empty Trace
   , _cache          :: Cache
-  , _burned         :: Word
-  , _constraints    :: [(SBool, Whiff)]
+  , _burned         :: W256
   , _iterations     :: Map CodeLocation Int
   , _allowFFI       :: Bool
   }
@@ -125,7 +125,7 @@ data Trace = Trace
   deriving (Show)
 
 data TraceData
-  = EventTrace Log
+  = EventTrace (Expr Logs)
   | FrameTrace FrameContext
   | QueryTrace Query
   | ErrorTrace Error
@@ -136,13 +136,13 @@ data TraceData
 -- | Queries halt execution until resolved through RPC calls or SMT queries
 data Query where
   PleaseFetchContract :: Addr -> StorageModel -> (Contract -> EVM ()) -> Query
-  PleaseMakeUnique    :: SymVal a => SBV a -> [SBool] -> (IsUnique a -> EVM ()) -> Query
-  PleaseFetchSlot     :: Addr -> Word -> (Word -> EVM ()) -> Query
-  PleaseAskSMT        :: SBool -> [SBool] -> (BranchCondition -> EVM ()) -> Query
+  --PleaseMakeUnique    :: SBV a -> [SBool] -> (IsUnique a -> EVM ()) -> Query
+  PleaseFetchSlot     :: Addr -> W256 -> (W256 -> EVM ()) -> Query
+  --PleaseAskSMT        :: SBool -> [SBool] -> (BranchCondition -> EVM ()) -> Query
   PleaseDoFFI         :: [String] -> (ByteString -> EVM ()) -> Query
 
 data Choose where
-  PleaseChoosePath    :: Whiff -> (Bool -> EVM ()) -> Choose
+  PleaseChoosePath    :: Expr EWord -> (Bool -> EVM ()) -> Choose
 
 instance Show Query where
   showsPrec _ = \case
@@ -152,14 +152,14 @@ instance Show Query where
       (("<EVM.Query: fetch slot "
         ++ show slot ++ " for "
         ++ show addr ++ ">") ++)
-    PleaseAskSMT condition constraints _ ->
-      (("<EVM.Query: ask SMT about "
-        ++ show condition ++ " in context "
-        ++ show constraints ++ ">") ++)
-    PleaseMakeUnique val constraints _ ->
-      (("<EVM.Query: make value "
-        ++ show val ++ " unique in context "
-        ++ show constraints ++ ">") ++)
+--     PleaseAskSMT condition constraints _ ->
+--       (("<EVM.Query: ask SMT about "
+--         ++ show condition ++ " in context "
+--         ++ show constraints ++ ">") ++)
+--     PleaseMakeUnique val constraints _ ->
+--       (("<EVM.Query: make value "
+--         ++ show val ++ " unique in context "
+--         ++ show constraints ++ ">") ++)
     PleaseDoFFI cmd _ ->
       (("<EVM.Query: do ffi: " ++ (show cmd)) ++)
 
@@ -191,16 +191,16 @@ data Cache = Cache
 -- | A way to specify an initial VM state
 data VMOpts = VMOpts
   { vmoptContract :: Contract
-  , vmoptCalldata :: (Buffer, SymWord)
-  , vmoptValue :: SymWord
+  , vmoptCalldata :: Expr Buf
+  , vmoptValue :: Expr EWord
   , vmoptPriorityFee :: W256
   , vmoptAddress :: Addr
-  , vmoptCaller :: SAddr
+  , vmoptCaller :: Expr EWord
   , vmoptOrigin :: Addr
   , vmoptGas :: W256
   , vmoptGaslimit :: W256
   , vmoptNumber :: W256
-  , vmoptTimestamp :: SymWord
+  , vmoptTimestamp :: Expr EWord
   , vmoptCoinbase :: Addr
   , vmoptDifficulty :: W256
   , vmoptMaxCodeSize :: W256
@@ -216,8 +216,8 @@ data VMOpts = VMOpts
   } deriving Show
 
 -- | A log entry
-data Log = Log Addr Buffer [SymWord]
-  deriving (Show)
+--data Log = Log Addr (Expr Buf) [Expr EWord]
+  --deriving (Show)
 
 -- | An entry in the VM's "call/create stack"
 data Frame = Frame
@@ -237,10 +237,10 @@ data FrameContext
   | CallContext
     { callContextTarget    :: Addr
     , callContextContext   :: Addr
-    , callContextOffset    :: Word
-    , callContextSize      :: Word
+    , callContextOffset    :: W256
+    , callContextSize      :: W256
     , callContextCodehash  :: W256
-    , callContextAbi       :: Maybe Word
+    , callContextAbi       :: Maybe W256
     , callContextData      :: Expr Buf
     , callContextReversion :: Map Addr Contract
     , callContextSubState  :: SubState
@@ -251,15 +251,15 @@ data FrameContext
 data FrameState = FrameState
   { _contract     :: Addr
   , _codeContract :: Addr
-  , _code         :: ByteString -- Buffer TODO: why was this a buffer before? Isn't this always concrete
+  , _code         :: Expr Buf
   , _pc           :: Int
-  , _stack        :: [SymWord]
-  , _memory       :: Expr Memory
+  , _stack        :: [Expr EWord]
+  , _memory       :: Expr Buf
   , _memorySize   :: Int
   , _calldata     :: Expr Buf
-  , _callvalue    :: SymWord
-  , _caller       :: SAddr
-  , _gas          :: Word
+  , _callvalue    :: Expr EWord
+  , _caller       :: Expr EWord
+  , _gas          :: W256
   , _returndata   :: Expr Buf
   , _static       :: Bool
   }
@@ -267,12 +267,12 @@ data FrameState = FrameState
 
 -- | The state that spans a whole transaction
 data TxState = TxState
-  { _gasprice            :: Word
-  , _txgaslimit          :: Word
-  , _txPriorityFee       :: Word
+  { _gasprice            :: W256
+  , _txgaslimit          :: W256
+  , _txPriorityFee       :: W256
   , _origin              :: Addr
   , _toAddr              :: Addr
-  , _value               :: SymWord
+  , _value               :: Expr EWord
   , _substate            :: SubState
   , _isCreate            :: Bool
   , _txReversion         :: Map Addr Contract
@@ -294,10 +294,9 @@ data SubState = SubState
 -- post-creation, and code in these two modes is treated differently
 -- by instructions like @EXTCODEHASH@, so we distinguish these two
 -- code types.
--- TODO: make this a bytestring too?
 data ContractCode
-  = InitCode Buffer     -- ^ "Constructor" code, during contract creation
-  | RuntimeCode Buffer  -- ^ "Instance" code, after contract creation
+  = InitCode (Expr Buf)     -- ^ "Constructor" code, during contract creation
+  | RuntimeCode (Expr Buf)  -- ^ "Instance" code, after contract creation
   deriving (Show)
 
 -- runtime err when used for symbolic code
@@ -314,31 +313,31 @@ instance Ord ContractCode where
 
 -- | A contract can either have concrete or symbolic storage
 -- depending on what type of execution we are doing
-data Storage
-  = Concrete (Map Word SymWord)
-  | Symbolic [(SymWord, SymWord)] (SArray (WordN 256) (WordN 256))
-  deriving (Show)
+-- data Storage
+--   = Concrete (Map Word SymWord)
+--   | Symbolic [(SymWord, SymWord)] (SArray (WordN 256) (WordN 256))
+--   deriving (Show)
 
 -- to allow for Eq Contract (which useful for debugging vmtests)
 -- we mock an instance of Eq for symbolic storage.
 -- It should not (cannot) be used though.
-instance Eq Storage where
-  (==) (Concrete a) (Concrete b) = fmap forceLit a == fmap forceLit b
-  (==) (Symbolic _ _) (Concrete _) = False
-  (==) (Concrete _) (Symbolic _ _) = False
-  (==) _ _ = error "do not compare two symbolic arrays like this!"
+-- instance Eq Storage where
+--   (==) (Concrete a) (Concrete b) = fmap forceLit a == fmap forceLit b
+--   (==) (Symbolic _ _) (Concrete _) = False
+--   (==) (Concrete _) (Symbolic _ _) = False
+--   (==) _ _ = error "do not compare two symbolic arrays like this!"
 
 -- | The state of a contract
 data Contract = Contract
   { _contractcode :: ContractCode
-  , _storage      :: Storage
-  , _balance      :: Word
-  , _nonce        :: Word
+  , _storage      :: Expr Storage
+  , _balance      :: W256
+  , _nonce        :: W256
   , _codehash     :: W256
   , _opIxMap      :: Vector Int
   , _codeOps      :: RegularVector.Vector (Int, Op)
   , _external     :: Bool
-  , _origStorage  :: Map Word Word
+  , _origStorage  :: Map W256 W256
   }
 
 deriving instance Show Contract
@@ -364,10 +363,10 @@ instance ParseField StorageModel
 -- | Various environmental data
 data Env = Env
   { _contracts    :: Map Addr Contract
-  , _chainId      :: Word
+  , _chainId      :: W256
   , _storageModel :: StorageModel
-  , _sha3Crack    :: Map Word ByteString
-  , _keccakUsed   :: [([SWord 8], SWord 256)]
+  , _sha3Crack    :: Map W256 ByteString
+  --, _keccakUsed   :: [([SWord 8], SWord 256)]
   }
   deriving (Show)
 
@@ -375,12 +374,12 @@ data Env = Env
 -- | Data about the block
 data Block = Block
   { _coinbase    :: Addr
-  , _timestamp   :: SymWord
-  , _number      :: Word
-  , _difficulty  :: Word
-  , _gaslimit    :: Word
-  , _baseFee     :: Word
-  , _maxCodeSize :: Word
+  , _timestamp   :: Expr EWord
+  , _number      :: W256
+  , _difficulty  :: W256
+  , _gaslimit    :: W256
+  , _baseFee     :: W256
+  , _maxCodeSize :: W256
   , _schedule    :: FeeSchedule Integer
   } deriving Show
 
@@ -414,7 +413,7 @@ makeLenses ''VM
 
 -- | An "external" view of a contract's bytecode, appropriate for
 -- e.g. @EXTCODEHASH@.
-bytecode :: Getter Contract Buffer
+bytecode :: Getter Contract (Expr Buf)
 bytecode = contractcode . to f
   where f (InitCode _)    = mempty
         f (RuntimeCode b) = b
@@ -430,7 +429,7 @@ instance Semigroup Cache where
 unifyCachedContract :: Contract -> Contract -> Contract
 unifyCachedContract a b = a & set storage merged
   where merged = case (view storage a, view storage b) of
-                   (Concrete sa, Concrete sb) ->
+                   (ConcreteStore sa, ConcreteStore sb) ->
                      Concrete (mappend sa sb)
                    _ ->
                      view storage a
@@ -505,12 +504,12 @@ makeVm o =
     , _chainId = w256 $ vmoptChainId o
     , _contracts = Map.fromList
       [(vmoptAddress o, vmoptContract o)]
-    , _keccakUsed = mempty
+    --, _keccakUsed = mempty
     , _storageModel = vmoptStorageModel o
     }
   , _cache = Cache mempty mempty
   , _burned = 0
-  , _constraints = []
+  --, _constraints = []
   , _iterations = mempty
   , _allowFFI = vmoptAllowFFI o
   } where theCode = case _contractcode (vmoptContract o) of
@@ -523,8 +522,8 @@ initialContract theContractCode = Contract
   { _contractcode = theContractCode
   , _codehash =
     case theCode of
-      ConcreteBuffer b -> keccak (stripBytecodeMetadata b)
-      SymbolicBuffer _ -> 0
+      ConcreteBuf b -> keccak (stripBytecodeMetadata b)
+      _ -> 0
 
   , _storage  = Concrete mempty
   , _balance  = 0

@@ -402,19 +402,17 @@ data Expr (a :: EType) where
   MSize          :: Expr EWord
 
   -- storage
-  SLoad          :: Expr EWord         -- address
-                 -> Expr EWord         -- index
+  SLoad          :: Expr EWord         -- index
                  -> Expr Storage       -- storage
                  -> Expr EWord         -- result
 
-  SStore         :: Expr EWord         -- address
-                 -> Expr EWord         -- index
+  SStore         :: Expr EWord         -- index
                  -> Expr EWord         -- value
                  -> Expr Storage       -- old storage
                  -> Expr Storage       -- new storae
 
   EmptyStore     :: Expr Storage
-  ConcreteStore  :: Map Addr (Map W256 W256) -> Expr Storage
+  ConcreteStore  :: Map W256 W256 -> Expr Storage
   AbstractStore  :: Expr Storage
 
   -- buffers
@@ -423,6 +421,8 @@ data Expr (a :: EType) where
   AbstractBuf    :: Expr Buf
 
 deriving instance Show (Expr a)
+-- TODO: do we need a custom instance here?
+--        e.g. what should AbstractBuf == AbstractBuf be? same q for Stores
 deriving instance Eq (Expr a)
 
 newtype ByteStringS = ByteStringS ByteString deriving (Eq)
