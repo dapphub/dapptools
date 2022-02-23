@@ -32,7 +32,6 @@ module EVM.ABI
   ( AbiValue (..)
   , AbiType (..)
   , AbiKind (..)
-  , AbiVals (..)
   , abiKind
   , Event (..)
   , SolError (..)
@@ -48,7 +47,6 @@ module EVM.ABI
   , emptyAbi
   , encodeAbiValue
   , decodeAbiValue
-  , decodeStaticArgs
   , decodeBuffer
   , formatString
   , parseTypeName
@@ -72,7 +70,6 @@ import Data.Text.Encoding (encodeUtf8, decodeUtf8')
 import Data.Vector        (Vector, toList)
 import Data.Word          (Word32)
 import Data.List          (intercalate)
-import Data.SBV           (fromBytes)
 import GHC.Generics
 
 import Test.QuickCheck hiding ((.&.), label)
@@ -432,7 +429,7 @@ genAbiValue = \case
     genUInt n = AbiUInt n <$> arbitraryIntegralWithMax (2^n-1)
 
 instance Arbitrary AbiType where
-  arbitrary = oneof $ -- doesn't create any tuples
+  arbitrary = oneof
     [ (AbiUIntType . (* 8)) <$> choose (1, 32)
     , (AbiIntType . (* 8)) <$> choose (1, 32)
     , pure AbiAddressType
@@ -472,7 +469,7 @@ instance Arbitrary AbiValue where
 
 -- Bool synonym with custom read instance
 -- to be able to parse lower case 'false' and 'true'
-data Boolz = Boolz Bool
+newtype Boolz = Boolz Bool
 
 instance Read Boolz where
   readsPrec _ ('T':'r':'u':'e':x) = [(Boolz True, x)]
@@ -522,35 +519,18 @@ listP parser = between (char '[') (char ']') ((do skipSpaces
 
 bytesP :: ReadP ByteStringS
 bytesP = do
-  string "0x"
+  _ <- string "0x"
   hex <- munch isHexDigit
   case BS16.decode (encodeUtf8 (Text.pack hex)) of
     Right d -> pure $ ByteStringS d
-    Left d -> pfail
+    Left _ -> pfail
 
-data AbiVals = NoVals | CAbi [AbiValue] | SAbi [SymWord]
-  deriving (Show)
-
-decodeBuffer :: [AbiType] -> Buffer -> AbiVals
-decodeBuffer tps (ConcreteBuffer b)
+decodeBuffer :: [AbiType] -> Expr Buf -> Maybe [AbiValue]
+decodeBuffer tps (ConcreteBuf b)
   = case runGetOrFail (getAbiSeq (length tps) tps) (BSLazy.fromStrict b) of
-      Right ("", _, args) -> CAbi . toList $ args
-      _ -> NoVals
-decodeBuffer tps b@(SymbolicBuffer _)
-  = if containsDynamic tps
-    then NoVals
-    else SAbi . decodeStaticArgs $ b
-  where
-    isDynamic t = abiKind t == Dynamic
-    containsDynamic = or . fmap isDynamic
-
-decodeStaticArgs :: Buffer -> [SymWord]
-decodeStaticArgs buffer = let
-    bs = case buffer of
-      ConcreteBuffer b -> litBytes b
-      SymbolicBuffer b -> b
-  in fmap (\i -> S (FromBytes buffer) $
-            fromBytes $ take 32 (drop (i*32) bs)) [0..((length bs) `div` 32 - 1)]
+      Right ("", _, args) -> Just (toList args)
+      _ -> Nothing
+decodeBuffer _ _ = error "TODO: symbolic abi decoding"
 
 -- A modification of 'arbitrarySizedBoundedIntegral' quickcheck library
 -- which takes the maxbound explicitly rather than relying on a Bounded instance.
