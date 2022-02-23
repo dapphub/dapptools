@@ -63,7 +63,6 @@ module EVM.Solidity
 
 import EVM.ABI
 import EVM.Types
-import Data.SBV
 
 import Control.Applicative
 import Control.Monad
@@ -79,8 +78,8 @@ import Data.Char            (isDigit)
 import Data.Foldable
 import Data.Map.Strict      (Map)
 import Data.Maybe
+import Data.Word            (Word32)
 import Data.List.NonEmpty   (NonEmpty)
-import qualified Data.List.NonEmpty as NonEmpty
 import Data.Semigroup
 import Data.Sequence        (Seq)
 import Data.Text            (Text, pack, intercalate)
@@ -100,6 +99,7 @@ import qualified Data.HashMap.Strict    as HMap
 import qualified Data.Map.Strict        as Map
 import qualified Data.Text              as Text
 import qualified Data.Vector            as Vector
+import qualified Data.List.NonEmpty     as NonEmpty
 import Data.List (sort, isPrefixOf, isInfixOf, elemIndex, tails, findIndex)
 
 data StorageItem = StorageItem {
@@ -297,7 +297,7 @@ readSolc fp =
       Nothing -> return Nothing
       Just (contracts, asts, sources) -> do
         sourceCache <- makeSourceCache sources asts
-        return $! Just (contracts, sourceCache)
+        return (Just (contracts, sourceCache))
 
 yul :: Text -> Text -> IO (Maybe ByteString)
 yul contract src = do
@@ -677,18 +677,18 @@ stripBytecodeMetadata bs =
       Nothing -> bs
       Just (b, _) -> b
 
-stripBytecodeMetadataSym :: [SWord 8] -> [SWord 8]
-stripBytecodeMetadataSym b =
-  let
-    concretes :: [Maybe Word8]
-    concretes = (fmap fromSized) . unliteral <$> b
-    bzzrs :: [[Maybe Word8]]
-    bzzrs = fmap (Just) . BS.unpack <$> knownBzzrPrefixes
-    candidates = (flip Data.List.isInfixOf concretes) <$> bzzrs
-  in case elemIndex True candidates of
-    Nothing -> b
-    Just i -> let Just ind = infixIndex (bzzrs !! i) concretes
-              in take ind b
+stripBytecodeMetadataSym :: Expr Buf -> Expr Buf
+stripBytecodeMetadataSym _ = error "TODO: strip metadata from symbolic bytecode"
+  --let
+    --concretes :: [Maybe Word8]
+    --concretes = (fmap fromSized) . unliteral <$> b
+    --bzzrs :: [[Maybe Word8]]
+    --bzzrs = fmap (Just) . BS.unpack <$> knownBzzrPrefixes
+    --candidates = (flip Data.List.isInfixOf concretes) <$> bzzrs
+  --in case elemIndex True candidates of
+    --Nothing -> b
+    --Just i -> let Just ind = infixIndex (bzzrs !! i) concretes
+              --in take ind b
 
 infixIndex :: (Eq a) => [a] -> [a] -> Maybe Int
 infixIndex needle haystack = findIndex (isPrefixOf needle) (tails haystack)

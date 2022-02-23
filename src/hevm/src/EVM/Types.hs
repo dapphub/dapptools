@@ -222,7 +222,7 @@ data Expr (a :: EType) where
   BlockHash      :: Expr EWord
   Coinbase       :: Expr EWord
   Timestamp      :: Expr EWord
-  Number         :: Expr EWord
+  BlocckNumber   :: Expr EWord
   Difficulty     :: Expr EWord
   GasLimit       :: Expr EWord
   ChainId        :: Expr EWord
@@ -423,6 +423,7 @@ data Expr (a :: EType) where
   AbstractBuf    :: Expr Buf
 
 deriving instance Show (Expr a)
+deriving instance Eq (Expr a)
 
 newtype ByteStringS = ByteStringS ByteString deriving (Eq)
 

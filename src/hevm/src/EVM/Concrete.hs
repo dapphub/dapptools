@@ -35,56 +35,53 @@ byteStringSliceWithDefaultZeroes offset size bs =
     in bs' <> BS.replicate (size - BS.length bs') 0
 
 
-wordValue :: Word -> W256
-wordValue (C _ x) = x
-
 sliceMemory :: (Integral a, Integral b) => a -> b -> ByteString -> ByteString
 sliceMemory o s =
   byteStringSliceWithDefaultZeroes (num o) (num s)
 
-writeMemory :: ByteString -> Word -> Word -> Word -> ByteString -> ByteString
-writeMemory bs1 (C _ n) (C _ src) (C _ dst) bs0 =
-  let
-    (a, b) = BS.splitAt (num dst) bs0
-    a'     = BS.replicate (num dst - BS.length a) 0
+--writeMemory :: ByteString -> Word -> Word -> Word -> ByteString -> ByteString
+--writeMemory bs1 (C _ n) (C _ src) (C _ dst) bs0 =
+  --let
+    --(a, b) = BS.splitAt (num dst) bs0
+    --a'     = BS.replicate (num dst - BS.length a) 0
     -- sliceMemory should work for both cases, but we are using 256 bit
     -- words, whereas ByteString is only defined up to 64 bit. For large n,
     -- src, dst this will cause problems (often in GeneralStateTests).
     -- Later we could reimplement ByteString for 256 bit arguments.
-    c      = if src > num (BS.length bs1)
-             then BS.replicate (num n) 0
-             else sliceMemory src n bs1
-    b'     = BS.drop (num n) b
-  in
-    a <> a' <> c <> b'
+    --c      = if src > num (BS.length bs1)
+             --then BS.replicate (num n) 0
+             --else sliceMemory src n bs1
+    --b'     = BS.drop (num n) b
+  --in
+    --a <> a' <> c <> b'
 
-readMemoryWord :: Word -> ByteString -> Word
-readMemoryWord (C _ i) m =
-  if i > (num $ BS.length m) then 0 else
-  let
-    go !a (-1) = a
-    go !a !n = go (a + shiftL (num $ readByteOrZero (num i + n) m)
-                              (8 * (31 - n))) (n - 1)
-    w = go (0 :: W256) (31 :: Int)
-  in {-# SCC "readMemoryWord" #-}
-    C (Lit w) w
+--readMemoryWord :: Word -> ByteString -> Word
+--readMemoryWord (C _ i) m =
+  --if i > (num $ BS.length m) then 0 else
+  --let
+    --go !a (-1) = a
+    --go !a !n = go (a + shiftL (num $ readByteOrZero (num i + n) m)
+                              --(8 * (31 - n))) (n - 1)
+    --w = go (0 :: W256) (31 :: Int)
+  --in [># SCC "readMemoryWord" #<]
+    --C (Lit w) w
 
-readMemoryWord32 :: Word -> ByteString -> Word
-readMemoryWord32 (C _ i) m =
-  let
-    go !a (-1) = a
-    go !a !n = go (a + shiftL (num $ readByteOrZero (num i + n) m)
-                              (8 * (3 - n))) (n - 1)
-  in {-# SCC "readMemoryWord32" #-}
-    w256 $ go (0 :: W256) (3 :: Int)
+--readMemoryWord32 :: Word -> ByteString -> Word
+--readMemoryWord32 (C _ i) m =
+  --let
+    --go !a (-1) = a
+    --go !a !n = go (a + shiftL (num $ readByteOrZero (num i + n) m)
+                              --(8 * (3 - n))) (n - 1)
+  --in [># SCC "readMemoryWord32" #<]
+    --w256 $ go (0 :: W256) (3 :: Int)
 
-setMemoryWord :: Word -> Word -> ByteString -> ByteString
-setMemoryWord (C _ i) (C _ x) =
-  writeMemory (word256Bytes x) 32 0 (num i)
+--setMemoryWord :: Word -> Word -> ByteString -> ByteString
+--setMemoryWord (C _ i) (C _ x) =
+  --writeMemory (word256Bytes x) 32 0 (num i)
 
-setMemoryByte :: Word -> Word8 -> ByteString -> ByteString
-setMemoryByte (C _ i) x =
-  writeMemory (BS.singleton x) 1 0 (num i)
+--setMemoryByte :: Word -> Word8 -> ByteString -> ByteString
+--setMemoryByte (C _ i) x =
+  --writeMemory (BS.singleton x) 1 0 (num i)
 
 --keccakBlob :: ByteString -> Word
 --keccakBlob x = C (FromKeccak (ConcreteBuffer x)) (keccak x)
