@@ -13,8 +13,6 @@ import Prelude hiding  (Word, LT, GT)
 
 import Data.Aeson
 import Crypto.Hash
-import Data.SBV hiding (Word)
-import Data.Kind
 import Data.Map (Map)
 import Data.Bifunctor (first)
 import Data.Char
@@ -23,6 +21,8 @@ import Data.ByteString.Base16 as BS16
 import Data.ByteString.Builder (byteStringHex, toLazyByteString)
 import Data.ByteString.Lazy (toStrict)
 import qualified Data.ByteString.Char8  as Char8
+import Data.Word (Word8, Word32)
+import Data.Bits (Bits, shiftR, shift, shiftL, (.&.), (.|.))
 import Data.DoubleWord
 import Data.DoubleWord.TH
 import Data.Maybe (fromMaybe)
@@ -39,7 +39,6 @@ import qualified Data.Text            as Text
 import qualified Data.Text.Encoding   as Text
 import qualified Data.Sequence        as Seq
 import qualified Text.Regex.TDFA      as Regex
-import qualified Data.Map             as Map
 import qualified Text.Read
 
 -- Some stuff for "generic programming", needed to create Word512
@@ -50,14 +49,14 @@ mkUnpackedDoubleWord "Word512" ''Word256 "Int512" ''Int256 ''Word256
   [''Typeable, ''Data, ''Generic]
 
 
-data Buffer
-  = ConcreteBuffer ByteString
-  | SymbolicBuffer [SWord 8]
+--data Buffer
+--  = ConcreteBuffer ByteString
+--  | SymbolicBuffer [SWord 8]
 
 newtype W256 = W256 Word256
   deriving
-    ( Num, Integral, Real, Ord, Enum, Eq
-    , Bits, FiniteBits, Bounded, Generic
+    ( Num, Integral, Real, Ord, Bits
+    , Enum, Eq , Bounded, Generic
     )
 
 --data Word = C (Expr EWord) W256 --maybe to remove completely in the future
@@ -169,12 +168,6 @@ data EType
 
 -- add type level list of constraints
 data Expr (a :: EType) where
-
-  -- hacks :(
-  -- this is unfortunately required as some of the haskell instance types (e.g.
-  -- Num) allow for the construction of expressions that contain operations
-  -- that are not valid EVM (e.g. rotate / neg). Hopefully this can be removed.
-  Todo           :: String -> Expr EWord -> Expr EWord
 
   -- identifiers
   Lit            :: W256   -> Expr EWord
@@ -505,49 +498,49 @@ instance JSON.ToJSON ByteStringS where
   --fromEnum (S _ x) = fromEnum x
 
 newtype Addr = Addr { addressWord160 :: Word160 }
-  deriving (Num, Integral, Real, Ord, Enum, Eq, Bits, Generic)
+  deriving (Num, Integral, Real, Ord, Enum, Eq, Generic)
 
-newtype SAddr = SAddr { saddressWord160 :: SWord 160 }
-  deriving (Num)
+--newtype SAddr = SAddr { saddressWord160 :: SWord 160 }
+  --deriving (Num)
 
 -- | Capture the correspondence between sized and fixed-sized BVs
 -- (This is blatant copypasta of `FromSized` from sbv, which just
 -- happens to be defined up to 64 bits)
-type family FromSizzle (t :: Type) :: Type where
-   FromSizzle (WordN 256) = W256
-   FromSizzle (WordN 160) = Addr
+--type family FromSizzle (t :: Type) :: Type where
+   --FromSizzle (WordN 256) = W256
+   --FromSizzle (WordN 160) = Addr
 
 -- | Conversion from a sized BV to a fixed-sized bit-vector.
-class FromSizzleBV a where
+--class FromSizzleBV a where
    -- | Convert a sized bit-vector to the corresponding fixed-sized bit-vector,
    -- for instance 'SWord 16' to 'SWord16'. See also 'toSized'.
-   fromSizzle :: a -> FromSizzle a
+   --fromSizzle :: a -> FromSizzle a
 
-   default fromSizzle :: (Num (FromSizzle a), Integral a) => a -> FromSizzle a
-   fromSizzle = fromIntegral
+   --default fromSizzle :: (Num (FromSizzle a), Integral a) => a -> FromSizzle a
+   --fromSizzle = fromIntegral
 
 
 --maybeLitWord :: SymWord -> Maybe Word
 --maybeLitWord (S whiff a) = fmap (C whiff . fromSizzle) (unliteral a)
 
 -- | convert between (WordN 256) and Word256
-type family ToSizzle (t :: Type) :: Type where
-    ToSizzle W256 = (WordN 256)
-    ToSizzle Addr = (WordN 160)
+--type family ToSizzle (t :: Type) :: Type where
+    --ToSizzle W256 = (WordN 256)
+    --ToSizzle Addr = (WordN 160)
 
 -- | Conversion from a fixed-sized BV to a sized bit-vector.
-class ToSizzleBV a where
+--class ToSizzleBV a where
    -- | Convert a fixed-sized bit-vector to the corresponding sized bit-vector,
-   toSizzle :: a -> ToSizzle a
+   --toSizzle :: a -> ToSizzle a
 
-   default toSizzle :: (Num (ToSizzle a), Integral a) => (a -> ToSizzle a)
-   toSizzle = fromIntegral
+   --default toSizzle :: (Num (ToSizzle a), Integral a) => (a -> ToSizzle a)
+   --toSizzle = fromIntegral
 
 
-instance (ToSizzleBV W256)
-instance (FromSizzleBV (WordN 256))
-instance (ToSizzleBV Addr)
-instance (FromSizzleBV (WordN 160))
+--instance (ToSizzleBV W256)
+--instance (FromSizzleBV (WordN 256))
+--instance (ToSizzleBV Addr)
+--instance (FromSizzleBV (WordN 160))
 
 -- | Operations over buffers (concrete or symbolic)
 
@@ -594,10 +587,10 @@ instance Show Addr where
         str = replicate (40 - length hex) '0' ++ hex
     in "0x" ++ toChecksumAddress str ++ drop 40 str
 
-instance Show SAddr where
-  show (SAddr a) = case unliteral a of
-    Nothing -> "<symbolic addr>"
-    Just c -> show $ fromSizzle c
+--instance Show SAddr where
+  --show (SAddr a) = case unliteral a of
+    --Nothing -> "<symbolic addr>"
+    --Just c -> show $ fromSizzle c
 
 -- https://eips.ethereum.org/EIPS/eip-55
 toChecksumAddress :: String -> String
@@ -686,7 +679,6 @@ toWord512 (W256 x) = fromHiAndLo 0 x
 fromWord512 :: Word512 -> W256
 fromWord512 x = W256 (loWord x)
 
-{-# SPECIALIZE num :: Word8 -> W256 #-}
 num :: (Integral a, Num b) => a -> b
 num = fromIntegral
 
@@ -700,10 +692,10 @@ padRight' :: Int -> String -> String
 padRight' n xs = xs <> replicate (n - length xs) '0'
 
 -- | Right padding  / truncating
-truncpad :: Int -> [SWord 8] -> [SWord 8]
-truncpad n xs = if m > n then take n xs
-                else mappend xs (replicate (n - m) 0)
-  where m = length xs
+--truncpad :: Int -> [SWord 8] -> [SWord 8]
+--truncpad n xs = if m > n then take n xs
+                --else mappend xs (replicate (n - m) 0)
+  --where m = length xs
 
 padLeft' :: (Num a) => Int -> [a] -> [a]
 padLeft' n xs = replicate (n - length xs) 0 <> xs
@@ -742,13 +734,12 @@ word160Bytes :: Addr -> ByteString
 word160Bytes x = BS.pack [byteAt (addressWord160 x) (19 - i) | i <- [0..19]]
 
 newtype Nibble = Nibble Word8
-  deriving ( Num, Integral, Real, Ord, Enum, Eq
-    , Bits, FiniteBits, Bounded, Generic)
+  deriving ( Num, Integral, Real, Ord, Enum, Eq, Bounded, Generic)
 
 instance Show Nibble where
   show = (:[]) . intToDigit . num
 
---Get first and second Nibble from byte
+-- Get first and second Nibble from byte
 hi, lo :: Word8 -> Nibble
 hi b = Nibble $ b `shiftR` 4
 lo b = Nibble $ b .&. 0x0f
@@ -760,7 +751,7 @@ unpackNibbles :: ByteString -> [Nibble]
 unpackNibbles bs = BS.unpack bs >>= unpackByte
   where unpackByte b = [hi b, lo b]
 
---Well-defined for even length lists only (plz dependent types)
+-- Well-defined for even length lists only (plz dependent types)
 packNibbles :: [Nibble] -> ByteString
 packNibbles [] = mempty
 packNibbles (n1:n2:ns) = BS.singleton (toByte n1 n2) <> packNibbles ns
