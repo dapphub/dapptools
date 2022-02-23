@@ -187,8 +187,7 @@ data Expr (a :: EType) where
   Revert         :: String       -> Expr End
   Stop           :: Expr Storage -> Expr End
   Return         :: Expr Buf     -> Expr Storage -> Expr End
-  -- TODO: this is probably wrong
-  ITE            :: Expr EWord   -> Expr EWord   -> Expr EWord -> Expr EWord
+  ITE            :: Expr EWord   -> Expr End     -> Expr End -> Expr End
 
   -- integers
   Add            :: Expr EWord -> Expr EWord -> Expr EWord
