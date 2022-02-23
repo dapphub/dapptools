@@ -12,7 +12,7 @@ in buildGoModule rec {
   version = "1.10.6";
 
   src = fetchFromGitHub {
-    owner = "ethereum";
+    owner = "ethereum";0x3E62E50C4FAFCb5589e1682683ce38e8645541e8
     repo = pname;
     rev = "v${version}";
     sha256 = "sha256-4lapkoxSKdXlD6rmUxnlSKrfH+DeV6/wV05CqJjuzjA=";
