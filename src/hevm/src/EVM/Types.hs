@@ -22,7 +22,7 @@ import Data.ByteString.Builder (byteStringHex, toLazyByteString)
 import Data.ByteString.Lazy (toStrict)
 import qualified Data.ByteString.Char8  as Char8
 import Data.Word (Word8, Word32)
-import Data.Bits (Bits, shiftR, shift, shiftL, (.&.), (.|.))
+import Data.Bits (Bits, FiniteBits, shiftR, shift, shiftL, (.&.), (.|.))
 import Data.DoubleWord
 import Data.DoubleWord.TH
 import Data.Maybe (fromMaybe)
@@ -55,8 +55,8 @@ mkUnpackedDoubleWord "Word512" ''Word256 "Int512" ''Int256 ''Word256
 
 newtype W256 = W256 Word256
   deriving
-    ( Num, Integral, Real, Ord, Bits
-    , Enum, Eq , Bounded, Generic
+    ( Num, Integral, Real, Ord, Generic
+    , Bits , FiniteBits, Enum, Eq , Bounded
     )
 
 --data Word = C (Expr EWord) W256 --maybe to remove completely in the future
@@ -498,7 +498,10 @@ instance JSON.ToJSON ByteStringS where
   --fromEnum (S _ x) = fromEnum x
 
 newtype Addr = Addr { addressWord160 :: Word160 }
-  deriving (Num, Integral, Real, Ord, Enum, Eq, Generic)
+  deriving
+    ( Num, Integral, Real, Ord, Enum
+    , Eq, Generic, Bits, FiniteBits
+    )
 
 --newtype SAddr = SAddr { saddressWord160 :: SWord 160 }
   --deriving (Num)

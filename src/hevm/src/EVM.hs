@@ -15,7 +15,6 @@ module EVM where
 
 import Prelude hiding (log, Word, exponent, GT, LT)
 
-import Data.SBV hiding (Word, output, Unknown)
 import Data.Proxy (Proxy(..))
 import Data.Text (unpack)
 import Data.Text.Encoding (decodeUtf8, encodeUtf8)
