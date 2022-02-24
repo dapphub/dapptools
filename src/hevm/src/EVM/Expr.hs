@@ -1,284 +1,81 @@
-{-# LANGUAGE GADTs #-}
-{-# LANGUAGE DataKinds #-}
-{-# LANGUAGE StandaloneDeriving #-}
+{-# Language DataKinds #-}
 
-{- |
-  Expr implements an abstract respresentation of an EVM program
-
-  This type can give insight into the provenance of a term which is useful, both for the aesthetic purpose of printing terms in a richer way, but also do optimizations on the AST instead of letting the SMT solver do all the heavy lifting.
-
-  Memory and storage are both represented as a sequence of writes on top of some base state.
-  In the case of Memory that base state is always empty, but in the case of Storage it can be either empty (for init code) or abstract, for runtime code.
-
-  Calldata is immutable, so we can simply represent it as an slice from the calldata buffer in a particular frame
-  Returndata is represented as a slice of a particular memory expression, allowing returndata in the current call frame to reference memory from the sub call frame.
+{-|
+   Helper functions for working with Expr instances
 -}
 module EVM.Expr where
 
-import Data.DoubleWord (Word256)
+import Prelude hiding (LT)
 
--- phantom type tags for AST construction
-data EType
-  = Memory
-  | Storage
-  | Returndata
-  | Logs
-  | EWord
-  | End
+import EVM.Types
+import qualified Data.ByteString as BS
+import qualified Data.Map.Strict as Map
 
-data Expr (a :: EType) where
+-- | Extracts the byte at a given index from a Buf.
+--
+-- We do our best to return a concrete value wherever possible, but fallback to
+-- an abstract expresion if nescessary. Note that a Buf is an infinite
+-- structure, so reads outside of the bounds of a ConcreteBuf return 0. This is
+-- inline with the semantics of calldata and memory, but not of returndata.
+index :: Expr EWord -> Expr Buf -> Expr Byte
+index _ EmptyBuf = LitByte 0x0
+index i AbstractBuf = ReadByte i AbstractBuf
 
-  -- identifiers
-  Lit            :: Word256 -> Expr EWord
-  Var            :: String  -> Expr EWord
+-- reads from concrete indices
+index (Lit x) (ConcreteBuf b)
+  = if fromIntegral x < BS.length b
+    then LitByte (BS.index b (fromIntegral x))
+    else LitByte 0x0
+index i@(Lit x) (WriteByte (Lit idx) val src)
+  = if fromIntegral x == idx
+    then val
+    else index i src
+index i@(Lit x) (WriteWord (Lit idx) val src)
+  = if fromIntegral x <= idx && idx < fromIntegral (x + 8)
+    then Index (litByte $ idx - fromIntegral x) val -- TODO: pull a concrete value here if we can
+    else index i src
+index i@(Lit x) (CopySlice (Lit dstOffset) (Lit srcOffset) (Lit size) src dst)
+  = if dstOffset <= fromIntegral x && fromIntegral x < (dstOffset + size)
+    then index (Lit $ fromIntegral x - (dstOffset - srcOffset)) src
+    else index i dst
 
-  -- control flow
-  Invalid        :: Expr End
-  SelfDestruct   :: Expr EWord       -> Expr End
-  Revert         :: String           -> Expr End
-  Stop           :: Expr Storage     -> Expr End
-  Return         :: Expr Returndata  -> Expr Storage -> Expr End
-  ITE            :: Expr EWord       -> Expr EWord   -> Expr EWord -> Expr EWord
+-- we can ignore some partially symbolic CopySlice's if x is not within the region written to dst
+index i@(Lit x) buf@(CopySlice (Lit dstOffset) (Lit size) _ _ dst)
+  = if fromIntegral x < dstOffset || dstOffset + size < fromIntegral x
+    then index i dst
+    else ReadByte (lit x) buf
+index i@(Lit x) buf@(CopySlice (Lit dstOffset) _ _ _ dst)
+  = if fromIntegral x < dstOffset
+    then index i dst
+    else ReadByte (lit x) buf
 
-  -- integers
-  Add            :: Expr EWord -> Expr EWord -> Expr EWord
-  Sub            :: Expr EWord -> Expr EWord -> Expr EWord
-  Mul            :: Expr EWord -> Expr EWord -> Expr EWord
-  Div            :: Expr EWord -> Expr EWord -> Expr EWord
-  SDiv           :: Expr EWord -> Expr EWord -> Expr EWord
-  Mod            :: Expr EWord -> Expr EWord -> Expr EWord
-  SMod           :: Expr EWord -> Expr EWord -> Expr EWord
-  AddMod         :: Expr EWord -> Expr EWord -> Expr EWord
-  MulMod         :: Expr EWord -> Expr EWord -> Expr EWord
-  Exp            :: Expr EWord -> Expr EWord -> Expr EWord
-  Sex            :: Expr EWord -> Expr EWord
+-- if we have writes to abstract indices, then return a ReadByte expr
+index i buf = ReadByte i buf
 
-  -- booleans
-  LT             :: Expr EWord -> Expr EWord -> Expr EWord
-  GT             :: Expr EWord -> Expr EWord -> Expr EWord
-  SLT            :: Expr EWord -> Expr EWord -> Expr EWord
-  SGT            :: Expr EWord -> Expr EWord -> Expr EWord
-  Eq             :: Expr EWord -> Expr EWord -> Expr EWord
-  IsZero         :: Expr EWord -> Expr EWord -> Expr EWord
 
-  -- bits
-  And            :: Expr EWord -> Expr EWord -> Expr EWord
-  Or             :: Expr EWord -> Expr EWord -> Expr EWord
-  Xor            :: Expr EWord -> Expr EWord -> Expr EWord
-  Not            :: Expr EWord -> Expr EWord
-  SHL            :: Expr EWord -> Expr EWord -> Expr EWord
-  SHR            :: Expr EWord -> Expr EWord -> Expr EWord
-  SAR            :: Expr EWord -> Expr EWord -> Expr EWord
+-- | Reads the word at the given slot from the given storage expression.
+--
+-- Reads from storage that are backed by Empty or Concrete stores will always
+-- return 0x0 if there have not been any writes at the requested slot, in the
+-- case of an AbstractStore we return a symbolic value.
+readStorage :: Expr Storage -> Expr EWord -> Expr EWord
+readStorage EmptyStore _ = Lit 0x0
+readStorage store@(ConcreteStore s) loc = case loc of
+  Lit l -> case Map.lookup l s of
+                 Just v -> Lit v
+                 Nothing -> Lit 0x0
+  _ -> SLoad loc store
+readStorage s@AbstractStore loc = SLoad loc s
+readStorage (SStore slot val prev) loc = if loc == slot then val else readStorage prev loc
 
-  -- keccak
-  Keccak         :: Expr EWord        -- offset
-                 -> Expr EWord        -- size
-                 -> Expr Memory       -- memory
-                 -> Expr EWord        -- result
 
-  -- block context
-  Origin         :: Expr EWord
-  BlockHash      :: Expr EWord
-  Coinbase       :: Expr EWord
-  Timestamp      :: Expr EWord
-  Number         :: Expr EWord
-  Difficulty     :: Expr EWord
-  GasLimit       :: Expr EWord
-  ChainId        :: Expr EWord
-  BaseFee        :: Expr EWord
-
-  -- frame context
-  CallValue      :: Int               -- frame idx
-                 -> Expr EWord
-
-  Caller         :: Int               -- frame idx
-                 -> Expr EWord
-
-  Address        :: Int               -- frame idx
-                 -> Expr EWord
-
-  Balance        :: Int               -- frame idx
-                 -> Int               -- PC (in case we're checking the current contract)
-                 -> Expr EWord        -- address
-                 -> Expr EWord
-
-  SelfBalance    :: Int               -- frame idx
-                 -> Int               -- PC
-                 -> Expr EWord
-
-  Gas            :: Int               -- frame idx
-                 -> Int               -- PC
-                 -> Expr EWord
-
-  -- calldata
-  CalldataSize   :: Expr EWord
-
-  CalldataLoad   :: Int                -- frame idx
-                 -> Expr EWord         -- data idx
-                 -> Expr EWord         -- result
-
-  CalldataCopy   :: Int                -- frame idx
-                 -> Expr EWord         -- dst offset
-                 -> Expr EWord         -- src offset
-                 -> Expr EWord         -- size
-                 -> Expr Memory        -- old memory
-                 -> Expr Memory        -- new memory
-
-  -- code
-  CodeSize       :: Expr EWord         -- address
-                 -> Expr EWord         -- size
-
-  ExtCodeHash    :: Expr EWord         -- address
-                 -> Expr EWord         -- size
-
-  CodeCopy       :: Expr EWord         -- address
-                 -> Expr EWord         -- dst offset
-                 -> Expr EWord         -- src offset
-                 -> Expr EWord         -- size
-                 -> Expr Memory        -- old memory
-                 -> Expr Memory        -- new memory
-
-  -- returndata
-  ReturndataSize :: Expr EWord
-  ReturndataCopy :: Expr EWord         -- dst offset
-                 -> Expr EWord         -- src offset
-                 -> Expr EWord         -- size
-                 -> Expr Returndata    -- returndata
-                 -> Expr Memory        -- old mem
-                 -> Expr Memory        -- new mem
-
-  EmptyRet       :: Expr Returndata
-  WriteRet       :: Expr EWord         -- offset
-                 -> Expr EWord         -- size
-                 -> Expr Memory        -- memory
-                 -> Expr Returndata    -- new returndata
-
-  -- logs
-  EmptyLog       :: Expr Logs
-
-  Log0           :: Expr EWord         -- offset
-                 -> Expr EWord         -- size
-                 -> Expr Memory        -- memory
-                 -> Expr Logs          -- old logs
-                 -> Expr Logs          -- new logs
-
-  Log1           :: Expr EWord         -- offset
-                 -> Expr EWord         -- size
-                 -> Expr EWord         -- topic
-                 -> Expr Memory        -- memory
-                 -> Expr Logs          -- old logs
-                 -> Expr Logs          -- new logs
-
-  Log2           :: Expr EWord         -- offset
-                 -> Expr EWord         -- size
-                 -> Expr EWord         -- topic 1
-                 -> Expr EWord         -- topic 2
-                 -> Expr Memory        -- memory
-                 -> Expr Logs          -- old logs
-                 -> Expr Logs          -- new logs
-
-  Log3           :: Expr EWord         -- offset
-                 -> Expr EWord         -- size
-                 -> Expr EWord         -- topic 1
-                 -> Expr EWord         -- topic 2
-                 -> Expr EWord         -- topic 3
-                 -> Expr Memory        -- memory
-                 -> Expr Logs          -- old logs
-                 -> Expr Logs          -- new logs
-
-  Log4           :: Expr EWord         -- offset
-                 -> Expr EWord         -- size
-                 -> Expr EWord         -- topic 1
-                 -> Expr EWord         -- topic 2
-                 -> Expr EWord         -- topic 3
-                 -> Expr EWord         -- topic 4
-                 -> Expr Memory        -- memory
-                 -> Expr Logs          -- old logs
-                 -> Expr Logs          -- new logs
-
-  -- Contract Creation
-  Create         :: Expr EWord         -- value
-                 -> Expr EWord         -- offset
-                 -> Expr EWord         -- size
-                 -> Expr Memory        -- memory
-                 -> Expr Logs          -- logs
-                 -> Expr Storage       -- storage
-                 -> Expr EWord         -- address
-
-  Create2        :: Expr EWord         -- value
-                 -> Expr EWord         -- offset
-                 -> Expr EWord         -- size
-                 -> Expr EWord         -- salt
-                 -> Expr Memory        -- memory
-                 -> Expr Logs          -- logs
-                 -> Expr Storage       -- storage
-                 -> Expr EWord         -- address
-
-  -- Calls
-  Call           :: Expr EWord         -- gas
-                 -> Maybe (Expr EWord) -- target
-                 -> Expr EWord         -- value
-                 -> Expr EWord         -- args offset
-                 -> Expr EWord         -- args size
-                 -> Expr EWord         -- ret offset
-                 -> Expr EWord         -- ret size
-                 -> Expr Logs          -- logs
-                 -> Expr Storage       -- storage
-                 -> Expr EWord         -- success
-
-  CallCode       :: Expr EWord         -- gas
-                 -> Expr EWord         -- address
-                 -> Expr EWord         -- value
-                 -> Expr EWord         -- args offset
-                 -> Expr EWord         -- args size
-                 -> Expr EWord         -- ret offset
-                 -> Expr EWord         -- ret size
-                 -> Expr Logs          -- logs
-                 -> Expr Storage       -- storage
-                 -> Expr EWord         -- success
-
-  DelegeateCall  :: Expr EWord         -- gas
-                 -> Expr EWord         -- address
-                 -> Expr EWord         -- value
-                 -> Expr EWord         -- args offset
-                 -> Expr EWord         -- args size
-                 -> Expr EWord         -- ret offset
-                 -> Expr EWord         -- ret size
-                 -> Expr Logs          -- logs
-                 -> Expr Storage       -- storage
-                 -> Expr EWord         -- success
-
-  -- memory
-  MLoad          :: Expr EWord         -- index
-                 -> Expr Memory        -- memory
-                 -> Expr EWord         -- result
-
-  MStore         :: Expr EWord         -- dst offset
-                 -> Expr EWord         -- value
-                 -> Expr Memory        -- prev memory
-                 -> Expr Memory        -- new memory
-
-  MStore8        :: Expr EWord         -- dst offset
-                 -> Expr EWord         -- value
-                 -> Expr Memory        -- prev memory
-                 -> Expr Memory        -- new memory
-
-  EmptyMem       :: Expr Memory
-  MSize          :: Expr EWord
-
-  -- storage
-  SLoad          :: Expr EWord         -- address
-                 -> Expr EWord         -- index
-                 -> Expr Storage       -- storage
-                 -> Expr EWord         -- result
-
-  SStore         :: Expr EWord         -- address
-                 -> Expr EWord         -- index
-                 -> Expr EWord         -- value
-                 -> Expr Storage       -- old storage
-                 -> Expr Storage       -- new storae
-
-  EmptyStore     :: Expr Storage
-  AbstractStore  :: Expr Storage
-
-deriving instance Show (Expr a)
+-- | Writes a value to a key in a storage expression.
+--
+-- Concrete writes on top of a concrete or empty store will produce a new
+-- ConcreteStore, otherwise we add a new write to the storage expression.
+writeStorage :: Expr EWord -> Expr EWord -> Expr Storage -> Expr Storage
+writeStorage k@(Lit key) v@(Lit val) store = case store of
+  EmptyStore -> ConcreteStore (Map.singleton key val)
+  ConcreteStore s -> ConcreteStore (Map.insert key val s)
+  _ -> SStore k v store
+writeStorage key val store = SStore key val store

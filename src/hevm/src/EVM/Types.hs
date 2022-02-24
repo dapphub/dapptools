@@ -133,13 +133,15 @@ newtype W256 = W256 Word256
   heavy lifting.
 
   Memory, calldata, and returndata are all represented as `Buf` expressions:
-  i.e. a sequence of writes on top of some dynamically sized bytestring. Writes
-  can be sequences on top of empty buffers (`EmptyBuf`), a non empty concrete
-  buffer (`ConcreteBuf`) or on a fully abstract buffer (`AbstractBuf`). Note
-  that the shared usage of `Buf` does allow for the construction of some badly
-  typed Expr instances (e.g. an MSTORE on top of the contents of calldata
-  instead of some previous instance of memory), we accept this for now for the
-  sake of simplifying the Expr type.
+  i.e. a sequence of writes on top of some dynamically sized bytestring. There
+  are three write primitives: WriteWord, WriteByte & CopySlice. Writes can be
+  sequenced on top of empty buffers (`EmptyBuf`), a non empty concrete buffer
+  (`ConcreteBuf`) or on a fully abstract buffer (`AbstractBuf`).
+
+  Note that the shared usage of `Buf` does allow for the construction of some
+  badly typed Expr instances (e.g. an MSTORE on top of the contents of calldata
+  instead of some previous instance of memory), we accept this for the
+  sake of simplifying pattern matches against a Buf expression.
 
   Storage expressions are similar, but instead of writing regions of bytes, we
   write a word to a particular key in a given addresses storage. Note that as
@@ -164,16 +166,24 @@ data EType
   | Storage
   | Logs
   | EWord
+  | Byte
   | End
 
 -- add type level list of constraints
 data Expr (a :: EType) where
 
   -- identifiers
+
   Lit            :: W256   -> Expr EWord
   Var            :: String -> Expr EWord
 
+  -- bytes
+
+  LitByte        :: Word8      -> Expr Byte
+  Index          :: Expr Byte  -> Expr EWord -> Expr Byte
+
   -- control flow
+
   Invalid        :: Expr End
   SelfDestruct   :: Expr EWord   -> Expr End
   Revert         :: String       -> Expr End
@@ -182,6 +192,7 @@ data Expr (a :: EType) where
   ITE            :: Expr EWord   -> Expr End     -> Expr End -> Expr End
 
   -- integers
+
   Add            :: Expr EWord -> Expr EWord -> Expr EWord
   Sub            :: Expr EWord -> Expr EWord -> Expr EWord
   Mul            :: Expr EWord -> Expr EWord -> Expr EWord
@@ -195,14 +206,18 @@ data Expr (a :: EType) where
   Sex            :: Expr EWord -> Expr EWord
 
   -- booleans
+
   LT             :: Expr EWord -> Expr EWord -> Expr EWord
   GT             :: Expr EWord -> Expr EWord -> Expr EWord
+  LEq            :: Expr EWord -> Expr EWord -> Expr EWord
+  GEq            :: Expr EWord -> Expr EWord -> Expr EWord
   SLT            :: Expr EWord -> Expr EWord -> Expr EWord
   SGT            :: Expr EWord -> Expr EWord -> Expr EWord
   Eq             :: Expr EWord -> Expr EWord -> Expr EWord
-  IsZero         :: Expr EWord -> Expr EWord -> Expr EWord
+  IsZero         :: Expr EWord -> Expr EWord
 
   -- bits
+
   And            :: Expr EWord -> Expr EWord -> Expr EWord
   Or             :: Expr EWord -> Expr EWord -> Expr EWord
   Xor            :: Expr EWord -> Expr EWord -> Expr EWord
@@ -212,12 +227,14 @@ data Expr (a :: EType) where
   SAR            :: Expr EWord -> Expr EWord -> Expr EWord
 
   -- keccak
+
   Keccak         :: Expr EWord         -- offset
                  -> Expr EWord         -- size
                  -> Expr Buf           -- memory
                  -> Expr EWord         -- result
 
   -- block context
+
   Origin         :: Expr EWord
   BlockHash      :: Expr EWord
   Coinbase       :: Expr EWord
@@ -229,6 +246,7 @@ data Expr (a :: EType) where
   BaseFee        :: Expr EWord
 
   -- frame context
+
   CallValue      :: Int                -- frame idx
                  -> Expr EWord
 
@@ -252,44 +270,27 @@ data Expr (a :: EType) where
                  -> Expr EWord
 
   -- calldata
+
   CalldataSize   :: Expr EWord
 
   CalldataLoad   :: Expr EWord         -- idx
                  -> Expr Buf           -- calldata
                  -> Expr EWord         -- result
 
-  CalldataCopy   :: Expr EWord         -- dst offset
-                 -> Expr EWord         -- src offset
-                 -> Expr EWord         -- size
-                 -> Expr Buf           -- calldata
-                 -> Expr Buf           -- old memory
-                 -> Expr Buf           -- new memory
-
   -- code
+
   CodeSize       :: Expr EWord         -- address
                  -> Expr EWord         -- size
 
   ExtCodeHash    :: Expr EWord         -- address
                  -> Expr EWord         -- size
 
-  CodeCopy       :: Expr EWord         -- address
-                 -> Expr EWord         -- dst offset
-                 -> Expr EWord         -- src offset
-                 -> Expr EWord         -- size
-                 -> Expr Buf           -- old memory
-                 -> Expr Buf           -- new memory
-
   -- returndata
+
   ReturndataSize :: Expr EWord
 
-  ReturndataCopy :: Expr EWord         -- dst offset
-                 -> Expr EWord         -- src offset
-                 -> Expr EWord         -- size
-                 -> Expr Buf           -- returndata
-                 -> Expr Buf           -- old mem
-                 -> Expr Buf           -- new mem
-
   -- logs
+
   EmptyLog       :: Expr Logs
 
   Log0           :: Expr EWord         -- offset
@@ -333,6 +334,7 @@ data Expr (a :: EType) where
                  -> Expr Logs          -- new logs
 
   -- Contract Creation
+
   Create         :: Expr EWord         -- value
                  -> Expr EWord         -- offset
                  -> Expr EWord         -- size
@@ -351,6 +353,7 @@ data Expr (a :: EType) where
                  -> Expr EWord         -- address
 
   -- Calls
+
   Call           :: Expr EWord         -- gas
                  -> Maybe (Expr EWord) -- target
                  -> Expr EWord         -- value
@@ -385,23 +388,15 @@ data Expr (a :: EType) where
                  -> Expr EWord         -- success
 
   -- memory
-  MLoad          :: Expr EWord         -- index
-                 -> Expr Buf           -- memory
-                 -> Expr EWord         -- result
-
-  MStore         :: Expr EWord         -- dst offset
-                 -> Expr EWord         -- value
-                 -> Expr Buf           -- prev memory
-                 -> Expr Buf           -- new memory
-
-  MStore8        :: Expr EWord         -- dst offset
-                 -> Expr EWord         -- value
-                 -> Expr Buf           -- prev memory
-                 -> Expr Buf           -- new memory
 
   MSize          :: Expr EWord
 
   -- storage
+
+  EmptyStore     :: Expr Storage
+  ConcreteStore  :: Map W256 W256 -> Expr Storage
+  AbstractStore  :: Expr Storage
+
   SLoad          :: Expr EWord         -- index
                  -> Expr Storage       -- storage
                  -> Expr EWord         -- result
@@ -411,14 +406,52 @@ data Expr (a :: EType) where
                  -> Expr Storage       -- old storage
                  -> Expr Storage       -- new storae
 
-  EmptyStore     :: Expr Storage
-  ConcreteStore  :: Map W256 W256 -> Expr Storage
-  AbstractStore  :: Expr Storage
-
   -- buffers
+
   EmptyBuf       :: Expr Buf
   ConcreteBuf    :: ByteString -> Expr Buf
   AbstractBuf    :: Expr Buf
+
+  ReadWord       :: Expr EWord         -- index
+                 -> Expr Buf           -- src
+                 -> Expr EWord
+
+  ReadByte       :: Expr EWord         -- index
+                 -> Expr Buf           -- src
+                 -> Expr Byte
+
+  WriteWord      :: Expr EWord         -- dst offset
+                 -> Expr EWord         -- value
+                 -> Expr Buf           -- prev
+                 -> Expr Buf
+
+  WriteByte      :: Expr EWord         -- dst offset
+                 -> Expr Byte          -- value
+                 -> Expr Buf           -- prev
+                 -> Expr Buf
+
+  CopySlice      :: Expr EWord         -- dst offset
+                 -> Expr EWord         -- src offset
+                 -> Expr EWord         -- size
+                 -> Expr Buf           -- src
+                 -> Expr Buf           -- dst
+                 -> Expr Buf
+
+-- TODO: are these bad? should I maybe define a typeclass that defines the evm
+-- encoding for a restricted set of types?
+lit :: Enum a => a -> Expr EWord
+lit = Lit . toEnum . fromEnum
+
+litByte :: Enum a => a -> Expr Byte
+litByte = LitByte . toEnum . fromEnum
+
+unlit :: Enum a => Expr EWord -> Maybe a
+unlit (Lit x) = Just . toEnum . fromEnum $ x
+unlit _ = Nothing
+
+unlitByte :: Enum a => Expr Byte -> Maybe a
+unlitByte (LitByte x) = Just . toEnum . fromEnum $ x
+unlitByte _ = Nothing
 
 deriving instance Show (Expr a)
 -- TODO: do we need a custom instance here?

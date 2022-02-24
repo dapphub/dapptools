@@ -24,6 +24,7 @@ import EVM.Solidity
 import EVM.Concrete (createAddress, create2Address)
 import EVM.Symbolic
 import EVM.Op
+import EVM.Expr
 import EVM.FeeSchedule (FeeSchedule (..))
 import Options.Generic as Options
 import qualified EVM.Precompiled
@@ -598,7 +599,7 @@ exec1 = do
     then doStop
 
     else do
-      let ?op = fromMaybe (error "could not analyze symbolic code") $ unliteral $ EVM.Symbolic.index (the state pc) (the state code)
+      let ?op = fromMaybe (error "could not analyze symbolic code") $ unlit $ EVM.Expr.index (the state pc) (the state code)
 
       case ?op of
 
@@ -606,8 +607,8 @@ exec1 = do
         x | x >= 0x60 && x <= 0x7f -> do
           let !n = num x - 0x60 + 1
               !xs = case the state code of
-                      ConcreteBuffer b -> w256lit $ word $ padRight n $ BS.take n (BS.drop (1 + the state pc) b)
-                      SymbolicBuffer b -> readSWord' 0 $ padLeft' 32 $ take n $ drop (1 + the state pc) b
+                      ConcreteBuf b -> w256lit $ word $ padRight n $ BS.take n (BS.drop (1 + the state pc) b)
+                      b -> readSWord' 0 $ padLeft' 32 $ take n $ drop (1 + the state pc) b
           limitStack 1 $
             burn g_verylow $ do
               next
@@ -1333,7 +1334,7 @@ transfer xFrom xTo xValue =
 -- | Checks a *CALL for failure; OOG, too many callframes, memory access etc.
 callChecks
   :: (?op :: Word8)
-  => Contract -> Word -> Addr -> Addr -> Word -> Word -> Word -> Word -> Word -> [SymWord]
+  => Contract -> Word -> Addr -> Addr -> Word -> Word -> Word -> Word -> Word -> [Expr EWord]
    -- continuation with gas available for call
   -> (Integer -> EVM ())
   -> EVM ()
@@ -1368,7 +1369,7 @@ precompiledContract
   -> Addr
   -> Word
   -> Word -> Word -> Word -> Word
-  -> [SymWord]
+  -> [Expr EWord]
   -> EVM ()
 precompiledContract this xGas precompileAddr recipient xValue inOffset inSize outOffset outSize xs =
   callChecks this xGas recipient precompileAddr xValue inOffset inSize outOffset outSize xs $ \gas' ->
@@ -1392,7 +1393,7 @@ precompiledContract this xGas precompileAddr recipient xValue inOffset inSize ou
 executePrecompile
   :: (?op :: Word8)
   => Addr
-  -> Integer -> Word -> Word -> Word -> Word -> [SymWord]
+  -> Integer -> Word -> Word -> Word -> Word -> [Expr EWord]
   -> EVM ()
 executePrecompile preCompileAddr gasCap inOffset inSize outOffset outSize xs  = do
   vm <- get
@@ -1590,51 +1591,51 @@ getCodeLocation :: VM -> CodeLocation
 getCodeLocation vm = (view (state . contract) vm, view (state . pc) vm)
 
 -- | Ask the SMT solver to provide a concrete model for val iff a unique model exists
-makeUnique :: SymWord -> (Word -> EVM ()) -> EVM ()
-makeUnique sw@(S w val) cont = case maybeLitWord sw of
-  Nothing -> do
-    conditions <- use constraints
-    assign result . Just . VMFailure . Query $ PleaseMakeUnique val (fst <$> conditions) $ \case
-      Unique a -> do
-        assign result Nothing
-        cont (C w $ fromSizzle a)
-      InconsistentU -> vmError DeadPath
-      TimeoutU -> vmError SMTTimeout
-      Multiple -> vmError $ NotUnique w
-  Just a -> cont a
+--makeUnique :: Expr EWord -> (Word -> EVM ()) -> EVM ()
+--makeUnique sw@(S w val) cont = case maybeLitWord sw of
+  --Nothing -> do
+    --conditions <- use constraints
+    --assign result . Just . VMFailure . Query $ PleaseMakeUnique val (fst <$> conditions) $ \case
+      --Unique a -> do
+        --assign result Nothing
+        --cont (C w $ fromSizzle a)
+      --InconsistentU -> vmError DeadPath
+      --TimeoutU -> vmError SMTTimeout
+      --Multiple -> vmError $ NotUnique w
+  --Just a -> cont a
 
--- | Construct SMT Query and halt execution until resolved
-askSMT :: CodeLocation -> (SBool, Whiff) -> (Bool -> EVM ()) -> EVM ()
-askSMT codeloc (condition, whiff) continue = do
-  -- We keep track of how many times we have come across this particular
-  -- (contract, pc) combination in the `iteration` mapping.
-  iteration <- use (iterations . at codeloc . non 0)
+---- | Construct SMT Query and halt execution until resolved
+--askSMT :: CodeLocation -> (SBool, Whiff) -> (Bool -> EVM ()) -> EVM ()
+--askSMT codeloc (condition, whiff) continue = do
+  ---- We keep track of how many times we have come across this particular
+  ---- (contract, pc) combination in the `iteration` mapping.
+  --iteration <- use (iterations . at codeloc . non 0)
 
-  -- If we are backstepping, the result of this query should be cached
-  -- already. So we first check the cache to see if the result is known
-  use (cache . path . at (codeloc, iteration)) >>= \case
-     -- If the query has been done already, select path or select the only available
-     Just w -> choosePath (Case w)
-     -- If this is a new query, run the query, cache the result
-     -- increment the iterations and select appropriate path
-     Nothing -> do pathconds <- use constraints
-                   assign result . Just . VMFailure . Query $ PleaseAskSMT
-                     condition' (fst <$> pathconds) choosePath
+  ---- If we are backstepping, the result of this query should be cached
+  ---- already. So we first check the cache to see if the result is known
+  --use (cache . path . at (codeloc, iteration)) >>= \case
+     ---- If the query has been done already, select path or select the only available
+     --Just w -> choosePath (Case w)
+     ---- If this is a new query, run the query, cache the result
+     ---- increment the iterations and select appropriate path
+     --Nothing -> do pathconds <- use constraints
+                   --assign result . Just . VMFailure . Query $ PleaseAskSMT
+                     --condition' (fst <$> pathconds) choosePath
 
-   where condition' = simplifyCondition condition whiff
+   --where condition' = simplifyCondition condition whiff
 
-         choosePath :: BranchCondition -> EVM ()
-         -- Only one path is possible
-         choosePath (Case v) = do assign result Nothing
-                                  pushTo constraints $ if v then (condition', whiff) else (sNot condition', IsZero whiff)
-                                  iteration <- use (iterations . at codeloc . non 0)
-                                  assign (cache . path . at (codeloc, iteration)) (Just v)
-                                  assign (iterations . at codeloc) (Just (iteration + 1))
-                                  continue v
-         -- Both paths are possible; we ask for more input
-         choosePath Unknown = assign result . Just . VMFailure . Choose . PleaseChoosePath whiff $ choosePath . Case
-         -- None of the paths are possible; fail this branch
-         choosePath Inconsistent = vmError DeadPath
+         --choosePath :: BranchCondition -> EVM ()
+         ---- Only one path is possible
+         --choosePath (Case v) = do assign result Nothing
+                                  --pushTo constraints $ if v then (condition', whiff) else (sNot condition', IsZero whiff)
+                                  --iteration <- use (iterations . at codeloc . non 0)
+                                  --assign (cache . path . at (codeloc, iteration)) (Just v)
+                                  --assign (iterations . at codeloc) (Just (iteration + 1))
+                                  --continue v
+         ---- Both paths are possible; we ask for more input
+         --choosePath Unknown = assign result . Just . VMFailure . Choose . PleaseChoosePath whiff $ choosePath . Case
+         ---- None of the paths are possible; fail this branch
+         --choosePath Inconsistent = vmError DeadPath
 
 -- | Construct RPC Query and halt execution until resolved
 fetchAccount :: Addr -> (Contract -> EVM ()) -> EVM ()
@@ -1655,18 +1656,18 @@ fetchAccount addr continue =
                         assign result Nothing
                         continue c)
 
-readStorage :: Storage -> SymWord -> Maybe (SymWord)
+readStorage :: Expr Storage -> Expr EWord -> Maybe (Expr EWord)
 readStorage (Symbolic _ s) (S w loc) = Just $ S (FromStorage w s) $ readArray s loc
 readStorage (Concrete s) loc = Map.lookup (forceLit loc) s
 
-writeStorage :: SymWord -> SymWord -> Storage -> Storage
+writeStorage :: Expr EWord -> Expr EWord -> Storage -> Expr Storage
 writeStorage k@(S _ loc) v@(S _ val) (Symbolic xs s) = Symbolic ((k,v):xs) (writeArray s loc val)
 writeStorage loc val (Concrete s) = Concrete (Map.insert (forceLit loc) val s)
 
 accessStorage
-  :: Addr                -- ^ Contract address
-  -> SymWord             -- ^ Storage slot key
-  -> (SymWord -> EVM ()) -- ^ Continuation
+  :: Addr                   -- ^ Contract address
+  -> Expr EWord             -- ^ Storage slot key
+  -> (Expr EWord -> EVM ()) -- ^ Continuation
   -> EVM ()
 accessStorage addr slot continue =
   use (env . contracts . at addr) >>= \case
@@ -2497,7 +2498,7 @@ pushSym x = state . stack %= (x :)
 
 stackOp1
   :: (?op :: Word8)
-  => ((SymWord) -> Integer)
+  => ((Expr EWord) -> Integer)
   -> ((SymWord) -> (SymWord))
   -> EVM ()
 stackOp1 cost f =
@@ -2512,8 +2513,8 @@ stackOp1 cost f =
 
 stackOp2
   :: (?op :: Word8)
-  => (((SymWord), (SymWord)) -> Integer)
-  -> (((SymWord), (SymWord)) -> (SymWord))
+  => (((Expr EWord), (Expr EWord)) -> Integer)
+  -> (((Expr EWord), (Expr EWord)) -> (Expr EWord))
   -> EVM ()
 stackOp2 cost f =
   use (state . stack) >>= \case
@@ -2526,8 +2527,8 @@ stackOp2 cost f =
 
 stackOp3
   :: (?op :: Word8)
-  => (((SymWord), (SymWord), (SymWord)) -> Integer)
-  -> (((SymWord), (SymWord), (SymWord)) -> (SymWord))
+  => (((Expr EWord), (Expr EWord), (Expr EWord)) -> Integer)
+  -> (((Expr EWord), (Expr EWord), (Expr EWord)) -> (Expr EWord))
   -> EVM ()
 stackOp3 cost f =
   use (state . stack) >>= \case
@@ -2540,7 +2541,7 @@ stackOp3 cost f =
 
 -- * Bytecode data functions
 
-checkJump :: (Integral n) => n -> [SymWord] -> EVM ()
+checkJump :: (Integral n) => n -> [Expr EWord] -> EVM ()
 checkJump x xs = do
   theCode <- use (state . code)
   self <- use (state . codeContract)
@@ -2622,7 +2623,7 @@ vmOpIx vm =
   do self <- currentContract vm
      (view opIxMap self) Vector.!? (view (state . pc) vm)
 
-opParams :: VM -> Map String (SymWord)
+opParams :: VM -> Map String (Expr EWord)
 opParams vm =
   case vmOp vm of
     Just OpCreate ->
