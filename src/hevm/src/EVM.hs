@@ -731,36 +731,10 @@ exec1 = do
                 \xOffset -> forceConcrete xSize' $ \xSize ->
                   burn (g_sha3 + g_sha3word * ceilDiv (num xSize) 32) $
                     accessMemoryRange fees xOffset xSize $ do
-                      (hash@(S _ hash'), invMap, bytes) <- case readMemory xOffset xSize vm of
-                                         ConcreteBuffer bs -> do
-                                           let hash' = C (Keccak (getExpr xOffset) (getExpr xSize) (getExpr (view memory state))) (keccak bs)
-                                           pure (litWord hash', Map.singleton hash' bs, litBytes bs)
-                                         SymbolicBuffer bs -> do
-                                           let hash' = symkeccak' bs
-                                           return (S (FromKeccak $ SymbolicBuffer bs) hash', mempty, bs)
-
-                      -- Although we would like to simply assert that the uninterpreted function symkeccak'
-                      -- is injective, this proves to cause a lot of concern for our smt solvers, probably
-                      -- due to the introduction of universal quantifiers into the queries.
-
-                      -- Instead, we keep track of all of the particular invocations of symkeccak' we see
-                      -- (similarly to sha3Crack), and simply assert that injectivity holds for these
-                      -- particular invocations.
-                      --
-                      -- We additionally make the probabalisitc assumption that the output of symkeccak'
-                      -- is greater than 100. This lets us avoid having to reason about storage collisions
-                      -- between mappings and "normal" slots
-
-                      let previousUsed = view (env . keccakUsed) vm
-                      env . keccakUsed <>= [(bytes, hash')]
-                      constraints <>= (hash' .> 100, Todo "probabilistic keccak assumption" []):
-                        (fmap (\(preimage, image) ->
-                          -- keccak is a function
-                          ((preimage .== bytes .=> image .== hash') .&&
-                          -- which is injective
-                          (image .== hash' .=> preimage .== bytes), Todo "injective keccak assumption" []))
-                         previousUsed)
-
+                      (hash, invMap) <-
+                        case readMemory xOffset xSize vm of
+                          ConcreteBuf bs -> pure (Lit keccak bs, Map.singleton hash' bs)
+                          buf -> pure (Keccak xOffset xSize (view $ state . memory), mempty)
                       next
                       assign (state . stack) (hash : xs)
                       (env . sha3Crack) <>= invMap
