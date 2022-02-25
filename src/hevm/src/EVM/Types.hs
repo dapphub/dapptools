@@ -132,11 +132,23 @@ newtype W256 = W256 Word256
   allow optimizations on the AST instead of letting the SMT solver do all the
   heavy lifting.
 
-  Memory, calldata, and returndata are all represented as `Buf` expressions:
-  i.e. a sequence of writes on top of some dynamically sized bytestring. There
-  are three write primitives: WriteWord, WriteByte & CopySlice. Writes can be
-  sequenced on top of empty buffers (`EmptyBuf`), a non empty concrete buffer
-  (`ConcreteBuf`) or on a fully abstract buffer (`AbstractBuf`).
+  Memory, calldata, and returndata are all represented as a Buf. Semantically
+  speaking a Buf is a byte array with of size 2^256.
+
+  Bufs have three base constructors:
+    - EmptyBuf:       all elements are zero
+    - AbstractBuf:    all elements are fully abstract values
+    - ConcreteBuf bs: all elements past (length bs) are zero
+
+  Bufs can be read from with:
+    - ReadByte idx buf: read the byte at idx from buf
+    - ReadWord idx buf: read the byte at idx from buf
+
+  Bufs can be written to with:
+    - WriteByte idx val buf: write val to idx in buf
+    - WriteWord idx val buf: write val to idx in buf
+    - CopySlice srcOffset dstOffset size src dst:
+        overwrite dstOffset -> dstOffset + size in dst with srcOffset -> srcOffset + size from src
 
   Note that the shared usage of `Buf` does allow for the construction of some
   badly typed Expr instances (e.g. an MSTORE on top of the contents of calldata
@@ -174,12 +186,12 @@ data Expr (a :: EType) where
 
   -- identifiers
 
-  Lit            :: W256   -> Expr EWord
+  Lit            :: {-# UNPACK #-} !W256     -> Expr EWord
   Var            :: String -> Expr EWord
 
   -- bytes
 
-  LitByte        :: Word8      -> Expr Byte
+  LitByte        :: {-# UNPACK #-} !Word8    -> Expr Byte
   Index          :: Expr Byte  -> Expr EWord -> Expr Byte
 
   -- control flow
@@ -200,10 +212,10 @@ data Expr (a :: EType) where
   SDiv           :: Expr EWord -> Expr EWord -> Expr EWord
   Mod            :: Expr EWord -> Expr EWord -> Expr EWord
   SMod           :: Expr EWord -> Expr EWord -> Expr EWord
-  AddMod         :: Expr EWord -> Expr EWord -> Expr EWord
-  MulMod         :: Expr EWord -> Expr EWord -> Expr EWord
+  AddMod         :: Expr EWord -> Expr EWord -> Expr EWord -> Expr EWord
+  MulMod         :: Expr EWord -> Expr EWord -> Expr EWord -> Expr EWord
   Exp            :: Expr EWord -> Expr EWord -> Expr EWord
-  Sex            :: Expr EWord -> Expr EWord
+  SEx            :: Expr EWord -> Expr EWord -> Expr EWord
 
   -- booleans
 

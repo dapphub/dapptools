@@ -13,7 +13,7 @@
 
 module EVM where
 
-import Prelude hiding (log, Word, exponent, GT, LT)
+import Prelude hiding (log, exponent, GT, LT)
 
 import Data.Proxy (Proxy(..))
 import Data.Text (unpack)
@@ -24,10 +24,11 @@ import EVM.Solidity
 import EVM.Concrete (createAddress, create2Address)
 import EVM.Symbolic
 import EVM.Op
-import EVM.Expr
+import EVM.Expr (readStorage, writeStorage, readByte)
 import EVM.FeeSchedule (FeeSchedule (..))
 import Options.Generic as Options
 import qualified EVM.Precompiled
+import qualified EVM.Expr as Expr
 
 import Control.Lens hiding (op, (:<), (|>), (.>))
 import Control.Monad.State.Strict hiding (state)
@@ -315,8 +316,8 @@ instance Ord ContractCode where
 -- | A contract can either have concrete or symbolic storage
 -- depending on what type of execution we are doing
 -- data Storage
---   = Concrete (Map Word SymWord)
---   | Symbolic [(SymWord, SymWord)] (SArray (WordN 256) (WordN 256))
+--   = Concrete (Map Word Expr EWord)
+--   | Symbolic [(Expr EWord, Expr EWord)] (SArray (WordN 256) (WordN 256))
 --   deriving (Show)
 
 -- to allow for Eq Contract (which useful for debugging vmtests)
@@ -599,7 +600,7 @@ exec1 = do
     then doStop
 
     else do
-      let ?op = fromMaybe (error "could not analyze symbolic code") $ unlit $ EVM.Expr.index (the state pc) (the state code)
+      let ?op = fromMaybe (error "could not analyze symbolic code") $ unlit $ EVM.Expr.readByte (the state pc) (the state code)
 
       case ?op of
 
@@ -664,51 +665,50 @@ exec1 = do
         0x00 -> doStop
 
         -- op: ADD
-        0x01 -> stackOp2 (const g_verylow) (uncurry (+))
+        0x01 -> stackOp2 (const g_verylow) (uncurry Expr.add)
         -- op: MUL
-        0x02 -> stackOp2 (const g_low) (uncurry (*))
+        0x02 -> stackOp2 (const g_low) (uncurry Expr.mul)
         -- op: SUB
-        0x03 -> stackOp2 (const g_verylow) (uncurry (-))
+        0x03 -> stackOp2 (const g_verylow) (uncurry Expr.sub)
 
         -- op: DIV
-        0x04 -> stackOp2 (const g_low) (uncurry (sDiv))
+        0x04 -> stackOp2 (const g_low) (uncurry Expr.div)
 
         -- op: SDIV
-        0x05 ->
-          stackOp2 (const g_low) (uncurry sdiv)
+        0x05 -> stackOp2 (const g_low) (uncurry Expr.sdiv)
 
         -- op: MOD
-        0x06 -> stackOp2 (const g_low) $ \(S a x, S b y) -> S (ITE (IsZero b) (Literal 0) (Mod a b)) (ite (y .== 0) 0 (x `sMod` y))
+        0x06 -> stackOp2 (const g_low) (uncurry Expr.mod)
 
         -- op: SMOD
-        0x07 -> stackOp2 (const g_low) $ uncurry smod
+        0x07 -> stackOp2 (const g_low) (uncurry Expr.smod)
         -- op: ADDMOD
-        0x08 -> stackOp3 (const g_mid) (\(x, y, z) -> addmod x y z)
+        0x08 -> stackOp3 (const g_mid) (uncurry Expr.addmod)
         -- op: MULMOD
-        0x09 -> stackOp3 (const g_mid) (\(x, y, z) -> mulmod x y z)
+        0x09 -> stackOp3 (const g_mid) (uncurry Expr.mulmod)
 
         -- op: LT
-        0x10 -> stackOp2 (const g_verylow) $ \(S a x, S b y) -> iteWhiff (LT a b) (x .< y) 1 0
+        0x10 -> stackOp2 (const g_verylow) (uncurry Expr.lt)
         -- op: GT
-        0x11 -> stackOp2 (const g_verylow) $ \(S a x, S b y) -> iteWhiff (GT a b) (x .> y) 1 0
+        0x11 -> stackOp2 (const g_verylow) (uncurry Expr.gt)
         -- op: SLT
-        0x12 -> stackOp2 (const g_verylow) $ uncurry slt
+        0x12 -> stackOp2 (const g_verylow) (uncurry Expr.slt)
         -- op: SGT
-        0x13 -> stackOp2 (const g_verylow) $ uncurry sgt
+        0x13 -> stackOp2 (const g_verylow) (uncurry Expr.sgt)
 
         -- op: EQ
-        0x14 -> stackOp2 (const g_verylow) $ \(S a x, S b y) -> iteWhiff (Eq a b) (x .== y) 1 0
+        0x14 -> stackOp2 (const g_verylow) (uncurry Expr.eq)
         -- op: ISZERO
-        0x15 -> stackOp1 (const g_verylow) $ \(S a x) -> iteWhiff (IsZero a) (x .== 0) 1 0
+        0x15 -> stackOp1 (const g_verylow) (uncurry Expr.iszero)
 
         -- op: AND
-        0x16 -> stackOp2 (const g_verylow) $ uncurry (.&.)
+        0x16 -> stackOp2 (const g_verylow) (uncurry Expr.and)
         -- op: OR
-        0x17 -> stackOp2 (const g_verylow) $ uncurry (.|.)
+        0x17 -> stackOp2 (const g_verylow) (uncurry Expr.or)
         -- op: XOR
-        0x18 -> stackOp2 (const g_verylow) $ uncurry xor
+        0x18 -> stackOp2 (const g_verylow) (uncurry Expr.xor)
         -- op: NOT
-        0x19 -> stackOp1 (const g_verylow) complement
+        0x19 -> stackOp1 (const g_verylow) (uncurry Expr.not)
 
         -- op: BYTE
         0x1a -> stackOp2 (const g_verylow) $ \case
@@ -716,11 +716,11 @@ exec1 = do
           (n, x) | otherwise          -> 0xff .&. shiftR x (8 * (31 - num (forceLit n)))
 
         -- op: SHL
-        0x1b -> stackOp2 (const g_verylow) $ \((S a n), (S b x)) -> S (SHL b a) $ sShiftLeft x n
+        0x1b -> stackOp2 (const g_verylow) (uncurry Expr.shl)
         -- op: SHR
-        0x1c -> stackOp2 (const g_verylow) $ \((S a n), (S b x)) -> S (SHR b a) $ sShiftRight x n
+        0x1c -> stackOp2 (const g_verylow) (uncurry Expr.shr)
         -- op: SAR
-        0x1d -> stackOp2 (const g_verylow) $ \((S a n), (S b x)) -> S (SAR b a) $ sSignedShiftArithRight x n
+        0x1d -> stackOp2 (const g_verylow) (uncurry Expr.sar)
 
         -- op: SHA3
         -- more accurately refered to as KECCAK
@@ -791,7 +791,7 @@ exec1 = do
         -- op: CALLER
         0x33 ->
           limitStack 1 . burn g_base $
-            let toSymWord :: SAddr -> SymWord
+            let toSymWord :: SAddr -> Expr EWord
                 toSymWord (SAddr x) = case unliteral x of
                   Just s -> litWord $ num s
                   Nothing -> var "CALLER" $ sFromIntegral x
@@ -1325,7 +1325,7 @@ exec1 = do
         xxx ->
           vmError (UnrecognizedOpcode xxx)
 
-transfer :: Addr -> Addr -> Word -> EVM ()
+transfer :: Addr -> Addr -> W256 -> EVM ()
 transfer xFrom xTo xValue =
   zoom (env . contracts) $ do
     ix xFrom . balance -= xValue
@@ -1334,7 +1334,7 @@ transfer xFrom xTo xValue =
 -- | Checks a *CALL for failure; OOG, too many callframes, memory access etc.
 callChecks
   :: (?op :: Word8)
-  => Contract -> Word -> Addr -> Addr -> Word -> Word -> Word -> Word -> Word -> [Expr EWord]
+  => Contract -> W256 -> Addr -> Addr -> W256 -> W256 -> W256 -> W256 -> W256 -> [Expr EWord]
    -- continuation with gas available for call
   -> (Integer -> EVM ())
   -> EVM ()
@@ -1364,11 +1364,11 @@ callChecks this xGas xContext xTo xValue xInOffset xInSize xOutOffset xOutSize x
 precompiledContract
   :: (?op :: Word8)
   => Contract
-  -> Word
+  -> W256
   -> Addr
   -> Addr
-  -> Word
-  -> Word -> Word -> Word -> Word
+  -> W256
+  -> W256 -> W256 -> W256 -> W256
   -> [Expr EWord]
   -> EVM ()
 precompiledContract this xGas precompileAddr recipient xValue inOffset inSize outOffset outSize xs =
@@ -1393,7 +1393,7 @@ precompiledContract this xGas precompileAddr recipient xValue inOffset inSize ou
 executePrecompile
   :: (?op :: Word8)
   => Addr
-  -> Integer -> Word -> Word -> Word -> Word -> [Expr EWord]
+  -> Integer -> W256 -> W256 -> W256 -> W256 -> [Expr EWord]
   -> EVM ()
 executePrecompile preCompileAddr gasCap inOffset inSize outOffset outSize xs  = do
   vm <- get
@@ -1551,12 +1551,12 @@ truncpadlit n xs = if m > n then BS.take n xs
                    else BS.append xs (BS.replicate (n - m) 0)
   where m = BS.length xs
 
-lazySlice :: Word -> Word -> ByteString -> LS.ByteString
+lazySlice :: W256 -> W256 -> ByteString -> LS.ByteString
 lazySlice offset size bs =
   let bs' = LS.take (num size) (LS.drop (num offset) (fromStrict bs))
   in bs' <> LS.replicate ((num size) - LS.length bs') 0
 
-parseModexpLength :: ByteString -> (Word, Word, Word)
+parseModexpLength :: ByteString -> (W256, W256, W256)
 parseModexpLength input =
   let lenb = w256 $ word $ LS.toStrict $ lazySlice  0 32 input
       lene = w256 $ word $ LS.toStrict $ lazySlice 32 64 input
@@ -1564,7 +1564,7 @@ parseModexpLength input =
   in (lenb, lene, lenm)
 
 --- checks if a range of ByteString bs starting at offset and length size is all zeros.
-isZero :: Word -> Word -> ByteString -> Bool
+isZero :: W256 -> W256 -> ByteString -> Bool
 isZero offset size bs =
   LS.all (== 0) $
     LS.take (num size) $
@@ -1656,14 +1656,6 @@ fetchAccount addr continue =
                         assign result Nothing
                         continue c)
 
-readStorage :: Expr Storage -> Expr EWord -> Maybe (Expr EWord)
-readStorage (Symbolic _ s) (S w loc) = Just $ S (FromStorage w s) $ readArray s loc
-readStorage (Concrete s) loc = Map.lookup (forceLit loc) s
-
-writeStorage :: Expr EWord -> Expr EWord -> Storage -> Expr Storage
-writeStorage k@(S _ loc) v@(S _ val) (Symbolic xs s) = Symbolic ((k,v):xs) (writeArray s loc val)
-writeStorage loc val (Concrete s) = Concrete (Map.insert (forceLit loc) val s)
-
 accessStorage
   :: Addr                   -- ^ Contract address
   -> Expr EWord             -- ^ Storage slot key
@@ -1724,7 +1716,7 @@ finalize = do
   use result >>= \case
     Nothing ->
       error "Finalising an unfinished tx."
-    Just (VMFailure (Revert _)) -> do
+    Just (VMFailure (EVM.Revert _)) -> do
       revertContracts
       revertSubstate
     Just (VMFailure _) -> do
@@ -1837,46 +1829,46 @@ burn n' continue =
       else
         vmError (OutOfGas available n)
 
-forceConcreteAddr :: SAddr -> (Addr -> EVM ()) -> EVM ()
-forceConcreteAddr n continue = case maybeLitAddr n of
-  Nothing -> vmError UnexpectedSymbolicArg
-  Just c -> continue c
+--forceConcreteAddr :: SAddr -> (Addr -> EVM ()) -> EVM ()
+--forceConcreteAddr n continue = case maybeLitAddr n of
+  --Nothing -> vmError UnexpectedSymbolicArg
+  --Just c -> continue c
 
-forceConcrete :: SymWord -> (Word -> EVM ()) -> EVM ()
-forceConcrete n continue = case maybeLitWord n of
-  Nothing -> vmError UnexpectedSymbolicArg
-  Just c -> continue c
+--forceConcrete :: Expr EWord -> (Word -> EVM ()) -> EVM ()
+--forceConcrete n continue = case maybeLitWord n of
+  --Nothing -> vmError UnexpectedSymbolicArg
+  --Just c -> continue c
 
-forceConcrete2 :: (SymWord, SymWord) -> ((Word, Word) -> EVM ()) -> EVM ()
-forceConcrete2 (n,m) continue = case (maybeLitWord n, maybeLitWord m) of
-  (Just c, Just d) -> continue (c, d)
-  _ -> vmError UnexpectedSymbolicArg
+--forceConcrete2 :: (Expr EWord, Expr EWord) -> ((Word, Word) -> EVM ()) -> EVM ()
+--forceConcrete2 (n,m) continue = case (maybeLitWord n, maybeLitWord m) of
+  --(Just c, Just d) -> continue (c, d)
+  --_ -> vmError UnexpectedSymbolicArg
 
-forceConcrete3 :: (SymWord, SymWord, SymWord) -> ((Word, Word, Word) -> EVM ()) -> EVM ()
-forceConcrete3 (k,n,m) continue = case (maybeLitWord k, maybeLitWord n, maybeLitWord m) of
-  (Just c, Just d, Just f) -> continue (c, d, f)
-  _ -> vmError UnexpectedSymbolicArg
+--forceConcrete3 :: (Expr EWord, Expr EWord, Expr EWord) -> ((Word, Word, Word) -> EVM ()) -> EVM ()
+--forceConcrete3 (k,n,m) continue = case (maybeLitWord k, maybeLitWord n, maybeLitWord m) of
+  --(Just c, Just d, Just f) -> continue (c, d, f)
+  --_ -> vmError UnexpectedSymbolicArg
 
-forceConcrete4 :: (SymWord, SymWord, SymWord, SymWord) -> ((Word, Word, Word, Word) -> EVM ()) -> EVM ()
-forceConcrete4 (k,l,n,m) continue = case (maybeLitWord k, maybeLitWord l, maybeLitWord n, maybeLitWord m) of
-  (Just b, Just c, Just d, Just f) -> continue (b, c, d, f)
-  _ -> vmError UnexpectedSymbolicArg
+--forceConcrete4 :: (Expr EWord, Expr EWord, Expr EWord, Expr EWord) -> ((Word, Word, Word, Word) -> EVM ()) -> EVM ()
+--forceConcrete4 (k,l,n,m) continue = case (maybeLitWord k, maybeLitWord l, maybeLitWord n, maybeLitWord m) of
+  --(Just b, Just c, Just d, Just f) -> continue (b, c, d, f)
+  --_ -> vmError UnexpectedSymbolicArg
 
-forceConcrete5 :: (SymWord, SymWord, SymWord, SymWord, SymWord) -> ((Word, Word, Word, Word, Word) -> EVM ()) -> EVM ()
-forceConcrete5 (k,l,m,n,o) continue = case (maybeLitWord k, maybeLitWord l, maybeLitWord m, maybeLitWord n, maybeLitWord o) of
-  (Just a, Just b, Just c, Just d, Just e) -> continue (a, b, c, d, e)
-  _ -> vmError UnexpectedSymbolicArg
+--forceConcrete5 :: (Expr EWord, Expr EWord, Expr EWord, Expr EWord, Expr EWord) -> ((Word, Word, Word, Word, Word) -> EVM ()) -> EVM ()
+--forceConcrete5 (k,l,m,n,o) continue = case (maybeLitWord k, maybeLitWord l, maybeLitWord m, maybeLitWord n, maybeLitWord o) of
+  --(Just a, Just b, Just c, Just d, Just e) -> continue (a, b, c, d, e)
+  --_ -> vmError UnexpectedSymbolicArg
 
-forceConcrete6 :: (SymWord, SymWord, SymWord, SymWord, SymWord, SymWord) -> ((Word, Word, Word, Word, Word, Word) -> EVM ()) -> EVM ()
-forceConcrete6 (k,l,m,n,o,p) continue = case (maybeLitWord k, maybeLitWord l, maybeLitWord m, maybeLitWord n, maybeLitWord o, maybeLitWord p) of
-  (Just a, Just b, Just c, Just d, Just e, Just f) -> continue (a, b, c, d, e, f)
-  _ -> vmError UnexpectedSymbolicArg
+--forceConcrete6 :: (Expr EWord, Expr EWord, Expr EWord, Expr EWord, Expr EWord, Expr EWord) -> ((Word, Word, Word, Word, Word, Word) -> EVM ()) -> EVM ()
+--forceConcrete6 (k,l,m,n,o,p) continue = case (maybeLitWord k, maybeLitWord l, maybeLitWord m, maybeLitWord n, maybeLitWord o, maybeLitWord p) of
+  --(Just a, Just b, Just c, Just d, Just e, Just f) -> continue (a, b, c, d, e, f)
+  --_ -> vmError UnexpectedSymbolicArg
 
-forceConcreteBuffer :: Buffer -> (ByteString -> EVM ()) -> EVM ()
-forceConcreteBuffer (SymbolicBuffer b) continue = case maybeLitBytes b of
-  Nothing -> vmError UnexpectedSymbolicArg
-  Just bs -> continue bs
-forceConcreteBuffer (ConcreteBuffer b) continue = continue b
+--forceConcreteBuffer :: Buffer -> (ByteString -> EVM ()) -> EVM ()
+--forceConcreteBuffer (SymbolicBuffer b) continue = case maybeLitBytes b of
+  --Nothing -> vmError UnexpectedSymbolicArg
+  --Just bs -> continue bs
+--forceConcreteBuffer (ConcreteBuffer b) continue = continue b
 
 -- * Substate manipulation
 refund :: Integer -> EVM ()
@@ -1915,7 +1907,7 @@ accessAccountForGas addr = do
 
 -- | returns a wrapped boolean- if true, this slot has been touched before in the txn (warm gas cost as in EIP 2929)
 -- otherwise cold
-accessStorageForGas :: Addr -> SymWord -> EVM Bool
+accessStorageForGas :: Addr -> Expr EWord -> EVM Bool
 accessStorageForGas addr key = do
   accessedStrkeys <- use (tx . substate . accessedStorageKeys)
   case maybeLitWord key of
@@ -1937,7 +1929,7 @@ cheatCode = num (keccak "hevm cheat code")
 
 cheat
   :: (?op :: Word8)
-  => (Word, Word) -> (Word, Word)
+  => (W256, W256) -> (W256, W256)
   -> EVM ()
 cheat (inOffset, inSize) (outOffset, outSize) = do
   mem <- use (state . memory)
@@ -1956,7 +1948,7 @@ cheat (inOffset, inSize) (outOffset, outSize) = do
             next
             push 1
 
-type CheatAction = Word -> Word -> Buffer -> EVM ()
+type CheatAction = W256 -> W256 -> Expr Buf -> EVM ()
 
 cheatActions :: Map Word32 CheatAction
 cheatActions =
@@ -1966,7 +1958,7 @@ cheatActions =
           vm <- get
           if view EVM.allowFFI vm then
             case decodeBuffer [AbiArrayDynamicType AbiStringType] input of
-              CAbi valsArr -> case valsArr of
+              Just valsArr -> case valsArr of
                 [AbiArrayDynamic AbiStringType strsV] ->
                   let
                     cmd = (flip fmap) (V.toList strsV) (\case
@@ -1982,7 +1974,7 @@ cheatActions =
               _ -> vmError (BadCheatCode sig)
           else
             let msg = encodeUtf8 "ffi disabled: run again with --ffi if you want to allow tests to call external scripts"
-            in vmError . Revert $ abiMethod "Error(string)" (AbiTuple . V.fromList $ [AbiString msg]),
+            in vmError . EVM.Revert $ abiMethod "Error(string)" (AbiTuple . V.fromList $ [AbiString msg]),
 
       action "warp(uint256)" $
         \sig _ _ input -> case decodeStaticArgs input of
@@ -2069,7 +2061,7 @@ ethsign sk digest = go 420
 -- note that the continuation is ignored in the precompile case
 delegateCall
   :: (?op :: Word8)
-  => Contract -> Word -> SAddr -> SAddr -> Word -> Word -> Word -> Word -> Word -> [SymWord]
+  => Contract -> W256 -> SAddr -> SAddr -> W256 -> W256 -> W256 -> W256 -> W256 -> [Expr EWord]
   -> (Addr -> EVM ())
   -> EVM ()
 delegateCall this gasGiven (SAddr xTo) (SAddr xContext) xValue xInOffset xInSize xOutOffset xOutSize xs continue =
@@ -2138,7 +2130,7 @@ collision c' = case c' of
 
 create :: (?op :: Word8)
   => Addr -> Contract
-  -> Word -> Word -> [SymWord] -> Addr -> Buffer -> EVM ()
+  -> W256 -> W256 -> [Expr EWord] -> Addr -> Expr Buf -> EVM ()
 create self this xGas' xValue xs newAddr initCode = do
   vm0 <- get
   let xGas = num xGas'
@@ -2242,8 +2234,8 @@ underrun = vmError StackUnderrun
 
 -- | A stack frame can be popped in three ways.
 data FrameResult
-  = FrameReturned Buffer -- ^ STOP, RETURN, or no more code
-  | FrameReverted Buffer -- ^ REVERT
+  = FrameReturned (Expr Buf) -- ^ STOP, RETURN, or no more code
+  | FrameReverted (Expr Buf) -- ^ REVERT
   | FrameErrored Error -- ^ Any other error
   deriving Show
 
@@ -2380,8 +2372,8 @@ finishFrame how = do
 
 accessUnboundedMemoryRange
   :: FeeSchedule Integer
-  -> Word
-  -> Word
+  -> W256
+  -> W256
   -> EVM ()
   -> EVM ()
 accessUnboundedMemoryRange _ _ 0 continue = continue
@@ -2395,8 +2387,8 @@ accessUnboundedMemoryRange fees f l continue = do
 
 accessMemoryRange
   :: FeeSchedule Integer
-  -> Word
-  -> Word
+  -> W256
+  -> W256
   -> EVM ()
   -> EVM ()
 accessMemoryRange _ _ 0 continue = continue
@@ -2406,11 +2398,11 @@ accessMemoryRange fees f l continue =
     else accessUnboundedMemoryRange fees f l continue
 
 accessMemoryWord
-  :: FeeSchedule Integer -> Word -> EVM () -> EVM ()
+  :: FeeSchedule Integer -> W256 -> EVM () -> EVM ()
 accessMemoryWord fees x = accessMemoryRange fees x 32
 
 copyBytesToMemory
-  :: Buffer -> Word -> Word -> Word -> EVM ()
+  :: Expr Buf -> W256 -> W256 -> W256 -> EVM ()
 copyBytesToMemory bs size xOffset yOffset =
   if size == 0 then noop
   else do
@@ -2419,7 +2411,7 @@ copyBytesToMemory bs size xOffset yOffset =
       writeMemory bs size xOffset yOffset mem
 
 copyCallBytesToMemory
-  :: Buffer -> Word -> Word -> Word -> EVM ()
+  :: Expr Buf -> W256 -> W256 -> W256 -> EVM ()
 copyCallBytesToMemory bs size xOffset yOffset =
   if size == 0 then noop
   else do
@@ -2427,13 +2419,13 @@ copyCallBytesToMemory bs size xOffset yOffset =
     assign (state . memory) $
       writeMemory bs (min size (num (len bs))) xOffset yOffset mem
 
-readMemory :: Word -> Word -> VM -> Buffer
+readMemory :: W256 -> W256 -> VM -> Buffer
 readMemory offset size vm = sliceWithZero (num offset) (num size) (view (state . memory) vm)
 
 word256At
   :: Functor f
-  => Word -> (SymWord -> f (SymWord))
-  -> Buffer -> f Buffer
+  => W256 -> (Expr EWord -> f (Expr EWord))
+  -> Expr Buf -> f Buffer
 word256At i = lens getter setter where
   getter = EVM.Symbolic.readMemoryWord i
   setter m x = setMemoryWord i x m
@@ -2489,17 +2481,17 @@ traceLog log = do
 
 -- * Stack manipulation
 
-push :: Word -> EVM ()
+push :: W256 -> EVM ()
 push = pushSym . w256lit . num
 
-pushSym :: SymWord -> EVM ()
+pushSym :: Expr EWord -> EVM ()
 pushSym x = state . stack %= (x :)
 
 
 stackOp1
   :: (?op :: Word8)
   => ((Expr EWord) -> Integer)
-  -> ((SymWord) -> (SymWord))
+  -> ((Expr EWord) -> (Expr EWord))
   -> EVM ()
 stackOp1 cost f =
   use (state . stack) >>= \case
@@ -2547,7 +2539,7 @@ checkJump x xs = do
   self <- use (state . codeContract)
   theCodeOps <- use (env . contracts . ix self . codeOps)
   theOpIxMap <- use (env . contracts . ix self . opIxMap)
-  if x < num (len theCode) && 0x5b == (fromMaybe (error "tried to jump to symbolic code location") $ unliteral $ EVM.Symbolic.index (num x) theCode)
+  if x < num (len theCode) && 0x5b == (fromMaybe (error "tried to jump to symbolic code location") $ unliteral $ EVM.Symbolic.readByte (num x) theCode)
     then
       if OpJumpdest == snd (theCodeOps RegularVector.! (theOpIxMap Vector.! num x))
       then do
@@ -2564,7 +2556,7 @@ opSize _                          = 1
 -- Index i of the resulting vector contains the operation index for
 -- the program counter value i.  This is needed because source map
 -- entries are per operation, not per byte.
-mkOpIxMap :: Buffer -> Vector Int
+mkOpIxMap :: Expr Buf -> Vector Int
 mkOpIxMap xs = Vector.create $ Vector.new (len xs) >>= \v ->
   -- Loop over the byte string accumulating a vector-mutating action.
   -- This is somewhat obfuscated, but should be fast.
@@ -2651,7 +2643,7 @@ opParams vm =
       then Map.fromList (zip xs (vm ^. state . stack))
       else mempty
 
-readOp :: Word8 -> Buffer -> Op
+readOp :: Word8 -> Expr Buf -> Op
 readOp x _  | x >= 0x80 && x <= 0x8f = OpDup (x - 0x80 + 1)
 readOp x _  | x >= 0x90 && x <= 0x9f = OpSwap (x - 0x90 + 1)
 readOp x _  | x >= 0xa0 && x <= 0xa4 = OpLog (x - 0xa0)
@@ -2736,7 +2728,7 @@ readOp x _ = case x of
   0xff -> OpSelfdestruct
   _    -> OpUnknown x
 
-mkCodeOps :: Buffer -> RegularVector.Vector (Int, Op)
+mkCodeOps :: Expr Buf -> RegularVector.Vector (Int, Op)
 mkCodeOps (ConcreteBuffer bytes) = RegularVector.fromList . toList $ go 0 bytes
   where
     go !i !xs =
@@ -2762,7 +2754,7 @@ mkCodeOps (SymbolicBuffer bytes) = RegularVector.fromList . toList $ go' 0 (stri
 -- Gas cost function for CALL, transliterated from the Yellow Paper.
 costOfCall
   :: FeeSchedule Integer
-  -> Bool -> Word -> Word -> Word -> Addr
+  -> Bool -> W256 -> W256 -> W256 -> Addr
   -> EVM (Integer, Integer)
 costOfCall (FeeSchedule {..}) recipientExists xValue availableGas' xGas' target = do
   acc <- accessAccountForGas target
@@ -2783,7 +2775,7 @@ costOfCall (FeeSchedule {..}) recipientExists xValue availableGas' xGas' target 
 -- Gas cost of create, including hash cost if needed
 costOfCreate
   :: FeeSchedule Integer
-  -> Word -> Word -> (Integer, Integer)
+  -> W256 -> W256 -> (Integer, Integer)
 costOfCreate (FeeSchedule {..}) availableGas' hashSize =
   (createCost + initGas, initGas)
   where
@@ -2809,7 +2801,7 @@ concreteModexpGasFee input = max 200 ((multiplicationComplexity * iterCount) `di
         iterCount = max iterCount' 1
 
 -- Gas cost of precompiles
-costOfPrecompile :: FeeSchedule Integer -> Addr -> Buffer -> Integer
+costOfPrecompile :: FeeSchedule Integer -> Addr -> Expr Buf -> Integer
 costOfPrecompile (FeeSchedule {..}) precompileAddr input =
   case precompileAddr of
     -- ECRECOVER
