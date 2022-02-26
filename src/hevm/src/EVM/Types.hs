@@ -238,12 +238,10 @@ data Expr (a :: EType) where
   SHR            :: Expr EWord -> Expr EWord -> Expr EWord
   SAR            :: Expr EWord -> Expr EWord -> Expr EWord
 
-  -- keccak
+  -- Hashes
 
-  Keccak         :: Expr EWord         -- offset
-                 -> Expr EWord         -- size
-                 -> Expr Buf           -- memory
-                 -> Expr EWord         -- result
+  Keccak         :: Expr Buf   -> Expr EWord
+  SHA256         :: Expr Buf   -> Expr EWord
 
   -- block context
 
