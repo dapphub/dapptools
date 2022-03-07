@@ -22,7 +22,6 @@ import EVM.ABI
 import EVM.Types
 import EVM.Solidity
 import EVM.Concrete (createAddress, create2Address)
-import EVM.Symbolic
 import EVM.Op
 import EVM.Expr (readStorage, writeStorage, readByte)
 import EVM.FeeSchedule (FeeSchedule (..))
@@ -89,7 +88,7 @@ data Error
   | MaxCodeSizeExceeded W256 W256
   | InvalidFormat
   | PrecompileFailure
-  | UnexpectedSymbolicArg
+  | UnexpectedSymbolicArg Int String
   | DeadPath
   | NotUnique (Expr EWord)
   | SMTTimeout
@@ -304,13 +303,13 @@ data ContractCode
 
 -- runtime err when used for symbolic code
 instance Eq ContractCode where
-  (InitCode x) == (InitCode y) = forceBuffer x == forceBuffer y
-  (RuntimeCode x) == (RuntimeCode y) = forceBuffer x == forceBuffer y
+  (InitCode x) == (InitCode y) = x == y
+  (RuntimeCode x) == (RuntimeCode y) = x == y
   _ == _ = False
 
 -- runtime err when used for symbolic code
 instance Ord ContractCode where
-  compare x y = compare (forceBuffer (buf x)) (forceBuffer (buf y))
+  compare x y = compare (buf x) (buf y)
     where buf (InitCode z) = z
           buf (RuntimeCode z) = z
 
@@ -395,7 +394,7 @@ blankState = FrameState
   , _stack        = mempty
   , _memory       = mempty
   , _memorySize   = 0
-  , _calldata     = (mempty, 0)
+  , _calldata     = mempty
   , _callvalue    = 0
   , _caller       = 0
   , _gas          = 0
@@ -433,7 +432,7 @@ unifyCachedContract :: Contract -> Contract -> Contract
 unifyCachedContract a b = a & set storage merged
   where merged = case (view storage a, view storage b) of
                    (ConcreteStore sa, ConcreteStore sb) ->
-                     Concrete (mappend sa sb)
+                     ConcreteStore (mappend sa sb)
                    _ ->
                      view storage a
 
@@ -463,9 +462,9 @@ makeVm o =
   { _result = Nothing
   , _frames = mempty
   , _tx = TxState
-    { _gasprice = w256 $ vmoptGasprice o
-    , _txgaslimit = w256 $ vmoptGaslimit o
-    , _txPriorityFee = w256 $ vmoptPriorityFee o
+    { _gasprice = vmoptGasprice o
+    , _txgaslimit = vmoptGaslimit o
+    , _txPriorityFee = vmoptPriorityFee o
     , _origin = txorigin
     , _toAddr = txtoAddr
     , _value = vmoptValue o
@@ -480,11 +479,11 @@ makeVm o =
   , _block = Block
     { _coinbase = vmoptCoinbase o
     , _timestamp = vmoptTimestamp o
-    , _number = w256 $ vmoptNumber o
-    , _difficulty = w256 $ vmoptDifficulty o
-    , _maxCodeSize = w256 $ vmoptMaxCodeSize o
-    , _gaslimit = w256 $ vmoptBlockGaslimit o
-    , _baseFee = w256 $ vmoptBaseFee o
+    , _number = vmoptNumber o
+    , _difficulty = vmoptDifficulty o
+    , _maxCodeSize = vmoptMaxCodeSize o
+    , _gaslimit = vmoptBlockGaslimit o
+    , _baseFee = vmoptBaseFee o
     , _schedule = vmoptSchedule o
     }
   , _state = FrameState
@@ -498,13 +497,13 @@ makeVm o =
     , _calldata = vmoptCalldata o
     , _callvalue = vmoptValue o
     , _caller = vmoptCaller o
-    , _gas = w256 $ vmoptGas o
+    , _gas = vmoptGas o
     , _returndata = mempty
     , _static = False
     }
   , _env = Env
     { _sha3Crack = mempty
-    , _chainId = w256 $ vmoptChainId o
+    , _chainId = vmoptChainId o
     , _contracts = Map.fromList
       [(vmoptAddress o, vmoptContract o)]
     --, _keccakUsed = mempty
@@ -528,7 +527,7 @@ initialContract theContractCode = Contract
       ConcreteBuf b -> keccak (stripBytecodeMetadata b)
       _ -> 0
 
-  , _storage  = Concrete mempty
+  , _storage  = EmptyStore
   , _balance  = 0
   , _nonce    = if creation then 1 else 0
   , _opIxMap  = mkOpIxMap theCode
@@ -574,26 +573,26 @@ exec1 = do
   if self > 0x0 && self <= 0x9 then do
     -- call to precompile
     let ?op = 0x00 -- dummy value
-    let
-      calldatasize = snd (the state calldata)
-    case maybeLitWord calldatasize of
-        Nothing -> vmError UnexpectedSymbolicArg
-        Just calldatasize' -> do
-          copyBytesToMemory (fst $ the state calldata) (num calldatasize') 0 0
-          executePrecompile self (num $ the state gas) 0 (num calldatasize') 0 0 []
+    case bufLength (the state calldata) of
+        Nothing -> vmError $
+          UnexpectedSymbolicArg (the state pc) "cannot call precompiles with symbolic data"
+        Just calldatasize -> do
+          copyBytesToMemory (the state calldata) (num calldatasize) 0 0
+          executePrecompile self (num $ the state gas) 0 (num calldatasize) 0 0 []
           vmx <- get
           case view (state.stack) vmx of
-            (x:_) -> case maybeLitWord x of
-              Just 0 -> do
-                fetchAccount self $ \_ -> do
-                  touchAccount self
-                  vmError PrecompileFailure
-              Just _ ->
-                fetchAccount self $ \_ -> do
-                  touchAccount self
-                  out <- use (state . returndata)
-                  finishFrame (FrameReturned out)
-              Nothing -> vmError UnexpectedSymbolicArg
+            (x:_) -> case x of
+              Lit (num -> x) -> case x of
+                0 -> do
+                  fetchAccount self $ \_ -> do
+                    touchAccount self
+                    vmError PrecompileFailure
+                _ -> fetchAccount self $ \_ -> do
+                    touchAccount self
+                    out <- use (state . returndata)
+                    finishFrame (FrameReturned out)
+              Nothing -> vmError $
+                UnexpectedSymbolicArg (view (state . pc) vmx) "precompile returned a symbolic value"
             _ ->
               underrun
 

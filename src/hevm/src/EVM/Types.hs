@@ -169,6 +169,15 @@ newtype W256 = W256 Word256
   that is being added to, this ensures that all context relevant to a given
   operation is contained within the term that represents that operation.
 
+  When dealing with Expr instances we assume that concrete expressions have
+  been reduced to their smallest possible representation (i.e. a `Lit`,
+  `ConcreteBuf`, or `ConcreteStore`). Failure to adhere to this invariant will
+  result in your concrete term being treated as symbolic, and may produce
+  unexpected errors. In the future we may wish to consider encoding the
+  concreteness of a given term directly in the type of that term, since such
+  type level shenanigans tends to complicate implementation, we skip this for
+  now.
+
   TODO: figure out how to attach knowledge to a term (e.g. on the potential bounds of a given word).
 -}
 
@@ -186,13 +195,13 @@ data Expr (a :: EType) where
 
   -- identifiers
 
-  Lit            :: {-# UNPACK #-} !W256     -> Expr EWord
+  Lit            :: W256   -> Expr EWord
   Var            :: String -> Expr EWord
 
   -- bytes
 
-  LitByte        :: {-# UNPACK #-} !Word8    -> Expr Byte
-  Index          :: Expr Byte  -> Expr EWord -> Expr Byte
+  LitByte        :: Word8     -> Expr Byte
+  Index          :: Expr Byte -> Expr EWord -> Expr Byte
 
   -- control flow
 
@@ -240,8 +249,8 @@ data Expr (a :: EType) where
 
   -- Hashes
 
-  Keccak         :: Expr Buf   -> Expr EWord
-  SHA256         :: Expr Buf   -> Expr EWord
+  Keccak         :: Expr Buf -> Expr EWord
+  SHA256         :: Expr Buf -> Expr EWord
 
   -- block context
 
@@ -462,6 +471,28 @@ unlit _ = Nothing
 unlitByte :: Enum a => Expr Byte -> Maybe a
 unlitByte (LitByte x) = Just . toEnum . fromEnum $ x
 unlitByte _ = Nothing
+
+-- Returns a concrete value if the buf is concrete, or Nothing if the buf is symbolic
+bufLength :: Expr Buf -> Maybe Int
+bufLength EmptyBuf = Just 0
+bufLength (ConcreteBuf b) = Just (BS.length b)
+bufLength _ = Nothing
+
+-- Returns the smallest possible size of a given buffer
+minLength :: Expr Buf -> Maybe Int
+minLength = bufLength . base
+
+-- Returns the base constructor upon which the buffer was built
+base :: Expr Buf -> Expr Buf
+base = \case
+  EmptyBuf -> EmptyBuf
+  AbstractBuf -> AbstractBuf
+  ConcreteBuf bs -> ConcreteBuf bs
+  WriteWord _ _ prev -> base prev
+  WriteByte _ _ prev -> base prev
+  CopySlice _ _ _ _ dst -> base dst
+
+
 
 deriving instance Show (Expr a)
 -- TODO: do we need a custom instance here?
