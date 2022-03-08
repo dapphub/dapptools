@@ -582,7 +582,7 @@ exec1 = do
           vmx <- get
           case view (state.stack) vmx of
             (x:_) -> case x of
-              Lit (num -> x) -> case x of
+              Lit (num -> x') -> case x' of
                 0 -> do
                   fetchAccount self $ \_ -> do
                     touchAccount self
@@ -591,16 +591,20 @@ exec1 = do
                     touchAccount self
                     out <- use (state . returndata)
                     finishFrame (FrameReturned out)
-              Nothing -> vmError $
+              _ -> vmError $
                 UnexpectedSymbolicArg (view (state . pc) vmx) "precompile returned a symbolic value"
             _ ->
               underrun
 
-  else if the state pc >= len (the state code)
+  -- This is a bit of a hack, but since we only use symbolic code to represent
+  -- ctor args (appended to the end of ctor bytecode) it should be fine. It may
+  -- be worth reworking the code representation to make this concrete code +
+  -- optional symbolic data restriction more visible in the type system.
+  else if (maybe True (\l -> the state pc >= l) (minLength (the state code)))
     then doStop
 
     else do
-      let ?op = fromMaybe (error "could not analyze symbolic code") $ unlit $ EVM.Expr.readByte (the state pc) (the state code)
+      let ?op = fromMaybe (error "could not analyze symbolic code") $ unlitByte $ EVM.Expr.readByte (Lit . num $ the state pc) (the state code)
 
       case ?op of
 

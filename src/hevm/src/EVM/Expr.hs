@@ -8,6 +8,8 @@ module EVM.Expr where
 
 import Prelude hiding (LT, GT)
 import Data.Bits
+import Data.Word
+import Data.DoubleWord
 
 import EVM.Types
 import qualified Data.ByteString as BS
@@ -159,61 +161,92 @@ sar = shr -- TODO: almost certainly wrong
 -- inline with the semantics of calldata and memory, but not of returndata.
 readByte :: Expr EWord -> Expr Buf -> Expr Byte
 readByte _ EmptyBuf = LitByte 0x0
-readByte i AbstractBuf = ReadByte i AbstractBuf
 
--- reads from concrete indices
+-- fuly concrete reads
 readByte (Lit x) (ConcreteBuf b)
-  = if fromIntegral x < BS.length b
-    then LitByte (BS.index b (fromIntegral x))
+  = if num x < BS.length b
+    then LitByte (BS.index b (num x))
     else LitByte 0x0
 readByte i@(Lit x) (WriteByte (Lit idx) val src)
-  = if fromIntegral x == idx
+  = if num x == idx
     then val
     else readByte i src
 readByte i@(Lit x) (WriteWord (Lit idx) val src)
-  = if fromIntegral x <= idx && idx < fromIntegral (x + 8)
-    then Index (litByte $ idx - fromIntegral x) val -- TODO: pull a concrete value here if we can
+  = if num x <= idx && idx < num (x + 8)
+    then case val of
+           (Lit v) -> LitByte . BS.pack . map (toEnum . fromEnum) $ v
+           _ -> Index (litByte $ idx - num x) val -- TODO: pull a concrete value here if we can
     else readByte i src
 readByte i@(Lit x) (CopySlice (Lit dstOffset) (Lit srcOffset) (Lit size) src dst)
-  = if dstOffset <= fromIntegral x && fromIntegral x < (dstOffset + size)
-    then readByte (Lit $ fromIntegral x - (dstOffset - srcOffset)) src
+  = if dstOffset <= num x && num x < (dstOffset + size)
+    then readByte (Lit $ num x - (dstOffset - srcOffset)) src
     else readByte i dst
 
--- we can ignore some partially symbolic CopySlice's if x is not within the region written to dst
+-- reads from partially symbolic copySlice exprs
 readByte i@(Lit x) buf@(CopySlice (Lit dstOffset) _ (Lit size) _ dst)
-  = if fromIntegral x < dstOffset || dstOffset + size < fromIntegral x
+  = if num x < dstOffset || dstOffset + size < num x
     then readByte i dst
     else ReadByte (lit x) buf
 readByte i@(Lit x) buf@(CopySlice (Lit dstOffset) _ _ _ dst)
-  = if fromIntegral x < dstOffset
+  = if num x < dstOffset
     then readByte i dst
     else ReadByte (lit x) buf
 
--- if we have writes to abstract indices, then return a ReadByte expr
+-- fully abstract reads
 readByte i buf = ReadByte i buf
 
+-- Returns the byte at idx from the given word.
+--
+-- Afaict there is no nice way to implement this function and we have to pull
+-- the 8 bits that we are interested in via the Bits api.
+indexWord :: Word8 -> W256 -> Word8
+indexWord (num -> idx) w = boolsToWord8 bs
+  where bs = [testBit w i | i <- [idx .. idx+8]]
 
--- | Copies a slice of src into dst
+-- | Pack up to eight bools in a byte.
+boolsToWord8 :: [Bool] -> Word8
+boolsToWord8 [] = 0
+boolsToWord8 xs = foldl setBit 0 (map snd $ filter fst $ zip xs [0 .. 7])
+
+{- | Copies a slice of src into dst.
+
+    TODO: handle writing slices with concrete indicies from partially symbolic bufs where the indicies do not overlap symbolic regions.
+
+        0           srcOffset       srcOffset + size     length src
+        ┌--------------┬------------------┬-----------------┐
+   src: |              | ------ sl ------ |                 |
+        └--------------┴------------------┴-----------------┘
+
+        0     dstOffset       dstOffset + size     length dst
+        ┌--------┬------------------┬-----------------┐
+   dst: |   hd   |                  |       tl        |
+        └--------┴------------------┴-----------------┘
+-}
 copySlice :: Expr EWord -> Expr EWord -> Expr EWord -> Expr Buf -> Expr Buf -> Expr Buf
+
+-- copies from empty bufs
 copySlice _ _ _ EmptyBuf EmptyBuf = EmptyBuf
 copySlice _ _ _ EmptyBuf (ConcreteBuf dst) = ConcreteBuf dst
-copySlice _ _ _ (ConcreteBuf src) EmptyBuf = ConcreteBuf src
-copySlice (Lit srcOffset) (Lit dstOffset) (Lit size) (ConcreteBuf src) (ConcreteBuf dst) = let
-    {-
-            0           srcOffset       srcOffset + size     length src
-            ┌--------------┬------------------┬-----------------┐
-       src: |              | ------ sl ------ |                 |
-            └--------------┴------------------┴-----------------┘
 
-            0     dstOffset       dstOffset + size     length dst
-            ┌--------┬------------------┬-----------------┐
-       dst: |   hd   |                  |       tl        |
-            └--------┴------------------┴-----------------┘
-    -}
+-- fully concrete copies
+copySlice (Lit srcOffset) (Lit dstOffset) (Lit size) (ConcreteBuf src) EmptyBuf = let
+    hd = BS.replicate (num dstOffset) 0
+    sl = padRight (fromEnum size) $ BS.take (fromEnum size) (BS.drop (fromEnum srcOffset) src)
+  in ConcreteBuf $ hd <> sl
+copySlice (Lit srcOffset) (Lit dstOffset) (Lit size) (ConcreteBuf src) (ConcreteBuf dst) = let
     hd = padRight (fromEnum dstOffset) $ BS.take (fromEnum dstOffset) dst
     sl = padRight (fromEnum size) $ BS.take (fromEnum size) (BS.drop (fromEnum srcOffset) src)
     tl = BS.drop (fromEnum dstOffset + fromEnum size) dst
   in ConcreteBuf $ hd <> sl <> tl
+
+-- concrete indicies & abstract src
+--copySlice (Lit srcOffset) (Lit dstOffset) (Lit size) src (ConcreteBuf dst) = let
+    --hd = padRight (fromEnum dstOffset) $ BS.take (fromEnum dstOffset) dst
+    --sl = padRight (fromEnum size) $ BS.take (fromEnum size) (BS.drop (fromEnum srcOffset) src)
+    --tl = BS.drop (fromEnum dstOffset + fromEnum size) dst
+  --in ConcreteBuf $ hd <> sl <> tl
+
+-- abstract indicies
 copySlice srcOffset dstOffset size src dst = CopySlice srcOffset dstOffset size src dst
 
 
