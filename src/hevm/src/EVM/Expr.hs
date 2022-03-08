@@ -9,7 +9,6 @@ module EVM.Expr where
 import Prelude hiding (LT, GT)
 import Data.Bits
 import Data.Word
-import Data.DoubleWord
 
 import EVM.Types
 import qualified Data.ByteString as BS
@@ -174,8 +173,8 @@ readByte i@(Lit x) (WriteByte (Lit idx) val src)
 readByte i@(Lit x) (WriteWord (Lit idx) val src)
   = if num x <= idx && idx < num (x + 8)
     then case val of
-           (Lit v) -> LitByte . BS.pack . map (toEnum . fromEnum) $ v
-           _ -> Index (litByte $ idx - num x) val -- TODO: pull a concrete value here if we can
+           (Lit v) -> LitByte $ indexWord (fromIntegral x) v
+           _ -> Index (litByte $ idx - num x) val
     else readByte i src
 readByte i@(Lit x) (CopySlice (Lit dstOffset) (Lit srcOffset) (Lit size) src dst)
   = if dstOffset <= num x && num x < (dstOffset + size)
@@ -195,18 +194,6 @@ readByte i@(Lit x) buf@(CopySlice (Lit dstOffset) _ _ _ dst)
 -- fully abstract reads
 readByte i buf = ReadByte i buf
 
--- Returns the byte at idx from the given word.
---
--- Afaict there is no nice way to implement this function and we have to pull
--- the 8 bits that we are interested in via the Bits api.
-indexWord :: Word8 -> W256 -> Word8
-indexWord (num -> idx) w = boolsToWord8 bs
-  where bs = [testBit w i | i <- [idx .. idx+8]]
-
--- | Pack up to eight bools in a byte.
-boolsToWord8 :: [Bool] -> Word8
-boolsToWord8 [] = 0
-boolsToWord8 xs = foldl setBit 0 (map snd $ filter fst $ zip xs [0 .. 7])
 
 {- | Copies a slice of src into dst.
 
@@ -286,3 +273,16 @@ writeStorage key val store = SStore key val store
 
 to512 :: W256 -> Word512
 to512 = fromIntegral
+
+-- Returns the byte at idx from the given word.
+--
+-- Afaict there is no nice way to implement this function and we have to pull
+-- the 8 bits that we are interested in via the Bits api.
+indexWord :: Word8 -> W256 -> Word8
+indexWord (num -> idx) w = boolsToWord8 bs
+  where bs = [testBit w i | i <- [idx .. idx+8]]
+
+-- | Pack up to eight bools in a byte.
+boolsToWord8 :: [Bool] -> Word8
+boolsToWord8 [] = 0
+boolsToWord8 xs = foldl setBit 0 (map snd $ filter fst $ zip xs [0 .. 7])
