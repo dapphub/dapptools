@@ -44,6 +44,7 @@ import Data.Word                    (Word8, Word32)
 import Data.Bits                    (FiniteBits)
 
 import Data.Tree
+import Data.Tuple.Curry
 import Data.List (find)
 
 import qualified Data.ByteString      as BS
@@ -600,11 +601,12 @@ exec1 = do
   -- ctor args (appended to the end of ctor bytecode) it should be fine. It may
   -- be worth reworking the code representation to make this concrete code +
   -- optional symbolic data restriction more visible in the type system.
+  -- TODO: is this actually safe? come up with a better representation. Does this work for immutable constants??
   else if (maybe True (\l -> the state pc >= l) (minLength (the state code)))
     then doStop
 
     else do
-      let ?op = fromMaybe (error "could not analyze symbolic code") $ unlitByte $ EVM.Expr.readByte (Lit . num $ the state pc) (the state code)
+      let ?op = fromMaybe (error "could not analyze symbolic code") $ unlitByte $ Expr.readByte (Lit . num $ the state pc) (the state code)
 
       case ?op of
 
@@ -612,8 +614,9 @@ exec1 = do
         x | x >= 0x60 && x <= 0x7f -> do
           let !n = num x - 0x60 + 1
               !xs = case the state code of
-                      ConcreteBuf b -> w256lit $ word $ padRight n $ BS.take n (BS.drop (1 + the state pc) b)
-                      b -> readSWord' 0 $ padLeft' 32 $ take n $ drop (1 + the state pc) b
+                -- TODO: pad right or left here?
+                ConcreteBuf b -> Lit $ word $ padRight n $ BS.take n (BS.drop (1 + the state pc) b)
+                b -> Expr.readBytes n (Lit . num $ the state pc + 1) b
           limitStack 1 $
             burn g_verylow $ do
               next
@@ -687,9 +690,9 @@ exec1 = do
         -- op: SMOD
         0x07 -> stackOp2 (const g_low) (uncurry Expr.smod)
         -- op: ADDMOD
-        0x08 -> stackOp3 (const g_mid) (uncurry Expr.addmod)
+        0x08 -> stackOp3 (const g_mid) (uncurryN Expr.addmod)
         -- op: MULMOD
-        0x09 -> stackOp3 (const g_mid) (uncurry Expr.mulmod)
+        0x09 -> stackOp3 (const g_mid) (uncurryN Expr.mulmod)
 
         -- op: LT
         0x10 -> stackOp2 (const g_verylow) (uncurry Expr.lt)
@@ -703,7 +706,7 @@ exec1 = do
         -- op: EQ
         0x14 -> stackOp2 (const g_verylow) (uncurry Expr.eq)
         -- op: ISZERO
-        0x15 -> stackOp1 (const g_verylow) (uncurry Expr.iszero)
+        0x15 -> stackOp1 (const g_verylow) (uncurryN Expr.iszero)
 
         -- op: AND
         0x16 -> stackOp2 (const g_verylow) (uncurry Expr.and)
@@ -712,12 +715,10 @@ exec1 = do
         -- op: XOR
         0x18 -> stackOp2 (const g_verylow) (uncurry Expr.xor)
         -- op: NOT
-        0x19 -> stackOp1 (const g_verylow) (uncurry Expr.not)
+        0x19 -> stackOp1 (const g_verylow) (uncurryN Expr.not)
 
         -- op: BYTE
-        0x1a -> stackOp2 (const g_verylow) $ \case
-          (n, _) | (forceLit n) >= 32 -> 0
-          (n, x) | otherwise          -> 0xff .&. shiftR x (8 * (31 - num (forceLit n)))
+        0x1a -> stackOp2 (const g_verylow) (uncurry Expr.indexWord)
 
         -- op: SHL
         0x1b -> stackOp2 (const g_verylow) (uncurry Expr.shl)

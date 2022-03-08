@@ -9,6 +9,7 @@ module EVM.Expr where
 import Prelude hiding (LT, GT)
 import Data.Bits
 import Data.Word
+import Data.Maybe
 
 import EVM.Types
 import qualified Data.ByteString as BS
@@ -173,7 +174,7 @@ readByte i@(Lit x) (WriteByte (Lit idx) val src)
 readByte i@(Lit x) (WriteWord (Lit idx) val src)
   = if num x <= idx && idx < num (x + 8)
     then case val of
-           (Lit v) -> LitByte $ indexWord (fromIntegral x) v
+           (Lit v) -> LitByte $ indexWord (num x) v
            _ -> Index (litByte $ idx - num x) val
     else readByte i src
 readByte i@(Lit x) (CopySlice (Lit dstOffset) (Lit srcOffset) (Lit size) src dst)
@@ -195,9 +196,41 @@ readByte i@(Lit x) buf@(CopySlice (Lit dstOffset) _ _ _ dst)
 readByte i buf = ReadByte i buf
 
 
-{- | Copies a slice of src into dst.
+-- | Reads n bytes starting from idx in buf and returns a left padded word
+--
+-- If n is >= 32 this is the same as readWord
+readBytes :: Int -> Expr EWord -> Expr Buf -> Expr EWord
+readBytes (min 32 -> n) idx buf = if Prelude.and . (fmap isLitByte) $ bytes
+                                  then Lit $ bytesToW256 . mapMaybe unlitByte $ bytes
+                                  else joined
+  where
+    pad bs
+      | length bs >= 32 = bs
+      | otherwise = pad (LitByte 0 : bs)
 
-    TODO: handle writing slices with concrete indicies from partially symbolic bufs where the indicies do not overlap symbolic regions.
+    bytes = pad [readByte (add idx (Lit . num $ i)) buf | i <- [0 .. n - 1]]
+    joined = JoinBytes
+               (bytes !! 0)  (bytes !! 1)  (bytes !! 2)  (bytes !! 3)
+               (bytes !! 4)  (bytes !! 5)  (bytes !! 6)  (bytes !! 7)
+               (bytes !! 8)  (bytes !! 9)  (bytes !! 10) (bytes !! 11)
+               (bytes !! 12) (bytes !! 13) (bytes !! 14) (bytes !! 15)
+               (bytes !! 16) (bytes !! 17) (bytes !! 18) (bytes !! 19)
+               (bytes !! 20) (bytes !! 21) (bytes !! 22) (bytes !! 23)
+               (bytes !! 24) (bytes !! 25) (bytes !! 26) (bytes !! 27)
+               (bytes !! 28) (bytes !! 29) (bytes !! 30) (bytes !! 31)
+
+
+-- | Reads the word starting at idx from the given buf
+readWord :: Expr EWord -> Expr Buf -> Expr EWord
+readWord i@(Lit idx) buf = let
+    bytes = [readByte (Lit i') buf | i' <- [idx .. idx + 31]]
+  in if Prelude.and . (fmap isLitByte) $ bytes
+     then Lit (bytesToW256 . mapMaybe unlitByte $ bytes)
+     else ReadWord i buf
+readWord idx buf = ReadWord idx buf
+
+
+{- | Copies a slice of src into dst.
 
         0           srcOffset       srcOffset + size     length src
         ┌--------------┬------------------┬-----------------┐
@@ -218,20 +251,22 @@ copySlice _ _ _ EmptyBuf (ConcreteBuf dst) = ConcreteBuf dst
 -- fully concrete copies
 copySlice (Lit srcOffset) (Lit dstOffset) (Lit size) (ConcreteBuf src) EmptyBuf = let
     hd = BS.replicate (num dstOffset) 0
-    sl = padRight (fromEnum size) $ BS.take (fromEnum size) (BS.drop (fromEnum srcOffset) src)
+    sl = padRight (num size) $ BS.take (num size) (BS.drop (num srcOffset) src)
   in ConcreteBuf $ hd <> sl
 copySlice (Lit srcOffset) (Lit dstOffset) (Lit size) (ConcreteBuf src) (ConcreteBuf dst) = let
-    hd = padRight (fromEnum dstOffset) $ BS.take (fromEnum dstOffset) dst
-    sl = padRight (fromEnum size) $ BS.take (fromEnum size) (BS.drop (fromEnum srcOffset) src)
-    tl = BS.drop (fromEnum dstOffset + fromEnum size) dst
+    hd = padRight (num dstOffset) $ BS.take (num dstOffset) dst
+    sl = padRight (num size) $ BS.take (num size) (BS.drop (num srcOffset) src)
+    tl = BS.drop (num dstOffset + num size) dst
   in ConcreteBuf $ hd <> sl <> tl
 
--- concrete indicies & abstract src
---copySlice (Lit srcOffset) (Lit dstOffset) (Lit size) src (ConcreteBuf dst) = let
-    --hd = padRight (fromEnum dstOffset) $ BS.take (fromEnum dstOffset) dst
-    --sl = padRight (fromEnum size) $ BS.take (fromEnum size) (BS.drop (fromEnum srcOffset) src)
-    --tl = BS.drop (fromEnum dstOffset + fromEnum size) dst
-  --in ConcreteBuf $ hd <> sl <> tl
+-- concrete indicies & abstract src (may produce a concrete result if we are
+-- copying from a concrete region of src)
+copySlice s@(Lit srcOffset) d@(Lit dstOffset) sz@(Lit size) src ds@(ConcreteBuf dst) = let
+    hd = padRight (num dstOffset) $ BS.take (num dstOffset) dst
+    sl = [readByte (Lit i) src | i <- [srcOffset .. srcOffset + size]]
+  in if Prelude.and . (fmap isLitByte) $ sl
+     then ConcreteBuf $ hd <> (BS.pack . (mapMaybe unlitByte) $ sl)
+     else CopySlice s d sz src ds
 
 -- abstract indicies
 copySlice srcOffset dstOffset size src dst = CopySlice srcOffset dstOffset size src dst
@@ -274,15 +309,21 @@ writeStorage key val store = SStore key val store
 to512 :: W256 -> Word512
 to512 = fromIntegral
 
--- Returns the byte at idx from the given word.
---
--- Afaict there is no nice way to implement this function and we have to pull
--- the 8 bits that we are interested in via the Bits api.
-indexWord :: Word8 -> W256 -> Word8
-indexWord (num -> idx) w = boolsToWord8 bs
-  where bs = [testBit w i | i <- [idx .. idx+8]]
+-- Is the given expr a literal word?
+isLitByte :: Expr Byte -> Bool
+isLitByte (LitByte _) = True
+isLitByte _ = False
 
--- | Pack up to eight bools in a byte.
-boolsToWord8 :: [Bool] -> Word8
-boolsToWord8 [] = 0
-boolsToWord8 xs = foldl setBit 0 (map snd $ filter fst $ zip xs [0 .. 7])
+-- | Returns the byte at idx from the given word.
+indexWord :: Int -> W256 -> Word8
+indexWord idx w = fromIntegral $ shiftR w idx
+
+-- | Converts a list of bytes into a W256, will wrap if the input is too large
+-- TODO: this is pretty messy (and probs wrong for signed?), make this good.
+bytesToW256 :: [Word8] -> W256
+bytesToW256 = num . bs2i . BS.pack
+
+-- | Converts a bytestring to an integer.
+-- TODO: signed? are we using the right endianess here?
+bs2i :: BS.ByteString -> Integer
+bs2i = BS.foldl' (\i b -> (i `shiftL` 8) + fromIntegral b) 0

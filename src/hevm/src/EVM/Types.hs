@@ -203,6 +203,16 @@ data Expr (a :: EType) where
   LitByte        :: Word8     -> Expr Byte
   Index          :: Expr Byte -> Expr EWord -> Expr Byte
 
+  -- TODO: rm readWord in favour of this?
+  JoinBytes      :: Expr Byte -> Expr Byte -> Expr Byte -> Expr Byte
+                 -> Expr Byte -> Expr Byte -> Expr Byte -> Expr Byte
+                 -> Expr Byte -> Expr Byte -> Expr Byte -> Expr Byte
+                 -> Expr Byte -> Expr Byte -> Expr Byte -> Expr Byte
+                 -> Expr Byte -> Expr Byte -> Expr Byte -> Expr Byte
+                 -> Expr Byte -> Expr Byte -> Expr Byte -> Expr Byte
+                 -> Expr Byte -> Expr Byte -> Expr Byte -> Expr Byte
+                 -> Expr Byte -> Expr Byte -> Expr Byte -> Expr Byte
+                 -> Expr EWord
   -- control flow
 
   Invalid        :: Expr End
