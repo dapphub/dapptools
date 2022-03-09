@@ -174,8 +174,8 @@ readByte i@(Lit x) (WriteByte (Lit idx) val src)
 readByte i@(Lit x) (WriteWord (Lit idx) val src)
   = if num x <= idx && idx < num (x + 8)
     then case val of
-           (Lit v) -> LitByte $ indexWord (num x) v
-           _ -> Index (litByte $ idx - num x) val
+           (Lit _) -> indexWord i val
+           _ -> Index (Lit $ idx - num x) val
     else readByte i src
 readByte i@(Lit x) (CopySlice (Lit dstOffset) (Lit srcOffset) (Lit size) src dst)
   = if dstOffset <= num x && num x < (dstOffset + size)
@@ -200,25 +200,7 @@ readByte i buf = ReadByte i buf
 --
 -- If n is >= 32 this is the same as readWord
 readBytes :: Int -> Expr EWord -> Expr Buf -> Expr EWord
-readBytes (min 32 -> n) idx buf = if Prelude.and . (fmap isLitByte) $ bytes
-                                  then Lit $ bytesToW256 . mapMaybe unlitByte $ bytes
-                                  else joined
-  where
-    pad bs
-      | length bs >= 32 = bs
-      | otherwise = pad (LitByte 0 : bs)
-
-    bytes = pad [readByte (add idx (Lit . num $ i)) buf | i <- [0 .. n - 1]]
-    joined = JoinBytes
-               (bytes !! 0)  (bytes !! 1)  (bytes !! 2)  (bytes !! 3)
-               (bytes !! 4)  (bytes !! 5)  (bytes !! 6)  (bytes !! 7)
-               (bytes !! 8)  (bytes !! 9)  (bytes !! 10) (bytes !! 11)
-               (bytes !! 12) (bytes !! 13) (bytes !! 14) (bytes !! 15)
-               (bytes !! 16) (bytes !! 17) (bytes !! 18) (bytes !! 19)
-               (bytes !! 20) (bytes !! 21) (bytes !! 22) (bytes !! 23)
-               (bytes !! 24) (bytes !! 25) (bytes !! 26) (bytes !! 27)
-               (bytes !! 28) (bytes !! 29) (bytes !! 30) (bytes !! 31)
-
+readBytes (min 32 -> n) idx buf = joinBytes [readByte (add idx (Lit . num $ i)) buf | i <- [0 .. n - 1]]
 
 -- | Reads the word starting at idx from the given buf
 readWord :: Expr EWord -> Expr Buf -> Expr EWord
@@ -272,6 +254,33 @@ copySlice s@(Lit srcOffset) d@(Lit dstOffset) sz@(Lit size) src ds@(ConcreteBuf 
 copySlice srcOffset dstOffset size src dst = CopySlice srcOffset dstOffset size src dst
 
 
+bufLength :: Expr Buf -> Expr EWord
+bufLength EmptyBuf = Lit 0
+bufLength (ConcreteBuf b) = Lit (num . BS.length $ b)
+bufLength b = BufLength b
+
+
+-- TODO: this is bullshit, delete it and figure out how to handle execution
+-- past the end of the bytecode properly
+-- Returns the smallest possible size of a given buffer
+minLength :: Expr Buf -> Maybe Int
+minLength b = case base b of
+  EmptyBuf -> Just 0
+  (ConcreteBuf bs) -> Just $ BS.length bs
+  _ -> Nothing
+
+
+-- Returns the base constructor upon which the buffer was built
+base :: Expr Buf -> Expr Buf
+base = \case
+  EmptyBuf -> EmptyBuf
+  AbstractBuf -> AbstractBuf
+  ConcreteBuf bs -> ConcreteBuf bs
+  WriteWord _ _ prev -> base prev
+  WriteByte _ _ prev -> base prev
+  CopySlice _ _ _ _ dst -> base dst
+
+
 -- ** Storage ** ----------------------------------------------------------------------------------
 
 
@@ -315,15 +324,78 @@ isLitByte (LitByte _) = True
 isLitByte _ = False
 
 -- | Returns the byte at idx from the given word.
-indexWord :: Int -> W256 -> Word8
-indexWord idx w = fromIntegral $ shiftR w idx
+indexWord :: Expr EWord -> Expr EWord -> Expr Byte
+indexWord (Lit idx) (Lit w) = LitByte . fromIntegral $ shiftR w (num idx * 8)
+indexWord (Lit idx) (JoinBytes zero        one        two       three
+                               four        five       six       seven
+                               eight       nine       ten       eleven
+                               twelve      thirteen   fourteen  fifteen
+                               sixteen     seventeen  eighteen  nineteen
+                               twenty      twentyone  twentytwo twentythree
+                               twentyfour  twentyfive twentysix twentyseven
+                               twentyeight twentynine thirty    thirtyone)
+  | idx == 0 = zero
+  | idx == 1 = one
+  | idx == 2 = two
+  | idx == 3 = three
+  | idx == 4 = four
+  | idx == 5 = five
+  | idx == 6 = six
+  | idx == 7 = seven
+  | idx == 8 = eight
+  | idx == 9 = nine
+  | idx == 10 = ten
+  | idx == 11 = eleven
+  | idx == 12 = twelve
+  | idx == 13 = thirteen
+  | idx == 14 = fourteen
+  | idx == 15 = fifteen
+  | idx == 16 = sixteen
+  | idx == 17 = seventeen
+  | idx == 18 = eighteen
+  | idx == 19 = nineteen
+  | idx == 20 = twenty
+  | idx == 21 = twentyone
+  | idx == 22 = twentytwo
+  | idx == 23 = twentythree
+  | idx == 24 = twentyfour
+  | idx == 25 = twentyfive
+  | idx == 26 = twentysix
+  | idx == 27 = twentyseven
+  | idx == 28 = twentyeight
+  | idx == 29 = twentynine
+  | idx == 30 = thirty
+  | idx == 31 = thirtyone
+  | otherwise = LitByte 0
+indexWord idx w = Index idx w
 
--- | Converts a list of bytes into a W256, will wrap if the input is too large
--- TODO: this is pretty messy (and probs wrong for signed?), make this good.
+
+padByte :: Expr Byte -> Expr EWord
+padByte (LitByte b) = Lit . bytesToW256 $ [b]
+padByte b = joinBytes [b]
+
+-- | Converts a list of bytes into a W256.
+-- TODO: semantics if the input is too large?
 bytesToW256 :: [Word8] -> W256
-bytesToW256 = num . bs2i . BS.pack
+bytesToW256 = word . BS.pack
 
--- | Converts a bytestring to an integer.
--- TODO: signed? are we using the right endianess here?
-bs2i :: BS.ByteString -> Integer
-bs2i = BS.foldl' (\i b -> (i `shiftL` 8) + fromIntegral b) 0
+padBytesLeft :: Int -> [Expr Byte] -> [Expr Byte]
+padBytesLeft n bs
+  | length bs > n = take n bs
+  | length bs == n = bs
+  | otherwise = padBytesLeft n (LitByte 0 : bs)
+
+joinBytes :: [Expr Byte] -> Expr EWord
+joinBytes bs
+  | Prelude.and . (fmap isLitByte) $ bs = Lit . bytesToW256 . (mapMaybe unlitByte) $ bs
+  | otherwise = let
+      bytes = padBytesLeft 32 bs
+    in JoinBytes
+      (bytes !! 0)  (bytes !! 1)  (bytes !! 2)  (bytes !! 3)
+      (bytes !! 4)  (bytes !! 5)  (bytes !! 6)  (bytes !! 7)
+      (bytes !! 8)  (bytes !! 9)  (bytes !! 10) (bytes !! 11)
+      (bytes !! 12) (bytes !! 13) (bytes !! 14) (bytes !! 15)
+      (bytes !! 16) (bytes !! 17) (bytes !! 18) (bytes !! 19)
+      (bytes !! 20) (bytes !! 21) (bytes !! 22) (bytes !! 23)
+      (bytes !! 24) (bytes !! 25) (bytes !! 26) (bytes !! 27)
+      (bytes !! 28) (bytes !! 29) (bytes !! 30) (bytes !! 31)

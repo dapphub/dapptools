@@ -23,7 +23,7 @@ import EVM.Types
 import EVM.Solidity
 import EVM.Concrete (createAddress, create2Address)
 import EVM.Op
-import EVM.Expr (readStorage, writeStorage, readByte)
+import EVM.Expr (readStorage, writeStorage, readByte, bufLength)
 import EVM.FeeSchedule (FeeSchedule (..))
 import Options.Generic as Options
 import qualified EVM.Precompiled
@@ -575,9 +575,7 @@ exec1 = do
     -- call to precompile
     let ?op = 0x00 -- dummy value
     case bufLength (the state calldata) of
-        Nothing -> vmError $
-          UnexpectedSymbolicArg (the state pc) "cannot call precompiles with symbolic data"
-        Just calldatasize -> do
+      (Lit calldatasize) -> do
           copyBytesToMemory (the state calldata) (num calldatasize) 0 0
           executePrecompile self (num $ the state gas) 0 (num calldatasize) 0 0 []
           vmx <- get
@@ -596,13 +594,14 @@ exec1 = do
                 UnexpectedSymbolicArg (view (state . pc) vmx) "precompile returned a symbolic value"
             _ ->
               underrun
+      _ -> vmError $ UnexpectedSymbolicArg (the state pc) "cannot call precompiles with symbolic data"
 
   -- This is a bit of a hack, but since we only use symbolic code to represent
   -- ctor args (appended to the end of ctor bytecode) it should be fine. It may
   -- be worth reworking the code representation to make this concrete code +
   -- optional symbolic data restriction more visible in the type system.
   -- TODO: is this actually safe? come up with a better representation. Does this work for immutable constants??
-  else if (maybe True (\l -> the state pc >= l) (minLength (the state code)))
+  else if (maybe True (\l -> the state pc >= l) (Expr.minLength (the state code)))
     then doStop
 
     else do
@@ -718,7 +717,7 @@ exec1 = do
         0x19 -> stackOp1 (const g_verylow) (uncurryN Expr.not)
 
         -- op: BYTE
-        0x1a -> stackOp2 (const g_verylow) (uncurry Expr.indexWord)
+        0x1a -> stackOp2 (const g_verylow) (\(i, w) -> Expr.padByte $ Expr.indexWord i w)
 
         -- op: SHL
         0x1b -> stackOp2 (const g_verylow) (uncurry Expr.shl)
@@ -732,14 +731,14 @@ exec1 = do
         0x20 ->
           case stk of
             (xOffset' : xSize' : xs) ->
-              forceConcrete xOffset' $
-                \xOffset -> forceConcrete xSize' $ \xSize ->
+              forceConcrete xOffset' "sha3 offset must be concrete" $
+                \xOffset -> forceConcrete xSize' "sha3 size must be concrete" $ \xSize ->
                   burn (g_sha3 + g_sha3word * ceilDiv (num xSize) 32) $
                     accessMemoryRange fees xOffset xSize $ do
                       (hash, invMap) <- case readMemory xOffset xSize vm of
                                           ConcreteBuf bs -> do
                                             let hash' = keccak bs
-                                            pure (Lit hash', Map.singleton hash')
+                                            pure (Lit hash', Map.singleton hash' bs)
                                           buf -> pure (Keccak buf, mempty)
                       next
                       assign (state . stack) (hash : xs)
@@ -754,7 +753,7 @@ exec1 = do
         -- op: BALANCE
         0x31 ->
           case stk of
-            (x':xs) -> forceConcrete x' $ \x ->
+            (x':xs) -> forceConcrete x' "BALANCE" $ \x ->
               accessAndBurn (num x) $
                 fetchAccount (num x) $ \c -> do
                   next
@@ -780,39 +779,43 @@ exec1 = do
 
         -- op: CALLDATALOAD
         0x35 -> stackOp1 (const g_verylow) $
-          \ind -> uncurry (readSWordWithBound ind) (the state calldata)
+          \ind -> Expr.readWord ind (the state calldata)
 
         -- op: CALLDATASIZE
         0x36 ->
           limitStack 1 . burn g_base $
-            next >> pushSym (snd (the state calldata))
+            next >> pushSym (bufLength (the state calldata))
 
         -- op: CALLDATACOPY
         0x37 ->
           case stk of
-            (xTo' : xFrom' : xSize' : xs) -> forceConcrete3 (xTo',xFrom',xSize') $ \(xTo,xFrom,xSize) ->
-              burn (g_verylow + g_copy * ceilDiv (num xSize) 32) $
-                accessUnboundedMemoryRange fees xTo xSize $ do
-                  next
-                  assign (state . stack) xs
-                  copyBytesToMemory cd xSize xFrom xTo
+            (xTo' : xFrom' : xSize' : xs) ->
+              forceConcrete3 (xTo',xFrom',xSize') "CALLDATACOPY" $
+                \(xTo,xFrom,xSize) ->
+                  burn (g_verylow + g_copy * ceilDiv (num xSize) 32) $
+                    accessUnboundedMemoryRange fees xTo xSize $ do
+                      next
+                      assign (state . stack) xs
+                      copyBytesToMemory (the state calldata) xSize xFrom xTo
             _ -> underrun
 
         -- op: CODESIZE
         0x38 ->
           limitStack 1 . burn g_base $
-            next >> push (num (len (the state code)))
+            next >> pushSym (bufLength (the state code))
 
         -- op: CODECOPY
         0x39 ->
           case stk of
-            (memOffset' : codeOffset' : n' : xs) -> forceConcrete3 (memOffset',codeOffset',n') $ \(memOffset,codeOffset,n) -> do
-              burn (g_verylow + g_copy * ceilDiv (num n) 32) $
-                accessUnboundedMemoryRange fees memOffset n $ do
-                  next
-                  assign (state . stack) xs
-                  copyBytesToMemory (the state code)
-                    n codeOffset memOffset
+            (memOffset' : codeOffset' : n' : xs) ->
+              forceConcrete3 (memOffset',codeOffset',n') "CODECOPY" $
+                \(memOffset,codeOffset,n) -> do
+                  burn (g_verylow + g_copy * ceilDiv (num n) 32) $
+                    accessUnboundedMemoryRange fees memOffset n $ do
+                      next
+                      assign (state . stack) xs
+                      copyBytesToMemory (the state code)
+                        n codeOffset memOffset
             _ -> underrun
 
         -- op: GASPRICE
@@ -823,18 +826,21 @@ exec1 = do
         -- op: EXTCODESIZE
         0x3b ->
           case stk of
-            (x':xs) -> makeUnique x' $ \x ->
-              if x == num cheatCode
+            (x':xs) -> case x' of
+              (Lit x) -> if x == num cheatCode
                 then do
                   next
                   assign (state . stack) xs
-                  push (w256 1)
+                  pushSym (Lit 1)
                 else
                   accessAndBurn (num x) $
                     fetchAccount (num x) $ \c -> do
                       next
                       assign (state . stack) xs
-                      push (num (len (view bytecode c)))
+                      pushSym (bufLength (view bytecode c))
+              _ -> do
+                assign (state . stack) xs
+                pushSym (CodeSize x')
             [] ->
               underrun
 
@@ -846,7 +852,7 @@ exec1 = do
               : codeOffset'
               : codeSize'
               : xs ) ->
-              forceConcrete4 (extAccount', memOffset', codeOffset', codeSize') $
+              forceConcrete4 (extAccount', memOffset', codeOffset', codeSize') "EXTCODECOPY" $
                 \(extAccount, memOffset, codeOffset, codeSize) -> do
                   acc <- accessAccountForGas (num extAccount)
                   let cost = if acc then g_warm_storage_read else g_cold_account_access
@@ -862,12 +868,12 @@ exec1 = do
         -- op: RETURNDATASIZE
         0x3d ->
           limitStack 1 . burn g_base $
-            next >> push (num $ len (the state returndata))
+            next >> pushSym (bufLength (the state returndata))
 
         -- op: RETURNDATACOPY
         0x3e ->
           case stk of
-            (xTo' : xFrom' : xSize' :xs) -> forceConcrete3 (xTo', xFrom', xSize') $
+            (xTo' : xFrom' : xSize' :xs) -> forceConcrete3 (xTo', xFrom', xSize') "RETURNDATACOPY" $
               \(xTo, xFrom, xSize) ->
                 burn (g_verylow + g_copy * ceilDiv (num xSize) 32) $
                   accessUnboundedMemoryRange fees xTo xSize $ do
@@ -881,7 +887,7 @@ exec1 = do
         -- op: EXTCODEHASH
         0x3f ->
           case stk of
-            (x':xs) -> forceConcrete x' $ \x ->
+            (x':xs) -> forceConcrete x' "EXTCODEHASH" $ \x ->
               accessAndBurn (num x) $ do
                 next
                 assign (state . stack) xs
@@ -1800,35 +1806,47 @@ burn n' continue =
   --Nothing -> vmError UnexpectedSymbolicArg
   --Just c -> continue c
 
---forceConcrete :: Expr EWord -> (Word -> EVM ()) -> EVM ()
---forceConcrete n continue = case maybeLitWord n of
-  --Nothing -> vmError UnexpectedSymbolicArg
-  --Just c -> continue c
+forceConcrete :: Expr EWord -> String -> (W256 -> EVM ()) -> EVM ()
+forceConcrete n msg continue = case maybeLitWord n of
+  Nothing -> do
+    vm <- get
+    vmError $ UnexpectedSymbolicArg (view (state . pc) vm) msg
+  Just c -> continue c
 
---forceConcrete2 :: (Expr EWord, Expr EWord) -> ((Word, Word) -> EVM ()) -> EVM ()
---forceConcrete2 (n,m) continue = case (maybeLitWord n, maybeLitWord m) of
-  --(Just c, Just d) -> continue (c, d)
-  --_ -> vmError UnexpectedSymbolicArg
+forceConcrete2 :: (Expr EWord, Expr EWord) -> String -> ((W256, W256) -> EVM ()) -> EVM ()
+forceConcrete2 (n,m) msg continue = case (maybeLitWord n, maybeLitWord m) of
+  (Just c, Just d) -> continue (c, d)
+  _ -> do
+    vm <- get
+    vmError $ UnexpectedSymbolicArg (view (state . pc) vm) msg
 
---forceConcrete3 :: (Expr EWord, Expr EWord, Expr EWord) -> ((Word, Word, Word) -> EVM ()) -> EVM ()
---forceConcrete3 (k,n,m) continue = case (maybeLitWord k, maybeLitWord n, maybeLitWord m) of
-  --(Just c, Just d, Just f) -> continue (c, d, f)
-  --_ -> vmError UnexpectedSymbolicArg
+forceConcrete3 :: (Expr EWord, Expr EWord, Expr EWord) -> String -> ((W256, W256, W256) -> EVM ()) -> EVM ()
+forceConcrete3 (k,n,m) msg continue = case (maybeLitWord k, maybeLitWord n, maybeLitWord m) of
+  (Just c, Just d, Just f) -> continue (c, d, f)
+  _ -> do
+    vm <- get
+    vmError $ UnexpectedSymbolicArg (view (state . pc) vm) msg
 
---forceConcrete4 :: (Expr EWord, Expr EWord, Expr EWord, Expr EWord) -> ((Word, Word, Word, Word) -> EVM ()) -> EVM ()
---forceConcrete4 (k,l,n,m) continue = case (maybeLitWord k, maybeLitWord l, maybeLitWord n, maybeLitWord m) of
-  --(Just b, Just c, Just d, Just f) -> continue (b, c, d, f)
-  --_ -> vmError UnexpectedSymbolicArg
+forceConcrete4 :: (Expr EWord, Expr EWord, Expr EWord, Expr EWord) -> String -> ((W256, W256, W256, W256) -> EVM ()) -> EVM ()
+forceConcrete4 (k,l,n,m) msg continue = case (maybeLitWord k, maybeLitWord l, maybeLitWord n, maybeLitWord m) of
+  (Just b, Just c, Just d, Just f) -> continue (b, c, d, f)
+  _ -> do
+    vm <- get
+    vmError $ UnexpectedSymbolicArg (view (state . pc) vm) msg
 
---forceConcrete5 :: (Expr EWord, Expr EWord, Expr EWord, Expr EWord, Expr EWord) -> ((Word, Word, Word, Word, Word) -> EVM ()) -> EVM ()
---forceConcrete5 (k,l,m,n,o) continue = case (maybeLitWord k, maybeLitWord l, maybeLitWord m, maybeLitWord n, maybeLitWord o) of
-  --(Just a, Just b, Just c, Just d, Just e) -> continue (a, b, c, d, e)
-  --_ -> vmError UnexpectedSymbolicArg
+forceConcrete5 :: (Expr EWord, Expr EWord, Expr EWord, Expr EWord, Expr EWord) -> String -> ((W256, W256, W256, W256, W256) -> EVM ()) -> EVM ()
+forceConcrete5 (k,l,m,n,o) msg continue = case (maybeLitWord k, maybeLitWord l, maybeLitWord m, maybeLitWord n, maybeLitWord o) of
+  (Just a, Just b, Just c, Just d, Just e) -> continue (a, b, c, d, e)
+  _ -> do
+    vm <- get
+    vmError $ UnexpectedSymbolicArg (view (state . pc) vm) msg
 
---forceConcrete6 :: (Expr EWord, Expr EWord, Expr EWord, Expr EWord, Expr EWord, Expr EWord) -> ((Word, Word, Word, Word, Word, Word) -> EVM ()) -> EVM ()
---forceConcrete6 (k,l,m,n,o,p) continue = case (maybeLitWord k, maybeLitWord l, maybeLitWord m, maybeLitWord n, maybeLitWord o, maybeLitWord p) of
-  --(Just a, Just b, Just c, Just d, Just e, Just f) -> continue (a, b, c, d, e, f)
-  --_ -> vmError UnexpectedSymbolicArg
+forceConcrete6 :: (Expr EWord, Expr EWord, Expr EWord, Expr EWord, Expr EWord, Expr EWord) -> String -> ((W256, W256, W256, W256, W256, W256) -> EVM ()) -> EVM ()
+forceConcrete6 (k,l,m,n,o,p) msg continue = case (maybeLitWord k, maybeLitWord l, maybeLitWord m, maybeLitWord n, maybeLitWord o, maybeLitWord p) of
+  (Just a, Just b, Just c, Just d, Just e, Just f) -> continue (a, b, c, d, e, f)
+  _ -> do
+    vm <- get
+    vmError $ UnexpectedSymbolicArg (view (state . pc) vm) msg
 
 --forceConcreteBuffer :: Buffer -> (ByteString -> EVM ()) -> EVM ()
 --forceConcreteBuffer (SymbolicBuffer b) continue = case maybeLitBytes b of
@@ -2518,7 +2536,7 @@ opSize :: Word8 -> Int
 opSize x | x >= 0x60 && x <= 0x7f = num x - 0x60 + 2
 opSize _                          = 1
 
--- Index i of the resulting vector contains the operation index for
+--  i of the resulting vector contains the operation index for
 -- the program counter value i.  This is needed because source map
 -- entries are per operation, not per byte.
 mkOpIxMap :: Expr Buf -> Vector Int

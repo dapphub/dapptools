@@ -200,8 +200,8 @@ data Expr (a :: EType) where
 
   -- bytes
 
-  LitByte        :: Word8     -> Expr Byte
-  Index          :: Expr Byte -> Expr EWord -> Expr Byte
+  LitByte        :: Word8      -> Expr Byte
+  Index          :: Expr EWord -> Expr EWord -> Expr Byte
 
   -- TODO: rm readWord in favour of this?
   JoinBytes      :: Expr Byte -> Expr Byte -> Expr Byte -> Expr Byte
@@ -265,7 +265,7 @@ data Expr (a :: EType) where
   -- block context
 
   Origin         :: Expr EWord
-  BlockHash      :: Expr EWord
+  BlockHash      :: Expr EWord -> Expr EWord
   Coinbase       :: Expr EWord
   Timestamp      :: Expr EWord
   BlocckNumber   :: Expr EWord
@@ -466,6 +466,9 @@ data Expr (a :: EType) where
                  -> Expr Buf           -- dst
                  -> Expr Buf
 
+  BufLength      :: Expr Buf -> Expr EWord
+
+
 -- TODO: are these bad? should I maybe define a typeclass that defines the evm
 -- encoding for a restricted set of types?
 lit :: Enum a => a -> Expr EWord
@@ -481,27 +484,6 @@ unlit _ = Nothing
 unlitByte :: Enum a => Expr Byte -> Maybe a
 unlitByte (LitByte x) = Just . toEnum . fromEnum $ x
 unlitByte _ = Nothing
-
--- Returns a concrete value if the buf is concrete, or Nothing if the buf is symbolic
-bufLength :: Expr Buf -> Maybe Int
-bufLength EmptyBuf = Just 0
-bufLength (ConcreteBuf b) = Just (BS.length b)
-bufLength _ = Nothing
-
--- Returns the smallest possible size of a given buffer
-minLength :: Expr Buf -> Maybe Int
-minLength = bufLength . base
-
--- Returns the base constructor upon which the buffer was built
-base :: Expr Buf -> Expr Buf
-base = \case
-  EmptyBuf -> EmptyBuf
-  AbstractBuf -> AbstractBuf
-  ConcreteBuf bs -> ConcreteBuf bs
-  WriteWord _ _ prev -> base prev
-  WriteByte _ _ prev -> base prev
-  CopySlice _ _ _ _ dst -> base dst
-
 
 
 deriving instance Show (Expr a)
@@ -608,8 +590,9 @@ newtype Addr = Addr { addressWord160 :: Word160 }
    --fromSizzle = fromIntegral
 
 
---maybeLitWord :: SymWord -> Maybe Word
---maybeLitWord (S whiff a) = fmap (C whiff . fromSizzle) (unliteral a)
+maybeLitWord :: Expr EWord -> Maybe W256
+maybeLitWord (Lit w) = Just w
+maybeLitWord _ = Nothing
 
 -- | convert between (WordN 256) and Word256
 --type family ToSizzle (t :: Type) :: Type where
