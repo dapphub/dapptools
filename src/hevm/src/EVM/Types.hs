@@ -201,7 +201,8 @@ data Expr (a :: EType) where
   -- bytes
 
   LitByte        :: Word8      -> Expr Byte
-  Index          :: Expr EWord -> Expr EWord -> Expr Byte
+  IndexWord      :: Expr EWord -> Expr EWord -> Expr Byte
+  EqByte         :: Expr Byte  -> Expr Byte  -> Expr EWord
 
   -- TODO: rm readWord in favour of this?
   JoinBytes      :: Expr Byte -> Expr Byte -> Expr Byte -> Expr Byte

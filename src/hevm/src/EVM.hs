@@ -15,7 +15,6 @@ module EVM where
 
 import Prelude hiding (log, exponent, GT, LT)
 
-import Data.Proxy (Proxy(..))
 import Data.Text (unpack)
 import Data.Text.Encoding (decodeUtf8, encodeUtf8)
 import EVM.ABI
@@ -23,7 +22,7 @@ import EVM.Types
 import EVM.Solidity
 import EVM.Concrete (createAddress, create2Address)
 import EVM.Op
-import EVM.Expr (readStorage, writeStorage, readByte, bufLength)
+import EVM.Expr (readStorage, writeStorage, readByte, readWord, writeWord, writeByte, bufLength, indexWord, litAddr)
 import EVM.FeeSchedule (FeeSchedule (..))
 import Options.Generic as Options
 import qualified EVM.Precompiled
@@ -879,9 +878,12 @@ exec1 = do
                   accessUnboundedMemoryRange fees xTo xSize $ do
                     next
                     assign (state . stack) xs
-                    if num (len (the state returndata)) < xFrom + xSize || xFrom + xSize < xFrom
-                    then vmError InvalidMemoryAccess
-                    else copyBytesToMemory (the state returndata) xSize xFrom xTo
+
+                    let oob = Expr.lt (bufLength $ the state returndata) (Expr.add xFrom' xSize')
+                        overflow = Expr.lt (Expr.add xFrom' xSize') (xFrom')
+                        jump True = vmError InvalidMemoryAccess
+                        jump False = copyBytesToMemory (the state returndata) xSize xFrom xTo
+                    branch (Expr.or oob overflow) jump
             _ -> underrun
 
         -- op: EXTCODEHASH
@@ -904,13 +906,11 @@ exec1 = do
         0x40 -> do
           -- We adopt the fake block hash scheme of the VMTests,
           -- so that blockhash(i) is the hash of i as decimal ASCII.
-          stackOp1 (const g_blockhash) $
-            \(forceLit -> i) ->
-              if i + 256 < the block number || i >= the block number
-              then 0
-              else
-                (num i :: Integer)
-                  & show & Char8.pack & keccak & num
+          stackOp1 (const g_blockhash) $ \case
+            (Lit i) -> if i + 256 < the block number || i >= the block number
+                       then 0
+                       else (num i :: Integer) & show & Char8.pack & keccak & num
+            i -> BlockHash i
 
         -- op: COINBASE
         0x41 ->
@@ -961,33 +961,33 @@ exec1 = do
         -- op: MLOAD
         0x51 ->
           case stk of
-            (x':xs) -> forceConcrete x' $ \x ->
+            (x':xs) -> forceConcrete x' "MLOAD" $ \x ->
               burn g_verylow $
                 accessMemoryWord fees x $ do
                   next
-                  assign (state . stack) (view (word256At (num x)) mem : xs)
+                  assign (state . stack) (readWord (Lit x) mem : xs)
             _ -> underrun
 
         -- op: MSTORE
         0x52 ->
           case stk of
-            (x':y:xs) -> forceConcrete x' $ \x ->
+            (x':y:xs) -> forceConcrete x' "MSTORE" $ \x ->
               burn g_verylow $
                 accessMemoryWord fees x $ do
                   next
-                  assign (state . memory . word256At (num x)) y
+                  assign (state . memory) (writeWord (Lit x) y mem)
                   assign (state . stack) xs
             _ -> underrun
 
         -- op: MSTORE8
         0x53 ->
           case stk of
-            (x':y:xs) -> forceConcrete x' $ \x ->
+            (x':y:xs) -> forceConcrete x' "MSTORE8" $ \x ->
               burn g_verylow $
                 accessMemoryRange fees x 1 $ do
-                  let yByte = bvExtract (Proxy :: Proxy 7) (Proxy :: Proxy 0) y
+                  let yByte = indexWord 31 y
                   next
-                  modifying (state . memory) (setMemoryByte x yByte)
+                  modifying (state . memory) (writeByte (Lit x) yByte)
                   assign (state . stack) xs
             _ -> underrun
 
@@ -1060,22 +1060,22 @@ exec1 = do
         0x56 ->
           case stk of
             (x:xs) ->
-              burn g_mid $ forceConcrete x $ \x' ->
+              burn g_mid $ forceConcrete x "JUMP: symbolic jumpdest" $ \x' ->
                 checkJump x' xs
             _ -> underrun
 
         -- op: JUMPI
         0x57 -> do
           case stk of
-            (x:y:xs) -> forceConcrete x $ \x' ->
+            (x:y:xs) -> forceConcrete x "JUMPI: symbolic jumpdest" $ \x' ->
                 burn g_high $
                   let jump :: Bool -> EVM ()
                       jump True = assign (state . stack) xs >> next
                       jump _    = checkJump x' xs
                   in case maybeLitWord y of
                       Just y' -> jump (0 == y')
-                      -- if the jump condition is symbolic, an smt query has to be made.
-                      Nothing -> askSMT (self, the state pc) (0 .== y, IsZero w) jump
+                      -- if the jump condition is symbolic, we explore both sides
+                      Nothing -> branch y jump
             _ -> underrun
 
         -- op: PC
@@ -1098,11 +1098,15 @@ exec1 = do
 
         -- op: EXP
         0x0a ->
-          let cost (_ ,(forceLit -> exponent)) =
-                if exponent == 0
-                then g_exp
-                else g_exp + g_expbyte * num (ceilDiv (1 + log2 exponent) 8)
-          in stackOp2 cost (uncurry Expr.exp)
+          case stk of
+            (base:exponent':xs) -> forceConcrete exponent' "EXP: symbolic exponent" $ \exponent ->
+              let cost = if exponent == 0
+                         then g_exp
+                         else g_exp + g_expbyte * num (ceilDiv (1 + log2 exponent) 8)
+              in burn cost $ do
+                next
+                state . stack .= Expr.exp base exponent' : xs
+            _ -> underrun
 
         -- op: SIGNEXTEND
         0x0b -> stackOp2 (const g_low) (uncurry Expr.sex)
@@ -1111,12 +1115,12 @@ exec1 = do
         0xf0 ->
           notStatic $
           case stk of
-            (xValue' : xOffset' : xSize' : xs) -> forceConcrete3 (xValue', xOffset', xSize') $
+            (xValue' : xOffset' : xSize' : xs) -> forceConcrete3 (xValue', xOffset', xSize') "CREATE" $
               \(xValue, xOffset, xSize) -> do
                 accessMemoryRange fees xOffset xSize $ do
                   availableGas <- use (state . gas)
                   let
-                    newAddr = createAddress self (wordValue (view nonce this))
+                    newAddr = createAddress self (view nonce this)
                     (cost, gas') = costOfCreate fees availableGas 0
                   _ <- accessAccountForGas newAddr
                   burn (cost - gas') $
@@ -1129,19 +1133,18 @@ exec1 = do
           case stk of
             ( xGas'
               : xTo
-              : (forceLit -> xValue)
+              : xValue'
               : xInOffset'
               : xInSize'
               : xOutOffset'
               : xOutSize'
               : xs
-             ) -> forceConcrete5 (xGas',xInOffset', xInSize', xOutOffset', xOutSize') $
-              \(xGas, xInOffset, xInSize, xOutOffset, xOutSize) ->
+             ) -> forceConcrete6 (xGas', xValue', xInOffset', xInSize', xOutOffset', xOutSize') "CALL" $
+              \(xGas, xValue, xInOffset, xInSize, xOutOffset, xOutSize) ->
                 (if xValue > 0 then notStatic else id) $
-                  let target = SAddr $ sFromIntegral xTo in
-                  delegateCall this xGas target target xValue xInOffset xInSize xOutOffset xOutSize xs $ \callee -> do
+                  delegateCall this xGas xTo xTo xValue xInOffset xInSize xOutOffset xOutSize xs $ \callee -> do
                     zoom state $ do
-                      assign callvalue (litWord xValue)
+                      assign callvalue (Lit xValue)
                       assign caller (litAddr self)
                       assign contract callee
                     transfer self callee xValue
@@ -1154,19 +1157,18 @@ exec1 = do
         0xf2 ->
           case stk of
             ( xGas'
-              : xTo'
-              : (forceLit -> xValue)
+              : xTo
+              : xValue'
               : xInOffset'
               : xInSize'
               : xOutOffset'
               : xOutSize'
               : xs
-              ) -> forceConcrete5 (xGas', xInOffset', xInSize', xOutOffset', xOutSize') $
-                \(xGas, xInOffset, xInSize, xOutOffset, xOutSize) ->
-                  let target = SAddr $ sFromIntegral xTo' in
-                  delegateCall this xGas target (litAddr self) xValue xInOffset xInSize xOutOffset xOutSize xs $ \_ -> do
+              ) -> forceConcrete6 (xGas', xValue', xInOffset', xInSize', xOutOffset', xOutSize') "CALLCODE" $
+                \(xGas, xValue, xInOffset, xInSize, xOutOffset, xOutSize) ->
+                  delegateCall this xGas xTo (litAddr self) xValue xInOffset xInSize xOutOffset xOutSize xs $ \_ -> do
                     zoom state $ do
-                      assign callvalue (litWord xValue)
+                      assign callvalue (Lit xValue)
                       assign caller (litAddr self)
                     touchAccount self
             _ ->
@@ -1175,11 +1177,11 @@ exec1 = do
         -- op: RETURN
         0xf3 ->
           case stk of
-            (xOffset' : xSize' :_) -> forceConcrete2 (xOffset', xSize') $ \(xOffset, xSize) ->
+            (xOffset' : xSize' :_) -> forceConcrete2 (xOffset', xSize') "RETURN" $ \(xOffset, xSize) ->
               accessMemoryRange fees xOffset xSize $ do
                 let
                   output = readMemory xOffset xSize vm
-                  codesize = num (len output)
+                  codesize = num (bufLength output)
                   maxsize = the block maxCodeSize
                   creation = case view frames vm of
                     [] -> the tx isCreate
@@ -1192,11 +1194,11 @@ exec1 = do
                   then
                     finishFrame (FrameErrored (MaxCodeSizeExceeded maxsize codesize))
                   else
-                    if isConcretely (readByteOrZero 0 output) (0xef ==)
-                    then finishFrame $ FrameErrored InvalidFormat
-                    else do
-                      burn (g_codedeposit * num codesize) $
-                        finishFrame (FrameReturned output)
+                    branch (Expr.eqByte (readByte 0 output) (LitByte 0xef)) $ \case
+                      True -> finishFrame $ FrameErrored InvalidFormat
+                      False -> do
+                        burn (g_codedeposit * num codesize) $
+                          finishFrame (FrameReturned output)
                 else
                    finishFrame (FrameReturned output)
             _ -> underrun
@@ -1210,10 +1212,9 @@ exec1 = do
              :xInSize'
              :xOutOffset'
              :xOutSize'
-             :xs) -> forceConcrete5 (xGas', xInOffset', xInSize', xOutOffset', xOutSize') $
+             :xs) -> forceConcrete5 (xGas', xInOffset', xInSize', xOutOffset', xOutSize') "DELEGATECALL" $
               \(xGas, xInOffset, xInSize, xOutOffset, xOutSize) ->
-                let target = SAddr $ sFromIntegral xTo in
-                delegateCall this xGas target (litAddr self) 0 xInOffset xInSize xOutOffset xOutSize xs $ \_ -> do
+                delegateCall this xGas xTo (litAddr self) 0 xInOffset xInSize xOutOffset xOutSize xs $ \_ -> do
                   touchAccount self
             _ -> underrun
 
@@ -1224,18 +1225,19 @@ exec1 = do
              :xOffset'
              :xSize'
              :xSalt'
-             :xs) -> forceConcrete4 (xValue', xOffset', xSize', xSalt') $
+             :xs) -> forceConcrete4 (xValue', xOffset', xSize', xSalt') "CREATE2" $
               \(xValue, xOffset, xSize, xSalt) ->
                 accessMemoryRange fees xOffset xSize $ do
                   availableGas <- use (state . gas)
 
-                  forceConcreteBuffer (readMemory (num xOffset) (num xSize) vm) $ \initCode -> do
-                   let
-                    newAddr  = create2Address self (num xSalt) initCode
-                    (cost, gas') = costOfCreate fees availableGas xSize
-                   _ <- accessAccountForGas newAddr
-                   burn (cost - gas') $
-                    create self this (num gas') xValue xs newAddr (ConcreteBuffer initCode)
+                  forceConcreteBuf (readMemory (num xOffset) (num xSize) vm) "CREATE2" $
+                    \initCode -> do
+                      let
+                        newAddr  = create2Address self (num xSalt) initCode
+                        (cost, gas') = costOfCreate fees availableGas xSize
+                      _ <- accessAccountForGas newAddr
+                      burn (cost - gas') $
+                       create self this (num gas') xValue xs newAddr (ConcreteBuf initCode)
             _ -> underrun
 
         -- op: STATICCALL
@@ -1247,10 +1249,9 @@ exec1 = do
              :xInSize'
              :xOutOffset'
              :xOutSize'
-             :xs) -> forceConcrete5 (xGas', xInOffset', xInSize', xOutOffset', xOutSize') $
+             :xs) -> forceConcrete5 (xGas', xInOffset', xInSize', xOutOffset', xOutSize') "STATICCALL" $
               \(xGas, xInOffset, xInSize, xOutOffset, xOutSize) -> do
-                let target = SAddr $ sFromIntegral xTo
-                delegateCall this xGas target target 0 xInOffset xInSize xOutOffset xOutSize xs $ \callee -> do
+                delegateCall this xGas xTo xTo 0 xInOffset xInSize xOutOffset xOutSize xs $ \callee -> do
                   zoom state $ do
                     assign callvalue 0
                     assign caller (litAddr self)
@@ -1266,7 +1267,7 @@ exec1 = do
           notStatic $
           case stk of
             [] -> underrun
-            (xTo':_) -> forceConcrete xTo' $ \(num -> xTo) -> do
+            (xTo':_) -> forceConcrete xTo' "SELFDESTRUCT" $ \(num -> xTo) -> do
               acc <- accessAccountForGas (num xTo)
               let cost = if acc then 0 else g_cold_account_access
                   funds = view balance this
@@ -1288,7 +1289,7 @@ exec1 = do
         -- op: REVERT
         0xfd ->
           case stk of
-            (xOffset':xSize':_) -> forceConcrete2 (xOffset', xSize') $ \(xOffset, xSize) ->
+            (xOffset':xSize':_) -> forceConcrete2 (xOffset', xSize') "REVERT" $ \(xOffset, xSize) ->
               accessMemoryRange fees xOffset xSize $ do
                 let output = readMemory xOffset xSize vm
                 finishFrame (FrameReverted output)
@@ -1609,6 +1610,9 @@ getCodeLocation vm = (view (state . contract) vm, view (state . pc) vm)
          ---- None of the paths are possible; fail this branch
          --choosePath Inconsistent = vmError DeadPath
 
+branch :: Expr EWord -> (Bool -> EVM ()) -> EVM ()
+branch cond jump = assign result . Just . VMFailure . Choose $ PleaseChoosePath cond jump
+
 -- | Construct RPC Query and halt execution until resolved
 fetchAccount :: Addr -> (Contract -> EVM ()) -> EVM ()
 fetchAccount addr continue =
@@ -1746,7 +1750,7 @@ finalize = do
   -- remove any destructed addresses
   destroyedAddresses <- use (tx . substate . selfdestructs)
   modifying (env . contracts)
-    (Map.filterWithKey (\k _ -> (notElem k destroyedAddresses)))
+    (Map.filterWithKey (\k _ -> (k `notElem` destroyedAddresses)))
   -- then, clear any remaining empty and touched addresses
   touchedAddresses <- use (tx . substate . touchedAccounts)
   modifying (env . contracts)
@@ -1848,11 +1852,11 @@ forceConcrete6 (k,l,m,n,o,p) msg continue = case (maybeLitWord k, maybeLitWord l
     vm <- get
     vmError $ UnexpectedSymbolicArg (view (state . pc) vm) msg
 
---forceConcreteBuffer :: Buffer -> (ByteString -> EVM ()) -> EVM ()
---forceConcreteBuffer (SymbolicBuffer b) continue = case maybeLitBytes b of
-  --Nothing -> vmError UnexpectedSymbolicArg
-  --Just bs -> continue bs
---forceConcreteBuffer (ConcreteBuffer b) continue = continue b
+forceConcreteBuf :: Expr Buf -> String -> (ByteString -> EVM ()) -> EVM ()
+forceConcreteBuf (ConcreteBuf b) _ continue = continue b
+forceConcreteBuf _ msg _ = do
+    vm <- get
+    vmError $ UnexpectedSymbolicArg (view (state . pc) vm) msg
 
 -- * Substate manipulation
 refund :: Integer -> EVM ()
@@ -2238,7 +2242,7 @@ finishFrame how = do
     [] -> do
       case how of
           FrameReturned output -> assign result . Just $ VMSuccess output
-          FrameReverted buffer -> forceConcreteBuffer buffer $ \out -> assign result . Just $ VMFailure (EVM.Revert out)
+          FrameReverted buffer -> forceConcreteBuf buffer $ \out -> assign result . Just $ VMFailure (EVM.Revert out)
           FrameErrored e       -> assign result . Just $ VMFailure e
       finalize
 

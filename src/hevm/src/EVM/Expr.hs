@@ -16,7 +16,7 @@ import qualified Data.ByteString as BS
 import qualified Data.Map.Strict as Map
 
 
--- ** Stack Ops ** --------------------------------------------------------------------------------
+-- ** Stack Ops ** ---------------------------------------------------------------------------------
 
 
 op1 :: (Expr EWord -> Expr EWord)
@@ -150,7 +150,7 @@ sar :: Expr EWord -> Expr EWord -> Expr EWord
 sar = shr -- TODO: almost certainly wrong
 
 
--- ** Bufs ** -------------------------------------------------------------------------------------
+-- ** Bufs ** --------------------------------------------------------------------------------------
 
 
 -- | Extracts the byte at a given index from a Buf.
@@ -254,13 +254,29 @@ copySlice s@(Lit srcOffset) d@(Lit dstOffset) sz@(Lit size) src ds@(ConcreteBuf 
 copySlice srcOffset dstOffset size src dst = CopySlice srcOffset dstOffset size src dst
 
 
+writeByte :: Expr EWord -> Expr Byte -> Expr Buf -> Expr Buf
+writeByte (Lit offset) (LitByte byte) (ConcreteBuf src)
+  = ConcreteBuf $ BS.take (num offset) src
+               <> BS.pack [byte]
+               <> BS.drop ((num offset) + 1) src
+writeByte offset byte src = WriteByte offset byte src
+
+
+writeWord :: Expr EWord -> Expr EWord -> Expr Buf -> Expr Buf
+writeWord (Lit offset) (Lit val) (ConcreteBuf src)
+  = ConcreteBuf $ BS.take (num offset) src
+               <> asBE val
+               <> BS.drop ((num offset) + 32) src
+writeWord offset val src = WriteWord offset val src
+
+
 bufLength :: Expr Buf -> Expr EWord
 bufLength EmptyBuf = Lit 0
 bufLength (ConcreteBuf b) = Lit (num . BS.length $ b)
 bufLength b = BufLength b
 
 
--- TODO: this is bullshit, delete it and figure out how to handle execution
+-- TODO: this is probs bullshit, delete it and figure out how to handle execution
 -- past the end of the bytecode properly
 -- Returns the smallest possible size of a given buffer
 minLength :: Expr Buf -> Maybe Int
@@ -281,7 +297,7 @@ base = \case
   CopySlice _ _ _ _ dst -> base dst
 
 
--- ** Storage ** ----------------------------------------------------------------------------------
+-- ** Storage ** -----------------------------------------------------------------------------------
 
 
 -- | Reads the word at the given slot from the given storage expression.
@@ -312,11 +328,18 @@ writeStorage k@(Lit key) v@(Lit val) store = case store of
 writeStorage key val store = SStore key val store
 
 
--- ** Helpers ** ----------------------------------------------------------------------------------
+-- ** Conversions ** -------------------------------------------------------------------------------
 
+
+litAddr :: Addr -> Expr EWord
+litAddr = Lit . num
 
 to512 :: W256 -> Word512
 to512 = fromIntegral
+
+
+-- ** Helpers ** -----------------------------------------------------------------------------------
+
 
 -- Is the given expr a literal word?
 isLitByte :: Expr Byte -> Bool
@@ -367,7 +390,7 @@ indexWord (Lit idx) (JoinBytes zero        one        two       three
   | idx == 30 = thirty
   | idx == 31 = thirtyone
   | otherwise = LitByte 0
-indexWord idx w = Index idx w
+indexWord idx w = IndexWord idx w
 
 
 padByte :: Expr Byte -> Expr EWord
@@ -399,3 +422,7 @@ joinBytes bs
       (bytes !! 20) (bytes !! 21) (bytes !! 22) (bytes !! 23)
       (bytes !! 24) (bytes !! 25) (bytes !! 26) (bytes !! 27)
       (bytes !! 28) (bytes !! 29) (bytes !! 30) (bytes !! 31)
+
+eqByte :: Expr Byte -> Expr Byte -> Expr EWord
+eqByte (LitByte x) (LitByte y) = Lit $ if x == y then 1 else 0
+eqByte x y = EqByte x y
