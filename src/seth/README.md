@@ -681,7 +681,7 @@ Print the decoded events of a contract.
 
 To use this command, you need to set the `SETH_ABI` variable:
 
-    export SETH_ABI=$(seth abi "event Foo(uint bar);")
+    export SETH_ABI=$(seth abi "event Foo(uint bar)")
 
 To use a JSON ABI file:
 
