@@ -11,6 +11,8 @@ import Data.Bits
 import Data.Word
 import Data.Maybe
 
+import Control.Lens (lens)
+
 import EVM.Types
 import qualified Data.ByteString as BS
 import qualified Data.Map.Strict as Map
@@ -175,7 +177,7 @@ readByte i@(Lit x) (WriteWord (Lit idx) val src)
   = if num x <= idx && idx < num (x + 8)
     then case val of
            (Lit _) -> indexWord i val
-           _ -> Index (Lit $ idx - num x) val
+           _ -> IndexWord (Lit $ idx - num x) val
     else readByte i src
 readByte i@(Lit x) (CopySlice (Lit dstOffset) (Lit srcOffset) (Lit size) src dst)
   = if dstOffset <= num x && num x < (dstOffset + size)
@@ -200,7 +202,8 @@ readByte i buf = ReadByte i buf
 --
 -- If n is >= 32 this is the same as readWord
 readBytes :: Int -> Expr EWord -> Expr Buf -> Expr EWord
-readBytes (min 32 -> n) idx buf = joinBytes [readByte (add idx (Lit . num $ i)) buf | i <- [0 .. n - 1]]
+readBytes (Prelude.min 32 -> n) idx buf
+  = joinBytes [readByte (add idx (Lit . num $ i)) buf | i <- [0 .. n - 1]]
 
 -- | Reads the word starting at idx from the given buf
 readWord :: Expr EWord -> Expr Buf -> Expr EWord
@@ -297,23 +300,34 @@ base = \case
   CopySlice _ _ _ _ dst -> base dst
 
 
+word256At
+  :: Functor f
+  => Expr EWord -> (Expr EWord -> f (Expr EWord))
+  -> Expr Buf -> f (Expr Buf)
+word256At i = lens getter setter where
+  getter = readWord i
+  setter m x = writeWord i x m
+
+
 -- ** Storage ** -----------------------------------------------------------------------------------
 
 
 -- | Reads the word at the given slot from the given storage expression.
 --
--- Reads from storage that are backed by Empty or Concrete stores will always
--- return 0x0 if there have not been any writes at the requested slot, in the
--- case of an AbstractStore we return a symbolic value.
-readStorage :: Expr Storage -> Expr EWord -> Expr EWord
-readStorage EmptyStore _ = Lit 0x0
+-- Note that we return a Nothing instead of a 0x0 if we are reading from a
+-- store that is backed by a ConcreteStore or an EmptyStore and there have been
+-- no explicit writes to the requested slot. This makes implementing rpc
+-- storage lookups much easier. If the store is backed by an AbstractStore we
+-- always return a symbolic value.
+readStorage :: Expr Storage -> Expr EWord -> Maybe (Expr EWord)
+readStorage EmptyStore _ = Nothing
 readStorage store@(ConcreteStore s) loc = case loc of
-  Lit l -> case Map.lookup l s of
-                 Just v -> Lit v
-                 Nothing -> Lit 0x0
-  _ -> SLoad loc store
-readStorage s@AbstractStore loc = SLoad loc s
-readStorage (SStore slot val prev) loc = if loc == slot then val else readStorage prev loc
+  Lit l -> fmap Lit (Map.lookup l s)
+  _ -> Just $ SLoad loc store
+readStorage s@AbstractStore loc = Just $ SLoad loc s
+readStorage s@(SStore slot val prev) loc = case (slot, loc) of
+  (Lit _, Lit _) -> if loc == slot then Just val else readStorage prev loc
+  _ -> Just $ SLoad loc s
 
 
 -- | Writes a value to a key in a storage expression.
@@ -426,3 +440,7 @@ joinBytes bs
 eqByte :: Expr Byte -> Expr Byte -> Expr EWord
 eqByte (LitByte x) (LitByte y) = Lit $ if x == y then 1 else 0
 eqByte x y = EqByte x y
+
+min :: Expr EWord -> Expr EWord -> Expr EWord
+min (Lit x) (Lit y) = if x < y then Lit x else Lit y
+min x y = Min x y

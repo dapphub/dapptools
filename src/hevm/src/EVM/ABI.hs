@@ -32,6 +32,7 @@ module EVM.ABI
   ( AbiValue (..)
   , AbiType (..)
   , AbiKind (..)
+  , AbiVals(..)
   , abiKind
   , Event (..)
   , SolError (..)
@@ -47,7 +48,8 @@ module EVM.ABI
   , emptyAbi
   , encodeAbiValue
   , decodeAbiValue
-  , decodeBuffer
+  , decodeBuf
+  , decodeStaticArgs
   , formatString
   , parseTypeName
   , makeAbiValue
@@ -56,6 +58,7 @@ module EVM.ABI
   ) where
 
 import EVM.Types
+import EVM.Expr (readWord)
 
 import Control.Monad      (replicateM, replicateM_, forM_, void)
 import Data.Binary.Get    (Get, runGet, runGetOrFail, label, getWord8, getWord32be, skip)
@@ -525,12 +528,25 @@ bytesP = do
     Right d -> pure $ ByteStringS d
     Left _ -> pfail
 
-decodeBuffer :: [AbiType] -> Expr Buf -> Maybe [AbiValue]
-decodeBuffer tps (ConcreteBuf b)
+data AbiVals = NoVals | CAbi [AbiValue] | SAbi [Expr EWord]
+  deriving (Show)
+
+decodeBuf :: [AbiType] -> Expr Buf -> AbiVals
+decodeBuf tps (ConcreteBuf b)
   = case runGetOrFail (getAbiSeq (length tps) tps) (BSLazy.fromStrict b) of
-      Right ("", _, args) -> Just (toList args)
-      _ -> Nothing
-decodeBuffer _ _ = error "TODO: symbolic abi decoding"
+      Right ("", _, args) -> CAbi (toList args)
+      _ -> NoVals
+decodeBuf tps buf
+  = if containsDynamic tps
+    then NoVals
+    else SAbi $ decodeStaticArgs (length tps) buf
+  where
+    isDynamic t = abiKind t == Dynamic
+    containsDynamic = or . fmap isDynamic
+
+decodeStaticArgs :: Int -> Expr Buf -> [Expr EWord]
+decodeStaticArgs n b = [readWord (Lit . num $ i) b | i <- [4,32 .. n*32]]
+
 
 -- A modification of 'arbitrarySizedBoundedIntegral' quickcheck library
 -- which takes the maxbound explicitly rather than relying on a Bounded instance.

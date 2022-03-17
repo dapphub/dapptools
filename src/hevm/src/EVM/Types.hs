@@ -236,6 +236,7 @@ data Expr (a :: EType) where
   MulMod         :: Expr EWord -> Expr EWord -> Expr EWord -> Expr EWord
   Exp            :: Expr EWord -> Expr EWord -> Expr EWord
   SEx            :: Expr EWord -> Expr EWord -> Expr EWord
+  Min            :: Expr EWord -> Expr EWord -> Expr EWord
 
   -- booleans
 
