@@ -5,10 +5,6 @@ Hello!
 `dapptools` is a suite of Ethereum focused CLI tools following the Unix design philosophy,
 favoring composability, configurability and extensibility.
 
-`dapptools` is currently in a stage of clandestine development where support for the casual user may
-be deprived. The software can now be considered free as in free puppy. Users seeking guidance can
-explore using foundry as an alternative
-
 This repository contains the source code for several programs
 hand-crafted and maintained by DappHub, along with dependency management, courtesy of Nix.
 
@@ -17,31 +13,28 @@ hand-crafted and maintained by DappHub, along with dependency management, courte
 - [hevm](./src/hevm) - Testing oriented EVM implementation. Debug, fuzz, or symbolically execute code against local or mainnet state.
 - [ethsign](./src/ethsign) - Sign Ethereum transactions from a local keystore or hardware wallet.
 
+## Development Status
+
+dapptools is currently in a stage of clandestine development where support for the casual user may
+be deprived. The software can now be considered free as in free puppy. Users seeking guidance can
+explore using foundry as an alternative
+
 ## Installation
 
-Install Nix if you haven't already:
-
-```sh
-# user must be in sudoers
-curl -L https://nixos.org/nix/install | sh
-
-# Run this or login again to use Nix
-. "$HOME/.nix-profile/etc/profile.d/nix.sh"
-```
-
-Then install dapptools:
+Install Nix if you haven't already ([instructions](https://nixos.org/download.html)). Then install dapptools:
 
 ```
 curl https://dapp.tools/install | sh
 ```
+
 This configures the dapphub binary cache and installs the `dapp`, `solc`, `seth` and `hevm` executables.
 
 **NOTE:** Arm support in the GHC haskell compiiler is still fairly bleeding edge, until this
 situation stabilises, users of M1 macs must run dapptools (and the installer!) under rosetta 2 (i.e.
 as an emulated x86 program). Make sure `/etc/nix/nix.conf` contains `system = x86_64-darwin`.
 
+You can also install an individual tool with:
 
-You can also install an individual tool with
 ```sh
 nix-env -iA <tool> -f $(curl -sS https://api.github.com/repos/dapphub/dapptools/releases/latest | jq -r .tarball_url)
 ```
