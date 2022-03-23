@@ -20,7 +20,6 @@ in
     , extract ? true
     , deps ? []
     , solc ? pkgs.solc
-    , test-hevm ? pkgs.dapp2.test-hevm
     , hevm ? pkgs.hevm
     , solcFlags ? ""
     , flatten ? false
@@ -29,8 +28,7 @@ in
       pkgs.stdenv.mkDerivation (rec {
         inherit doCheck extract;
         buildInputs = [ solc pkgs.jq ]
-          ++ (pkgs.lib.optional (test-hevm != null) test-hevm)
-          ++ pkgs.lib.optional flatten hevm;
+          ++ pkgs.lib.optional (flatten || doCheck) hevm;
         passthru = {
           remappings = remappings deps;
           libPaths = libPaths deps;
