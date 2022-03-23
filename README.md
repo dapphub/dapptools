@@ -5,6 +5,10 @@ Hello!
 `dapptools` is a suite of Ethereum focused CLI tools following the Unix design philosophy,
 favoring composability, configurability and extensibility.
 
+`dapptools` is currently in a stage of clandestine development where support for the casual user may
+be deprived. The software can now be considered free as in free puppy. Users seeking guidance can
+explore using foundry as an alternative
+
 This repository contains the source code for several programs
 hand-crafted and maintained by DappHub, along with dependency management, courtesy of Nix.
 
