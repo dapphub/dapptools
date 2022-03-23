@@ -5,10 +5,6 @@ Hello!
 `dapptools` is a suite of Ethereum focused CLI tools following the Unix design philosophy,
 favoring composability, configurability and extensibility.
 
-`dapptools` is currently in a stage of clandestine development where support for the casual user may
-be deprived. The software can now be considered free as in free puppy. Users seeking guidance can
-explore using foundry as an alternative
-
 This repository contains the source code for several programs
 hand-crafted and maintained by DappHub, along with dependency management, courtesy of Nix.
 
@@ -16,6 +12,12 @@ hand-crafted and maintained by DappHub, along with dependency management, courte
 - [seth](./src/seth) - Ethereum CLI. Query contracts, send transactions, follow logs, slice & dice data.
 - [hevm](./src/hevm) - Testing oriented EVM implementation. Debug, fuzz, or symbolically execute code against local or mainnet state.
 - [ethsign](./src/ethsign) - Sign Ethereum transactions from a local keystore or hardware wallet.
+
+## Development Status
+
+dapptools is currently in a stage of clandestine development where support for the casual user may
+be deprived. The software can now be considered free as in free puppy. Users seeking guidance can
+explore using foundry as an alternative
 
 ## Installation
 
