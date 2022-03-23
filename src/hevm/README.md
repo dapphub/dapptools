@@ -294,6 +294,7 @@ If you prefer to use your own installation of GHC and the basic Haskell package 
 
 **Note:** If you are on macOS when building with Stack, you will first need to install the [secp256k1](https://github.com/bitcoin-core/secp256k1) and [libff](https://github.com/scipr-lab/libff) libraries. These commands should be enough:
 
+    $ brew install automake
     $ git clone https://github.com/bitcoin-core/secp256k1.git
     $ cd secp256k1
     $ ./autogen.sh
@@ -302,6 +303,7 @@ If you prefer to use your own installation of GHC and the basic Haskell package 
     $ sudo make install
     $ cd .. && rm -rf secp256k1 # optional (cleanup)
 
+	$ brew install openssl
     $ git clone https://github.com/scipr-lab/libff --recursive
     $ cd libff
     $ export LDFLAGS=-L/usr/local/opt/openssl/lib
@@ -312,7 +314,7 @@ If you prefer to use your own installation of GHC and the basic Haskell package 
     $ sed -i '' 's/STATIC/SHARED/' depends/CMakeLists.txt
     $ mkdir build
     $ cd build
-    $ CXXFLAGS="-fPIC $CXXFLAGS" cmake $ARGS ..
+    $ CXXFLAGS="-fPIC $CXXFLAGS" OPENSSL_ROOT_DIR=/usr/local/opt/openssl cmake $ARGS ..
     $ make && sudo make install
 
 ### Cheat codes
