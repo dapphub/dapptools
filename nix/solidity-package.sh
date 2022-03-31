@@ -17,7 +17,7 @@ mapfile -t files < <(find "$dir/src" -name '*.sol')
 json_file="out/dapp.sol.json"
 (set -x; solc $REMAPPINGS "${opts[@]}" $solcFlags "${files[@]}" > "$json_file")
 
-if [[ "$doCheck" == 1 ]] then
+if [[ "$doCheck" == 1 ]]; then
   DAPP_OUT=out dapp test
 fi
 
