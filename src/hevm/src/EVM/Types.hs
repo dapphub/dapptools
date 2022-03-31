@@ -420,7 +420,7 @@ data Expr (a :: EType) where
 
   -- memory
 
-  MSize          :: Expr EWord
+  MSize          :: Expr Buf -> Expr EWord
 
   -- storage
 
@@ -470,6 +470,11 @@ data Expr (a :: EType) where
 
   BufLength      :: Expr Buf -> Expr EWord
 
+deriving instance Show (Expr a)
+-- TODO: do we need a custom instance here?
+--        e.g. what should AbstractBuf == AbstractBuf be? same q for Stores
+deriving instance Eq (Expr a)
+
 
 -- TODO: are these bad? should I maybe define a typeclass that defines the evm
 -- encoding for a restricted set of types?
@@ -487,11 +492,6 @@ unlitByte :: Enum a => Expr Byte -> Maybe a
 unlitByte (LitByte x) = Just . toEnum . fromEnum $ x
 unlitByte _ = Nothing
 
-
-deriving instance Show (Expr a)
--- TODO: do we need a custom instance here?
---        e.g. what should AbstractBuf == AbstractBuf be? same q for Stores
-deriving instance Eq (Expr a)
 
 newtype ByteStringS = ByteStringS ByteString deriving (Eq)
 
