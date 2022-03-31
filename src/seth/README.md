@@ -293,7 +293,7 @@ governance token using the ERC20 ABI:
     $ seth call $MKR_TOKEN "totalSupply()(uint)"
     995238778286468792512963
 
-If you want to send a string as an argument, remember to put the quotes.
+If you want to send a string as an argument, you must surround the string in both single and double quotes.
     $ TOKEN=0x9f8F72aA9304c8B593d555F12eF6589cC3A579A2
     $ seth call $TOKEN "getAddress(string)(address)" '"my_string"'
     0x7Bb0b08587b8a6B8945e09F1Baca426558B0f06a
