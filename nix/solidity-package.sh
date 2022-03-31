@@ -17,8 +17,8 @@ mapfile -t files < <(find "$dir/src" -name '*.sol')
 json_file="out/dapp.sol.json"
 (set -x; solc $REMAPPINGS "${opts[@]}" $solcFlags "${files[@]}" > "$json_file")
 
-if [[ "$doCheck" == 1 ]] && command -v dapp2-test-hevm >/dev/null 2>&1; then
-  DAPP_OUT=out dapp2-test-hevm
+if [[ "$doCheck" == 1 ]]; then
+  DAPP_OUT=out dapp test
 fi
 
 if [[ $flatten == 1 && ! $x =~ \.t(\.[a-z0-9]+)*\.sol$ ]]; then
