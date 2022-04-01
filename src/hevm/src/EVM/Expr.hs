@@ -273,9 +273,10 @@ writeWord (Lit offset) (Lit val) (ConcreteBuf src)
 writeWord offset val src = WriteWord offset val src
 
 
--- | Returns the length of a given buffer, if there are any writes to abstract
---   locations, or copyslices with an abstract size, an abstract expresion will
---   be returned.
+-- | Returns the length of a given buffer
+--
+-- If there are any writes to abstract locations, or CopySlices with an
+-- abstract size or dstOffset, an abstract expresion will be returned.
 bufLength :: Expr Buf -> Expr EWord
 bufLength buf = case go 0 buf of
                   Just len -> len
@@ -290,8 +291,9 @@ bufLength buf = case go 0 buf of
     go _ _ = Nothing
 
 
--- | Returns the smallest possible size of a given buffer. All data past this
---   index will be symbolic (i.e. unexecutable).
+-- | Returns the smallest possible size of a given buffer.
+--
+-- All data past this index will be symbolic (i.e. unexecutable).
 minLength :: Expr Buf -> Maybe Int
 minLength = go 0
   where
@@ -312,7 +314,7 @@ minLength = go 0
     go l (CopySlice _ _ _ _ dst) = go l dst
 
 
--- Returns the base constructor upon which the buffer was built
+-- | Returns the base constructor upon which the buffer was built
 base :: Expr Buf -> Expr Buf
 base = \case
   EmptyBuf -> EmptyBuf
