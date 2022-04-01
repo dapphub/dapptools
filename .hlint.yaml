@@ -24,3 +24,4 @@
 - ignore: {name: "Redundant flip"}
 - ignore: {name: "Redundant $!"}
 - ignore: {name: "Redundant <$>"}
+#[ { "ignore": { "within": '**.*' } } ]
