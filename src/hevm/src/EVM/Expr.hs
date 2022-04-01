@@ -75,13 +75,13 @@ addmod :: Expr EWord -> Expr EWord -> Expr EWord -> Expr EWord
 addmod = op3 AddMod (\x y z ->
   if z == 0
   then 0
-  else fromIntegral $ ((to512 x) + (to512 y)) `Prelude.mod` (to512 z))
+  else fromIntegral $ (to512 x + to512 y) `Prelude.mod` to512 z)
 
 mulmod :: Expr EWord -> Expr EWord -> Expr EWord -> Expr EWord
 mulmod = op3 MulMod (\x y z ->
    if z == 0
    then 0
-   else fromIntegral $ ((to512 x) * (to512 y)) `Prelude.mod` (to512 z))
+   else fromIntegral $ (to512 x * to512 y) `Prelude.mod` to512 z)
 
 exp :: Expr EWord -> Expr EWord -> Expr EWord
 exp = op2 Exp (^)
@@ -137,7 +137,7 @@ or :: Expr EWord -> Expr EWord -> Expr EWord
 or = op2 Or (.|.)
 
 xor :: Expr EWord -> Expr EWord -> Expr EWord
-xor = op2 Xor (Data.Bits.xor)
+xor = op2 Xor Data.Bits.xor
 
 not :: Expr EWord -> Expr EWord
 not = op1 Not complement
@@ -273,20 +273,43 @@ writeWord (Lit offset) (Lit val) (ConcreteBuf src)
 writeWord offset val src = WriteWord offset val src
 
 
+-- | Returns the length of a given buffer, if there are any writes to abstract
+--   locations, or copyslices with an abstract size, an abstract expresion will
+--   be returned.
 bufLength :: Expr Buf -> Expr EWord
-bufLength EmptyBuf = Lit 0
-bufLength (ConcreteBuf b) = Lit (num . BS.length $ b)
-bufLength b = BufLength b
+bufLength buf = case go 0 buf of
+                  Just len -> len
+                  Nothing -> BufLength buf
+  where
+    go :: W256 -> Expr Buf -> Maybe (Expr EWord)
+    go l EmptyBuf = Just . Lit $ l
+    go l (ConcreteBuf b) = Just . Lit $ max (num . BS.length $ b) l
+    go l (WriteWord (Lit idx) _ b) = go (max l (idx + 31)) b
+    go l (WriteByte (Lit idx) _ b) = go (max l idx) b
+    go l (CopySlice _ (Lit dstOffset) (Lit size) _ dst) = go (max (dstOffset + size - 1) l) dst
+    go _ _ = Nothing
 
 
--- TODO: this is probs bullshit, delete it and figure out how to handle execution
--- past the end of the bytecode properly
--- Returns the smallest possible size of a given buffer
+-- | Returns the smallest possible size of a given buffer. All data past this
+--   index will be symbolic (i.e. unexecutable).
 minLength :: Expr Buf -> Maybe Int
-minLength b = case base b of
-  EmptyBuf -> Just 0
-  (ConcreteBuf bs) -> Just $ BS.length bs
-  _ -> Nothing
+minLength = go 0
+  where
+    go :: W256 -> Expr Buf -> Maybe Int
+    -- base cases
+    go l EmptyBuf = Just . num $ l
+    go l AbstractBuf = Nothing
+    go l (ConcreteBuf b) = Just . num $ max (num . BS.length $ b) l
+
+    -- writes to a concrete index
+    go l (WriteWord (Lit idx) _ b) = go (max l (idx + 31)) b
+    go l (WriteByte (Lit idx) _ b) = go (max l idx) b
+    go l (CopySlice _ (Lit dstOffset) (Lit size) _ dst) = go (max (dstOffset + size - 1) l) dst
+
+    -- abstract writes are ignored
+    go l (WriteWord _ _ b) = go l b
+    go l (WriteByte _ _ b) = go l b
+    go l (CopySlice _ _ _ _ dst) = go l dst
 
 
 -- Returns the base constructor upon which the buffer was built
