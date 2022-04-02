@@ -308,7 +308,7 @@ minLength = go 0
     go l (WriteByte (Lit idx) _ b) = go (max l idx) b
     go l (CopySlice _ (Lit dstOffset) (Lit size) _ dst) = go (max (dstOffset + size - 1) l) dst
 
-    -- abstract writes are ignored
+    -- writes to an abstract index are ignored
     go l (WriteWord _ _ b) = go l b
     go l (WriteByte _ _ b) = go l b
     go l (CopySlice _ _ _ _ dst) = go l dst
@@ -333,6 +333,17 @@ word256At i = lens getter setter where
   getter = readWord i
   setter m x = writeWord i x m
 
+-- | Left fold over a buffer from 0 to idx (inclusive)
+--
+-- Currently only concrete idx values are accepted. We could maybe lift this
+-- restriction by adding a lambda abstraction to Expr
+foldBufTo :: (a -> Expr Byte -> a) -> a -> W256 -> Expr Buf -> a
+foldBufTo f start idx buf = go start 0
+  where
+    go acc 0 = go (f acc (readByte (Lit 0) buf)) 1
+    go acc i = if i > idx
+                 then acc
+                 else go (f acc (readByte (Lit i) buf)) (i + 1)
 
 -- ** Storage ** -----------------------------------------------------------------------------------
 

@@ -22,7 +22,7 @@ import EVM.Types
 import EVM.Solidity
 import EVM.Concrete (createAddress, create2Address)
 import EVM.Op
-import EVM.Expr (readStorage, writeStorage, readByte, readWord, writeWord, writeByte, bufLength, indexWord, litAddr, readBytes, word256At, copySlice)
+import EVM.Expr (readStorage, writeStorage, readByte, readWord, writeWord, writeByte, bufLength, indexWord, litAddr, readBytes, word256At, copySlice, minLength)
 import EVM.FeeSchedule (FeeSchedule (..))
 import Options.Generic as Options
 import qualified EVM.Precompiled
@@ -40,7 +40,7 @@ import Data.Sequence                (Seq)
 import Data.Vector.Storable         (Vector)
 import Data.Foldable                (toList)
 import Data.Word                    (Word8, Word32)
-import Data.Bits                    (FiniteBits)
+import Data.Bits                    (FiniteBits, countLeadingZeros, finiteBitSize)
 
 import Data.Tree
 import Data.Tuple.Curry
@@ -2526,45 +2526,53 @@ opSize _                          = 1
 --  i of the resulting vector contains the operation index for
 -- the program counter value i.  This is needed because source map
 -- entries are per operation, not per byte.
+--
+-- Note that in some cases we have to deal with bytecode that may have an
+-- abstract length (e.g. constructors that have dynamic data), in this case we
+-- construct the opIxMap only up to the bytecode index past which we can be
+-- sure that all data is symbolic. Since we do not support execution of
+-- symbolic opcodes a source mapping for these regions is not required.
 mkOpIxMap :: Expr Buf -> Vector Int
-mkOpIxMap xs = Vector.create $ Vector.new (len xs) >>= \v ->
+mkOpIxMap xs = case minLength xs of
+  Nothing -> error "cannot operate on fully abstracted bytecode"
+  Just l -> Vector.create $ Vector.new l >>= \v ->
   -- Loop over the byte string accumulating a vector-mutating action.
   -- This is somewhat obfuscated, but should be fast.
-  case xs of
-    ConcreteBuf xs' ->
-      let (_, _, _, m) =
-            BS.foldl' (go v) (0 :: Word8, 0, 0, return ()) xs'
-      in m >> return v
-    xs' ->
-      let (_, _, _, m) =
-            foldl (go' v) (0, 0, 0, return ()) (stripBytecodeMetadataSym xs')
-      in m >> return v
+    case xs of
+      ConcreteBuf xs' ->
+        let (_, _, _, m) =
+              BS.foldl' (go v) (0 :: Word8, 0, 0, return ()) xs'
+        in m >> return v
+      xs' ->
+        let (_, _, _, m) =
+              Expr.foldBufTo (go' v) (0, 0, 0, return ()) (fromIntegral l) (stripBytecodeMetadataSym xs')
+        in m >> return v
 
-  where
-    -- concrete case
-    go v (0, !i, !j, !m) x | x >= 0x60 && x <= 0x7f =
-      {- Start of PUSH op. -} (x - 0x60 + 1, i + 1, j,     m >> Vector.write v i j)
-    go v (1, !i, !j, !m) _ =
-      {- End of PUSH op. -}   (0,            i + 1, j + 1, m >> Vector.write v i j)
-    go v (0, !i, !j, !m) _ =
-      {- Other op. -}         (0,            i + 1, j + 1, m >> Vector.write v i j)
-    go v (n, !i, !j, !m) _ =
-      {- PUSH data. -}        (n - 1,        i + 1, j,     m >> Vector.write v i j)
+    where
+      -- concrete case
+      go v (0, !i, !j, !m) x | x >= 0x60 && x <= 0x7f =
+        {- Start of PUSH op. -} (x - 0x60 + 1, i + 1, j,     m >> Vector.write v i j)
+      go v (1, !i, !j, !m) _ =
+        {- End of PUSH op. -}   (0,            i + 1, j + 1, m >> Vector.write v i j)
+      go v (0, !i, !j, !m) _ =
+        {- Other op. -}         (0,            i + 1, j + 1, m >> Vector.write v i j)
+      go v (n, !i, !j, !m) _ =
+        {- PUSH data. -}        (n - 1,        i + 1, j,     m >> Vector.write v i j)
 
-    -- symbolic case
-    go' v (0, !i, !j, !m) x = case unliteral x of
-      Just x' -> if x' >= 0x60 && x' <= 0x7f
-        -- start of PUSH op --
-                 then (x' - 0x60 + 1, i + 1, j,     m >> Vector.write v i j)
-        -- other data --
-                 else (0,             i + 1, j + 1, m >> Vector.write v i j)
-      _ -> error "cannot analyze symbolic code"
+      -- symbolic case
+      go' v (0, !i, !j, !m) x = case unlitByte x of
+        Just x' -> if x' >= 0x60 && x' <= 0x7f
+          -- start of PUSH op --
+                   then (x' - 0x60 + 1, i + 1, j,     m >> Vector.write v i j)
+          -- other data --
+                   else (0,             i + 1, j + 1, m >> Vector.write v i j)
+        _ -> error "cannot analyze symbolic code"
 
-      {- Start of PUSH op. -} (x - 0x60 + 1, i + 1, j,     m >> Vector.write v i j)
-    go' v (1, !i, !j, !m) _ =
-      {- End of PUSH op. -}   (0,            i + 1, j + 1, m >> Vector.write v i j)
-    go' v (n, !i, !j, !m) _ =
-      {- PUSH data. -}        (n - 1,        i + 1, j,     m >> Vector.write v i j)
+        {- Start of PUSH op. -} (x - 0x60 + 1, i + 1, j,     m >> Vector.write v i j)
+      go' v (1, !i, !j, !m) _ =
+        {- End of PUSH op. -}   (0,            i + 1, j + 1, m >> Vector.write v i j)
+      go' v (n, !i, !j, !m) _ =
+        {- PUSH data. -}        (n - 1,        i + 1, j,     m >> Vector.write v i j)
 
 vmOp :: VM -> Maybe Op
 vmOp vm =
@@ -2707,17 +2715,17 @@ mkCodeOps (ConcreteBuf bytes) = RegularVector.fromList . toList $ go 0 bytes
           mempty
         Just (x, xs') ->
           let j = opSize x
-          in (i, readOp x (ConcreteBuffer xs')) Seq.<| go (i + j) (BS.drop j xs)
-mkCodeOps buf = RegularVector.fromList . toList $ go' 0 (stripBytecodeMetadataSym bytes)
+          in (i, readOp x (ConcreteBuf xs')) Seq.<| go (i + j) (BS.drop j xs)
+mkCodeOps buf = RegularVector.fromList . toList $ go' 0 (stripBytecodeMetadataSym buf)
   where
     go' !i !xs =
       case uncons xs of
         Nothing ->
           mempty
         Just (x, xs') ->
-          let x' = fromSized $ fromMaybe (error "unexpected symbolic code argument") $ unliteral x
+          let x' = fromMaybe (error "unexpected symbolic code argument") $ unlit x
               j = opSize x'
-          in (i, readOp x' (SymbolicBuffer xs')) Seq.<| go' (i + j) (drop j xs)
+          in (i, readOp x' (SymbolicBuf xs')) Seq.<| go' (i + j) (drop j xs)
 
 -- * Gas cost calculation helpers
 
@@ -2758,7 +2766,7 @@ concreteModexpGasFee :: ByteString -> Integer
 concreteModexpGasFee input = max 200 ((multiplicationComplexity * iterCount) `div` 3)
   where (lenb, lene, lenm) = parseModexpLength input
         ez = isZero (96 + lenb) lene input
-        e' = w256 $ word $ LS.toStrict $
+        e' = word $ LS.toStrict $
           lazySlice (96 + lenb) (min 32 lene) input
         nwords :: Integer
         nwords = ceilDiv (num $ max lenb lenm) 8
@@ -2777,27 +2785,25 @@ costOfPrecompile (FeeSchedule {..}) precompileAddr input =
     -- ECRECOVER
     0x1 -> 3000
     -- SHA2-256
-    0x2 -> num $ (((len input + 31) `div` 32) * 12) + 60
+    0x2 -> num $ (((bufLength input + 31) `div` 32) * 12) + 60
     -- RIPEMD-160
-    0x3 -> num $ (((len input + 31) `div` 32) * 120) + 600
+    0x3 -> num $ (((bufLength input + 31) `div` 32) * 120) + 600
     -- IDENTITY
-    0x4 -> num $ (((len input + 31) `div` 32) * 3) + 15
+    0x4 -> num $ (((bufLength input + 31) `div` 32) * 3) + 15
     -- MODEXP
-    0x5 -> concreteModexpGasFee input'
-      where input' = case input of
-               ConcreteBuf b -> b
-               _ -> error "unsupported: symbolic MODEXP gas cost calc"
+    0x5 -> case input of
+             ConcreteBuf i -> concreteModexpGasFee i
+             _ -> error "Unsupported symbolic modexp gas calc"
     -- ECADD
     0x6 -> g_ecadd
     -- ECMUL
     0x7 -> g_ecmul
     -- ECPAIRING
-    0x8 -> num $ ((len input) `div` 192) * (num g_pairing_point) + (num g_pairing_base)
+    0x8 -> num $ ((bufLength input) `div` 192) * (num g_pairing_point) + (num g_pairing_base)
     -- BLAKE2
-    0x9 -> let input' = case input of
-                         ConcreteBuf b -> b
-                         _ -> error "unsupported: symbolic BLAKE2B gas cost calc"
-           in g_fround * (num $ asInteger $ lazySlice 0 4 input')
+    0x9 -> case input of
+             ConcreteBuf i -> g_fround * (num $ asInteger $ lazySlice 0 4 i)
+             _ -> error "Unsupported symbolic blake2 gas calc"
     _ -> error ("unimplemented precompiled contract " ++ show precompileAddr)
 
 -- Gas cost of memory expansion
