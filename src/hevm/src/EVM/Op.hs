@@ -1,7 +1,11 @@
+{-# LANGUAGE DataKinds #-}
+
 module EVM.Op
   ( Op (..)
   , opString
   ) where
+
+import EVM.Types
 
 import Data.Word (Word8)
 import Numeric (showHex)
@@ -82,7 +86,7 @@ data Op
   | OpDup !Word8
   | OpSwap !Word8
   | OpLog !Word8
-  | OpPush !Word8
+  | OpPush (Expr EWord)
   | OpUnknown Word8
   deriving (Show, Eq)
 

@@ -2532,6 +2532,10 @@ opSize _                          = 1
 -- construct the opIxMap only up to the bytecode index past which we can be
 -- sure that all data is symbolic. Since we do not support execution of
 -- symbolic opcodes a source mapping for these regions is not required.
+-- In the future it may be desirable to lift this implied structure to the type
+-- level by introducing a distinction between buffers of known and unknown
+-- length, and representing InitCode as a pair of (Buf KnownLength, Buf UnknownLength).
+-- We avoid for know for the sake of keeping the type level reprsentation simple.
 mkOpIxMap :: Expr Buf -> Vector Int
 mkOpIxMap xs = case minLength xs of
   Nothing -> error "cannot operate on fully abstracted bytecode"
@@ -2578,15 +2582,13 @@ vmOp :: VM -> Maybe Op
 vmOp vm =
   let i  = vm ^. state . pc
       code' = vm ^. state . code
-      xs = case code' of
-        ConcreteBuf xs' -> ConcreteBuf (BS.drop i xs')
-        xs' -> (drop i xs')
-      op = case xs of
-        ConcreteBuf b -> BS.index b 0
-        b -> fromSized $ fromMaybe (error "unexpected symbolic code") (unliteral (head b))
-  in if (len code' < i)
-     then Nothing
-     else Just (readOp op xs)
+      data' = WriteWord 0 (readWord (Lit . num $ i) code') EmptyBuf
+  in do
+    l <- minLength code'
+    when (l < i) Nothing
+    case readByte (Lit . num $ i) code' of
+      LitByte op -> Just $ readOp op data'
+      _ -> Nothing
 
 vmOpIx :: VM -> Maybe Int
 vmOpIx vm =
@@ -2621,16 +2623,14 @@ opParams vm =
       then Map.fromList (zip xs (vm ^. state . stack))
       else mempty
 
+-- | Reads
 readOp :: Word8 -> Expr Buf -> Op
 readOp x _  | x >= 0x80 && x <= 0x8f = OpDup (x - 0x80 + 1)
 readOp x _  | x >= 0x90 && x <= 0x9f = OpSwap (x - 0x90 + 1)
 readOp x _  | x >= 0xa0 && x <= 0xa4 = OpLog (x - 0xa0)
 readOp x xs | x >= 0x60 && x <= 0x7f =
-  let n   = x - 0x60 + 1
-      xs'' = case xs of
-        ConcreteBuf xs' -> num $ readMemoryWord 0 $ BS.take (num n) xs'
-        xs' -> readSWord' 0 $ take (num n) xs'
-  in OpPush xs''
+  let n = num $ x - 0x60 + 1
+  in OpPush (readBytes n (Lit . num $ x) xs)
 readOp x _ = case x of
   0x00 -> OpStop
   0x01 -> OpAdd
