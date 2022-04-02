@@ -2706,6 +2706,7 @@ readOp x _ = case x of
   0xff -> OpSelfdestruct
   _    -> OpUnknown x
 
+-- Maps operation indicies into a pair of (bytecode index, operation)
 mkCodeOps :: Expr Buf -> RegularVector.Vector (Int, Op)
 mkCodeOps (ConcreteBuf bytes) = RegularVector.fromList . toList $ go 0 bytes
   where
@@ -2718,14 +2719,12 @@ mkCodeOps (ConcreteBuf bytes) = RegularVector.fromList . toList $ go 0 bytes
           in (i, readOp x (ConcreteBuf xs')) Seq.<| go (i + j) (BS.drop j xs)
 mkCodeOps buf = RegularVector.fromList . toList $ go' 0 (stripBytecodeMetadataSym buf)
   where
-    go' !i !xs =
-      case uncons xs of
-        Nothing ->
-          mempty
-        Just (x, xs') ->
-          let x' = fromMaybe (error "unexpected symbolic code argument") $ unlit x
-              j = opSize x'
-          in (i, readOp x' (SymbolicBuf xs')) Seq.<| go' (i + j) (drop j xs)
+    go' :: Int -> Expr Buf -> Seq (Int, Op)
+    go' !i b | i > fromMaybe (error "cannot analyze fully abstract code") (minLength b) = mempty
+    go' !i b = let
+        op = fromMaybe (error "unexpected symbolic code argument") . unlitByte $ readByte (Lit . num $ i) b
+        sz = opSize op
+      in (i, readOp op buf) Seq.<| go' (i + sz) b
 
 -- * Gas cost calculation helpers
 
