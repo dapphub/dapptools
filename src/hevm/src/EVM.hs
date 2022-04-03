@@ -407,8 +407,8 @@ blankState = FrameState
   , _memory       = mempty
   , _memorySize   = 0
   , _calldata     = mempty
-  , _callvalue    = 0
-  , _caller       = 0
+  , _callvalue    = (Lit 0)
+  , _caller       = (Lit 0)
   , _gas          = 0
   , _returndata   = mempty
   , _static       = False
@@ -486,7 +486,7 @@ makeVm o =
     , _txReversion = Map.fromList
       [(vmoptAddress o, vmoptContract o)]
     }
-  , _logs = mempty
+  , _logs = EmptyLog
   , _traces = Zipper.fromForest []
   , _block = Block
     { _coinbase = vmoptCoinbase o
@@ -587,8 +587,8 @@ exec1 = do
     let ?op = 0x00 -- dummy value
     case bufLength (the state calldata) of
       (Lit calldatasize) -> do
-          copyBytesToMemory (the state calldata) (num calldatasize) 0 0
-          executePrecompile self (num $ the state gas) 0 (num calldatasize) 0 0 []
+          copyBytesToMemory (the state calldata) (Lit calldatasize) (Lit 0) (Lit 0)
+          executePrecompile self (num $ the state gas) 0 calldatasize 0 0 []
           vmx <- get
           case view (state.stack) vmx of
             (x:_) -> case x of
@@ -666,7 +666,7 @@ exec1 = do
               else
                 forceConcrete2 (xOffset', xSize') "LOG" $ \(xOffset, xSize) -> do
                     let (topics, xs') = splitAt n xs
-                        bytes         = readMemory (num xOffset) (num xSize) vm
+                        bytes         = readMemory xOffset' xSize' vm
                         logs'         = Log (litAddr self) bytes topics (view logs vm)
                     burn (g_log + g_logdata * (num xSize) + num n * g_logtopic) $
                       accessMemoryRange fees xOffset xSize $ do
@@ -715,7 +715,7 @@ exec1 = do
         -- op: EQ
         0x14 -> stackOp2 (const g_verylow) (uncurry Expr.eq)
         -- op: ISZERO
-        0x15 -> stackOp1 (const g_verylow) (uncurryN Expr.iszero)
+        0x15 -> stackOp1 (const g_verylow) Expr.iszero
 
         -- op: AND
         0x16 -> stackOp2 (const g_verylow) (uncurry Expr.and)
@@ -724,7 +724,7 @@ exec1 = do
         -- op: XOR
         0x18 -> stackOp2 (const g_verylow) (uncurry Expr.xor)
         -- op: NOT
-        0x19 -> stackOp1 (const g_verylow) (uncurryN Expr.not)
+        0x19 -> stackOp1 (const g_verylow) Expr.not
 
         -- op: BYTE
         0x1a -> stackOp2 (const g_verylow) (\(i, w) -> Expr.padByte $ Expr.indexWord i w)
@@ -917,8 +917,8 @@ exec1 = do
           -- so that blockhash(i) is the hash of i as decimal ASCII.
           stackOp1 (const g_blockhash) $ \case
             (Lit i) -> if i + 256 < the block number || i >= the block number
-                       then 0
-                       else (num i :: Integer) & show & Char8.pack & keccak & num
+                       then Lit 0
+                       else (num i :: Integer) & show & Char8.pack & keccak & Lit
             i -> BlockHash i
 
         -- op: COINBASE
@@ -994,7 +994,7 @@ exec1 = do
             (x':y:xs) -> forceConcrete x' "MSTORE8" $ \x ->
               burn g_verylow $
                 accessMemoryRange fees x 1 $ do
-                  let yByte = indexWord 31 y
+                  let yByte = indexWord (Lit 31) y
                   next
                   modifying (state . memory) (writeByte (Lit x) yByte)
                   assign (state . stack) xs
@@ -1133,7 +1133,7 @@ exec1 = do
                     (cost, gas') = costOfCreate fees availableGas 0
                   _ <- accessAccountForGas newAddr
                   burn (cost - gas') $
-                    let initCode = readMemory (num xOffset) (num xSize) vm
+                    let initCode = readMemory xOffset' xSize' vm
                     in create self this (num gas') xValue xs newAddr initCode
             _ -> underrun
 
@@ -1190,7 +1190,8 @@ exec1 = do
               accessMemoryRange fees xOffset xSize $ do
                 let
                   output = readMemory xOffset' xSize' vm
-                  codesize = num (bufLength output)
+                  codesize = fromMaybe (error "RETURN: cannot return dynamically sized abstract data")
+                               . unlit . bufLength $ output
                   maxsize = the block maxCodeSize
                   creation = case view frames vm of
                     [] -> the tx isCreate
@@ -1203,7 +1204,7 @@ exec1 = do
                   then
                     finishFrame (FrameErrored (MaxCodeSizeExceeded maxsize codesize))
                   else
-                    branch (Expr.eqByte (readByte 0 output) (LitByte 0xef)) $ \case
+                    branch (Expr.eqByte (readByte (Lit 0) output) (LitByte 0xef)) $ \case
                       True -> finishFrame $ FrameErrored InvalidFormat
                       False -> do
                         burn (g_codedeposit * num codesize) $
@@ -1239,7 +1240,7 @@ exec1 = do
                 accessMemoryRange fees xOffset xSize $ do
                   availableGas <- use (state . gas)
 
-                  forceConcreteBuf (readMemory (num xOffset) (num xSize) vm) "CREATE2" $
+                  forceConcreteBuf (readMemory xOffset' xSize' vm) "CREATE2" $
                     \initCode -> do
                       let
                         newAddr  = create2Address self (num xSalt) initCode
@@ -1262,7 +1263,7 @@ exec1 = do
               \(xGas, xInOffset, xInSize, xOutOffset, xOutSize) -> do
                 delegateCall this xGas xTo xTo 0 xInOffset xInSize xOutOffset xOutSize xs $ \callee -> do
                   zoom state $ do
-                    assign callvalue 0
+                    assign callvalue (Lit 0)
                     assign caller (litAddr self)
                     assign contract callee
                     assign static True
@@ -1331,13 +1332,13 @@ callChecks this xGas xContext xTo xValue xInOffset xInSize xOutOffset xOutSize x
       burn (cost - gas') $ do
         if xValue > view balance this
         then do
-          assign (state . stack) (0 : xs)
+          assign (state . stack) (Lit 0 : xs)
           assign (state . returndata) mempty
           pushTrace $ ErrorTrace $ BalanceTooLow xValue (view balance this)
           next
         else if length (view frames vm) >= 1024
              then do
-               assign (state . stack) (0 : xs)
+               assign (state . stack) (Lit 0 : xs)
                assign (state . returndata) mempty
                pushTrace $ ErrorTrace CallDepthLimitReached
                next
@@ -1380,17 +1381,17 @@ executePrecompile
   -> EVM ()
 executePrecompile preCompileAddr gasCap inOffset inSize outOffset outSize xs  = do
   vm <- get
-  let input = readMemory (num inOffset) (num inSize) vm
+  let input = readMemory (Lit inOffset) (Lit inSize) vm
       fees = view (block . schedule) vm
       cost = costOfPrecompile fees preCompileAddr input
       notImplemented = error $ "precompile at address " <> show preCompileAddr <> " not yet implemented"
       precompileFail = burn (num gasCap - cost) $ do
-                         assign (state . stack) (0 : xs)
+                         assign (state . stack) (Lit 0 : xs)
                          pushTrace $ ErrorTrace PrecompileFailure
                          next
   if cost > num gasCap then
     burn (num gasCap) $ do
-      assign (state . stack) (0 : xs)
+      assign (state . stack) (Lit 0 : xs)
       next
   else
     burn cost $
@@ -1402,11 +1403,11 @@ executePrecompile preCompileAddr gasCap inOffset inSize outOffset outSize xs  = 
           case EVM.Precompiled.execute 0x1 (truncpadlit 128 input') 32 of
             Nothing -> do
               -- return no output for invalid signature
-              assign (state . stack) (1 : xs)
+              assign (state . stack) (Lit 1 : xs)
               assign (state . returndata) mempty
               next
             Just output -> do
-              assign (state . stack) (1 : xs)
+              assign (state . stack) (Lit 1 : xs)
               assign (state . returndata) (ConcreteBuf output)
               copyBytesToMemory (ConcreteBuf output) (Lit outSize) (Lit 0) (Lit outOffset)
               next
@@ -1418,7 +1419,7 @@ executePrecompile preCompileAddr gasCap inOffset inSize outOffset outSize xs  = 
                      ConcreteBuf input' -> ConcreteBuf $ BS.pack $ BA.unpack (Crypto.hash input' :: Digest SHA256)
                      _ -> WriteWord (Lit 0) (SHA256 input) EmptyBuf
           in do
-            assign (state . stack) (1 : xs)
+            assign (state . stack) (Lit 1 : xs)
             assign (state . returndata) hash
             copyBytesToMemory hash (Lit outSize) (Lit 0) (Lit outOffset)
             next
@@ -1433,14 +1434,14 @@ executePrecompile preCompileAddr gasCap inOffset inSize outOffset outSize xs  = 
             hash' = BS.pack $ BA.unpack (Crypto.hash input' :: Digest RIPEMD160)
             hash  = ConcreteBuf $ padding <> hash'
           in do
-            assign (state . stack) (1 : xs)
+            assign (state . stack) (Lit 1 : xs)
             assign (state . returndata) hash
             copyBytesToMemory hash (Lit outSize) (Lit 0) (Lit outOffset)
             next
 
         -- IDENTITY
         0x4 -> do
-            assign (state . stack) (1 : xs)
+            assign (state . stack) (Lit 1 : xs)
             assign (state . returndata) input
             copyCallBytesToMemory input (Lit outSize) (Lit 0) (Lit outOffset)
             next
@@ -1464,7 +1465,7 @@ executePrecompile preCompileAddr gasCap inOffset inSize outOffset outSize xs  = 
                 in
                   padLeft (num lenm) (asBE (expFast b e m))
           in do
-            assign (state . stack) (1 : xs)
+            assign (state . stack) (Lit 1 : xs)
             assign (state . returndata) output
             copyBytesToMemory output (Lit outSize) (Lit 0) (Lit outOffset)
             next
@@ -1477,7 +1478,7 @@ executePrecompile preCompileAddr gasCap inOffset inSize outOffset outSize xs  = 
           Nothing -> precompileFail
           Just output -> do
             let truncpaddedOutput = ConcreteBuf $ truncpadlit 64 output
-            assign (state . stack) (1 : xs)
+            assign (state . stack) (Lit 1 : xs)
             assign (state . returndata) truncpaddedOutput
             copyBytesToMemory truncpaddedOutput (Lit outSize) (Lit 0) (Lit outOffset)
             next
@@ -1491,7 +1492,7 @@ executePrecompile preCompileAddr gasCap inOffset inSize outOffset outSize xs  = 
           Nothing -> precompileFail
           Just output -> do
             let truncpaddedOutput = ConcreteBuf $ truncpadlit 64 output
-            assign (state . stack) (1 : xs)
+            assign (state . stack) (Lit 1 : xs)
             assign (state . returndata) truncpaddedOutput
             copyBytesToMemory truncpaddedOutput (Lit outSize) (Lit 0) (Lit outOffset)
             next
@@ -1505,7 +1506,7 @@ executePrecompile preCompileAddr gasCap inOffset inSize outOffset outSize xs  = 
           Nothing -> precompileFail
           Just output -> do
             let truncpaddedOutput = ConcreteBuf $ truncpadlit 32 output
-            assign (state . stack) (1 : xs)
+            assign (state . stack) (Lit 1 : xs)
             assign (state . returndata) truncpaddedOutput
             copyBytesToMemory truncpaddedOutput (Lit outSize) (Lit 0) (Lit outOffset)
             next
@@ -1519,7 +1520,7 @@ executePrecompile preCompileAddr gasCap inOffset inSize outOffset outSize xs  = 
             (213, True) -> case EVM.Precompiled.execute 0x9 input' 64 of
               Just output -> do
                 let truncpaddedOutput = ConcreteBuf $ truncpadlit 64 output
-                assign (state . stack) (1 : xs)
+                assign (state . stack) (Lit 1 : xs)
                 assign (state . returndata) truncpaddedOutput
                 copyBytesToMemory truncpaddedOutput (Lit outSize) (Lit 0) (Lit outOffset)
                 next
@@ -1663,8 +1664,8 @@ accessStorage addr slot continue =
               Just cachedContract -> forceConcrete slot "cannot read symbolic slots via rpc" $
                 \s -> maybe (mkQuery s) continue (readStorage (view storage cachedContract) slot)
           else do
-            modifying (env . contracts . ix addr . storage) (writeStorage slot 0)
-            continue 0
+            modifying (env . contracts . ix addr . storage) (writeStorage slot (Lit 0))
+            continue $ Lit 0
     Nothing ->
       fetchAccount addr $ \_ ->
         accessStorage addr slot continue
@@ -1966,7 +1967,7 @@ cheatActions =
                     cont bs = do
                       let encoded = ConcreteBuf bs
                       assign (state . returndata) encoded
-                      copyBytesToMemory encoded outSize 0 outOffset
+                      copyBytesToMemory encoded outSize (Lit 0) outOffset
                       assign result Nothing
                   in assign result (Just . VMFailure . Query $ (PleaseDoFFI cmd cont))
                 _ -> vmError (BadCheatCode sig)
@@ -1999,7 +2000,7 @@ cheatActions =
           [a, slot] ->
             forceConcrete a "cannot load from a symbolic address" $ \(num -> a') ->
               accessStorage a' slot $ \res -> do
-                assign (state . returndata . word256At 0) res
+                assign (state . returndata . word256At (Lit 0)) res
                 assign (state . memory . word256At outOffset) res
           _ -> vmError (BadCheatCode sig),
 
@@ -2023,7 +2024,7 @@ cheatActions =
                           , AbiBytes 32 (word256Bytes . fromInteger $ sign_s s)
                           ])
                   assign (state . returndata) (ConcreteBuf encoded)
-                  copyBytesToMemory (ConcreteBuf encoded) (num . BS.length $ encoded) 0 outOffset
+                  copyBytesToMemory (ConcreteBuf encoded) (Lit . num . BS.length $ encoded) (Lit 0) outOffset
           _ -> vmError (BadCheatCode sig),
 
       action "addr(uint256)" $
@@ -2039,8 +2040,8 @@ cheatActions =
                     -- See yellow paper #286
                     let
                       pub = BS.concat [ encodeInt x, encodeInt y ]
-                      addr = num . word256 . BS.drop 12 . BS.take 32 . keccakBytes $ pub
-                    assign (state . returndata . word256At 0) addr
+                      addr = Lit . num . word256 . BS.drop 12 . BS.take 32 . keccakBytes $ pub
+                    assign (state . returndata . word256At (Lit 0)) addr
                     assign (state . memory . word256At outOffset) addr
           _ -> vmError (BadCheatCode sig)
 
@@ -2065,7 +2066,7 @@ delegateCall
   -> (Addr -> EVM ())
   -> EVM ()
 delegateCall this gasGiven xTo xContext xValue xInOffset xInSize xOutOffset xOutSize xs continue =
-  forceConcrete2 (fromIntegral xTo, fromIntegral xContext) "cannot delegateCall with symbolic target or context" $
+  forceConcrete2 (xTo, xContext) "cannot delegateCall with symbolic target or context" $
     \((num -> xTo'), (num -> xContext')) ->
       if xTo' > 0 && xTo' <= 9
       then precompiledContract this gasGiven xTo' xContext' xValue xInOffset xInSize xOutOffset xOutSize xs
@@ -2093,7 +2094,7 @@ delegateCall this gasGiven xTo xContext xValue xInOffset xInSize xOutOffset xOut
                                              of Nothing -> Nothing
                                                 Just abi -> Just $ num abi
                                         else Nothing
-                                    , callContextData = (readMemory (num xInOffset) (num xInSize) vm0)
+                                    , callContextData = (readMemory (Lit xInOffset) (Lit xInSize) vm0)
                                     }
 
                   pushTrace (FrameTrace newContext)
@@ -2137,19 +2138,19 @@ create self this xGas' xValue xs newAddr initCode = do
   let xGas = num xGas'
   if xValue > view balance this
   then do
-    assign (state . stack) (0 : xs)
+    assign (state . stack) (Lit 0 : xs)
     assign (state . returndata) mempty
     pushTrace $ ErrorTrace $ BalanceTooLow xValue (view balance this)
     next
   else if length (view frames vm0) >= 1024
   then do
-    assign (state . stack) (0 : xs)
+    assign (state . stack) (Lit 0 : xs)
     assign (state . returndata) mempty
     pushTrace $ ErrorTrace CallDepthLimitReached
     next
   else if collision $ view (env . contracts . at newAddr) vm0
   then burn xGas $ do
-    assign (state . stack) (0 : xs)
+    assign (state . stack) (Lit 0 : xs)
     modifying (env . contracts . ix self . nonce) succ
     next
   else burn xGas $ do
@@ -2287,7 +2288,7 @@ finishFrame how = do
       case view frameContext nextFrame of
 
         -- Were we calling?
-        CallContext _ _ (num -> outOffset) (num -> outSize) _ _ _ reversion substate' -> do
+        CallContext _ _ (Lit -> outOffset) (Lit -> outSize) _ _ _ reversion substate' -> do
 
           -- Excerpt K.1. from the yellow paper:
           -- K.1. Deletion of an Account Despite Out-of-gas.
@@ -2307,7 +2308,7 @@ finishFrame how = do
             -- Case 1: Returning from a call?
             FrameReturned output -> do
               assign (state . returndata) output
-              copyCallBytesToMemory output outSize 0 outOffset
+              copyCallBytesToMemory output outSize (Lit 0) outOffset
               reclaimRemainingGasAllowance
               push 1
 
@@ -2316,7 +2317,7 @@ finishFrame how = do
               revertContracts
               revertSubstate
               assign (state . returndata) output
-              copyCallBytesToMemory output outSize 0 outOffset
+              copyCallBytesToMemory output outSize (Lit 0) outOffset
               reclaimRemainingGasAllowance
               push 0
 
@@ -2397,7 +2398,7 @@ accessMemoryWord fees x = accessMemoryRange fees x 32
 copyBytesToMemory
   :: Expr Buf -> Expr EWord -> Expr EWord -> Expr EWord -> EVM ()
 copyBytesToMemory bs size xOffset yOffset =
-  if size == 0 then noop
+  if size == (Lit 0) then noop
   else do
     mem <- use (state . memory)
     assign (state . memory) $
@@ -2406,7 +2407,7 @@ copyBytesToMemory bs size xOffset yOffset =
 copyCallBytesToMemory
   :: Expr Buf -> Expr EWord -> Expr EWord -> Expr EWord -> EVM ()
 copyCallBytesToMemory bs size xOffset yOffset =
-  if size == 0 then noop
+  if size == (Lit 0) then noop
   else do
     mem <- use (state . memory)
     assign (state . memory) $
@@ -2459,6 +2460,7 @@ traceForest :: VM -> Forest Trace
 traceForest = view (traces . to zipperRootForest)
 
 traceTopLog :: (MonadState VM m) => Expr Logs -> m ()
+traceTopLog EmptyLog = noop
 traceTopLog (Log addr bytes topics _) = do
   trace <- withTraceLocation (EventTrace addr bytes topics)
   modifying traces $
@@ -2593,7 +2595,7 @@ vmOp :: VM -> Maybe Op
 vmOp vm =
   let i  = vm ^. state . pc
       code' = vm ^. state . code
-      data' = WriteWord 0 (readWord (Lit . num $ i) code') EmptyBuf
+      data' = WriteWord (Lit 0) (readWord (Lit . num $ i) code') EmptyBuf
   in do
     l <- minLength code'
     when (l < i) Nothing
@@ -2790,18 +2792,19 @@ concreteModexpGasFee input = max 200 ((multiplicationComplexity * iterCount) `di
 
 -- Gas cost of precompiles
 costOfPrecompile :: FeeSchedule Integer -> Addr -> Expr Buf -> Integer
-costOfPrecompile (FeeSchedule {..}) precompileAddr input =
-  case precompileAddr of
+costOfPrecompile (FeeSchedule {..}) precompileAddr input' = let
+    input = fromMaybe (error "precompile input cannot have a dynamic size") $ Expr.toList input'
+  in case precompileAddr of
     -- ECRECOVER
     0x1 -> 3000
     -- SHA2-256
-    0x2 -> num $ (((bufLength input + 31) `div` 32) * 12) + 60
+    0x2 -> num $ (((length input + 31) `div` 32) * 12) + 60
     -- RIPEMD-160
-    0x3 -> num $ (((bufLength input + 31) `div` 32) * 120) + 600
+    0x3 -> num $ (((length input + 31) `div` 32) * 120) + 600
     -- IDENTITY
-    0x4 -> num $ (((bufLength input + 31) `div` 32) * 3) + 15
+    0x4 -> num $ (((length input + 31) `div` 32) * 3) + 15
     -- MODEXP
-    0x5 -> case input of
+    0x5 -> case input' of
              ConcreteBuf i -> concreteModexpGasFee i
              _ -> error "Unsupported symbolic modexp gas calc"
     -- ECADD
@@ -2809,9 +2812,9 @@ costOfPrecompile (FeeSchedule {..}) precompileAddr input =
     -- ECMUL
     0x7 -> g_ecmul
     -- ECPAIRING
-    0x8 -> num $ ((bufLength input) `div` 192) * (num g_pairing_point) + (num g_pairing_base)
+    0x8 -> num $ ((length input) `div` 192) * (num g_pairing_point) + (num g_pairing_base)
     -- BLAKE2
-    0x9 -> case input of
+    0x9 -> case input' of
              ConcreteBuf i -> g_fround * (num $ asInteger $ lazySlice 0 4 i)
              _ -> error "Unsupported symbolic blake2 gas calc"
     _ -> error ("unimplemented precompiled contract " ++ show precompileAddr)

@@ -440,7 +440,7 @@ deriving instance Show (Expr a)
 -- TODO: do we need a custom instance here?
 --        e.g. what should AbstractBuf == AbstractBuf be? same q for Stores
 deriving instance Eq (Expr a)
-
+deriving instance Ord (Expr a)
 
 -- TODO: are these bad? should I maybe define a typeclass that defines the evm
 -- encoding for a restricted set of types?
