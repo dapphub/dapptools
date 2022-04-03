@@ -297,9 +297,16 @@ data SubState = SubState
 -- by instructions like @EXTCODEHASH@, so we distinguish these two
 -- code types.
 data ContractCode
-  = InitCode (Expr Buf)     -- ^ "Constructor" code, during contract creation
-  | RuntimeCode (Expr Buf)  -- ^ "Instance" code, after contract creation
+  = InitCode (Expr Buf)  -- ^ "Constructor" code, during contract creation
+  | RuntimeCode (Expr Buf)           -- ^ "Instance" code, after contract creation
   deriving (Show)
+
+  {- TODO: this is what Contractcode should look like actually
+data ContractCode
+  = InitCode ([Expr Byte], Expr Buf)  -- ^ "Constructor" code, during contract creation
+  | RuntimeCode [Expr Byte]           -- ^ "Instance" code, after contract creation
+  deriving (Show)
+  -}
 
 -- runtime err when used for symbolic code
 instance Eq ContractCode where

@@ -63,6 +63,8 @@ module EVM.Solidity
 
 import EVM.ABI
 import EVM.Types
+import EVM.Expr (bufLength)
+import qualified EVM.Expr as Expr
 
 import Control.Applicative
 import Control.Monad
@@ -78,7 +80,7 @@ import Data.Char            (isDigit)
 import Data.Foldable
 import Data.Map.Strict      (Map)
 import Data.Maybe
-import Data.Word            (Word32)
+import Data.Word            (Word8, Word32)
 import Data.List.NonEmpty   (NonEmpty)
 import Data.Semigroup
 import Data.Sequence        (Seq)
@@ -678,17 +680,18 @@ stripBytecodeMetadata bs =
       Just (b, _) -> b
 
 stripBytecodeMetadataSym :: Expr Buf -> Expr Buf
-stripBytecodeMetadataSym _ = error "TODO: strip metadata from symbolic bytecode"
-  --let
-    --concretes :: [Maybe Word8]
-    --concretes = (fmap fromSized) . unliteral <$> b
-    --bzzrs :: [[Maybe Word8]]
-    --bzzrs = fmap (Just) . BS.unpack <$> knownBzzrPrefixes
-    --candidates = (flip Data.List.isInfixOf concretes) <$> bzzrs
-  --in case elemIndex True candidates of
-    --Nothing -> b
-    --Just i -> let Just ind = infixIndex (bzzrs !! i) concretes
-              --in take ind b
+stripBytecodeMetadataSym buf = case Expr.toList buf of
+  Just bytes -> let
+      concretes :: [Maybe Word8]
+      concretes = fmap unlitByte bytes
+      bzzrs :: [[Maybe Word8]]
+      bzzrs = fmap (Just) . BS.unpack <$> knownBzzrPrefixes
+      candidates = (flip Data.List.isInfixOf concretes) <$> bzzrs
+    in case elemIndex True candidates of
+      Nothing -> buf
+      Just i -> let Just ind = infixIndex (bzzrs !! i) concretes
+                in Expr.take (num ind) buf
+  _ -> error "cannot strip bytecode from a buffer with an abstract length"
 
 infixIndex :: (Eq a) => [a] -> [a] -> Maybe Int
 infixIndex needle haystack = findIndex (isPrefixOf needle) (tails haystack)

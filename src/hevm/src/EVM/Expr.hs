@@ -10,6 +10,7 @@ import Prelude hiding (LT, GT)
 import Data.Bits
 import Data.Word
 import Data.Maybe
+import Data.List
 
 import Control.Lens (lens)
 
@@ -300,7 +301,7 @@ minLength = go 0
     go :: W256 -> Expr Buf -> Maybe Int
     -- base cases
     go l EmptyBuf = Just . num $ l
-    go l AbstractBuf = Nothing
+    go _ AbstractBuf = Nothing
     go l (ConcreteBuf b) = Just . num $ max (num . BS.length $ b) l
 
     -- writes to a concrete index
@@ -344,6 +345,48 @@ foldBufTo f start idx buf = go start 0
     go acc i = if i > idx
                  then acc
                  else go (f acc (readByte (Lit i) buf)) (i + 1)
+
+-- | Returns the first n bytes of buf
+take :: W256 -> Expr Buf -> Expr Buf
+take n = slice (Lit 0) (Lit n)
+
+-- | Returns the last n bytes of buf
+drop :: W256 -> Expr Buf -> Expr Buf
+drop n buf = slice (sub (Lit n) (sub (bufLength buf) (Lit 1))) (Lit n) buf
+
+slice :: Expr EWord -> Expr EWord -> Expr Buf -> Expr Buf
+slice offset size src = copySlice offset (Lit 0) size src EmptyBuf
+
+toList :: Expr Buf -> Maybe [Expr Byte]
+toList EmptyBuf = Just []
+toList AbstractBuf = Nothing
+toList (ConcreteBuf bs) = Just . (fmap LitByte) $ BS.unpack bs
+toList buf = case bufLength buf of
+  Lit l -> Just $ go l
+  _ -> Nothing
+  where
+    go 0 = [readByte (Lit 0) buf]
+    go i = readByte (Lit i) buf : go (i - 1)
+
+fromList :: [Expr Byte] -> Expr Buf
+fromList bs = case Prelude.and (fmap isLitByte bs) of
+  True -> ConcreteBuf . BS.pack . mapMaybe unlitByte $ bs
+  -- we want the resulting buffer to be a concrete base with any symbolic
+  -- writes stacked on top, so we write all concrete bytes in a first pass and
+  -- then write any symbolic bytes afterwards
+  False -> applySyms . applyConcrete $ bs
+    where
+      applyConcrete :: [Expr Byte] -> (Expr Buf, [(W256, Expr Byte)])
+      applyConcrete bytes = let
+          go :: (Expr Buf, [(W256, Expr Byte)]) -> (W256, Expr Byte) -> (Expr Buf, [(W256, Expr Byte)])
+          go (buf, syms) b = case b of
+                       (idx, LitByte b') -> (writeByte (Lit idx) (LitByte b') buf, syms)
+                       _ -> (buf, b : syms)
+        in foldl' go (EmptyBuf, []) (zip [0..] bytes)
+
+      applySyms :: (Expr Buf, [(W256, Expr Byte)]) -> Expr Buf
+      applySyms (buf, syms) = foldl' (\acc (idx, b) -> writeByte (Lit idx) b acc) buf syms
+
 
 -- ** Storage ** -----------------------------------------------------------------------------------
 
@@ -454,7 +497,7 @@ bytesToW256 = word . BS.pack
 
 padBytesLeft :: Int -> [Expr Byte] -> [Expr Byte]
 padBytesLeft n bs
-  | length bs > n = take n bs
+  | length bs > n = Prelude.take n bs
   | length bs == n = bs
   | otherwise = padBytesLeft n (LitByte 0 : bs)
 
