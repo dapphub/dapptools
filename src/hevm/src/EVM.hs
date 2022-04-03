@@ -127,7 +127,7 @@ data Trace = Trace
   deriving (Show)
 
 data TraceData
-  = EventTrace (Expr Logs)
+  = EventTrace (Expr EWord) (Expr Buf) [Expr EWord]
   | FrameTrace FrameContext
   | QueryTrace Query
   | ErrorTrace Error
@@ -217,10 +217,6 @@ data VMOpts = VMOpts
   , vmoptAllowFFI :: Bool
   } deriving Show
 
--- | A log entry
---data Log = Log Addr (Expr Buf) [Expr EWord]
-  --deriving (Show)
-
 -- | An entry in the VM's "call/create stack"
 data Frame = Frame
   { _frameContext   :: FrameContext
@@ -301,11 +297,20 @@ data ContractCode
   | RuntimeCode (Expr Buf)           -- ^ "Instance" code, after contract creation
   deriving (Show)
 
-  {- TODO: this is what Contractcode should look like actually
-data ContractCode
-  = InitCode ([Expr Byte], Expr Buf)  -- ^ "Constructor" code, during contract creation
-  | RuntimeCode [Expr Byte]           -- ^ "Instance" code, after contract creation
-  deriving (Show)
+  {-
+      TODO: this is what Contractcode should look like actually. This reflects
+      the structure of code output by solc where:
+
+        - initcode has concrete code, followed by an abstract data "section"
+        - runtimecode has a fixed length, but may contain fixed size symbolic regions (due to immutable)
+
+      hopefully we do not have to deal with dynamic immutable before we get a real data section...
+
+      data ContractCode
+        = InitCode (BytesString, Expr Buf)  -- ^ "Constructor" code, during contract creation
+        | RuntimeCode [Expr Byte]           -- ^ "Instance" code, after contract creation
+        deriving (Show)
+
   -}
 
 -- runtime err when used for symbolic code
@@ -659,17 +664,16 @@ exec1 = do
               if length xs < n
               then underrun
               else
-                forceConcrete2 (xOffset', xSize') $ \(xOffset, xSize) -> do
+                forceConcrete2 (xOffset', xSize') "LOG" $ \(xOffset, xSize) -> do
                     let (topics, xs') = splitAt n xs
                         bytes         = readMemory (num xOffset) (num xSize) vm
-                        log           = Log self bytes topics
-
+                        logs'         = Log self bytes topics (view logs vm)
                     burn (g_log + g_logdata * (num xSize) + num n * g_logtopic) $
                       accessMemoryRange fees xOffset xSize $ do
-                        traceLog log
+                        traceTopLog logs'
                         next
                         assign (state . stack) xs'
-                        pushToSequence logs log
+                        assign logs logs'
             _ ->
               underrun
 
@@ -2454,9 +2458,9 @@ zipperRootForest z =
 traceForest :: VM -> Forest Trace
 traceForest = view (traces . to zipperRootForest)
 
-traceLog :: (MonadState VM m) => Expr Logs -> m ()
-traceLog log = do
-  trace <- withTraceLocation (EventTrace log)
+traceTopLog :: (MonadState VM m) => Expr Logs -> m ()
+traceTopLog (Log addr bytes topics _) = do
+  trace <- withTraceLocation (EventTrace addr bytes topics)
   modifying traces $
     \t -> Zipper.nextSpace (Zipper.insert (Node trace []) t)
 

@@ -324,43 +324,9 @@ data Expr (a :: EType) where
 
   EmptyLog       :: Expr Logs
 
-  Log0           :: Expr EWord         -- offset
-                 -> Expr EWord         -- size
-                 -> Expr Buf           -- memory
-                 -> Expr Logs          -- old logs
-                 -> Expr Logs          -- new logs
-
-  Log1           :: Expr EWord         -- offset
-                 -> Expr EWord         -- size
-                 -> Expr EWord         -- topic
-                 -> Expr Buf           -- memory
-                 -> Expr Logs          -- old logs
-                 -> Expr Logs          -- new logs
-
-  Log2           :: Expr EWord         -- offset
-                 -> Expr EWord         -- size
-                 -> Expr EWord         -- topic 1
-                 -> Expr EWord         -- topic 2
-                 -> Expr Buf           -- memory
-                 -> Expr Logs          -- old logs
-                 -> Expr Logs          -- new logs
-
-  Log3           :: Expr EWord         -- offset
-                 -> Expr EWord         -- size
-                 -> Expr EWord         -- topic 1
-                 -> Expr EWord         -- topic 2
-                 -> Expr EWord         -- topic 3
-                 -> Expr Buf           -- memory
-                 -> Expr Logs          -- old logs
-                 -> Expr Logs          -- new logs
-
-  Log4           :: Expr EWord         -- offset
-                 -> Expr EWord         -- size
-                 -> Expr EWord         -- topic 1
-                 -> Expr EWord         -- topic 2
-                 -> Expr EWord         -- topic 3
-                 -> Expr EWord         -- topic 4
-                 -> Expr Buf           -- memory
+  Log            :: Expr EWord         -- address
+                 -> Expr Buf           -- data
+                 -> [Expr EWord]       -- topics
                  -> Expr Logs          -- old logs
                  -> Expr Logs          -- new logs
 
