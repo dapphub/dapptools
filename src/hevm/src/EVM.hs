@@ -667,7 +667,7 @@ exec1 = do
                 forceConcrete2 (xOffset', xSize') "LOG" $ \(xOffset, xSize) -> do
                     let (topics, xs') = splitAt n xs
                         bytes         = readMemory (num xOffset) (num xSize) vm
-                        logs'         = Log self bytes topics (view logs vm)
+                        logs'         = Log (litAddr self) bytes topics (view logs vm)
                     burn (g_log + g_logdata * (num xSize) + num n * g_logtopic) $
                       accessMemoryRange fees xOffset xSize $ do
                         traceTopLog logs'
@@ -1023,10 +1023,10 @@ exec1 = do
                 if num availableGas <= g_callstipend
                   then finishFrame (FrameErrored (OutOfGas availableGas (num g_callstipend)))
                   else do
-                    let original = case view storage this of
-                                     ConcreteStore _ -> fromMaybe 0 (Map.lookup (forceLit x) (view origStorage this))
-                                     _ -> 0 -- we don't use this value anywhere anyway
-                        storage_cost = case (maybeLitWord current, maybeLitWord new) of
+                    let original = case readStorage (ConcreteStore $ view origStorage this) x of
+                                     Just (Lit v) -> v
+                                     _ -> 0
+                    let storage_cost = case (maybeLitWord current, maybeLitWord new) of
                                  (Just current', Just new') ->
                                     if (current' == new') then g_sload
                                     else if (current' == original) && (original == 0) then g_sset
