@@ -249,7 +249,7 @@ data FrameContext
 data FrameState = FrameState
   { _contract     :: Addr
   , _codeContract :: Addr
-  , _code         :: Expr Buf
+  , _code         :: ContractCode
   , _pc           :: Int
   , _stack        :: [Expr EWord]
   , _memory       :: Expr Buf
@@ -288,30 +288,25 @@ data SubState = SubState
   }
   deriving (Show)
 
--- | A contract is either in creation (running its "constructor") or
--- post-creation, and code in these two modes is treated differently
--- by instructions like @EXTCODEHASH@, so we distinguish these two
--- code types.
+{- |
+  A contract is either in creation (running its "constructor") or
+  post-creation, and code in these two modes is treated differently
+  by instructions like @EXTCODEHASH@, so we distinguish these two
+  code types.
+
+  The definition follows the structure of code output by solc. We need to use
+  some heuristics here to deal with symbolic data regions that may be present
+  in the bytecode since the fully abstract case is impractical:
+
+  - initcode has concrete code, followed by an abstract data "section"
+  - runtimecode has a fixed length, but may contain fixed size symbolic regions (due to immutable)
+
+  hopefully we do not have to deal with dynamic immutable before we get a real data section...
+-}
 data ContractCode
-  = InitCode (Expr Buf)  -- ^ "Constructor" code, during contract creation
-  | RuntimeCode (Expr Buf)           -- ^ "Instance" code, after contract creation
+  = InitCode (ByteString, Expr Buf)  -- ^ "Constructor" code, during contract creation
+  | RuntimeCode [Expr Byte]          -- ^ "Instance" code, after contract creation
   deriving (Show)
-
-  {-
-      TODO: this is what Contractcode should look like actually. This reflects
-      the structure of code output by solc where:
-
-        - initcode has concrete code, followed by an abstract data "section"
-        - runtimecode has a fixed length, but may contain fixed size symbolic regions (due to immutable)
-
-      hopefully we do not have to deal with dynamic immutable before we get a real data section...
-
-      data ContractCode
-        = InitCode (BytesString, Expr Buf)  -- ^ "Constructor" code, during contract creation
-        | RuntimeCode [Expr Byte]           -- ^ "Instance" code, after contract creation
-        deriving (Show)
-
-  -}
 
 -- runtime err when used for symbolic code
 instance Eq ContractCode where
