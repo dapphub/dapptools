@@ -7,7 +7,6 @@ import EVM (balance, initialContract)
 import EVM.FeeSchedule
 import EVM.Precompiled (execute)
 import EVM.RLP
-import EVM.Symbolic (forceLit)
 import EVM.Types
 
 import Control.Lens
@@ -60,7 +59,7 @@ ecrec v r s e = num . word <$> EVM.Precompiled.execute 1 input 32
 
 sender :: Int -> Transaction -> Maybe Addr
 sender chainId tx = ecrec v' (txR tx) (txS tx) hash
-  where hash = keccak (signingData chainId tx)
+  where hash = keccak' (signingData chainId tx)
         v    = txV tx
         v'   = if v == 27 || v == 28 then v
                else 27 + v
@@ -186,7 +185,7 @@ newAccount :: EVM.Contract
 newAccount = initialContract $ EVM.RuntimeCode mempty
 
 -- | Increments origin nonce and pays gas deposit
-setupTx :: Addr -> Addr -> Word -> Word -> Map Addr EVM.Contract -> Map Addr EVM.Contract
+setupTx :: Addr -> Addr -> W256 -> W256 -> Map Addr EVM.Contract -> Map Addr EVM.Contract
 setupTx origin coinbase gasPrice gasLimit prestate =
   let gasCost = gasPrice * gasLimit
   in (Map.adjust ((over EVM.nonce   (+ 1))
@@ -205,15 +204,14 @@ initTx vm = let
     gasLimit = view (EVM.tx . EVM.txgaslimit) vm
     coinbase = view (EVM.block . EVM.coinbase) vm
     value    = view (EVM.state . EVM.callvalue) vm
-    toContract = initialContract (EVM.InitCode (view (EVM.state . EVM.code) vm))
+    toContract = initialContract (view (EVM.state . EVM.code) vm)
     preState = setupTx origin coinbase gasPrice gasLimit $ view (EVM.env . EVM.contracts) vm
     oldBalance = view (accountAt toAddr . balance) preState
     creation = view (EVM.tx . EVM.isCreate) vm
-    initState =
-      (if isJust (maybeLitWord value)
-       then (Map.adjust (over balance (subtract (forceLit value))) origin)
-        . (Map.adjust (over balance (+ (forceLit value))) toAddr)
-       else id)
+    initState = (case unlit value of
+      Just v -> ((Map.adjust (over balance (subtract v))) origin)
+              . (Map.adjust (over balance (+ v))) toAddr
+      Nothing -> id)
       . (if creation
          then Map.insert toAddr (toContract & balance .~ oldBalance)
          else touchAccount toAddr)

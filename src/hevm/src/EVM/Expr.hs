@@ -190,11 +190,11 @@ readByte i@(Lit x) (CopySlice (Lit dstOffset) (Lit srcOffset) (Lit size) src dst
 readByte i@(Lit x) buf@(CopySlice (Lit dstOffset) _ (Lit size) _ dst)
   = if num x < dstOffset || dstOffset + size < num x
     then readByte i dst
-    else ReadByte (lit x) buf
+    else ReadByte (Lit x) buf
 readByte i@(Lit x) buf@(CopySlice (Lit dstOffset) _ _ _ dst)
   = if num x < dstOffset
     then readByte i dst
-    else ReadByte (lit x) buf
+    else ReadByte (Lit x) buf
 
 -- fully abstract reads
 readByte i buf = ReadByte i buf
@@ -292,7 +292,6 @@ bufLength buf = case go 0 buf of
     go l (CopySlice _ (Lit dstOffset) (Lit size) _ dst) = go (max (dstOffset + size - 1) l) dst
     go _ _ = Nothing
 
-
 -- | Returns the smallest possible size of a given buffer.
 --
 -- All data past this index will be symbolic (i.e. unexecutable).
@@ -316,17 +315,6 @@ minLength = go 0
     go l (CopySlice _ _ _ _ dst) = go l dst
 
 
--- | Returns the base constructor upon which the buffer was built
-base :: Expr Buf -> Expr Buf
-base = \case
-  EmptyBuf -> EmptyBuf
-  AbstractBuf -> AbstractBuf
-  ConcreteBuf bs -> ConcreteBuf bs
-  WriteWord _ _ prev -> base prev
-  WriteByte _ _ prev -> base prev
-  CopySlice _ _ _ _ dst -> base dst
-
-
 word256At
   :: Functor f
   => Expr EWord -> (Expr EWord -> f (Expr EWord))
@@ -335,28 +323,20 @@ word256At i = lens getter setter where
   getter = readWord i
   setter m x = writeWord i x m
 
--- | Left fold over a buffer from 0 to idx (inclusive)
---
--- Currently only concrete idx values are accepted. We could maybe lift this
--- restriction by adding a lambda abstraction to Expr
-foldBufTo :: (a -> Expr Byte -> a) -> a -> W256 -> Expr Buf -> a
-foldBufTo f start idx buf = go start 0
-  where
-    go acc 0 = go (f acc (readByte (Lit 0) buf)) 1
-    go acc i = if i > idx
-                 then acc
-                 else go (f acc (readByte (Lit i) buf)) (i + 1)
 
 -- | Returns the first n bytes of buf
 take :: W256 -> Expr Buf -> Expr Buf
 take n = slice (Lit 0) (Lit n)
 
+
 -- | Returns the last n bytes of buf
 drop :: W256 -> Expr Buf -> Expr Buf
 drop n buf = slice (sub (Lit n) (sub (bufLength buf) (Lit 1))) (Lit n) buf
 
+
 slice :: Expr EWord -> Expr EWord -> Expr Buf -> Expr Buf
 slice offset size src = copySlice offset (Lit 0) size src EmptyBuf
+
 
 toList :: Expr Buf -> Maybe [Expr Byte]
 toList EmptyBuf = Just []
@@ -368,6 +348,7 @@ toList buf = case bufLength buf of
   where
     go 0 = [readByte (Lit 0) buf]
     go i = readByte (Lit i) buf : go (i - 1)
+
 
 fromList :: [Expr Byte] -> Expr Buf
 fromList bs = case Prelude.and (fmap isLitByte bs) of

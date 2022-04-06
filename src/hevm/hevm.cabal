@@ -17,9 +17,9 @@ license:
 license-file:
   COPYING
 author:
-  Mikael Brockman, Martin Lundfall, David Terry
+  Mikael Brockman, Martin Lundfall, d-xo
 maintainer:
-  mikael@brockman.se, martin.lundfall@gmail.com
+  mikael@brockman.se, martin.lundfall@gmail.com, git@d-xo.org
 category:
   Ethereum
 build-type:

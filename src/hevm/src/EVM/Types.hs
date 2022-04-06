@@ -442,22 +442,13 @@ deriving instance Show (Expr a)
 deriving instance Eq (Expr a)
 deriving instance Ord (Expr a)
 
--- TODO: are these bad? should I maybe define a typeclass that defines the evm
--- encoding for a restricted set of types?
-lit :: Enum a => a -> Expr EWord
-lit = Lit . toEnum . fromEnum
-
-litByte :: Enum a => a -> Expr Byte
-litByte = LitByte . toEnum . fromEnum
-
-unlit :: Enum a => Expr EWord -> Maybe a
-unlit (Lit x) = Just . toEnum . fromEnum $ x
+unlit :: Expr EWord -> Maybe W256
+unlit (Lit x) = Just x
 unlit _ = Nothing
 
-unlitByte :: Enum a => Expr Byte -> Maybe a
-unlitByte (LitByte x) = Just . toEnum . fromEnum $ x
+unlitByte :: Expr Byte -> Maybe Word8
+unlitByte (LitByte x) = Just x
 unlitByte _ = Nothing
-
 
 newtype ByteStringS = ByteStringS ByteString deriving (Eq)
 
@@ -736,8 +727,8 @@ padRight' n xs = xs <> replicate (n - length xs) '0'
                 --else mappend xs (replicate (n - m) 0)
   --where m = length xs
 
-padLeft' :: (Num a) => Int -> [a] -> [a]
-padLeft' n xs = replicate (n - length xs) 0 <> xs
+padLeft' :: Int -> [Expr Byte] -> [Expr Byte]
+padLeft' n xs = replicate (n - length xs) (LitByte 0) <> xs
 
 word256 :: ByteString -> Word256
 word256 xs = case Cereal.runGet m (padLeft 32 xs) of
@@ -808,11 +799,12 @@ word32 :: [Word8] -> Word32
 word32 xs = sum [ fromIntegral x `shiftL` (8*n)
                 | (n, x) <- zip [0..] (reverse xs) ]
 
-keccak :: ByteString -> W256
-keccak =
-  keccakBytes
-    >>> BS.take 32
-    >>> word
+keccak :: Expr Buf -> Expr EWord
+keccak (ConcreteBuf bs) = Lit $ keccak' bs
+keccak buf = Keccak buf
+
+keccak' :: ByteString -> W256
+keccak' = keccakBytes >>> BS.take 32 >>> word
 
 abiKeccak :: ByteString -> Word32
 abiKeccak =
@@ -836,3 +828,11 @@ regexMatches regexSource =
     regex = Regex.makeRegexOpts compOpts execOpts (Text.unpack regexSource)
   in
     Regex.matchTest regex . Seq.fromList . Text.unpack
+
+-- | A total variant of (!!)
+(!?) :: Foldable f => f a -> Int -> Maybe a
+xs !? n
+  | n < 0     = Nothing
+  | otherwise = foldr (\x r k -> case k of
+                                   0 -> Just x
+                                   _ -> r (k-1)) (const Nothing) xs n

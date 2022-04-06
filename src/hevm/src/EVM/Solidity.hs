@@ -63,8 +63,6 @@ module EVM.Solidity
 
 import EVM.ABI
 import EVM.Types
-import EVM.Expr (bufLength)
-import qualified EVM.Expr as Expr
 
 import Control.Applicative
 import Control.Monad
@@ -364,8 +362,8 @@ readCombinedJSON json = do
       in SolcContract {
         _runtimeCode      = theRuntimeCode,
         _creationCode     = theCreationCode,
-        _runtimeCodehash  = keccak (stripBytecodeMetadata theRuntimeCode),
-        _creationCodehash = keccak (stripBytecodeMetadata theCreationCode),
+        _runtimeCodehash  = keccak' (stripBytecodeMetadata theRuntimeCode),
+        _creationCodehash = keccak' (stripBytecodeMetadata theCreationCode),
         _runtimeSrcmap    = force "internal error: srcmap-runtime" (makeSrcMaps (x ^?! key "srcmap-runtime" . _String)),
         _creationSrcmap   = force "internal error: srcmap" (makeSrcMaps (x ^?! key "srcmap" . _String)),
         _contractName = s,
@@ -407,8 +405,8 @@ readStdJSON json = do
       in (s <> ":" <> c, (SolcContract {
         _runtimeCode      = theRuntimeCode,
         _creationCode     = theCreationCode,
-        _runtimeCodehash  = keccak (stripBytecodeMetadata theRuntimeCode),
-        _creationCodehash = keccak (stripBytecodeMetadata theCreationCode),
+        _runtimeCodehash  = keccak' (stripBytecodeMetadata theRuntimeCode),
+        _creationCodehash = keccak' (stripBytecodeMetadata theCreationCode),
         _runtimeSrcmap    = force "internal error: srcmap-runtime" (makeSrcMaps (runtime ^?! key "sourceMap" . _String)),
         _creationSrcmap   = force "internal error: srcmap" (makeSrcMaps (creation ^?! key "sourceMap" . _String)),
         _contractName = s <> ":" <> c,
@@ -446,7 +444,7 @@ mkEventMap abis = Map.fromList $
   let
     relevant = filter (\y -> "event" == y ^?! key "type" . _String) abis
     f abi =
-     ( keccak (encodeUtf8 (signature abi))
+     ( keccak' (encodeUtf8 (signature abi))
      , Event
        (abi ^?! key "name" . _String)
        (case abi ^?! key "anonymous" . _Bool of
@@ -468,7 +466,7 @@ mkErrorMap abis = Map.fromList $
   let
     relevant = filter (\y -> "error" == y ^?! key "type" . _String) abis
     f abi =
-     ( stripKeccak $ keccak (encodeUtf8 (signature abi))
+     ( stripKeccak $ keccak' (encodeUtf8 (signature abi))
      , SolError
        (abi ^?! key "name" . _String)
        (map (\y -> ( force "internal error: type" (parseTypeName' y)))
@@ -679,19 +677,18 @@ stripBytecodeMetadata bs =
       Nothing -> bs
       Just (b, _) -> b
 
-stripBytecodeMetadataSym :: Expr Buf -> Expr Buf
-stripBytecodeMetadataSym buf = case Expr.toList buf of
-  Just bytes -> let
-      concretes :: [Maybe Word8]
-      concretes = fmap unlitByte bytes
-      bzzrs :: [[Maybe Word8]]
-      bzzrs = fmap (Just) . BS.unpack <$> knownBzzrPrefixes
-      candidates = (flip Data.List.isInfixOf concretes) <$> bzzrs
-    in case elemIndex True candidates of
-      Nothing -> buf
-      Just i -> let Just ind = infixIndex (bzzrs !! i) concretes
-                in Expr.take (num ind) buf
-  _ -> error "cannot strip bytecode from a buffer with an abstract length"
+stripBytecodeMetadataSym :: [Expr Byte] -> [Expr Byte]
+stripBytecodeMetadataSym b =
+  let
+    concretes :: [Maybe Word8]
+    concretes = unlitByte <$> b
+    bzzrs :: [[Maybe Word8]]
+    bzzrs = fmap (Just) . BS.unpack <$> knownBzzrPrefixes
+    candidates = (flip Data.List.isInfixOf concretes) <$> bzzrs
+  in case elemIndex True candidates of
+    Nothing -> b
+    Just i -> let Just ind = infixIndex (bzzrs !! i) concretes
+              in take ind b
 
 infixIndex :: (Eq a) => [a] -> [a] -> Maybe Int
 infixIndex needle haystack = findIndex (isPrefixOf needle) (tails haystack)

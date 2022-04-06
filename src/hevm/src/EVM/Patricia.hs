@@ -5,7 +5,7 @@
 module EVM.Patricia where
 
 import EVM.RLP
-import EVM.Types hiding (Literal)
+import EVM.Types
 
 import Control.Monad.Free
 import Control.Monad.State
@@ -84,7 +84,7 @@ instance Show (NodeDB Node) where
 putNode :: Node -> NodeDB Ref
 putNode node =
   let bytes = rlpencode $ rlpNode node
-      digest = word256Bytes $ keccak bytes
+      digest = word256Bytes $ keccak' bytes
   in if BS.length bytes < 32
     then return $ Literal node
     else do
@@ -226,5 +226,5 @@ insertValues inputs =
 calcRoot :: [(ByteString, ByteString)] -> Maybe ByteString
 calcRoot vs = case insertValues vs of
      Just (Hash b) -> Just b
-     Just (Literal n) -> Just $ word256Bytes $ keccak $ rlpencode $ rlpNode n
+     Just (Literal n) -> Just $ word256Bytes $ keccak' $ rlpencode $ rlpNode n
      Nothing -> Nothing

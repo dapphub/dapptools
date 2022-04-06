@@ -7,8 +7,7 @@ module EVM.Fetch where
 import Prelude hiding (Word)
 
 import EVM.ABI
-import EVM.Types    (Addr, w256, W256, hexText, Word, Buffer(..))
-import EVM.Symbolic (litWord)
+import EVM.Types    (Addr, W256, hexText, Expr(..))
 import EVM          (IsUnique(..), EVM, Contract, Block, initialContract, nonce, balance, external)
 import qualified EVM.FeeSchedule as FeeSchedule
 
@@ -17,9 +16,6 @@ import qualified EVM
 import Control.Lens hiding ((.=))
 import Control.Monad.Reader
 import Control.Monad.Trans.Maybe
-import Data.SBV.Trans.Control
-import qualified Data.SBV.Internals as SBV
-import Data.SBV.Trans hiding (Word)
 import Data.Aeson
 import Data.Aeson.Lens
 import qualified Data.ByteString as BS

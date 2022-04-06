@@ -9,7 +9,7 @@ import EVM.RLP
 import EVM.Types
 
 import Control.Lens    ((^?), ix)
-import Data.Bits       (Bits (..), shiftL, shiftR)
+import Data.Bits       (Bits (..), shiftR)
 import Data.ByteString (ByteString)
 import Data.Maybe      (fromMaybe)
 import Data.Word       (Word8)
@@ -102,8 +102,8 @@ x0 ^ y0 | y0 < 0    = errorWithoutStackTrace "Negative exponent"
                   | otherwise   = g (x * x) ((y - 1) `shiftR` 1) (x * z)
 
 createAddress :: Addr -> W256 -> Addr
-createAddress a n = num $ keccak $ rlpList [rlpAddrFull a, rlpWord256 n]
+createAddress a n = num $ keccak' $ rlpList [rlpAddrFull a, rlpWord256 n]
 
 create2Address :: Addr -> W256 -> ByteString -> Addr
-create2Address a s b = num $ keccak $ mconcat
-  [BS.singleton 0xff, word160Bytes a, word256Bytes $ num s, word256Bytes $ keccak b]
+create2Address a s b = num $ keccak' $ mconcat
+  [BS.singleton 0xff, word160Bytes a, word256Bytes $ num s, word256Bytes $ keccak' b]
