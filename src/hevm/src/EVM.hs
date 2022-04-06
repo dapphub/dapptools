@@ -575,7 +575,7 @@ exec1 = do
           vmx <- get
           case view (state.stack) vmx of
             (x:_) -> case x of
-              Lit (num -> x') -> case x' of
+              Lit (num -> x' :: Integer) -> case x' of
                 0 -> do
                   fetchAccount self $ \_ -> do
                     touchAccount self

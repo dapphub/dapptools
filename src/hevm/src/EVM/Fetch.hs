@@ -8,13 +8,12 @@ import Prelude hiding (Word)
 
 import EVM.ABI
 import EVM.Types    (Addr, W256, hexText, Expr(..))
-import EVM          (IsUnique(..), EVM, Contract, Block, initialContract, nonce, balance, external)
+import EVM          (EVM, Contract, Block, initialContract, nonce, balance, external)
 import qualified EVM.FeeSchedule as FeeSchedule
 
 import qualified EVM
 
 import Control.Lens hiding ((.=))
-import Control.Monad.Reader
 import Control.Monad.Trans.Maybe
 import Data.Aeson
 import Data.Aeson.Lens
@@ -101,7 +100,7 @@ fetchQuery n f q = do
 parseBlock :: (AsValue s, Show s) => s -> Maybe EVM.Block
 parseBlock j = do
   coinbase   <- readText <$> j ^? key "miner" . _String
-  timestamp  <- litWord . readText <$> j ^? key "timestamp" . _String
+  timestamp  <- Lit . readText <$> j ^? key "timestamp" . _String
   number     <- readText <$> j ^? key "number" . _String
   difficulty <- readText <$> j ^? key "difficulty" . _String
   gasLimit   <- readText <$> j ^? key "gasLimit" . _String
@@ -126,16 +125,15 @@ fetchContractWithSession n url addr sess = runMaybeT $ do
   theBalance <- MaybeT $ fetch (QueryBalance addr)
 
   return $
-    initialContract (EVM.RuntimeCode (ConcreteBuffer theCode))
-      & set nonce    (w256 theNonce)
-      & set balance  (w256 theBalance)
+    initialContract (EVM.RuntimeCode (fmap LitByte $ BS.unpack theCode))
+      & set nonce    theNonce
+      & set balance  theBalance
       & set external True
 
 fetchSlotWithSession
-  :: BlockNumber -> Text -> Session -> Addr -> W256 -> IO (Maybe Word)
+  :: BlockNumber -> Text -> Session -> Addr -> W256 -> IO (Maybe W256)
 fetchSlotWithSession n url sess addr slot =
-  fmap w256 <$>
-    fetchQuery n (fetchWithSession url sess) (QuerySlot addr slot)
+  fetchQuery n (fetchWithSession url sess) (QuerySlot addr slot)
 
 fetchBlockWithSession
   :: BlockNumber -> Text -> Session -> IO (Maybe Block)
@@ -152,20 +150,20 @@ fetchContractFrom n url addr =
   Session.withAPISession
     (fetchContractWithSession n url addr)
 
-fetchSlotFrom :: BlockNumber -> Text -> Addr -> W256 -> IO (Maybe Word)
+fetchSlotFrom :: BlockNumber -> Text -> Addr -> W256 -> IO (Maybe W256)
 fetchSlotFrom n url addr slot =
   Session.withAPISession
     (\s -> fetchSlotWithSession n url s addr slot)
 
 http :: BlockNumber -> Text -> Fetcher
-http n url = oracle Nothing (Just (n, url)) True
+http n url = oracle (Just (n, url)) True
 
 zero :: Fetcher
-zero = oracle Nothing Nothing True
+zero = oracle Nothing True
 
 -- smtsolving + (http or zero)
-oracle :: Maybe SBV.State -> Maybe (BlockNumber, Text) -> Bool -> Fetcher
-oracle smtstate info ensureConsistency q = do
+oracle :: Maybe (BlockNumber, Text) -> Bool -> Fetcher
+oracle info ensureConsistency q = do
   case q of
     EVM.PleaseDoFFI vals continue -> case vals of
        cmd : args -> do
@@ -174,13 +172,13 @@ oracle smtstate info ensureConsistency q = do
             AbiTuple (RegularVector.fromList [ AbiBytesDynamic . hexText . pack $ stdout'])
        _ -> error (show vals)
 
-    EVM.PleaseAskSMT branchcondition pathconditions continue ->
-      case smtstate of
-        Nothing -> return $ continue EVM.Unknown
-        Just state -> flip runReaderT state $ SBV.runQueryT $ do
-         let pathconds = sAnd pathconditions
-         -- Is is possible to satisfy the condition?
-         continue <$> checkBranch pathconds branchcondition ensureConsistency
+    --EVM.PleaseAskSMT branchcondition pathconditions continue ->
+      --case smtstate of
+        --Nothing -> return $ continue EVM.Unknown
+        --Just state -> flip runReaderT state $ SBV.runQueryT $ do
+         --let pathconds = sAnd pathconditions
+         ---- Is is possible to satisfy the condition?
+         --continue <$> checkBranch pathconds branchcondition ensureConsistency
 
     -- if we are using a symbolic storage model,
     -- we generate a new array to the fetched contract here
@@ -191,34 +189,26 @@ oracle smtstate info ensureConsistency q = do
       case contract of
         Just x -> case model of
           EVM.ConcreteS -> return $ continue x
-          EVM.InitialS  -> return $ continue $ x
-             & set EVM.storage (EVM.Symbolic [] $ SBV.sListArray 0 [])
-          EVM.SymbolicS -> case smtstate of
-            Nothing -> return (continue $ x
-                               & set EVM.storage (EVM.Symbolic [] $ SBV.sListArray 0 []))
+          EVM.InitialS  -> return $ continue $ x & set EVM.storage EmptyStore
+          EVM.SymbolicS -> return $ continue $ x & set EVM.storage AbstractStore
 
-            Just state ->
-              flip runReaderT state $ SBV.runQueryT $ do
-                store <- freshArray_ Nothing
-                return $ continue $ x
-                  & set EVM.storage (EVM.Symbolic [] store)
         Nothing -> error ("oracle error: " ++ show q)
 
-    EVM.PleaseMakeUnique val pathconditions continue ->
-          case smtstate of
-            Nothing -> return $ continue Multiple
-            Just state -> flip runReaderT state $ SBV.runQueryT $ do
-              constrain $ sAnd $ pathconditions <> [val .== val] -- dummy proposition just to make sure `val` is defined when we do `getValue` later.
-              checkSat >>= \case
-                Sat -> do
-                  val' <- getValue val
-                  s    <- checksat (val ./= literal val')
-                  case s of
-                    Unsat -> pure $ continue $ Unique val'
-                    _ -> pure $ continue Multiple
-                Unsat -> pure $ continue InconsistentU
-                Unk -> pure $ continue TimeoutU
-                DSat _ -> error "unexpected DSAT"
+    --EVM.PleaseMakeUnique val pathconditions continue ->
+          --case smtstate of
+            --Nothing -> return $ continue Multiple
+            --Just state -> flip runReaderT state $ SBV.runQueryT $ do
+              --constrain $ sAnd $ pathconditions <> [val .== val] -- dummy proposition just to make sure `val` is defined when we do `getValue` later.
+              --checkSat >>= \case
+                --Sat -> do
+                  --val' <- getValue val
+                  --s    <- checksat (val ./= literal val')
+                  --case s of
+                    --Unsat -> pure $ continue $ Unique val'
+                    --_ -> pure $ continue Multiple
+                --Unsat -> pure $ continue InconsistentU
+                --Unk -> pure $ continue TimeoutU
+                --DSat _ -> error "unexpected DSAT"
 
 
     EVM.PleaseFetchSlot addr slot continue ->
@@ -232,63 +222,63 @@ oracle smtstate info ensureConsistency q = do
 
 type Fetcher = EVM.Query -> IO (EVM ())
 
-checksat :: SBool -> Query CheckSatResult
-checksat b = do push 1
-                constrain b
-                m <- checkSat
-                pop 1
-                return m
+--checksat :: SBool -> Query CheckSatResult
+--checksat b = do push 1
+                --constrain b
+                --m <- checkSat
+                --pop 1
+                --return m
 
 -- | Checks which branches are satisfiable, checking the pathconditions for consistency
 -- if the third argument is true.
 -- When in debug mode, we do not want to be able to navigate to dead paths,
 -- but for normal execution paths with inconsistent pathconditions
 -- will be pruned anyway.
-checkBranch :: SBool -> SBool -> Bool -> Query EVM.BranchCondition
-checkBranch pathconds branchcondition False = do
-  constrain pathconds
-  checksat branchcondition >>= \case
-     -- the condition is unsatisfiable
-     Unsat -> -- if pathconditions are consistent then the condition must be false
-            return $ EVM.Case False
-     -- Sat means its possible for condition to hold
-     Sat -> -- is its negation also possible?
-            checksat (sNot branchcondition) >>= \case
-               -- No. The condition must hold
-               Unsat -> return $ EVM.Case True
-               -- Yes. Both branches possible
-               Sat -> return EVM.Unknown
-               -- Explore both branches in case of timeout
-               Unk -> return EVM.Unknown
-               DSat _ -> error "checkBranch: unexpected SMT result"
-     -- If the query times out, we simply explore both paths
-     Unk -> return EVM.Unknown
-     DSat _ -> error "checkBranch: unexpected SMT result"
+--checkBranch :: SBool -> SBool -> Bool -> Query EVM.BranchCondition
+--checkBranch pathconds branchcondition False = do
+  --constrain pathconds
+  --checksat branchcondition >>= \case
+     ---- the condition is unsatisfiable
+     --Unsat -> -- if pathconditions are consistent then the condition must be false
+            --return $ EVM.Case False
+     ---- Sat means its possible for condition to hold
+     --Sat -> -- is its negation also possible?
+            --checksat (sNot branchcondition) >>= \case
+               ---- No. The condition must hold
+               --Unsat -> return $ EVM.Case True
+               ---- Yes. Both branches possible
+               --Sat -> return EVM.Unknown
+               ---- Explore both branches in case of timeout
+               --Unk -> return EVM.Unknown
+               --DSat _ -> error "checkBranch: unexpected SMT result"
+     ---- If the query times out, we simply explore both paths
+     --Unk -> return EVM.Unknown
+     --DSat _ -> error "checkBranch: unexpected SMT result"
 
-checkBranch pathconds branchcondition True = do
-  constrain pathconds
-  checksat branchcondition >>= \case
-     -- the condition is unsatisfiable
-     Unsat -> -- are the pathconditions even consistent?
-              checksat (sNot branchcondition) >>= \case
-                -- No. We are on an inconsistent path.
-                Unsat -> return EVM.Inconsistent
-                -- Yes. The condition must be false.
-                Sat -> return $ EVM.Case False
-                -- Assume the negated condition is still possible.
-                Unk -> return $ EVM.Case False
-                DSat _ -> error "checkBranch: unexpected SMT result"
-     -- Sat means its possible for condition to hold
-     Sat -> -- is its negation also possible?
-            checksat (sNot branchcondition) >>= \case
-               -- No. The condition must hold
-               Unsat -> return $ EVM.Case True
-               -- Yes. Both branches possible
-               Sat -> return EVM.Unknown
-               -- Explore both branches in case of timeout
-               Unk -> return EVM.Unknown
-               DSat _ -> error "checkBranch: unexpected SMT result"
+--checkBranch pathconds branchcondition True = do
+  --constrain pathconds
+  --checksat branchcondition >>= \case
+     ---- the condition is unsatisfiable
+     --Unsat -> -- are the pathconditions even consistent?
+              --checksat (sNot branchcondition) >>= \case
+                ---- No. We are on an inconsistent path.
+                --Unsat -> return EVM.Inconsistent
+                ---- Yes. The condition must be false.
+                --Sat -> return $ EVM.Case False
+                ---- Assume the negated condition is still possible.
+                --Unk -> return $ EVM.Case False
+                --DSat _ -> error "checkBranch: unexpected SMT result"
+     ---- Sat means its possible for condition to hold
+     --Sat -> -- is its negation also possible?
+            --checksat (sNot branchcondition) >>= \case
+               ---- No. The condition must hold
+               --Unsat -> return $ EVM.Case True
+               ---- Yes. Both branches possible
+               --Sat -> return EVM.Unknown
+               ---- Explore both branches in case of timeout
+               --Unk -> return EVM.Unknown
+               --DSat _ -> error "checkBranch: unexpected SMT result"
 
-     -- If the query times out, we simply explore both paths
-     Unk -> return EVM.Unknown
-     DSat _ -> error "Internal Error: unexpected SMT result"
+     ---- If the query times out, we simply explore both paths
+     --Unk -> return EVM.Unknown
+     --DSat _ -> error "Internal Error: unexpected SMT result"
