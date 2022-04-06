@@ -33,7 +33,7 @@ import Control.Monad.State.Strict (runState, liftIO, StateT)
 import qualified Control.Monad.State.Class as State
 import qualified EVM.Exec
 import Data.Text (Text)
-import EVM.Types (Buffer)
+import EVM.Types (Expr, EType(..))
 
 import EVM (EVM, VM, VMResult (VMFailure, VMSuccess), Error (Query, Choose), Query, Choose)
 import qualified EVM
@@ -85,7 +85,7 @@ evmIO :: StateT VM IO a -> Stepper a
 evmIO = singleton . IOAct
 
 -- | Run the VM until final result, resolving all queries
-execFully :: Stepper (Either Error Buffer)
+execFully :: Stepper (Either Error (Expr Buf))
 execFully =
   exec >>= \case
     VMFailure (Query q) ->

@@ -1,4 +1,5 @@
 {-# Language PartialTypeSignatures #-}
+{-# Language DataKinds #-}
 {-# Language FlexibleInstances #-}
 {-# Language ExtendedDefaultRules #-}
 {-# Language PatternSynonyms #-}
@@ -36,9 +37,9 @@ module EVM.Facts
   ) where
 
 import EVM          (VM, Contract, Cache)
-import EVM.Symbolic (litWord, forceLit)
 import EVM          (balance, nonce, storage, bytecode, env, contracts, contract, state, cache, fetched)
-import EVM.Types    (Addr, Word, SymWord, Buffer(..))
+import EVM.Types    (Addr, W256, Expr(..), EType(..))
+import EVM.Expr     (writeStorage)
 
 import qualified EVM
 
@@ -71,9 +72,9 @@ default (ASCII)
 -- Note that Haskell allows this kind of union of records.
 -- It's convenient here, but typically avoided.
 data Fact
-  = BalanceFact { addr :: Addr, what :: Word }
-  | NonceFact   { addr :: Addr, what :: Word }
-  | StorageFact { addr :: Addr, what :: Word, which :: Word }
+  = BalanceFact { addr :: Addr, what :: W256 }
+  | NonceFact   { addr :: Addr, what :: W256 }
+  | StorageFact { addr :: Addr, what :: W256, which :: W256 }
   | CodeFact    { addr :: Addr, blob :: ByteString }
   deriving (Eq, Show)
 
@@ -100,7 +101,7 @@ instance AsASCII Addr where
   dump = Char8.pack . show
   load = readMaybe . Char8.unpack
 
-instance AsASCII Word where
+instance AsASCII W256 where
   dump = Char8.pack . show
   load = readMaybe . Char8.unpack
 
@@ -113,13 +114,13 @@ instance AsASCII ByteString where
 
 contractFacts :: Addr -> Contract -> [Fact]
 contractFacts a x = case view bytecode x of
-  ConcreteBuffer b ->
+  ConcreteBuf b ->
     storageFacts a x ++
     [ BalanceFact a (view balance x)
     , NonceFact   a (view nonce x)
     , CodeFact    a b
     ]
-  SymbolicBuffer b ->
+  _ ->
     -- here simply ignore storing the bytecode
     storageFacts a x ++
     [ BalanceFact a (view balance x)
@@ -129,13 +130,13 @@ contractFacts a x = case view bytecode x of
 
 storageFacts :: Addr -> Contract -> [Fact]
 storageFacts a x = case view storage x of
-  EVM.Symbolic _ _ -> []
-  EVM.Concrete s -> map f (Map.toList s)
+  ConcreteStore s -> map f (Map.toList s)
+  _ -> []
   where
-    f :: (Word, SymWord) -> Fact
+    f :: (W256, W256) -> Fact
     f (k, v) = StorageFact
       { addr  = a
-      , what  = fromIntegral (forceLit v)
+      , what  = fromIntegral v
       , which = fromIntegral k
       }
 
@@ -160,10 +161,10 @@ apply1 :: VM -> Fact -> VM
 apply1 vm fact =
   case fact of
     CodeFact    {..} -> flip execState vm $ do
-      assign (env . contracts . at addr) (Just (EVM.initialContract (EVM.RuntimeCode (ConcreteBuffer blob))))
+      assign (env . contracts . at addr) (Just (EVM.initialContract (EVM.RuntimeCode (fmap LitByte $ BS.unpack blob))))
       when (view (state . contract) vm == addr) $ EVM.loadContract addr
     StorageFact {..} ->
-      vm & over (env . contracts . ix addr . storage) (EVM.writeStorage (litWord which) (litWord what))
+      vm & over (env . contracts . ix addr . storage) (writeStorage (Lit which) (Lit what))
     BalanceFact {..} ->
       vm & set (env . contracts . ix addr . balance) what
     NonceFact   {..} ->
@@ -173,10 +174,10 @@ apply2 :: VM -> Fact -> VM
 apply2 vm fact =
   case fact of
     CodeFact    {..} -> flip execState vm $ do
-      assign (cache . fetched . at addr) (Just (EVM.initialContract (EVM.RuntimeCode (ConcreteBuffer blob))))
+      assign (cache . fetched . at addr) (Just (EVM.initialContract (EVM.RuntimeCode (fmap LitByte $ BS.unpack blob))))
       when (view (state . contract) vm == addr) $ EVM.loadContract addr
     StorageFact {..} ->
-      vm & over (cache . fetched . ix addr . storage) (EVM.writeStorage (litWord which) (litWord what))
+      vm & over (cache . fetched . ix addr . storage) (writeStorage (Lit which) (Lit what))
     BalanceFact {..} ->
       vm & set (cache . fetched . ix addr . balance) what
     NonceFact   {..} ->
@@ -186,7 +187,7 @@ apply2 vm fact =
 instance Ord Fact where
   compare = comparing f
     where
-    f :: Fact -> (Int, Addr, Word)
+    f :: Fact -> (Int, Addr, W256)
     f (CodeFact a _)      = (0, a, 0)
     f (BalanceFact a _)   = (1, a, 0)
     f (NonceFact a _)     = (2, a, 0)

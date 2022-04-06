@@ -2,8 +2,8 @@ module EVM.Exec where
 
 import EVM
 import EVM.Concrete (createAddress)
-import EVM.Symbolic (litAddr)
 import EVM.Types
+import EVM.Expr (litAddr)
 
 import qualified EVM.FeeSchedule as FeeSchedule
 
@@ -21,15 +21,15 @@ ethrunAddress = Addr 0x00a329c0648769a73afac7f9381e08fb43dbea72
 vmForEthrunCreation :: ByteString -> VM
 vmForEthrunCreation creationCode =
   (makeVm $ VMOpts
-    { vmoptContract = initialContract (InitCode (ConcreteBuffer creationCode))
-    , vmoptCalldata = (mempty, 0)
-    , vmoptValue = 0
+    { vmoptContract = initialContract (InitCode creationCode mempty)
+    , vmoptCalldata = mempty
+    , vmoptValue = (Lit 0)
     , vmoptAddress = createAddress ethrunAddress 1
     , vmoptCaller = litAddr ethrunAddress
     , vmoptOrigin = ethrunAddress
     , vmoptCoinbase = 0
     , vmoptNumber = 0
-    , vmoptTimestamp = 0
+    , vmoptTimestamp = (Lit 0)
     , vmoptBlockGaslimit = 0
     , vmoptGasprice = 0
     , vmoptDifficulty = 0

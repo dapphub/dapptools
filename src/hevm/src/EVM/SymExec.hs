@@ -20,9 +20,6 @@ import Data.Maybe (catMaybes, fromMaybe)
 import EVM.Types
 import EVM.Concrete (createAddress)
 import qualified EVM.FeeSchedule as FeeSchedule
-import Data.SBV.Trans.Control
-import Data.SBV.Trans hiding (distinct, Word)
-import Data.SBV hiding (runSMT, newArray_, addAxiom, distinct, sWord8s, Word)
 import Data.Vector (toList, fromList)
 import Data.Tree
 import Data.DoubleWord (Word256)
@@ -38,17 +35,6 @@ data ProofResult a b c = Qed a | Cex b | Timeout c
 type VerifyResult = ProofResult (Tree BranchInfo) (Tree BranchInfo) (Tree BranchInfo)
 type EquivalenceResult = ProofResult ([VM], [VM]) VM ()
 
--- | Convenience functions for generating large symbolic byte strings
-sbytes32, sbytes128, sbytes256, sbytes512, sbytes1024 :: Query ([SWord 8])
-sbytes32 = toBytes <$> freshVar_ @ (WordN 256)
-sbytes128 = toBytes <$> freshVar_ @ (WordN 1024)
-sbytes256 = liftA2 (++) sbytes128 sbytes128
-sbytes512 = liftA2 (++) sbytes256 sbytes256
-sbytes1024 = liftA2 (++) sbytes512 sbytes512
-
-mkByte :: Query [SWord 8]
-mkByte = do x <- freshVar_
-            return [x]
 
 -- | Abstract calldata argument generation
 symAbiArg :: AbiType -> Query ([SWord 8], W256)
