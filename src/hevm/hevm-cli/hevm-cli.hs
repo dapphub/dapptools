@@ -450,10 +450,14 @@ runSMTWithTimeOut :: Maybe Text -> Maybe Integer -> Bool -> Symbolic a -> IO a
 runSMTWithTimeOut solver maybeTimeout smtdebug symb
   | solver == Just "cvc4" = runwithcvc4
   | solver == Just "z3" = runwithz3
+  | solver == Just "cvc5" = runwithcvc5
+  | solver == Just "bitwuzla" = runwithbitwuzla
   | solver == Nothing = runwithz3
   | otherwise = error "Unknown solver. Currently supported solvers; z3, cvc4"
  where timeout = fromMaybe 60000 maybeTimeout
        runwithz3 = runSMTWith z3{SBV.verbose=smtdebug} $ (setTimeOut timeout) >> symb
+       runwithcvc5 = runSMTWith cvc5{SBV.verbose=smtdebug} $ (setTimeOut timeout) >> symb
+       runwithbitwuzla = runSMTWith bitwuzla{SBV.verbose=smtdebug} $ (setTimeOut timeout) >> symb
        runwithcvc4 = do
          setEnv "SBV_CVC4_OPTIONS" ("--lang=smt --incremental --interactive --no-interactive-prompt --model-witness-value --tlimit-per=" <> show timeout)
          a <- runSMTWith cvc4{SBV.verbose=smtdebug} symb
