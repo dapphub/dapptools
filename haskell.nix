@@ -16,6 +16,13 @@ in self-hs: super-hs:
   in {
     restless-git = dontCheck "restless-git" (./src/restless-git);
 
+    sbv = pkgs.haskell.lib.dontCheck (self-hs.callCabal2nix "sbv"
+      (builtins.fetchGit {
+        url = "https://github.com/LeventErkok/sbv";
+        rev = "46361e106b09124050b9558de9cf7e5eb90d3fae";
+      })
+      {inherit (pkgs) z3;});
+
     hevm = pkgs.haskell.lib.dontHaddock ((
       self-hs.callCabal2nix "hevm" (./src/hevm) {
         # Haskell libs with the same names as C libs...
