@@ -106,6 +106,8 @@ in rec {
       (self.haskellPackages.callCabal2nix "jays" (./src/jays) {})
   ).overrideAttrs (_: { postInstall = "cp $out/bin/{jays,jshon}"; });
 
+  smt-hs = self.pkgs.haskell.lib.justStaticExecutables self.haskellPackages.hevm;
+
   # Override buggy jshon program with Haskell-based replacement.
   jshon = self.jays;
 

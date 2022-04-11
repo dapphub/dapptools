@@ -16,6 +16,8 @@ in self-hs: super-hs:
   in {
     restless-git = dontCheck "restless-git" (./src/restless-git);
 
+    smt-hs = pkgs.haskell.lib.dontHaddock (self-hs.callCabal2nix "smt-hs" (./src/smt-hs) {});
+
     hevm = pkgs.haskell.lib.dontHaddock ((
       self-hs.callCabal2nix "hevm" (./src/hevm) {
         # Haskell libs with the same names as C libs...
