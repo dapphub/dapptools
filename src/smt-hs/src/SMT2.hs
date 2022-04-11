@@ -96,10 +96,10 @@ type family Decl
               (env :: Env bools ints bvs fns)
               :: Env a b c d
             where
-  Decl (A Boolean)    s ('Env bools ints bvs fns) = 'Env (bools ::> s) ints bvs fns
-  Decl (A SmtInt)     s ('Env bools ints bvs fns) = 'Env bools (ints ::> s) bvs fns
-  Decl (A (BitVec n)) s ('Env bools ints bvs fns) = 'Env bools ints (bvs ::> '(s, n)) fns
-  Decl (F args ret)   s ('Env bools ints bvs fns) = 'Env bools ints bvs (fns ::> '(s, args, ret))
+  --Decl (A Boolean)    s ('Env bools ints bvs fns) = 'Env (bools ::> s) ints bvs fns
+  --Decl (A SmtInt)     s ('Env bools ints bvs fns) = 'Env bools (ints ::> s) bvs fns
+  --Decl (A (BitVec n)) s ('Env bools ints bvs fns) = 'Env bools ints (bvs ::> '(s, n)) fns
+  --Decl (F args ret)   s ('Env bools ints bvs fns) = 'Env bools ints bvs (fns ::> '(s, args, ret))
 
 
 -- environment lookup ------------------------------------------------------------------------------
