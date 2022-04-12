@@ -62,7 +62,8 @@ data Entry :: Symbol -> Atom -> Type where
 
 -- environment lookup ------------------------------------------------------------------------------
 
--- A proof that a particular name / type has been declared in the environment
+
+-- A proof that a particular (name, type) pair has been declared in the environment
 data Elem (n :: Symbol) (a :: Atom) (e :: Env) where
   DH :: Elem n a ('(n,a):e)
   DT :: Elem n a e -> Elem n a (t:s)
@@ -74,7 +75,9 @@ type family Find n a e where
   Find n a '[] = TypeError (Text "variable '" :<>: Text n :<>: Text "' not found in typechecking env")
 
 -- TODO: haaalllpppp
-class Contains (p :: Elem n a e) where
+class Contains p where
+instance (Contains (Elem n a p)) where
+
 
 -- sequenced solver commands -----------------------------------------------------------------------
 
@@ -112,7 +115,9 @@ data Exp (e :: Env) (k :: Atom) where
   Distinct  :: [Exp e Boolean] -> Exp e Boolean
   ITE       :: Exp e Boolean   -> Exp e Boolean -> Exp e Boolean -> Exp e Boolean
 
+
 -- tests -------------------------------------------------------------------------------------------
+
 
 --test :: SMT2 e
 test
