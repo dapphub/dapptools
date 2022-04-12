@@ -14,11 +14,11 @@ faulty model parsing will result in a compile time error.
 
 The package consists of five submodules:
 
-  - SMT2: query generation framework
-  - Exec: parallel by default query executor
-  - Type: compile time smt2 typechecker
-  - Read: library of smt2 parser combinators
-  - Show: counterexample pretty printing framework
+  - `SMT2`: query generation framework
+  - `Exec`: parallel by default query executor
+  - `Type`: compile time smt2 typechecker
+  - `Read`: library of smt2 parser combinators
+  - `Show`: counterexample pretty printing framework
 
 ## Usage
 

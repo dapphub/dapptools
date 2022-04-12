@@ -68,15 +68,15 @@ data Elem (n :: Symbol) (a :: Atom) (e :: Env) where
   DH :: Elem n a ('(n,a):e)
   DT :: Elem n a e -> Elem n a (t:s)
 
-type Find :: Symbol -> Atom -> Env -> Elem n a s
+type Find :: Symbol -> Atom -> Env -> Elem n a e
 type family Find n a e where
   Find n a ('(n,a): s) = DH
   Find n a ('(t,p): s) = DT (Find n a s)
   Find n a '[] = TypeError (Text "variable '" :<>: Text n :<>: Text "' not found in typechecking env")
 
 -- TODO: haaalllpppp
-class Contains p where
-instance (Contains (Elem n a p)) where
+class Found p where
+instance (Found (Elem n a e)) where
 
 
 -- sequenced solver commands -----------------------------------------------------------------------
@@ -104,7 +104,7 @@ data SMT2 (env :: Env) where
 data Exp (e :: Env) (k :: Atom) where
   -- basic types
   Lit   :: Bool -> Exp e Boolean
-  Var   :: Contains (Find nm a e) => symbolRepr nm -> Exp e a
+  Var   :: Found (Find nm a e) => symbolRepr nm -> Exp e a
 
   -- boolean ops
   And       :: [Exp e Boolean] -> Exp e Boolean
