@@ -1,6 +1,5 @@
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE UndecidableInstances #-}
-{-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE AllowAmbiguousTypes #-}
 {-# LANGUAGE TypeFamilies #-}
@@ -10,27 +9,19 @@
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE DeriveAnyClass #-}
-{-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE PolyKinds #-}
-{-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE DataKinds #-}
 
 module SMT2 where
 
 import Prelude hiding (Eq,Word)
-import Data.ByteString (ByteString)
 import GHC.TypeLits
-import Data.Vector.Sized (Vector, fromList)
+import Data.Kind
+import Data.Function
+
+-- TODO: rm these deps
 import Data.Parameterized.NatRepr
 import Data.Parameterized.SymbolRepr
-import Data.Word
-import Data.Function
-import Data.Foldable (foldl')
-import Data.BitVector.Sized (BV, mkBV)
-import Data.Kind
-import Data.Singletons (Sing, SingKind(..))
-import Data.Singletons.TH (singletons, genSingletons)
 
 
 -- base types --------------------------------------------------------------------------------------
