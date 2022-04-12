@@ -19,10 +19,6 @@ import GHC.TypeLits
 import Data.Kind
 import Data.Function
 
--- TODO: rm these deps
-import Data.Parameterized.NatRepr
-import Data.Parameterized.SymbolRepr
-
 
 -- base types --------------------------------------------------------------------------------------
 
@@ -74,8 +70,8 @@ instance (Found (Elem n a e)) where
 
 
 data SMT2 (env :: Env) where
-  Declare   :: symbolRepr nm
-            -> SAtom a
+  Declare   :: KnownSymbol nm
+            => SAtom a
             -> SMT2 e
             -> SMT2 ('(nm, a) : e)
 
@@ -95,7 +91,7 @@ data SMT2 (env :: Env) where
 data Exp (e :: Env) (k :: Atom) where
   -- basic types
   Lit   :: Bool -> Exp e Boolean
-  Var   :: Found (Find nm a e) => symbolRepr nm -> Exp e a
+  Var   :: (Found (Find nm a e), KnownSymbol nm) => Exp e a
 
   -- boolean ops
   And       :: [Exp e Boolean] -> Exp e Boolean
@@ -113,6 +109,6 @@ data Exp (e :: Env) (k :: Atom) where
 --test :: SMT2 e
 test
   = EmptySMT2
-  & Declare (knownSymbol @"hi") SBool
-  & Assert (Var (knownSymbol @"hi"))
+  & Declare @"hi" SBool
+  & Assert (Var @"hi")
   & CheckSat
