@@ -1,147 +1,107 @@
 {-# LANGUAGE GADTs #-}
+{-# LANGUAGE UndecidableInstances #-}
+{-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE AllowAmbiguousTypes #-}
 {-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE StandaloneKindSignatures #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE DeriveAnyClass #-}
+{-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE DataKinds #-}
+
+module SMT2 where
 
 import Prelude hiding (Eq,Word)
 import Data.ByteString (ByteString)
 import GHC.TypeLits
 import Data.Vector.Sized (Vector, fromList)
-import Data.Parameterized.List
-import Data.Parameterized.Context
-import Data.Parameterized.Classes
 import Data.Parameterized.NatRepr
 import Data.Parameterized.SymbolRepr
 import Data.Word
 import Data.Function
 import Data.Foldable (foldl')
 import Data.BitVector.Sized (BV, mkBV)
+import Data.Kind
+import Data.Singletons (Sing, SingKind(..))
+import Data.Singletons.TH (singletons, genSingletons)
 
 
 -- base types --------------------------------------------------------------------------------------
 
 
-data Atom
-  = Boolean
-  | SmtInt
-  | BitVec Nat
+data Atom = Boolean
 
-data Tp
-  = A Atom
-  | F (Ctx Atom) Atom
-
-
--- singleton types ---------------------------------------------------------------------------------
-
-
--- atomic types
 data SAtom (a :: Atom) where
   SBool :: SAtom Boolean
-  SInt :: SAtom SmtInt
-  SBV :: NatRepr n -> SAtom (BitVec n)
-
-deriving instance (Show (SAtom a))
-deriving instance (ShowF SAtom)
-
--- uninterpreted functions
-data UF (args :: Ctx Atom) (ret :: Atom) where
-  UF :: Assignment SAtom args -> SAtom ret -> UF args ret
-
-deriving instance (Show (UF args ret))
-
--- all types
-data STp (tp :: Tp) where
-  SA :: SAtom a -> STp (A a)
-  SF :: UF args ret -> STp (F args ret)
-
--- variable names
-data Name (nm :: Symbol) where
-  Name :: symbolRepr nm -> Name nm
-
-data NamedBV (uid :: (Symbol, Nat)) where
-  NamedBV :: symbolRepr nm -> natRepr sz -> NamedBV '(nm, sz)
-
-data NamedFun (uid :: (Symbol, Ctx Atom, Atom)) where
-  NamedFun :: symbolRepr nm -> Assignment SAtom args -> SAtom ret -> NamedFun '(nm, args, ret)
 
 
 -- type checking environment -----------------------------------------------------------------------
 
 
-data Env
-    (bools :: Ctx Symbol)
-    (ints  :: Ctx Symbol)
-    (bvs   :: Ctx (Symbol, Nat))
-    (fns   :: Ctx (Symbol, Ctx Atom, Atom))
-  where
-    Env :: Assignment Name bools
-        -> Assignment Name ints
-        -> Assignment NamedBV bvs
-        -> Assignment NamedFun fns
-        -> Env bools ints bvs fns
+type Env = [(Symbol, Atom)]
+type Empty = '[]
 
--- | Declares a new name in the given environment
-type family Decl
-              (tp :: Tp)
-              (s :: Symbol)
-              (env :: Env bools ints bvs fns)
-              :: Env a b c d
-            where
-  --Decl (A Boolean)    s ('Env bools ints bvs fns) = 'Env (bools ::> s) ints bvs fns
-  --Decl (A SmtInt)     s ('Env bools ints bvs fns) = 'Env bools (ints ::> s) bvs fns
-  --Decl (A (BitVec n)) s ('Env bools ints bvs fns) = 'Env bools ints (bvs ::> '(s, n)) fns
-  --Decl (F args ret)   s ('Env bools ints bvs fns) = 'Env bools ints bvs (fns ::> '(s, args, ret))
+-- | A runtime representation of the typechecking environment
+data Dict :: Env -> Type where
+   Nil  :: Dict '[]
+   (:>) :: Entry s o -> Dict tl -> Dict ('(s,o) : tl)
+
+infixr 5 :>
+
+-- | An entry in the dictionary
+data Entry :: Symbol -> Atom -> Type where
+   E :: forall s a. SAtom a -> Entry s a
 
 
 -- environment lookup ------------------------------------------------------------------------------
 
+-- A proof that a particular name / type has been declared in the environment
+data Elem (n :: Symbol) (a :: Atom) (e :: Env) where
+  DH :: Elem n a ('(n,a):e)
+  DT :: Elem n a e -> Elem n a (t:s)
 
--- TODO: how to actually implement these...
-class Fresh (nm :: Symbol) (e :: Env bools ints bvs fns) where
-class Contains (tp :: Tp) (nm :: Symbol) (e :: Env bools ints bvs fns) where
+type Find :: Symbol -> Atom -> Env -> Elem n a s
+type family Find n a e where
+  Find n a ('(n,a): s) = DH
+  Find n a ('(t,p): s) = DT (Find n a s)
+  Find n a '[] = TypeError (Text "variable '" :<>: Text n :<>: Text "' not found in typechecking env")
 
+-- TODO: haaalllpppp
+class Contains (p :: Elem n a e) where
 
 -- sequenced solver commands -----------------------------------------------------------------------
 
 
-data Problem (env :: Env ints bools bvs fns) where
-  Declare  :: Fresh nm e
-           => STp tp
-           -> symbolRepr nm
-           -> Problem e
-           -> Problem (Decl tp nm e)
+data SMT2 (env :: Env) where
+  Declare   :: symbolRepr nm
+            -> SAtom a
+            -> SMT2 e
+            -> SMT2 ('(nm, a) : e)
 
-  Assert   :: Exp e Boolean
-           -> Problem e
-           -> Problem e
+  Assert    :: Exp e Boolean
+            -> SMT2 e
+            -> SMT2 e
 
-  CheckSat :: Problem e
-           -> Problem e
+  CheckSat  :: SMT2 e
+            -> SMT2 e
 
-  -- TODO: how to force an empty env here?
-  EmptyProb:: Problem ('Env a b c d)
+  EmptySMT2 :: SMT2 '[]
 
 
 -- smt expressions ---------------------------------------------------------------------------------
 
 
-data Exp (e :: Env ints bools bvs fns) (k :: Atom) where
+data Exp (e :: Env) (k :: Atom) where
   -- basic types
-  LitBool   :: Bool -> Exp e Boolean
-  LitBV     :: BV n -> Exp e (BitVec n)
-  LitInt    :: Integer -> Exp e SmtInt
-  SymBool   :: Contains (A Boolean) nm e => symbolRepr nm -> Exp e Boolean
-  SymBV     :: Contains (A (BitVec sz)) nm e => symbolRepr nm -> Exp e Boolean
-  SymInt    :: Contains (A SmtInt)  nm e => symbolRepr nm -> Exp e Boolean
+  Lit   :: Bool -> Exp e Boolean
+  Var   :: Contains (Find nm a e) => symbolRepr nm -> Exp e a
 
   -- boolean ops
   And       :: [Exp e Boolean] -> Exp e Boolean
@@ -152,27 +112,11 @@ data Exp (e :: Env ints bools bvs fns) (k :: Atom) where
   Distinct  :: [Exp e Boolean] -> Exp e Boolean
   ITE       :: Exp e Boolean   -> Exp e Boolean -> Exp e Boolean -> Exp e Boolean
 
-  -- bitvector ops
-  Shr       :: Exp e (BitVec n) -> Exp e (BitVec n) -> Exp e (BitVec n)
-  Shl       :: Exp e (BitVec n) -> Exp e (BitVec n) -> Exp e (BitVec n)
-
-  -- function application
-  App       :: Contains (F args ret) nm e => symbolRepr nm -> Assignment (Exp e) args -> Exp e ret
-
-
 -- tests -------------------------------------------------------------------------------------------
 
-mkProblem :: Problem e
-mkProblem
-  = EmptyProb
-  & Declare (SA SBool) (knownSymbol @"hi")
-  & Assert (SymBool (knownSymbol @"hi"))
+--test :: SMT2 e
+test
+  = EmptySMT2
+  & Declare (knownSymbol @"hi") SBool
+  & Assert (Var (knownSymbol @"hi"))
   & CheckSat
-
-mkFuncProb :: Problem e
-mkFuncProb
-  = EmptyProb
-  & Declare (SF (UF (Empty :> SInt :> SBool :> SBV (knownNat @256)) SBool)) (knownSymbol @"hi")
-  & Assert (App (knownSymbol @"hi") (Empty :> LitInt 10 :> LitBool False :> LitBV (mkBV (knownNat @256) 100)))
-  EmptyProb
-

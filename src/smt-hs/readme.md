@@ -3,9 +3,9 @@
 Blade is an opinionated smt2 abstraction layer focused on the construction of strongly
 typed combinators for both the consumption and production of smt2-lib strings.
 
-Blade takes the view that direct access to and control over the raw smt representation greatly
-simplifies query optimisation and debugging. For this reason blade focuses on providing facilities
-that make this approach as safe and ergonomic as possible.
+Direct access to and control over the raw smt representation greatly simplifies query optimisation
+and debugging. For this reason blade focuses on providing facilities that make this approach as safe
+and ergonomic as possible.
 
 Queries in blade are constructed by combining fragments of (potentially parameterized) smt2.
 These fragments are parsed and typechecked at compile time and used to direct typesystem
@@ -53,8 +53,7 @@ partial
     |]
 
 -- Variables can be declared at runtime. Although we cannot statically ensure that these names are
--- well typed, we provide runtime mechanisms that are constrained in ways that allow the typechecker to
--- infer well-typededness in other combinators
+-- well typed, we provide runtime mechanisms that allow the typechecker to infer well-typededness
 dyndec :: [String] -> SMT2 e
 dyndec names = do
   vs <- forM names (declare . fresh)
