@@ -42,6 +42,15 @@ data SAtom (a :: Atom) where
 -- typechecking environment
 type Env = [(Symbol, Atom)]
 
+-- name declaration --------------------------------------------------------------------------------
+
+type Decl n a e = DeclH n a e e
+
+type DeclH :: Symbol -> Atom -> Env -> Env -> Env
+type family DeclH n a e e' where
+  DeclH n a '[] e = '(n, a) : e
+  DeclH n a ('(n, _) : tl) e = TypeError (Text n :<>: Text " is already declared")
+
 
 -- environment lookup ------------------------------------------------------------------------------
 
@@ -60,8 +69,8 @@ type family Find n a e where
 
 -- Allow env lookup from typeclass constraints
 class Found p where
-instance Found 'DH where
-instance (Found tl) => Found ('DT tl) where
+instance Found DH where
+instance (Found tl) => Found (DT tl) where
 
 
 -- sequenced solver commands -----------------------------------------------------------------------
@@ -71,7 +80,7 @@ data SMT2 (env :: Env) where
   Declare   :: KnownSymbol nm
             => SAtom a
             -> SMT2 e
-            -> SMT2 ('(nm, a) : e)
+            -> SMT2 (Decl nm a e)
 
   Assert    :: Exp e Boolean
             -> SMT2 e
