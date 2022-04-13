@@ -9,8 +9,8 @@ and ergonomic as possible.
 
 Queries in blade are constructed by combining fragments of (potentially parameterized) smt2.
 These fragments are parsed and typechecked at compile time and used to direct typesystem
-analysis that is able to statically ensure that all kinds of poorly typed smt generation or
-faulty model parsing will result in a compile time error.
+analysis that is able to statically ensure that all kinds of poorly typed smt generation will result
+in a compile time error.
 
 The package consists of five submodules:
 

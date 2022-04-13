@@ -82,6 +82,8 @@ instance (Found tl) => Found (DT tl) where
 
 -- | The language of top level solver commands
 data SMT2 (env :: Env) where
+  EmptySMT2 :: SMT2 '[]
+
   Declare   :: KnownSymbol nm
             => SAtom a
             -> SMT2 e
@@ -93,8 +95,6 @@ data SMT2 (env :: Env) where
 
   CheckSat  :: SMT2 e
             -> SMT2 e
-
-  EmptySMT2 :: SMT2 '[]
 
 
 -- | The language of assertable statements
