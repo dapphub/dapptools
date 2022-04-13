@@ -30,20 +30,24 @@ import Data.Kind
 import Data.Function
 
 
--- types --------------------------------------------------------------------------------------
+-- base types --------------------------------------------------------------------------------------
 
 
--- atomic data types
+-- | Atomic data types
 data Atom = Boolean
 
+-- | Singleton type for Atom
 data SAtom (a :: Atom) where
   SBool :: SAtom Boolean
 
--- typechecking environment
+-- | The typechecking environment
 type Env = [(Symbol, Atom)]
+
 
 -- name declaration --------------------------------------------------------------------------------
 
+
+-- | Extends the typechecking env with (n, a) iff n is not already present in e
 type Decl n a e = DeclH n a e e
 
 type DeclH :: Symbol -> Atom -> Env -> Env -> Env
@@ -55,27 +59,28 @@ type family DeclH n a e e' where
 -- environment lookup ------------------------------------------------------------------------------
 
 
--- A proof that a particular (name, type) pair has been declared in the environment
+-- | A proof that a (n, a) is present in e
 data Elem (n :: Symbol) (a :: Atom) (e :: Env) where
   DH :: Elem n a ('(n,a):e)
   DT :: Elem n a e -> Elem n a (t:e)
 
--- Compile time type env lookup
+-- | Compile time type env lookup
 type Find :: Symbol -> Atom -> Env -> Elem n a e
 type family Find n a e where
   Find n a ('(n,a): e) = DH
   Find n a ('(_,_): e) = DT (Find n a e)
   Find n a '[] = TypeError (Text "variable '" :<>: Text n :<>: Text "' not found in typechecking env")
 
--- Allow env lookup from typeclass constraints
-class Found p where
+-- | Found resolves iff it is passed a valid prood of inclusion in a given typechecking env
+class Found (p :: Elem n a e) where
 instance Found DH where
 instance (Found tl) => Found (DT tl) where
 
 
--- sequenced solver commands -----------------------------------------------------------------------
+-- SMT2 AST ----------------------------------------------------------------------------------------
 
 
+-- | The language of top level solver commands
 data SMT2 (env :: Env) where
   Declare   :: KnownSymbol nm
             => SAtom a
@@ -92,15 +97,11 @@ data SMT2 (env :: Env) where
   EmptySMT2 :: SMT2 '[]
 
 
--- smt expressions ---------------------------------------------------------------------------------
-
-
+-- | The language of assertable statements
 data Exp (e :: Env) (a :: Atom) where
-  -- basic types
-  Lit   :: Bool -> Exp e Boolean
-  Var   :: (KnownSymbol n, Found (Find n a e :: Elem n a e)) => Exp e a
+  Lit       :: Bool -> Exp e Boolean
+  Var       :: (KnownSymbol n, Found (Find n a e :: Elem n a e)) => Exp e a
 
-  -- boolean ops
   And       :: [Exp e Boolean] -> Exp e Boolean
   Or        :: [Exp e Boolean] -> Exp e Boolean
   Eq        :: [Exp e Boolean] -> Exp e Boolean
