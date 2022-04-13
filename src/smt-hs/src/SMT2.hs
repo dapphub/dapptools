@@ -120,4 +120,11 @@ test
   = EmptySMT2
   & Declare @"hi" SBool
   & Assert (Var @"hi")
+
+  -- produces a type error: 'hi' is already declared
+  -- & Declare @"hi" SBool
+
+  -- produces a type error: 'yo' is undeclared
+  -- & Assert (Var @"yo")
+
   & CheckSat
