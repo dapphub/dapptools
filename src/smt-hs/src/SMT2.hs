@@ -53,7 +53,7 @@ type Decl n a e = DeclH n a e e
 type DeclH :: Symbol -> Atom -> Env -> Env -> Env
 type family DeclH n a e e' where
   DeclH n a '[] e = '(n, a) : e
-  DeclH n a ('(n, _) : tl) e = TypeError (Text n :<>: Text " is already declared")
+  DeclH n a ('(n, _) : tl) e = TypeError (Text "'" :<>: Text n :<>: Text "' is already declared")
 
 
 -- environment lookup ------------------------------------------------------------------------------
@@ -69,7 +69,7 @@ type Find :: Symbol -> Atom -> Env -> Elem n a e
 type family Find n a e where
   Find n a ('(n,a): e) = DH
   Find n a ('(_,_): e) = DT (Find n a e)
-  Find n a '[] = TypeError (Text "variable '" :<>: Text n :<>: Text "' not found in typechecking env")
+  Find n a '[] = TypeError (Text "'" :<>: Text n :<>: Text "' is undeclared")
 
 -- | Found resolves iff it is passed a valid prood of inclusion in a given typechecking env
 class Found (p :: Elem n a e) where
