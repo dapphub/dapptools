@@ -60,7 +60,7 @@ type family Find n a e where
 
 -- Allow env lookup from typeclass constraints
 class Found p where
-instance (Found (Elem n a e) ~ Elem n a e) => (Found (Elem n a e)) where
+instance (Find n a e ~ Elem n a e) => Found (Elem n a e) where
 
 
 -- sequenced solver commands -----------------------------------------------------------------------
