@@ -12,6 +12,16 @@
 {-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE DataKinds #-}
 
+{- | An embedding of the SMT2 typing rules in the haskell type system
+
+     SMT2 scripts are made up of sequences of solver commands. These commands
+     can declare new variables and assert statements about these variables.
+
+     Each node in the script AST is assigned a type that represents the
+     available typing context. Any attempt to extend the script with a new
+     command will produce a type error if any sub term references a variable that
+     has not yet been declared.
+-}
 module SMT2 where
 
 import Prelude hiding (Eq,Word)
@@ -20,31 +30,17 @@ import Data.Kind
 import Data.Function
 
 
--- base types --------------------------------------------------------------------------------------
+-- types --------------------------------------------------------------------------------------
 
 
+-- atomic data types
 data Atom = Boolean
 
 data SAtom (a :: Atom) where
   SBool :: SAtom Boolean
 
-
--- type checking environment -----------------------------------------------------------------------
-
-
+-- typechecking environment
 type Env = [(Symbol, Atom)]
-type Empty = '[]
-
--- | A runtime representation of the typechecking environment
-data Dict :: Env -> Type where
-   Nil  :: Dict '[]
-   (:>) :: Entry s o -> Dict tl -> Dict ('(s,o) : tl)
-
-infixr 5 :>
-
--- | An entry in the dictionary
-data Entry :: Symbol -> Atom -> Type where
-   E :: forall s a. SAtom a -> Entry s a
 
 
 -- environment lookup ------------------------------------------------------------------------------
@@ -53,17 +49,18 @@ data Entry :: Symbol -> Atom -> Type where
 -- A proof that a particular (name, type) pair has been declared in the environment
 data Elem (n :: Symbol) (a :: Atom) (e :: Env) where
   DH :: Elem n a ('(n,a):e)
-  DT :: Elem n a e -> Elem n a (t:s)
+  DT :: Elem n a e -> Elem n a (t:e)
 
+-- Compile time type env lookup
 type Find :: Symbol -> Atom -> Env -> Elem n a e
 type family Find n a e where
-  Find n a ('(n,a): s) = DH
-  Find n a ('(t,p): s) = DT (Find n a s)
+  Find n a ('(n,a): e) = DH
+  Find n a ('(t,p): e) = DT (Find n a e)
   Find n a '[] = TypeError (Text "variable '" :<>: Text n :<>: Text "' not found in typechecking env")
 
--- TODO: haaalllpppp
+-- Allow env lookup from typeclass constraints
 class Found p where
-instance (Found (Elem n a e)) where
+instance (Found (Elem n a e) ~ Elem n a e) => (Found (Elem n a e)) where
 
 
 -- sequenced solver commands -----------------------------------------------------------------------
@@ -106,7 +103,7 @@ data Exp (e :: Env) (k :: Atom) where
 -- tests -------------------------------------------------------------------------------------------
 
 
---test :: SMT2 e
+test :: SMT2 '[ '("hi", 'Boolean) ]
 test
   = EmptySMT2
   & Declare @"hi" SBool
