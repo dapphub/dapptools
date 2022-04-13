@@ -36,6 +36,11 @@ import Data.Function
 -- | Atomic data types
 data Atom = Boolean
 
+-- | Define the haskell datatype used to declare literals of a given atomic type
+type LitType :: Atom -> Type
+type family LitType a where
+  LitType Boolean = Bool
+
 -- | Singleton type for Atom
 data SAtom (a :: Atom) where
   SBool :: SAtom Boolean
@@ -47,32 +52,32 @@ type Env = [(Symbol, Atom)]
 -- name declaration --------------------------------------------------------------------------------
 
 
--- | Extends the typechecking env with (n, a) iff n is not already present in e
-type Decl n a e = DeclH n a e e
+-- | Extends the typechecking env with (name, typ) iff name is not already present in env
+type Decl name typ env = DeclH name typ env env
 
 type DeclH :: Symbol -> Atom -> Env -> Env -> Env
-type family DeclH n a e e' where
-  DeclH n a '[] e = '(n, a) : e
-  DeclH n a ('(n, _) : tl) e = TypeError (Text "'" :<>: Text n :<>: Text "' is already declared")
+type family DeclH name typ env orig where
+  DeclH name typ '[] orig = '(name, typ) : orig
+  DeclH name _ ('(name, _) : _) _ = TypeError (Text "\"" :<>: Text name :<>: Text "\" is already declared")
 
 
 -- environment lookup ------------------------------------------------------------------------------
 
 
--- | A proof that a (n, a) is present in e
-data Elem (n :: Symbol) (a :: Atom) (e :: Env) where
-  DH :: Elem n a ('(n,a):e)
-  DT :: Elem n a e -> Elem n a (t:e)
+-- | A proof that (name, typ) is present in a given env
+data Elem :: Symbol -> Atom -> Env -> Type where
+  DH :: Elem name typ ('(name, typ) : tl)
+  DT :: Elem name typ tl -> Elem name typ (hd : tl)
 
 -- | Compile time type env lookup
-type Find :: Symbol -> Atom -> Env -> Elem n a e
-type family Find n a e where
-  Find n a ('(n,a): e) = DH
-  Find n a ('(_,_): e) = DT (Find n a e)
-  Find n a '[] = TypeError (Text "'" :<>: Text n :<>: Text "' is undeclared")
+type Find :: Symbol -> Atom -> Env -> Elem n t e
+type family Find name typ env where
+  Find name typ ('(name,typ) : _) = DH
+  Find name typ ('(_,_): tl) = DT (Find name typ tl)
+  Find name typ '[] = TypeError (Text "\"" :<>: Text name :<>: Text "\" is undeclared")
 
 -- | Found resolves iff it is passed a valid prood of inclusion in a given typechecking env
-class Found (p :: Elem n a e) where
+class Found (p :: Elem name typ env) where
 instance Found DH where
 instance (Found tl) => Found (DT tl) where
 
@@ -81,13 +86,13 @@ instance (Found tl) => Found (DT tl) where
 
 
 -- | The language of top level solver commands
-data SMT2 (env :: Env) where
+data SMT2 (e :: Env) where
   EmptySMT2 :: SMT2 '[]
 
-  Declare   :: KnownSymbol nm
-            => SAtom a
+  Declare   :: KnownSymbol n
+            => SAtom t
             -> SMT2 e
-            -> SMT2 (Decl nm a e)
+            -> SMT2 (Decl n t e)
 
   Assert    :: Exp e Boolean
             -> SMT2 e
@@ -98,17 +103,21 @@ data SMT2 (env :: Env) where
 
 
 -- | The language of assertable statements
-data Exp (e :: Env) (a :: Atom) where
-  Lit       :: Bool -> Exp e Boolean
-  Var       :: (KnownSymbol n, Found (Find n a e :: Elem n a e)) => Exp e a
+data Exp (e :: Env) (t :: Atom) where
 
+  -- polymorphic
+  Lit       :: LitType t -> Exp e t
+  Var       :: (KnownSymbol n, Found (Find n t e :: Elem n t e)) => Exp e t
+  ITE       :: Exp e Boolean   -> Exp e t -> Exp e t -> Exp e t
+
+  -- boolean
   And       :: [Exp e Boolean] -> Exp e Boolean
   Or        :: [Exp e Boolean] -> Exp e Boolean
   Eq        :: [Exp e Boolean] -> Exp e Boolean
   Xor       :: [Exp e Boolean] -> Exp e Boolean
   Impl      :: [Exp e Boolean] -> Exp e Boolean
   Distinct  :: [Exp e Boolean] -> Exp e Boolean
-  ITE       :: Exp e Boolean   -> Exp e Boolean -> Exp e Boolean -> Exp e Boolean
+
 
 
 -- tests -------------------------------------------------------------------------------------------
@@ -121,10 +130,10 @@ test
   & Declare @"hi" SBool
   & Assert (Var @"hi")
 
-  -- produces a type error: 'hi' is already declared
+  -- produces a type error: "hi" is already declared
   -- & Declare @"hi" SBool
 
-  -- produces a type error: 'yo' is undeclared
+  -- produces a type error: "yo" is undeclared
   -- & Assert (Var @"yo")
 
   & CheckSat
