@@ -7,7 +7,7 @@ description: A parallel by default, minimally abstracted smt2 abstraction, with 
 
 license:            GPL-3.0-only
 author:             dxo
-maintainer:         hi@d-xo.org
+maintainer:         git@d-xo.org
 extra-source-files: CHANGELOG.md
 
 library

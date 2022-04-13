@@ -55,12 +55,12 @@ data Elem (n :: Symbol) (a :: Atom) (e :: Env) where
 type Find :: Symbol -> Atom -> Env -> Elem n a e
 type family Find n a e where
   Find n a ('(n,a): e) = DH
-  Find n a ('(t,p): e) = DT (Find n a e)
+  Find n a ('(_,_): e) = DT (Find n a e)
   Find n a '[] = TypeError (Text "variable '" :<>: Text n :<>: Text "' not found in typechecking env")
 
 -- Allow env lookup from typeclass constraints
-class Found p where
-instance (Find n a e ~ (p :: Elem n a e)) => Found (Elem n a e) where
+class Declared n a e where
+instance (Find n a e ~ DH) => Declared n a e where
 
 
 -- sequenced solver commands -----------------------------------------------------------------------
@@ -85,10 +85,10 @@ data SMT2 (env :: Env) where
 -- smt expressions ---------------------------------------------------------------------------------
 
 
-data Exp (e :: Env) (k :: Atom) where
+data Exp (e :: Env) (a :: Atom) where
   -- basic types
   Lit   :: Bool -> Exp e Boolean
-  Var   :: (Found (Find nm a e), KnownSymbol nm) => Exp e a
+  Var   :: (KnownSymbol n, Declared n a e) => Exp e a
 
   -- boolean ops
   And       :: [Exp e Boolean] -> Exp e Boolean
@@ -103,7 +103,8 @@ data Exp (e :: Env) (k :: Atom) where
 -- tests -------------------------------------------------------------------------------------------
 
 
-test :: SMT2 '[ '("hi", 'Boolean) ]
+-- TODO: compile error when adding an explicit type
+--test :: SMT2 e
 test
   = EmptySMT2
   & Declare @"hi" SBool
