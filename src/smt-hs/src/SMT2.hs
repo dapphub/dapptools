@@ -59,8 +59,9 @@ type family Find n a e where
   Find n a '[] = TypeError (Text "variable '" :<>: Text n :<>: Text "' not found in typechecking env")
 
 -- Allow env lookup from typeclass constraints
-class Declared n a e where
-instance (Find n a e ~ DH) => Declared n a e where
+class Found p where
+instance Found 'DH where
+instance (Found tl) => Found ('DT tl) where
 
 
 -- sequenced solver commands -----------------------------------------------------------------------
@@ -88,7 +89,7 @@ data SMT2 (env :: Env) where
 data Exp (e :: Env) (a :: Atom) where
   -- basic types
   Lit   :: Bool -> Exp e Boolean
-  Var   :: (KnownSymbol n, Declared n a e) => Exp e a
+  Var   :: (KnownSymbol n, Found (Find n a e :: Elem n a e)) => Exp e a
 
   -- boolean ops
   And       :: [Exp e Boolean] -> Exp e Boolean
