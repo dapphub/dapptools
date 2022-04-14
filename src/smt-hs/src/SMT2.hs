@@ -137,13 +137,13 @@ data Entry :: Symbol -> Atom -> Type where
   E :: forall name typ. SAtom typ -> Entry name typ
 
 
-insert :: (name :: Symbol) -> (typ :: Atom) -> Dict env -> (Dict (Decl name typ env), Elem name typ env)
+insert :: SomeSymbol -> Atom -> Dict env -> (Dict (Decl name typ env), Elem name typ env)
 insert name typ env = undefined
 
-type Dyn = forall (e :: '[ '(Symbol, Atom)]) . State (Dict e, SMT2 e) a
+type Dyn e a = State (Dict e, SMT2 e) a
 
 
-declare :: String -> Dyn
+--declare :: String -> Dyn e (SMT2 e)
 declare name = do
   (env, smt) <- get
   pure EmptySMT2
@@ -151,13 +151,15 @@ declare name = do
 
 -- tests -------------------------------------------------------------------------------------------
 
-testDyn :: Dyn
+testDyn :: Dyn '[] (SMT2 '[])
 testDyn = do
   pure EmptySMT2
 
 
--- TODO: compile error when adding an explicit type
---test :: SMT2 e
+-- TODO: writing out the full typechecking env here is very annoying.
+-- Why doesn't the following work?
+-- test :: SMT2 e
+test :: SMT2 '[ '( "hi", Boolean ) ]
 test
   = EmptySMT2
   & Declare @"hi" SBool
