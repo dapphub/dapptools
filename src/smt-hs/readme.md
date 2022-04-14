@@ -24,8 +24,10 @@ The package consists of five submodules:
 
 ### Query Generation
 
+Well typedenss of fully static smt can be enforced with compile time checks only. The following
+produces compile time errors due to the smt2 type errors.
+
 ```haskell
--- This produces compile time errors due to the smt2 type errors.
 broken :: SMT2 e
 broken
   = [smt2|
@@ -33,8 +35,12 @@ broken
       (declare-const a Bool)
       (assert c)
     |]
+```
 
--- Fragments can be parameterized.
+These guarantees extend to fragments where all names and types are known, but constants are
+parameterized:
+
+```haskell
 param :: Int -> SMT2 e
 param bVal
   = [smt2|
@@ -42,24 +48,56 @@ param bVal
       (define-const b Int ${bVal})
       (assert (= a b))
     |]
+```
 
--- Fragments can use typeclass constraints to refer to undeclared variables.
--- Failure to abide by this contract will produce a compile time error.
+Fragments can use typeclass constraints to refer to undeclared variables.
+Failure to abide by this contract will produce a compile time error.
+
+```haskell
 partial :: (Has "a" SBool e, Has "b" SInt e) => SMT2 e
 partial
   = [smt2|
       (assert (and a (lt b 10)))
       (check-sat)
     |]
+```
 
--- Variables can be declared at runtime. Although we cannot statically ensure that these names are
--- well typed, we provide runtime mechanisms that allow the typechecker to infer well-typededness
+Variables can be declared at runtime.
+
+We cannot provide any useful guarantees of name freshness for runtime declared variables, so
+delegate this responsibility to the user and accept the possibility of badly typed SMT generation in
+this case.
+
+We can however statically ensure that all references are to a declared variable of the correct time.
+In order to do this we have to introduce some runtime machinery:
+
+- A runtime copy of the typing environment
+- Inclusion proofs for the typing environment
+
+We then only allow variables to be declared at runtime if the caller can provide a proof of
+inclusion. Since the only way to produce such a proof is to declare a variable beforehand, we have a
+guarantee that all referenced names in the generated smt2 are present in the typing context with a
+matching type.
+
+The monad instance of the `SMT2` type automates the management of the typechecking environment and
+provides convenient interfaces for working with the proofs. There are monadic smart constructors for
+the top level commands.
+
+```haskell
 dyndec :: [String] -> SMT2 e
 dyndec names = do
-  vs <- forM names (declare . fresh)
-  query = forM vs (assert v)
+  -- this returns an array of proofs of inclusion
+  -- note we do not make any freshness checks here!
+  vs <- mapM declare SBool names
 
--- Fragments can easily be sequenced and combined
+  -- assert each declared variable & check sat
+  mapM assert vs
+  checkSat
+```
+
+Both static and dynamic fragments can easily be sequenced and combined.
+
+```haskell
 combined :: [String] -> Int -> SMT2 e
 combined names v = do
   dyndec names

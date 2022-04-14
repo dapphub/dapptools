@@ -1,4 +1,5 @@
 {-# LANGUAGE GADTs #-}
+{-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE AllowAmbiguousTypes #-}
@@ -28,6 +29,7 @@ import Prelude hiding (Eq,Word)
 import GHC.TypeLits
 import Data.Kind
 import Data.Function
+import Control.Monad.State
 
 
 -- base types --------------------------------------------------------------------------------------
@@ -77,9 +79,12 @@ type family Find name typ env where
   Find name typ '[] = TypeError (Text "\"" :<>: Text name :<>: Text "\" is undeclared")
 
 -- | Found resolves iff it is passed a valid prood of inclusion in a given typechecking env
-class Found (p :: Elem name typ env) where
+class Found (proof :: Elem name typ env) where
 instance Found DH where
 instance (Found tl) => Found (DT tl) where
+
+-- | Type alias for adding an inclusion constraint against a given typing env
+type Has name typ env = Found (Find name typ env :: Elem name typ env)
 
 
 -- SMT2 AST ----------------------------------------------------------------------------------------
@@ -107,7 +112,7 @@ data Exp (e :: Env) (t :: Atom) where
 
   -- polymorphic
   Lit       :: LitType t -> Exp e t
-  Var       :: (KnownSymbol n, Found (Find n t e :: Elem n t e)) => Exp e t
+  Var       :: (KnownSymbol n, Has n t e) => Exp e t
   ITE       :: Exp e Boolean   -> Exp e t -> Exp e t -> Exp e t
 
   -- boolean
@@ -119,8 +124,36 @@ data Exp (e :: Env) (t :: Atom) where
   Distinct  :: [Exp e Boolean] -> Exp e Boolean
 
 
+-- monadic interface -------------------------------------------------------------------------------
+
+
+data Dict :: Env -> Type where
+   Nil  :: Dict '[]
+   (:>) :: Entry name typ -> Dict tl -> Dict ('(name, typ) : tl)
+
+infixr 5 :>
+
+data Entry :: Symbol -> Atom -> Type where
+  E :: forall name typ. SAtom typ -> Entry name typ
+
+
+insert :: (name :: Symbol) -> (typ :: Atom) -> Dict env -> (Dict (Decl name typ env), Elem name typ env)
+insert name typ env = undefined
+
+type Dyn = forall (e :: '[ '(Symbol, Atom)]) . State (Dict e, SMT2 e) a
+
+
+declare :: String -> Dyn
+declare name = do
+  (env, smt) <- get
+  pure EmptySMT2
+
 
 -- tests -------------------------------------------------------------------------------------------
+
+testDyn :: Dyn
+testDyn = do
+  pure EmptySMT2
 
 
 -- TODO: compile error when adding an explicit type
@@ -137,3 +170,7 @@ test
   -- & Assert (Var @"yo")
 
   & CheckSat
+
+-- asserting the typechecking env for fragments works
+incomplete :: (Has "hi" Boolean e) => SMT2 e -> SMT2 e
+incomplete = Assert (And [Var @"hi", Lit False])
