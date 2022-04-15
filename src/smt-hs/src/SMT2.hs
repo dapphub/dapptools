@@ -55,16 +55,19 @@ data SAtom (a :: Atom) where
 deriving instance Show (SAtom a)
 
 -- | The typechecking environment
+--
+-- A Ctx is a type level snoc list from galois with a nice inclusion proof system.
 data Env
-  = Env [(Symbol, Atom)]     -- The statically declared names
-        (Ctx Atom)           -- The dynamically declared names
+  = Env
+      [(Symbol, Atom)]     -- ^ The statically declared names
+      (Ctx Atom)           -- ^ The dynamically declared names
 
 type Dyn :: Env -> Ctx Atom
 type family Dyn env where
   Dyn ('Env _ dyn) = dyn
 
 
--- name declaration --------------------------------------------------------------------------------
+-- static name declaration -------------------------------------------------------------------------
 
 
 -- | Extends the static part of the typechecking env with (name, typ) iff name is not already present in env
@@ -75,13 +78,8 @@ type family DeclH name typ env orig where
   DeclH name typ ('Env '[] _) ('Env st dy) = 'Env ('(name, typ) : st) dy
   DeclH name _ ('Env ('(name, _) : _) _) _ = TypeError (Text "duplicate name declaration")
 
--- | Extends the dynamic part of the typechecking env with typ
-type DDecl :: Atom -> Env -> Env
-type family DDecl typ env where
-  DeclH typ ('Env st dy) = 'Env st (dy ::> typ)
 
-
--- environment lookup ------------------------------------------------------------------------------
+-- static environment lookup -----------------------------------------------------------------------
 
 
 -- | A proof that (name, typ) is present in the static part of a given environment
@@ -119,8 +117,8 @@ data SMT2 (e :: Env) where
 
   DDeclare  :: String
             -> SAtom t
-            -> SMT2 e
-            -> SMT2 (DDecl t e)
+            -> SMT2 ('Env st dy)
+            -> SMT2 ('Env st (dy ::> t))
 
   Assert    :: Exp e Boolean
             -> SMT2 e
@@ -129,7 +127,6 @@ data SMT2 (e :: Env) where
   CheckSat  :: SMT2 e
             -> SMT2 e
 
-deriving instance Show (SMT2 e)
 
 -- | The language of assertable statements
 data Exp (e :: Env) (t :: Atom) where
@@ -148,69 +145,124 @@ data Exp (e :: Env) (t :: Atom) where
   Impl      :: [Exp e Boolean] -> Exp e Boolean
   Distinct  :: [Exp e Boolean] -> Exp e Boolean
 
-instance Show (Exp e t) where
-  show (Lit a) = undefined
-
 
 -- runtime variable declaration --------------------------------------------------------------------
 
 
+-- | The type of entries in the runtime type environment
 data Entry :: Atom -> Type where
   E :: forall typ. String -> SAtom typ -> Entry typ
 
--- declares a name in an environment and returns an index
-declare :: String -> SAtom a -> Assignment Entry e -> SMT2 e' -> (Assignment Entry (e ::> a), SMT2 (DDecl a e'), Index (e ::> a) a)
-declare name tp env prev = (env', next, idx)
-  where
-    env' = extend env (E name tp)
-    next = DDeclare name tp prev
-    idx = lastIndex (size env')
+-- | References to runtime delcared variables
+data SymVar where
+  SymVar :: forall (e :: Ctx Atom) (a :: Atom) . SAtom a -> Index e a -> SymVar
 
-testDyn :: String -> SMT2 _
-testDyn name = next'
-             & Assert (VarD idx)
-             & CheckSat
-  where
-    base = EmptySMT2
-         & SDeclare @"hi" SBool
-    (env', next, idx) = declare name SBool empty base
-    (env'', next', idx') = declare "ooo" SBool env' next
+-- | State used when dynamically constructing smt
+data SMTState where
+  SMTState :: forall (st :: [ (Symbol, Atom)]) (dy :: Ctx Atom)
+            . Assignment Entry dy
+           -> SMT2 ('Env st dy)
+           -> SMTState
+
+-- | State monad wrapper over an SMTState
+type Writer = State (SMTState)
+
+declare :: String -> SAtom a -> Writer SymVar
+declare name typ = do
+  s <- get
+  case s of
+    SMTState env exp -> do
+      let env' = extend env (E name typ)
+          proof = lastIndex (size env')
+          next = DDeclare name typ exp
+      put $ SMTState env' next
+      pure $ SymVar typ proof
+
+assert :: SymVar -> Writer ()
+assert v = do
+  s <- get
+  case s of
+    SMTState env exp -> case v of
+      SymVar SBool proof -> do
+        {-
+          [typecheck -Wdeferred-type-errors] [E] • Could not deduce (KnownDiff e dy) arising from a use of ‘VarD’
+            from the context: a ~ 'Boolean
+              bound by a pattern with constructor: SBool :: SAtom 'Boolean,
+                       in a case alternative
+              at /dapptools/src/smt-hs/src/SMT2.hs:183:14-18
+          • In the first argument of ‘Assert’, namely ‘(VarD proof)’
+            In the expression: Assert (VarD proof) exp
+            In an equation for ‘next’: next = Assert (VarD proof) exp
+          -}
+        let next = Assert (VarD proof) exp
+        put $ SMTState env next
+
+checkSat :: Writer ()
+checkSat = do
+  s <- get
+  case s of
+    SMTState env exp -> do
+      put $ SMTState env (CheckSat exp)
 
 
 -- tests -------------------------------------------------------------------------------------------
 
 
---testDyn :: SMT2 _
---testDyn = EmptySMT2
---declare :: SMT2 e -> SMT2 e
---testDyn :: Dyn '[] '[] (SMT2 '[] -> SMT2 _)
---testDyn = do
-  --p <- declare "hi" SBool
-  --(_, smt) <- get
-  --pure smt
+-- Interface for dynamic name declaration
+testDyn :: String -> Writer ()
+testDyn s = do
+  v <- declare "hi" SBool
+  v' <- declare "ho" SBool
+  assert v
+  assert v'
+  checkSat
 
 
--- TODO: writing out the full typechecking env here is very annoying.
--- PartialTypeSignatures with a wildcard isn't too bad, but having to disable a compiler warning is lame
--- Why doesn't the following work?
--- test :: SMT2 e
-test :: SMT2 _
+{-
+ - TODO: type signatures here are pretty awkward:
+ -
+ - test :: SMT2 e
+ -
+ - This doesn't work becuase `SMT2 e` means "I can return an SMT2 over any Type", but
+ - actually `test` returns a specific type and the typechecker knows about it.
+ - The thing that's awkward is that this type depends on the terms inside it, and
+ - includes the full typechecking environment for the final expression, so what
+ - GHC actually wants us to write is:
+ -
+ - test :: SMT2 ('Env '[ '("hi", 'Boolean)] 'EmptyCtx)
+ -
+ - If we enable PartialTypeSignatures, then you can use a wildcard for the
+ - dependent type, which is probablly actually not such a bad workflow, but it
+ - also means having to force library users to disable a compiler warning, which
+ - is kinda gross.
+ -
+ - test :: SMT2 _
+ -
+ - So far the best I've come up with is to hide everything behind an
+ - existential type, I dunno if this is going to result in some crazy pattern
+ - matching down the line though...
+ -}
+data Static where
+  Static :: forall (e :: Env) . SMT2 e -> Static
+
+test :: Static
 test
-  = EmptySMT2
+  = Static $
+    EmptySMT2
   & SDeclare @"hi" SBool
   & Assert (VarS @"hi")
 
+  -- TODO: this is broken now? :(
   -- produces a type error: "hi" is already declared
   -- & SDeclare @"hi" SBool
 
   -- produces a type error: "yo" is undeclared
-  -- & Assert (Var @"yo")
+  -- & Assert (VarS @"yo")
 
   & CheckSat
 
-incompleteDecl :: SMT2 e -> SMT2 _
-incompleteDecl prev = prev
-                    & SDeclare @"hi" SBool
+incompleteDecl :: Static -> Static
+incompleteDecl (Static prev) = Static $ prev & SDeclare @"hi" SBool
 
 -- asserting the typechecking env for fragments works
 incomplete :: (Has "hi" Boolean e) => SMT2 e -> SMT2 e
