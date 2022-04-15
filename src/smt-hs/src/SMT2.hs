@@ -1,4 +1,5 @@
 {-# LANGUAGE GADTs #-}
+{-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE PartialTypeSignatures #-}
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE UndecidableInstances #-}
@@ -30,8 +31,9 @@ import Prelude hiding (Eq,Word)
 import GHC.TypeLits
 import Data.Kind
 import Data.Function
-import Data.Proxy
+import Data.Typeable
 
+import Data.Parameterized.Context
 import Control.Monad.State
 
 
@@ -50,10 +52,16 @@ type family LitType a where
 data SAtom (a :: Atom) where
   SBool :: SAtom Boolean
 
+deriving instance Show (SAtom a)
+
 -- | The typechecking environment
-data Env d
+data Env
   = Env [(Symbol, Atom)]     -- The statically declared names
-        (Dict d)             -- The dynamically declared names
+        (Ctx Atom)           -- The dynamically declared names
+
+type Dyn :: Env -> Ctx Atom
+type family Dyn env where
+  Dyn ('Env _ dyn) = dyn
 
 
 -- name declaration --------------------------------------------------------------------------------
@@ -62,22 +70,27 @@ data Env d
 -- | Extends the static part of the typechecking env with (name, typ) iff name is not already present in env
 type Decl name typ env = DeclH name typ env env
 
-type DeclH :: Symbol -> Atom -> Env e -> Env e -> Env e
+type DeclH :: Symbol -> Atom -> Env -> Env -> Env
 type family DeclH name typ env orig where
   DeclH name typ ('Env '[] _) ('Env st dy) = 'Env ('(name, typ) : st) dy
   DeclH name _ ('Env ('(name, _) : _) _) _ = TypeError (Text "duplicate name declaration")
+
+-- | Extends the dynamic part of the typechecking env with typ
+type DDecl :: Atom -> Env -> Env
+type family DDecl typ env where
+  DeclH typ ('Env st dy) = 'Env st (dy ::> typ)
 
 
 -- environment lookup ------------------------------------------------------------------------------
 
 
 -- | A proof that (name, typ) is present in the static part of a given environment
-data Elem :: Symbol -> Atom -> Env e -> Type where
+data Elem :: Symbol -> Atom -> Env -> Type where
   DH :: Elem name typ ('Env ('(name, typ) : tl) dyn)
   DT :: Elem name typ ('Env st dy) -> Elem name typ ('Env (hd : st) dy)
 
 -- | Compile time type env lookup
-type Find :: Symbol -> Atom -> Env e -> Elem n t e'
+type Find :: Symbol -> Atom -> Env -> Elem n t e'
 type family Find name typ env where
   Find name typ ('Env ('(name,typ) : _) _) = DH
   Find name typ ('Env ('(_,_): tl) dyn) = DT (Find name typ ('Env tl dyn))
@@ -96,14 +109,18 @@ type Has name typ env = Found (Find name typ env :: Elem name typ env)
 
 
 -- | The language of top level solver commands
-data SMT2 (e :: Env e') where
-  EmptySMT2 :: SMT2 ('Env '[] e')
+data SMT2 (e :: Env) where
+  EmptySMT2 :: SMT2 ('Env '[] EmptyCtx)
 
-  Declare   :: KnownSymbol n
-            => Proxy n
-            -> SAtom t
+  SDeclare  :: KnownSymbol n
+            => SAtom t
             -> SMT2 e
             -> SMT2 (Decl n t e)
+
+  DDeclare  :: String
+            -> SAtom t
+            -> SMT2 e
+            -> SMT2 (DDecl t e)
 
   Assert    :: Exp e Boolean
             -> SMT2 e
@@ -112,13 +129,15 @@ data SMT2 (e :: Env e') where
   CheckSat  :: SMT2 e
             -> SMT2 e
 
+deriving instance Show (SMT2 e)
 
 -- | The language of assertable statements
-data Exp (e :: Env dy) (t :: Atom) where
+data Exp (e :: Env) (t :: Atom) where
 
   -- polymorphic
   Lit       :: LitType t -> Exp e t
-  Var       :: (KnownSymbol n, Has n t e) => Exp e t
+  VarS      :: (KnownSymbol n, Has n t e) => Exp e t
+  VarD      :: (KnownDiff e' (Dyn e)) => Index e' t -> Exp e t
   ITE       :: Exp e Boolean   -> Exp e t -> Exp e t -> Exp e t
 
   -- boolean
@@ -129,24 +148,41 @@ data Exp (e :: Env dy) (t :: Atom) where
   Impl      :: [Exp e Boolean] -> Exp e Boolean
   Distinct  :: [Exp e Boolean] -> Exp e Boolean
 
+instance Show (Exp e t) where
+  show (Lit a) = undefined
+
 
 -- runtime variable declaration --------------------------------------------------------------------
 
 
-data Dict :: [Atom] -> Type where
-   Nil  :: Dict '[]
-   (:>) :: Entry typ -> Dict tl -> Dict (typ : tl)
-
-infixr 5 :>
-
 data Entry :: Atom -> Type where
   E :: forall typ. String -> SAtom typ -> Entry typ
 
+-- declares a name in an environment and returns an index
+declare :: String -> SAtom a -> Assignment Entry e -> SMT2 e' -> (Assignment Entry (e ::> a), SMT2 (DDecl a e'), Index (e ::> a) a)
+declare name tp env prev = (env', next, idx)
+  where
+    env' = extend env (E name tp)
+    next = DDeclare name tp prev
+    idx = lastIndex (size env')
+
+testDyn :: String -> SMT2 _
+testDyn name = next'
+             & Assert (VarD idx)
+             & CheckSat
+  where
+    base = EmptySMT2
+         & SDeclare @"hi" SBool
+    (env', next, idx) = declare name SBool empty base
+    (env'', next', idx') = declare "ooo" SBool env' next
 
 
 -- tests -------------------------------------------------------------------------------------------
 
 
+--testDyn :: SMT2 _
+--testDyn = EmptySMT2
+--declare :: SMT2 e -> SMT2 e
 --testDyn :: Dyn '[] '[] (SMT2 '[] -> SMT2 _)
 --testDyn = do
   --p <- declare "hi" SBool
@@ -161,11 +197,11 @@ data Entry :: Atom -> Type where
 test :: SMT2 _
 test
   = EmptySMT2
-  & Declare (Proxy @"hi") SBool
-  & Assert (Var @"hi")
+  & SDeclare @"hi" SBool
+  & Assert (VarS @"hi")
 
   -- produces a type error: "hi" is already declared
-  -- & Declare @"hi" SBool
+  -- & SDeclare @"hi" SBool
 
   -- produces a type error: "yo" is undeclared
   -- & Assert (Var @"yo")
@@ -174,10 +210,10 @@ test
 
 incompleteDecl :: SMT2 e -> SMT2 _
 incompleteDecl prev = prev
-                    & Declare (Proxy @"hi") SBool
+                    & SDeclare @"hi" SBool
 
 -- asserting the typechecking env for fragments works
 incomplete :: (Has "hi" Boolean e) => SMT2 e -> SMT2 e
 incomplete prev = prev
-                & Assert (And [Var @"hi", Lit False])
+                & Assert (And [VarS @"hi", Lit False])
                 & CheckSat
