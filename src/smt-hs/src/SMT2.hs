@@ -36,7 +36,6 @@ import Data.Function
 import Data.Typeable
 
 import Data.Parameterized.Context
-import Control.Monad.State
 
 
 -- base types --------------------------------------------------------------------------------------
@@ -67,11 +66,6 @@ data Env
 type Dy :: Env -> Ctx Atom
 type family Dy env where
   Dy ('Env _ dy) = dy
-
--- | Returns the static part of a given Env
-type St :: Env -> [(Symbol, Atom)]
-type family St env where
-  St ('Env st _) = st
 
 
 -- static name declaration -------------------------------------------------------------------------
@@ -142,7 +136,7 @@ data Exp (e :: Env) (t :: Atom) where
   Lit       :: LitType t -> Exp e t
   VarS      :: (KnownSymbol n, Has n t e) => Exp e t
   VarD      :: (KnownDiff e' (Dy e)) => Index e' t -> Exp e t
-  ITE       :: Exp e Boolean   -> Exp e t -> Exp e t -> Exp e t
+  ITE       :: Exp e Boolean -> Exp e t -> Exp e t -> Exp e t
 
   -- boolean
   And       :: [Exp e Boolean] -> Exp e Boolean
@@ -153,7 +147,8 @@ data Exp (e :: Env) (t :: Atom) where
   Distinct  :: [Exp e Boolean] -> Exp e Boolean
 
 
--- monadic interface --------------------------------------------------------------------
+-- indexed monad -----------------------------------------------------------------------------------
+
 
 class IxMonad m where
     ireturn :: a -> m p p a
@@ -165,11 +160,11 @@ instance Monad m => IxMonad (IxStateT m) where
   ireturn x = IxStateT (\si -> Prelude.return (si,x))
   ibind (IxStateT m) f = IxStateT (\si -> m si Prelude.>>= (\ (sm,x) -> runIxStateT (f x) sm))
 
-vsget :: Monad m => IxStateT m si si si
-vsget = IxStateT (\si -> Prelude.return (si,si))
+get :: Monad m => IxStateT m si si si
+get = IxStateT (\si -> Prelude.return (si,si))
 
-vsput :: Monad m => so -> IxStateT m si so ()
-vsput x = IxStateT (\si -> Prelude.return (x,()))
+put :: Monad m => so -> IxStateT m si so ()
+put x = IxStateT (\si -> Prelude.return (x,()))
 
 return :: (Monad m) => a -> IxStateT m si si a
 return = ireturn
@@ -180,6 +175,10 @@ return = ireturn
 (>>) :: (Monad m) => IxStateT m p q a -> IxStateT m q r b -> IxStateT m p r b
 v >> w = v SMT2.>>= const w
 
+
+-- monadic interface -------------------------------------------------------------------------------
+
+
 -- | The type of entries in the runtime type environment
 data Entry :: Atom -> Type where
   E :: forall typ. String -> SAtom typ -> Entry typ
@@ -188,34 +187,33 @@ data Entry :: Atom -> Type where
 type Writer stin dyin stout dyout ret = forall m . (Monad m) => IxStateT m
   (Assignment Entry dyin, SMT2 ('Env stin dyin))    -- ^ prestate
   (Assignment Entry dyout, SMT2 ('Env stout dyout)) -- ^ poststate
-  ret                                               -- ^ return
-
+  ret                                               -- ^ return type
 
 declare :: String -> SAtom a -> Writer st dy st (dy ::> a) (Index (dy ::> a) a)
 declare name typ = SMT2.do
-  (env, exp) <- vsget
+  (env, exp) <- get
   let env'  = extend env (E name typ)
       exp'  = DDeclare name typ exp
       proof = lastIndex (size env')
-  vsput (env', exp')
+  put (env', exp')
   SMT2.return proof
 
 assert :: KnownDiff old dy => Index old Boolean -> Writer st dy st dy ()
 assert proof = SMT2.do
-  (env, exp) <- vsget
+  (env, exp) <- get
   let next = Assert (VarD proof) exp
-  vsput (env, next)
+  put (env, next)
 
 include :: (SMT2 ('Env stin dy) -> SMT2 ('Env stout dy)) -> Writer stin dy stout dy ()
 include fragment = SMT2.do
-  (env, exp) <- vsget
-  vsput (env, fragment exp)
+  (env, exp) <- get
+  put (env, fragment exp)
 
 
 -- tests -------------------------------------------------------------------------------------------
 
 
-testDyn :: String -> String -> Writer _ _ _ _ _
+testDyn :: String -> String -> Writer st dy st _ ()
 testDyn n1 n2 = SMT2.do
   p <- declare n1 SBool
   p' <- declare n2 SBool
@@ -224,8 +222,6 @@ testDyn n1 n2 = SMT2.do
   -- TODO: including static fragments that declare names
   --include incompleteDecl
   include CheckSat
-  (env, exp) <- vsget
-  SMT2.return exp
 
 
 test :: SMT2 _
@@ -242,26 +238,24 @@ test
 
   & CheckSat
 
-incompleteDecl :: SMT2 e -> SMT2 _
-incompleteDecl = SDeclare @"hi" SBool
+declHi :: SMT2 e -> SMT2 _
+declHi = SDeclare @"hi" SBool
 
 -- asserting the typechecking env for fragments works
-incomplete :: _ => SMT2 e -> SMT2 e
-incomplete =
+assertHi :: _ => SMT2 e -> SMT2 e
+assertHi =
     Assert (And [VarS @"hi", Lit False])
-  . CheckSat
-
--- TODO: why is the constraint needed here?
-static :: _ => SMT2 e -> SMT2 _
-static =
-    SDeclare @"hi" SBool
-  . Assert (And [VarS @"hi", Lit False])
-  . CheckSat
 
 -- composition of two incomplete fragments
-
 composed :: SMT2 _
 composed
   = EmptySMT2
-  & incompleteDecl
-  & incomplete
+  & declHi
+  & assertHi
+
+-- TODO: why is the constraint needed here?
+static :: _ => SMT2 e -> SMT2 _
+static prev = prev
+  & SDeclare @"hi" SBool
+  & Assert (And [VarS @"hi", Lit False])
+  & CheckSat
