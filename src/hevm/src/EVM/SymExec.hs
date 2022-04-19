@@ -40,8 +40,8 @@ type EquivalenceResult = ProofResult ([VM], [VM]) VM ()
 
 -- | Convenience functions for generating large symbolic byte strings
 sbytes32, sbytes128, sbytes256, sbytes512, sbytes1024 :: Query ([SWord 8])
-sbytes32 = toBytes <$> freshVar_ @ (WordN 256)
-sbytes128 = toBytes <$> freshVar_ @ (WordN 1024)
+sbytes32 = toBytes <$> freshVar_ @(WordN 256)
+sbytes128 = toBytes <$> freshVar_ @(WordN 1024)
 sbytes256 = liftA2 (++) sbytes128 sbytes128
 sbytes512 = liftA2 (++) sbytes256 sbytes256
 sbytes1024 = liftA2 (++) sbytes512 sbytes512

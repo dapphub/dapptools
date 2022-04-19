@@ -6,6 +6,8 @@
 module Jays where
 
 import Data.Aeson
+import qualified Data.Aeson.Key as Key
+import qualified Data.Aeson.KeyMap as KeyMap
 import Data.ByteString.Lazy (ByteString)
 import Data.ByteString.Lazy (fromStrict, toStrict)
 import Data.Foldable (toList)
@@ -147,7 +149,7 @@ work stk ops =
     (xs, OpNewValue v : ops') -> work (v : xs) ops'
 
     (v : Object o : xs, OpInsert k : ops') ->
-      work (Object (Map.insert k v o) : xs) ops'
+      work (Object (KeyMap.insert (Key.fromText k) v o) : xs) ops'
     (v : Array o : xs, OpInsert "append" : ops') ->
       work (Array (snoc o v) : xs) ops'
     (_, OpInsert "append" : _) ->
@@ -156,7 +158,7 @@ work stk ops =
       Left "error in -i"
 
     (Object o : xs, OpExtract k : ops') ->
-      case Map.lookup k o of
+      case KeyMap.lookup (Key.fromText k) o of
         Nothing ->
           Left ("error in -e: no such key: " <> k)
         Just x ->
@@ -185,7 +187,7 @@ work stk ops =
       Left "error in -t"
 
     (Object o : xs, OpKeys : ops') ->
-      (map (fromStrict . encodeUtf8) (sort (Map.keys o)) ++) <$> work xs ops'
+      (map (fromStrict . encodeUtf8 . Key.toText) (sort (KeyMap.keys o)) ++) <$> work xs ops'
     (_, OpKeys : _) ->
       Left "error in -k"
 

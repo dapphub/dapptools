@@ -70,6 +70,7 @@ import Control.Monad
 import Control.Lens         hiding (Indexed, (.=))
 import qualified Data.String.Here as Here
 import Data.Aeson hiding (json)
+import qualified Data.Aeson.KeyMap as KeyMap
 import Data.Aeson.Types
 import Data.Aeson.Lens
 import Data.Scientific
@@ -714,8 +715,8 @@ astIdMap = foldMap f
     f :: Value -> Map Int Value
     f (Array x) = foldMap f x
     f v@(Object x) =
-      let t = foldMap f (HMap.elems x)
-      in case HMap.lookup "id" x of
+      let t = foldMap f (KeyMap.elems x)
+      in case KeyMap.lookup "id" x of
         Nothing         -> t
         Just (Number i) -> t <> Map.singleton (round i) v
         Just _          -> t
