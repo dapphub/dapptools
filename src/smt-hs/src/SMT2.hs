@@ -1,6 +1,7 @@
 {-# LANGUAGE GADTs #-}
-{-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE QualifiedDo #-}
 {-# LANGUAGE PartialTypeSignatures #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
@@ -14,6 +15,7 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE DataKinds #-}
+{-# OPTIONS -Wno-partial-type-signatures #-}
 
 {- | An embedding of the SMT2 typing rules in the haskell type system
 
@@ -52,8 +54,6 @@ type family LitType a where
 data SAtom (a :: Atom) where
   SBool :: SAtom Boolean
 
-deriving instance Show (SAtom a)
-
 -- | The typechecking environment
 --
 -- A Ctx is a type level snoc list from galois with a nice inclusion proof system.
@@ -62,9 +62,16 @@ data Env
       [(Symbol, Atom)]     -- ^ The statically declared names
       (Ctx Atom)           -- ^ The dynamically declared names
 
-type Dyn :: Env -> Ctx Atom
-type family Dyn env where
-  Dyn ('Env _ dyn) = dyn
+
+-- | Returns the dynamic part of a given Env
+type Dy :: Env -> Ctx Atom
+type family Dy env where
+  Dy ('Env _ dy) = dy
+
+-- | Returns the static part of a given Env
+type St :: Env -> [(Symbol, Atom)]
+type family St env where
+  St ('Env st _) = st
 
 
 -- static name declaration -------------------------------------------------------------------------
@@ -134,7 +141,7 @@ data Exp (e :: Env) (t :: Atom) where
   -- polymorphic
   Lit       :: LitType t -> Exp e t
   VarS      :: (KnownSymbol n, Has n t e) => Exp e t
-  VarD      :: (KnownDiff e' (Dyn e)) => Index e' t -> Exp e t
+  VarD      :: (KnownDiff e' (Dy e)) => Index e' t -> Exp e t
   ITE       :: Exp e Boolean   -> Exp e t -> Exp e t -> Exp e t
 
   -- boolean
@@ -146,113 +153,87 @@ data Exp (e :: Env) (t :: Atom) where
   Distinct  :: [Exp e Boolean] -> Exp e Boolean
 
 
--- runtime variable declaration --------------------------------------------------------------------
+-- monadic interface --------------------------------------------------------------------
 
+class IxMonad m where
+    ireturn :: a -> m p p a
+    ibind :: m p q a -> (a -> m q r b) -> m p r b
+
+newtype IxStateT m si so v = IxStateT { runIxStateT:: si -> m (so,v) }
+
+instance Monad m => IxMonad (IxStateT m) where
+  ireturn x = IxStateT (\si -> Prelude.return (si,x))
+  ibind (IxStateT m) f = IxStateT (\si -> m si Prelude.>>= (\ (sm,x) -> runIxStateT (f x) sm))
+
+vsget :: Monad m => IxStateT m si si si
+vsget = IxStateT (\si -> Prelude.return (si,si))
+
+vsput :: Monad m => so -> IxStateT m si so ()
+vsput x = IxStateT (\si -> Prelude.return (x,()))
+
+return :: (Monad m) => a -> IxStateT m si si a
+return = ireturn
+
+(>>=) :: (Monad m) => IxStateT m p q a -> (a -> IxStateT m q r b) -> IxStateT m p r b
+(>>=) = ibind
+
+(>>) :: (Monad m) => IxStateT m p q a -> IxStateT m q r b -> IxStateT m p r b
+v >> w = v SMT2.>>= const w
 
 -- | The type of entries in the runtime type environment
 data Entry :: Atom -> Type where
   E :: forall typ. String -> SAtom typ -> Entry typ
 
--- | References to runtime delcared variables
-data SymVar where
-  SymVar :: forall (e :: Ctx Atom) (a :: Atom) . SAtom a -> Index e a -> SymVar
+-- | Wrapper type for the indexed state monad we use
+type Writer stin dyin stout dyout ret = forall m . (Monad m) => IxStateT m
+  (Assignment Entry dyin, SMT2 ('Env stin dyin))    -- ^ prestate
+  (Assignment Entry dyout, SMT2 ('Env stout dyout)) -- ^ poststate
+  ret                                               -- ^ return
 
--- | State used when dynamically constructing smt
-data SMTState where
-  SMTState :: forall (st :: [ (Symbol, Atom)]) (dy :: Ctx Atom)
-            . Assignment Entry dy
-           -> SMT2 ('Env st dy)
-           -> SMTState
 
--- | State monad wrapper over an SMTState
-type Writer = State (SMTState)
+declare :: String -> SAtom a -> Writer st dy st (dy ::> a) (Index (dy ::> a) a)
+declare name typ = SMT2.do
+  (env, exp) <- vsget
+  let env'  = extend env (E name typ)
+      exp'  = DDeclare name typ exp
+      proof = lastIndex (size env')
+  vsput (env', exp')
+  SMT2.return proof
 
-declare :: String -> SAtom a -> Writer SymVar
-declare name typ = do
-  s <- get
-  case s of
-    SMTState env exp -> do
-      let env' = extend env (E name typ)
-          proof = lastIndex (size env')
-          next = DDeclare name typ exp
-      put $ SMTState env' next
-      pure $ SymVar typ proof
+assert :: KnownDiff old dy => Index old Boolean -> Writer st dy st dy ()
+assert proof = SMT2.do
+  (env, exp) <- vsget
+  let next = Assert (VarD proof) exp
+  vsput (env, next)
 
-assert :: SymVar -> Writer ()
-assert v = do
-  s <- get
-  case s of
-    SMTState env exp -> case v of
-      SymVar SBool proof -> do
-        {-
-          [typecheck -Wdeferred-type-errors] [E] • Could not deduce (KnownDiff e dy) arising from a use of ‘VarD’
-            from the context: a ~ 'Boolean
-              bound by a pattern with constructor: SBool :: SAtom 'Boolean,
-                       in a case alternative
-              at /dapptools/src/smt-hs/src/SMT2.hs:183:14-18
-          • In the first argument of ‘Assert’, namely ‘(VarD proof)’
-            In the expression: Assert (VarD proof) exp
-            In an equation for ‘next’: next = Assert (VarD proof) exp
-          -}
-        let next = Assert (VarD proof) exp
-        put $ SMTState env next
-
-checkSat :: Writer ()
-checkSat = do
-  s <- get
-  case s of
-    SMTState env exp -> do
-      put $ SMTState env (CheckSat exp)
+include :: (SMT2 ('Env stin dy) -> SMT2 ('Env stout dy)) -> Writer stin dy stout dy ()
+include fragment = SMT2.do
+  (env, exp) <- vsget
+  vsput (env, fragment exp)
 
 
 -- tests -------------------------------------------------------------------------------------------
 
 
--- Interface for dynamic name declaration
-testDyn :: String -> Writer ()
-testDyn s = do
-  v <- declare "hi" SBool
-  v' <- declare "ho" SBool
-  assert v
-  assert v'
-  checkSat
+testDyn :: Writer _ _ _ _ _
+testDyn = SMT2.do
+  p <- declare "hi" SBool
+  p' <- declare "ho" SBool
+  assert p
+  assert p'
+  -- TODO: including static fragments that declare names
+  --include incompleteDecl
+  include CheckSat
+  (env, exp) <- vsget
+  SMT2.return exp
 
 
-{-
- - TODO: type signatures here are pretty awkward:
- -
- - test :: SMT2 e
- -
- - This doesn't work becuase `SMT2 e` means "I can return an SMT2 over any Type", but
- - actually `test` returns a specific type and the typechecker knows about it.
- - The thing that's awkward is that this type depends on the terms inside it, and
- - includes the full typechecking environment for the final expression, so what
- - GHC actually wants us to write is:
- -
- - test :: SMT2 ('Env '[ '("hi", 'Boolean)] 'EmptyCtx)
- -
- - If we enable PartialTypeSignatures, then you can use a wildcard for the
- - dependent type, which is probablly actually not such a bad workflow, but it
- - also means having to force library users to disable a compiler warning, which
- - is kinda gross.
- -
- - test :: SMT2 _
- -
- - So far the best I've come up with is to hide everything behind an
- - existential type, I dunno if this is going to result in some crazy pattern
- - matching down the line though...
- -}
-data Static where
-  Static :: forall (e :: Env) . SMT2 e -> Static
-
-test :: Static
+test :: SMT2 _
 test
-  = Static $
-    EmptySMT2
+  = EmptySMT2
   & SDeclare @"hi" SBool
   & Assert (VarS @"hi")
 
-  -- TODO: this is broken now? :(
   -- produces a type error: "hi" is already declared
   -- & SDeclare @"hi" SBool
 
@@ -261,11 +242,26 @@ test
 
   & CheckSat
 
-incompleteDecl :: Static -> Static
-incompleteDecl (Static prev) = Static $ prev & SDeclare @"hi" SBool
+incompleteDecl :: SMT2 e -> SMT2 _
+incompleteDecl = SDeclare @"hi" SBool
 
 -- asserting the typechecking env for fragments works
-incomplete :: (Has "hi" Boolean e) => SMT2 e -> SMT2 e
-incomplete prev = prev
-                & Assert (And [VarS @"hi", Lit False])
-                & CheckSat
+incomplete :: _ => SMT2 e -> SMT2 e
+incomplete =
+    Assert (And [VarS @"hi", Lit False])
+  . CheckSat
+
+-- TODO: why is the constraint needed here?
+static :: _ => SMT2 e -> SMT2 _
+static =
+    SDeclare @"hi" SBool
+  . Assert (And [VarS @"hi", Lit False])
+  . CheckSat
+
+-- composition of two incomplete fragments
+
+composed :: SMT2 _
+composed
+  = EmptySMT2
+  & incompleteDecl
+  & incomplete
