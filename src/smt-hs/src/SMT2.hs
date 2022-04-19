@@ -215,10 +215,10 @@ include fragment = SMT2.do
 -- tests -------------------------------------------------------------------------------------------
 
 
-testDyn :: Writer _ _ _ _ _
-testDyn = SMT2.do
-  p <- declare "hi" SBool
-  p' <- declare "ho" SBool
+testDyn :: String -> String -> Writer _ _ _ _ _
+testDyn n1 n2 = SMT2.do
+  p <- declare n1 SBool
+  p' <- declare n2 SBool
   assert p
   assert p'
   -- TODO: including static fragments that declare names
