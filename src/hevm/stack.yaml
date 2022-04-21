@@ -7,7 +7,6 @@ extra-deps:
 - restless-git-0.7
 - s-cargot-0.1.4.0
 - tree-view-0.5
-- text-format-0.3.2
 - witherable-0.3.5
 - base16-bytestring-1.0.1.0@sha256:33b9d57afa334d06485033e930c6b13fc760baf88fd8f715ae2f9a4b46e19a54,2641
 - github: dmjio/semver-range
