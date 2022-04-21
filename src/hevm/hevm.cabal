@@ -189,7 +189,6 @@ executable hevm
     sbv,
     temporary,
     text,
-    text-format,
     unordered-containers,
     vector,
     vty
