@@ -61,8 +61,8 @@ data SMT2 (e :: Env) where
 
   SDeclare  :: KnownSymbol n
             => SAtom t
-            -> SMT2 e
-            -> SMT2 (Decl n t e)
+            -> SMT2 ('Env st dy)
+            -> SMT2 ('Env (Decl n t st) dy)
 
   DDeclare  :: String
             -> SAtom t
@@ -99,12 +99,12 @@ data Exp (e :: Env) (t :: Atom) where
 
 
 -- | Extends the static part of the typechecking env with (name, typ) iff name is not already present in env
-type Decl name typ env = DeclH name typ env env
+type Decl name typ st = DeclH name typ st st
 
-type DeclH :: Symbol -> Atom -> Env -> Env -> Env
+type DeclH :: Symbol -> Atom -> Ctx (Symbol, Atom) -> Ctx (Symbol, Atom) -> Ctx (Symbol, Atom)
 type family DeclH name typ env orig where
-  DeclH name typ ('Env 'EmptyCtx _) ('Env st dy) = 'Env (st ::> '(name, typ)) dy
-  DeclH name _ ('Env (_ ::> '(name, _)) _) _ = TypeError (Text "duplicate name declaration")
+  DeclH name typ 'EmptyCtx st = st ::> '(name, typ)
+  DeclH name _ (_ ::> '(name, _)) _ = TypeError (Text "duplicate name declaration")
 
 
 -- static environment lookup -----------------------------------------------------------------------
@@ -116,14 +116,16 @@ data Elem :: Symbol -> Atom -> Env -> Type where
   DT :: Elem name typ ('Env st dy) -> Elem name typ ('Env (st ::> e) dy)
 
 -- | Compile time type env lookup
-type Find :: Symbol -> Atom -> Env -> Nat
+type Find :: Symbol -> Atom -> Ctx (Symbol, Atom) -> Nat
 type family Find name typ env where
-  Find name typ ('Env (_ ::> '(name, typ)) _) = 0
-  Find name typ ('Env (pre ::> _) dy) = (Find name typ ('Env pre dy)) + 1
-  Find name typ ('Env 'EmptyCtx 'EmptyCtx) = TypeError (Text "undeclared name")
+  Find name typ (_ ::> '(name, typ)) = 0
+  Find name typ (pre ::> _) = (Find name typ pre) + 1
+  Find name typ 'EmptyCtx = TypeError (Text "undeclared name")
 
 -- | Type alias for convenient inclusion checking
-type Has n a e = ValidIx (Find n a e) (St e)
+type Has n a e = ValidIx (Find n a (St e)) (St e)
+
+
 -- overloaded monadic ops for QualifiedDo ----------------------------------------------------------
 
 
@@ -150,6 +152,10 @@ type Writer pre post ret = IxState
   (Assignment Entry (Dy post), SMT2 post) -- ^ poststate
   ret                                               -- ^ return type
 
+-- | Declare a new name at runtime
+--
+-- N.B. Does not perform any freshness checks. You are responsible for ensuring
+-- that names declared via the rutime interface are distinct
 declare :: String -> SAtom a -> Writer ('Env st dy) ('Env st (dy ::> a)) (Index (dy ::> a) a)
 declare name typ = SMT2.do
   (env, exp) <- get
@@ -159,13 +165,15 @@ declare name typ = SMT2.do
   put (env', exp')
   SMT2.return proof
 
+-- | Assert some boolean variable
 assert :: KnownDiff old (Dy e) => Index old Boolean -> Writer e e ()
 assert proof = SMT2.do
   (env, exp) <- get
   let next = Assert (VarD proof) exp
   put (env, next)
 
-include :: (SMT2 ('Env stin dy) -> SMT2 ('Env stout dy)) -> Writer ('Env stin dy) ('Env stout dy) ()
+-- | Extend the SMT2 expression with some static fragment
+include :: _ => (SMT2 ('Env stin dy) -> SMT2 ('Env stout dy)) -> Writer ('Env stin dy) ('Env stout dy) ()
 include fragment = SMT2.do
   (env, exp) <- get
   put (env, fragment exp)
@@ -203,8 +211,9 @@ testDyn n1 n2 = SMT2.do
   p' <- declare n2 SBool
   assert p
   assert p'
-  -- TODO: including static fragments that declare names
-  --include declHi
+  include declHi
+  -- TODO: include a fragment that depends on a static name
+  include assertHi
   include CheckSat
 
 
@@ -222,13 +231,12 @@ test
 
   & CheckSat
 
-declHi :: SMT2 e -> SMT2 _
+declHi :: SMT2 _ -> SMT2 _
 declHi = SDeclare @"hi" SBool
 
 -- asserting the typechecking env for fragments works
 assertHi :: _ => SMT2 e -> SMT2 e
-assertHi =
-    Assert (And [VarS @"hi", Lit False])
+assertHi = Assert (And [VarS @"hi", Lit False])
 
 -- composition of two incomplete fragments
 composed :: SMT2 _
@@ -238,7 +246,7 @@ composed
   & assertHi
 
 -- TODO: why is the constraint needed here?
-static :: _ => SMT2 e -> SMT2 _
+static :: _ => SMT2 _ -> SMT2 _
 static prev = prev
   & SDeclare @"hi" SBool
   & Assert (And [VarS @"hi", Lit False])
