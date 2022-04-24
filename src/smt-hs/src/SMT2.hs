@@ -62,6 +62,10 @@ data Env
       (Ctx (Symbol, Atom)) -- ^ The statically declared names
       (Ctx Atom)           -- ^ The dynamically declared names
 
+-- | Returns the static part of a given Env
+type St :: Env -> Ctx (Symbol, Atom)
+type family St env where
+  St ('Env st _) = st
 
 -- | Returns the dynamic part of a given Env
 type Dy :: Env -> Ctx Atom
@@ -90,19 +94,14 @@ data Elem :: Symbol -> Atom -> Env -> Type where
   DT :: Elem name typ ('Env st dy) -> Elem name typ ('Env (st ::> e) dy)
 
 -- | Compile time type env lookup
-type Find :: Symbol -> Atom -> Env -> Elem n t e'
+type Find :: Symbol -> Atom -> Env -> Nat
 type family Find name typ env where
-  Find name typ ('Env (_ ::> '(name,typ)) _) = DH
-  Find name typ ('Env (hd ::> '(_,_)) dyn) = DT (Find name typ ('Env hd dyn))
-  Find name typ ('Env 'EmptyCtx _) = TypeError (Text "undeclared name")
+  Find name typ ('Env (_ ::> '(name, typ)) _) = 0
+  Find name typ ('Env (pre ::> _) dy) = (Find name typ ('Env pre dy)) + 1
+  Find name typ ('Env 'EmptyCtx 'EmptyCtx) = TypeError (Text "undeclared name")
 
--- | Found resolves iff it is passed a valid prood of inclusion in a given typechecking env
-class Found (proof :: Elem name typ env) where
-instance Found DH where
-instance (Found tl) => Found (DT tl) where
-
--- | Type alias for adding an inclusion constraint against a given typing env
-type Has name typ env = Found (Find name typ env :: Elem name typ env)
+-- | Type alias for convenient inclusion checking
+type Has n a e = ValidIx (Find n a e) (St e)
 
 
 -- SMT2 AST ----------------------------------------------------------------------------------------
