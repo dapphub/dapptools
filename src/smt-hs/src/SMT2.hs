@@ -36,6 +36,7 @@ import Data.Function
 import Data.Typeable
 
 import Data.Parameterized.Context
+import IxState
 
 
 -- base types --------------------------------------------------------------------------------------
@@ -58,7 +59,7 @@ data SAtom (a :: Atom) where
 -- A Ctx is a type level snoc list from galois with a nice inclusion proof system.
 data Env
   = Env
-      [(Symbol, Atom)]     -- ^ The statically declared names
+      (Ctx (Symbol, Atom)) -- ^ The statically declared names
       (Ctx Atom)           -- ^ The dynamically declared names
 
 
@@ -76,8 +77,8 @@ type Decl name typ env = DeclH name typ env env
 
 type DeclH :: Symbol -> Atom -> Env -> Env -> Env
 type family DeclH name typ env orig where
-  DeclH name typ ('Env '[] _) ('Env st dy) = 'Env ('(name, typ) : st) dy
-  DeclH name _ ('Env ('(name, _) : _) _) _ = TypeError (Text "duplicate name declaration")
+  DeclH name typ ('Env 'EmptyCtx _) ('Env st dy) = 'Env (st ::> '(name, typ)) dy
+  DeclH name _ ('Env (_ ::> '(name, _)) _) _ = TypeError (Text "duplicate name declaration")
 
 
 -- static environment lookup -----------------------------------------------------------------------
@@ -85,15 +86,15 @@ type family DeclH name typ env orig where
 
 -- | A proof that (name, typ) is present in the static part of a given environment
 data Elem :: Symbol -> Atom -> Env -> Type where
-  DH :: Elem name typ ('Env ('(name, typ) : tl) dyn)
-  DT :: Elem name typ ('Env st dy) -> Elem name typ ('Env (hd : st) dy)
+  DH :: Elem name typ ('Env (hd ::> '(name, typ)) dyn)
+  DT :: Elem name typ ('Env st dy) -> Elem name typ ('Env (st ::> e) dy)
 
 -- | Compile time type env lookup
 type Find :: Symbol -> Atom -> Env -> Elem n t e'
 type family Find name typ env where
-  Find name typ ('Env ('(name,typ) : _) _) = DH
-  Find name typ ('Env ('(_,_): tl) dyn) = DT (Find name typ ('Env tl dyn))
-  Find name typ ('Env '[] _) = TypeError (Text "undeclared name")
+  Find name typ ('Env (_ ::> '(name,typ)) _) = DH
+  Find name typ ('Env (hd ::> '(_,_)) dyn) = DT (Find name typ ('Env hd dyn))
+  Find name typ ('Env 'EmptyCtx _) = TypeError (Text "undeclared name")
 
 -- | Found resolves iff it is passed a valid prood of inclusion in a given typechecking env
 class Found (proof :: Elem name typ env) where
@@ -109,7 +110,7 @@ type Has name typ env = Found (Find name typ env :: Elem name typ env)
 
 -- | The language of top level solver commands
 data SMT2 (e :: Env) where
-  EmptySMT2 :: SMT2 ('Env '[] EmptyCtx)
+  EmptySMT2 :: SMT2 ('Env EmptyCtx EmptyCtx)
 
   SDeclare  :: KnownSymbol n
             => SAtom t
@@ -147,33 +148,17 @@ data Exp (e :: Env) (t :: Atom) where
   Distinct  :: [Exp e Boolean] -> Exp e Boolean
 
 
--- indexed monad -----------------------------------------------------------------------------------
+-- overloaded monadic ops for QualifiedDo ----------------------------------------------------------
 
 
-class IxMonad m where
-    ireturn :: a -> m p p a
-    ibind :: m p q a -> (a -> m q r b) -> m p r b
-
-newtype IxStateT m si so v = IxStateT { runIxStateT:: si -> m (so,v) }
-
-instance Monad m => IxMonad (IxStateT m) where
-  ireturn x = IxStateT (\si -> Prelude.return (si,x))
-  ibind (IxStateT m) f = IxStateT (\si -> m si Prelude.>>= (\ (sm,x) -> runIxStateT (f x) sm))
-
-get :: Monad m => IxStateT m si si si
-get = IxStateT (\si -> Prelude.return (si,si))
-
-put :: Monad m => so -> IxStateT m si so ()
-put x = IxStateT (\si -> Prelude.return (x,()))
-
-return :: (Monad m) => a -> IxStateT m si si a
+return :: a -> IxState si si a
 return = ireturn
 
-(>>=) :: (Monad m) => IxStateT m p q a -> (a -> IxStateT m q r b) -> IxStateT m p r b
+(>>=) :: IxState p q a -> (a -> IxState q r b) -> IxState p r b
 (>>=) = ibind
 
-(>>) :: (Monad m) => IxStateT m p q a -> IxStateT m q r b -> IxStateT m p r b
-v >> w = v SMT2.>>= const w
+(>>) :: IxState p q a -> IxState q r b -> IxState p r b
+v >> w = v IxState.>>= const w
 
 
 -- monadic interface -------------------------------------------------------------------------------
@@ -184,7 +169,7 @@ data Entry :: Atom -> Type where
   E :: forall typ. String -> SAtom typ -> Entry typ
 
 -- | Wrapper type for the indexed state monad we use
-type Writer stin dyin stout dyout ret = forall m . (Monad m) => IxStateT m
+type Writer stin dyin stout dyout ret = IxState
   (Assignment Entry dyin, SMT2 ('Env stin dyin))    -- ^ prestate
   (Assignment Entry dyout, SMT2 ('Env stout dyout)) -- ^ poststate
   ret                                               -- ^ return type

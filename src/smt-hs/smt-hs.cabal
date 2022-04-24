@@ -11,7 +11,7 @@ maintainer:         git@d-xo.org
 extra-source-files: CHANGELOG.md
 
 library
-    exposed-modules:  SMT2
+    exposed-modules:  SMT2, IxState
     build-depends:    base,
                       mtl,
                       parameterized-utils,
