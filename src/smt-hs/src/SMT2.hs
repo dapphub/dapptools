@@ -45,11 +45,6 @@ import IxState
 -- | Atomic data types
 data Atom = Boolean
 
--- | Define the haskell datatype used to declare literals of a given atomic type
-type LitType :: Atom -> Type
-type family LitType a where
-  LitType Boolean = Bool
-
 -- | Singleton type for Atom
 data SAtom (a :: Atom) where
   SBool :: SAtom Boolean
@@ -61,16 +56,6 @@ data Env
   = Env
       (Ctx (Symbol, Atom)) -- ^ The statically declared names
       (Ctx Atom)           -- ^ The dynamically declared names
-
--- | Returns the static part of a given Env
-type St :: Env -> Ctx (Symbol, Atom)
-type family St env where
-  St ('Env st _) = st
-
--- | Returns the dynamic part of a given Env
-type Dy :: Env -> Ctx Atom
-type family Dy env where
-  Dy ('Env _ dy) = dy
 
 
 -- static name declaration -------------------------------------------------------------------------
@@ -168,12 +153,12 @@ data Entry :: Atom -> Type where
   E :: forall typ. String -> SAtom typ -> Entry typ
 
 -- | Wrapper type for the indexed state monad we use
-type Writer stin dyin stout dyout ret = IxState
-  (Assignment Entry dyin, SMT2 ('Env stin dyin))    -- ^ prestate
-  (Assignment Entry dyout, SMT2 ('Env stout dyout)) -- ^ poststate
+type Writer pre post ret = IxState
+  (Assignment Entry (Dy pre), SMT2 pre)    -- ^ prestate
+  (Assignment Entry (Dy post), SMT2 post) -- ^ poststate
   ret                                               -- ^ return type
 
-declare :: String -> SAtom a -> Writer st dy st (dy ::> a) (Index (dy ::> a) a)
+declare :: String -> SAtom a -> Writer ('Env st dy) ('Env st (dy ::> a)) (Index (dy ::> a) a)
 declare name typ = SMT2.do
   (env, exp) <- get
   let env'  = extend env (E name typ)
@@ -182,29 +167,48 @@ declare name typ = SMT2.do
   put (env', exp')
   SMT2.return proof
 
-assert :: KnownDiff old dy => Index old Boolean -> Writer st dy st dy ()
+assert :: KnownDiff old (Dy e) => Index old Boolean -> Writer e e ()
 assert proof = SMT2.do
   (env, exp) <- get
   let next = Assert (VarD proof) exp
   put (env, next)
 
-include :: (SMT2 ('Env stin dy) -> SMT2 ('Env stout dy)) -> Writer stin dy stout dy ()
+include :: (SMT2 ('Env stin dy) -> SMT2 ('Env stout dy)) -> Writer ('Env stin dy) ('Env stout dy) ()
 include fragment = SMT2.do
   (env, exp) <- get
   put (env, fragment exp)
 
 
+-- utils -------------------------------------------------------------------------------------------
+
+
+-- | Define the haskell datatype used to declare literals of a given atomic type
+type LitType :: Atom -> Type
+type family LitType a where
+  LitType Boolean = Bool
+
+-- | Returns the static part of a given Env
+type St :: Env -> Ctx (Symbol, Atom)
+type family St env where
+  St ('Env st _) = st
+
+-- | Returns the dynamic part of a given Env
+type Dy :: Env -> Ctx Atom
+type family Dy env where
+  Dy ('Env _ dy) = dy
+
+
 -- tests -------------------------------------------------------------------------------------------
 
 
-testDyn :: String -> String -> Writer st dy st _ ()
+testDyn :: String -> String -> Writer ('Env st dy) ('Env st _) ()
 testDyn n1 n2 = SMT2.do
   p <- declare n1 SBool
   p' <- declare n2 SBool
   assert p
   assert p'
   -- TODO: including static fragments that declare names
-  --include incompleteDecl
+  --include declHi
   include CheckSat
 
 
