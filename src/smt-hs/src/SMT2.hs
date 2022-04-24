@@ -62,7 +62,7 @@ data SMT2 (e :: Env) where
   SDeclare  :: KnownSymbol n
             => SAtom t
             -> SMT2 ('Env st dy)
-            -> SMT2 ('Env (Decl n t st) dy)
+            -> SMT2 ('Env (st ::> '(n,t)) dy)
 
   DDeclare  :: String
             -> SAtom t
@@ -106,20 +106,11 @@ type family DeclH name typ env orig where
   DeclH name typ 'EmptyCtx st = st ::> '(name, typ)
   DeclH name _ (_ ::> '(name, _)) _ = TypeError (Text "duplicate name declaration")
 
-
--- static environment lookup -----------------------------------------------------------------------
-
-
--- | A proof that (name, typ) is present in the static part of a given environment
-data Elem :: Symbol -> Atom -> Env -> Type where
-  DH :: Elem name typ ('Env (hd ::> '(name, typ)) dyn)
-  DT :: Elem name typ ('Env st dy) -> Elem name typ ('Env (st ::> e) dy)
-
 -- | Compile time type env lookup
 type Find :: Symbol -> Atom -> Ctx (Symbol, Atom) -> Nat
 type family Find name typ env where
   Find name typ (_ ::> '(name, typ)) = 0
-  Find name typ (pre ::> _) = (Find name typ pre) + 1
+  Find name typ (pre ::> _) = 1 + (Find name typ pre)
   Find name typ 'EmptyCtx = TypeError (Text "undeclared name")
 
 -- | Type alias for convenient inclusion checking
@@ -136,7 +127,7 @@ return = ireturn
 (>>=) = ibind
 
 (>>) :: IxState p q a -> IxState q r b -> IxState p r b
-v >> w = v IxState.>>= const w
+v >> w = v SMT2.>>= const w
 
 
 -- monadic interface -------------------------------------------------------------------------------
@@ -149,8 +140,8 @@ data Entry :: Atom -> Type where
 -- | Wrapper type for the indexed state monad we use
 type Writer pre post ret = IxState
   (Assignment Entry (Dy pre), SMT2 pre)    -- ^ prestate
-  (Assignment Entry (Dy post), SMT2 post) -- ^ poststate
-  ret                                               -- ^ return type
+  (Assignment Entry (Dy post), SMT2 post)  -- ^ poststate
+  ret                                      -- ^ return type
 
 -- | Declare a new name at runtime
 --
@@ -171,12 +162,6 @@ assert proof = SMT2.do
   (env, exp) <- get
   let next = Assert (VarD proof) exp
   put (env, next)
-
--- | Extend the SMT2 expression with some static fragment
-include :: _ => (SMT2 ('Env stin dy) -> SMT2 ('Env stout dy)) -> Writer ('Env stin dy) ('Env stout dy) ()
-include fragment = SMT2.do
-  (env, exp) <- get
-  put (env, fragment exp)
 
 
 -- utils -------------------------------------------------------------------------------------------
@@ -205,6 +190,12 @@ type family Dy env where
 -- tests -------------------------------------------------------------------------------------------
 
 
+-- | Extend the SMT2 expression with some static fragment
+include :: (SMT2 ('Env stin dy) -> SMT2 ('Env stout dy)) -> Writer ('Env stin dy) ('Env stout dy) ()
+include fragment = SMT2.do
+  (env, exp) <- get
+  put (env, fragment exp)
+
 testDyn :: String -> String -> Writer _ _ ()
 testDyn n1 n2 = SMT2.do
   p <- declare n1 SBool
@@ -213,6 +204,10 @@ testDyn n1 n2 = SMT2.do
   assert p'
   include declHi
   -- TODO: include a fragment that depends on a static name
+  -- I'm gonna need a way to convince the typechecker that:
+  --   a <=? a + b is always true
+  -- How can I do proofs with typelits
+  -- Do I need a proper induction numeric encoding here?
   include assertHi
   include CheckSat
 
