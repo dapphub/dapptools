@@ -45,48 +45,11 @@ import IxState
 -- | Atomic data types
 data Atom = Boolean
 
--- | Singleton type for Atom
-data SAtom (a :: Atom) where
-  SBool :: SAtom Boolean
-
 -- | The typechecking environment
---
--- A Ctx is a type level snoc list from galois with a nice inclusion proof system.
 data Env
   = Env
       (Ctx (Symbol, Atom)) -- ^ The statically declared names
       (Ctx Atom)           -- ^ The dynamically declared names
-
-
--- static name declaration -------------------------------------------------------------------------
-
-
--- | Extends the static part of the typechecking env with (name, typ) iff name is not already present in env
-type Decl name typ env = DeclH name typ env env
-
-type DeclH :: Symbol -> Atom -> Env -> Env -> Env
-type family DeclH name typ env orig where
-  DeclH name typ ('Env 'EmptyCtx _) ('Env st dy) = 'Env (st ::> '(name, typ)) dy
-  DeclH name _ ('Env (_ ::> '(name, _)) _) _ = TypeError (Text "duplicate name declaration")
-
-
--- static environment lookup -----------------------------------------------------------------------
-
-
--- | A proof that (name, typ) is present in the static part of a given environment
-data Elem :: Symbol -> Atom -> Env -> Type where
-  DH :: Elem name typ ('Env (hd ::> '(name, typ)) dyn)
-  DT :: Elem name typ ('Env st dy) -> Elem name typ ('Env (st ::> e) dy)
-
--- | Compile time type env lookup
-type Find :: Symbol -> Atom -> Env -> Nat
-type family Find name typ env where
-  Find name typ ('Env (_ ::> '(name, typ)) _) = 0
-  Find name typ ('Env (pre ::> _) dy) = (Find name typ ('Env pre dy)) + 1
-  Find name typ ('Env 'EmptyCtx 'EmptyCtx) = TypeError (Text "undeclared name")
-
--- | Type alias for convenient inclusion checking
-type Has n a e = ValidIx (Find n a e) (St e)
 
 
 -- SMT2 AST ----------------------------------------------------------------------------------------
@@ -132,6 +95,35 @@ data Exp (e :: Env) (t :: Atom) where
   Distinct  :: [Exp e Boolean] -> Exp e Boolean
 
 
+-- static name declaration -------------------------------------------------------------------------
+
+
+-- | Extends the static part of the typechecking env with (name, typ) iff name is not already present in env
+type Decl name typ env = DeclH name typ env env
+
+type DeclH :: Symbol -> Atom -> Env -> Env -> Env
+type family DeclH name typ env orig where
+  DeclH name typ ('Env 'EmptyCtx _) ('Env st dy) = 'Env (st ::> '(name, typ)) dy
+  DeclH name _ ('Env (_ ::> '(name, _)) _) _ = TypeError (Text "duplicate name declaration")
+
+
+-- static environment lookup -----------------------------------------------------------------------
+
+
+-- | A proof that (name, typ) is present in the static part of a given environment
+data Elem :: Symbol -> Atom -> Env -> Type where
+  DH :: Elem name typ ('Env (hd ::> '(name, typ)) dyn)
+  DT :: Elem name typ ('Env st dy) -> Elem name typ ('Env (st ::> e) dy)
+
+-- | Compile time type env lookup
+type Find :: Symbol -> Atom -> Env -> Nat
+type family Find name typ env where
+  Find name typ ('Env (_ ::> '(name, typ)) _) = 0
+  Find name typ ('Env (pre ::> _) dy) = (Find name typ ('Env pre dy)) + 1
+  Find name typ ('Env 'EmptyCtx 'EmptyCtx) = TypeError (Text "undeclared name")
+
+-- | Type alias for convenient inclusion checking
+type Has n a e = ValidIx (Find n a e) (St e)
 -- overloaded monadic ops for QualifiedDo ----------------------------------------------------------
 
 
@@ -182,6 +174,10 @@ include fragment = SMT2.do
 -- utils -------------------------------------------------------------------------------------------
 
 
+-- | Singleton type for Atom
+data SAtom (a :: Atom) where
+  SBool :: SAtom Boolean
+
 -- | Define the haskell datatype used to declare literals of a given atomic type
 type LitType :: Atom -> Type
 type family LitType a where
@@ -201,7 +197,7 @@ type family Dy env where
 -- tests -------------------------------------------------------------------------------------------
 
 
-testDyn :: String -> String -> Writer ('Env st dy) ('Env st _) ()
+testDyn :: String -> String -> Writer _ _ ()
 testDyn n1 n2 = SMT2.do
   p <- declare n1 SBool
   p' <- declare n2 SBool
