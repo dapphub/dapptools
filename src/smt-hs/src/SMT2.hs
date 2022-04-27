@@ -212,6 +212,8 @@ testDyn n1 n2 = SMT2.do
   include CheckSat
 
 
+
+
 test :: SMT2 _
 test
   = EmptySMT2
