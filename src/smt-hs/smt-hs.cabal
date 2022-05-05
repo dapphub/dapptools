@@ -11,11 +11,10 @@ maintainer:         git@d-xo.org
 extra-source-files: CHANGELOG.md
 
 library
-    exposed-modules:  SMT2, IxState, SMT3
+    exposed-modules:  SMT2
     build-depends:    base,
                       containers,
                       mtl,
-                      fin,
                       parameterized-utils,
     hs-source-dirs:   src
     default-language: Haskell2010

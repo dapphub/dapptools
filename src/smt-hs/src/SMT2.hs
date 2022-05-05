@@ -1,250 +1,321 @@
 {-# LANGUAGE GADTs #-}
-{-# LANGUAGE QualifiedDo #-}
-{-# LANGUAGE PartialTypeSignatures #-}
-{-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE ConstraintKinds #-}
-{-# LANGUAGE UndecidableInstances #-}
-{-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE AllowAmbiguousTypes #-}
-{-# LANGUAGE TypeFamilies #-}
-{-# LANGUAGE StandaloneKindSignatures #-}
-{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE DeriveAnyClass #-}
+{-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE DerivingStrategies #-}
+{-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeOperators #-}
-{-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE PolyKinds #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE StandaloneKindSignatures #-}
 {-# LANGUAGE DataKinds #-}
-{-# OPTIONS -Wno-partial-type-signatures #-}
 
-{- | An embedding of the SMT2 typing rules in the haskell type system
-
-     SMT2 scripts are made up of sequences of solver commands. These commands
-     can declare new variables and assert statements about these variables.
-
-     Each node in the script AST is assigned a type that represents the
-     available typing context. Any attempt to extend the script with a new
-     command will produce a type error if any sub term references a variable that
-     has not yet been declared.
--}
 module SMT2 where
 
 import Prelude hiding (Eq,Word)
-import GHC.TypeLits
 import Data.Kind
 import Data.Function
 import Data.Typeable
+import GHC.TypeLits
+import GHC.Natural
 
-import Data.Parameterized.Context
-import IxState
-
-
--- base types --------------------------------------------------------------------------------------
-
-
--- | Atomic data types
-data Atom = Boolean
-
--- | The typechecking environment
-data Env
-  = Env
-      (Ctx (Symbol, Atom)) -- ^ The statically declared names
-      (Ctx Atom)           -- ^ The dynamically declared names
+import Data.Parameterized.List
+import Data.Parameterized.Classes
+import Control.Monad.State
+import Data.Map (Map)
 
 
--- SMT2 AST ----------------------------------------------------------------------------------------
+-- AST types --------------------------------------------------------------------------------------
 
+
+-- | Runtime bitvector representation
+data BV :: Nat -> Type where
+  BV :: KnownNat n => Natural -> BV n
+
+deriving instance (Show (BV n))
+
+-- | Data types
+data Ty
+  = Boolean
+  | BitVec Nat
+  | Integer
+  | Arr Ty Ty
+  | Fun [Ty] Ty
+
+-- | Sequenced solver commands
+newtype SMT2 = SMT2 [Command]
+  deriving newtype (Semigroup, Monoid)
 
 -- | The language of top level solver commands
-data SMT2 (e :: Env) where
-  EmptySMT2 :: SMT2 ('Env EmptyCtx EmptyCtx)
+data Command where
+  CheckSat            :: Command
+  GetModel            :: Command
+  Reset               :: Command
+  ResetAssertions     :: Command
+  GetProof            :: Command
+  GetUnsatAssumptions :: Command
+  GetUnsatCore        :: Command
+  Exit                :: Command
+  GetAssertions       :: Command
+  GetAssignment       :: Command
+  Assert              :: Exp Boolean -> Command
+  CheckSatAssuming    :: Exp Boolean -> Command
+  Echo                :: String      -> Command
+  GetInfo             :: InfoFlag    -> Command
+  GetOption           :: String      -> Command
+  GetValue            :: List Exp ts -> Command
+  Pop                 :: Natural     -> Command
+  Push                :: Natural     -> Command
+  SetInfo             :: String      -> Command
+  SetLogic            :: String      -> Command
+  SetOption           :: Option      -> Command
+  Declare             :: String -> STy t -> Command
 
-  SDeclare  :: KnownSymbol n
-            => SAtom t
-            -> SMT2 ('Env st dy)
-            -> SMT2 ('Env (st ::> '(n,t)) dy)
+deriving instance (Show Command)
 
-  DDeclare  :: String
-            -> SAtom t
-            -> SMT2 ('Env st dy)
-            -> SMT2 ('Env st (dy ::> t))
+data Option
+  = DiagnosticOutputChannel String
+  | GlobalDeclarations Bool
+  | InteractiveMode Bool
+  | PrintSuccess Bool
+  | ProduceAssertions Bool
+  | ProduceAssignments Bool
+  | ProduceModels Bool
+  | ProduceProofs Bool
+  | ProduceUnsatAssumptions Bool
+  | ProduceUnsatCores Bool
+  | RandomSeed Bool
+  | RegularOutputChannel Bool
+  | ReproducibleResourceLimit Bool
+  | Verbosity Bool
+  deriving (Show)
 
-  Assert    :: Exp e Boolean
-            -> SMT2 e
-            -> SMT2 e
-
-  CheckSat  :: SMT2 e
-            -> SMT2 e
-
+data InfoFlag
+  = AllStatistics
+  | AssertionStackLevels
+  | Authors
+  | ErrorBehaviour
+  | Name
+  | ReasonUnknown
+  | Version
+  deriving (Show)
 
 -- | The language of assertable statements
-data Exp (e :: Env) (t :: Atom) where
+data Exp (t :: Ty) where
 
-  -- polymorphic
-  Lit       :: LitType t -> Exp e t
-  VarS      :: (KnownSymbol n, Has n t e) => Exp e t
-  VarD      :: (KnownDiff e' (Dy e)) => Index e' t -> Exp e t
-  ITE       :: Exp e Boolean -> Exp e t -> Exp e t -> Exp e t
+  -- literals & names
+  Lit       :: Show t => t -> Exp (ExpType t)
+  Var       :: Ref t -> Exp t
 
-  -- boolean
-  And       :: [Exp e Boolean] -> Exp e Boolean
-  Or        :: [Exp e Boolean] -> Exp e Boolean
-  Eq        :: [Exp e Boolean] -> Exp e Boolean
-  Xor       :: [Exp e Boolean] -> Exp e Boolean
-  Impl      :: [Exp e Boolean] -> Exp e Boolean
-  Distinct  :: [Exp e Boolean] -> Exp e Boolean
+  -- functions
+  App       :: Exp (Fun args ret) -> List Exp args -> Exp ret
 
+  -- core ops
+  -- http://smtlib.cs.uiowa.edu/theories-Core.shtml
+  And       :: [Exp Boolean] -> Exp Boolean
+  Or        :: [Exp Boolean] -> Exp Boolean
+  Eq        :: [Exp t] -> Exp Boolean
+  Xor       :: [Exp Boolean] -> Exp Boolean
+  Impl      :: [Exp Boolean] -> Exp Boolean
+  Distinct  :: [Exp Boolean] -> Exp Boolean
+  ITE       :: Exp Boolean -> Exp t -> Exp t -> Exp t
 
--- static name declaration -------------------------------------------------------------------------
+  -- bitvector
+  -- http://smtlib.cs.uiowa.edu/theories-FixedSizeBitVectors.shtml
+  Concat    :: Exp (BitVec i) -> Exp (BitVec j) -> Exp (BitVec (i + j))
+  Extract   :: ( 0 <= j, j <= i, i <= (m - 1)) => SNat i -> SNat j -> Exp (BitVec m) -> Exp (BitVec (i - j + 1))
 
+  BVNot     :: (1 <= m) => Exp (BitVec m) -> Exp (BitVec m)
+  BVNeg     :: (1 <= m) => Exp (BitVec m) -> Exp (BitVec m)
+  BVAnd     :: (1 <= m) => Exp (BitVec m) -> Exp (BitVec m) -> Exp (BitVec m)
+  BVOr      :: (1 <= m) => Exp (BitVec m) -> Exp (BitVec m) -> Exp (BitVec m)
+  BVAdd     :: (1 <= m) => Exp (BitVec m) -> Exp (BitVec m) -> Exp (BitVec m)
+  BVMul     :: (1 <= m) => Exp (BitVec m) -> Exp (BitVec m) -> Exp (BitVec m)
+  BVUDiv    :: (1 <= m) => Exp (BitVec m) -> Exp (BitVec m) -> Exp (BitVec m)
+  BVURem    :: (1 <= m) => Exp (BitVec m) -> Exp (BitVec m) -> Exp (BitVec m)
+  BVShl     :: (1 <= m) => Exp (BitVec m) -> Exp (BitVec m) -> Exp (BitVec m)
+  BVLShr    :: (1 <= m) => Exp (BitVec m) -> Exp (BitVec m) -> Exp (BitVec m)
+  BVULt     :: (1 <= m) => Exp (BitVec m) -> Exp (BitVec m) -> Exp Boolean
 
--- | Extends the static part of the typechecking env with (name, typ) iff name is not already present in env
-type Decl name typ st = DeclH name typ st st
+  -- integer
+  -- http://smtlib.cs.uiowa.edu/theories-Ints.shtml
+  Neg       :: Exp 'Integer -> Exp 'Integer
+  Sub       :: Exp 'Integer -> Exp 'Integer -> Exp 'Integer
+  Add       :: Exp 'Integer -> Exp 'Integer -> Exp 'Integer
+  Mul       :: Exp 'Integer -> Exp 'Integer -> Exp 'Integer
+  Div       :: Exp 'Integer -> Exp 'Integer -> Exp 'Integer
+  Mod       :: Exp 'Integer -> Exp 'Integer -> Exp 'Integer
+  Abs       :: Exp 'Integer -> Exp 'Integer
+  LEQ       :: Exp 'Integer -> Exp 'Integer -> Exp Boolean
+  LT        :: Exp 'Integer -> Exp 'Integer -> Exp Boolean
+  GEQ       :: Exp 'Integer -> Exp 'Integer -> Exp Boolean
+  GT        :: Exp 'Integer -> Exp 'Integer -> Exp Boolean
+  Divisible :: (1 <= n) => SNat n -> Exp 'Integer -> Exp Boolean
 
-type DeclH :: Symbol -> Atom -> Ctx (Symbol, Atom) -> Ctx (Symbol, Atom) -> Ctx (Symbol, Atom)
-type family DeclH name typ env orig where
-  DeclH name typ 'EmptyCtx st = st ::> '(name, typ)
-  DeclH name _ (_ ::> '(name, _)) _ = TypeError (Text "duplicate name declaration")
+  -- arrays
+  -- http://smtlib.cs.uiowa.edu/theories-ArraysEx.shtml
+  Select    :: Exp (Arr k v) -> Exp k -> Exp v
+  Store     :: Exp (Arr k v) -> Exp k -> Exp v -> Exp (Arr k v)
 
--- | Compile time type env lookup
-type Find :: Symbol -> Atom -> Ctx (Symbol, Atom) -> Nat
-type family Find name typ env where
-  Find name typ (_ ::> '(name, typ)) = 0
-  Find name typ (pre ::> _) = 1 + (Find name typ pre)
-  Find name typ 'EmptyCtx = TypeError (Text "undeclared name")
-
--- | Type alias for convenient inclusion checking
-type Has n a e = ValidIx (Find n a (St e)) (St e)
-
-
--- overloaded monadic ops for QualifiedDo ----------------------------------------------------------
-
-
-return :: a -> IxState si si a
-return = ireturn
-
-(>>=) :: IxState p q a -> (a -> IxState q r b) -> IxState p r b
-(>>=) = ibind
-
-(>>) :: IxState p q a -> IxState q r b -> IxState p r b
-v >> w = v SMT2.>>= const w
+deriving instance (ShowF Exp)
+deriving instance (Show (Exp t))
 
 
 -- monadic interface -------------------------------------------------------------------------------
 
 
--- | The type of entries in the runtime type environment
-data Entry :: Atom -> Type where
-  E :: forall typ. String -> SAtom typ -> Entry typ
-
 -- | Wrapper type for the indexed state monad we use
-type Writer pre post ret = IxState
-  (Assignment Entry (Dy pre), SMT2 pre)    -- ^ prestate
-  (Assignment Entry (Dy post), SMT2 post)  -- ^ poststate
-  ret                                      -- ^ return type
+type Writer ret = State SMT2 ret
+
+data Ref (a :: Ty) where
+  Ref :: String -> STy a -> Ref a
+
+deriving instance (Show (Ref t))
+
+-- | Extend the SMT2 expression with some static fragment
+include :: SMT2 -> Writer ()
+include (SMT2 fragment) = do
+  SMT2 exp <- get
+  put $ SMT2 (fragment <> exp)
+
+-- | Extend the SMT2 expression with a single command
+include' :: Command -> Writer ()
+include' cmd = include (SMT2 [cmd])
 
 -- | Declare a new name at runtime
 --
 -- N.B. Does not perform any freshness checks. You are responsible for ensuring
 -- that names declared via the rutime interface are distinct
-declare :: String -> SAtom a -> Writer ('Env st dy) ('Env st (dy ::> a)) (Index (dy ::> a) a)
-declare name typ = SMT2.do
-  (env, exp) <- get
-  let env'  = extend env (E name typ)
-      exp'  = DDeclare name typ exp
-      proof = lastIndex (size env')
-  put (env', exp')
-  SMT2.return proof
+declare :: String -> STy a -> Writer (Ref a)
+declare name typ = do
+  SMT2 exp <- get
+  put $ SMT2 (Declare name typ : exp)
+  return $ Ref name typ
 
 -- | Assert some boolean variable
-assert :: KnownDiff old (Dy e) => Index old Boolean -> Writer e e ()
-assert proof = SMT2.do
-  (env, exp) <- get
-  let next = Assert (VarD proof) exp
-  put (env, next)
+assert :: Exp Boolean -> Writer ()
+assert e = do
+  SMT2 exp <- get
+  put $ SMT2 (Assert e : exp)
+
+checkSat :: Writer ()
+checkSat = include' CheckSat
+
+getModel :: Writer ()
+getModel = include' GetModel
+
+reset :: Writer ()
+reset = include' Reset
+
+resetAssertions :: Writer ()
+resetAssertions = include' ResetAssertions
+
+getProof :: Writer ()
+getProof = include' GetProof
+
+getUnsatAssumptions :: Writer ()
+getUnsatAssumptions = include' GetUnsatAssumptions
+
+getUnsatCore :: Writer ()
+getUnsatCore = include' GetUnsatCore
+
+exit :: Writer ()
+exit = include' Exit
+
+getAssertions :: Writer ()
+getAssertions = include' GetAssertions
+
+getAssignment :: Writer ()
+getAssignment = include' GetAssignment
+
+checkSatAssuming :: Exp Boolean -> Writer ()
+checkSatAssuming = include' . CheckSatAssuming
+
+echo :: String -> Writer ()
+echo = include' . Echo
+
+getInfo :: InfoFlag -> Writer ()
+getInfo = include' . GetInfo
+
+getOption :: String -> Writer ()
+getOption = include' . GetOption
+
+getValue :: List Exp ts -> Writer ()
+getValue = include' . GetValue
+
+pop :: Natural -> Writer ()
+pop = include' . Pop
+
+push :: Natural -> Writer ()
+push = include' . Push
+
+setInfo :: String -> Writer ()
+setInfo = include' . SetInfo
+
+setLogic :: String -> Writer ()
+setLogic = include' . SetLogic
+
+setOption :: Option -> Writer ()
+setOption = include' . SetOption
 
 
 -- utils -------------------------------------------------------------------------------------------
 
 
--- | Singleton type for Atom
-data SAtom (a :: Atom) where
-  SBool :: SAtom Boolean
+-- | Singleton type for Nat
+data SNat (n :: Nat) where
+  SZ :: SNat 0
+  SS :: SNat n -> SNat (1 + n)
 
--- | Define the haskell datatype used to declare literals of a given atomic type
-type LitType :: Atom -> Type
-type family LitType a where
-  LitType Boolean = Bool
+deriving instance (Show (SNat n))
 
--- | Returns the static part of a given Env
-type St :: Env -> Ctx (Symbol, Atom)
-type family St env where
-  St ('Env st _) = st
+-- | Singleton type for Ty
+data STy (a :: Ty) where
+  SBool :: STy Boolean
+  SBitVec :: SNat n -> STy (BitVec n)
+  SInt :: STy 'Integer
+  SFun :: List STy args -> STy ret -> STy (Fun args ret)
+  SArr :: STy k -> STy v -> STy (Arr k v)
+deriving instance (Show (STy ty))
+deriving instance (ShowF STy)
 
--- | Returns the dynamic part of a given Env
-type Dy :: Env -> Ctx Atom
-type family Dy env where
-  Dy ('Env _ dy) = dy
+-- | Define the Ty that should be used for a given haskell datatype
+type ExpType :: Type -> Ty
+type family ExpType a where
+  ExpType Bool = Boolean
+  ExpType (BV n) = (BitVec n)
+  ExpType Integer = 'Integer
 
 
 -- tests -------------------------------------------------------------------------------------------
 
 
--- | Extend the SMT2 expression with some static fragment
-include :: (SMT2 ('Env stin dy) -> SMT2 ('Env stout dy)) -> Writer ('Env stin dy) ('Env stout dy) ()
-include fragment = SMT2.do
-  (env, exp) <- get
-  put (env, fragment exp)
-
-testDyn :: String -> String -> Writer _ _ ()
-testDyn n1 n2 = SMT2.do
+testDyn :: String -> String -> Writer ()
+testDyn n1 n2 = do
   p <- declare n1 SBool
   p' <- declare n2 SBool
-  assert p
-  assert p'
+  assert (Var p)
+  assert (Var p')
   include declHi
-  -- TODO: include a fragment that depends on a static name
-  -- I'm gonna need a way to convince the typechecker that:
-  --   a <=? a + b is always true
-  -- How can I do proofs with typelits
-  -- Do I need a proper induction numeric encoding here?
   include assertHi
-  include CheckSat
+  checkSat
 
+test :: SMT2
+test = SMT2
+  [ Declare "hi" SBool
+  , Assert (Eq [Add (Lit (1 :: Integer)) (Lit (2 :: Integer)), Lit (3 :: Integer)])
+  , Assert (Eq [Lit True, BVULt (Lit (BV @256 100)) (Lit (BV @256 1000))])
+  , CheckSat
+  ]
 
-
-
-test :: SMT2 _
-test
-  = EmptySMT2
-  & SDeclare @"hi" SBool
-  & Assert (VarS @"hi")
-
-  -- produces a type error: "hi" is already declared
-  -- & SDeclare @"hi" SBool
-
-  -- produces a type error: "yo" is undeclared
-  -- & Assert (VarS @"yo")
-
-  & CheckSat
-
-declHi :: SMT2 _ -> SMT2 _
-declHi = SDeclare @"hi" SBool
+declHi :: SMT2
+declHi = SMT2 [Declare "hi" SBool]
 
 -- asserting the typechecking env for fragments works
-assertHi :: _ => SMT2 e -> SMT2 e
-assertHi = Assert (And [VarS @"hi", Lit False])
+assertHi :: SMT2
+assertHi = SMT2 [Assert (And [Var (Ref "hi" SBool), Lit False])]
 
 -- composition of two incomplete fragments
-composed :: SMT2 _
-composed
-  = EmptySMT2
-  & declHi
-  & assertHi
+composed :: SMT2
+composed = declHi <> assertHi
 
--- TODO: why is the constraint needed here?
-static :: _ => SMT2 _ -> SMT2 _
-static prev = prev
-  & SDeclare @"hi" SBool
-  & Assert (And [VarS @"hi", Lit False])
-  & CheckSat
