@@ -1,4 +1,7 @@
 {-# LANGUAGE GADTs #-}
+{-# LANGUAGE DeriveAnyClass #-}
+{-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeOperators #-}
@@ -7,16 +10,6 @@
 {-# LANGUAGE StandaloneKindSignatures #-}
 {-# LANGUAGE DataKinds #-}
 
-{- | An embedding of the SMT2 typing rules in the haskell type system
-
-     SMT2 scripts are made up of sequences of solver commands. These commands
-     can declare new variables and assert statements about these variables.
-
-     Each node in the script AST is assigned a type that represents the
-     available typing context. Any attempt to extend the script with a new
-     command will produce a type error if any sub term references a variable that
-     has not yet been declared.
--}
 module SMT3 where
 
 import Prelude hiding (Eq,Word)
@@ -29,6 +22,7 @@ import GHC.TypeLits
 import GHC.Natural
 
 import Data.Parameterized.List
+import Data.Parameterized.Classes
 
 
 -- AST types --------------------------------------------------------------------------------------
@@ -37,6 +31,8 @@ import Data.Parameterized.List
 -- | Runtime bitvector representation
 data BV :: Nat -> Type where
   BV :: KnownNat n => Natural -> BV n
+
+deriving instance (Show (BV n))
 
 -- | Data types
 data Ty
@@ -48,7 +44,7 @@ data Ty
 
 -- | Sequenced solver commands
 newtype SMT2 = SMT2 [Command]
-  deriving (Semigroup, Monoid)
+  deriving newtype (Semigroup, Monoid)
 
 -- | The language of top level solver commands
 data Command where
@@ -75,6 +71,8 @@ data Command where
   SetOption           :: Option      -> Command
   Declare             :: String -> STy t -> Command
 
+deriving instance (Show Command)
+
 data Option
   = DiagnosticOutputChannel String
   | GlobalDeclarations Bool
@@ -90,6 +88,7 @@ data Option
   | RegularOutputChannel Bool
   | ReproducibleResourceLimit Bool
   | Verbosity Bool
+  deriving (Show)
 
 data InfoFlag
   = AllStatistics
@@ -99,13 +98,14 @@ data InfoFlag
   | Name
   | ReasonUnknown
   | Version
+  deriving (Show)
 
 -- | The language of assertable statements
 data Exp (t :: Ty) where
 
   -- literals & names
-  Lit       :: t -> Exp (ExpType t)
-  Var       :: String -> Exp t
+  Lit       :: Show t => t -> Exp (ExpType t)
+  Var       :: Ref t -> Exp t
 
   -- functions
   App       :: Exp (Fun args ret) -> List Exp args -> Exp ret
@@ -123,8 +123,7 @@ data Exp (t :: Ty) where
   -- bitvector
   -- http://smtlib.cs.uiowa.edu/theories-FixedSizeBitVectors.shtml
   Concat    :: Exp (BitVec i) -> Exp (BitVec j) -> Exp (BitVec (i + j))
-  Extract   :: ( 0 <= j, j <= i, i <= (m - 1))
-            => SNat i -> SNat j -> Exp (BitVec m) -> Exp (BitVec (i - j + 1))
+  Extract   :: ( 0 <= j, j <= i, i <= (m - 1)) => SNat i -> SNat j -> Exp (BitVec m) -> Exp (BitVec (i - j + 1))
 
   BVNot     :: (1 <= m) => Exp (BitVec m) -> Exp (BitVec m)
   BVNeg     :: (1 <= m) => Exp (BitVec m) -> Exp (BitVec m)
@@ -158,6 +157,9 @@ data Exp (t :: Ty) where
   Select    :: Exp (Arr k v) -> Exp k -> Exp v
   Store     :: Exp (Arr k v) -> Exp k -> Exp v -> Exp (Arr k v)
 
+deriving instance (ShowF Exp)
+deriving instance (Show (Exp t))
+
 
 -- monadic interface -------------------------------------------------------------------------------
 
@@ -167,6 +169,18 @@ type Writer ret = State SMT2 ret
 
 data Ref (a :: Ty) where
   Ref :: String -> STy a -> Ref a
+
+deriving instance (Show (Ref t))
+
+-- | Extend the SMT2 expression with some static fragment
+include :: SMT2 -> Writer ()
+include (SMT2 fragment) = do
+  SMT2 exp <- get
+  put $ SMT2 (fragment <> exp)
+
+-- | Extend the SMT2 expression with a single command
+include' :: Command -> Writer ()
+include' cmd = include (SMT2 [cmd])
 
 -- | Declare a new name at runtime
 --
@@ -179,10 +193,70 @@ declare name typ = do
   return $ Ref name typ
 
 -- | Assert some boolean variable
-assert :: Ref Boolean -> Writer ()
-assert (Ref name SBool) = do
+assert :: Exp Boolean -> Writer ()
+assert e = do
   SMT2 exp <- get
-  put $ SMT2 (Assert (Var name) : exp)
+  put $ SMT2 (Assert e : exp)
+
+checkSat :: Writer ()
+checkSat = include' CheckSat
+
+getModel :: Writer ()
+getModel = include' GetModel
+
+reset :: Writer ()
+reset = include' Reset
+
+resetAssertions :: Writer ()
+resetAssertions = include' ResetAssertions
+
+getProof :: Writer ()
+getProof = include' GetProof
+
+getUnsatAssumptions :: Writer ()
+getUnsatAssumptions = include' GetUnsatAssumptions
+
+getUnsatCore :: Writer ()
+getUnsatCore = include' GetUnsatCore
+
+exit :: Writer ()
+exit = include' Exit
+
+getAssertions :: Writer ()
+getAssertions = include' GetAssertions
+
+getAssignment :: Writer ()
+getAssignment = include' GetAssignment
+
+checkSatAssuming :: Exp Boolean -> Writer ()
+checkSatAssuming = include' . CheckSatAssuming
+
+echo :: String -> Writer ()
+echo = include' . Echo
+
+getInfo :: InfoFlag -> Writer ()
+getInfo = include' . GetInfo
+
+getOption :: String -> Writer ()
+getOption = include' . GetOption
+
+getValue :: List Exp ts -> Writer ()
+getValue = include' . GetValue
+
+pop :: Natural -> Writer ()
+pop = include' . Pop
+
+push :: Natural -> Writer ()
+push = include' . Push
+
+setInfo :: String -> Writer ()
+setInfo = include' . SetInfo
+
+setLogic :: String -> Writer ()
+setLogic = include' . SetLogic
+
+setOption :: Option -> Writer ()
+setOption = include' . SetOption
 
 
 -- utils -------------------------------------------------------------------------------------------
@@ -193,6 +267,8 @@ data SNat (n :: Nat) where
   SZ :: SNat 0
   SS :: SNat n -> SNat (1 + n)
 
+deriving instance (Show (SNat n))
+
 -- | Singleton type for Ty
 data STy (a :: Ty) where
   SBool :: STy Boolean
@@ -200,6 +276,8 @@ data STy (a :: Ty) where
   SInt :: STy 'Integer
   SFun :: List STy args -> STy ret -> STy (Fun args ret)
   SArr :: STy k -> STy v -> STy (Arr k v)
+deriving instance (Show (STy ty))
+deriving instance (ShowF STy)
 
 -- | Define the Ty that should be used for a given haskell datatype
 type ExpType :: Type -> Ty
@@ -212,21 +290,15 @@ type family ExpType a where
 -- tests -------------------------------------------------------------------------------------------
 
 
--- | Extend the SMT2 expression with some static fragment
-include :: SMT2 -> Writer ()
-include (SMT2 fragment) = do
-  SMT2 exp <- get
-  put $ SMT2 (fragment <> exp)
-
 testDyn :: String -> String -> Writer ()
 testDyn n1 n2 = do
   p <- declare n1 SBool
   p' <- declare n2 SBool
-  assert p
-  assert p'
+  assert (Var p)
+  assert (Var p')
   include declHi
   include assertHi
-  include $ SMT2 [CheckSat]
+  checkSat
 
 test :: SMT2
 test = SMT2
@@ -241,7 +313,7 @@ declHi = SMT2 [Declare "hi" SBool]
 
 -- asserting the typechecking env for fragments works
 assertHi :: SMT2
-assertHi = SMT2 [Assert (And [Var "hi", Lit False])]
+assertHi = SMT2 [Assert (And [Var (Ref "hi" SBool), Lit False])]
 
 -- composition of two incomplete fragments
 composed :: SMT2
