@@ -6,7 +6,6 @@
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE PolyKinds #-}
-{-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE TypeFamilies #-}
@@ -14,42 +13,16 @@
 {-# LANGUAGE DataKinds #-}
 
 {- | Defines the core AST datatypes as well as the monadic interface for programatic SMT2 generation -}
-module SMT2 (
+module SMT2.Syntax.Typed (
   BV(..),
   Ty(..),
-  SMT2(..),
+  Script(..),
   Command(..),
   Option(..),
   InfoFlag(..),
   Exp(..),
-  Ref,
-  asRef,
-  Writer,
   STy(..),
   SNat(..),
-  include,
-  declare,
-  assert,
-  checkSat,
-  getModel,
-  reset,
-  resetAssertions,
-  getProof,
-  getUnsatAssumptions,
-  getUnsatCore,
-  exit,
-  getAssertions,
-  getAssignment,
-  checkSatAssuming,
-  echo,
-  getInfo,
-  getOption,
-  getValue,
-  pop,
-  push,
-  setInfo,
-  setLogic,
-  setOption
 ) where
 
 
@@ -82,9 +55,11 @@ data Ty
   | Integer
   | Arr Ty Ty
   | Fun [Ty] Ty
+  deriving (Typeable)
+
 
 -- | Sequenced solver commands
-newtype SMT2 = SMT2 [Command]
+newtype Script = Script [Command]
   deriving newtype (Semigroup, Monoid)
 
 -- | The language of top level solver commands
@@ -146,7 +121,7 @@ data Exp (t :: Ty) where
 
   -- literals & names
   Lit       :: Show t => t -> Exp (ExpType t)
-  Var       :: Ref t -> Exp t
+  Var       :: String -> Exp t
 
   -- functions
   App       :: Exp (Fun args ret) -> List Exp args -> Exp ret
@@ -202,112 +177,6 @@ deriving instance (ShowF Exp)
 deriving instance (Show (Exp t))
 
 
--- monadic interface -------------------------------------------------------------------------------
-
-
--- | Wrapper type for the indexed state monad we use
--- TODO: make this a newtype
-type Writer ret = State SMT2 ret
-
--- | Wrapper type for name references.
---
--- A Ref can be constructed at runtime using the `declare` smart constructor, or at compile time using the `asRef` smart constructor.
-data Ref (a :: Ty) where
-  Ref :: String -> STy a -> Ref a
-
-deriving instance (Show (Ref t))
-
--- | Construct a Ref from a statically known string
-asRef :: forall nm a . KnownSymbol nm => STy a -> Ref a
-asRef = Ref (symbolVal (Proxy @nm))
-
--- | Declare a new name at runtime, returns a Ref
---
--- N.B. Does not perform any freshness checks. You are responsible for ensuring
--- that names declared via the rutime interface are distinct
-declare :: String -> STy a -> Writer (Ref a)
-declare name typ = do
-  SMT2 exp <- get
-  put $ SMT2 (Declare name typ : exp)
-  return $ Ref name typ
-
--- | Extend the SMT2 expression with some static fragment
-include :: SMT2 -> Writer ()
-include (SMT2 fragment) = do
-  SMT2 exp <- get
-  put $ SMT2 (fragment <> exp)
-
--- | Extend the SMT2 expression with a single command
-include' :: Command -> Writer ()
-include' cmd = include (SMT2 [cmd])
-
--- | Assert some boolean expression
-assert :: Exp Boolean -> Writer ()
-assert e = do
-  SMT2 exp <- get
-  put $ SMT2 (Assert e : exp)
-
-checkSat :: Writer ()
-checkSat = include' CheckSat
-
-getModel :: Writer ()
-getModel = include' GetModel
-
-reset :: Writer ()
-reset = include' Reset
-
-resetAssertions :: Writer ()
-resetAssertions = include' ResetAssertions
-
-getProof :: Writer ()
-getProof = include' GetProof
-
-getUnsatAssumptions :: Writer ()
-getUnsatAssumptions = include' GetUnsatAssumptions
-
-getUnsatCore :: Writer ()
-getUnsatCore = include' GetUnsatCore
-
-exit :: Writer ()
-exit = include' Exit
-
-getAssertions :: Writer ()
-getAssertions = include' GetAssertions
-
-getAssignment :: Writer ()
-getAssignment = include' GetAssignment
-
-checkSatAssuming :: Exp Boolean -> Writer ()
-checkSatAssuming = include' . CheckSatAssuming
-
-echo :: String -> Writer ()
-echo = include' . Echo
-
-getInfo :: InfoFlag -> Writer ()
-getInfo = include' . GetInfo
-
-getOption :: String -> Writer ()
-getOption = include' . GetOption
-
-getValue :: List Exp ts -> Writer ()
-getValue = include' . GetValue
-
-pop :: Natural -> Writer ()
-pop = include' . Pop
-
-push :: Natural -> Writer ()
-push = include' . Push
-
-setInfo :: String -> Writer ()
-setInfo = include' . SetInfo
-
-setLogic :: String -> Writer ()
-setLogic = include' . SetLogic
-
-setOption :: Option -> Writer ()
-setOption = include' . SetOption
-
-
 -- utils -------------------------------------------------------------------------------------------
 
 
@@ -334,37 +203,3 @@ type family ExpType a where
   ExpType Bool = Boolean
   ExpType (BV n) = (BitVec n)
   ExpType Integer = 'Integer
-
-
--- tests -------------------------------------------------------------------------------------------
-
-
-testDyn :: String -> String -> Writer ()
-testDyn n1 n2 = do
-  p <- declare n1 SBool
-  p' <- declare n2 SBool
-  assert (Var p)
-  assert (Var p')
-  include declHi
-  include assertHi
-  checkSat
-
-test :: SMT2
-test = SMT2
-  [ Declare "hi" SBool
-  , Assert (Eq [Add (Lit (1 :: Integer)) (Lit (2 :: Integer)), Lit (3 :: Integer)])
-  , Assert (Eq [Lit True, BVULt (Lit (BV @256 100)) (Lit (BV @256 1000))])
-  , CheckSat
-  ]
-
-declHi :: SMT2
-declHi = SMT2 [Declare "hi" SBool]
-
--- asserting the typechecking env for fragments works
-assertHi :: SMT2
-assertHi = SMT2 [Assert (And [Var (Ref "hi" SBool), Lit False])]
-
--- composition of two incomplete fragments
-composed :: SMT2
-composed = declHi <> assertHi
-

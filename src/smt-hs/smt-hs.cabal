@@ -11,10 +11,14 @@ maintainer:         git@d-xo.org
 extra-source-files: CHANGELOG.md
 
 library
-    exposed-modules:  SMT2
-    build-depends:    base,
+    exposed-modules:  SMT2.Build SMT2.Parse SMT2.Type SMT2.Syntax.Typed SMT2.Syntax.Untyped
+    build-depends:    base>=4.15,
+                      base-compat>=0.12,
                       containers,
                       mtl,
                       parameterized-utils,
+                      template-haskell,
+                      parsec,
+                      text
     hs-source-dirs:   src
     default-language: Haskell2010
