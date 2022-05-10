@@ -70,7 +70,11 @@ library
   ghc-options:
     -Wall -Wno-deprecations
   extra-libraries:
-    secp256k1, ff, c++
+    secp256k1, ff
+  if os(darwin)
+     extra-libraries: c++
+  else
+     extra-libraries: stdc++
   c-sources:
     ethjet/tinykeccak.c, ethjet/ethjet.c
   cxx-sources:
