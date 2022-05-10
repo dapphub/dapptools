@@ -10,14 +10,14 @@ in rec {
   haskellPackages =
     super.haskellPackages.override (old: {
     overrides = lib.composeExtensions (old.overrides or (_: _: {})) (
-      import ./haskell.nix { inherit lib; pkgs = self;}
+      import ./haskell.nix { inherit lib; pkgs = self; }
     );
   });
 
   unwrappedHaskellPackages =
     super.haskellPackages.override (old: {
     overrides = lib.composeExtensions (old.overrides or (_: _: {})) (
-      import ./haskell.nix { inherit lib; pkgs = self; wrapped = false;}
+      import ./haskell.nix { inherit lib; pkgs = self; wrapped = false; }
     );
   });
 

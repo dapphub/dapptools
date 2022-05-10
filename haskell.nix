@@ -44,6 +44,7 @@ in self-hs: super-hs:
           "--enable-executable-static"
           "--extra-lib-dirs=${pkgs.gmp.override { withStatic = true; }}/lib"
           "--extra-lib-dirs=${pkgs.glibc.static}/lib"
+          "--extra-lib-dirs=${pkgs.libcxx.override { enableShared = false; }}/lib"
           "--extra-lib-dirs=${pkgs.libff.override { enableStatic = true; }}/lib"
           "--extra-lib-dirs=${pkgs.ncurses.override {enableStatic = true; }}/lib"
           "--extra-lib-dirs=${pkgs.zlib.static}/lib"
