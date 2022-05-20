@@ -1,37 +1,31 @@
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE PartialTypeSignatures #-}
+{-# LANGUAGE GADTs #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE Rank2Types #-}
+{-# LANGUAGE DataKinds #-}
 
 {- | Compile time SMT2 parser -}
 module SMT2.Parse where
 
 import Language.Haskell.TH.Quote
+import Language.Haskell.TH.Syntax
 import Language.Haskell.TH
 import Data.Char (toLower)
 import Text.Parsec
+import Text.Parsec.Pos
 import Data.Functor
 import Numeric (readHex)
-import Numeric.Compat (readBin)
+--import Numeric.Compat (readBin)
 import Data.Function
+import Control.Exception (throwIO)
+import Data.Typeable
+
+import SMT2.Type
 
 import qualified Data.Text.Read as R
-
-import SMT2.Syntax.Typed
+import qualified SMT2.Syntax.Typed as T
 import qualified SMT2.Syntax.Untyped as U
-
-data SExp
-  = Const Integer
-  | Symbol String
-  | Keyword String
-  | Reserved String
-  | SExp [SExp]
-
-sexpr :: Parsec String st SExp
-sexpr = node <|> leaf
-  where
-    leaf =  Const <$> (try numeral <|> try hexadecimal <|> try binary)
-        <|> Symbol <$> try symbol
-        <|> Keyword <$> try keyword
-        <|> Reserved <$> try reservedWord
-    node = SExp <$> (between `on` char) '(' ')' (sexpr `sepBy1` char ' ')
 
 nameChar :: Parsec String st Char
 nameChar = oneOf "~!@$%^&*_-+=<>.?/"
@@ -95,44 +89,46 @@ hexadecimal = do
   s <- fmap toLower <$> many1 hexDigit
   return $ fst (readHex s !! 0)
 
-binary :: Parsec String st Integer
-binary = do
-  string "#b"
-  s <- many1 (char '0' <|> char '1')
-  return $ fst (readBin s !! 0)
+--binary :: Parsec String st Integer
+--binary = do
+  --string "#b"
+  --s <- many1 (char '0' <|> char '1')
+  --return $ fst (readBin s !! 0)
 
-infoFlag :: Parsec String st InfoFlag
-infoFlag =  try (string ":all-statistics" $> AllStatistics)
-        <|> try (string ":assertion-stack-levels" $> AssertionStackLevels)
-        <|> try (string ":authors" $> Authors)
-        <|> try (string ":error-behaviour" $> ErrorBehaviour)
-        <|> try (string ":name" $> Name)
-        <|> try (string ":reason-unknown" $> ReasonUnknown)
-        <|> try (string ":version" $> Version)
+infoFlag :: Parsec String st T.InfoFlag
+infoFlag =  flag ":all-statistics" T.AllStatistics
+        <|> flag ":assertion-stack-levels" T.AssertionStackLevels
+        <|> flag ":authors" T.Authors
+        <|> flag ":error-behaviour" T.ErrorBehaviour
+        <|> flag ":name" T.Name
+        <|> flag ":reason-unknown" T.ReasonUnknown
+        <|> flag ":version" T.Version
         <?> "info flag"
+  where
+    flag s e = try (string s $> e)
 
 
-smtoption :: Parsec String st Option
-smtoption =  DiagnosticOutputChannel <$> opt "diagnostic-output-channel" stringLiteral
-         <|> GlobalDeclarations <$> opt "global-declarations" bool
-         <|> InteractiveMode <$> opt "interactive-mode" bool
-         <|> PrintSuccess <$> opt "print-success" bool
-         <|> ProduceAssertions <$> opt "produce-assertions" bool
-         <|> ProduceAssignments <$> opt "produce-assignments" bool
-         <|> ProduceModels <$> opt "produce-models" bool
-         <|> ProduceProofs <$> opt "produce-proofs" bool
-         <|> ProduceUnsatAssumptions <$> opt "produce-unsat-assumptions" bool
-         <|> ProduceUnsatCores <$> opt "produce-unsat-cores" bool
-         <|> RandomSeed <$> opt "random-seed" numeral
-         <|> RegularOutputChannel <$> opt "regular-output-channel" stringLiteral
-         <|> ReproducibleResourceLimit <$> opt "reproducible-resource-limit" numeral
-         <|> Verbosity <$> opt "verbosity" numeral
+smtoption :: Parsec String st T.Option
+smtoption =  opt "diagnostic-output-channel" T.DiagnosticOutputChannel stringLiteral
+         <|> opt "global-declarations" T.GlobalDeclarations bool
+         <|> opt "interactive-mode" T.InteractiveMode bool
+         <|> opt "print-success" T.PrintSuccess bool
+         <|> opt "produce-assertions" T.ProduceAssertions bool
+         <|> opt "produce-assignments" T.ProduceAssignments bool
+         <|> opt "produce-models" T.ProduceModels bool
+         <|> opt "produce-proofs" T.ProduceProofs bool
+         <|> opt "produce-unsat-assumptions" T.ProduceUnsatAssumptions bool
+         <|> opt "produce-unsat-cores" T.ProduceUnsatCores bool
+         <|> opt "random-seed" T.RandomSeed numeral
+         <|> opt "regular-output-channel" T.RegularOutputChannel stringLiteral
+         <|> opt "reproducible-resource-limit" T.ReproducibleResourceLimit numeral
+         <|> opt "verbosity" T.Verbosity numeral
          <?> "option"
   where
-    opt s arg = try (string s) *> space *> arg
+    opt s e arg = e <$> (try (string s) *> space *> arg)
 
 smtexp :: Parsec String st (U.Exp)
-smtexp = U.LitInt <$> (try numeral <|> try hexadecimal <|> try binary)
+smtexp = U.LitInt <$> (try numeral <|> try hexadecimal) -- <|> try binary)
       <|> U.LitStr <$> try stringLiteral
       <|> U.LitBool <$> try bool
       <|> opMany "and" U.And
@@ -213,8 +209,52 @@ extract = do
   e <- smtexp
   pure $ U.Extract i j e
 
+assert :: Parsec String st T.Command
+assert = do
+  string "(assert"
+  space
+  e <- smtexp
+  string ")"
+  case infer e of
+    Right e' -> pure $ T.Assert e'
+    Left s -> error s
+
+declare :: Parsec String st T.Command
+declare = error "DECLARE"
+
+command :: Parsec String st T.Command
+command =  try assert
+       <|> try declare
+
 test :: String -> Either ParseError U.Exp
 test = parse smtexp "(source)"
+
+location' :: Q SourcePos
+location' = aux <$> location
+  where
+    aux :: Loc -> SourcePos
+    aux loc = uncurry (newPos (loc_filename loc)) (loc_start loc)
+
+topLevel :: Parsec String st a -> Parsec String st a
+topLevel p = spaces *> p <* eof
+
+parseIO :: Parsec String () a -> String -> IO a
+parseIO p str =
+  case parse p "" str of
+    Left err -> throwIO (userError (show err))
+    Right a  -> return a
+
+smt2 :: QuasiQuoter
+smt2 = QuasiQuoter {
+      quoteExp = \str -> do
+        l <- location'
+        c <- runIO $ parseIO (setPosition l *> topLevel command) str
+        lift c
+    , quotePat  = undefined
+    , quoteType = undefined
+    , quoteDec  = undefined
+    }
+
 
 test0 = test "(or (and 1 2 \"hi\") (or 3 false))"
 test1 = test "(ite (and 1 2 \"hi\") (or 3 false) (eq 4 3))"

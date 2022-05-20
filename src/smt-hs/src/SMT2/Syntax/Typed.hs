@@ -1,4 +1,9 @@
 {-# LANGUAGE GADTs #-}
+{-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE TemplateHaskellQuotes #-}
+{-# LANGUAGE DeriveLift #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE AllowAmbiguousTypes #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
@@ -30,13 +35,19 @@ import Prelude hiding (Eq,Word)
 import Data.Kind
 import Data.Function
 import Data.Typeable
+import Data.Data
 import GHC.TypeLits
 import GHC.Natural
+import GHC.Generics
 
 import Data.Parameterized.List
 import Data.Parameterized.Classes
+import Language.Haskell.TH.Syntax (Q(..), Lift(..))
+import Language.Haskell.TH (Name(..), appE, conE)
 import Control.Monad.State
 import Data.Map (Map)
+
+import qualified Language.Haskell.TH.Syntax as TH
 
 
 -- AST types --------------------------------------------------------------------------------------
@@ -79,15 +90,16 @@ data Command where
   Echo                :: String      -> Command
   GetInfo             :: InfoFlag    -> Command
   GetOption           :: String      -> Command
-  GetValue            :: List Exp ts -> Command
+  GetValue            :: String      -> Command
   Pop                 :: Natural     -> Command
   Push                :: Natural     -> Command
   SetInfo             :: String      -> Command
   SetLogic            :: String      -> Command
   SetOption           :: Option      -> Command
-  Declare             :: String -> STy t -> Command
+  Declare             :: String      -> Command
 
 deriving instance (Show Command)
+deriving instance (Lift Command)
 
 data Option
   = DiagnosticOutputChannel String
@@ -104,7 +116,7 @@ data Option
   | RegularOutputChannel String
   | ReproducibleResourceLimit Integer
   | Verbosity Integer
-  deriving (Show)
+  deriving (Show, Lift)
 
 data InfoFlag
   = AllStatistics
@@ -114,13 +126,13 @@ data InfoFlag
   | Name
   | ReasonUnknown
   | Version
-  deriving (Show)
+  deriving (Show, Lift)
 
 -- | The language of assertable statements
 data Exp (t :: Ty) where
 
   -- literals & names
-  Lit       :: Show t => t -> Exp (ExpType t)
+  Lit       :: (Lift t, Show t) => t -> Exp (ExpType t)
   Var       :: String -> Exp t
 
   -- functions
@@ -173,8 +185,15 @@ data Exp (t :: Ty) where
   Select    :: Exp (Arr k v) -> Exp k -> Exp v
   Store     :: Exp (Arr k v) -> Exp k -> Exp v -> Exp (Arr k v)
 
-deriving instance (ShowF Exp)
 deriving instance (Show (Exp t))
+deriving instance (ShowF Exp)
+deriving instance (Typeable (Exp t))
+
+instance Lift (Exp a) where
+  liftTyped (Lit a) = [|| Lit a ||]
+  liftTyped (Var a) = [|| Var a ||]
+  liftTyped (Or a) = [|| Or a ||]
+  liftTyped other = error $ "FUK: " <> show other
 
 
 -- utils -------------------------------------------------------------------------------------------

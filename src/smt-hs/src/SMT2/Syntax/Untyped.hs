@@ -1,6 +1,10 @@
+{-# LANGUAGE DeriveDataTypeable #-}
+
 module SMT2.Syntax.Untyped where
 
 import GHC.Natural
+import Data.Typeable
+import Data.Data
 
 data Exp
   = LitStr String
@@ -42,5 +46,5 @@ data Exp
   | Divisible Natural Exp
   | Select Exp Exp
   | Store Exp Exp Exp
-  deriving (Show, Eq)
+  deriving (Show, Eq, Typeable, Data)
 

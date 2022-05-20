@@ -50,7 +50,7 @@ asRef = Ref (symbolVal (Proxy @nm))
 declare :: String -> STy a -> SMT2 (Ref a)
 declare name typ = do
   Script exp <- get
-  put $ Script (Declare name typ : exp)
+  put $ Script (Declare name : exp)
   return $ Ref name typ
 
 -- | Extend the SMT2 expression with some static fragment
@@ -111,7 +111,7 @@ getInfo = include' . GetInfo
 getOption :: String -> SMT2 ()
 getOption = include' . GetOption
 
-getValue :: List Exp ts -> SMT2 ()
+getValue :: String -> SMT2 ()
 getValue = include' . GetValue
 
 pop :: Natural -> SMT2 ()
