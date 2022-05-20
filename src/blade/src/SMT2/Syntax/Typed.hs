@@ -81,7 +81,6 @@ newtype Script = Script [Command]
 
 -- | The language of top level solver commands
 data Command where
-  CheckSat            :: Command
   GetModel            :: Command
   Reset               :: Command
   ResetAssertions     :: Command
@@ -92,7 +91,6 @@ data Command where
   GetAssertions       :: Command
   GetAssignment       :: Command
   Assert              :: Exp Boolean -> Command
-  CheckSatAssuming    :: Exp Boolean -> Command
   Echo                :: String      -> Command
   GetInfo             :: InfoFlag    -> Command
   GetOption           :: String      -> Command
@@ -210,7 +208,6 @@ instance Show Command where
   show (Declare name tp) = "(declare-const " <> show name <> " " <> show tp <> ")"
   show (Assert e) = "(assert " <> show e <> ")"
   show (SetOption o) = "(set-option " <> show o <> ")"
-  show CheckSat = "(check-sat)"
   show GetModel = "(get-model)"
   show Reset = "(reset)"
   --show ResetAssertions = "reset"

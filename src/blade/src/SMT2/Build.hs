@@ -19,7 +19,6 @@ module SMT2.Build (
   declare,
   include,
   assert,
-  checkSat,
   getModel,
   reset,
   resetAssertions,
@@ -29,7 +28,6 @@ module SMT2.Build (
   exit,
   getAssertions,
   getAssignment,
-  checkSatAssuming,
   echo,
   getInfo,
   getOption,
@@ -90,9 +88,6 @@ assert e = do
   Script exp <- get
   put $ Script (Assert e : exp)
 
-checkSat :: SMT2 ()
-checkSat = include' CheckSat
-
 getModel :: SMT2 ()
 getModel = include' GetModel
 
@@ -119,9 +114,6 @@ getAssertions = include' GetAssertions
 
 getAssignment :: SMT2 ()
 getAssignment = include' GetAssignment
-
-checkSatAssuming :: Exp Boolean -> SMT2 ()
-checkSatAssuming = include' . CheckSatAssuming
 
 echo :: String -> SMT2 ()
 echo = include' . Echo

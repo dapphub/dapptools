@@ -224,7 +224,6 @@ assert = do
 
 command :: Parsec String st T.Command
 command =  try assert
-       <|> try (string "(check-sat)") $> T.CheckSat
 
 script :: Parsec String st T.Script
 script = T.Script <$> (spaces *> sepEndBy command spaces <* spaces)

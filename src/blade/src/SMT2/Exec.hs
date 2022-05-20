@@ -64,7 +64,6 @@ data CheckSatResult
   | Error String
   deriving (Show)
 
--- TODO: can I enforce at the type level that scripts here do not end with (check-sat)?
 checkSat :: SolverGroup -> [Script] -> IO [(Script, CheckSatResult)]
 checkSat (SolverGroup taskQueue) scripts = do
   -- prepare tasks
@@ -114,7 +113,7 @@ withSolvers solver count cont = do
         Left e -> writeChan r (Error e)
         -- otherwise call (check-sat), parse the result, and send it down the result channel
         Right () -> do
-          sat <- sendCommand inst CheckSat
+          sat <- sendLine inst "(check-sat)"
           res <- case sat of
             "sat" -> pure Sat
             "unsat" -> pure Unsat
@@ -164,8 +163,12 @@ sendScript solver (Script cmds) = case cmds of
 
 -- | Sends a single command to the solver, returns the first available line from the output buffer
 sendCommand :: SolverInstance -> Command -> IO String
-sendCommand (SolverInstance _ stdin stdout _ _) cmd = do
-  hPutStr stdin (show cmd <> "\n")
+sendCommand inst cmd = sendLine inst (show cmd)
+
+-- | Sends a string to the solver and appends a newline, returns the first available line from the output buffer
+sendLine :: SolverInstance -> String -> IO String
+sendLine (SolverInstance _ stdin stdout _ _) cmd = do
+  hPutStr stdin (cmd <> "\n")
   hFlush stdin
   hGetLine stdout
 
