@@ -1,5 +1,9 @@
 {-# LANGUAGE DeriveDataTypeable #-}
 
+{-|
+Module      : SMT2.Syntax.Untyped
+Description : Untyped SMT2 expression AST
+-}
 module SMT2.Syntax.Untyped where
 
 import GHC.Natural

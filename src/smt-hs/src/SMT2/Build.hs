@@ -6,11 +6,40 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE PolyKinds #-}
-{-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE DataKinds #-}
 
-module SMT2.Build where
+{-|
+Module      : SMT2.Build
+Description : Monadic interface for runtime SMT2 generation
+-}
+module SMT2.Build (
+  SMT2(..),
+  Ref,
+  declare,
+  include,
+  assert,
+  checkSat,
+  getModel,
+  reset,
+  resetAssertions,
+  getProof,
+  getUnsatAssumptions,
+  getUnsatCore,
+  exit,
+  getAssertions,
+  getAssignment,
+  checkSatAssuming,
+  echo,
+  getInfo,
+  getOption,
+  getValue,
+  pop,
+  push,
+  setInfo,
+  setLogic,
+  setOption
+)where
 
 import Data.Kind
 import Data.Function
@@ -27,7 +56,6 @@ import SMT2.Syntax.Typed
 
 
 -- | Wrapper type for the indexed state monad we use
--- TODO: make this a newtype
 newtype SMT2 ret = SMT2 (State Script ret)
   deriving (Functor, Applicative, Monad, MonadState Script)
 
@@ -39,18 +67,11 @@ data Ref (a :: Ty) where
 
 deriving instance (Show (Ref t))
 
--- | Construct a Ref from a statically known string
-asRef :: forall nm a . KnownSymbol nm => STy a -> Ref a
-asRef = Ref (symbolVal (Proxy @nm))
-
 -- | Declare a new name at runtime, returns a Ref
---
--- N.B. Does not perform any freshness checks. You are responsible for ensuring
--- that names declared via the rutime interface are distinct
 declare :: String -> STy a -> SMT2 (Ref a)
 declare name typ = do
   Script exp <- get
-  put $ Script (Declare name : exp)
+  put $ Script (Declare name typ : exp)
   return $ Ref name typ
 
 -- | Extend the SMT2 expression with some static fragment

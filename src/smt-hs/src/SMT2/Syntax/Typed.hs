@@ -17,7 +17,10 @@
 {-# LANGUAGE StandaloneKindSignatures #-}
 {-# LANGUAGE DataKinds #-}
 
-{- | Defines the core AST datatypes as well as the monadic interface for programatic SMT2 generation -}
+{-|
+Module      : SMT2.Syntax.Typed
+Description : Defines typed versions of the core SMT2 datatypes
+-}
 module SMT2.Syntax.Typed (
   BV(..),
   Ty(..),
@@ -39,6 +42,7 @@ import Data.Data
 import GHC.TypeLits
 import GHC.Natural
 import GHC.Generics
+import Data.Char
 
 import Data.Parameterized.List
 import Data.Parameterized.Classes
@@ -46,6 +50,7 @@ import Language.Haskell.TH.Syntax (Q(..), Lift(..))
 import Language.Haskell.TH (Name(..), appE, conE)
 import Control.Monad.State
 import Data.Map (Map)
+import Data.List (intercalate)
 
 import qualified Language.Haskell.TH.Syntax as TH
 
@@ -96,9 +101,8 @@ data Command where
   SetInfo             :: String      -> Command
   SetLogic            :: String      -> Command
   SetOption           :: Option      -> Command
-  Declare             :: String      -> Command
+  Declare             :: String -> STy t -> Command
 
-deriving instance (Show Command)
 deriving instance (Lift Command)
 
 data Option
@@ -185,7 +189,6 @@ data Exp (t :: Ty) where
   Select    :: Exp (Arr k v) -> Exp k -> Exp v
   Store     :: Exp (Arr k v) -> Exp k -> Exp v -> Exp (Arr k v)
 
-deriving instance (Show (Exp t))
 deriving instance (ShowF Exp)
 deriving instance (Typeable (Exp t))
 
@@ -194,6 +197,25 @@ instance Lift (Exp a) where
   liftTyped (Var a) = [|| Var a ||]
   liftTyped (Or a) = [|| Or a ||]
   liftTyped other = error $ "FUK: " <> show other
+
+
+-- translation into concrete syntax ----------------------------------------------------------------
+
+
+instance Show Command where
+  show (Declare name tp) = "(declare-const " <> show name <> " " <> show tp <> ")"
+  show (Assert e) = "(assert " <> show e <> ")"
+
+instance Show (Exp a) where
+  show (Lit a) = map toLower $ show a
+  show (Var a) = a
+  show (And a) = "(and " <> intercalate " " (fmap show a) <> ")"
+  show (Or a) = "(or " <> intercalate " " (fmap show a) <> ")"
+  show (Eq a) = "(eq " <> intercalate " " (fmap show a) <> ")"
+  show (Xor a) = "(xor " <> intercalate " " (fmap show a) <> ")"
+  show (Impl a) = "(=> " <> intercalate " " (fmap show a) <> ")"
+  show (Distinct a) = "(distinct " <> intercalate " " (fmap show a) <> ")"
+  show (ITE cond l r) = "(ite " <> show cond <> " " <> show l <> " " <> show r <> ")"
 
 
 -- utils -------------------------------------------------------------------------------------------
@@ -206,6 +228,10 @@ data SNat (n :: Nat) where
 
 deriving instance (Show (SNat n))
 
+instance Lift (SNat n) where
+  liftTyped SZ = [|| SZ ||]
+  liftTyped (SS n) = [|| SS n ||]
+
 -- | Singleton type for Ty
 data STy (a :: Ty) where
   SBool :: STy Boolean
@@ -215,6 +241,11 @@ data STy (a :: Ty) where
   SArr :: STy k -> STy v -> STy (Arr k v)
 deriving instance (Show (STy ty))
 deriving instance (ShowF STy)
+
+instance Lift (STy ty) where
+  liftTyped SBool = [|| SBool ||]
+  liftTyped (SBitVec n) = [|| SBitVec n ||]
+  liftTyped (SInt) = [|| SInt ||]
 
 -- | Define the Ty that should be used for a given haskell datatype
 type ExpType :: Type -> Ty

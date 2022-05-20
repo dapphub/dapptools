@@ -6,6 +6,10 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE GADTs #-}
 
+{-|
+Module      : SMT2.Type
+Description : (Partial) typechecking routines for SMT2 expressions
+-}
 module SMT2.Type where
 
 import Data.Kind

@@ -5,7 +5,10 @@
 {-# LANGUAGE Rank2Types #-}
 {-# LANGUAGE DataKinds #-}
 
-{- | Compile time SMT2 parser -}
+{-|
+Module      : SMT2.Parse
+Description : SMT2 parser, can be used at both runtime and and compile time
+-}
 module SMT2.Parse where
 
 import Language.Haskell.TH.Quote
