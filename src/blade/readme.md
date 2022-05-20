@@ -1,125 +1,126 @@
 # Blade
 
-Blade is an opinionated smt2 abstraction layer focused on the construction of strongly
-typed combinators for both the consumption and production of smt2-lib strings.
+Blade is an opinionated smt abstraction layer focused on the construction of strongly
+typed combinators for the production of smt-lib strings.
 
 Direct access to and control over the raw smt representation greatly simplifies query optimisation
 and debugging. For this reason blade focuses on providing facilities that make this approach as safe
 and ergonomic as possible.
 
-Queries in blade are constructed by combining fragments of (potentially parameterized) smt2.
-These fragments are parsed and typechecked at compile time and used to direct typesystem
-analysis that is able to statically ensure that all kinds of poorly typed smt generation will result
-in a compile time error.
+Queries in blade are constructed by combining fragments of (potentially parameterized) smt2. These
+fragments are parsed and (partially) typechecked at compile time, meaning that many kinds of poorly
+typed smt generation will result in a compile time error.
 
-The package consists of five submodules:
+Blade currently supports the following theories:
 
-  - `SMT2`: query generation framework
-  - `Exec`: parallel by default query executor
-  - `Type`: compile time smt2 typechecker
-  - `Read`: library of smt2 parser combinators
-  - `Show`: counterexample pretty printing framework
+- core
+- integer
+- bitvector
+- uninterpreted functions
+
+The package consists of four core modules:
+
+  - `SMT2.Build`: runtime query generation
+  - `SMT2.Exec`: parallel query execution
+  - `SMT2.Parse`: compile time smt2 parser
+  - `SMT2.Syntax.Typed`: typed smt2 AST
+
+## TODO
+
+- name declaration / ref interpolation
+- bv parsing (string into `Nat`??)
+
+## Guarantees
+
+Although blade can detect many kinds of poorly typed smt2 at compile time, it cannot currently catch them
+all:
+
+| Error                   | Detection    |
+|-------------------------|--------------|
+| parse error             | compile time |
+| mismatched types        | compile time |
+| undeclared dynamic name | compile time |
+| undeclared static name  | runtime      |
+| duplicated names        | runtime      |
 
 ## Usage
 
-### Query Generation
+### Static Query Generation
 
-Well typedenss of fully static smt can be enforced with compile time checks only. The following
-produces compile time errors due to the smt2 type errors.
-
-```haskell
-broken :: SMT2 e
-broken
-  = [smt2|
-      (declare-const a Int)
-      (declare-const a Bool)
-      (assert c)
-    |]
-```
-
-These guarantees extend to fragments where all names and types are known, but constants are
-parameterized:
+Static SMT2 scripts can be created using the quasiquoter interface:
 
 ```haskell
-param :: Int -> SMT2 e
-param bVal
-  = [smt2|
-      (declare-const a Int)
-      (define-const b Int ${bVal})
-      (assert (= a b))
-    |]
+{-# LANGUAGE QuasiQuotes #-}
+
+import SMT2.Parse
+import SMT2.Syntax.Typed (Script)
+
+script :: Script
+script = [smt2|
+  (assert (or true (true) false))
+  (assert (or true (true) false))
+|]
 ```
 
-Fragments can use typeclass constraints to refer to undeclared variables.
-Failure to abide by this contract will produce a compile time error.
+Many errors here will result in a ghc type error. For example, the following fragement:
 
 ```haskell
-partial :: (Has "a" SBool e, Has "b" SInt e) => SMT2 e
-partial
-  = [smt2|
-      (assert (and a (lt b 10)))
-      (check-sat)
-    |]
+script :: Script
+script = [smt2|
+  (assert (or true (true) false))
+  (assert (or 1 (true) false))
+|]
 ```
 
-Variables can be declared at runtime.
+Produces the following (somewhat helpful) ghc errror:
 
-We cannot provide any useful guarantees of name freshness for runtime declared variables, so
-delegate this responsibility to the user and accept the possibility of badly typed SMT generation in
-this case.
-
-We can however statically ensure that all references are to a declared variable of the correct time.
-In order to do this we have to introduce some runtime machinery:
-
-- A runtime copy of the typing environment
-- Inclusion proofs for the typing environment
-
-We then only allow variables to be declared at runtime if the caller can provide a proof of
-inclusion. Since the only way to produce such a proof is to declare a variable beforehand, we have a
-guarantee that all referenced names in the generated smt2 are present in the typing context with a
-matching type.
-
-The monad instance of the `SMT2` type automates the management of the typechecking environment and
-provides convenient interfaces for working with the proofs. There are monadic smart constructors for
-the top level commands.
-
-```haskell
-dyndec :: [String] -> SMT2 e
-dyndec names = do
-  -- this returns an array of proofs of inclusion
-  -- note we do not make any freshness checks here!
-  vs <- mapM declare SBool names
-
-  -- assert each declared variable & check sat
-  mapM assert vs
-  checkSat
+```
+[typecheck] [E] • Exception when trying to run compile-time code:
+    Type mismatch. Expected 'Boolean, got 'Integer
+CallStack (from HasCallStack):
+  error, called at */blade/src/SMT2/Parse.hs:223:15 in main:SMT2.Parse
+  Code: Language.Haskell.TH.Quote.quoteExp
+          smt2
+          "\n\
+          \  (assert (or true (true) false))\n\
+          \  (assert (or 1 (true) false))\n\
+          \  (check-sat)\n"
+• In the quasi-quotation:
+    [smt2|
+  (assert (or true (true) false))
+  (assert (or 1 (true) false))
+|]
 ```
 
-Both static and dynamic fragments can easily be sequenced and combined.
+## Dynamic Query Generation
 
-```haskell
-combined :: [String] -> Int -> SMT2 e
-combined names v = do
-  dyndec names
-  declare @"a" SBool
-  declare @"b" SInt
-  partial
-```
+Queries can also be constructed at runtime. This is carried out using the `SMT2` monad found in `SMT2.Build`.
+Declaring a variable at runtime produces a `Ref` object. These objects can only be constructed using
+the `declare` smart constructor in `SMT2.Build`.
+
+TODO: how do we restrict variable referencing?
 
 ### Query Execution
 
-```haskell
-main :: IO ()
-main = do
-  -- produce a list of 100 smt queries using the above function
-  let qs = fmap query [1..100]
+Query execution is fully parallelised out of the box. The following executes `query` 100 times
+across three instances of Z3:
 
-  -- spawn 5 solver instances and run the queries in parallel
-  solvers <- spawnSolvers Bitwuzla 5
-  results <- runQueries solvers qs
+```haskell
+query :: Script
+query = [smt2|
+  (assert (or true (true) false))
+  (assert (and true (true) false))
+|]
+
+main :: IO ()
+main = withSolvers Z3 3 $ \solvers -> do
+  results <- checkSat solvers (replicate 100 query)
+  forM_ results (print . snd)
 ```
 
 ### Model Extraction
+
+TODO!
 
 ```haskell
 main :: IO ()

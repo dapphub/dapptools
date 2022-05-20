@@ -13,7 +13,9 @@ Description : (Partial) typechecking routines for SMT2 expressions
 module SMT2.Type where
 
 import Data.Kind
-import Data.Typeable
+import Data.Typeable hiding (typeRep)
+import Type.Reflection (typeRep)
+
 
 import Text.Parsec
 
@@ -38,4 +40,5 @@ infer = \case
     check :: forall x . Typeable x => Err (Exp x -> Exp a)
     check = case eqT @a @x of
       Just Refl -> Right id
-      Nothing   -> Left "Type mismatch"
+      Nothing   -> Left ("Type mismatch. Expected " <> show (typeRep @a) <> ", got " <> show (typeRep @x))
+

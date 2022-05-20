@@ -9,7 +9,7 @@ import SMT2.Syntax.Typed
 prog1 :: Script
 prog1 = [smt2|
   (assert (or true (true) false))
-  (assert (or true (true) false))
+  (assert (or false (true) false))
   (check-sat)
 |]
 
