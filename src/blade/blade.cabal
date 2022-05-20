@@ -1,5 +1,5 @@
 cabal-version:      2.4
-name:               smt-hs
+name:               blade
 version:            0.1.0.0
 
 synopsis: Type safe smt2 abstraction layer

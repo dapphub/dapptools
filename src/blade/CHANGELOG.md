@@ -1,4 +1,4 @@
-# Revision history for smt-hs
+# Revision history for blade
 
 ## 0.1.0.0 -- YYYY-mm-dd
 

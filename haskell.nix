@@ -16,7 +16,7 @@ in self-hs: super-hs:
   in {
     restless-git = dontCheck "restless-git" (./src/restless-git);
 
-    smt-hs = pkgs.haskell.lib.dontHaddock (self-hs.callCabal2nix "smt-hs" (./src/smt-hs) {});
+    blade = pkgs.haskell.lib.dontHaddock (self-hs.callCabal2nix "blade" (./src/blade) {});
 
     hevm = pkgs.haskell.lib.dontHaddock ((
       self-hs.callCabal2nix "hevm" (./src/hevm) {

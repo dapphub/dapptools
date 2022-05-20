@@ -4,7 +4,7 @@ let
 in
   pkgs.haskellPackages.shellFor {
     packages = p: [
-      p.smt-hs
+      p.blade
     ];
     buildInputs = with pkgs.haskellPackages; [
       cabal-install
