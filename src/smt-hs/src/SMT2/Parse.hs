@@ -222,12 +222,15 @@ assert = do
     Right e' -> pure $ T.Assert e'
     Left s -> error s
 
-declare :: Parsec String st T.Command
-declare = error "DECLARE"
-
 command :: Parsec String st T.Command
 command =  try assert
-       <|> try declare
+       <|> try (string "(check-sat)") $> T.CheckSat
+
+eol :: Parsec String st String
+eol = string "\n"
+
+script :: Parsec String st T.Script
+script = T.Script <$> sepEndBy command eol
 
 test :: String -> Either ParseError U.Exp
 test = parse smtexp "(source)"
@@ -237,9 +240,6 @@ location' = aux <$> location
   where
     aux :: Loc -> SourcePos
     aux loc = uncurry (newPos (loc_filename loc)) (loc_start loc)
-
-topLevel :: Parsec String st a -> Parsec String st a
-topLevel p = spaces *> p <* eof
 
 parseIO :: Parsec String () a -> String -> IO a
 parseIO p str =
@@ -251,7 +251,7 @@ smt2 :: QuasiQuoter
 smt2 = QuasiQuoter {
       quoteExp = \str -> do
         l <- location'
-        c <- runIO $ parseIO (setPosition l *> topLevel command) str
+        c <- runIO $ parseIO (setPosition l *> script) str
         lift c
     , quotePat  = undefined
     , quoteType = undefined

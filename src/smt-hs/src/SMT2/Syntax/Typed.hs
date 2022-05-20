@@ -77,6 +77,7 @@ data Ty
 -- | Sequenced solver commands
 newtype Script = Script [Command]
   deriving newtype (Semigroup, Monoid)
+  deriving (Lift)
 
 -- | The language of top level solver commands
 data Command where
