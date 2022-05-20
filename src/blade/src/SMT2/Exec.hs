@@ -11,7 +11,9 @@ module SMT2.Exec (
   CheckSatResult(..),
   checkSat,
   withSolvers,
-  SMT2.Exec.test
+  SMT2.Exec.test,
+  prog,
+  prog2
 )where
 
 import GHC.Natural
@@ -23,6 +25,7 @@ import Control.Concurrent (forkIO, killThread)
 
 import SMT2.Syntax.Typed (Script(..), Command(..), Option(..))
 import SMT2.Parse
+import Debug.Trace
 
 -- | Supported solvers
 data Solver
@@ -101,7 +104,7 @@ withSolvers solver count cont = do
       task <- readChan queue
       inst <- readChan avail
       _ <- forkIO $ runTask task inst avail
-      pure ()
+      orchestrate queue avail
 
     runTask (Task (Script cmds) r) inst availableInstances = do
       -- reset solver and send all lines of provided script
@@ -172,10 +175,16 @@ sendCommand (SolverInstance _ stdin stdout _ _) cmd = do
 prog :: Script
 prog = [smt2|
   (assert (or true (true) false))
-  (assert (or false (true) false))
+  (assert (and true (true) false))
+|]
+
+prog2 :: Script
+prog2 = [smt2|
+  (assert (or true (true) false))
+  (assert (and true (true) false))
 |]
 
 test :: IO ()
 test = withSolvers Z3 3 $ \solvers -> do
-  results <- checkSat solvers (replicate 3 prog)
+  results <- checkSat solvers (replicate 12 (prog <> prog2))
   forM_ results (print . snd)

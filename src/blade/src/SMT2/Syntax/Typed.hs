@@ -197,11 +197,14 @@ instance Lift (Exp a) where
   liftTyped (Lit a) = [|| Lit a ||]
   liftTyped (Var a) = [|| Var a ||]
   liftTyped (Or a) = [|| Or a ||]
+  liftTyped (And a) = [|| And a ||]
   liftTyped other = error $ "FUK: " <> show other
 
 
 -- translation into concrete syntax ----------------------------------------------------------------
 
+instance Show Script where
+  show (Script cmds) = unlines $ fmap show cmds
 
 instance Show Command where
   show (Declare name tp) = "(declare-const " <> show name <> " " <> show tp <> ")"
@@ -232,20 +235,20 @@ instance Show Command where
   --Declare             :: String -> STy t -> Command
 
 instance Show Option where
-  show (DiagnosticOutputChannel s) = "diagnostic-output-channel " <> s
-  show (GlobalDeclarations b) = "global-declarations " <> (lowercase $ show b)
-  show (InteractiveMode b) = "interactive-mode " <> (lowercase $ show b)
-  show (PrintSuccess b) = "print-success " <> (lowercase $ show b)
-  show (ProduceAssertions b) = "produce-assertions " <> (lowercase $ show b)
-  show (ProduceAssignments b) = "produce-assignments " <> (lowercase $ show b)
-  show (ProduceModels b) = "produce-models " <> (lowercase $ show b)
-  show (ProduceProofs b) = "produce-proofs " <> (lowercase $ show b)
-  show (ProduceUnsatAssumptions b) = "produce-unsat-assumptions " <> (lowercase $ show b)
-  show (ProduceUnsatCores b) = "produce-unsat-cores " <> (lowercase $ show b)
-  show (RandomSeed i) = "random-seed " <> show i
-  show (RegularOutputChannel s) = "regular-output-channel " <> s
-  show (ReproducibleResourceLimit i) = "reproducible-resource-limit " <> show i
-  show (Verbosity i) = "verbosity " <> show i
+  show (DiagnosticOutputChannel s) = ":diagnostic-output-channel " <> s
+  show (GlobalDeclarations b) = ":global-declarations " <> (lowercase $ show b)
+  show (InteractiveMode b) = ":interactive-mode " <> (lowercase $ show b)
+  show (PrintSuccess b) = ":print-success " <> (lowercase $ show b)
+  show (ProduceAssertions b) = ":produce-assertions " <> (lowercase $ show b)
+  show (ProduceAssignments b) = ":produce-assignments " <> (lowercase $ show b)
+  show (ProduceModels b) = ":produce-models " <> (lowercase $ show b)
+  show (ProduceProofs b) = ":produce-proofs " <> (lowercase $ show b)
+  show (ProduceUnsatAssumptions b) = ":produce-unsat-assumptions " <> (lowercase $ show b)
+  show (ProduceUnsatCores b) = ":produce-unsat-cores " <> (lowercase $ show b)
+  show (RandomSeed i) = ":random-seed " <> show i
+  show (RegularOutputChannel s) = ":regular-output-channel " <> s
+  show (ReproducibleResourceLimit i) = ":reproducible-resource-limit " <> show i
+  show (Verbosity i) = ":verbosity " <> show i
 
 instance Show (Exp a) where
   show (Lit a) = lowercase $ show a
@@ -287,6 +290,7 @@ instance Lift (STy ty) where
   liftTyped SBool = [|| SBool ||]
   liftTyped (SBitVec n) = [|| SBitVec n ||]
   liftTyped (SInt) = [|| SInt ||]
+  -- TODO: SFun, SArr
 
 -- | Define the Ty that should be used for a given haskell datatype
 type ExpType :: Type -> Ty

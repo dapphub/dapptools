@@ -226,11 +226,8 @@ command :: Parsec String st T.Command
 command =  try assert
        <|> try (string "(check-sat)") $> T.CheckSat
 
-eol :: Parsec String st String
-eol = string "\n"
-
 script :: Parsec String st T.Script
-script = T.Script <$> sepEndBy command eol
+script = T.Script <$> (spaces *> sepEndBy command spaces <* spaces)
 
 test :: String -> Either ParseError U.Exp
 test = parse smtexp "(source)"
