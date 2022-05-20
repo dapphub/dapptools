@@ -12,6 +12,7 @@ extra-source-files: CHANGELOG.md
 
 library
     exposed-modules:  SMT2.Build SMT2.Parse SMT2.Exec SMT2.Syntax.Typed
+    other-modules:   SMT2.Type SMT2.Syntax.Untyped
     build-depends:    base>=4.15,
                       --base-compat>=0.12,
                       process,

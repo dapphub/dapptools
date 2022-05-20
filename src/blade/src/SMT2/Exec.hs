@@ -8,10 +8,10 @@ Description : Parallel execution of SMT2 queries
 module SMT2.Exec (
   Solver(..),
   SolverInstance(..),
-  Model(..),
-  SMTResult(..),
-  runQueries,
+  CheckSatResult(..),
+  checkSat,
   withSolvers,
+  SMT2.Exec.test
 )where
 
 import GHC.Natural
@@ -51,7 +51,7 @@ data SolverInstance = SolverInstance
 newtype SolverGroup = SolverGroup (Chan Task)
 
 -- | A script to be executed and a channel where the result should be written
-data Task = Task Script (Chan SMTResult)
+data Task = Task Script (Chan CheckSatResult)
 
 -- | The result of a call to (check-sat)
 data CheckSatResult
@@ -61,7 +61,7 @@ data CheckSatResult
   | Error String
   deriving (Show)
 
--- TODO: can I enfore at the type level that scripts here do not end with (check-sat)?
+-- TODO: can I enforce at the type level that scripts here do not end with (check-sat)?
 checkSat :: SolverGroup -> [Script] -> IO [(Script, CheckSatResult)]
 checkSat (SolverGroup taskQueue) scripts = do
   -- prepare tasks
@@ -80,10 +80,14 @@ checkSat (SolverGroup taskQueue) scripts = do
 
 withSolvers :: Solver -> Natural -> (SolverGroup -> IO a) -> IO a
 withSolvers solver count cont = do
-  -- spawn solvers and orchestration thread
+  -- spawn solvers
   instances <- mapM (const $ spawnSolver solver) [1..count]
+
+  -- spawn orchestration thread
   taskQueue <- newChan
-  orchestrateId <- forkIO $ orchestrate taskQueue instances
+  availableInstances <- newChan
+  forM_ instances (writeChan availableInstances)
+  orchestrateId <- forkIO $ orchestrate taskQueue availableInstances
 
   -- run continuation with task queue
   res <- cont (SolverGroup taskQueue)
@@ -93,22 +97,31 @@ withSolvers solver count cont = do
   killThread orchestrateId
   pure res
   where
-    orchestrate queue instances = do
-      -- block until an instance is available
-      -- pull a task from the queue
+    orchestrate queue avail = do
       task <- readChan queue
-      -- send that task to the solver instance
-      undefined
+      inst <- readChan avail
+      _ <- forkIO $ runTask task inst avail
+      pure ()
 
-    runTask (Task s r) inst = do
-      out <- sendScript inst s
-      let res = case out of
-        Left e -> Error e
-        Right ()
+    runTask (Task (Script cmds) r) inst availableInstances = do
+      -- reset solver and send all lines of provided script
+      out <- sendScript inst (Script $ Reset : cmds)
+      case out of
+        -- if we got an error then return it
+        Left e -> writeChan r (Error e)
+        -- otherwise call (check-sat), parse the result, and send it down the result channel
+        Right () -> do
+          sat <- sendCommand inst CheckSat
+          res <- case sat of
+            "sat" -> pure Sat
+            "unsat" -> pure Unsat
+            "timeout" -> pure Unknown
+            "unknown" -> pure Unknown
+            _ -> pure . Error $ "Unable to parse solver output: " <> sat
+          writeChan r res
 
-      undefined
-
-
+      -- put the instance back in the list of available instances
+      writeChan availableInstances inst
 
 
 -- | Arguments used when spawing a solver instance
@@ -159,7 +172,7 @@ sendCommand (SolverInstance _ stdin stdout _ _) cmd = do
 prog :: Script
 prog = [smt2|
   (assert (or true (true) false))
-  (assert (or true (true) false))
+  (assert (or false (true) false))
 |]
 
 test :: IO ()

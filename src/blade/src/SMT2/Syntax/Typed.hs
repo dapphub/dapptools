@@ -121,7 +121,7 @@ data Option
   | RegularOutputChannel String
   | ReproducibleResourceLimit Integer
   | Verbosity Integer
-  deriving (Show, Lift)
+  deriving (Lift)
 
 data InfoFlag
   = AllStatistics
@@ -206,9 +206,49 @@ instance Lift (Exp a) where
 instance Show Command where
   show (Declare name tp) = "(declare-const " <> show name <> " " <> show tp <> ")"
   show (Assert e) = "(assert " <> show e <> ")"
+  show (SetOption o) = "(set-option " <> show o <> ")"
+  show CheckSat = "(check-sat)"
+  show GetModel = "(get-model)"
+  show Reset = "(reset)"
+  --show ResetAssertions = "reset"
+  --ResetAssertions     :: Command
+  --GetProof            :: Command
+  --GetUnsatAssumptions :: Command
+  --GetUnsatCore        :: Command
+  --Exit                :: Command
+  --GetAssertions       :: Command
+  --GetAssignment       :: Command
+  --Assert              :: Exp Boolean -> Command
+  --CheckSatAssuming    :: Exp Boolean -> Command
+  --Echo                :: String      -> Command
+  --GetInfo             :: InfoFlag    -> Command
+  --GetOption           :: String      -> Command
+  --GetValue            :: String      -> Command
+  --Pop                 :: Natural     -> Command
+  --Push                :: Natural     -> Command
+  --SetInfo             :: String      -> Command
+  --SetLogic            :: String      -> Command
+  --SetOption           :: Option      -> Command
+  --Declare             :: String -> STy t -> Command
+
+instance Show Option where
+  show (DiagnosticOutputChannel s) = "diagnostic-output-channel " <> s
+  show (GlobalDeclarations b) = "global-declarations " <> (lowercase $ show b)
+  show (InteractiveMode b) = "interactive-mode " <> (lowercase $ show b)
+  show (PrintSuccess b) = "print-success " <> (lowercase $ show b)
+  show (ProduceAssertions b) = "produce-assertions " <> (lowercase $ show b)
+  show (ProduceAssignments b) = "produce-assignments " <> (lowercase $ show b)
+  show (ProduceModels b) = "produce-models " <> (lowercase $ show b)
+  show (ProduceProofs b) = "produce-proofs " <> (lowercase $ show b)
+  show (ProduceUnsatAssumptions b) = "produce-unsat-assumptions " <> (lowercase $ show b)
+  show (ProduceUnsatCores b) = "produce-unsat-cores " <> (lowercase $ show b)
+  show (RandomSeed i) = "random-seed " <> show i
+  show (RegularOutputChannel s) = "regular-output-channel " <> s
+  show (ReproducibleResourceLimit i) = "reproducible-resource-limit " <> show i
+  show (Verbosity i) = "verbosity " <> show i
 
 instance Show (Exp a) where
-  show (Lit a) = map toLower $ show a
+  show (Lit a) = lowercase $ show a
   show (Var a) = a
   show (And a) = "(and " <> intercalate " " (fmap show a) <> ")"
   show (Or a) = "(or " <> intercalate " " (fmap show a) <> ")"
@@ -254,3 +294,6 @@ type family ExpType a where
   ExpType Bool = Boolean
   ExpType (BV n) = (BitVec n)
   ExpType Integer = 'Integer
+
+lowercase :: String -> String
+lowercase = fmap toLower
