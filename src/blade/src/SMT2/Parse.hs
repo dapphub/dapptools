@@ -168,6 +168,7 @@ smtexp = U.LitInt <$> (try numeral <|> try hexadecimal) -- <|> try binary)
       <|> op2 "select" U.Select
       <|> op3 "store" U.Store
       <|> try (string "(" *> smtexp <* string ")")
+      <|> U.Var <$> try symbol
       <?> "smt expression"
       where
         op1 n e = try $ do
