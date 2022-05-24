@@ -201,6 +201,7 @@ instance Lift (Exp a) where
 
 -- translation into concrete syntax ----------------------------------------------------------------
 
+
 instance Show Script where
   show (Script cmds) = unlines $ fmap show cmds
 
@@ -210,26 +211,21 @@ instance Show Command where
   show (SetOption o) = "(set-option " <> show o <> ")"
   show GetModel = "(get-model)"
   show Reset = "(reset)"
-  --show ResetAssertions = "reset"
-  --ResetAssertions     :: Command
-  --GetProof            :: Command
-  --GetUnsatAssumptions :: Command
-  --GetUnsatCore        :: Command
-  --Exit                :: Command
-  --GetAssertions       :: Command
-  --GetAssignment       :: Command
-  --Assert              :: Exp Boolean -> Command
-  --CheckSatAssuming    :: Exp Boolean -> Command
-  --Echo                :: String      -> Command
-  --GetInfo             :: InfoFlag    -> Command
-  --GetOption           :: String      -> Command
-  --GetValue            :: String      -> Command
-  --Pop                 :: Natural     -> Command
-  --Push                :: Natural     -> Command
-  --SetInfo             :: String      -> Command
-  --SetLogic            :: String      -> Command
-  --SetOption           :: Option      -> Command
-  --Declare             :: String -> STy t -> Command
+  show ResetAssertions = "(reset-assertions)"
+  show GetProof = "(get-proof)"
+  show GetUnsatAssumptions = "(get-unsat-assumptions)"
+  show GetUnsatCore = "(get-unsat-core)"
+  show Exit = "(exit)"
+  show GetAssertions = "(get-assertions)"
+  show GetAssignment = "(get-assignment)"
+  show (Echo s) = "(echo" <> s <> ")"
+  show (GetInfo f) = "(get-info" <> show f <> ")"
+  show (GetOption s) = "(get-option" <> s <> ")"
+  show (GetValue s) = "(get-value" <> s <> ")"
+  show (Pop n) = "(pop " <> show n <> ")"
+  show (Push n) = "(push " <> show n <> ")"
+  show (SetInfo s) = "(set-info " <> s <> ")"
+  show (SetLogic s) = "(set-logic " <> s <> ")"
 
 instance Show Option where
   show (DiagnosticOutputChannel s) = ":diagnostic-output-channel " <> s
