@@ -31,8 +31,8 @@ type Err a = Either String a
 -- If this is impossible, an error is thrown instead.
 infer :: forall e a . (Typeable a) => U.Exp -> Err (Exp a)
 infer = \case
-  U.LitInt  i -> check <*> (Lit <$> Right i)
-  U.LitBool b -> check <*> (Lit <$> Right b)
+  U.LitInt  i -> check <*> (LitInt <$> Right i)
+  U.LitBool b -> check <*> (LitBool <$> Right b)
   U.And  args -> check <*> (And <$> (mapM infer args))
   U.Or   args -> check <*> (Or <$> (mapM infer args))
   where

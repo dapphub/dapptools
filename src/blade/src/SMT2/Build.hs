@@ -66,7 +66,7 @@ data Ref (a :: Ty) where
 deriving instance (Show (Ref t))
 
 -- | Declare a new name at runtime, returns a Ref
-declare :: String -> STy a -> SMT2 (Ref a)
+declare :: Typeable a => String -> STy a -> SMT2 (Ref a)
 declare name typ = do
   Script exp <- get
   put $ Script (Declare name typ : exp)

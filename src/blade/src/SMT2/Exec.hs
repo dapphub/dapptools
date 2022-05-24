@@ -129,6 +129,7 @@ withSolvers solver count cont = do
 -- | Arguments used when spawing a solver instance
 solverArgs :: Solver -> [String]
 solverArgs = \case
+  Bitwuzla -> error "TODO: Bitwuzla args"
   Z3 ->
     [ "-in" ]
   CVC5 ->
@@ -176,9 +177,7 @@ sendLine (SolverInstance _ stdin stdout _ _) cmd = do
 -- tests ----------------------------------------------------------------------------------------------
 
 prog :: Script
-prog = [smt2|
-  (assert (or true (true) false))
-|]
+prog = [smt2|(assert (or false (true) false))|]
 
 prog2 :: Script
 prog2 = [smt2|

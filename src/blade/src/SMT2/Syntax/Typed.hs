@@ -1,4 +1,5 @@
 {-# LANGUAGE GADTs #-}
+{-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE TemplateHaskellQuotes #-}
 {-# LANGUAGE DeriveLift #-}
@@ -34,7 +35,7 @@ module SMT2.Syntax.Typed (
 ) where
 
 
-import Prelude hiding (Eq,Word)
+import Prelude hiding (Eq,LT,GT,Word)
 import Data.Kind
 import Data.Function
 import Data.Typeable
@@ -43,16 +44,16 @@ import GHC.TypeLits
 import GHC.Natural
 import GHC.Generics
 import Data.Char
+import Data.Map (Map)
+import Data.List (intercalate)
 
 import Data.Parameterized.List
 import Data.Parameterized.Classes
 import Language.Haskell.TH.Syntax (Q(..), Lift(..))
 import Language.Haskell.TH (Name(..), appE, conE)
 import Control.Monad.State
-import Data.Map (Map)
-import Data.List (intercalate)
-
 import qualified Language.Haskell.TH.Syntax as TH
+import qualified Prelude as P
 
 
 -- AST types --------------------------------------------------------------------------------------
@@ -63,6 +64,8 @@ data BV :: Nat -> Type where
   BV :: KnownNat n => Natural -> BV n
 
 deriving instance (Show (BV n))
+deriving instance (Lift (BV n))
+deriving instance (P.Eq (BV n))
 
 -- | Data types
 data Ty
@@ -77,7 +80,8 @@ data Ty
 -- | Sequenced solver commands
 newtype Script = Script [Command]
   deriving newtype (Semigroup, Monoid)
-  deriving (Lift)
+  deriving (Lift, P.Eq)
+
 
 -- | The language of top level solver commands
 data Command where
@@ -100,9 +104,33 @@ data Command where
   SetInfo             :: String      -> Command
   SetLogic            :: String      -> Command
   SetOption           :: Option      -> Command
-  Declare             :: String -> STy t -> Command
+  Declare             :: Typeable t => String -> STy t -> Command
 
 deriving instance (Lift Command)
+instance P.Eq Command where
+  GetModel == GetModel = True
+  Reset == Reset = True
+  ResetAssertions == ResetAssertions = True
+  GetProof == GetProof = True
+  GetUnsatAssumptions == GetUnsatAssumptions = True
+  GetUnsatCore == GetUnsatCore = True
+  Exit == Exit = True
+  GetAssertions == GetAssertions = True
+  GetAssignment == GetAssignment = True
+  Assert a == Assert b = a == b
+  (Echo a) == (Echo b) = a == b
+  (GetInfo a) == (GetInfo b) = a == b
+  (GetOption a) == (GetOption b) = a == b
+  (GetValue a) == (GetValue b) = a == b
+  (Pop a) == (Pop b) = a == b
+  (Push a) == (Push b) = a == b
+  (SetInfo a) == (SetInfo b) = a == b
+  (SetLogic a) == (SetLogic b) = a == b
+  (SetOption a) == (SetOption b) = a == b
+  (Declare a (b :: STy t1)) == (Declare c (d :: STy t2))
+    = a == c && case eqT @t1 @t2 of
+       Just Refl -> True
+       Nothing -> False
 
 data Option
   = DiagnosticOutputChannel String
@@ -119,7 +147,7 @@ data Option
   | RegularOutputChannel String
   | ReproducibleResourceLimit Integer
   | Verbosity Integer
-  deriving (Lift)
+  deriving (Lift, P.Eq)
 
 data InfoFlag
   = AllStatistics
@@ -129,23 +157,25 @@ data InfoFlag
   | Name
   | ReasonUnknown
   | Version
-  deriving (Show, Lift)
+  deriving (Show, Lift, P.Eq)
 
 -- | The language of assertable statements
 data Exp (t :: Ty) where
 
   -- literals & names
-  Lit       :: (Lift t, Show t) => t -> Exp (ExpType t)
+  LitBool   :: Bool -> Exp Boolean
+  LitInt    :: Integer -> Exp 'Integer
+  LitBV     :: BV n -> Exp (BitVec n)
   Var       :: String -> Exp t
 
   -- functions
-  App       :: Exp (Fun args ret) -> List Exp args -> Exp ret
+  App       :: (Typeable args, Typeable ret) => Exp (Fun args ret) -> List Exp args -> Exp ret
 
   -- core ops
   -- http://smtlib.cs.uiowa.edu/theories-Core.shtml
   And       :: [Exp Boolean] -> Exp Boolean
   Or        :: [Exp Boolean] -> Exp Boolean
-  Eq        :: [Exp t] -> Exp Boolean
+  Eq        :: Typeable t => [Exp t] -> Exp Boolean
   Xor       :: [Exp Boolean] -> Exp Boolean
   Impl      :: [Exp Boolean] -> Exp Boolean
   Distinct  :: [Exp Boolean] -> Exp Boolean
@@ -153,8 +183,9 @@ data Exp (t :: Ty) where
 
   -- bitvector
   -- http://smtlib.cs.uiowa.edu/theories-FixedSizeBitVectors.shtml
-  Concat    :: Exp (BitVec i) -> Exp (BitVec j) -> Exp (BitVec (i + j))
-  Extract   :: (0 <= j, j <= i, i <= (m - 1)) => SNat i -> SNat j -> Exp (BitVec m) -> Exp (BitVec (i - j + 1))
+  Concat    :: (KnownNat i, KnownNat j) => Exp (BitVec i) -> Exp (BitVec j) -> Exp (BitVec (i + j))
+  Extract   :: (KnownNat i, KnownNat j, KnownNat m, 0 <= j, j <= i, i <= (m - 1))
+            => SNat i -> SNat j -> Exp (BitVec m) -> Exp (BitVec (i - j + 1))
 
   BVNot     :: (1 <= m) => Exp (BitVec m) -> Exp (BitVec m)
   BVNeg     :: (1 <= m) => Exp (BitVec m) -> Exp (BitVec m)
@@ -165,8 +196,8 @@ data Exp (t :: Ty) where
   BVUDiv    :: (1 <= m) => Exp (BitVec m) -> Exp (BitVec m) -> Exp (BitVec m)
   BVURem    :: (1 <= m) => Exp (BitVec m) -> Exp (BitVec m) -> Exp (BitVec m)
   BVShl     :: (1 <= m) => Exp (BitVec m) -> Exp (BitVec m) -> Exp (BitVec m)
-  BVLShr    :: (1 <= m) => Exp (BitVec m) -> Exp (BitVec m) -> Exp (BitVec m)
-  BVULt     :: (1 <= m) => Exp (BitVec m) -> Exp (BitVec m) -> Exp Boolean
+  BVShr     :: (1 <= m) => Exp (BitVec m) -> Exp (BitVec m) -> Exp (BitVec m)
+  BVULt     :: (KnownNat m, 1 <= m) => Exp (BitVec m) -> Exp (BitVec m) -> Exp Boolean
 
   -- integer
   -- http://smtlib.cs.uiowa.edu/theories-Ints.shtml
@@ -181,22 +212,109 @@ data Exp (t :: Ty) where
   LT        :: Exp 'Integer -> Exp 'Integer -> Exp Boolean
   GEQ       :: Exp 'Integer -> Exp 'Integer -> Exp Boolean
   GT        :: Exp 'Integer -> Exp 'Integer -> Exp Boolean
-  Divisible :: (1 <= n) => SNat n -> Exp 'Integer -> Exp Boolean
+  Divisible :: (KnownNat n, 1 <= n) => SNat n -> Exp 'Integer -> Exp Boolean
 
   -- arrays
   -- http://smtlib.cs.uiowa.edu/theories-ArraysEx.shtml
-  Select    :: Exp (Arr k v) -> Exp k -> Exp v
+  Select    :: (Typeable k, Typeable v) => Exp (Arr k v) -> Exp k -> Exp v
   Store     :: Exp (Arr k v) -> Exp k -> Exp v -> Exp (Arr k v)
 
 deriving instance (ShowF Exp)
 deriving instance (Typeable (Exp t))
 
+instance P.Eq (Exp t) where
+  (LitBool a) == (LitBool b) = a == b
+  (LitInt a) == (LitInt b) = a == b
+  (LitBV a) == (LitBV b) = a == b
+  (Var a) == (Var b) = a == b
+
+  (App (a :: Exp (Fun args1 ret1)) (b :: List Exp args2)) == (App (c :: Exp (Fun args3 ret2)) (d :: List Exp args4))
+    = case eqT @args1 @args3 of
+        Nothing -> False
+        Just Refl -> case eqT @ret1 @ret2 of
+          Nothing -> False
+          Just Refl -> case eqT @args2 @args4 of
+             Nothing -> False
+             Just Refl -> True
+
+  (And a) == (And b) = a == b
+  (Or a) == (Or b) = a == b
+  (Xor a) == (Xor b) = a == b
+  (Impl a) == (Impl b) = a == b
+  (Distinct a) == (Distinct b) = a == b
+  (ITE a b c) == (ITE d e f) = a == d && b == e && c == f
+  (Eq (a :: [Exp t1])) == (Eq (b :: [Exp t2]))
+    = case eqT @t1 @t2 of
+        Just Refl -> a == b
+        Nothing -> False
+
+  (Concat (a :: Exp (BitVec i)) (b :: Exp (BitVec j))) == (Concat (c :: Exp (BitVec k)) (d :: Exp (BitVec l)))
+    = case eqT @i @k of
+        Nothing -> False
+        Just Refl -> case eqT @j @l of
+          Nothing -> False
+          Just Refl -> a == c && b == d
+  (Extract (a :: SNat i) (b :: SNat j) (c :: Exp (BitVec n))) == (Extract (d :: SNat k) (e :: SNat l) (f :: Exp (BitVec m)))
+    = case eqT @i @k of
+        Nothing -> False
+        Just Refl -> case eqT @j @l of
+          Nothing -> False
+          Just Refl -> case eqT @n @m of
+            Nothing -> False
+            Just Refl -> a == d && b == e && c == f
+
+  (BVNot a) == (BVNot b) = a == b
+  (BVNeg a) == (BVNeg b) = a == b
+  (BVAnd a b) == (BVAnd c d) = a == c && b == d
+  (BVOr a b) == (BVOr c d) = a == c && b == d
+  (BVAdd a b) == (BVAdd c d) = a == c && b == d
+  (BVMul a b) == (BVMul c d) = a == c && b == d
+  (BVUDiv a b) == (BVUDiv c d) = a == c && b == d
+  (BVURem a b) == (BVURem c d) = a == c && b == d
+  (BVShl a b) == (BVShl c d) = a == c && b == d
+  (BVShr a b) == (BVShr c d) = a == c && b == d
+  (BVULt (a :: Exp (BitVec i)) (b :: Exp (BitVec j))) == (BVULt (c :: Exp (BitVec k)) (d :: Exp (BitVec l)))
+    = case eqT @i @k of
+        Nothing -> False
+        Just Refl -> case eqT @j @l of
+          Nothing -> False
+          Just Refl -> a == c && b == d
+
+  (Neg a) == (Neg b) = a == b
+  (Sub a b) == (Sub c d) = a == c && b == d
+  (Add a b) == (Add c d) = a == c && b == d
+  (Mul a b) == (Mul c d) = a == c && b == d
+  (Div a b) == (Div c d) = a == c && b == d
+  (Mod a b) == (Mod c d) = a == c && b == d
+  (Abs a) == (Abs b) = a == b
+  (LEQ a b) == (LEQ c d) = a == c && b == d
+  (LT a b) == (LT c d) = a == c && b == d
+  (GEQ a b) == (GEQ c d) = a == c && b == d
+  (GT a b) == (GT c d) = a == c && b == d
+  (Divisible (a :: SNat i) b) == (Divisible (c :: SNat j) d)
+    = case eqT @i @j of
+        Nothing -> False
+        Just Refl -> a == c && b == d
+
+  (Select (a :: Exp (Arr k1 v1)) (b :: Exp k2)) == (Select (c :: Exp (Arr k3 v2)) (d :: Exp k4))
+    = case eqT @k1 @k3 of
+        Nothing -> False
+        Just Refl -> case eqT @k2 @k4 of
+          Nothing -> False
+          Just Refl -> case eqT @v1 @v2 of
+            Nothing -> False
+            Just Refl -> a == c && b == d
+  (Store a b c) == (Store d e f) = a == d && b == e && c == f
+  _ == _ = False
+
 instance Lift (Exp a) where
-  liftTyped (Lit a) = [|| Lit a ||]
+  liftTyped (LitBool a) = [|| LitBool a ||]
+  liftTyped (LitInt a) = [|| LitInt a ||]
+  liftTyped (LitBV a) = [|| LitBV a ||]
   liftTyped (Var a) = [|| Var a ||]
   liftTyped (Or a) = [|| Or a ||]
   liftTyped (And a) = [|| And a ||]
-  liftTyped other = error $ "FUK: " <> show other
+  liftTyped other = error $ "TODO: impl lift for: " <> show other
 
 
 -- translation into concrete syntax ----------------------------------------------------------------
@@ -244,8 +362,16 @@ instance Show Option where
   show (Verbosity i) = ":verbosity " <> show i
 
 instance Show (Exp a) where
-  show (Lit a) = lowercase $ show a
+  -- TODO: handle lit bv?
+  -- TODO: handle lit arr?
+  -- TODO: handle lit fn?
+  -- vars & lits
+  show (LitBool a) = lowercase $ show a
+  show (LitInt a) = show a
+  show (LitBV a) = show a
   show (Var a) = a
+
+  -- core
   show (And a) = "(and " <> intercalate " " (fmap show a) <> ")"
   show (Or a) = "(or " <> intercalate " " (fmap show a) <> ")"
   show (Eq a) = "(eq " <> intercalate " " (fmap show a) <> ")"
@@ -253,6 +379,43 @@ instance Show (Exp a) where
   show (Impl a) = "(=> " <> intercalate " " (fmap show a) <> ")"
   show (Distinct a) = "(distinct " <> intercalate " " (fmap show a) <> ")"
   show (ITE cond l r) = "(ite " <> show cond <> " " <> show l <> " " <> show r <> ")"
+
+  -- euf
+  show (App fn args) = "(" <> show fn <> " " <> show args <> ")"
+
+  -- bv
+  show (Concat l r) = "(concat " <> show l <> " " <> show r <> ")"
+  -- TODO: is this correct?
+  show (Extract i j bv) = "(extract " <> show i <> " " <> show j <> " " <> show bv <> ")"
+  show (BVNot bv) = "(bvnot " <> show bv <> ")"
+  show (BVNeg bv) = "(bvneg " <> show bv <> ")"
+  show (BVAnd l r) = "(bvand " <> show l <> " " <> show r <> ")"
+  show (BVOr l r) = "(bvor " <> show l <> " " <> show r <> ")"
+  show (BVAdd l r) = "(bvadd " <> show l <> " " <> show r <> ")"
+  show (BVMul l r) = "(bvmul " <> show l <> " " <> show r <> ")"
+  show (BVUDiv l r) = "(bvudiv " <> show l <> " " <> show r <> ")"
+  show (BVURem l r) = "(bvurem " <> show l <> " " <> show r <> ")"
+  show (BVShl l r) = "(bvshl " <> show l <> " " <> show r <> ")"
+  show (BVShr l r) = "(bvshr " <> show l <> " " <> show r <> ")"
+  show (BVULt l r) = "(bvult " <> show l <> " " <> show r <> ")"
+
+  -- integer
+  show (Neg i) = "(- " <> show i <> ")"
+  show (Sub i j) = "(- " <> show i <> " " <> show j <> ")"
+  show (Add i j) = "(+ " <> show i <> " " <> show j <> ")"
+  show (Mul i j) = "(* " <> show i <> " " <> show j <> ")"
+  show (Div i j) = "(div " <> show i <> " " <> show j <> ")"
+  show (Mod i j) = "(mod " <> show i <> " " <> show j <> ")"
+  show (Abs i) = "(abs " <> show i <> ")"
+  show (LEQ i j) = "(<= " <> show i <> " " <> show j <> ")"
+  show (LT i j) = "(< " <> show i <> " " <> show j <> ")"
+  show (GEQ i j) = "(>= " <> show i <> " " <> show j <> ")"
+  show (GT i j) = "(> " <> show i <> " " <> show j <> ")"
+  show (Divisible n e) = "(divisble " <> show n <> " " <> show e <> ")"
+
+  -- arrays
+  show (Select arr k) = "(select " <> show arr <> " " <> show k <> ")"
+  show (Store arr k v) = "(select " <> show arr <> " " <> show k <> " " <> show v <> ")"
 
 
 -- utils -------------------------------------------------------------------------------------------
@@ -262,8 +425,13 @@ instance Show (Exp a) where
 data SNat (n :: Nat) where
   SZ :: SNat 0
   SS :: SNat n -> SNat (1 + n)
-
 deriving instance (Show (SNat n))
+
+instance KnownNat n => P.Eq (SNat n) where
+  (l :: SNat i) == (r :: SNat j)
+    = case eqT @i @j of
+        Just Refl -> True
+        Nothing -> False
 
 instance Lift (SNat n) where
   liftTyped SZ = [|| SZ ||]
@@ -279,18 +447,17 @@ data STy (a :: Ty) where
 deriving instance (Show (STy ty))
 deriving instance (ShowF STy)
 
+instance Typeable ty => P.Eq (STy ty) where
+  (a :: STy t1) == (b :: STy t2)
+    = case eqT @t1 @t2 of
+        Just Refl -> True
+        Nothing -> False
+
 instance Lift (STy ty) where
+  liftTyped SInt = [|| SInt ||]
   liftTyped SBool = [|| SBool ||]
   liftTyped (SBitVec n) = [|| SBitVec n ||]
-  liftTyped (SInt) = [|| SInt ||]
   -- TODO: SFun, SArr
-
--- | Define the Ty that should be used for a given haskell datatype
-type ExpType :: Type -> Ty
-type family ExpType a where
-  ExpType Bool = Boolean
-  ExpType (BV n) = (BitVec n)
-  ExpType Integer = 'Integer
 
 lowercase :: String -> String
 lowercase = fmap toLower

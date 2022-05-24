@@ -220,17 +220,14 @@ assert = do
   string ")"
   case infer e of
     Right e' -> pure $ T.Assert e'
-    Left s -> error s
+    Left s -> fail s
 
 command :: Parsec String st T.Command
 command =  try assert
        <?> "smt command"
 
 script :: Parsec String st T.Script
-script = T.Script <$> (newline *> sepEndBy1 (spaces *> command) newline)
-
-test :: String -> Either ParseError U.Exp
-test = parse smtexp "(source)"
+script = T.Script <$> ((skipMany newline) *> (sepBy1 (spaces *> command) newline))
 
 location' :: Q SourcePos
 location' = aux <$> location
@@ -250,6 +247,9 @@ smt2 = QuasiQuoter {
     , quoteDec  = undefined
     }
 
+
+test :: String -> Either ParseError U.Exp
+test = parse smtexp "(source)"
 
 test0 = test "(or (and 1 2 \"hi\") (or 3 false))"
 test1 = test "(ite (and 1 2 \"hi\") (or 3 false) (eq 4 3))"
