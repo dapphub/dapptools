@@ -216,6 +216,7 @@ extract = do
 
 assert :: Parsec String st T.Command
 assert = do
+  spaces
   string "(assert"
   space
   e <- smtexp
