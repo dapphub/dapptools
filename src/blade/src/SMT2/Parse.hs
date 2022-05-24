@@ -224,9 +224,10 @@ assert = do
 
 command :: Parsec String st T.Command
 command =  try assert
+       <?> "smt command"
 
 script :: Parsec String st T.Script
-script = T.Script <$> (spaces *> sepEndBy command spaces <* spaces)
+script = T.Script <$> (newline *> sepEndBy1 (spaces *> command) newline)
 
 test :: String -> Either ParseError U.Exp
 test = parse smtexp "(source)"
@@ -237,18 +238,13 @@ location' = aux <$> location
     aux :: Loc -> SourcePos
     aux loc = uncurry (newPos (loc_filename loc)) (loc_start loc)
 
-parseIO :: Parsec String () a -> String -> IO a
-parseIO p str =
-  case parse p "" str of
-    Left err -> throwIO (userError (show err))
-    Right a  -> return a
-
 smt2 :: QuasiQuoter
 smt2 = QuasiQuoter {
       quoteExp = \str -> do
         l <- location'
-        c <- runIO $ parseIO (setPosition l *> script) str
-        lift c
+        case parse (setPosition l *> script) "" str of
+          Left e -> error (show e)
+          Right a -> lift a
     , quotePat  = undefined
     , quoteType = undefined
     , quoteDec  = undefined

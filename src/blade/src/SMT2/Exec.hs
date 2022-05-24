@@ -178,7 +178,6 @@ sendLine (SolverInstance _ stdin stdout _ _) cmd = do
 prog :: Script
 prog = [smt2|
   (assert (or true (true) false))
-  (assert (and true (true) false))
 |]
 
 prog2 :: Script
