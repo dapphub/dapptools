@@ -158,7 +158,7 @@ smtexp = U.LitInt <$> (try numeral <|> try hexadecimal) -- <|> try binary)
       <|> op2 "+" U.Add
       <|> op2 "*" U.Mul
       <|> op2 "div" U.Div
-      <|> op2 "mod" U.Div
+      <|> op2 "mod" U.Mod
       <|> op1 "abs" U.Abs
       <|> op2 "<=" U.LEQ
       <|> op2 "<" U.LT
