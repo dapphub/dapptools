@@ -10,7 +10,7 @@ import Debug.Trace
 import Test.Tasty
 import Test.Tasty.QuickCheck
 import Test.Tasty.HUnit
-import Text.Parsec
+import Text.Parsec (parse)
 
 import SMT2.Syntax.Typed
 import SMT2.Parse
@@ -40,22 +40,42 @@ main = defaultMain $ testGroup "blade"
       , testCase "trailing newline" $ qtest [smt2|
           (assert true)
         |]
+      , testCase "trailing newlines" $ qtest [smt2|
+          (assert true)
+
+
+
+
+        |]
+      , testCase "leading newlines" $ qtest [smt2|
+
+
+
+
+          (assert true)
+
+
+
+        |]
       ]
   ]
+
+
+-- generators --------------------------------------------------------------------------------------
 
 
 genExpBool :: Int -> Gen (Exp Boolean)
 genExpBool 0 = oneof
   [ LitBool <$> arbitrary
-  , Var <$> arbitrary
+  , Var <$> name
   ]
 genExpBool n = oneof
-  [ fmap And (listOf subExpBool)
-  , fmap Or (listOf subExpBool)
-  , fmap Eq (listOf subExpBool)
-  , fmap Xor (listOf subExpBool)
-  , fmap Impl (listOf subExpBool)
-  , fmap Distinct (listOf subExpBool)
+  [ fmap And (listOf1 subExpBool)
+  , fmap Or (listOf1 subExpBool)
+  , fmap Eq (listOf1 subExpBool)
+  , fmap Xor (listOf1 subExpBool)
+  , fmap Impl (listOf1 subExpBool)
+  , fmap Distinct (listOf1 subExpBool)
   , liftM3 ITE subExpBool subExpBool subExpBool
   , liftM2 LEQ subExpInt subExpInt
   , liftM2 GEQ subExpInt subExpInt
@@ -69,7 +89,7 @@ genExpBool n = oneof
 genExpInt :: Int -> Gen (Exp 'Integer)
 genExpInt 0 = oneof
   [ LitInt <$> arbitrary
-  , Var <$> arbitrary
+  , Var <$> name
   ]
 genExpInt n = oneof
   [ fmap Neg subExpInt
@@ -85,13 +105,44 @@ genExpInt n = oneof
 
 genCommand :: Int -> Gen Command
 genCommand n = oneof
-  [ liftM2 Declare arbitrary (pure SInt)
-  , liftM2 Declare arbitrary (pure SBool)
+  [ liftM2 Declare name (pure SInt)
+  , liftM2 Declare name (pure SBool)
   , fmap Assert (genExpBool n)
   ]
 
 genScript :: Int -> Gen Script
 genScript n = Script <$> listOf1 (genCommand n)
+
+lower :: Gen Char
+lower = frequency [ (26, choose ('a', 'z')) ]
+
+upper :: Gen Char
+upper = frequency [ (26, choose ('A', 'Z')) ]
+
+digit :: Gen Char
+digit = frequency [ (10, choose ('0', '9')) ]
+
+special :: Gen Char
+special = elements "~!@$%^&*_-+=<>.?/"
+
+name :: Gen String
+name = do
+  h <- lower
+  ts <- listOf (oneof [lower, upper, digit, special])
+  pure (h : ts)
+
+reservedWords :: [String]
+reservedWords
+  = [ "!", "_" , "as", "DECIMAL", "exists", "forall", "let", "NUMERAL", "par", "STRING"
+    , "assert", "check-sat", "declare-sort", "declare-fun", "define-sort"
+    , "define-fun", "exit", "get-assertions", "get-assignment", "get-info"
+    , "get-option", "get-proof", "get-unsat-core", "get-value", "pop", "push"
+    , "set-logic", "set-info", "set-option"
+    ]
+
+
+-- utils -------------------------------------------------------------------------------------------
+
 
 qtest :: Script -> IO ()
 qtest = const (pure ())

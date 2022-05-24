@@ -1,4 +1,5 @@
 {-# LANGUAGE GADTs #-}
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE TemplateHaskellQuotes #-}
@@ -324,7 +325,7 @@ instance Show Script where
   show (Script cmds) = unlines $ fmap show cmds
 
 instance Show Command where
-  show (Declare name tp) = "(declare-const " <> show name <> " " <> show tp <> ")"
+  show (Declare name tp) = "(declare-const " <> name <> " " <> show tp <> ")"
   show (Assert e) = "(assert " <> show e <> ")"
   show (SetOption o) = "(set-option " <> show o <> ")"
   show GetModel = "(get-model)"
@@ -417,6 +418,15 @@ instance Show (Exp a) where
   show (Select arr k) = "(select " <> show arr <> " " <> show k <> ")"
   show (Store arr k v) = "(select " <> show arr <> " " <> show k <> " " <> show v <> ")"
 
+instance Show (STy ty) where
+  show SInt = "Int"
+  show SBool = "Bool"
+  show (SBitVec n) = "(_ BitVec " <> show n <> ")"
+
+instance Show (SNat n) where
+  show SZ = show 0
+  show (SS _ :: SNat n) = show (natVal (Proxy @n))
+
 
 -- utils -------------------------------------------------------------------------------------------
 
@@ -424,8 +434,7 @@ instance Show (Exp a) where
 -- | Singleton type for Nat
 data SNat (n :: Nat) where
   SZ :: SNat 0
-  SS :: SNat n -> SNat (1 + n)
-deriving instance (Show (SNat n))
+  SS :: (KnownNat (1 + n)) => SNat n -> SNat (1 + n)
 
 instance KnownNat n => P.Eq (SNat n) where
   (l :: SNat i) == (r :: SNat j)
@@ -444,8 +453,6 @@ data STy (a :: Ty) where
   SInt :: STy 'Integer
   SFun :: List STy args -> STy ret -> STy (Fun args ret)
   SArr :: STy k -> STy v -> STy (Arr k v)
-deriving instance (Show (STy ty))
-deriving instance (ShowF STy)
 
 instance Typeable ty => P.Eq (STy ty) where
   (a :: STy t1) == (b :: STy t2)

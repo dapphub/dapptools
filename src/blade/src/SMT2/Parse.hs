@@ -227,7 +227,12 @@ command =  try assert
        <?> "smt command"
 
 script :: Parsec String st T.Script
-script = T.Script <$> ((skipMany newline) *> (sepBy1 (spaces *> command) newline))
+script = do
+  skipMany newline
+  spaces
+  s <- sepEndBy1 command newline
+  spaces
+  pure $ T.Script s
 
 location' :: Q SourcePos
 location' = aux <$> location
