@@ -153,8 +153,8 @@ smtexp = U.LitInt <$> (try numeral <|> try hexadecimal) -- <|> try binary)
       <|> op2 "bvshl" U.BVShl
       <|> op2 "bvshr" U.BVShr
       <|> op2 "bvult" U.BVShr
-      <|> op1 "-" U.Neg
       <|> op2 "-" U.Sub
+      <|> op1 "-" U.Neg
       <|> op2 "+" U.Add
       <|> op2 "*" U.Mul
       <|> op2 "div" U.Div
