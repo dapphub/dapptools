@@ -138,6 +138,7 @@ smtexp = U.LitInt <$> (try numeral <|> try hexadecimal) -- <|> try binary)
       <|> opMany "or" U.Or
       <|> opMany "eq" U.Eq
       <|> opMany "xor" U.Xor
+      <|> opMany "=>" U.Impl
       <|> opMany "distinct" U.Distinct
       <|> op3 "ite" U.ITE
       <|> op2 "concat" U.Concat
