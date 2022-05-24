@@ -167,7 +167,7 @@ data Exp (t :: Ty) where
   LitBool   :: Bool -> Exp Boolean
   LitInt    :: Integer -> Exp 'Integer
   LitBV     :: BV n -> Exp (BitVec n)
-  Var       :: String -> Exp t
+  Var       :: Typeable t => String -> Exp t
 
   -- functions
   App       :: (Typeable args, Typeable ret) => Exp (Fun args ret) -> List Exp args -> Exp ret
@@ -313,8 +313,28 @@ instance Lift (Exp a) where
   liftTyped (LitInt a) = [|| LitInt a ||]
   liftTyped (LitBV a) = [|| LitBV a ||]
   liftTyped (Var a) = [|| Var a ||]
-  liftTyped (Or a) = [|| Or a ||]
+
   liftTyped (And a) = [|| And a ||]
+  liftTyped (Or a) = [|| Or a ||]
+  liftTyped (Eq a) = [|| Eq a ||]
+  liftTyped (Xor a) = [|| Xor a ||]
+  liftTyped (Impl a) = [|| Impl a ||]
+  liftTyped (Distinct a) = [|| Distinct a ||]
+  liftTyped (ITE c l r) = [|| ITE c l r ||]
+
+  liftTyped (Neg a) = [|| Neg a ||]
+  liftTyped (Sub a b) = [|| Sub a b ||]
+  liftTyped (Add a b) = [|| Add a b ||]
+  liftTyped (Mul a b) = [|| Mul a b ||]
+  liftTyped (Div a b) = [|| Div a b ||]
+  liftTyped (Mod a b) = [|| Mod a b ||]
+  liftTyped (Abs a) = [|| Abs a ||]
+  liftTyped (LEQ a b) = [|| LEQ a b ||]
+  liftTyped (LT a b) = [|| LT a b ||]
+  liftTyped (GEQ a b) = [|| GEQ a b ||]
+  liftTyped (GT a b) = [|| GT a b ||]
+  liftTyped (Divisible a b) = [|| Divisible a b ||]
+
   liftTyped other = error $ "TODO: impl lift for: " <> show other
 
 
