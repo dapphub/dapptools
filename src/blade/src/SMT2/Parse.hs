@@ -19,6 +19,7 @@ import Text.Parsec
 import Text.Parsec.Pos
 import Data.Functor
 import Numeric (readHex)
+import GHC.Natural
 --import Numeric.Compat (readBin)
 import Data.Function
 import Control.Exception (throwIO)
@@ -80,13 +81,13 @@ stringLiteral = do char '"'
     nonEscaped = noneOf "\""
     escaped = try (string "\"\"") $> '"'
 
-numeral :: Parsec String st Integer
+numeral :: Parsec String st Natural
 numeral =  string "0" $> 0
        <|> do c <- oneOf "123456789"
               cs <- many digit
               return $ read (c:cs)
 
-hexadecimal :: Parsec String st Integer
+hexadecimal :: Parsec String st Natural
 hexadecimal = do
   string "#x"
   s <- fmap toLower <$> many1 hexDigit
@@ -198,7 +199,7 @@ divisible :: Parsec String st (U.Exp)
 divisible = do
   string "divisble"
   space
-  i <- fromInteger <$> numeral
+  i <- numeral
   space
   e <- smtexp
   pure $ U.Divisible i e
@@ -207,9 +208,9 @@ extract :: Parsec String st (U.Exp)
 extract = do
   string "extract"
   space
-  i <- fromInteger <$> numeral
+  i <- numeral
   space
-  j <- fromInteger <$> numeral
+  j <- numeral
   space
   e <- smtexp
   pure $ U.Extract i j e

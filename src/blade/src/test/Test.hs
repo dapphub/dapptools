@@ -5,6 +5,7 @@ module Main where
 
 import Prelude hiding (GT, LT)
 import Control.Monad
+import GHC.Natural
 import Debug.Trace
 
 import Test.Tasty
@@ -22,18 +23,12 @@ main = defaultMain $ testGroup "blade"
   [ testGroup "roundtrips"
       [ testProperty "valid smt" $ do
           generated <- trace' <$> sized genScript
-          let parsed = parse script "" (show generated)
-          return $ case parsed of
+          return $ case parse script "" (toSMT generated) of
             Left e -> trace (show e) $ property False
-            Right s -> s === generated
-
-        --testProperty "invalid smt" undefined
-      ]
-  , testGroup "smt-comp benchmarks"
-      [
+            Right parsed -> parsed === generated
       ]
   -- these should all produce compile time errors if there is a failure
-  , testGroup "quasiquoter"
+  , testGroup "quasiquoter newline handling"
       [ testCase "no newline" $ qtest [smt2|(assert true)|]
       , testCase "leading newline" $ qtest [smt2|
           (assert true)|]
@@ -88,7 +83,7 @@ genExpBool n = oneof
 
 genExpInt :: Int -> Gen (Exp 'Integer)
 genExpInt 0 = oneof
-  [ LitInt <$> arbitrary
+  [ LitInt <$> nat
   , Var <$> name
   ]
 genExpInt n = oneof
@@ -105,9 +100,7 @@ genExpInt n = oneof
 
 genCommand :: Int -> Gen Command
 genCommand n = oneof
-  [ liftM2 Declare name (pure SInt)
-  , liftM2 Declare name (pure SBool)
-  , fmap Assert (genExpBool n)
+  [ fmap Assert (genExpBool n)
   ]
 
 genScript :: Int -> Gen Script
@@ -131,6 +124,9 @@ name = do
   ts <- listOf (oneof [lower, upper, digit, special])
   pure (h : ts)
 
+nat :: Gen Natural
+nat = fromIntegral <$> arbitrarySizedNatural
+
 reservedWords :: [String]
 reservedWords
   = [ "!", "_" , "as", "DECIMAL", "exists", "forall", "let", "NUMERAL", "par", "STRING"
@@ -146,3 +142,8 @@ reservedWords
 
 qtest :: Script -> IO ()
 qtest = const (pure ())
+
+--qtest :: Script -> IO ()
+--qtest s = do
+  --error . show $ s
+  --pure ()

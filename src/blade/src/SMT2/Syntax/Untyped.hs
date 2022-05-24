@@ -12,7 +12,7 @@ import Data.Data
 
 data Exp
   = LitStr String
-  | LitInt Integer
+  | LitInt Natural
   | LitBool Bool
   | Var String
   | App String [Exp]

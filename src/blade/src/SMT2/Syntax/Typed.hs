@@ -33,6 +33,7 @@ module SMT2.Syntax.Typed (
   Exp(..),
   STy(..),
   SNat(..),
+  ToSMT(..),
 ) where
 
 
@@ -81,7 +82,7 @@ data Ty
 -- | Sequenced solver commands
 newtype Script = Script [Command]
   deriving newtype (Semigroup, Monoid)
-  deriving (Lift, P.Eq)
+  deriving (Lift, P.Eq, Show)
 
 
 -- | The language of top level solver commands
@@ -108,6 +109,7 @@ data Command where
   Declare             :: Typeable t => String -> STy t -> Command
 
 deriving instance (Lift Command)
+deriving instance (Show Command)
 instance P.Eq Command where
   GetModel == GetModel = True
   Reset == Reset = True
@@ -144,11 +146,11 @@ data Option
   | ProduceProofs Bool
   | ProduceUnsatAssumptions Bool
   | ProduceUnsatCores Bool
-  | RandomSeed Integer
+  | RandomSeed Natural
   | RegularOutputChannel String
-  | ReproducibleResourceLimit Integer
-  | Verbosity Integer
-  deriving (Lift, P.Eq)
+  | ReproducibleResourceLimit Natural
+  | Verbosity Natural
+  deriving (Lift, Show, P.Eq)
 
 data InfoFlag
   = AllStatistics
@@ -165,7 +167,7 @@ data Exp (t :: Ty) where
 
   -- literals & names
   LitBool   :: Bool -> Exp Boolean
-  LitInt    :: Integer -> Exp 'Integer
+  LitInt    :: Natural -> Exp 'Integer
   LitBV     :: BV n -> Exp (BitVec n)
   Var       :: Typeable t => String -> Exp t
 
@@ -220,6 +222,7 @@ data Exp (t :: Ty) where
   Select    :: (Typeable k, Typeable v) => Exp (Arr k v) -> Exp k -> Exp v
   Store     :: Exp (Arr k v) -> Exp k -> Exp v -> Exp (Arr k v)
 
+deriving instance (Show (Exp t))
 deriving instance (ShowF Exp)
 deriving instance (Typeable (Exp t))
 
@@ -340,112 +343,130 @@ instance Lift (Exp a) where
 
 -- translation into concrete syntax ----------------------------------------------------------------
 
+class ToSMT a where
+  toSMT :: a -> String
 
-instance Show Script where
-  show (Script cmds) = unlines $ fmap show cmds
+instance ToSMT Script where
+  toSMT (Script cmds) = unlines $ fmap toSMT cmds
 
-instance Show Command where
-  show (Declare name tp) = "(declare-const " <> name <> " " <> show tp <> ")"
-  show (Assert e) = "(assert " <> show e <> ")"
-  show (SetOption o) = "(set-option " <> show o <> ")"
-  show GetModel = "(get-model)"
-  show Reset = "(reset)"
-  show ResetAssertions = "(reset-assertions)"
-  show GetProof = "(get-proof)"
-  show GetUnsatAssumptions = "(get-unsat-assumptions)"
-  show GetUnsatCore = "(get-unsat-core)"
-  show Exit = "(exit)"
-  show GetAssertions = "(get-assertions)"
-  show GetAssignment = "(get-assignment)"
-  show (Echo s) = "(echo" <> s <> ")"
-  show (GetInfo f) = "(get-info" <> show f <> ")"
-  show (GetOption s) = "(get-option" <> s <> ")"
-  show (GetValue s) = "(get-value" <> s <> ")"
-  show (Pop n) = "(pop " <> show n <> ")"
-  show (Push n) = "(push " <> show n <> ")"
-  show (SetInfo s) = "(set-info " <> s <> ")"
-  show (SetLogic s) = "(set-logic " <> s <> ")"
+instance ToSMT Command where
+  toSMT (Declare name tp) = "(declare-const " <> name <> " " <> toSMT tp <> ")"
+  toSMT (Assert e) = "(assert " <> toSMT e <> ")"
+  toSMT (SetOption o) = "(set-option " <> toSMT o <> ")"
+  toSMT GetModel = "(get-model)"
+  toSMT Reset = "(reset)"
+  toSMT ResetAssertions = "(reset-assertions)"
+  toSMT GetProof = "(get-proof)"
+  toSMT GetUnsatAssumptions = "(get-unsat-assumptions)"
+  toSMT GetUnsatCore = "(get-unsat-core)"
+  toSMT Exit = "(exit)"
+  toSMT GetAssertions = "(get-assertions)"
+  toSMT GetAssignment = "(get-assignment)"
+  toSMT (Echo s) = "(echo" <> s <> ")"
+  toSMT (GetInfo f) = "(get-info" <> toSMT f <> ")"
+  toSMT (GetOption s) = "(get-option" <> s <> ")"
+  toSMT (GetValue s) = "(get-value" <> s <> ")"
+  toSMT (Pop n) = "(pop " <> toSMT n <> ")"
+  toSMT (Push n) = "(push " <> toSMT n <> ")"
+  toSMT (SetInfo s) = "(set-info " <> s <> ")"
+  toSMT (SetLogic s) = "(set-logic " <> s <> ")"
 
-instance Show Option where
-  show (DiagnosticOutputChannel s) = ":diagnostic-output-channel " <> s
-  show (GlobalDeclarations b) = ":global-declarations " <> (lowercase $ show b)
-  show (InteractiveMode b) = ":interactive-mode " <> (lowercase $ show b)
-  show (PrintSuccess b) = ":print-success " <> (lowercase $ show b)
-  show (ProduceAssertions b) = ":produce-assertions " <> (lowercase $ show b)
-  show (ProduceAssignments b) = ":produce-assignments " <> (lowercase $ show b)
-  show (ProduceModels b) = ":produce-models " <> (lowercase $ show b)
-  show (ProduceProofs b) = ":produce-proofs " <> (lowercase $ show b)
-  show (ProduceUnsatAssumptions b) = ":produce-unsat-assumptions " <> (lowercase $ show b)
-  show (ProduceUnsatCores b) = ":produce-unsat-cores " <> (lowercase $ show b)
-  show (RandomSeed i) = ":random-seed " <> show i
-  show (RegularOutputChannel s) = ":regular-output-channel " <> s
-  show (ReproducibleResourceLimit i) = ":reproducible-resource-limit " <> show i
-  show (Verbosity i) = ":verbosity " <> show i
+instance ToSMT Option where
+  toSMT (DiagnosticOutputChannel s) = ":diagnostic-output-channel " <> s
+  toSMT (GlobalDeclarations b) = ":global-declarations " <> (lowercase $ show b)
+  toSMT (InteractiveMode b) = ":interactive-mode " <> (lowercase $ show b)
+  toSMT (PrintSuccess b) = ":print-success " <> (lowercase $ show b)
+  toSMT (ProduceAssertions b) = ":produce-assertions " <> (lowercase $ show b)
+  toSMT (ProduceAssignments b) = ":produce-assignments " <> (lowercase $ show b)
+  toSMT (ProduceModels b) = ":produce-models " <> (lowercase $ show b)
+  toSMT (ProduceProofs b) = ":produce-proofs " <> (lowercase $ show b)
+  toSMT (ProduceUnsatAssumptions b) = ":produce-unsat-assumptions " <> (lowercase $ show b)
+  toSMT (ProduceUnsatCores b) = ":produce-unsat-cores " <> (lowercase $ show b)
+  toSMT (RandomSeed i) = ":random-seed " <> show i
+  toSMT (RegularOutputChannel s) = ":regular-output-channel " <> s
+  toSMT (ReproducibleResourceLimit i) = ":reproducible-resource-limit " <> show i
+  toSMT (Verbosity i) = ":verbosity " <> show i
 
-instance Show (Exp a) where
-  -- TODO: handle lit bv?
-  -- TODO: handle lit arr?
-  -- TODO: handle lit fn?
+instance ToSMT InfoFlag where
+  toSMT AllStatistics = ":all-statistics"
+  toSMT AssertionStackLevels = ":assertion-stack-levels"
+  toSMT Authors = ":authors"
+  toSMT ErrorBehaviour = ":error-behaviour"
+  toSMT Name = ":name"
+  toSMT ReasonUnknown = ":reason-unknown"
+  toSMT Version = ":version"
+
+instance ToSMT (Exp a) where
+  -- TODO: handle lit bv
+  -- TODO: handle lit arr
+  -- TODO: handle lit fn
   -- vars & lits
-  show (LitBool a) = lowercase $ show a
-  show (LitInt a) = show a
-  show (LitBV a) = show a
-  show (Var a) = a
+  toSMT (LitBool a) = lowercase $ show a
+  toSMT (LitInt a) = if a < 0 then toSMT (Neg . LitInt $ negate a) else show a
+  toSMT (LitBV a) = show a
+  toSMT (Var a) = a
 
   -- core
-  show (And a) = "(and " <> intercalate " " (fmap show a) <> ")"
-  show (Or a) = "(or " <> intercalate " " (fmap show a) <> ")"
-  show (Eq a) = "(eq " <> intercalate " " (fmap show a) <> ")"
-  show (Xor a) = "(xor " <> intercalate " " (fmap show a) <> ")"
-  show (Impl a) = "(=> " <> intercalate " " (fmap show a) <> ")"
-  show (Distinct a) = "(distinct " <> intercalate " " (fmap show a) <> ")"
-  show (ITE cond l r) = "(ite " <> show cond <> " " <> show l <> " " <> show r <> ")"
+  toSMT (And a) = "(and " <> intercalate " " (fmap toSMT a) <> ")"
+  toSMT (Or a) = "(or " <> intercalate " " (fmap toSMT a) <> ")"
+  toSMT (Eq a) = "(eq " <> intercalate " " (fmap toSMT a) <> ")"
+  toSMT (Xor a) = "(xor " <> intercalate " " (fmap toSMT a) <> ")"
+  toSMT (Impl a) = "(=> " <> intercalate " " (fmap toSMT a) <> ")"
+  toSMT (Distinct a) = "(distinct " <> intercalate " " (fmap toSMT a) <> ")"
+  toSMT (ITE cond l r) = "(ite " <> toSMT cond <> " " <> toSMT l <> " " <> toSMT r <> ")"
 
   -- euf
-  show (App fn args) = "(" <> show fn <> " " <> show args <> ")"
+  toSMT (App fn args) = "(" <> toSMT fn <> " " <> toSMT args <> ")"
 
   -- bv
-  show (Concat l r) = "(concat " <> show l <> " " <> show r <> ")"
+  toSMT (Concat l r) = "(concat " <> toSMT l <> " " <> toSMT r <> ")"
   -- TODO: is this correct?
-  show (Extract i j bv) = "(extract " <> show i <> " " <> show j <> " " <> show bv <> ")"
-  show (BVNot bv) = "(bvnot " <> show bv <> ")"
-  show (BVNeg bv) = "(bvneg " <> show bv <> ")"
-  show (BVAnd l r) = "(bvand " <> show l <> " " <> show r <> ")"
-  show (BVOr l r) = "(bvor " <> show l <> " " <> show r <> ")"
-  show (BVAdd l r) = "(bvadd " <> show l <> " " <> show r <> ")"
-  show (BVMul l r) = "(bvmul " <> show l <> " " <> show r <> ")"
-  show (BVUDiv l r) = "(bvudiv " <> show l <> " " <> show r <> ")"
-  show (BVURem l r) = "(bvurem " <> show l <> " " <> show r <> ")"
-  show (BVShl l r) = "(bvshl " <> show l <> " " <> show r <> ")"
-  show (BVShr l r) = "(bvshr " <> show l <> " " <> show r <> ")"
-  show (BVULt l r) = "(bvult " <> show l <> " " <> show r <> ")"
+  toSMT (Extract i j bv) = "(extract " <> toSMT i <> " " <> toSMT j <> " " <> toSMT bv <> ")"
+  toSMT (BVNot bv) = "(bvnot " <> toSMT bv <> ")"
+  toSMT (BVNeg bv) = "(bvneg " <> toSMT bv <> ")"
+  toSMT (BVAnd l r) = "(bvand " <> toSMT l <> " " <> toSMT r <> ")"
+  toSMT (BVOr l r) = "(bvor " <> toSMT l <> " " <> toSMT r <> ")"
+  toSMT (BVAdd l r) = "(bvadd " <> toSMT l <> " " <> toSMT r <> ")"
+  toSMT (BVMul l r) = "(bvmul " <> toSMT l <> " " <> toSMT r <> ")"
+  toSMT (BVUDiv l r) = "(bvudiv " <> toSMT l <> " " <> toSMT r <> ")"
+  toSMT (BVURem l r) = "(bvurem " <> toSMT l <> " " <> toSMT r <> ")"
+  toSMT (BVShl l r) = "(bvshl " <> toSMT l <> " " <> toSMT r <> ")"
+  toSMT (BVShr l r) = "(bvshr " <> toSMT l <> " " <> toSMT r <> ")"
+  toSMT (BVULt l r) = "(bvult " <> toSMT l <> " " <> toSMT r <> ")"
 
   -- integer
-  show (Neg i) = "(- " <> show i <> ")"
-  show (Sub i j) = "(- " <> show i <> " " <> show j <> ")"
-  show (Add i j) = "(+ " <> show i <> " " <> show j <> ")"
-  show (Mul i j) = "(* " <> show i <> " " <> show j <> ")"
-  show (Div i j) = "(div " <> show i <> " " <> show j <> ")"
-  show (Mod i j) = "(mod " <> show i <> " " <> show j <> ")"
-  show (Abs i) = "(abs " <> show i <> ")"
-  show (LEQ i j) = "(<= " <> show i <> " " <> show j <> ")"
-  show (LT i j) = "(< " <> show i <> " " <> show j <> ")"
-  show (GEQ i j) = "(>= " <> show i <> " " <> show j <> ")"
-  show (GT i j) = "(> " <> show i <> " " <> show j <> ")"
-  show (Divisible n e) = "(divisble " <> show n <> " " <> show e <> ")"
+  toSMT (Neg i) = "(- " <> toSMT i <> ")"
+  toSMT (Sub i j) = "(- " <> toSMT i <> " " <> toSMT j <> ")"
+  toSMT (Add i j) = "(+ " <> toSMT i <> " " <> toSMT j <> ")"
+  toSMT (Mul i j) = "(* " <> toSMT i <> " " <> toSMT j <> ")"
+  toSMT (Div i j) = "(div " <> toSMT i <> " " <> toSMT j <> ")"
+  toSMT (Mod i j) = "(mod " <> toSMT i <> " " <> toSMT j <> ")"
+  toSMT (Abs i) = "(abs " <> toSMT i <> ")"
+  toSMT (LEQ i j) = "(<= " <> toSMT i <> " " <> toSMT j <> ")"
+  toSMT (LT i j) = "(< " <> toSMT i <> " " <> toSMT j <> ")"
+  toSMT (GEQ i j) = "(>= " <> toSMT i <> " " <> toSMT j <> ")"
+  toSMT (GT i j) = "(> " <> toSMT i <> " " <> toSMT j <> ")"
+  toSMT (Divisible n e) = "(divisble " <> toSMT n <> " " <> toSMT e <> ")"
 
   -- arrays
-  show (Select arr k) = "(select " <> show arr <> " " <> show k <> ")"
-  show (Store arr k v) = "(select " <> show arr <> " " <> show k <> " " <> show v <> ")"
+  toSMT (Select arr k) = "(select " <> toSMT arr <> " " <> toSMT k <> ")"
+  toSMT (Store arr k v) = "(select " <> toSMT arr <> " " <> toSMT k <> " " <> toSMT v <> ")"
 
-instance Show (STy ty) where
-  show SInt = "Int"
-  show SBool = "Bool"
-  show (SBitVec n) = "(_ BitVec " <> show n <> ")"
+instance ToSMT (STy ty) where
+  toSMT SInt = "Int"
+  toSMT SBool = "Bool"
+  toSMT (SBitVec n) = "(_ BitVec " <> toSMT n <> ")"
 
-instance Show (SNat n) where
-  show SZ = show 0
-  show (SS _ :: SNat n) = show (natVal (Proxy @n))
+instance ToSMT (SNat n) where
+  toSMT SZ = show 0
+  toSMT (SS _ :: SNat n) = show (natVal (Proxy @n))
+
+instance ToSMT (List Exp a) where
+  toSMT Nil = ""
+  toSMT (hd :< tl) = toSMT hd <> " " <> toSMT tl
+
+instance ToSMT Natural where
+  toSMT = show
 
 
 -- utils -------------------------------------------------------------------------------------------
@@ -455,6 +476,7 @@ instance Show (SNat n) where
 data SNat (n :: Nat) where
   SZ :: SNat 0
   SS :: (KnownNat (1 + n)) => SNat n -> SNat (1 + n)
+deriving instance Show (SNat n)
 
 instance KnownNat n => P.Eq (SNat n) where
   (l :: SNat i) == (r :: SNat j)
@@ -473,6 +495,8 @@ data STy (a :: Ty) where
   SInt :: STy 'Integer
   SFun :: List STy args -> STy ret -> STy (Fun args ret)
   SArr :: STy k -> STy v -> STy (Arr k v)
+deriving instance Show (STy ty)
+deriving instance ShowF STy
 
 instance Typeable ty => P.Eq (STy ty) where
   (a :: STy t1) == (b :: STy t2)
