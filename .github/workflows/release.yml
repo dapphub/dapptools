@@ -5,117 +5,17 @@ on:
       - '[a-z]+/[0-9]+.[0-9]+.[0-9]+'
 
 jobs:
-  macosRelease:
-    runs-on: ${{ matrix.os }}
-    name: macosRelease
-    strategy:
-      matrix:
-        os:
-          - macos-latest
-        include:
-          - os: macos-latest
-            brew: automake
-
-    steps:
-      - name: Workaround for actions/cache#403
-        if: runner.os == 'macOS'
-        run: |
-          brew install gnu-tar
-          echo PATH="/usr/local/opt/gnu-tar/libexec/gnubin:$PATH" >> $GITHUB_ENV
-
-      - name: Get Packages
-        uses: mstksg/get-package@v1
-        with:
-          brew: ${{ matrix.brew }}
-          apt-get: ${{ matrix.apt-get }}
-
-      - name: Checkout
-        uses: actions/checkout@v2
-
-      - name: Cache Local
-        id: cache-local
-        uses: actions/cache@v1
-        with:
-          path: ~/.local/
-          key: ${{ runner.os }}-local-v3
-
-      - name: Cache Stack
-        id: cache-stack
-        uses: actions/cache@v1
-        with:
-          path: ~/.stack
-          key: ${{ runner.os }}-stack-v3
-
-      - name: Build Binaries
-        run: |
-          .github/scripts/install-solc.sh
-          .github/scripts/install-z3.sh
-          .github/scripts/install-cvc4.sh
-        env:
-          HOST_OS: ${{ runner.os }}
-
-      - name: Build Libraries
-        run: |
-          .github/scripts/install-libsecp256k1.sh
-          .github/scripts/install-libff.sh
-        env:
-          HOST_OS: ${{ runner.os }}
-
-      - name: Build Dependencies
-        run: |
-          cd src/hevm && stack build --ghc-options="-Werror" --extra-include-dirs=$HOME/.local/include --extra-lib-dirs=$HOME/.local/lib --only-dependencies && cd ../..
-
-      - name: Build and install hevm
-        run: |
-          cd src/hevm && stack install --extra-include-dirs=$HOME/.local/include --extra-lib-dirs=$HOME/.local/lib && cd ../..
-
-      - name: Test
-        run: |
-          export LD_LIBRARY_PATH="${LD_LIBRARY_PATH}:$HOME/.local/lib"
-          export PATH="${PATH}:$HOME/.local/bin"
-
-          cp "$HOME/.local/bin/solc-0.8.6" "$HOME/.local/bin/solc"
-          cd src/hevm && stack test --extra-include-dirs=$HOME/.local/include --extra-lib-dirs=$HOME/.local/lib && cd ../..
-
-      - name: Amend and compress binaries (macOS)
-        if: runner.os == 'macOS'
-        run: .github/scripts/build-macos-release.sh
-
-      - name: Upload artifact
-        uses: actions/upload-artifact@v1
-        with:
-          name: hevm-${{ runner.os }}
-          path: hevm.tar.gz
-
-  linuxRelease:
+  release:
     name: Create Release
-    needs: macosRelease
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
-      # v12
       - uses: cachix/install-nix-action@v14.1
-      # v8
       - uses: cachix/cachix-action@v10
         with:
           name: dapp
           signingKey: '${{ secrets.CACHIX_SIGNING_KEY }}'
-      - run: nix-build -A hevmUnwrapped --out-link hevmLinux
-
-      - uses: actions/download-artifact@master
-        with:
-          name: hevm-macOS
-          path: hevm-macOS
-
-      - name: Rename macOS artifact
-        run: |
-          mv ./hevm-macOS/hevm.tar.gz ./hevm-macOS/hevm-macOS.tar.gz
-
       - name: Release
         uses: softprops/action-gh-release@v1
-        with:
-          files: |
-            ./hevmLinux/bin/hevm
-            ./hevm-macOS/hevm-macOS.tar.gz
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
