@@ -694,9 +694,11 @@ symRun opts@UnitTestOptions{..} concreteVm testName types = do
         SBV.resetAssertions
         constrain $ sAnd (fst <$> view EVM.constraints vm')
         unless bailed $
-          case view result vm' of
-            Just (VMSuccess (SymbolicBuffer buf)) ->
-              constrain $ litBytes (encodeAbiValue $ AbiBool $ not shouldFail) .== buf
+          let
+            checkResult buf = constrain $ litBytes (encodeAbiValue $ AbiBool $ not shouldFail) .== buf
+          in case view result vm' of
+            Just (VMSuccess (SymbolicBuffer buf)) -> checkResult buf
+            Just (VMSuccess (ConcreteBuffer buf)) -> checkResult (litBytes buf)
             r -> error $ "unexpected return value: " ++ show r
         checkSat >>= \case
           Sat -> do

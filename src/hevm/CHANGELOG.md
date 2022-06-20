@@ -14,6 +14,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Support for solc 0.8.14
 - Support for solc 0.8.15
 
+### Fixed
+
+- Correctly handle concrete returndata when checking the result of a symbolic test
+
 ## [0.49.0] - 2021-11-12
 
 ### Added
