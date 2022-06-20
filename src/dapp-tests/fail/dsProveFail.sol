@@ -4,11 +4,23 @@ import "ds-test/test.sol";
 import "ds-token/token.sol";
 import "ds-math/math.sol";
 
+contract Withdraw {
+    receive() external payable {}
+
+    function withdraw(uint password) public {
+        require(password == 42, "Access denied!");
+        payable(msg.sender).transfer(address(this).balance);
+    }
+}
+
+
 contract SolidityTest is DSTest, DSMath {
     DSToken token;
+    Withdraw withdraw;
 
     function setUp() public {
         token = new DSToken("TKN");
+        withdraw = new Withdraw();
     }
 
     function prove_add(uint x, uint y) public {
@@ -59,5 +71,16 @@ contract SolidityTest is DSTest, DSMath {
                         : amt; // otherwise `amt` has been transfered to `usr`
         assertEq(expected, postbal - prebal);
     }
+
+    function proveFail_withdraw(uint guess) public {
+        payable(address(withdraw)).transfer(1 ether);
+        uint preBalance = address(this).balance;
+        withdraw.withdraw(guess);
+        uint postBalance = address(this).balance;
+        assertEq(preBalance + 1 ether, postBalance);
+    }
+
+    // allow sending eth to the test contract
+    receive() external payable {}
 }
 

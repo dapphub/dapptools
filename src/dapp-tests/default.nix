@@ -163,6 +163,7 @@ in
       invariant-first = fail "invariantFirst";
       invariant-test-usr-bal = fail "invariantTestUserBal";
       invariant-test-initial-inv-call = fail "invariantCount";
+      withdraw = fail "proveFail_withdraw";
     };
 
     dss = pkgs.buildDappPackage {

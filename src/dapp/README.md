@@ -114,6 +114,7 @@ contract DapptutorialTest is DSTest {
         assertEq(preBalance + 1 ether, postBalance);
     }
 
+    // allow sending eth to the test contract
     receive() external payable {}
 }
 ```
