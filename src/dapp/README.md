@@ -50,6 +50,7 @@ Let's create a new `dapp` project. We make a new directory and initialize the `d
 
 ```sh
 mkdir dapptutorial
+cd dapptutorial
 dapp init
 ```
 
@@ -87,6 +88,9 @@ Compile the contract by running `dapp build`. If you didn't make any mistakes, y
 Let's write some tests for our vault. Change `Dapptutorial.t.sol` to the following. We'll go over whats going on in the next paragraph.
 
 ```solidity
+import {DSTest} from "ds-test/test.sol";
+import {Dapptutorial} from "./Dapptutorial.sol";
+
 contract DapptutorialTest is DSTest {
     Dapptutorial dapptutorial;
 
@@ -110,8 +114,7 @@ contract DapptutorialTest is DSTest {
         assertEq(preBalance + 1 ether, postBalance);
     }
 
-    receive() external payable {
-    }
+    receive() external payable {}
 }
 ```
 
