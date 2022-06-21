@@ -9,6 +9,7 @@
 ### --
 ###   Compilation options:
 ### optimize             activate solidity optimizer
+### via-ir               change compilation pipeline to go through the Yul intermediate representation
 ### legacy               compile using the '--combined-json' format
 ### extract              after building, write the .abi, .bin and .bin-runtime. Implies '--legacy'
 ###
@@ -56,6 +57,7 @@ dapp <command> --help
 --
   Compilation options:
 optimize             activate solidity optimizer
+via-ir               change compilation pipeline to go through the Yul intermediate representation
 legacy               compile using the '--combined-json' format
 extract              after building, write the .abi, .bin and .bin-runtime. Implies '--legacy'
 
@@ -141,6 +143,7 @@ while [[ $1 ]]; do
     --)                shift; break;;
     --extract)                export DAPP_BUILD_EXTRACT=1;;
     --optimize)               export DAPP_BUILD_OPTIMIZE=1;;
+    --via-ir)                 export DAPP_VIA_IR=1;;
     --legacy)                 export DAPP_BUILD_LEGACY=1;;
 
     -m|--match)        shift; export DAPP_TEST_MATCH=$1;;
