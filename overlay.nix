@@ -18,6 +18,9 @@ in rec {
     inherit (self) pkgs;
   };
 
+  # 2.4 changed the interface here to a flakes based one which broke the various --nix-run subcommands
+  nix = self.nixVersions.nix_2_3;
+
   # experimental dapp builder, allows for easy overriding of phases
   buildDappPackage = import ./nix/build-dapp-package.nix { inherit (self) pkgs; };
 

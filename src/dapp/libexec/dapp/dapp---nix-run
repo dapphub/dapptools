@@ -16,4 +16,4 @@ have() { command -v "$1" >/dev/null; }
 
 expr="$1"; shift
 
-nix-shell -I "nixpkgs=$DAPPTOOLS" -E "(with import $DAPPTOOLS {}; $expr)" --run "$*"
+nix run "(with import $DAPPTOOLS {}; $expr)" -c "$@"
