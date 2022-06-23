@@ -343,6 +343,7 @@ instance Lift (Exp a) where
 
 -- translation into concrete syntax ----------------------------------------------------------------
 
+
 class ToSMT a where
   toSMT :: a -> String
 

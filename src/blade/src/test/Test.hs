@@ -27,6 +27,24 @@ main = defaultMain $ testGroup "blade"
             Left e -> trace (show e) $ property False
             Right parsed -> parsed === generated
       ]
+  , testGroup "examples"
+    [ testCase "broked" $ do
+        pure ()
+    , testCase "brokedToo" $ do
+        -- This is broken in a non trivial way. There is no way to infer the
+        -- type of the variable without building up a type checking
+        -- environment.
+        -- If I want to do proper typechecking I need to either:
+        --   1. disallow refererences to names that have not been declared in the same smt fragment
+        --   2. be able to reason about the composition of all possible smt fragments
+        -- There are some very hard problems here. Is this the best use of my
+        -- time at the moment? Maybe just split this out and then keep it as a
+        -- side project in dependently typed haskell?
+        -- If I want to
+        let s' = Eq [Var "hi"]
+        error . show $ s'
+        pure ()
+    ]
   -- these should all produce compile time errors if there is a failure
   , testGroup "quasiquoter newline handling"
       [ testCase "no newline" $ qtest [smt2|(assert true)|]
