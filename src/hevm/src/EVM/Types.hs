@@ -690,17 +690,17 @@ readN s = fromIntegral (read s :: Integer)
 readNull :: Read a => a -> String -> a
 readNull x = fromMaybe x . Text.Read.readMaybe
 
-wordField :: JSON.Object -> Text -> JSON.Parser W256
+wordField :: JSON.Object -> Key -> JSON.Parser W256
 wordField x f = ((readNull 0) . Text.unpack)
                   <$> (x .: f)
 
-addrField :: JSON.Object -> Text -> JSON.Parser Addr
+addrField :: JSON.Object -> Key -> JSON.Parser Addr
 addrField x f = (read . Text.unpack) <$> (x .: f)
 
-addrFieldMaybe :: JSON.Object -> Text -> JSON.Parser (Maybe Addr)
+addrFieldMaybe :: JSON.Object -> Key -> JSON.Parser (Maybe Addr)
 addrFieldMaybe x f = (Text.Read.readMaybe . Text.unpack) <$> (x .: f)
 
-dataField :: JSON.Object -> Text -> JSON.Parser ByteString
+dataField :: JSON.Object -> Key -> JSON.Parser ByteString
 dataField x f = hexText <$> (x .: f)
 
 toWord512 :: W256 -> Word512
