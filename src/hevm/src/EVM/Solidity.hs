@@ -83,7 +83,7 @@ import Data.List.NonEmpty   (NonEmpty)
 import qualified Data.List.NonEmpty as NonEmpty
 import Data.Semigroup
 import Data.Sequence        (Seq)
-import Data.Text            (Text, pack, intercalate)
+import Data.Text            (Text, pack, intercalate, toLower)
 import Data.Text.Encoding   (encodeUtf8, decodeUtf8)
 import Data.Text.IO         (readFile, writeFile)
 import Data.Vector          (Vector)
@@ -160,6 +160,17 @@ data Method = Method
   , _methodSignature :: Text
   , _methodMutability :: Mutability
   } deriving (Show, Eq, Ord, Generic)
+
+instance ToJSON Method where
+  toJSON (Method outputs inputs name _ mutability) =
+    object [ "type" .= String "function"
+           , "name" .= name
+           , "stateMutability" .= (toLower $ pack $ show $ mutability)
+           , "inputs"  .=
+               (toJSON $ AbiNamedTupleType (Vector.fromList inputs))
+           , "outputs" .=
+               (toJSON $ AbiNamedTupleType (Vector.fromList outputs))
+           ]
 
 data Mutability
   = Pure       -- ^ specified to not read blockchain state

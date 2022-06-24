@@ -2,12 +2,11 @@
 let
   inherit (dapphub) pkgs;
 
-
   drv = pkgs.haskellPackages.shellFor {
     packages = p: [
       p.hevm
     ];
-    buildInputs = with pkgs.haskellPackages; [
+    buildInputs = with pkgs.haskellPackages; with pkgs; [
       cabal-install
       haskell-language-server
     ];

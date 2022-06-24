@@ -11,22 +11,7 @@
 ### Otherwise, ensure <data> begins with `0x' and treat it as hexdata.
 set -e
 if [[ $1 =~ ^([^\(]+)\( ]]; then
-  abi=$(seth --abi-function-json "$1")
-  shift
-  args=()
-  for arg; do
-    [[ $arg = @* ]] && arg=$(seth lookup "$arg")
-    args+=(--arg "$arg")
-  done
-  calldata=$(
-    hevm abiencode --abi "$abi" "${args[@]}"
-  )
-  if [[ $calldata = error* ]]; then
-    echo >&2 "hevm: $calldata"
-    exit 1
-  else
-    echo "0x${calldata#0x}"
-  fi
+  seth --abi-encode "$@"
 elif [[ $2 ]]; then
   seth --fail-usage "$0"
 else

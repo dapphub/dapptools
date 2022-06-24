@@ -15,7 +15,8 @@ set -e
 [[ $# -eq 4 ]] || [[ $# -eq 5 ]] || seth --fail-usage "$0"
 
 if [[ $5 = 'vyper' || $5 = 'vy' || $5 = 'v' ]]; then
-  # note: not guaranteed to be accurate for all Vyper versions since storage layout is not yet stable
+  # note: not guaranteed to be accurate for all Vyper versions since storage
+  # layout is not yet stable
   # more info: https://twitter.com/big_tech_sux/status/1420159854170152963
   echo >&2 "${0##*/}: warning: not guaranteed to be accurate for all Vyper versions since storage layout is not yet stable"
   echo $(seth keccak $(seth abi-encode "x($2,$1)" $4 $3));

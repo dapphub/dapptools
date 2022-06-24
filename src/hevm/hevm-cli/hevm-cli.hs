@@ -34,6 +34,7 @@ import EVM.SymExec
 import EVM.Debug
 import EVM.ABI
 import EVM.Solidity
+import EVM.SolidityABI
 import EVM.Types hiding (word)
 import EVM.UnitTest (UnitTestOptions, coverageReport, coverageForUnitTestContract)
 import EVM.UnitTest (runUnitTestContract)
@@ -58,7 +59,7 @@ import Data.ByteString            (ByteString)
 import Data.List                  (intercalate, isSuffixOf)
 import Data.Tree
 import Data.Text                  (unpack, pack)
-import Data.Text.Encoding         (encodeUtf8)
+import Data.Text.Encoding         (encodeUtf8, decodeUtf8)
 import Data.Text.IO               (hPutStr)
 import Data.Maybe                 (fromMaybe, fromJust)
 import Data.Version               (showVersion)
@@ -74,15 +75,17 @@ import qualified Data.Aeson        as JSON
 import qualified Data.Aeson.Types  as JSON
 import Data.Aeson (FromJSON (..), (.:))
 import Data.Aeson.Lens hiding (values)
-import qualified Data.Vector as V
-import qualified Data.ByteString.Lazy  as Lazy
+import Data.Aeson.Encode.Pretty (encodePretty', Config(..), keyOrder, defConfig, Indent(..))
 
+import qualified Data.Vector as V
+import qualified Data.ByteString.Lazy   as Lazy
 import qualified Data.SBV               as SBV
 import qualified Data.ByteString        as ByteString
 import qualified Data.ByteString.Char8  as Char8
 import qualified Data.ByteString.Lazy   as LazyByteString
 import qualified Data.Map               as Map
 import qualified Data.Text              as Text
+import qualified Data.Text.IO           as TextIO
 import qualified System.Timeout         as Timeout
 
 import qualified Paths_hevm      as Paths
@@ -228,6 +231,20 @@ data Command w
   { abi  :: w ::: Maybe String <?> "Signature of types to decode / encode"
   , arg  :: w ::: [String]     <?> "Values to encode"
   }
+  | Abi
+  { abi  :: w ::: Maybe String <?> "Signature of types to decode / encode"
+  }
+  | Abidecode
+  { abi        :: w ::: Maybe String     <?> "Signature of types to decode / encode"
+  , calldata   :: w ::: Maybe ByteString <?> "Tx: calldata"
+  , returndata :: w ::: Maybe ByteString <?> "returndata"
+  }
+  | Normalise
+  { abi  :: w ::: Maybe String <?> "Signature of types to decode / encode"
+  }
+  | Selector
+  { abi :: w ::: Maybe String <?> "Signature of types to decode / encode"
+  }
   | MerkleTest -- Insert a set of key values and check against the given root
   { file :: w ::: String <?> "Path to .json test file"
   }
@@ -320,6 +337,7 @@ main = do
   cmd <- Options.unwrapRecord "hevm -- Ethereum evaluator"
   let
     root = fromMaybe "." (dappRoot cmd)
+    required arg = fromMaybe (error ("missing required argument --" <> arg))
   case cmd of
     Version {} -> putStrLn (showVersion Paths.version)
     Symbolic {} -> withCurrentDirectory root $ assert cmd
@@ -327,7 +345,15 @@ main = do
     Exec {} ->
       launchExec cmd
     Abiencode {} ->
-      print . ByteStringS $ abiencode (abi cmd) (arg cmd)
+      print . ByteStringS $ abiencode (required "abi" (abi cmd)) (arg cmd)
+    Abidecode {} ->
+      TextIO.putStrLn $ abidecode (abi cmd) (calldata cmd) (returndata cmd)
+    Abi {} ->
+      TextIO.putStrLn $ makeabi $ required "abi" (abi cmd)
+    Normalise {} ->
+      TextIO.putStrLn $ normaliseSig $ required "abi" (abi cmd)
+    Selector {} ->
+      print . ByteStringS $ abiselector $ required "abi" (abi cmd)
     BcTest {} ->
       launchTest cmd
     DappTest {} ->
@@ -968,16 +994,87 @@ runVMTest diffmode mode timelimit (name, x) =
 
 #endif
 
-parseAbi :: (AsValue s) => s -> (Text, [AbiType])
-parseAbi abijson =
-  (signature abijson, snd
-    <$> parseMethodInput
-    <$> V.toList
-      (fromMaybe (error "Malformed function abi") (abijson ^? key "inputs" . _Array)))
 
-abiencode :: (AsValue s) => Maybe s -> [String] -> ByteString
-abiencode Nothing _ = error "missing required argument: abi"
-abiencode (Just abijson) args =
+normaliseSig :: String -> Text
+normaliseSig abi = fst $ parseAbi abi
+
+abidecode :: Maybe String -> Maybe ByteString -> Maybe ByteString -> Text
+abidecode Nothing _ _ = error "missing required argument --abi"
+abidecode _ Nothing Nothing = error "must provide either --calldata or --returndata"
+abidecode (Just abi) (Just calldata) Nothing =
+  let (sig, types) = parseAbi abi
+      abiSelector  = strip0x (selector sig)
+      (dataSelector, dataBody) =
+        ByteString.splitAt 4 (hexByteString "--calldata" $ strip0x $ calldata)
+      AbiTuple (values) = decodeAbiValue (AbiTupleType (V.fromList types)) (Lazy.fromStrict $ dataBody)
+  in
+    if (abiSelector == dataSelector) then
+      pack $ intercalate "\n" (show <$> V.toList values)
+    else
+      error $ "abi and calldata signatures do not match."
+           <> "\nabi:      " <> show (ByteStringS abiSelector)
+           <> "\ncalldata: " <> show (ByteStringS dataSelector)
+
+abidecode (Just abi) Nothing (Just returndata) =
+  let (_, types) = parseAbiOutputs abi
+      dataBody = hexByteString "--returndata" $ strip0x $ returndata
+      AbiTuple values = decodeAbiValue (AbiTupleType (V.fromList types)) (Lazy.fromStrict $ dataBody)
+  in pack $ intercalate "\n" (show <$> V.toList values)
+
+abidecode (Just abi) (Just calldata) (Just returndata) =
+  let inputs  = abidecode (Just abi) (Just calldata) Nothing
+      outputs = abidecode (Just abi) Nothing (Just returndata)
+  in inputs <> "\n->\n" <> outputs
+
+abiselector :: String -> ByteString
+abiselector abi = selector $ fst $ parseAbi abi
+
+makeabi :: String -> Text
+makeabi abi =
+  case parseSolidityAbi abi of
+    Left e -> error $ "could not parse abi fragment. result: " ++ e
+    Right (Just method, _, _)           -> render (JSON.toJSON method)
+    Right (Nothing, Just event, _)      -> render (JSON.toJSON event)
+    Right (Nothing, Nothing, Just err)  -> render (JSON.toJSON err)
+  where
+    render = decodeUtf8 . Lazy.toStrict . encoder
+    encoder = encodePretty' $
+      defConfig { confIndent  = Spaces 2,
+                  confCompare = keyOrder [ "type"
+                                         , "name"
+                                         , "indexed"
+                                         , "stateMutability"
+                                         , "anonymous"
+                                         , "components"
+                                         , "inputs"
+                                         , "outputs"
+                                         ]}
+
+parseAbi :: String -> (Text, [AbiType])
+parseAbi abi =
+  case (abi ^? key "inputs" . _Array) of
+    Just inputs ->
+      (signature abi, snd <$> parseMethodInput <$> V.toList inputs)
+    Nothing ->
+      case parseSolidityAbi abi of
+        Left e -> error $ "could not parse abi fragment. result: " ++ e
+        Right (Just (Method _ types _ sig _), _, _) -> (sig, snd <$> types)
+        Right (Nothing, Nothing, Just (SolError name types)) -> (sig, types)
+          where sig = name <> pack (show (AbiTupleType (V.fromList types)))
+        Right (_, Just _, _) -> error "event encoding is not currently supported"
+
+parseAbiOutputs :: String -> (Text, [AbiType])
+parseAbiOutputs abi =
+  case (abi ^? key "outputs" . _Array) of
+    Just outputs ->
+      (signature abi, snd <$> parseMethodInput <$> V.toList outputs)
+    Nothing ->
+      case parseSolidityAbi abi of
+        Left e -> error $ "could not parse abi fragment. result: " ++ e
+        Right (Just (Method outputs _ _ sig _), _, _) -> (sig, snd <$> outputs)
+
+abiencode :: String -> [String] -> ByteString
+abiencode abijson args =
   let (sig', declarations) = parseAbi abijson
   in if length declarations == length args
      then abiMethod sig' $ AbiTuple . V.fromList $ zipWith makeAbiValue declarations args

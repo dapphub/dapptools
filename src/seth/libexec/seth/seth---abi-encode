@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+### seth---abi-encode -- ABI encode signature and arguments
+### Usage: seth abi-encode <sig> [<args>]
+set -e
+[[ $1 ]] || seth --fail-usage "$0"
+
+abi="$1"
+shift
+args=()
+for arg; do
+  [[ $arg = @* ]] && arg=$(seth lookup "$arg")
+  args+=(--arg "$arg")
+done
+
+calldata=$(hevm abiencode --abi "$abi" "${args[@]}")
+
+if [[ $? == 1 ]]; then
+  echo >&2 "hevm: $calldata"
+  exit 1
+else
+  echo "0x${calldata#0x}"
+fi

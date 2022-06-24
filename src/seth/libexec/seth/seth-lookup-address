@@ -26,9 +26,10 @@ namehash=0x$(seth namehash $namein | cut -c3-)
 ENS_REGISTRY=${SETH_ENS_REGISTRY:-'0x00000000000C2E074eC69A0dFb2997BA6C7d2e1e'} # same on all supported networks
 resolver=$(seth call $ENS_REGISTRY "resolver(bytes32)(address)" $namehash)
 name=$(seth call $resolver "name(bytes32)(string)" $namehash)
+name=${name//\"/} # dequote
 
 # check the reverse direction and make sure the addresses match
-address=$(seth resolve-name $name)
+address=$(seth resolve-name "$name")
 if [[ $(seth --to-hexdata $address) != $addressin ]]; then
   seth --fail "${0##*/}: error: forward resolution of the found ENS name $name did not match"
 fi

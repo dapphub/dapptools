@@ -60,6 +60,7 @@ module EVM.ABI
 import EVM.Types
 
 import Control.Monad      (replicateM, replicateM_, forM_, void)
+import Data.Aeson hiding (json)
 import Data.Binary.Get    (Get, runGet, runGetOrFail, label, getWord8, getWord32be, skip)
 import Data.Binary.Put    (Put, runPut, putWord8, putWord32be)
 import Data.Bits          (shiftL, shiftR, (.&.))
@@ -135,10 +136,29 @@ data AbiType
   | AbiArrayDynamicType AbiType
   | AbiArrayType        Int AbiType
   | AbiTupleType        (Vector AbiType)
+  | AbiNamedTupleType   (Vector (Text, AbiType))
   deriving (Read, Eq, Ord, Generic)
 
 instance Show AbiType where
   show = Text.unpack . abiTypeSolidity
+
+instance ToJSON AbiType where
+  toJSON abitype = case abitype of
+    AbiNamedTupleType tuple ->
+      toJSON [ obj name typ | (name, typ) <- Vector.toList tuple ]
+    AbiTupleType tuple ->
+      toJSON [ obj "" typ | typ <- Vector.toList tuple ]
+    _ ->
+      toJSON $ Text.pack $ show abitype
+    where
+      obj name (AbiNamedTupleType ts) =
+        object [ "type" .= String "tuple", "name" .= String name,
+                 "components" .= toJSON (AbiNamedTupleType ts) ]
+      obj name (AbiTupleType ts) =
+        object [ "type" .= String "tuple", "name" .= String name,
+                 "components" .= toJSON (AbiTupleType ts) ]
+      obj name typ =
+        object [ "type" .= (abiTypeSolidity typ), "name" .= String name ]
 
 data AbiKind = Dynamic | Static
   deriving (Show, Read, Eq, Ord, Generic)
@@ -149,8 +169,44 @@ data Indexed   = Indexed   | NotIndexed
   deriving (Show, Ord, Eq, Generic)
 data Event     = Event Text Anonymity [(Text, AbiType, Indexed)]
   deriving (Show, Ord, Eq, Generic)
-data SolError  = SolError Text [AbiType]
+data SolError  = SolError Text [AbiType]  -- todo: should be (Text, AbiType) with argnames
   deriving (Show, Ord, Eq, Generic)
+
+instance ToJSON Event where
+  toJSON (Event name anon indexedtypes) =
+    object [ "type" .= String "event"
+           , "name" .= name
+           , "anonymous" .= isAnon anon
+           , "inputs"  .= inputs
+           ]
+    where
+      isIndexed = \case
+        Indexed    -> True
+        NotIndexed -> False
+      isAnon = \case
+        Anonymous    -> True
+        NotAnonymous -> False
+
+      inputs = toJSON [ obj argname typ index | (argname, typ, index) <- indexedtypes ]
+
+      obj argname (AbiNamedTupleType ts) index =
+        object [ "type" .= String "tuple", "name" .= argname,
+                 "indexed" .= isIndexed index,
+                 "components" .= toJSON (AbiNamedTupleType ts) ]
+      obj argname (AbiTupleType ts) index =
+        object [ "type" .= String "tuple", "name" .= argname,
+                 "indexed" .= isIndexed index,
+                 "components" .= toJSON (AbiTupleType ts) ]
+      obj argname typ index =
+        object [ "type" .= abiTypeSolidity typ, "name" .= argname,
+                 "indexed" .= isIndexed index ]
+
+instance ToJSON SolError where
+  toJSON (SolError name types) =
+    object [ "type" .= String "error"
+           , "name" .= name
+           , "inputs"  .= (toJSON $ AbiTupleType (Vector.fromList types))
+           ]
 
 abiKind :: AbiType -> AbiKind
 abiKind = \case
@@ -159,6 +215,7 @@ abiKind = \case
   AbiArrayDynamicType _ -> Dynamic
   AbiArrayType _ t      -> abiKind t
   AbiTupleType ts       -> if Dynamic `elem` (abiKind <$> ts) then Dynamic else Static
+  AbiNamedTupleType ts  -> if Dynamic `elem` (abiKind <$> snd <$> ts) then Dynamic else Static
   _                     -> Static
 
 abiValueType :: AbiValue -> AbiType
@@ -186,6 +243,7 @@ abiTypeSolidity = \case
   AbiArrayDynamicType t -> abiTypeSolidity t <> "[]"
   AbiArrayType n t      -> abiTypeSolidity t <> "[" <> pack (show n) <> "]"
   AbiTupleType ts       -> "(" <> (Text.intercalate "," . Vector.toList $ abiTypeSolidity <$> ts) <> ")"
+  AbiNamedTupleType ts  -> "(" <> (Text.intercalate "," . Vector.toList $ abiTypeSolidity <$> snd <$> ts) <> ")"
 
 getAbi :: AbiType -> Get AbiValue
 getAbi t = label (Text.unpack (abiTypeSolidity t)) $
@@ -222,6 +280,9 @@ getAbi t = label (Text.unpack (abiTypeSolidity t)) $
 
     AbiTupleType ts ->
       AbiTuple <$> getAbiSeq (Vector.length ts) (Vector.toList ts)
+
+    AbiNamedTupleType ts ->
+      AbiTuple <$> getAbiSeq (Vector.length ts) (Vector.toList $ snd <$> ts)
 
 putAbi :: AbiValue -> Put
 putAbi = \case
@@ -428,6 +489,8 @@ genAbiValue = \case
        replicateM n (scale (`div` 2) (genAbiValue t))
    AbiTupleType ts ->
      AbiTuple <$> mapM genAbiValue ts
+   AbiNamedTupleType ts ->
+     AbiTuple <$> mapM genAbiValue (snd <$> ts)
   where
     genUInt n = AbiUInt n <$> arbitraryIntegralWithMax (2^n-1)
 
@@ -512,7 +575,30 @@ parseAbiValue (AbiArrayDynamicType typ) =
 parseAbiValue (AbiArrayType n typ) =
   AbiArray n typ <$> do a <- listP (parseAbiValue typ)
                         return $ Vector.fromList a
-parseAbiValue (AbiTupleType _) = error "tuple types not supported"
+parseAbiValue (AbiTupleType types) =
+  AbiTuple <$> do args <- tupleP [parseAbiValue typ | typ <- Vector.toList types]
+                  return $ Vector.fromList args
+parseAbiValue (AbiNamedTupleType types) =
+  AbiTuple <$> do args <- tupleP [parseAbiValue typ | typ <- Vector.toList $ snd <$> types]
+                  return $ Vector.fromList args
+
+tupleP :: [ReadP a] -> ReadP [a]
+tupleP parsers = between (char '(') (char ')') (argP parsers)
+
+argP :: [ReadP a] -> ReadP [a]
+argP [] = do return []
+argP (p:[]) = do
+  skipSpaces
+  arg <- p
+  skipSpaces
+  return [arg]
+argP (p:ps) = do
+  skipSpaces
+  arg <- p
+  skipSpaces
+  char ','
+  args <- argP ps
+  return (arg:args)
 
 listP :: ReadP a -> ReadP [a]
 listP parser = between (char '[') (char ']') ((do skipSpaces

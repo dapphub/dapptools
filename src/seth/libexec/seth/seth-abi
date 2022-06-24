@@ -1,22 +1,24 @@
-#!/usr/bin/env node
+#!/usr/bin/env bash
+### seth-abi -- Generate ABI json for a given signature
+### Usage: seth abi <signature>
+### Example: seth abi "f(uint x)"
+### Returns: {
+###            "type": "function",
+###            "name": "f",
+###            "stateMutability": "nonpayable",
+###            "inputs": [
+###              {
+###                "type": "uint256",
+###                "name": "x"
+###              }
+###            ],
+###            "outputs": []
+###          }
+### Example: seth abi "function f(bool, MyStruct(uint, bytes[][2])) returns (string)"
+### Example: seth abi "event Event(uint32 x, bool indexed b)
+### Example: seth abi "error SomeError(string msg)"
 
-// silence warnings we don't care about
-const log = console.log
-console.log = () => {};
+set -e
+[[ $# = 1 ]] || seth --fail-usage "$0"
 
-const ethers = require("./ethers.min.js");
-
-console.log = log;
-
-const sig = process.argv[2];
-if (!sig) {
-  console.error("Usage: seth-abi <solidity-fragment>")
-  process.exit(1);
-}
-
-try {
-  console.log(JSON.stringify([ethers.utils.parseSignature(sig)]));
-} catch (e) {
-  console.error(`seth-abi: error: ${e.message}`);
-  process.exit(1);
-}
+hevm abi --abi "$1"
