@@ -4,6 +4,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.13.0] - 2022-06-27
+
+### Added
+
+- Transaction type as specified in EIP-2718 can be specified through `--tx-type`. Its default value is 2 which means EIP-1559. The priority fee is defaulted to `1gwei` if not specified with `--prio-fee`.
+Transaction type of 1 is equal to legacy transactions where `--prio-fee` is not available.
+
+### Changed
+
+- If `--tx-type` is equal to `2` or it is not passed which defaults transaction type to `2` then not passing `--prio-fee` defaults priority fee to `1gwei`.
+
 ## [0.12.0] - 2021-11-12
 
 ### Changed

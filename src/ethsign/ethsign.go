@@ -330,6 +330,11 @@ func main() {
 					Usage: "max priority fee per gas",
 				},
 				cli.StringFlag{
+					Name:  "tx-type",
+					Usage: "transaction type (1=Legacy, 2=EIP-1559)",
+					Value: "2",
+				},
+				cli.StringFlag{
 					Name:  "value",
 					Usage: "transaction value",
 				},
@@ -349,10 +354,9 @@ func main() {
 					}
 				}
 
-				// TODO: could support tx type 1 at some point
-				txtype := types.LegacyTxType
-				if c.String("prio-fee") != "" {
-					txtype = types.DynamicFeeTxType
+				txtype := types.DynamicFeeTxType;
+				if c.String("tx-type") == "1" {
+					txtype = types.LegacyTxType;
 				}
 
 				create := c.Bool("create")

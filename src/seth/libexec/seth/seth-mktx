@@ -13,6 +13,8 @@ if [[ $2 ]]; then
   data=$(seth calldata "${@:2}")
 fi
 
+if [ -z "$ETH_TX_TYPE" ]; then ETH_TX_TYPE=2; fi
+
 args=(
   --from "$(seth --to-address "$ETH_FROM")"
   --nonce "${ETH_NONCE:-$(seth nonce "$ETH_FROM")}"
@@ -21,6 +23,7 @@ args=(
   --gas-limit "${ETH_GAS:-200000}"
   --value "$value"
   --data "${data:-0x}"
+  --tx-type "$ETH_TX_TYPE"
 )
 
 if [[ $SETH_CREATE ]]; then
@@ -29,11 +32,13 @@ else
   args+=(--to "$(seth --to-address "$1")")
 fi
 
-if [[ $ETH_PRIO_FEE ]]; then
-  args+=(--prio-fee "$ETH_PRIO_FEE")
-fi
-
 if [ -n "$ETH_PASSWORD" ]; then args+=(--passphrase-file "$ETH_PASSWORD"); fi
+
+if [ "${ETH_TX_TYPE}" = 2 ];
+then
+  default_prio_fee=$(seth --to-wei 1 gwei)
+  args+=(--prio-fee "${ETH_PRIO_FEE:-$default_prio_fee}");
+fi
 
 tx=$([[ $SETH_VERBOSE ]] && set -x; ethsign tx "${args[@]}")
 echo "$tx"

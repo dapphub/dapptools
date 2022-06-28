@@ -838,8 +838,9 @@ Sign and publish a transaction to the blockchain.
 | `--from`      | `ETH_FROM`      | n/a          | sender                            |
 | `--gas`       | `ETH_GAS`       | `200000`     | gas quantity                      |
 | `--gas-price` | `ETH_GAS_PRICE` |              | gas price                         |
-| `--prio-fee`  | `ETH_PRIO_FEE`  |              | EIP-1559 priority fee (miner tip) |
+| `--prio-fee`  | `ETH_PRIO_FEE`  | `1gwei`      | EIP-1559 priority fee (miner tip) |
 | `--value`     | `ETH_VALUE`     | `0`          | ether value                       |
+| `--tx-type`   | `ETH_TX_TYPE`   | `2`          | type of the transaction           |
 | `--create`    | `SETH_CREATE`   |              | create contract                   |
 | `--resend`    | `SETH_RESEND`   |              | reuse nonce                       |
 | `--async`     | `SETH_ASYNC`    |              | don't wait                        |
@@ -857,8 +858,9 @@ the transaction receipt and exit with an error code if the transaction
 failed. This is a post-Byzantium feature and will soon become the
 default behavior.
 
-If `--gas-price` is provided (or `ETH_GAS_PRICE`) is set, legacy transactions will be used.
-For dynamic fee transactions (EIP-1559), `--prio-fee` is required.
+If `--tx-type` is not provided, EIP-1559 transaction will be used.
+If `--prio-fee` is not privided and EIP-1559 is used then a default value of `1gwei` is used.
+If `--tx-type` is equal to `1`, legacy transactions will be used and `--prio-fee` will be ignored.
 
 ### `seth sign`
 

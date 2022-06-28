@@ -27,7 +27,7 @@ if [[ -z $SETH_PARAMS_NO_GAS ]]; then
     param ETH_GAS        gas
 fi
 
-if [[ $ETH_PRIO_FEE ]]; then
+if [[ "${ETH_TX_TYPE}" = 2 ]]; then
   param ETH_GAS_PRICE  maxFeePerGas  --wei
   param ETH_PRIO_FEE   maxPriorityFeePerGas --wei
 else

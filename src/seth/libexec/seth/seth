@@ -19,10 +19,11 @@
 ###    -F, --from=<sender>        account to send transaction from
 ###    -G, --gas=<number>         number of gas units to provide
 ###    -P, --gas-price=<number>   price (in wei) of each gas unit
-###    -T, --prio-fee             max priority fee (miner tip) in wei per gas
+###    -T, --prio-fee             max priority fee (miner tip) in wei per gas. Only applicable if tx-type=2. Defaults to 1gwei.
 ###    -N, --nonce=<number>       nonce value to use for the transaction
 ###    -V, --value=<number>       amount (in wei) of ETH to send
 ###    -S, --password=<file>      password for non-interactive signing
+###    -X, --tx-type=<number>     identifies format of the transaction as specified in EIP-2718. EIP-1559 is a Type 2 transaction.
 ###
 ### Options for seth-call(1):
 ###
@@ -76,10 +77,11 @@ keystore=dir         local keystore directory
 F,from=address       account to send transaction from
 G,gas=number         number of gas units to provide
 P,gas-price=number   price (in wei) of each gas unit
-T,prio-fee=number    max priority fee (miner tip) in wei per gas
+T,prio-fee=number    max priority fee (miner tip) in wei per gas. Only applicable if tx-type=2. Defaults to 1gwei.
 N,nonce=number       nonce value to use for the transaction
 V,value=number       amount (in wei) of ETH to send
 S,password=file      password for non-interactive signing
+X,tx-type=number     identifies format of the transaction as specified in EIP-2718. EIP-1559 is a Type 2 transaction.
 
   Options for seth-block(1):
 full                 get block with full transaction information
@@ -167,6 +169,7 @@ while [[ $1 ]]; do
     -N|--nonce)      shift; export ETH_NONCE=$1;;
     -V|--value)      shift; export ETH_VALUE=$1;;
     -S|--password)   shift; export ETH_PASSWORD=$1;;
+    -X|--tx-type)    shift; export ETH_TX_TYPE=$1;;
 
        --state)      shift; export HEVM_STATE=$1;;
        --timestamp)  shift; export HEVM_TIMESTAMP=$1;;
