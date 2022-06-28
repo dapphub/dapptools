@@ -859,7 +859,7 @@ failed. This is a post-Byzantium feature and will soon become the
 default behavior.
 
 If `--tx-type` is not provided, EIP-1559 transaction will be used.
-If `--prio-fee` is not privided and EIP-1559 is used then a default value of `1gwei` is used.
+If `--prio-fee` is not provided and EIP-1559 is used then a default value of `1gwei` is used.
 If `--tx-type` is equal to `1`, legacy transactions will be used and `--prio-fee` will be ignored.
 
 ### `seth sign`
