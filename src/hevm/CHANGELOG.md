@@ -17,6 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - Correctly handle concrete returndata when checking the result of a symbolic test
+- Correctly handle reverting branches when checking the result of a symbolic test
 
 ## [0.49.0] - 2021-11-12
 
