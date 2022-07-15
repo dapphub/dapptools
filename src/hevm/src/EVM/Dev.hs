@@ -23,13 +23,17 @@ runExpr = do
   pure $ case view result vm of
     Nothing -> error "Internal Error: vm in intermediate state after call to runFully"
     Just (VMSuccess buf) -> Return buf EmptyStore
-    Just (VMFailure e) -> undefined
+    Just (VMFailure e) -> case e of
+      UnrecognizedOpcode _ -> Invalid
+      SelfDestruction -> SelfDestruct
+      EVM.Revert buf -> EVM.Types.Revert buf
+      e' -> EVM.Types.TmpErr $ show e'
 
 -- | Builds the Expr for the given evm bytecode object
 buildExpr :: ByteString -> IO (Expr End)
 buildExpr bs = evalStateT (interpret (Fetch.oracle Nothing False) Nothing Nothing runExpr) vm
   where
-    contractCode = RuntimeCode $ fmap LitByte (unpack bs)
+    contractCode = RuntimeCode $ fmap LitByte (unpack (hexByteString "" bs))
     c = Contract
       { _contractcode = contractCode
       , _storage      = EmptyStore
@@ -44,9 +48,9 @@ buildExpr bs = evalStateT (interpret (Fetch.oracle Nothing False) Nothing Nothin
     vm = makeVm $ VMOpts
       { EVM.vmoptContract      = c
       , EVM.vmoptCalldata      = AbstractBuf
-      , EVM.vmoptValue         = Var "callvalue"
+      , EVM.vmoptValue         = Lit 0
       , EVM.vmoptAddress       = Addr 0xffffffffffffffff
-      , EVM.vmoptCaller        = Var "caller"
+      , EVM.vmoptCaller        = Lit 0
       , EVM.vmoptOrigin        = Addr 0xffffffffffffffff
       , EVM.vmoptGas           = 0xffffffffffffffff
       , EVM.vmoptGaslimit      = 0xffffffffffffffff

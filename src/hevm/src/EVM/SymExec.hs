@@ -174,6 +174,7 @@ interpret fetcher maxIter askSmtIters =
         Stepper.IOAct q ->
           mapStateT liftIO q >>= interpret fetcher maxIter askSmtIters . k
         Stepper.Ask (EVM.PleaseChoosePath cond continue) -> do
+          assign result Nothing
           vm <- get
           case maxIterationsReached vm maxIter of
             -- TODO: parallelise

@@ -11,6 +11,8 @@ module EVM.Types where
 
 import Prelude hiding  (Word, LT, GT)
 
+import Debug.Trace
+
 import Data.Aeson
 import Crypto.Hash
 import Data.Map (Map)
@@ -217,11 +219,11 @@ data Expr (a :: EType) where
   -- control flow
 
   Invalid        :: Expr End
-  SelfDestruct   :: Expr EWord   -> Expr End
-  Revert         :: String       -> Expr End
-  Stop           :: Expr Storage -> Expr End
+  SelfDestruct   :: Expr End
+  Revert         :: Expr Buf     -> Expr End
   Return         :: Expr Buf     -> Expr Storage -> Expr End
   ITE            :: Expr EWord   -> Expr End     -> Expr End -> Expr End
+  TmpErr         :: String -> Expr End
 
   -- integers
 
