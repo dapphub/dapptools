@@ -31,6 +31,7 @@ import qualified Control.Monad.State.Class as State
 import Control.Applicative
 
 data ProofResult a b c = Qed a | Cex b | Timeout c
+  deriving (Show)
 type VerifyResult = ProofResult () () ()
 type EquivalenceResult = ProofResult ([VM], [VM]) VM ()
 
@@ -112,8 +113,8 @@ abstractVM typesignature concreteArgs x storagemodel = undefined
   return $ loadSymVM (RuntimeCode (ConcreteBuffer x)) symstore storagemodel c value' (SymbolicBuffer cd', cdlen) & over constraints ((<>) [cdconstraint])
   -}
 
-loadSymVM :: ContractCode -> Expr Storage -> StorageModel -> Expr EWord -> Expr EWord -> Expr Buf -> VM
-loadSymVM x initStore model addr callvalue' calldata' =
+loadSymVM :: ContractCode -> Expr Storage -> Expr EWord -> Expr EWord -> Expr Buf -> VM
+loadSymVM x initStore addr callvalue' calldata' =
   (makeVm $ VMOpts
     { vmoptContract = contractWithStore x initStore
     , vmoptCalldata = calldata'
@@ -135,7 +136,6 @@ loadSymVM x initStore model addr callvalue' calldata' =
     , vmoptSchedule = FeeSchedule.berlin
     , vmoptChainId = 1
     , vmoptCreate = False
-    , vmoptStorageModel = model
     , vmoptTxAccessList = mempty
     , vmoptAllowFFI = False
     }) & set (env . contracts . at (createAddress ethrunAddress 1))
@@ -289,8 +289,8 @@ consistentPath vm = undefined
 -- | Symbolically execute the VM and check all endstates against the postcondition, if available.
 verify :: VM -> Maybe Integer -> Maybe Integer -> Maybe (Fetch.BlockNumber, Text) -> Maybe Postcondition -> VerifyResult
 verify preState maxIter askSmtIters rpcinfo maybepost = undefined
-  --smtState <- queryState
-  --tree <- doInterpret (Fetch.oracle (Just smtState) rpcinfo False) maxIter askSmtIters preState
+  --expr <- doInterpret (Fetch.oracle Nothing rpcinfo False) maxIter askSmtIters preState
+  --pure ()
   --case maybepost of
     --(Just post) -> do
       --let livePaths = pruneDeadPaths $ leaves tree

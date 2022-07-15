@@ -182,16 +182,12 @@ oracle info ensureConsistency q = do
 
     -- if we are using a symbolic storage model,
     -- we generate a new array to the fetched contract here
-    EVM.PleaseFetchContract addr model continue -> do
+    EVM.PleaseFetchContract addr continue -> do
       contract <- case info of
                     Nothing -> return $ Just $ initialContract (EVM.RuntimeCode mempty)
                     Just (n, url) -> fetchContractFrom n url addr
       case contract of
-        Just x -> case model of
-          EVM.ConcreteS -> return $ continue x
-          EVM.InitialS  -> return $ continue $ x & set EVM.storage EmptyStore
-          EVM.SymbolicS -> return $ continue $ x & set EVM.storage AbstractStore
-
+        Just x -> return $ continue x
         Nothing -> error ("oracle error: " ++ show q)
 
     --EVM.PleaseMakeUnique val pathconditions continue ->

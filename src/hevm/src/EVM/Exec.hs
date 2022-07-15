@@ -41,7 +41,6 @@ vmForEthrunCreation creationCode =
     , vmoptSchedule = FeeSchedule.berlin
     , vmoptChainId = 1
     , vmoptCreate = False
-    , vmoptStorageModel = ConcreteS
     , vmoptTxAccessList = mempty
     , vmoptAllowFFI = False
     }) & set (env . contracts . at ethrunAddress)

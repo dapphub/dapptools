@@ -48,13 +48,13 @@ data Action a where
   Run ::             Action VM
 
   -- | Wait for a query to be resolved
-  Wait :: Query   -> Action ()
+  Wait :: Query -> Action ()
 
   -- | Multiple things can happen
   Ask :: Choose -> Action ()
 
   -- | Embed a VM state transformation
-  EVM  :: EVM a   -> Action a
+  EVM  :: EVM a -> Action a
 
   -- | Perform an IO action
   IOAct :: StateT VM IO a -> Action a -- they should all just be this?

@@ -1,0 +1,68 @@
+{-# Language DataKinds #-}
+
+{- |
+Module: EVM.Dev
+Description: Helpers for repl driven hevm hacking
+-}
+module EVM.Dev where
+
+import EVM
+import EVM.Types
+import EVM.SymExec
+import Control.Lens
+import qualified EVM.Stepper as Stepper
+import qualified EVM.Fetch as Fetch
+import qualified EVM.FeeSchedule as FeeSchedule
+
+import Data.ByteString
+import Control.Monad.State.Strict hiding (state)
+
+runExpr :: Stepper.Stepper (Expr End)
+runExpr = do
+  vm <- Stepper.runFully
+  pure $ case view result vm of
+    Nothing -> error "Internal Error: vm in intermediate state after call to runFully"
+    Just (VMSuccess buf) -> Return buf EmptyStore
+    Just (VMFailure e) -> undefined
+
+-- | Builds the Expr for the given evm bytecode object
+buildExpr :: ByteString -> IO (Expr End)
+buildExpr bs = evalStateT (interpret (Fetch.oracle Nothing False) Nothing Nothing runExpr) vm
+  where
+    contractCode = RuntimeCode $ fmap LitByte (unpack bs)
+    c = Contract
+      { _contractcode = contractCode
+      , _storage      = EmptyStore
+      , _balance      = 0
+      , _nonce        = 0
+      , _codehash     = keccak (ConcreteBuf bs)
+      , _opIxMap      = mkOpIxMap contractCode
+      , _codeOps      = mkCodeOps contractCode
+      , _external     = False
+      , _origStorage  = mempty
+      }
+    vm = makeVm $ VMOpts
+      { EVM.vmoptContract      = c
+      , EVM.vmoptCalldata      = AbstractBuf
+      , EVM.vmoptValue         = Var "callvalue"
+      , EVM.vmoptAddress       = Addr 0xffffffffffffffff
+      , EVM.vmoptCaller        = Var "caller"
+      , EVM.vmoptOrigin        = Addr 0xffffffffffffffff
+      , EVM.vmoptGas           = 0xffffffffffffffff
+      , EVM.vmoptGaslimit      = 0xffffffffffffffff
+      , EVM.vmoptBaseFee       = 0
+      , EVM.vmoptPriorityFee   = 0
+      , EVM.vmoptCoinbase      = 0
+      , EVM.vmoptNumber        = 0
+      , EVM.vmoptTimestamp     = Var "timestamp"
+      , EVM.vmoptBlockGaslimit = 0
+      , EVM.vmoptGasprice      = 0
+      , EVM.vmoptMaxCodeSize   = 0xffffffff
+      , EVM.vmoptDifficulty    = 0
+      , EVM.vmoptSchedule      = FeeSchedule.berlin
+      , EVM.vmoptChainId       = 1
+      , EVM.vmoptCreate        = False
+      , EVM.vmoptTxAccessList  = mempty
+      , EVM.vmoptAllowFFI      = False
+      }
+

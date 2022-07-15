@@ -254,7 +254,7 @@ showTrace dapp vm trace =
 
     QueryTrace q ->
       case q of
-        PleaseFetchContract addr _ _ ->
+        PleaseFetchContract addr _ ->
           "fetch contract " <> pack (show addr) <> pos
         PleaseFetchSlot addr slot _ ->
           "fetch storage slot " <> pack (show slot) <> " from " <> pack (show addr) <> pos

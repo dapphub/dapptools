@@ -501,17 +501,6 @@ assert cmd = do
   srcInfo <- getSrcInfo cmd
   let block'  = maybe EVM.Fetch.Latest EVM.Fetch.BlockNumber (block cmd)
       rpcinfo = (,) block' <$> rpc cmd
-      treeShowing = undefined
-      --treeShowing :: Tree BranchInfo -> Query ()
-      --treeShowing tree =
-        --when (showTree cmd) $ do
-          --consistentTree tree >>= \case
-            --Nothing -> io $ putStrLn "No consistent paths" -- unlikely
-            --Just tree' -> let
-              --showBranch = showBranchInfoWithAbi srcInfo
-              --renderTree' = renderTree showBranch (showLeafInfo srcInfo)
-              --in io $ setLocaleEncoding utf8 >> putStrLn (showTree' (renderTree' tree'))
-
   maybesig <- case sig cmd of
     Nothing ->
       return Nothing
@@ -522,7 +511,7 @@ assert cmd = do
       return $ Just (name,typ)
   if debug cmd then
     runSMTWithTimeOut (solver cmd) (smttimeout cmd) (smtdebug cmd) $ query $ do
-      preState <- symvmFromCommand cmd
+      let preState = symvmFromCommand cmd
       smtState <- queryState
       undefined
       --io $ void $ EVM.TTY.runFromVM
@@ -531,7 +520,11 @@ assert cmd = do
         --(EVM.Fetch.oracle (Just smtState) rpcinfo True)
         --preState
 
-  else undefined
+  else do
+    let preState = symvmFromCommand cmd
+    let errCodes = fromMaybe defaultPanicCodes (assertions cmd)
+    let res = verify preState (maxIterations cmd) (askSmtIterations cmd) rpcinfo (Just $ checkAssertions errCodes)
+    print res
     {-
     runSMTWithTimeOut (solver cmd) (smttimeout cmd) (smtdebug cmd) $ query $ do
       preState <- symvmFromCommand cmd
@@ -829,7 +822,7 @@ vmFromCommand cmd = do
         addr f def = fromMaybe def (f cmd)
         bytes f def = maybe def decipher (f cmd)
 
-symvmFromCommand :: Command Options.Unwrapped -> Query EVM.VM
+symvmFromCommand :: Command Options.Unwrapped -> EVM.VM
 symvmFromCommand = undefined
   {-
 symvmFromCommand cmd = do

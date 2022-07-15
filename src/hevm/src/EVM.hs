@@ -137,7 +137,7 @@ data TraceData
 
 -- | Queries halt execution until resolved through RPC calls or SMT queries
 data Query where
-  PleaseFetchContract :: Addr -> StorageModel -> (Contract -> EVM ()) -> Query
+  PleaseFetchContract :: Addr -> (Contract -> EVM ()) -> Query
   --PleaseMakeUnique    :: SBV a -> [SBool] -> (IsUnique a -> EVM ()) -> Query
   PleaseFetchSlot     :: Addr -> W256 -> (W256 -> EVM ()) -> Query
   --PleaseAskSMT        :: SBool -> [SBool] -> (BranchCondition -> EVM ()) -> Query
@@ -148,7 +148,7 @@ data Choose where
 
 instance Show Query where
   showsPrec _ = \case
-    PleaseFetchContract addr _ _ ->
+    PleaseFetchContract addr _ ->
       (("<EVM.Query: fetch contract " ++ show addr ++ ">") ++)
     PleaseFetchSlot addr slot _ ->
       (("<EVM.Query: fetch slot "
@@ -212,7 +212,6 @@ data VMOpts = VMOpts
   , vmoptSchedule :: FeeSchedule Integer
   , vmoptChainId :: W256
   , vmoptCreate :: Bool
-  , vmoptStorageModel :: StorageModel
   , vmoptTxAccessList :: Map Addr [W256]
   , vmoptAllowFFI :: Bool
   } deriving Show
@@ -369,7 +368,7 @@ instance ParseField StorageModel
 data Env = Env
   { _contracts    :: Map Addr Contract
   , _chainId      :: W256
-  , _storageModel :: StorageModel
+  --, _storageModel :: StorageModel
   , _sha3Crack    :: Map W256 ByteString
   --, _keccakUsed   :: [([SWord 8], SWord 256)]
   }
@@ -508,7 +507,7 @@ makeVm o =
     , _contracts = Map.fromList
       [(vmoptAddress o, vmoptContract o)]
     --, _keccakUsed = mempty
-    , _storageModel = vmoptStorageModel o
+    --, _storageModel = vmoptStorageModel o
     }
   , _cache = Cache mempty mempty
   , _burned = 0
@@ -1616,9 +1615,8 @@ fetchAccount addr continue =
           assign (env . contracts . at addr) (Just c)
           continue c
         Nothing -> do
-          model <- use (env . storageModel)
           assign result . Just . VMFailure $ Query $
-            PleaseFetchContract addr model
+            PleaseFetchContract addr
               (\c -> do assign (cache . fetched . at addr) (Just c)
                         assign (env . contracts . at addr) (Just c)
                         assign result Nothing

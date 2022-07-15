@@ -286,7 +286,6 @@ fromBlockchainCase' block tx preState postState =
          , vmoptSchedule      = feeSchedule
          , vmoptChainId       = 1
          , vmoptCreate        = isCreate
-         , vmoptStorageModel  = EVM.ConcreteS
          , vmoptTxAccessList  = txAccessMap tx
          , vmoptAllowFFI      = False
          })
