@@ -39,21 +39,21 @@ sliceMemory :: (Integral a, Integral b) => a -> b -> ByteString -> ByteString
 sliceMemory o s =
   byteStringSliceWithDefaultZeroes (num o) (num s)
 
---writeMemory :: ByteString -> Word -> Word -> Word -> ByteString -> ByteString
---writeMemory bs1 (C _ n) (C _ src) (C _ dst) bs0 =
-  --let
-    --(a, b) = BS.splitAt (num dst) bs0
-    --a'     = BS.replicate (num dst - BS.length a) 0
+writeMemory :: ByteString -> W256 -> W256 -> W256 -> ByteString -> ByteString
+writeMemory bs1 n src dst bs0 =
+  let
+    (a, b) = BS.splitAt (num dst) bs0
+    a'     = BS.replicate (num dst - BS.length a) 0
     -- sliceMemory should work for both cases, but we are using 256 bit
     -- words, whereas ByteString is only defined up to 64 bit. For large n,
     -- src, dst this will cause problems (often in GeneralStateTests).
     -- Later we could reimplement ByteString for 256 bit arguments.
-    --c      = if src > num (BS.length bs1)
-             --then BS.replicate (num n) 0
-             --else sliceMemory src n bs1
-    --b'     = BS.drop (num n) b
-  --in
-    --a <> a' <> c <> b'
+    c      = if src > num (BS.length bs1)
+             then BS.replicate (num n) 0
+             else sliceMemory src n bs1
+    b'     = BS.drop (num n) b
+  in
+    a <> a' <> c <> b'
 
 --readMemoryWord :: Word -> ByteString -> Word
 --readMemoryWord (C _ i) m =

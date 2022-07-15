@@ -7,8 +7,7 @@ import EVM (Trace, traceContract, traceOpIx, ContractCode(..), Contract(..), cod
 import EVM.ABI (Event, AbiType, SolError)
 import EVM.Debug (srcMapCodePos)
 import EVM.Solidity
-import EVM.Types (W256, abiKeccak, keccak, Buffer(..), Addr, regexMatches)
-import EVM.Concrete
+import EVM.Types (W256, abiKeccak, keccak', Addr, regexMatches, unlit, unlitByte)
 
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as BS
@@ -18,8 +17,9 @@ import Data.Text (Text, isPrefixOf, pack, unpack)
 import Data.Text.Encoding (encodeUtf8)
 import Data.Map (Map, toList, elems)
 import Data.List (sort)
-import Data.Maybe (isJust, fromJust)
+import Data.Maybe (isJust, fromJust, mapMaybe)
 import Data.Word (Word32)
+import EVM.Concrete
 
 import Control.Arrow ((>>>))
 import Control.Lens
@@ -160,26 +160,27 @@ srcMap :: DappInfo -> Contract -> Int -> Maybe SrcMap
 srcMap dapp contr opIndex = do
   sol <- findSrc contr dapp
   case view contractcode contr of
-    (InitCode _) ->
+    (InitCode _ _) ->
       preview (creationSrcmap . ix opIndex) sol
     (RuntimeCode _) ->
       preview (runtimeSrcmap . ix opIndex) sol
 
 findSrc :: Contract -> DappInfo -> Maybe SolcContract
-findSrc c dapp = case preview (dappSolcByHash . ix (view codehash c)) dapp of
-  Just (_, v) -> Just v
-  Nothing -> lookupCode (view contractcode c) dapp
+findSrc c dapp = do
+  hash <- unlit (view codehash c)
+  case preview (dappSolcByHash . ix hash) dapp of
+    Just (_, v) -> Just v
+    Nothing -> lookupCode (view contractcode c) dapp
 
 
 lookupCode :: ContractCode -> DappInfo -> Maybe SolcContract
-lookupCode (InitCode (SymbolicBuffer _)) _ = Nothing -- TODO: srcmaps for symbolic bytecode
-lookupCode (RuntimeCode (SymbolicBuffer _)) _ = Nothing -- TODO: srcmaps for symbolic bytecode
-lookupCode (InitCode (ConcreteBuffer c)) a =
-  snd <$> preview (dappSolcByHash . ix (keccak (stripBytecodeMetadata c))) a
-lookupCode (RuntimeCode (ConcreteBuffer c)) a =
-  case snd <$> preview (dappSolcByHash . ix (keccak (stripBytecodeMetadata c))) a of
+lookupCode (InitCode c _) a =
+  snd <$> preview (dappSolcByHash . ix (keccak' (stripBytecodeMetadata c))) a
+lookupCode (RuntimeCode c) a = let
+    code = BS.pack $ mapMaybe unlitByte c
+  in case snd <$> preview (dappSolcByHash . ix (keccak' (stripBytecodeMetadata code))) a of
     Just x -> return x
-    Nothing -> snd <$> find (compareCode c . fst) (view dappSolcByCode a)
+    Nothing -> snd <$> find (compareCode code . fst) (view dappSolcByCode a)
 
 compareCode :: ByteString -> Code -> Bool
 compareCode raw (Code template locs) =

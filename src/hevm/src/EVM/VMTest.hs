@@ -1,5 +1,4 @@
 {-# Language CPP #-}
-{-# Language TemplateHaskell #-}
 
 module EVM.VMTest
   ( Case
@@ -16,11 +15,11 @@ module EVM.VMTest
 import Prelude hiding (Word)
 
 import qualified EVM
-import EVM (contractcode, storage, origStorage, balance, nonce, Storage(..), initialContract)
+import EVM (contractcode, storage, origStorage, balance, nonce, initialContract)
+import EVM.Expr (litCode, litAddr)
 import qualified EVM.Concrete as EVM
 import qualified EVM.FeeSchedule
 
-import EVM.Symbolic
 import EVM.Transaction
 import EVM.Types
 
@@ -40,7 +39,6 @@ import qualified Data.Map          as Map
 import qualified Data.Aeson        as JSON
 import qualified Data.Aeson.Types  as JSON
 import qualified Data.ByteString.Lazy  as Lazy
-import qualified Data.ByteString as BS
 
 data Which = Pre | Post
 
@@ -81,7 +79,7 @@ checkStateFail diff x vm (okState, okMoney, okNonce, okData, okCode) = do
       acc ++ show k ++ " : "
                    ++ (show . toInteger  $ (view nonce v)) ++ " "
                    ++ (show . toInteger  $ (view balance v)) ++ " "
-                   ++ (printStorage $ (view storage v))
+                   ++ (printStorage (view storage v))
         ++ "\n") "" cs
 
     reason = map fst (filter (not . snd)
@@ -94,8 +92,7 @@ checkStateFail diff x vm (okState, okMoney, okNonce, okData, okCode) = do
     check = checkContracts x
     expected = testExpectation x
     actual = view (EVM.env . EVM.contracts . to (fmap (clearZeroStorage.clearOrigStorage))) vm
-    printStorage (EVM.Symbolic _ c) = show c
-    printStorage (EVM.Concrete c) = show $ Map.toList c
+    printStorage = undefined
 
   putStr (unwords reason)
   when (diff && (not okState)) $ do
@@ -110,7 +107,7 @@ checkStateFail diff x vm (okState, okMoney, okNonce, okData, okCode) = do
 checkExpectation :: HasCallStack => Bool -> Case -> EVM.VM -> IO Bool
 checkExpectation diff x vm = do
   let expectation = testExpectation x
-      (okState, b2, b3, b4, b5) = checkExpectedContracts vm $ expectation
+      (okState, b2, b3, b4, b5) = checkExpectedContracts vm expectation
   unless okState $ void $ checkStateFail
     diff x vm (okState, b2, b3, b4, b5)
   return okState
@@ -129,7 +126,7 @@ a === b = codeEqual && storageEqual && (view balance a == view balance b) && (vi
   where
     storageEqual = view storage a == view storage b
     codeEqual = case (view contractcode a, view contractcode b) of
-      (EVM.RuntimeCode (ConcreteBuffer a'), EVM.RuntimeCode (ConcreteBuffer b')) -> a' == b'
+      (EVM.RuntimeCode a', EVM.RuntimeCode b') -> a' == b'
       _ -> error "unexpected code"
 
 checkExpectedContracts :: HasCallStack => EVM.VM -> Map Addr EVM.Contract -> (Bool, Bool, Bool, Bool, Bool)
@@ -147,13 +144,15 @@ clearOrigStorage :: EVM.Contract -> EVM.Contract
 clearOrigStorage = set origStorage mempty
 
 clearZeroStorage :: EVM.Contract -> EVM.Contract
-clearZeroStorage c = case view storage c of
-  EVM.Symbolic _ _ -> c
-  EVM.Concrete m -> let store = Map.filter (\x -> forceLit x /= 0) m
-                    in set EVM.storage (EVM.Concrete store) c
+clearZeroStorage = undefined
+--clearZeroStorage c = case view storage c of
+  --EVM.Symbolic _ _ -> c
+  --EVM.Concrete m -> let store = Map.filter (\x -> forceLit x /= 0) m
+                    --in set EVM.storage (EVM.Concrete store) c
 
 clearStorage :: EVM.Contract -> EVM.Contract
-clearStorage = set storage (EVM.Concrete mempty)
+clearStorage = undefined
+--clearStorage = set storage (EVM.Concrete mempty)
 
 clearBalance :: EVM.Contract -> EVM.Contract
 clearBalance = set balance 0
@@ -168,17 +167,17 @@ clearCode = set contractcode (EVM.RuntimeCode mempty)
 
 instance FromJSON EVM.Contract where
   parseJSON (JSON.Object v) = do
-    code <- (EVM.RuntimeCode . ConcreteBuffer <$> (hexText <$> v .: "code"))
-    storage' <- Map.mapKeys w256 <$> v .: "storage"
+    code <- (EVM.RuntimeCode . litCode <$> (hexText <$> v .: "code"))
+    storage' <- v .: "storage"
     balance' <- v .: "balance"
     nonce'   <- v .: "nonce"
     return
       $
       EVM.initialContract code
-       & balance .~ w256 balance'
-       & nonce   .~ w256 nonce'
-       & storage .~ EVM.Concrete (fmap (litWord . w256) storage')
-       & origStorage .~ fmap w256 storage'
+       & balance .~ balance'
+       & nonce   .~ nonce'
+       & storage .~ ConcreteStore storage'
+       & origStorage .~ storage'
 
   parseJSON invalid =
     JSON.typeMismatch "Contract" invalid
@@ -269,7 +268,7 @@ fromBlockchainCase' block tx preState postState =
         (EVM.VMOpts
          { vmoptContract      = EVM.initialContract theCode
          , vmoptCalldata      = cd
-         , vmoptValue         = litWord (w256 $ txValue tx)
+         , vmoptValue         = Lit (txValue tx)
          , vmoptAddress       = toAddr
          , vmoptCaller        = litAddr origin
          , vmoptOrigin        = origin
@@ -278,7 +277,7 @@ fromBlockchainCase' block tx preState postState =
          , vmoptPriorityFee   = priorityFee tx (blockBaseFee block)
          , vmoptGaslimit      = txGasLimit tx
          , vmoptNumber        = blockNumber block
-         , vmoptTimestamp     = litWord $ w256 $ blockTimestamp block
+         , vmoptTimestamp     = Lit $ blockTimestamp block
          , vmoptCoinbase      = blockCoinbase block
          , vmoptDifficulty    = blockDifficulty block
          , vmoptMaxCodeSize   = 24576
@@ -295,17 +294,17 @@ fromBlockchainCase' block tx preState postState =
         postState
           where
             toAddr = fromMaybe (EVM.createAddress origin senderNonce) (txToAddr tx)
-            senderNonce = EVM.wordValue $ view (accountAt origin . nonce) preState
+            senderNonce = undefined
+            --senderNonce = EVM.wordValue $ view (accountAt origin . nonce) preState
             feeSchedule = EVM.FeeSchedule.berlin
             toCode = Map.lookup toAddr preState
             theCode = if isCreate
-                      then EVM.InitCode (ConcreteBuffer (txData tx))
+                      then EVM.InitCode (txData tx) mempty
                       else maybe (EVM.RuntimeCode mempty) (view contractcode) toCode
             effectiveGasPrice = effectiveprice tx (blockBaseFee block)
             cd = if isCreate
-                 then (mempty, 0)
-                 else let l = num . BS.length $ txData tx
-                      in (ConcreteBuffer $ txData tx, litWord l)
+                 then mempty
+                 else ConcreteBuf $ txData tx
 
 effectiveprice :: Transaction -> W256 -> W256
 effectiveprice tx baseFee = priorityFee tx baseFee + baseFee
@@ -338,9 +337,9 @@ validateTx tx block cs = do
   origin        <- sender 1 tx
   originBalance <- (view balance) <$> view (at origin) cs
   originNonce   <- (view nonce)   <$> view (at origin) cs
-  let gasDeposit = w256 $ (effectiveprice tx (blockBaseFee block)) * (txGasLimit tx)
-  if gasDeposit + (w256 $ txValue tx) <= originBalance
-    && (w256 $ txNonce tx) == originNonce && blockBaseFee block <= maxBaseFee tx
+  let gasDeposit = (effectiveprice tx (blockBaseFee block)) * (txGasLimit tx)
+  if gasDeposit + (txValue tx) <= originBalance
+    && txNonce tx == originNonce && blockBaseFee block <= maxBaseFee tx
   then Just ()
   else Nothing
 
@@ -349,14 +348,15 @@ checkTx tx block prestate = do
   origin <- sender 1 tx
   validateTx tx block prestate
   let isCreate   = isNothing (txToAddr tx)
-      senderNonce = EVM.wordValue $ view (accountAt origin . nonce) prestate
+      senderNonce = undefined
+      --senderNonce = EVM.wordValue $ view (accountAt origin . nonce) prestate
       toAddr      = fromMaybe (EVM.createAddress origin senderNonce) (txToAddr tx)
       prevCode    = view (accountAt toAddr . contractcode) prestate
       prevNonce   = view (accountAt toAddr . nonce) prestate
-  if isCreate && ((case prevCode of {EVM.RuntimeCode b -> len b /= 0; _ -> True}) || (prevNonce /= 0))
+  if isCreate && ((case prevCode of {EVM.RuntimeCode b -> not (null b); _ -> True}) || (prevNonce /= 0))
   then mzero
   else
-    return $ prestate
+    return prestate
 
 vmForCase :: Case -> EVM.VM
 vmForCase x =

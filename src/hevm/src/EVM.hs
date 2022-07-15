@@ -305,7 +305,7 @@ data SubState = SubState
 -}
 data ContractCode
   = InitCode ByteString (Expr Buf)  -- ^ "Constructor" code, during contract creation
-  | RuntimeCode [Expr Byte]          -- ^ "Instance" code, after contract creation
+  | RuntimeCode [Expr Byte]         -- ^ "Instance" code, after contract creation
   deriving (Show)
 
 -- runtime err when used for symbolic code

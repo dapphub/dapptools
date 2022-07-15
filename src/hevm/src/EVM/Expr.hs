@@ -414,6 +414,9 @@ writeStorage key val store = SStore key val store
 litAddr :: Addr -> Expr EWord
 litAddr = Lit . num
 
+litCode :: BS.ByteString -> [Expr Byte]
+litCode bs = fmap LitByte (BS.unpack bs)
+
 to512 :: W256 -> Word512
 to512 = fromIntegral
 

@@ -17,7 +17,7 @@ import EVM.Dapp (DappInfo, dappInfo, Test, extractSig, Test(..), srcMap)
 import EVM.Dapp (dappUnitTests, unitTestMethods, dappSolcByName, dappSolcByHash, dappSources)
 import EVM.Dapp (dappAstSrcMap)
 import EVM.Debug
-import EVM.Format (showWordExact, showWordExplanation)
+--import EVM.Format (showWordExact, showWordExplanation)
 import EVM.Format (contractNamePart, contractPathPart, showTraceTree)
 import EVM.Hexdump (prettyHex)
 import EVM.Op
@@ -44,9 +44,7 @@ import Data.Text (Text, pack)
 import Data.Text.Encoding (decodeUtf8)
 import Data.List (sort, find)
 import Data.Version (showVersion)
-import Data.SBV hiding (solver)
 
-import qualified Data.SBV.Internals as SBV
 import qualified Data.ByteString as BS
 import qualified Data.Map as Map
 import qualified Data.Text as Text
@@ -58,6 +56,8 @@ import qualified System.Console.Haskeline as Readline
 import qualified EVM.TTYCenteredList as Centered
 
 import qualified Paths_hevm as Paths
+
+  {-
 
 data Name
   = AbiPane
@@ -1047,3 +1047,4 @@ dimAttr :: AttrName; dimAttr = "dim"
 wordAttr :: AttrName; wordAttr = "word"
 boldAttr :: AttrName; boldAttr = "bold"
 activeAttr :: AttrName; activeAttr = "active"
+-}

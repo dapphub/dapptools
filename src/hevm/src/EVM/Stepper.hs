@@ -23,8 +23,6 @@ where
 --
 -- The implementation uses the operational monad pattern
 -- as the framework for monadic interpretation.
---
--- Note: this is a sketch of a work in progress!
 
 import Prelude hiding (fail)
 

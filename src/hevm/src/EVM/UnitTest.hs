@@ -8,7 +8,6 @@ import Prelude hiding (Word)
 
 import EVM
 import EVM.ABI
-import EVM.Concrete hiding (readMemoryWord)
 import EVM.Symbolic
 import EVM.Dapp
 import EVM.Debug (srcMapCodePos)
@@ -35,12 +34,8 @@ import Control.Monad.Par.Class (spawn_)
 import Control.Monad.Par.IO (runParIO)
 
 import qualified Data.ByteString.Lazy as BSLazy
-import qualified Data.SBV.Trans.Control as SBV (Query, getValue, resetAssertions)
-import qualified Data.SBV.Internals as SBV (State)
 import Data.Binary.Get    (runGet)
 import Data.ByteString    (ByteString)
-import Data.SBV    hiding (verbose)
-import Data.SBV.Control   (CheckSatResult(..), checkSat)
 import Data.Decimal       (DecimalRaw(..))
 import Data.Either        (isRight, lefts)
 import Data.Foldable      (toList)
@@ -76,7 +71,6 @@ data UnitTestOptions = UnitTestOptions
   , askSmtIters :: Maybe Integer
   , maxDepth    :: Maybe Int
   , smtTimeout  :: Maybe Integer
-  , smtState    :: Maybe SBV.State
   , solver      :: Maybe Text
   , covMatch    :: Maybe Text
   , match       :: Text
@@ -121,6 +115,7 @@ defaultMaxCodeSize = 0xffffffff
 
 type ABIMethod = Text
 
+  {-
 -- | Assuming a constructor is loaded, this stepper will run the constructor
 -- to create the test contract, give it an initial balance, and run `setUp()'.
 initializeUnitTest :: UnitTestOptions -> SolcContract -> Stepper ()
@@ -155,15 +150,15 @@ initializeUnitTest UnitTestOptions { .. } theContract = do
   Stepper.evm $ case res of
     Left e -> pushTrace (ErrorTrace e)
     _ -> popTrace
-
+-}
 
 -- | Assuming a test contract is loaded and initialized, this stepper
 -- will run the specified test method and return whether it succeeded.
-runUnitTest :: UnitTestOptions -> ABIMethod -> AbiValue -> Stepper Bool
-runUnitTest a method args = do
-  x <- execTestStepper a method args
-  checkFailures a method x
-
+--runUnitTest :: UnitTestOptions -> ABIMethod -> AbiValue -> Stepper Bool
+--runUnitTest a method args = do
+  --x <- execTestStepper a method args
+  --checkFailures a method x
+    {-
 execTestStepper :: UnitTestOptions -> ABIMethod -> AbiValue -> Stepper Bool
 execTestStepper UnitTestOptions { .. } methodName' method = do
   -- Set up the call to the test method
@@ -175,7 +170,8 @@ execTestStepper UnitTestOptions { .. } methodName' method = do
      -- If we failed, put the error in the trace.
     Left e -> Stepper.evm (pushTrace (ErrorTrace e) >> popTrace) >> pure True
     _ -> pure False
-
+-}
+  {-
 exploreStep :: UnitTestOptions -> ByteString -> Stepper Bool
 exploreStep UnitTestOptions{..} bs = do
   Stepper.evm $ do
@@ -192,8 +188,8 @@ exploreStep UnitTestOptions{..} bs = do
      -- If we failed, put the error in the trace.
     Left e -> Stepper.evm (pushTrace (ErrorTrace e) >> popTrace) >> pure True
     _ -> pure False
-
-
+-}
+  {-
 checkFailures :: UnitTestOptions -> ABIMethod -> Bool -> Stepper Bool
 checkFailures UnitTestOptions { .. } method bailed = do
    -- Decide whether the test is supposed to fail or succeed
@@ -207,7 +203,7 @@ checkFailures UnitTestOptions { .. } method bailed = do
       abiCall testParams $ Left ("failed()", emptyAbi)
     res <- Stepper.execFully
     case res of
-      Right (ConcreteBuffer r) ->
+      Right (ConcreteBuf r) ->
         let AbiBool failed = decodeAbiValue AbiBoolType (BSLazy.fromStrict r)
         in pure (shouldFail == failed)
       _ -> error "internal error: unexpected failure code"
@@ -380,7 +376,8 @@ coverageForUnitTestContract
       let cov2 = MultiSet.unions (cov1 : covs)
 
       pure (MultiSet.mapMaybe (srcMapForOpLocation dapp) cov2)
-
+-}
+  {-
 runUnitTestContract
   :: UnitTestOptions
   -> Map Text SolcContract
@@ -998,3 +995,4 @@ getParametersFromEnvironmentVariables rpc = do
     <*> getWord "DAPP_TEST_MAXCODESIZE" defaultMaxCodeSize
     <*> getWord "DAPP_TEST_DIFFICULTY" diff
     <*> getWord "DAPP_TEST_CHAINID" 99
+    -}
