@@ -116,9 +116,10 @@ abstractVM typesignature concreteArgs x storagemodel = undefined
 loadSymVM :: ContractCode -> Expr Storage -> Expr EWord -> Expr EWord -> Expr Buf -> VM
 loadSymVM x initStore addr callvalue' calldata' =
   (makeVm $ VMOpts
-    { vmoptContract = contractWithStore x initStore
+    { vmoptContract = initialContract x
     , vmoptCalldata = calldata'
     , vmoptValue = callvalue'
+    , vmoptStorageBase = Symbolic
     , vmoptAddress = createAddress ethrunAddress 1
     , vmoptCaller = addr
     , vmoptOrigin = ethrunAddress --todo: generalize
@@ -139,7 +140,8 @@ loadSymVM x initStore addr callvalue' calldata' =
     , vmoptTxAccessList = mempty
     , vmoptAllowFFI = False
     }) & set (env . contracts . at (createAddress ethrunAddress 1))
-             (Just (contractWithStore x initStore))
+             (Just (initialContract x))
+       & set (env . storage) initStore
 
 doInterpret :: Fetch.Fetcher -> Maybe Integer -> Maybe Integer -> VM -> Expr End
 doInterpret fetcher maxIter askSmtIters vm = undefined

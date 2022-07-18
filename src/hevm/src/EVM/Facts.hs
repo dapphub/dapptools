@@ -37,9 +37,9 @@ module EVM.Facts
   ) where
 
 import EVM          (VM, Contract, Cache)
-import EVM          (balance, nonce, storage, bytecode, env, contracts, contract, state, cache, fetched)
-import EVM.Types    (Addr, W256, Expr(..), EType(..))
-import EVM.Expr     (writeStorage)
+import EVM          (balance, nonce, storage, bytecode, env, contracts, contract, state, cache, fetchedStorage, fetchedContracts)
+import EVM.Types    (Addr, W256, Expr(..), EType(..), num)
+import EVM.Expr     (writeStorage, litAddr)
 
 import qualified EVM
 
@@ -51,6 +51,7 @@ import Data.ByteString (ByteString)
 import Data.Monoid     ((<>))
 import Data.Ord        (comparing)
 import Data.Set        (Set)
+import Data.Map        (Map)
 import Text.Read       (readMaybe)
 
 import qualified Data.ByteString.Base16 as BS16
@@ -112,26 +113,24 @@ instance AsASCII ByteString where
       Right y -> Just y
       _       -> Nothing
 
-contractFacts :: Addr -> Contract -> [Fact]
-contractFacts a x = case view bytecode x of
+contractFacts :: Addr -> Contract -> Map W256 (Map W256 W256) -> [Fact]
+contractFacts a x store = case view bytecode x of
   ConcreteBuf b ->
-    storageFacts a x ++
+    storageFacts a store ++
     [ BalanceFact a (view balance x)
     , NonceFact   a (view nonce x)
     , CodeFact    a b
     ]
   _ ->
     -- here simply ignore storing the bytecode
-    storageFacts a x ++
+    storageFacts a store ++
     [ BalanceFact a (view balance x)
     , NonceFact   a (view nonce x)
     ]
 
 
-storageFacts :: Addr -> Contract -> [Fact]
-storageFacts a x = case view storage x of
-  ConcreteStore s -> map f (Map.toList s)
-  _ -> []
+storageFacts :: Addr -> Map W256 (Map W256 W256) -> [Fact]
+storageFacts a store = map f (Map.toList (Map.findWithDefault Map.empty (num a) store))
   where
     f :: (W256, W256) -> Fact
     f (k, v) = StorageFact
@@ -142,13 +141,16 @@ storageFacts a x = case view storage x of
 
 cacheFacts :: Cache -> Set Fact
 cacheFacts c = Set.fromList $ do
-  (k, v) <- Map.toList (view EVM.fetched c)
-  contractFacts k v
+  (k, v) <- Map.toList (view EVM.fetchedContracts c)
+  contractFacts k v (view EVM.fetchedStorage c)
 
 vmFacts :: VM -> Set Fact
 vmFacts vm = Set.fromList $ do
   (k, v) <- Map.toList (view (env . contracts) vm)
-  contractFacts k v
+  case view (env . storage) vm of
+    EmptyStore -> contractFacts k v Map.empty
+    ConcreteStore s -> contractFacts k v s
+    _ -> error "cannot serialize an abstract store"
 
 -- Somewhat stupidly, this function demands that for each contract,
 -- the code fact for that contract comes before the other facts for
@@ -164,7 +166,7 @@ apply1 vm fact =
       assign (env . contracts . at addr) (Just (EVM.initialContract (EVM.RuntimeCode (fmap LitByte $ BS.unpack blob))))
       when (view (state . contract) vm == addr) $ EVM.loadContract addr
     StorageFact {..} ->
-      vm & over (env . contracts . ix addr . storage) (writeStorage (Lit which) (Lit what))
+      vm & over (env . storage) (writeStorage (litAddr addr) (Lit which) (Lit what))
     BalanceFact {..} ->
       vm & set (env . contracts . ix addr . balance) what
     NonceFact   {..} ->
@@ -174,14 +176,17 @@ apply2 :: VM -> Fact -> VM
 apply2 vm fact =
   case fact of
     CodeFact    {..} -> flip execState vm $ do
-      assign (cache . fetched . at addr) (Just (EVM.initialContract (EVM.RuntimeCode (fmap LitByte $ BS.unpack blob))))
+      assign (cache . fetchedContracts . at addr) (Just (EVM.initialContract (EVM.RuntimeCode (fmap LitByte $ BS.unpack blob))))
       when (view (state . contract) vm == addr) $ EVM.loadContract addr
-    StorageFact {..} ->
-      vm & over (cache . fetched . ix addr . storage) (writeStorage (Lit which) (Lit what))
+    StorageFact {..} -> let
+        store = view (cache . fetchedStorage) vm
+        ctrct = Map.findWithDefault Map.empty (num addr) store
+      in
+        vm & set (cache . fetchedStorage) (Map.insert (num addr) (Map.insert which what ctrct) store)
     BalanceFact {..} ->
-      vm & set (cache . fetched . ix addr . balance) what
+      vm & set (cache . fetchedContracts . ix addr . balance) what
     NonceFact   {..} ->
-      vm & set (cache . fetched . ix addr . nonce) what
+      vm & set (cache . fetchedContracts . ix addr . nonce) what
 
 -- Sort facts in the right order for `apply1` to work.
 instance Ord Fact where

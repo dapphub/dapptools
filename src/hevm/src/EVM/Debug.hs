@@ -33,7 +33,8 @@ prettyContract c =
     , (text "codehash", text (show (c ^. codehash)))
     , (text "balance", int (fromIntegral (c ^. balance)))
     , (text "nonce", int (fromIntegral (c ^. nonce)))
-    , (text "storage", text (show (c ^. storage)))
+    -- TODO: this thing here
+    --, (text "storage", text (show (c ^. storage)))
     ]
 
 prettyContracts :: Map Addr Contract -> Doc

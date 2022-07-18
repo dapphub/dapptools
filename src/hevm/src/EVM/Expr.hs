@@ -385,17 +385,17 @@ instance Monoid (Expr Buf) where
 -- no explicit writes to the requested slot. This makes implementing rpc
 -- storage lookups much easier. If the store is backed by an AbstractStore we
 -- always return a symbolic value.
-readStorage :: Expr Storage -> Expr EWord -> Expr EWord -> Maybe (Expr EWord)
-readStorage EmptyStore _ _ = Nothing
-readStorage store@(ConcreteStore s) addr loc = case (addr, loc) of
+readStorage :: Expr EWord -> Expr EWord -> Expr Storage -> Maybe (Expr EWord)
+readStorage _ _ EmptyStore = Nothing
+readStorage addr loc store@(ConcreteStore s) = case (addr, loc) of
   (Lit a, Lit l) -> do
     ctrct <- Map.lookup a s
     val <- Map.lookup l ctrct
     pure $ Lit val
   _ -> Just $ SLoad addr loc store
-readStorage s@AbstractStore addr' loc = Just $ SLoad addr' loc s
-readStorage s@(SStore addr slot val prev) addr' loc = case (addr, slot, addr', loc) of
-  (Lit _, Lit _, Lit _, Lit _) -> if loc == slot && addr == addr' then Just val else readStorage prev addr' loc
+readStorage addr' loc s@AbstractStore = Just $ SLoad addr' loc s
+readStorage addr' loc s@(SStore addr slot val prev) = case (addr, slot, addr', loc) of
+  (Lit _, Lit _, Lit _, Lit _) -> if loc == slot && addr == addr' then Just val else readStorage addr' loc prev
   _ -> Just $ SLoad addr' addr' s
 
 

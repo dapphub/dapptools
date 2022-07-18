@@ -107,8 +107,6 @@ data VM = VM
   { _result         :: Maybe VMResult
   , _state          :: FrameState
   , _frames         :: [Frame]
-  , _storage        :: Expr Storage
-  , _origStorage    :: Map Addr (Map W256 W256)
   , _env            :: Env
   , _block          :: Block
   , _tx             :: TxState
@@ -188,14 +186,19 @@ data IsUnique a = Unique a | Multiple | InconsistentU | TimeoutU
 -- | The cache is data that can be persisted for efficiency:
 -- any expensive query that is constant at least within a block.
 data Cache = Cache
-  { _fetched :: Map Addr Contract,
+  { _fetchedContracts :: Map Addr Contract,
+    _fetchedStorage :: Map W256 (Map W256 W256),
     _path :: Map (CodeLocation, Int) Bool
   } deriving Show
+
+data StorageBase = Concrete | Symbolic
+  deriving (Show, Eq)
 
 -- | A way to specify an initial VM state
 data VMOpts = VMOpts
   { vmoptContract :: Contract
   , vmoptCalldata :: Expr Buf
+  , vmoptStorageBase :: StorageBase
   , vmoptValue :: Expr EWord
   , vmoptPriorityFee :: W256
   , vmoptAddress :: Addr
@@ -368,7 +371,8 @@ instance ParseField StorageModel
 data Env = Env
   { _contracts    :: Map Addr Contract
   , _chainId      :: W256
-  --, _storageModel :: StorageModel
+  , _storage      :: Expr Storage
+  , _origStorage  :: Map W256 (Map W256 W256)
   , _sha3Crack    :: Map W256 ByteString
   --, _keccakUsed   :: [([SWord 8], SWord 256)]
   }
@@ -422,22 +426,30 @@ bytecode = contractcode . to toBuf
 
 instance Semigroup Cache where
   a <> b = Cache
-    { _fetched = Map.unionWith unifyCachedContract (view fetched a) (view fetched b)
+    { _fetchedContracts = Map.unionWith unifyCachedContract (view fetchedContracts a) (view fetchedContracts b)
+    , _fetchedStorage = Map.unionWith unifyCachedStorage (view fetchedStorage a) (view fetchedStorage b)
     , _path = mappend (view path a) (view path b)
     }
+
+unifyCachedStorage :: Map W256 W256 -> Map W256 W256 -> Map W256 W256
+unifyCachedStorage a b = undefined
 
 -- only intended for use in Cache merges, where we expect
 -- everything to be Concrete
 unifyCachedContract :: Contract -> Contract -> Contract
+unifyCachedContract a b = undefined
+  {-
 unifyCachedContract a b = a & set storage merged
   where merged = case (view storage a, view storage b) of
                    (ConcreteStore sa, ConcreteStore sb) ->
                      ConcreteStore (mappend sa sb)
                    _ ->
                      view storage a
+   -}
 
 instance Monoid Cache where
-  mempty = Cache { _fetched = mempty,
+  mempty = Cache { _fetchedContracts = mempty,
+                   _fetchedStorage = mempty,
                    _path = mempty
                  }
 
@@ -504,12 +516,14 @@ makeVm o =
   , _env = Env
     { _sha3Crack = mempty
     , _chainId = vmoptChainId o
+    , _storage = if vmoptStorageBase o == Concrete then EmptyStore else AbstractStore
+    , _origStorage = mempty
     , _contracts = Map.fromList
       [(vmoptAddress o, vmoptContract o)]
     --, _keccakUsed = mempty
     --, _storageModel = vmoptStorageModel o
     }
-  , _cache = Cache mempty mempty
+  , _cache = Cache mempty mempty mempty
   , _burned = 0
   --, _constraints = []
   , _iterations = mempty
@@ -530,10 +544,6 @@ initialContract theContractCode = Contract
       creation = case theContractCode of
         InitCode _ _  -> True
         RuntimeCode _ -> False
-
-contractWithStore :: ContractCode -> Expr Storage -> Contract
-contractWithStore theContractCode store =
-  initialContract theContractCode & set storage store
 
 -- * Opcode dispatch (exec1)
 
@@ -999,7 +1009,7 @@ exec1 = do
                 if num availableGas <= g_callstipend
                   then finishFrame (FrameErrored (OutOfGas availableGas (num g_callstipend)))
                   else do
-                    let original = case readStorage (ConcreteStore $ view origStorage this) x of
+                    let original = case readStorage (litAddr self) x (ConcreteStore $ the env origStorage) of
                                      Just (Lit v) -> v
                                      _ -> 0
                     let storage_cost = case (maybeLitWord current, maybeLitWord new) of
@@ -1018,8 +1028,8 @@ exec1 = do
                     burn (storage_cost + cold_storage_cost) $ do
                       next
                       assign (state . stack) xs
-                      modifying (env . contracts . ix self . storage)
-                        (writeStorage x new)
+                      modifying (env . storage)
+                        (writeStorage (litAddr self) x new)
 
                       case (maybeLitWord current, maybeLitWord new) of
                          (Just current', Just new') ->
@@ -1608,14 +1618,14 @@ fetchAccount addr continue =
   use (env . contracts . at addr) >>= \case
     Just c -> continue c
     Nothing ->
-      use (cache . fetched . at addr) >>= \case
+      use (cache . fetchedContracts . at addr) >>= \case
         Just c -> do
           assign (env . contracts . at addr) (Just c)
           continue c
         Nothing -> do
           assign result . Just . VMFailure $ Query $
             PleaseFetchContract addr
-              (\c -> do assign (cache . fetched . at addr) (Just c)
+              (\c -> do assign (cache . fetchedContracts . at addr) (Just c)
                         assign (env . contracts . at addr) (Just c)
                         assign result Nothing
                         continue c)
@@ -1625,10 +1635,11 @@ accessStorage
   -> Expr EWord             -- ^ Storage slot key
   -> (Expr EWord -> EVM ()) -- ^ Continuation
   -> EVM ()
-accessStorage addr slot continue =
+accessStorage addr slot continue = do
+  store <- use (env . storage)
   use (env . contracts . at addr) >>= \case
     Just c ->
-      case readStorage (view storage c) slot of
+      case readStorage (litAddr addr) slot store of
         -- Notice that if storage is symbolic, we always continue straight away
         Just x ->
           continue x
@@ -1636,12 +1647,12 @@ accessStorage addr slot continue =
           if view external c
           then
             -- check if the slot is cached
-            use (cache . fetched . at addr) >>= \case
+            use (cache . fetchedContracts . at addr) >>= \case
               Nothing -> forceConcrete slot "cannot read symbolic slots via RPC" mkQuery
-              Just cachedContract -> forceConcrete slot "cannot read symbolic slots via rpc" $
-                \s -> maybe (mkQuery s) continue (readStorage (view storage cachedContract) slot)
+              Just _ -> forceConcrete slot "cannot read symbolic slots via rpc" $
+                \s -> maybe (mkQuery s) continue (readStorage (litAddr addr) slot store)
           else do
-            modifying (env . contracts . ix addr . storage) (writeStorage slot (Lit 0))
+            modifying (env . storage) (writeStorage (litAddr addr) slot (Lit 0))
             continue $ Lit 0
     Nothing ->
       fetchAccount addr $ \_ ->
@@ -1649,11 +1660,11 @@ accessStorage addr slot continue =
   where
       mkQuery s = assign result . Just . VMFailure . Query $
                     PleaseFetchSlot addr s
-                      (\(Lit -> x) -> do
-                          modifying (cache . fetched . ix addr . storage) (writeStorage slot x)
-                          modifying (env . contracts . ix addr . storage) (writeStorage slot x)
+                      (\x -> do
+                          modifying (cache . fetchedStorage . ix (num addr)) (Map.insert s x)
+                          modifying (env . storage) (writeStorage (litAddr addr) slot (Lit x))
                           assign result Nothing
-                          continue x)
+                          continue (Lit x))
 
 accountExists :: Addr -> VM -> Bool
 accountExists addr vm =
@@ -1968,7 +1979,7 @@ cheatActions =
           [a, slot, new] ->
             forceConcrete a "cannot store at a symbolic address" $ \(num -> a') ->
               fetchAccount a' $ \_ -> do
-                modifying (env . contracts . ix a' . storage) (writeStorage slot new)
+                modifying (env . storage) (writeStorage (litAddr a') slot new)
           _ -> vmError (BadCheatCode sig),
 
       action "load(address,bytes32)" $
@@ -2146,8 +2157,7 @@ create self this xGas' xValue xs newAddr initCode = do
         vmError $ UnexpectedSymbolicArg (view (state . pc) vm0) "initcode must have a concrete prefix"
       Just c -> do
         let
-          newContract =
-            initialContract c & set storage EmptyStore
+          newContract = initialContract c
           newContext  =
             CreationContext { creationContextAddress   = newAddr
                             , creationContextCodehash  = view codehash newContract
@@ -2191,7 +2201,6 @@ replaceCode target newCode =
         InitCode _ _ ->
           put . Just $
           initialContract newCode
-          & set storage (view storage now)
           & set balance (view balance now)
           & set nonce   (view nonce now)
         RuntimeCode _ ->

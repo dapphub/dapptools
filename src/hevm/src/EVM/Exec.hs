@@ -24,6 +24,7 @@ vmForEthrunCreation creationCode =
     { vmoptContract = initialContract (InitCode creationCode mempty)
     , vmoptCalldata = mempty
     , vmoptValue = (Lit 0)
+    , vmoptStorageBase = Concrete
     , vmoptAddress = createAddress ethrunAddress 1
     , vmoptCaller = litAddr ethrunAddress
     , vmoptOrigin = ethrunAddress

@@ -15,7 +15,7 @@ module EVM.VMTest
 import Prelude hiding (Word)
 
 import qualified EVM
-import EVM (contractcode, storage, origStorage, balance, nonce, initialContract)
+import EVM (contractcode, storage, origStorage, balance, nonce, initialContract, StorageBase(..))
 import EVM.Expr (litCode, litAddr)
 import qualified EVM.Concrete as EVM
 import qualified EVM.FeeSchedule
@@ -79,7 +79,8 @@ checkStateFail diff x vm (okState, okMoney, okNonce, okData, okCode) = do
       acc ++ show k ++ " : "
                    ++ (show . toInteger  $ (view nonce v)) ++ " "
                    ++ (show . toInteger  $ (view balance v)) ++ " "
-                   ++ (printStorage (view storage v))
+                   -- TODO: this
+                   -- ++ (printStorage (view storage v))
         ++ "\n") "" cs
 
     reason = map fst (filter (not . snd)
@@ -124,7 +125,8 @@ checkExpectation diff x vm = do
 (===) :: EVM.Contract -> EVM.Contract -> Bool
 a === b = codeEqual && storageEqual && (view balance a == view balance b) && (view nonce a == view nonce b)
   where
-    storageEqual = view storage a == view storage b
+    --storageEqual = view storage a == view storage b
+    storageEqual = undefined
     codeEqual = case (view contractcode a, view contractcode b) of
       (EVM.RuntimeCode a', EVM.RuntimeCode b') -> a' == b'
       _ -> error "unexpected code"
@@ -141,7 +143,7 @@ checkExpectedContracts vm expected =
      )
 
 clearOrigStorage :: EVM.Contract -> EVM.Contract
-clearOrigStorage = set origStorage mempty
+clearOrigStorage = undefined
 
 clearZeroStorage :: EVM.Contract -> EVM.Contract
 clearZeroStorage = undefined
@@ -168,7 +170,7 @@ clearCode = set contractcode (EVM.RuntimeCode mempty)
 instance FromJSON EVM.Contract where
   parseJSON (JSON.Object v) = do
     code <- (EVM.RuntimeCode . litCode <$> (hexText <$> v .: "code"))
-    storage' <- v .: "storage"
+    --storage' <- v .: "storage"
     balance' <- v .: "balance"
     nonce'   <- v .: "nonce"
     return
@@ -176,8 +178,8 @@ instance FromJSON EVM.Contract where
       EVM.initialContract code
        & balance .~ balance'
        & nonce   .~ nonce'
-       & storage .~ ConcreteStore storage'
-       & origStorage .~ storage'
+       -- & storage .~ ConcreteStore storage'
+       -- & origStorage .~ storage'
 
   parseJSON invalid =
     JSON.typeMismatch "Contract" invalid
@@ -271,6 +273,7 @@ fromBlockchainCase' block tx preState postState =
          , vmoptValue         = Lit (txValue tx)
          , vmoptAddress       = toAddr
          , vmoptCaller        = litAddr origin
+         , vmoptStorageBase   = Concrete
          , vmoptOrigin        = origin
          , vmoptGas           = txGasLimit tx - fromIntegral (txGasCost feeSchedule tx)
          , vmoptBaseFee       = blockBaseFee block
