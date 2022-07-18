@@ -393,14 +393,16 @@ data Expr (a :: EType) where
   -- storage
 
   EmptyStore     :: Expr Storage
-  ConcreteStore  :: Map W256 W256 -> Expr Storage
+  ConcreteStore  :: Map W256 (Map W256 W256) -> Expr Storage
   AbstractStore  :: Expr Storage
 
-  SLoad          :: Expr EWord         -- index
+  SLoad          :: Expr EWord         -- address
+                 -> Expr EWord         -- index
                  -> Expr Storage       -- storage
                  -> Expr EWord         -- result
 
-  SStore         :: Expr EWord         -- index
+  SStore         :: Expr EWord         -- address
+                 -> Expr EWord         -- index
                  -> Expr EWord         -- value
                  -> Expr Storage       -- old storage
                  -> Expr Storage       -- new storae

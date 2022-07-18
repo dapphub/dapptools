@@ -385,27 +385,32 @@ instance Monoid (Expr Buf) where
 -- no explicit writes to the requested slot. This makes implementing rpc
 -- storage lookups much easier. If the store is backed by an AbstractStore we
 -- always return a symbolic value.
-readStorage :: Expr Storage -> Expr EWord -> Maybe (Expr EWord)
-readStorage EmptyStore _ = Nothing
-readStorage store@(ConcreteStore s) loc = case loc of
-  Lit l -> fmap Lit (Map.lookup l s)
-  _ -> Just $ SLoad loc store
-readStorage s@AbstractStore loc = Just $ SLoad loc s
-readStorage s@(SStore slot val prev) loc = case (slot, loc) of
-  (Lit _, Lit _) -> if loc == slot then Just val else readStorage prev loc
-  _ -> Just $ SLoad loc s
+readStorage :: Expr Storage -> Expr EWord -> Expr EWord -> Maybe (Expr EWord)
+readStorage EmptyStore _ _ = Nothing
+readStorage store@(ConcreteStore s) addr loc = case (addr, loc) of
+  (Lit a, Lit l) -> do
+    ctrct <- Map.lookup a s
+    val <- Map.lookup l ctrct
+    pure $ Lit val
+  _ -> Just $ SLoad addr loc store
+readStorage s@AbstractStore addr' loc = Just $ SLoad addr' loc s
+readStorage s@(SStore addr slot val prev) addr' loc = case (addr, slot, addr', loc) of
+  (Lit _, Lit _, Lit _, Lit _) -> if loc == slot && addr == addr' then Just val else readStorage prev addr' loc
+  _ -> Just $ SLoad addr' addr' s
 
 
 -- | Writes a value to a key in a storage expression.
 --
 -- Concrete writes on top of a concrete or empty store will produce a new
 -- ConcreteStore, otherwise we add a new write to the storage expression.
-writeStorage :: Expr EWord -> Expr EWord -> Expr Storage -> Expr Storage
-writeStorage k@(Lit key) v@(Lit val) store = case store of
-  EmptyStore -> ConcreteStore (Map.singleton key val)
-  ConcreteStore s -> ConcreteStore (Map.insert key val s)
-  _ -> SStore k v store
-writeStorage key val store = SStore key val store
+writeStorage :: Expr EWord -> Expr EWord -> Expr EWord -> Expr Storage -> Expr Storage
+writeStorage a@(Lit addr) k@(Lit key) v@(Lit val) store = case store of
+  EmptyStore -> ConcreteStore (Map.singleton addr (Map.singleton key val))
+  ConcreteStore s -> let
+      ctrct = Map.findWithDefault Map.empty addr s
+    in ConcreteStore (Map.insert addr (Map.insert key val ctrct) s)
+  _ -> SStore a k v store
+writeStorage addr key val store = SStore addr key val store
 
 
 -- ** Conversions ** -------------------------------------------------------------------------------

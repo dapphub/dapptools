@@ -107,6 +107,8 @@ data VM = VM
   { _result         :: Maybe VMResult
   , _state          :: FrameState
   , _frames         :: [Frame]
+  , _storage        :: Expr Storage
+  , _origStorage    :: Map Addr (Map W256 W256)
   , _env            :: Env
   , _block          :: Block
   , _tx             :: TxState
@@ -334,14 +336,12 @@ deriving instance Ord ContractCode
 -- | The state of a contract
 data Contract = Contract
   { _contractcode :: ContractCode
-  , _storage      :: Expr Storage
   , _balance      :: W256
   , _nonce        :: W256
   , _codehash     :: Expr EWord
   , _opIxMap      :: Vector Int
   , _codeOps      :: RegularVector.Vector (Int, Op)
   , _external     :: Bool
-  , _origStorage  :: Map W256 W256
   }
 
 deriving instance Show Contract
@@ -521,13 +521,11 @@ initialContract :: ContractCode -> Contract
 initialContract theContractCode = Contract
   { _contractcode = theContractCode
   , _codehash = hashcode theContractCode
-  , _storage  = EmptyStore
   , _balance  = 0
   , _nonce    = if creation then 1 else 0
   , _opIxMap  = mkOpIxMap theContractCode
   , _codeOps  = mkCodeOps theContractCode
   , _external = False
-  , _origStorage = mempty
   } where
       creation = case theContractCode of
         InitCode _ _  -> True
