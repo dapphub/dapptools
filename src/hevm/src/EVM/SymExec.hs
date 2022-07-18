@@ -286,11 +286,25 @@ consistentPath vm = undefined
     --Unsat -> return Nothing
     --DSat _ -> error "unexpected DSAT"
 
+-- | Stepper that parses the result of Stepper.runFully into an Expr End
+runExpr :: Stepper.Stepper (Expr End)
+runExpr = do
+  vm <- Stepper.runFully
+  pure $ case view result vm of
+    Nothing -> error "Internal Error: vm in intermediate state after call to runFully"
+    Just (VMSuccess buf) -> Return buf EmptyStore
+    Just (VMFailure e) -> case e of
+      UnrecognizedOpcode _ -> Invalid
+      SelfDestruction -> SelfDestruct
+      EVM.Revert buf -> EVM.Types.Revert buf
+      e' -> EVM.Types.TmpErr $ show e'
+
 
 -- | Symbolically execute the VM and check all endstates against the postcondition, if available.
-verify :: VM -> Maybe Integer -> Maybe Integer -> Maybe (Fetch.BlockNumber, Text) -> Maybe Postcondition -> VerifyResult
-verify preState maxIter askSmtIters rpcinfo maybepost = undefined
-  --expr <- doInterpret (Fetch.oracle Nothing rpcinfo False) maxIter askSmtIters preState
+verify :: VM -> Maybe Integer -> Maybe Integer -> Maybe (Fetch.BlockNumber, Text) -> Maybe Postcondition -> IO VerifyResult
+verify preState maxIter askSmtIters rpcinfo maybepost = do
+  expr <- evalStateT (interpret (Fetch.oracle Nothing False) Nothing Nothing runExpr) preState
+  undefined
   --pure ()
   --case maybepost of
     --(Just post) -> do

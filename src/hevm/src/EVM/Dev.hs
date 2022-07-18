@@ -9,25 +9,11 @@ module EVM.Dev where
 import EVM
 import EVM.Types
 import EVM.SymExec
-import Control.Lens
-import qualified EVM.Stepper as Stepper
 import qualified EVM.Fetch as Fetch
 import qualified EVM.FeeSchedule as FeeSchedule
 
 import Data.ByteString
 import Control.Monad.State.Strict hiding (state)
-
-runExpr :: Stepper.Stepper (Expr End)
-runExpr = do
-  vm <- Stepper.runFully
-  pure $ case view result vm of
-    Nothing -> error "Internal Error: vm in intermediate state after call to runFully"
-    Just (VMSuccess buf) -> Return buf EmptyStore
-    Just (VMFailure e) -> case e of
-      UnrecognizedOpcode _ -> Invalid
-      SelfDestruction -> SelfDestruct
-      EVM.Revert buf -> EVM.Types.Revert buf
-      e' -> EVM.Types.TmpErr $ show e'
 
 -- | Builds the Expr for the given evm bytecode object
 buildExpr :: ByteString -> IO (Expr End)
