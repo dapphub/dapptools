@@ -294,7 +294,7 @@ runExpr = do
   vm <- Stepper.runFully
   pure $ case view result vm of
     Nothing -> error "Internal Error: vm in intermediate state after call to runFully"
-    Just (VMSuccess buf) -> Return buf EmptyStore
+    Just (VMSuccess buf) -> Return buf (view (env . storage) vm)
     Just (VMFailure e) -> case e of
       UnrecognizedOpcode _ -> Invalid
       SelfDestruction -> SelfDestruct

@@ -1,4 +1,5 @@
 {-# Language DataKinds #-}
+{-# Language QuasiQuotes #-}
 
 {- |
 Module: EVM.Dev
@@ -6,20 +7,46 @@ Description: Helpers for repl driven hevm hacking
 -}
 module EVM.Dev where
 
+import Data.ByteString
+import Control.Monad.State.Strict hiding (state)
+import Data.Maybe (fromJust)
+
+import Debug.Trace
+
+import Data.String.Here
+import Control.Lens
+
 import EVM
 import EVM.Types
 import EVM.SymExec
+import EVM.Solidity
 import qualified EVM.Fetch as Fetch
 import qualified EVM.FeeSchedule as FeeSchedule
 
-import Data.ByteString
-import Control.Monad.State.Strict hiding (state)
+doTest :: IO (Expr End)
+doTest = do
+  c <- testContract
+  buildExpr c
+
+testContract :: IO ByteString
+testContract = do
+  let src =
+        [i|
+          contract C {
+            uint x;
+            function set(uint v) public {
+              x = v;
+            }
+          }
+          |]
+  fmap fromJust (solcRuntime "C" src)
+
 
 -- | Builds the Expr for the given evm bytecode object
 buildExpr :: ByteString -> IO (Expr End)
 buildExpr bs = evalStateT (interpret (Fetch.oracle Nothing False) Nothing Nothing runExpr) vm
   where
-    contractCode = RuntimeCode $ fmap LitByte (unpack (hexByteString "" bs))
+    contractCode = RuntimeCode $ fmap LitByte (unpack bs)
     c = Contract
       { _contractcode = contractCode
       , _balance      = 0
