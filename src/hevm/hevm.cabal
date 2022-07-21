@@ -39,7 +39,8 @@ library
     EVM.Debug,
     EVM.Demand,
     EVM.Dev,
-    EVM.Expr
+    EVM.Expr,
+    EVM.SMT,
     EVM.Exec,
     EVM.Facts,
     EVM.Facts.Git,

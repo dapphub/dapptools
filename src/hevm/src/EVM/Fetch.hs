@@ -7,7 +7,7 @@ module EVM.Fetch where
 import Prelude hiding (Word)
 
 import EVM.ABI
-import EVM.Types    (Addr, W256, hexText, Expr(..))
+import EVM.Types    (Addr, W256, hexText, Expr(Lit, LitByte))
 import EVM          (EVM, Contract, Block, initialContract, nonce, balance, external)
 import qualified EVM.FeeSchedule as FeeSchedule
 

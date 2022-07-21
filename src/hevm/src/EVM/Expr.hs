@@ -301,7 +301,7 @@ minLength = go 0
     go :: W256 -> Expr Buf -> Maybe Int
     -- base cases
     go l EmptyBuf = Just . num $ l
-    go _ AbstractBuf = Nothing
+    go _ (AbstractBuf _) = Nothing
     go l (ConcreteBuf b) = Just . num $ max (num . BS.length $ b) l
 
     -- writes to a concrete index
@@ -340,7 +340,7 @@ slice offset size src = copySlice offset (Lit 0) size src EmptyBuf
 
 toList :: Expr Buf -> Maybe [Expr Byte]
 toList EmptyBuf = Just []
-toList AbstractBuf = Nothing
+toList (AbstractBuf _) = Nothing
 toList (ConcreteBuf bs) = Just . (fmap LitByte) $ BS.unpack bs
 toList buf = case bufLength buf of
   Lit l -> Just $ go l

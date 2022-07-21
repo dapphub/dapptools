@@ -306,6 +306,10 @@ runExpr = do
 verify :: VM -> Maybe Integer -> Maybe Integer -> Maybe (Fetch.BlockNumber, Text) -> Maybe Postcondition -> IO VerifyResult
 verify preState maxIter askSmtIters rpcinfo maybepost = do
   expr <- evalStateT (interpret (Fetch.oracle Nothing False) Nothing Nothing runExpr) preState
+  -- check prop on each leaf
+  -- if prop violated then:
+  --   - gather path conditions
+  --   - check satisfiability of path conditions
   undefined
   --pure ()
   --case maybepost of

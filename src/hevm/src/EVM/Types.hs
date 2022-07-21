@@ -18,6 +18,7 @@ import Crypto.Hash
 import Data.Map (Map)
 import Data.Bifunctor (first)
 import Data.Char
+import Data.List (isPrefixOf)
 import Data.ByteString (ByteString)
 import Data.ByteString.Base16 as BS16
 import Data.ByteString.Builder (byteStringHex, toLazyByteString)
@@ -272,7 +273,7 @@ data Expr (a :: EType) where
   BlockHash      :: Expr EWord -> Expr EWord
   Coinbase       :: Expr EWord
   Timestamp      :: Expr EWord
-  BlocckNumber   :: Expr EWord
+  BlockNumber   :: Expr EWord
   Difficulty     :: Expr EWord
   GasLimit       :: Expr EWord
   ChainId        :: Expr EWord
@@ -302,14 +303,6 @@ data Expr (a :: EType) where
                  -> Int                -- PC
                  -> Expr EWord
 
-  -- calldata
-
-  CalldataSize   :: Expr EWord
-
-  CalldataLoad   :: Expr EWord         -- idx
-                 -> Expr Buf           -- calldata
-                 -> Expr EWord         -- result
-
   -- code
 
   CodeSize       :: Expr EWord         -- address
@@ -317,10 +310,6 @@ data Expr (a :: EType) where
 
   ExtCodeHash    :: Expr EWord         -- address
                  -> Expr EWord         -- size
-
-  -- returndata
-
-  ReturndataSize :: Expr EWord
 
   -- logs
 
@@ -386,10 +375,6 @@ data Expr (a :: EType) where
                  -> Expr Storage       -- storage
                  -> Expr EWord         -- success
 
-  -- memory
-
-  MSize          :: Expr Buf -> Expr EWord
-
   -- storage
 
   EmptyStore     :: Expr Storage
@@ -411,7 +396,7 @@ data Expr (a :: EType) where
 
   EmptyBuf       :: Expr Buf
   ConcreteBuf    :: ByteString -> Expr Buf
-  AbstractBuf    :: Expr Buf
+  AbstractBuf    :: String -> Expr Buf
 
   ReadWord       :: Expr EWord         -- index
                  -> Expr Buf           -- src
@@ -636,6 +621,9 @@ toChecksumAddress addr = zipWith transform nibbles addr
 strip0x :: ByteString -> ByteString
 strip0x bs = if "0x" `Char8.isPrefixOf` bs then Char8.drop 2 bs else bs
 
+strip0x' :: String -> String
+strip0x' s = if "0x" `isPrefixOf` s then drop 2 s else s
+
 instance FromJSON W256 where
   parseJSON v = do
     s <- Text.unpack <$> parseJSON v
@@ -718,6 +706,9 @@ num = fromIntegral
 
 padLeft :: Int -> ByteString -> ByteString
 padLeft n xs = BS.replicate (n - BS.length xs) 0 <> xs
+
+padLeftStr :: Int -> String -> String
+padLeftStr n xs = replicate (n - length xs) '0' <> xs
 
 padRight :: Int -> ByteString -> ByteString
 padRight n xs = xs <> BS.replicate (n - BS.length xs) 0

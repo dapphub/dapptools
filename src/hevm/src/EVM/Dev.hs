@@ -58,7 +58,7 @@ buildExpr bs = evalStateT (interpret (Fetch.oracle Nothing False) Nothing Nothin
       }
     vm = makeVm $ VMOpts
       { EVM.vmoptContract      = c
-      , EVM.vmoptCalldata      = AbstractBuf
+      , EVM.vmoptCalldata      = AbstractBuf "Calldata"
       , EVM.vmoptValue         = Lit 0
       , EVM.vmoptAddress       = Addr 0xffffffffffffffff
       , EVM.vmoptCaller        = Lit 0

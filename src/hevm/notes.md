@@ -10,6 +10,9 @@ This is a pretty huge PR. Summary of changes:
 ## TODO
 
 - reimplement existing symexec functionality in terms of queries over the new ast def
+    - translate expressions into SMT
+    - introduce language of assertable expressions for property checking
+    - build reachability checker
 - implement all exisiting undefineds to reach feature parity with existing symexec engine
 - implement partially symbolic gas model and pure UnexpectedSymbolicArg
 - allow knowledge to be attached to AST nodes & implement simplification engine
