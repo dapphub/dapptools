@@ -6,29 +6,28 @@ module EVM.SymExec where
 import Prelude hiding (Word)
 
 import Control.Lens hiding (pre)
-import EVM hiding (Query, push)
+import EVM hiding (Query, Revert, push)
 import qualified EVM
 import EVM.Exec
 import qualified EVM.Fetch as Fetch
 import EVM.ABI
+import EVM.SMT
 import EVM.Stepper (Stepper)
 import qualified EVM.Stepper as Stepper
 import qualified Control.Monad.Operational as Operational
 import Control.Monad.State.Strict hiding (state)
-import Data.Maybe (catMaybes, fromMaybe)
 import EVM.Types
 import EVM.Concrete (createAddress)
 import qualified EVM.FeeSchedule as FeeSchedule
-import Data.Vector (toList, fromList)
-import Data.Tree
 import Data.DoubleWord (Word256)
+import GHC.Conc (numCapabilities)
 
-import Data.ByteString (ByteString, pack)
-import qualified Data.ByteString.Lazy as Lazy
-import qualified Data.ByteString as BS
-import Data.Text (Text, splitOn, unpack)
+import Debug.Trace
+
+import Data.ByteString (ByteString)
 import qualified Control.Monad.State.Class as State
-import Control.Applicative
+import Data.Bifunctor (first, second)
+import Data.Text (Text)
 
 data ProofResult a b c = Qed a | Cex b | Timeout c
   deriving (Show)
@@ -221,7 +220,7 @@ maxIterationsReached vm (Just maxIter) =
 
 -- TODO: do we need a predicate language here?
 type Precondition = VM -> Bool
-type Postcondition = (VM, VM) -> Bool
+type Postcondition = Expr End -> Bool
 
 checkAssert :: [Word256] -> ByteString -> Maybe (Text, [AbiType]) -> [String] -> (VerifyResult, VM)
 checkAssert errs c signature' concreteArgs = undefined
@@ -247,7 +246,7 @@ checkAssert errs c signature' concreteArgs = undefined
   see: https://docs.soliditylang.org/en/v0.8.6/control-structures.html?highlight=Panic#panic-via-assert-and-error-via-require
 -}
 checkAssertions :: [Word256] -> Postcondition
-checkAssertions errs (_, out) = undefined
+checkAssertions errs out = undefined
 --checkAssertions errs (_, out) = case view result out of
   --Just (EVM.VMFailure (EVM.UnrecognizedOpcode 254)) -> sFalse
   --Just (EVM.VMFailure (EVM.Revert msg)) -> if msg `elem` (fmap panicMsg errs) then sFalse else sTrue
@@ -302,15 +301,49 @@ runExpr = do
       e' -> EVM.Types.TmpErr $ show e'
 
 
+-- | Converts a given top level expr into a list of final states and the associated path conditions for each state
+flattenExpr :: Expr End -> [([Expr EWord], Expr End)]
+flattenExpr = go []
+  where
+    go :: [Expr EWord] -> Expr End -> [([Expr EWord], Expr End)]
+    go pcs = \case
+      ITE c t f -> go ((Eq c (Lit 1)) : pcs) t <> go ((Eq c (Lit 0)) : pcs) f
+      Invalid -> [(pcs, Invalid)]
+      SelfDestruct -> [(pcs, SelfDestruct)]
+      Revert buf -> [(pcs, Revert buf)]
+      Return  buf store -> [(pcs, Return buf store)]
+      _ -> undefined
+
+isReachable :: SolverGroup -> [Expr EWord] -> Expr End -> IO (Expr End, CheckSatResult)
+isReachable solvers pcs leaf = do
+  res <- checkSat solvers (fmap assertWord pcs)
+  undefined
+
+
 -- | Symbolically execute the VM and check all endstates against the postcondition, if available.
 verify :: VM -> Maybe Integer -> Maybe Integer -> Maybe (Fetch.BlockNumber, Text) -> Maybe Postcondition -> IO VerifyResult
 verify preState maxIter askSmtIters rpcinfo maybepost = do
+  traceM "building expression"
   expr <- evalStateT (interpret (Fetch.oracle Nothing False) Nothing Nothing runExpr) preState
+  let leaves = flattenExpr expr
+      -- we are only interested in end states where the postcondition has been violated
+      violated = case maybepost of
+                   Just p -> filter (p . snd) leaves
+                   Nothing -> leaves
+      -- TODO: can we split each pc into it's own query? will this fuck up models in sat cases?
+      queries = fmap (first assertWords) violated
+  reachable <- withSolvers Z3 (num numCapabilities) $ \solvers -> do
+    traceM "checking reachability"
+    traceShowM $ (fmap fst queries) !! 0
+    rs <- checkSat solvers (fmap fst queries)
+    let satisfied = fmap fst $ filter (\(_,r) -> isSat r) rs
+    pure $ fmap snd $ filter (\(q,_) -> q `elem` satisfied) queries
+  pure $ if null reachable then Qed () else Cex ()
+
   -- check prop on each leaf
   -- if prop violated then:
   --   - gather path conditions
   --   - check satisfiability of path conditions
-  undefined
   --pure ()
   --case maybepost of
     --(Just post) -> do

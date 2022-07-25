@@ -61,7 +61,6 @@ data CheckSatResult
   = Sat
   | Unsat
   | Unknown
-  | Error String
   deriving (Show)
 
 checkSat :: SolverGroup -> [Script] -> IO [(Script, CheckSatResult)]
@@ -175,6 +174,7 @@ sendLine (SolverInstance _ stdin stdout _ _) cmd = do
 
 
 -- tests ----------------------------------------------------------------------------------------------
+
 
 prog :: Script
 prog = [smt2|(assert (or false (true) false))|]

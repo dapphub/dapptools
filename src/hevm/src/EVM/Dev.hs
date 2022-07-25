@@ -28,6 +28,12 @@ doTest = do
   c <- testContract
   buildExpr c
 
+reachable :: IO ()
+reachable = do
+  c <- testContract
+  r <- verify (initVm c) Nothing Nothing Nothing Nothing
+  print r
+
 testContract :: IO ByteString
 testContract = do
   let src =
@@ -41,10 +47,8 @@ testContract = do
           |]
   fmap fromJust (solcRuntime "C" src)
 
-
--- | Builds the Expr for the given evm bytecode object
-buildExpr :: ByteString -> IO (Expr End)
-buildExpr bs = evalStateT (interpret (Fetch.oracle Nothing False) Nothing Nothing runExpr) vm
+initVm :: ByteString -> VM
+initVm bs = vm
   where
     contractCode = RuntimeCode $ fmap LitByte (unpack bs)
     c = Contract
@@ -58,7 +62,7 @@ buildExpr bs = evalStateT (interpret (Fetch.oracle Nothing False) Nothing Nothin
       }
     vm = makeVm $ VMOpts
       { EVM.vmoptContract      = c
-      , EVM.vmoptCalldata      = AbstractBuf "Calldata"
+      , EVM.vmoptCalldata      = AbstractBuf "calldata"
       , EVM.vmoptValue         = Lit 0
       , EVM.vmoptAddress       = Addr 0xffffffffffffffff
       , EVM.vmoptCaller        = Lit 0
@@ -82,3 +86,7 @@ buildExpr bs = evalStateT (interpret (Fetch.oracle Nothing False) Nothing Nothin
       , EVM.vmoptAllowFFI      = False
       }
 
+
+-- | Builds the Expr for the given evm bytecode object
+buildExpr :: ByteString -> IO (Expr End)
+buildExpr bs = evalStateT (interpret (Fetch.oracle Nothing False) Nothing Nothing runExpr) (initVm bs)

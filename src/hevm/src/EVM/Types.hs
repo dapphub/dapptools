@@ -192,6 +192,7 @@ data EType
   | EWord
   | Byte
   | End
+  deriving (Typeable)
 
 -- add type level list of constraints
 data Expr (a :: EType) where
