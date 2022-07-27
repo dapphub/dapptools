@@ -2,7 +2,7 @@
 # to our Haskell package extensions from other overlays, bypassing the
 # rest of our overlay.  This was necessary for rather obscure reasons.
 
-{ pkgs, lib, wrapped ? true, shared ? false }:
+{ pkgs, lib, ... }:
 
 let
   stdenv = pkgs.stdenv;
@@ -24,30 +24,11 @@ in self-hs: super-hs:
         inherit (pkgs) secp256k1;
       }
     ).overrideAttrs (attrs: {
-      postInstall =
-        if wrapped
-        then
-          ''
-            wrapProgram $out/bin/hevm --prefix PATH \
-              : "${lib.makeBinPath (with pkgs; [bash coreutils git solc])}"
-          ''
-        else "";
-
       enableSeparateDataOutput = true;
-      buildInputs = attrs.buildInputs ++ [pkgs.solc] ++ (if wrapped then [] else [pkgs.z3 pkgs.cvc4]);
+      buildInputs = attrs.buildInputs ++ (with pkgs; [solc z3 cvc4]);
       nativeBuildInputs = attrs.nativeBuildInputs ++ [pkgs.makeWrapper];
       configureFlags = attrs.configureFlags ++ [
           "--ghc-option=-O2"
-      ] ++
-      (if stdenv.isDarwin then [] else
-        if shared then [] else [
-          "--enable-executable-static"
-          "--extra-lib-dirs=${pkgs.gmp.override { withStatic = true; }}/lib"
-          "--extra-lib-dirs=${pkgs.glibc.static}/lib"
-          "--extra-lib-dirs=${pkgs.libff.override { enableStatic = true; }}/lib"
-          "--extra-lib-dirs=${pkgs.ncurses.override {enableStatic = true; }}/lib"
-          "--extra-lib-dirs=${pkgs.zlib.static}/lib"
-          "--extra-lib-dirs=${pkgs.libffi.overrideAttrs (old: { dontDisableStatic = true; })}/lib"
-      ]);
+      ];
     }));
   }
