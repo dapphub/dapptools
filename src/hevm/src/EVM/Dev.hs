@@ -21,7 +21,9 @@ import EVM.SMT (withSolvers, Solver(..))
 import EVM.Types
 import EVM.SymExec
 import EVM.Solidity
+import EVM.Format (formatExpr)
 import qualified EVM.Fetch as Fetch
+import qualified Data.Text as T
 import qualified EVM.FeeSchedule as FeeSchedule
 
 doTest :: IO (Expr End)
@@ -32,11 +34,13 @@ doTest = do
 reachable' :: IO ()
 reachable' = do
   c <- testContract
-  full <- buildExpr c
+  full <- simplify <$> buildExpr c
   withSolvers Z3 4 $ \solvers -> do
     less <- reachable solvers full
-    print full
-    print less
+    Prelude.putStrLn "FULL AST\n\n"
+    Prelude.putStrLn $ formatExpr full
+    Prelude.putStrLn "\n\nReachable AST\n\n"
+    Prelude.putStrLn $ formatExpr less
 
 testContract :: IO ByteString
 testContract = do

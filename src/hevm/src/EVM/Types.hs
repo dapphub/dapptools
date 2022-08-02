@@ -11,8 +11,6 @@ module EVM.Types where
 
 import Prelude hiding  (Word, LT, GT)
 
-import Debug.Trace
-
 import Data.Aeson
 import Crypto.Hash
 import Data.Map (Map)

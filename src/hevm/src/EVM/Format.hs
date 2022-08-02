@@ -35,6 +35,7 @@ import Data.Tree (Tree (Node))
 import Data.Tree.View (showTree)
 import Data.Vector (Vector)
 import Data.Word (Word32)
+import Data.Char (isSpace)
 
 import qualified Data.ByteString as BS
 import qualified Data.Char as Char
@@ -464,3 +465,18 @@ showTree' (Node _ children) =
            --- -> Tree [String]
 --renderTree showBranch showLeaf (Node b []) = Node (showBranch b ++ showLeaf b) []
 --renderTree showBranch showLeaf (Node b cs) = Node (showBranch b) (renderTree showBranch showLeaf <$> cs)
+
+indent' :: Int -> String -> String
+indent' n = rstrip . unlines . fmap (replicate n ' ' <>) . lines
+
+rstrip :: String -> String
+rstrip = reverse . dropWhile (=='\n') . reverse
+
+formatExpr :: Expr a -> String
+formatExpr = \case
+  ITE c t f -> rstrip . unlines $
+    [ "(ITE (" <> formatExpr c <> ")"
+    , indent' 2 (formatExpr t)
+    , indent' 2 (formatExpr f)
+    , ")"]
+  a -> show a
