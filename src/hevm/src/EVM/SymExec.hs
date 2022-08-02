@@ -21,8 +21,7 @@ import EVM.Concrete (createAddress)
 import qualified EVM.FeeSchedule as FeeSchedule
 import Data.DoubleWord (Word256)
 import GHC.Conc (numCapabilities)
-
-import Debug.Trace
+import Control.Concurrent.Async
 
 import Data.ByteString (ByteString)
 import qualified Control.Monad.State.Class as State
@@ -315,6 +314,40 @@ flattenExpr = go []
       Revert buf -> [(Revert buf, pcs)]
       Return  buf store -> [(Return buf store, pcs)]
       _ -> undefined
+
+-- | Strips unreachable branches from a given expr
+-- TODO: handle errors properly
+reachable :: SolverGroup -> Expr End -> IO (Expr End)
+reachable solvers = go []
+  where
+    go :: [Expr EWord] -> Expr End -> IO (Expr End)
+    go pcs = \case
+      ITE c t f -> do
+        res <- concurrently
+          (checkSat' solvers (assertWords (Eq c (Lit 1) : pcs), []))
+          (checkSat' solvers (assertWords (Eq c (Lit 0) : pcs), []))
+        case res of
+          (Error tm, Error fm) -> error $ "Solver Errors: " <> unlines [tm, fm]
+          (Error tm, _) -> error $ "Solver Error: " <> tm
+          (_ , Error fm) -> error $ "Solver Error: " <> fm
+          (Unsat, Unsat) -> error "Internal Error: two unsat branches found"
+          (EVM.SMT.Unknown, _) -> undefined
+          (_, EVM.SMT.Unknown) -> undefined
+          (Unsat, Sat _) -> go (Eq c (Lit 0) : pcs) f
+          (Sat _, Unsat) -> go (Eq c (Lit 1) : pcs) t
+          (Sat _, Sat _) -> do
+            (texp, fexp) <- concurrently
+              (go (Eq c (Lit 1) : pcs) t)
+              (go (Eq c (Lit 0) : pcs) f)
+            pure $ ITE c texp fexp
+      Invalid -> pure Invalid
+      SelfDestruct -> pure SelfDestruct
+      Revert msg -> pure (Revert msg)
+      Return msg store -> pure (Return msg store)
+      TmpErr _ -> undefined
+
+
+
 
 -- | Symbolically execute the VM and check all endstates against the postcondition, if available.
 verify :: VM -> Maybe Integer -> Maybe Integer -> Maybe (Fetch.BlockNumber, Text) -> Maybe Postcondition -> IO VerifyResult

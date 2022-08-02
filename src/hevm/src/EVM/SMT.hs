@@ -286,6 +286,22 @@ isSat :: CheckSatResult -> Bool
 isSat (Sat _) = True
 isSat _ = False
 
+isErr :: CheckSatResult -> Bool
+isErr (Error _) = True
+isErr _ = False
+
+checkSat' :: SolverGroup -> (SMT2, [String]) -> IO (CheckSatResult)
+checkSat' (SolverGroup taskQueue) (script, models) = do
+  -- prepare tasks
+  res <- newChan
+  let task = Task script models res
+
+  -- send tasks to solver group
+  writeChan taskQueue task
+
+  -- collect results
+  readChan res
+
 checkSat :: SolverGroup -> [(SMT2, [String])] -> IO [(SMT2, CheckSatResult)]
 checkSat (SolverGroup taskQueue) scripts = do
   -- prepare tasks

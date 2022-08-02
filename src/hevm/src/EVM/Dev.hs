@@ -17,6 +17,7 @@ import Data.String.Here
 import Control.Lens
 
 import EVM
+import EVM.SMT (withSolvers, Solver(..))
 import EVM.Types
 import EVM.SymExec
 import EVM.Solidity
@@ -28,13 +29,14 @@ doTest = do
   c <- testContract
   buildExpr c
 
-reachable :: IO ()
-reachable = do
+reachable' :: IO ()
+reachable' = do
   c <- testContract
-  e <- buildExpr c
-  r <- verify (initVm c) Nothing Nothing Nothing Nothing
-  print e
-  print r
+  full <- buildExpr c
+  withSolvers Z3 4 $ \solvers -> do
+    less <- reachable solvers full
+    print full
+    print less
 
 testContract :: IO ByteString
 testContract = do
