@@ -14,7 +14,7 @@ import Prelude hiding (LT, GT)
 
 import GHC.Natural
 import Control.Monad
-import GHC.IO.Handle (Handle, hGetLine, hPutStr, hFlush)
+import GHC.IO.Handle (Handle, hGetLine, hIsEOF, hPutStr, hFlush, hGetContents)
 import Control.Concurrent.Chan (Chan, newChan, writeChan, readChan)
 import Control.Concurrent (forkIO, killThread)
 import Data.List (singleton)
@@ -75,11 +75,9 @@ declareBufs names = SMT2 $ ["; buffers"] <> fmap declare names
   where
     declare n = "(declare-const " <> n <> " (Array (_ BitVec 256) (_ BitVec 8)))"
 
-trace' x = trace (show x) x
-
 -- | Walks the expression and returns the names of all referenced buffers
 referencedBufs :: Expr a -> [String]
-referencedBufs = trace' . nubOrd . go
+referencedBufs = nubOrd . go
   where
     go :: Expr a -> [String]
     go = \case
@@ -162,7 +160,7 @@ referencedBufs = trace' . nubOrd . go
       a -> error $ "TODO: implement: " <> show a
 
 -- encodes a word into smt
-exprToSMT :: Expr a-> String
+exprToSMT :: Expr a -> String
 exprToSMT = \case
   Lit w -> "#x" <> (padLeftStr 64 . strip0x' . show $ w)
   Var s -> s
@@ -269,43 +267,44 @@ data SolverInstance = SolverInstance
 -- | A channel representing a group of solvers
 newtype SolverGroup = SolverGroup (Chan Task)
 
--- | A script to be executed and a channel where the result should be written
-data Task = Task SMT2 (Chan CheckSatResult)
+-- | A script to be executed, a list of models to be extracted in the case of a sat result, and a channel where the result should be written
+data Task = Task
+  { script :: SMT2
+  , models :: [String]
+  , resultChan :: Chan CheckSatResult
+  }
 
 -- | The result of a call to (check-sat)
 data CheckSatResult
-  = Sat
+  = Sat [String]
   | Unsat
   | Unknown
   | Error String
   deriving (Show)
 
 isSat :: CheckSatResult -> Bool
-isSat Sat = True
+isSat (Sat _) = True
 isSat _ = False
 
-checkSat :: SolverGroup -> [SMT2] -> IO [(SMT2, CheckSatResult)]
+checkSat :: SolverGroup -> [(SMT2, [String])] -> IO [(SMT2, CheckSatResult)]
 checkSat (SolverGroup taskQueue) scripts = do
   -- prepare tasks
-  tasks <- forM scripts $ \s -> do
+  tasks <- forM scripts $ \(s, ms) -> do
     res <- newChan
-    pure $ Task s res
+    pure $ Task s ms res
 
   -- send tasks to solver group
-  traceM "sending tasks to solvers"
   forM_ tasks (writeChan taskQueue)
 
   -- collect results
-  forM tasks $ \(Task s r) -> do
+  forM tasks $ \(Task s _ r) -> do
     res <- readChan r
-    traceM $ "got result: " <> show res
     pure (s, res)
 
 
 withSolvers :: Solver -> Natural -> (SolverGroup -> IO a) -> IO a
 withSolvers solver count cont = do
   -- spawn solvers
-  traceM $ "spawning " <> show count <> " solvers"
   instances <- mapM (const $ spawnSolver solver) [1..count]
 
   -- spawn orchestration thread
@@ -328,12 +327,9 @@ withSolvers solver count cont = do
       _ <- forkIO $ runTask task inst avail
       orchestrate queue avail
 
-    runTask (Task (SMT2 cmds) r) inst availableInstances = do
-      traceM "running task"
+    runTask (Task (SMT2 cmds) ms r) inst availableInstances = do
       -- reset solver and send all lines of provided script
-      traceM "sending script"
       out <- sendScript inst (SMT2 $ "(reset)" : cmds)
-      traceM "sent script"
       case out of
         -- if we got an error then return it
         Left e -> writeChan r (Error e)
@@ -341,7 +337,10 @@ withSolvers solver count cont = do
         Right () -> do
           sat <- sendLine inst "(check-sat)"
           res <- case sat of
-            "sat" -> pure Sat
+            "sat" -> do
+              models <- forM ms $ \m -> do
+                getValue inst m
+              pure $ Sat models
             "unsat" -> pure Unsat
             "timeout" -> pure Unknown
             "unknown" -> pure Unknown
@@ -397,18 +396,42 @@ sendCommand inst cmd = do
   case cmd' of
     "" -> pure "success"      -- ignore blank lines
     ';' : _ -> pure "success" -- ignore comments
-    _ -> do
-      out <- sendLine inst cmd'
-      traceM out
-      pure out
+    _ -> sendLine inst cmd'
 
 -- | Sends a string to the solver and appends a newline, returns the first available line from the output buffer
 sendLine :: SolverInstance -> String -> IO String
 sendLine (SolverInstance _ stdin stdout _ _) cmd = do
-  traceM $ "sending " <> cmd
   hPutStr stdin (cmd <> "\n")
   hFlush stdin
   hGetLine stdout
+
+-- | Returns a string representation of the model for the requested variable
+getValue :: SolverInstance -> String -> IO String
+getValue (SolverInstance _ stdin stdout _ _) var = do
+  hPutStr stdin ("(get-value (" <> var <> "))\n")
+  hFlush stdin
+  fmap (unlines . reverse) (readSExpr stdout)
+
+-- | Reads lines from h until we have a balanced sexpr
+readSExpr :: Handle -> IO [String]
+readSExpr h = go 0 0 []
+  where
+    go :: Int -> Int -> [String] -> IO [String]
+    go 0 0 _ = do
+      line <- hGetLine h
+      let ls = length $ filter (== '(') line
+          rs = length $ filter (== ')') line
+      if ls == rs
+         then pure [line]
+         else go ls rs [line]
+    go ls rs prev = do
+      line <- hGetLine h
+      let ls' = length $ filter (== '(') line
+          rs' = length $ filter (== ')') line
+      if (ls + ls') == (rs + rs')
+         then pure $ line : prev
+         else go (ls + ls') (rs + rs') (line : prev)
+
 
 
 -- ** Helpers ** ---------------------------------------------------------------------------------

@@ -28,10 +28,12 @@ import Data.ByteString (ByteString)
 import qualified Control.Monad.State.Class as State
 import Data.Bifunctor (first, second)
 import Data.Text (Text)
+import Data.List (find)
+import Data.Maybe (isJust, fromJust)
 
 data ProofResult a b c = Qed a | Cex b | Timeout c
   deriving (Show)
-type VerifyResult = ProofResult () () ()
+type VerifyResult = ProofResult () [(Expr End, [String])] ()
 type EquivalenceResult = ProofResult ([VM], [VM]) VM ()
 
 
@@ -302,43 +304,41 @@ runExpr = do
 
 
 -- | Converts a given top level expr into a list of final states and the associated path conditions for each state
-flattenExpr :: Expr End -> [([Expr EWord], Expr End)]
+flattenExpr :: Expr End -> [(Expr End, [Expr EWord])]
 flattenExpr = go []
   where
-    go :: [Expr EWord] -> Expr End -> [([Expr EWord], Expr End)]
+    go :: [Expr EWord] -> Expr End -> [(Expr End, [Expr EWord])]
     go pcs = \case
       ITE c t f -> go ((Eq c (Lit 1)) : pcs) t <> go ((Eq c (Lit 0)) : pcs) f
-      Invalid -> [(pcs, Invalid)]
-      SelfDestruct -> [(pcs, SelfDestruct)]
-      Revert buf -> [(pcs, Revert buf)]
-      Return  buf store -> [(pcs, Return buf store)]
+      Invalid -> [(Invalid, pcs)]
+      SelfDestruct -> [(SelfDestruct, pcs)]
+      Revert buf -> [(Revert buf, pcs)]
+      Return  buf store -> [(Return buf store, pcs)]
       _ -> undefined
-
-isReachable :: SolverGroup -> [Expr EWord] -> Expr End -> IO (Expr End, CheckSatResult)
-isReachable solvers pcs leaf = do
-  res <- checkSat solvers (fmap assertWord pcs)
-  undefined
-
 
 -- | Symbolically execute the VM and check all endstates against the postcondition, if available.
 verify :: VM -> Maybe Integer -> Maybe Integer -> Maybe (Fetch.BlockNumber, Text) -> Maybe Postcondition -> IO VerifyResult
 verify preState maxIter askSmtIters rpcinfo maybepost = do
-  traceM "building expression"
   expr <- evalStateT (interpret (Fetch.oracle Nothing False) Nothing Nothing runExpr) preState
   let leaves = flattenExpr expr
       -- we are only interested in end states where the postcondition has been violated
       violated = case maybepost of
-                   Just p -> filter (p . snd) leaves
+                   Just p -> filter (p . fst) leaves
                    Nothing -> leaves
-      -- TODO: can we split each pc into it's own query? will this fuck up models in sat cases?
-      queries = fmap (first assertWords) violated
+      queries = fmap (second (\pcs -> (assertWords pcs, ["txdata", "storage"]))) violated
+      findExpr s = fmap fst $ find (\(e,(s', _)) -> s == s') queries
   reachable <- withSolvers Z3 (num numCapabilities) $ \solvers -> do
-    traceM "checking reachability"
-    traceShowM $ (fmap fst queries) !! 0
-    rs <- checkSat solvers (fmap fst queries)
-    let satisfied = fmap fst $ filter (\(_,r) -> isSat r) rs
-    pure $ fmap snd $ filter (\(q,_) -> q `elem` satisfied) queries
-  pure $ if null reachable then Qed () else Cex ()
+    forM_ queries $ \(_, (SMT2 q,_)) -> do
+      putStrLn $ unlines q
+    rs <- checkSat solvers (fmap snd queries)
+    let rs' = fmap (first findExpr) rs
+        rs'' = fmap (first fromJust) (filter (isJust . fst) rs')
+        rs''' = filter (isSat . snd) rs''
+    pure rs'''
+  pure $ if null reachable then Qed () else Cex (fmap (second getModels) reachable)
+  where
+    getModels (Sat ms) = ms
+    getModels _ = []
 
   -- check prop on each leaf
   -- if prop violated then:

@@ -31,7 +31,9 @@ doTest = do
 reachable :: IO ()
 reachable = do
   c <- testContract
+  e <- buildExpr c
   r <- verify (initVm c) Nothing Nothing Nothing Nothing
+  print e
   print r
 
 testContract :: IO ByteString
@@ -62,7 +64,7 @@ initVm bs = vm
       }
     vm = makeVm $ VMOpts
       { EVM.vmoptContract      = c
-      , EVM.vmoptCalldata      = AbstractBuf "calldata"
+      , EVM.vmoptCalldata      = AbstractBuf "txdata"
       , EVM.vmoptValue         = Lit 0
       , EVM.vmoptAddress       = Addr 0xffffffffffffffff
       , EVM.vmoptCaller        = Lit 0

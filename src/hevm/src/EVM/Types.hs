@@ -274,7 +274,7 @@ data Expr (a :: EType) where
   BlockHash      :: Expr EWord -> Expr EWord
   Coinbase       :: Expr EWord
   Timestamp      :: Expr EWord
-  BlockNumber   :: Expr EWord
+  BlockNumber    :: Expr EWord
   Difficulty     :: Expr EWord
   GasLimit       :: Expr EWord
   ChainId        :: Expr EWord
