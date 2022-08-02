@@ -315,6 +315,22 @@ flattenExpr = go []
       Return  buf store -> [(Return buf store, pcs)]
       _ -> undefined
 
+-- | Simple recursive match based AST simplification
+-- TODO: make this the fixpoint?
+simplify :: Expr a -> Expr a
+simplify = applyExpr go
+  where
+    -- redundant CopySlice
+    go (CopySlice (Lit 0x0) (Lit 0x0) (Lit 0x0) _ dst) = dst
+    -- redundant ITE
+    go o@(ITE _ a b) = if a == b then a else o
+    -- redundant add / sub
+    go o@(Sub (Add a b) c)
+      | a == c = b
+      | b == c = a
+      | otherwise = o
+    go a = a
+
 -- | Strips unreachable branches from a given expr
 -- TODO: handle errors properly
 reachable :: SolverGroup -> Expr End -> IO (Expr End)

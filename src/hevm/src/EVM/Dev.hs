@@ -36,7 +36,7 @@ reachable' = do
   c <- testContract
   full <- simplify <$> buildExpr c
   withSolvers Z3 4 $ \solvers -> do
-    less <- reachable solvers full
+    less <- simplify <$> reachable solvers full
     Prelude.putStrLn "FULL AST\n\n"
     Prelude.putStrLn $ formatExpr full
     Prelude.putStrLn "\n\nReachable AST\n\n"

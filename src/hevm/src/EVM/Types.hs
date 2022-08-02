@@ -12,7 +12,7 @@ module EVM.Types where
 import Prelude hiding  (Word, LT, GT)
 
 import Data.Aeson
-import Crypto.Hash
+import Crypto.Hash hiding (SHA256)
 import Data.Map (Map)
 import Data.Bifunctor (first)
 import Data.Char
@@ -429,6 +429,204 @@ deriving instance Show (Expr a)
 --        e.g. what should AbstractBuf == AbstractBuf be? same q for Stores
 deriving instance Eq (Expr a)
 deriving instance Ord (Expr a)
+
+-- | Recursively applies a given function to every node in a given expr instance
+-- Recursion schemes do this & a lot more, but defining them over GADT's isn't worth the hassle
+-- TODO: can this be generalized into a recursive fold?
+applyExpr :: (forall a . Expr a -> Expr a) -> Expr b -> Expr b
+applyExpr f e = case (f e) of
+
+  -- literals & variables
+
+  Lit a -> Lit a
+  LitByte a -> LitByte a
+  Var a -> Var a
+
+  -- bytes
+
+  IndexWord a b -> IndexWord (applyExpr f (f a)) (applyExpr f (f b))
+  EqByte a b -> EqByte (applyExpr f (f a)) (applyExpr f (f b))
+
+  JoinBytes
+    zero one two three four five six seven
+    eight nine ten eleven twelve thirteen fourteen fifteen
+    sixteen seventeen eighteen nineteen twenty twentyone twentytwo twentythree
+    twentyfour twentyfive twentysix twentyseven twentyeight twentynine thirty thirtyone
+    -> JoinBytes
+        (applyExpr f (f zero)) (applyExpr f (f one)) (applyExpr f (f two)) (applyExpr f (f three))
+        (applyExpr f (f four)) (applyExpr f (f five)) (applyExpr f (f six)) (applyExpr f (f seven))
+        (applyExpr f (f eight)) (applyExpr f (f nine)) (applyExpr f (f ten)) (applyExpr f (f eleven))
+        (applyExpr f (f twelve)) (applyExpr f (f thirteen)) (applyExpr f (f fourteen))
+        (applyExpr f (f fifteen)) (applyExpr f (f sixteen)) (applyExpr f (f seventeen))
+        (applyExpr f (f eighteen)) (applyExpr f (f nineteen)) (applyExpr f (f twenty))
+        (applyExpr f (f twentyone)) (applyExpr f (f twentytwo)) (applyExpr f (f twentythree))
+        (applyExpr f (f twentyfour)) (applyExpr f (f twentyfive)) (applyExpr f (f twentysix))
+        (applyExpr f (f twentyseven)) (applyExpr f (f twentyeight)) (applyExpr f (f twentynine))
+        (applyExpr f (f thirty)) (applyExpr f (f thirtyone))
+
+  -- control flow
+
+  Invalid -> Invalid
+  SelfDestruct -> SelfDestruct
+  Revert a -> Revert (applyExpr f (f a))
+  Return a b -> Return (applyExpr f (f a)) (applyExpr f (f b))
+  ITE a b c -> ITE (applyExpr f (f a)) (applyExpr f (f b)) (applyExpr f (f c))
+  TmpErr a -> TmpErr a
+
+  -- integers
+
+  Add a b -> Add (applyExpr f (f a)) (applyExpr f (f b))
+  Sub a b -> Sub (applyExpr f (f a)) (applyExpr f (f b))
+  Mul a b -> Mul (applyExpr f (f a)) (applyExpr f (f b))
+  Div a b -> Div (applyExpr f (f a)) (applyExpr f (f b))
+  SDiv a b -> SDiv (applyExpr f (f a)) (applyExpr f (f b))
+  Mod a b -> Mod (applyExpr f (f a)) (applyExpr f (f b))
+  SMod a b -> SMod (applyExpr f (f a)) (applyExpr f (f b))
+  AddMod a b c -> AddMod (applyExpr f (f a)) (applyExpr f (f b)) (applyExpr f (f c))
+  MulMod a b c -> MulMod (applyExpr f (f a)) (applyExpr f (f b)) (applyExpr f (f c))
+  Exp a b -> Exp (applyExpr f (f a)) (applyExpr f (f b))
+  SEx a b -> SEx (applyExpr f (f a)) (applyExpr f (f b))
+  Min a b -> Min (applyExpr f (f a)) (applyExpr f (f b))
+
+  -- booleans
+
+  LT a b ->  LT (applyExpr f (f a)) (applyExpr f (f b))
+  GT a b ->  GT (applyExpr f (f a)) (applyExpr f (f b))
+  LEq a b -> LEq (applyExpr f (f a)) (applyExpr f (f b))
+  GEq a b -> GEq (applyExpr f (f a)) (applyExpr f (f b))
+  SLT a b -> SLT (applyExpr f (f a)) (applyExpr f (f b))
+  SGT a b -> SGT (applyExpr f (f a)) (applyExpr f (f b))
+  Eq a b ->  Eq (applyExpr f (f a)) (applyExpr f (f b))
+  IsZero a -> IsZero (applyExpr f (f a))
+
+  -- bits
+
+  And a b -> And (applyExpr f (f a)) (applyExpr f (f b))
+  Or a b ->  Or (applyExpr f (f a)) (applyExpr f (f b))
+  Xor a b -> Xor (applyExpr f (f a)) (applyExpr f (f b))
+  Not a -> Not (applyExpr f (f a))
+  SHL a b -> SHL (applyExpr f (f a)) (applyExpr f (f b))
+  SHR a b -> SHR (applyExpr f (f a)) (applyExpr f (f b))
+  SAR a b -> SAR (applyExpr f (f a)) (applyExpr f (f b))
+
+  -- Hashes
+
+  Keccak a -> Keccak (applyExpr f (f a))
+  SHA256 a -> SHA256 (applyExpr f (f a))
+
+  -- block context
+
+  Origin -> Origin
+  Coinbase -> Coinbase
+  Timestamp -> Timestamp
+  BlockNumber -> BlockNumber
+  Difficulty -> Difficulty
+  GasLimit -> GasLimit
+  ChainId -> ChainId
+  BaseFee -> BaseFee
+  BlockHash a -> BlockHash (applyExpr f (f a))
+
+  -- frame context
+
+  Caller a -> Caller a
+  CallValue a -> CallValue a
+  Address a -> Address a
+  SelfBalance a b -> SelfBalance a b
+  Gas a b -> Gas a b
+  Balance a b c -> Balance a b (applyExpr f (f c))
+
+  -- code
+
+  CodeSize a -> CodeSize (applyExpr f (f a))
+  ExtCodeHash a -> ExtCodeHash a
+
+  -- logs
+
+  EmptyLog -> EmptyLog
+  Log a b c d -> Log (applyExpr f (f a)) (applyExpr f (f b)) (fmap (applyExpr f . f) c) (applyExpr f (f d))
+
+  -- Contract Creation
+
+  Create a b c d e g
+    -> Create
+         (applyExpr f (f a))
+         (applyExpr f (f b))
+         (applyExpr f (f c))
+         (applyExpr f (f d))
+         (applyExpr f (f e))
+         (applyExpr f (f g))
+  Create2 a b c d e g h
+    -> Create2
+         (applyExpr f (f a))
+         (applyExpr f (f b))
+         (applyExpr f (f c))
+         (applyExpr f (f d))
+         (applyExpr f (f e))
+         (applyExpr f (f g))
+         (applyExpr f (f h))
+
+  -- Calls
+
+  Call a b c d e g h i j
+    -> Call
+         (applyExpr f (f a))
+         (fmap (applyExpr f . f) b)
+         (applyExpr f (f c))
+         (applyExpr f (f d))
+         (applyExpr f (f e))
+         (applyExpr f (f g))
+         (applyExpr f (f h))
+         (applyExpr f (f i))
+         (applyExpr f (f j))
+  CallCode a b c d e g h i j
+    -> CallCode
+        (applyExpr f (f a))
+        (applyExpr f (f b))
+        (applyExpr f (f c))
+        (applyExpr f (f d))
+        (applyExpr f (f e))
+        (applyExpr f (f g))
+        (applyExpr f (f h))
+        (applyExpr f (f i))
+        (applyExpr f (f j))
+  DelegeateCall a b c d e g h i j
+    -> DelegeateCall
+        (applyExpr f (f a))
+        (applyExpr f (f b))
+        (applyExpr f (f c))
+        (applyExpr f (f d))
+        (applyExpr f (f e))
+        (applyExpr f (f g))
+        (applyExpr f (f h))
+        (applyExpr f (f i))
+        (applyExpr f (f j))
+
+  -- storage
+
+  EmptyStore -> EmptyStore
+  ConcreteStore a -> ConcreteStore a
+  AbstractStore -> AbstractStore
+  SLoad a b c -> SLoad (applyExpr f (f a)) (applyExpr f (f b)) (applyExpr f (f c))
+  SStore a b c d -> SStore (applyExpr f (f a)) (applyExpr f (f b)) (applyExpr f (f c)) (applyExpr f (f d))
+
+  -- buffers
+
+  EmptyBuf -> EmptyBuf
+  ConcreteBuf a -> ConcreteBuf a
+  AbstractBuf a -> AbstractBuf a
+  ReadWord a b -> ReadWord (applyExpr f (f a)) (applyExpr f (f b))
+  ReadByte a b -> ReadByte (applyExpr f (f a)) (applyExpr f (f b))
+  WriteWord a b c -> WriteWord (applyExpr f (f a)) (applyExpr f (f b)) (applyExpr f (f c))
+  WriteByte a b c -> WriteByte (applyExpr f (f a)) (applyExpr f (f b)) (applyExpr f (f c))
+
+  CopySlice a b c d e
+    -> CopySlice
+         (applyExpr f (f a))
+         (applyExpr f (f b))
+         (applyExpr f (f c))
+         (applyExpr f (f d))
+         (applyExpr f (f e))
+  BufLength a -> BufLength (applyExpr f (f a))
 
 unlit :: Expr EWord -> Maybe W256
 unlit (Lit x) = Just x
