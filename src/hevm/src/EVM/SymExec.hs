@@ -316,14 +316,25 @@ flattenExpr = go []
       _ -> undefined
 
 -- | Simple recursive match based AST simplification
--- TODO: make this the fixpoint?
+-- Note: may not terminate!
 simplify :: Expr a -> Expr a
-simplify = applyExpr go
+simplify e = if (mapExpr go e == e)
+               then e
+               else simplify (mapExpr go e)
   where
+    go :: Expr a -> Expr a
     -- redundant CopySlice
     go (CopySlice (Lit 0x0) (Lit 0x0) (Lit 0x0) _ dst) = dst
+    -- redundant Eq
+    go o@(Eq a b)
+      | a == b = (Lit 1)
+      | otherwise = o
     -- redundant ITE
-    go o@(ITE _ a b) = if a == b then a else o
+    go o@(ITE c a b)
+      | c == Lit 1 = a
+      | c == Lit 0 = b
+      | a == b = a
+      | otherwise = o
     -- redundant add / sub
     go o@(Sub (Add a b) c)
       | a == c = b
