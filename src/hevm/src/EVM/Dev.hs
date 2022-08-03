@@ -26,17 +26,18 @@ import qualified EVM.Fetch as Fetch
 import qualified Data.Text as T
 import qualified EVM.FeeSchedule as FeeSchedule
 
-doTest :: IO (Expr End)
+doTest :: IO ()
 doTest = do
   c <- testContract
-  buildExpr c
+  e <- simplify <$> buildExpr c
+  Prelude.putStrLn (formatExpr e)
 
 reachable' :: IO ()
 reachable' = do
   c <- testContract
   full <- simplify <$> buildExpr c
   withSolvers Z3 4 $ \solvers -> do
-    less <- simplify <$> reachable solvers full
+    less <- reachable solvers full
     Prelude.putStrLn "FULL AST\n\n"
     Prelude.putStrLn $ formatExpr full
     Prelude.putStrLn "\n\nReachable AST\n\n"
@@ -71,7 +72,7 @@ initVm bs = vm
     vm = makeVm $ VMOpts
       { EVM.vmoptContract      = c
       , EVM.vmoptCalldata      = AbstractBuf "txdata"
-      , EVM.vmoptValue         = Lit 0
+      , EVM.vmoptValue         = Var "callvalue"
       , EVM.vmoptAddress       = Addr 0xffffffffffffffff
       , EVM.vmoptCaller        = Lit 0
       , EVM.vmoptOrigin        = Addr 0xffffffffffffffff
