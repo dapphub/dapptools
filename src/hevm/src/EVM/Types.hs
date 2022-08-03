@@ -6,6 +6,7 @@
 {-# LANGUAGE DefaultSignatures #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 
 module EVM.Types where
 
@@ -430,11 +431,212 @@ deriving instance Show (Expr a)
 deriving instance Eq (Expr a)
 deriving instance Ord (Expr a)
 
+-- | Recursively folds a given function over a given expression
+-- Recursion schemes do this & a lot more, but defining them over GADT's isn't worth the hassle
+foldExpr :: forall b c . Monoid b => (forall a . Expr a -> b) -> b -> Expr c -> b
+foldExpr f acc expr = acc <> (go expr)
+  where
+    go :: forall a . Expr a -> b
+    go = \case
+      -- literals & variables
+
+      e@(Lit _) -> f e
+      e@(LitByte _) -> f e
+      e@(Var _) -> f e
+
+      -- bytes
+
+      e@(IndexWord a b) -> f e <> (go a) <> (go b)
+      e@(EqByte a b) -> f e <> (go a) <> (go b)
+
+      e@(JoinBytes
+        zero one two three four five six seven
+        eight nine ten eleven twelve thirteen fourteen fifteen
+        sixteen seventeen eighteen nineteen twenty twentyone twentytwo twentythree
+        twentyfour twentyfive twentysix twentyseven twentyeight twentynine thirty thirtyone)
+        -> f e
+        <> (go zero) <> (go one) <> (go two) <> (go three)
+        <> (go four) <> (go five) <> (go six) <> (go seven)
+        <> (go eight) <> (go nine) <> (go ten) <> (go eleven)
+        <> (go twelve) <> (go thirteen) <> (go fourteen)
+        <> (go fifteen) <> (go sixteen) <> (go seventeen)
+        <> (go eighteen) <> (go nineteen) <> (go twenty)
+        <> (go twentyone) <> (go twentytwo) <> (go twentythree)
+        <> (go twentyfour) <> (go twentyfive) <> (go twentysix)
+        <> (go twentyseven) <> (go twentyeight) <> (go twentynine)
+        <> (go thirty) <> (go thirtyone)
+
+      -- control flow
+
+      e@Invalid -> f e
+      e@SelfDestruct -> f e
+      e@(Revert a) -> f e <> (go a)
+      e@(Return a b) -> f e <> (go a) <> (go b)
+      e@(ITE a b c) -> f e <> (go a) <> (go b) <> (go c)
+      e@(TmpErr _) -> f e
+
+      -- integers
+
+      e@(Add a b) -> f e <> (go a) <> (go b)
+      e@(Sub a b) -> f e <> (go a) <> (go b)
+      e@(Mul a b) -> f e <> (go a) <> (go b)
+      e@(Div a b) -> f e <> (go a) <> (go b)
+      e@(SDiv a b) -> f e <> (go a) <> (go b)
+      e@(Mod a b) -> f e <> (go a) <> (go b)
+      e@(SMod a b) -> f e <> (go a) <> (go b)
+      e@(AddMod a b c) -> f e <> (go a) <> (go b) <> (go c)
+      e@(MulMod a b c) -> f e <> (go a) <> (go b) <> (go c)
+      e@(Exp a b) -> f e <> (go a) <> (go b)
+      e@(SEx a b) -> f e <> (go a) <> (go b)
+      e@(Min a b) -> f e <> (go a) <> (go b)
+
+      -- booleans
+
+      e@(LT a b) -> f e <> (go a) <> (go b)
+      e@(GT a b) -> f e <> (go a) <> (go b)
+      e@(LEq a b) -> f e <> (go a) <> (go b)
+      e@(GEq a b) -> f e <> (go a) <> (go b)
+      e@(SLT a b) -> f e <> (go a) <> (go b)
+      e@(SGT a b) -> f e <> (go a) <> (go b)
+      e@(Eq a b) -> f e <> (go a) <> (go b)
+      e@(IsZero a) -> f e <> (go a)
+
+      -- bits
+
+      e@(And a b) -> f e <> (go a) <> (go b)
+      e@(Or a b) -> f e <> (go a) <> (go b)
+      e@(Xor a b) -> f e <> (go a) <> (go b)
+      e@(Not a) -> f e <> (go a)
+      e@(SHL a b) -> f e <> (go a) <> (go b)
+      e@(SHR a b) -> f e <> (go a) <> (go b)
+      e@(SAR a b) -> f e <> (go a) <> (go b)
+
+      -- Hashes
+
+      e@(Keccak a) -> f e <> (go a)
+      e@(SHA256 a) -> f e <> (go a)
+
+      -- block context
+
+      e@(Origin) -> f e
+      e@(Coinbase) -> f e
+      e@(Timestamp) -> f e
+      e@(BlockNumber) -> f e
+      e@(Difficulty) -> f e
+      e@(GasLimit) -> f e
+      e@(ChainId) -> f e
+      e@(BaseFee) -> f e
+      e@(BlockHash _) -> f e
+
+      -- frame context
+
+      e@(Caller _) -> f e
+      e@(CallValue _) -> f e
+      e@(Address _) -> f e
+      e@(SelfBalance _ _) -> f e
+      e@(Gas _ _) -> f e
+      e@(Balance {}) -> f e
+
+      -- code
+
+      e@(CodeSize a) -> f e <> (go a)
+      e@(ExtCodeHash a) -> f e <> (go a)
+
+      -- logs
+
+      e@(EmptyLog) -> f e
+      e@(Log a b c d) -> f e <> (go a) <> (go b) <> (foldl (<>) mempty (fmap f c)) <> (go d)
+
+      -- Contract Creation
+
+      e@(Create a b c d g h)
+        -> f e
+        <> (go a)
+        <> (go b)
+        <> (go c)
+        <> (go d)
+        <> (go g)
+        <> (go h)
+      e@(Create2 a b c d g h i)
+        -> f e
+        <> (go a)
+        <> (go b)
+        <> (go c)
+        <> (go d)
+        <> (go g)
+        <> (go h)
+        <> (go i)
+
+      -- Calls
+
+      e@(Call a b c d g h i j k)
+        -> f e
+        <> (go a)
+        <> (maybe mempty (go) b)
+        <> (go c)
+        <> (go d)
+        <> (go g)
+        <> (go h)
+        <> (go i)
+        <> (go j)
+        <> (go k)
+
+      e@(CallCode a b c d g h i j k)
+        -> f e
+        <> (go a)
+        <> (go b)
+        <> (go c)
+        <> (go d)
+        <> (go g)
+        <> (go h)
+        <> (go i)
+        <> (go j)
+        <> (go k)
+
+      e@(DelegeateCall a b c d g h i j k)
+        -> f e
+        <> (go a)
+        <> (go b)
+        <> (go c)
+        <> (go d)
+        <> (go g)
+        <> (go h)
+        <> (go i)
+        <> (go j)
+        <> (go k)
+
+      -- storage
+
+      e@(EmptyStore) -> f e
+      e@(ConcreteStore _) -> f e
+      e@(AbstractStore) -> f e
+      e@(SLoad a b c) -> f e <> (go a) <> (go b) <> (go c)
+      e@(SStore a b c d) -> f e <> (go a) <> (go b) <> (go c) <> (go d)
+
+      -- buffers
+
+      e@(EmptyBuf) -> f e
+      e@(ConcreteBuf _) -> f e
+      e@(AbstractBuf _) -> f e
+      e@(ReadWord a b) -> f e <> (go a) <> (go b)
+      e@(ReadByte a b) -> f e <> (go a) <> (go b)
+      e@(WriteWord a b c) -> f e <> (go a) <> (go b) <> (go c)
+      e@(WriteByte a b c) -> f e <> (go a) <> (go b) <> (go c)
+
+      e@(CopySlice a b c d g)
+        -> f e
+        <> (go a)
+        <> (go b)
+        <> (go c)
+        <> (go d)
+        <> (go g)
+      e@(BufLength a) -> f e <> (go a)
+
 -- | Recursively applies a given function to every node in a given expr instance
 -- Recursion schemes do this & a lot more, but defining them over GADT's isn't worth the hassle
 -- TODO: can this be generalized into a recursive fold?
-applyExpr :: (forall a . Expr a -> Expr a) -> Expr b -> Expr b
-applyExpr f e = case (f e) of
+mapExpr :: (forall a . Expr a -> Expr a) -> Expr b -> Expr b
+mapExpr f expr = case (f expr) of
 
   -- literals & variables
 
@@ -444,8 +646,8 @@ applyExpr f e = case (f e) of
 
   -- bytes
 
-  IndexWord a b -> IndexWord (applyExpr f (f a)) (applyExpr f (f b))
-  EqByte a b -> EqByte (applyExpr f (f a)) (applyExpr f (f b))
+  IndexWord a b -> IndexWord (mapExpr f (f a)) (mapExpr f (f b))
+  EqByte a b -> EqByte (mapExpr f (f a)) (mapExpr f (f b))
 
   JoinBytes
     zero one two three four five six seven
@@ -453,66 +655,66 @@ applyExpr f e = case (f e) of
     sixteen seventeen eighteen nineteen twenty twentyone twentytwo twentythree
     twentyfour twentyfive twentysix twentyseven twentyeight twentynine thirty thirtyone
     -> JoinBytes
-        (applyExpr f (f zero)) (applyExpr f (f one)) (applyExpr f (f two)) (applyExpr f (f three))
-        (applyExpr f (f four)) (applyExpr f (f five)) (applyExpr f (f six)) (applyExpr f (f seven))
-        (applyExpr f (f eight)) (applyExpr f (f nine)) (applyExpr f (f ten)) (applyExpr f (f eleven))
-        (applyExpr f (f twelve)) (applyExpr f (f thirteen)) (applyExpr f (f fourteen))
-        (applyExpr f (f fifteen)) (applyExpr f (f sixteen)) (applyExpr f (f seventeen))
-        (applyExpr f (f eighteen)) (applyExpr f (f nineteen)) (applyExpr f (f twenty))
-        (applyExpr f (f twentyone)) (applyExpr f (f twentytwo)) (applyExpr f (f twentythree))
-        (applyExpr f (f twentyfour)) (applyExpr f (f twentyfive)) (applyExpr f (f twentysix))
-        (applyExpr f (f twentyseven)) (applyExpr f (f twentyeight)) (applyExpr f (f twentynine))
-        (applyExpr f (f thirty)) (applyExpr f (f thirtyone))
+        (mapExpr f (f zero)) (mapExpr f (f one)) (mapExpr f (f two)) (mapExpr f (f three))
+        (mapExpr f (f four)) (mapExpr f (f five)) (mapExpr f (f six)) (mapExpr f (f seven))
+        (mapExpr f (f eight)) (mapExpr f (f nine)) (mapExpr f (f ten)) (mapExpr f (f eleven))
+        (mapExpr f (f twelve)) (mapExpr f (f thirteen)) (mapExpr f (f fourteen))
+        (mapExpr f (f fifteen)) (mapExpr f (f sixteen)) (mapExpr f (f seventeen))
+        (mapExpr f (f eighteen)) (mapExpr f (f nineteen)) (mapExpr f (f twenty))
+        (mapExpr f (f twentyone)) (mapExpr f (f twentytwo)) (mapExpr f (f twentythree))
+        (mapExpr f (f twentyfour)) (mapExpr f (f twentyfive)) (mapExpr f (f twentysix))
+        (mapExpr f (f twentyseven)) (mapExpr f (f twentyeight)) (mapExpr f (f twentynine))
+        (mapExpr f (f thirty)) (mapExpr f (f thirtyone))
 
   -- control flow
 
   Invalid -> Invalid
   SelfDestruct -> SelfDestruct
-  Revert a -> Revert (applyExpr f (f a))
-  Return a b -> Return (applyExpr f (f a)) (applyExpr f (f b))
-  ITE a b c -> ITE (applyExpr f (f a)) (applyExpr f (f b)) (applyExpr f (f c))
+  Revert a -> Revert (mapExpr f (f a))
+  Return a b -> Return (mapExpr f (f a)) (mapExpr f (f b))
+  ITE a b c -> ITE (mapExpr f (f a)) (mapExpr f (f b)) (mapExpr f (f c))
   TmpErr a -> TmpErr a
 
   -- integers
 
-  Add a b -> Add (applyExpr f (f a)) (applyExpr f (f b))
-  Sub a b -> Sub (applyExpr f (f a)) (applyExpr f (f b))
-  Mul a b -> Mul (applyExpr f (f a)) (applyExpr f (f b))
-  Div a b -> Div (applyExpr f (f a)) (applyExpr f (f b))
-  SDiv a b -> SDiv (applyExpr f (f a)) (applyExpr f (f b))
-  Mod a b -> Mod (applyExpr f (f a)) (applyExpr f (f b))
-  SMod a b -> SMod (applyExpr f (f a)) (applyExpr f (f b))
-  AddMod a b c -> AddMod (applyExpr f (f a)) (applyExpr f (f b)) (applyExpr f (f c))
-  MulMod a b c -> MulMod (applyExpr f (f a)) (applyExpr f (f b)) (applyExpr f (f c))
-  Exp a b -> Exp (applyExpr f (f a)) (applyExpr f (f b))
-  SEx a b -> SEx (applyExpr f (f a)) (applyExpr f (f b))
-  Min a b -> Min (applyExpr f (f a)) (applyExpr f (f b))
+  Add a b -> Add (mapExpr f (f a)) (mapExpr f (f b))
+  Sub a b -> Sub (mapExpr f (f a)) (mapExpr f (f b))
+  Mul a b -> Mul (mapExpr f (f a)) (mapExpr f (f b))
+  Div a b -> Div (mapExpr f (f a)) (mapExpr f (f b))
+  SDiv a b -> SDiv (mapExpr f (f a)) (mapExpr f (f b))
+  Mod a b -> Mod (mapExpr f (f a)) (mapExpr f (f b))
+  SMod a b -> SMod (mapExpr f (f a)) (mapExpr f (f b))
+  AddMod a b c -> AddMod (mapExpr f (f a)) (mapExpr f (f b)) (mapExpr f (f c))
+  MulMod a b c -> MulMod (mapExpr f (f a)) (mapExpr f (f b)) (mapExpr f (f c))
+  Exp a b -> Exp (mapExpr f (f a)) (mapExpr f (f b))
+  SEx a b -> SEx (mapExpr f (f a)) (mapExpr f (f b))
+  Min a b -> Min (mapExpr f (f a)) (mapExpr f (f b))
 
   -- booleans
 
-  LT a b ->  LT (applyExpr f (f a)) (applyExpr f (f b))
-  GT a b ->  GT (applyExpr f (f a)) (applyExpr f (f b))
-  LEq a b -> LEq (applyExpr f (f a)) (applyExpr f (f b))
-  GEq a b -> GEq (applyExpr f (f a)) (applyExpr f (f b))
-  SLT a b -> SLT (applyExpr f (f a)) (applyExpr f (f b))
-  SGT a b -> SGT (applyExpr f (f a)) (applyExpr f (f b))
-  Eq a b ->  Eq (applyExpr f (f a)) (applyExpr f (f b))
-  IsZero a -> IsZero (applyExpr f (f a))
+  LT a b ->  LT (mapExpr f (f a)) (mapExpr f (f b))
+  GT a b ->  GT (mapExpr f (f a)) (mapExpr f (f b))
+  LEq a b -> LEq (mapExpr f (f a)) (mapExpr f (f b))
+  GEq a b -> GEq (mapExpr f (f a)) (mapExpr f (f b))
+  SLT a b -> SLT (mapExpr f (f a)) (mapExpr f (f b))
+  SGT a b -> SGT (mapExpr f (f a)) (mapExpr f (f b))
+  Eq a b ->  Eq (mapExpr f (f a)) (mapExpr f (f b))
+  IsZero a -> IsZero (mapExpr f (f a))
 
   -- bits
 
-  And a b -> And (applyExpr f (f a)) (applyExpr f (f b))
-  Or a b ->  Or (applyExpr f (f a)) (applyExpr f (f b))
-  Xor a b -> Xor (applyExpr f (f a)) (applyExpr f (f b))
-  Not a -> Not (applyExpr f (f a))
-  SHL a b -> SHL (applyExpr f (f a)) (applyExpr f (f b))
-  SHR a b -> SHR (applyExpr f (f a)) (applyExpr f (f b))
-  SAR a b -> SAR (applyExpr f (f a)) (applyExpr f (f b))
+  And a b -> And (mapExpr f (f a)) (mapExpr f (f b))
+  Or a b ->  Or (mapExpr f (f a)) (mapExpr f (f b))
+  Xor a b -> Xor (mapExpr f (f a)) (mapExpr f (f b))
+  Not a -> Not (mapExpr f (f a))
+  SHL a b -> SHL (mapExpr f (f a)) (mapExpr f (f b))
+  SHR a b -> SHR (mapExpr f (f a)) (mapExpr f (f b))
+  SAR a b -> SAR (mapExpr f (f a)) (mapExpr f (f b))
 
   -- Hashes
 
-  Keccak a -> Keccak (applyExpr f (f a))
-  SHA256 a -> SHA256 (applyExpr f (f a))
+  Keccak a -> Keccak (mapExpr f (f a))
+  SHA256 a -> SHA256 (mapExpr f (f a))
 
   -- block context
 
@@ -524,7 +726,7 @@ applyExpr f e = case (f e) of
   GasLimit -> GasLimit
   ChainId -> ChainId
   BaseFee -> BaseFee
-  BlockHash a -> BlockHash (applyExpr f (f a))
+  BlockHash a -> BlockHash (mapExpr f (f a))
 
   -- frame context
 
@@ -533,100 +735,100 @@ applyExpr f e = case (f e) of
   Address a -> Address a
   SelfBalance a b -> SelfBalance a b
   Gas a b -> Gas a b
-  Balance a b c -> Balance a b (applyExpr f (f c))
+  Balance a b c -> Balance a b (mapExpr f (f c))
 
   -- code
 
-  CodeSize a -> CodeSize (applyExpr f (f a))
-  ExtCodeHash a -> ExtCodeHash a
+  CodeSize a -> CodeSize (mapExpr f (f a))
+  ExtCodeHash a -> ExtCodeHash (mapExpr f (f a))
 
   -- logs
 
   EmptyLog -> EmptyLog
-  Log a b c d -> Log (applyExpr f (f a)) (applyExpr f (f b)) (fmap (applyExpr f . f) c) (applyExpr f (f d))
+  Log a b c d -> Log (mapExpr f (f a)) (mapExpr f (f b)) (fmap (mapExpr f . f) c) (mapExpr f (f d))
 
   -- Contract Creation
 
   Create a b c d e g
     -> Create
-         (applyExpr f (f a))
-         (applyExpr f (f b))
-         (applyExpr f (f c))
-         (applyExpr f (f d))
-         (applyExpr f (f e))
-         (applyExpr f (f g))
+         (mapExpr f (f a))
+         (mapExpr f (f b))
+         (mapExpr f (f c))
+         (mapExpr f (f d))
+         (mapExpr f (f e))
+         (mapExpr f (f g))
   Create2 a b c d e g h
     -> Create2
-         (applyExpr f (f a))
-         (applyExpr f (f b))
-         (applyExpr f (f c))
-         (applyExpr f (f d))
-         (applyExpr f (f e))
-         (applyExpr f (f g))
-         (applyExpr f (f h))
+         (mapExpr f (f a))
+         (mapExpr f (f b))
+         (mapExpr f (f c))
+         (mapExpr f (f d))
+         (mapExpr f (f e))
+         (mapExpr f (f g))
+         (mapExpr f (f h))
 
   -- Calls
 
   Call a b c d e g h i j
     -> Call
-         (applyExpr f (f a))
-         (fmap (applyExpr f . f) b)
-         (applyExpr f (f c))
-         (applyExpr f (f d))
-         (applyExpr f (f e))
-         (applyExpr f (f g))
-         (applyExpr f (f h))
-         (applyExpr f (f i))
-         (applyExpr f (f j))
+         (mapExpr f (f a))
+         (fmap (mapExpr f . f) b)
+         (mapExpr f (f c))
+         (mapExpr f (f d))
+         (mapExpr f (f e))
+         (mapExpr f (f g))
+         (mapExpr f (f h))
+         (mapExpr f (f i))
+         (mapExpr f (f j))
   CallCode a b c d e g h i j
     -> CallCode
-        (applyExpr f (f a))
-        (applyExpr f (f b))
-        (applyExpr f (f c))
-        (applyExpr f (f d))
-        (applyExpr f (f e))
-        (applyExpr f (f g))
-        (applyExpr f (f h))
-        (applyExpr f (f i))
-        (applyExpr f (f j))
+        (mapExpr f (f a))
+        (mapExpr f (f b))
+        (mapExpr f (f c))
+        (mapExpr f (f d))
+        (mapExpr f (f e))
+        (mapExpr f (f g))
+        (mapExpr f (f h))
+        (mapExpr f (f i))
+        (mapExpr f (f j))
   DelegeateCall a b c d e g h i j
     -> DelegeateCall
-        (applyExpr f (f a))
-        (applyExpr f (f b))
-        (applyExpr f (f c))
-        (applyExpr f (f d))
-        (applyExpr f (f e))
-        (applyExpr f (f g))
-        (applyExpr f (f h))
-        (applyExpr f (f i))
-        (applyExpr f (f j))
+        (mapExpr f (f a))
+        (mapExpr f (f b))
+        (mapExpr f (f c))
+        (mapExpr f (f d))
+        (mapExpr f (f e))
+        (mapExpr f (f g))
+        (mapExpr f (f h))
+        (mapExpr f (f i))
+        (mapExpr f (f j))
 
   -- storage
 
   EmptyStore -> EmptyStore
   ConcreteStore a -> ConcreteStore a
   AbstractStore -> AbstractStore
-  SLoad a b c -> SLoad (applyExpr f (f a)) (applyExpr f (f b)) (applyExpr f (f c))
-  SStore a b c d -> SStore (applyExpr f (f a)) (applyExpr f (f b)) (applyExpr f (f c)) (applyExpr f (f d))
+  SLoad a b c -> SLoad (mapExpr f (f a)) (mapExpr f (f b)) (mapExpr f (f c))
+  SStore a b c d -> SStore (mapExpr f (f a)) (mapExpr f (f b)) (mapExpr f (f c)) (mapExpr f (f d))
 
   -- buffers
 
   EmptyBuf -> EmptyBuf
   ConcreteBuf a -> ConcreteBuf a
   AbstractBuf a -> AbstractBuf a
-  ReadWord a b -> ReadWord (applyExpr f (f a)) (applyExpr f (f b))
-  ReadByte a b -> ReadByte (applyExpr f (f a)) (applyExpr f (f b))
-  WriteWord a b c -> WriteWord (applyExpr f (f a)) (applyExpr f (f b)) (applyExpr f (f c))
-  WriteByte a b c -> WriteByte (applyExpr f (f a)) (applyExpr f (f b)) (applyExpr f (f c))
+  ReadWord a b -> ReadWord (mapExpr f (f a)) (mapExpr f (f b))
+  ReadByte a b -> ReadByte (mapExpr f (f a)) (mapExpr f (f b))
+  WriteWord a b c -> WriteWord (mapExpr f (f a)) (mapExpr f (f b)) (mapExpr f (f c))
+  WriteByte a b c -> WriteByte (mapExpr f (f a)) (mapExpr f (f b)) (mapExpr f (f c))
 
   CopySlice a b c d e
     -> CopySlice
-         (applyExpr f (f a))
-         (applyExpr f (f b))
-         (applyExpr f (f c))
-         (applyExpr f (f d))
-         (applyExpr f (f e))
-  BufLength a -> BufLength (applyExpr f (f a))
+         (mapExpr f (f a))
+         (mapExpr f (f b))
+         (mapExpr f (f c))
+         (mapExpr f (f d))
+         (mapExpr f (f e))
+  BufLength a -> BufLength (mapExpr f (f a))
 
 unlit :: Expr EWord -> Maybe W256
 unlit (Lit x) = Just x

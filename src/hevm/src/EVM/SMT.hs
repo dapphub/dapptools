@@ -39,11 +39,13 @@ newtype SMT2 = SMT2 [String]
 assertWord :: Expr EWord -> SMT2
 assertWord e = prelude
             <> (declareBufs $ referencedBufs e)
+            <> (declareVars $ referencedVars e)
             <> (SMT2 . singleton $ "(assert (= " <> exprToSMT (Lit 1) <> " " <> exprToSMT e <> ")")
 
 assertWords :: [Expr EWord] -> SMT2
 assertWords es = prelude
             <> (declareBufs . nubOrd $ foldl (<>) [] (fmap (referencedBufs) es))
+            <> (declareVars . nubOrd $ foldl (<>) [] (fmap (referencedVars) es))
             <> (SMT2 $ fmap (\e -> "(assert (= " <> exprToSMT (Lit 1) <> " " <> exprToSMT e <> "))") es)
 
 prelude :: SMT2
@@ -75,89 +77,26 @@ declareBufs names = SMT2 $ ["; buffers"] <> fmap declare names
   where
     declare n = "(declare-const " <> n <> " (Array (_ BitVec 256) (_ BitVec 8)))"
 
--- | Walks the expression and returns the names of all referenced buffers
 referencedBufs :: Expr a -> [String]
-referencedBufs = nubOrd . go
+referencedBufs expr = nubOrd (foldExpr go [] expr)
   where
     go :: Expr a -> [String]
     go = \case
       AbstractBuf s -> [s]
-      Lit _ -> []
-      Var _ -> []
-      LitByte _ -> []
-      IndexWord a b -> go a <> go b
-      EqByte a b -> go a <> go b
-      JoinBytes
-        zero one two three four five six seven
-        eight nine ten eleven twelve thirteen fourteen fifteen
-        sixteen seventeen eighteen nineteen twenty twentyone twentytwo twentythree
-        twentyfour twentyfive twentysix twentyseven twentyeight twentynine thirty thirtyone
-        -> go zero <> go one <> go two <> go three
-        <> go four <> go five <> go six <> go seven
-        <> go eight <> go nine <> go ten <> go eleven
-        <> go twelve <> go thirteen <> go fourteen
-        <> go fifteen <> go sixteen <> go seventeen
-        <> go eighteen <> go nineteen <> go twenty
-        <> go twentyone <> go twentytwo <> go twentythree
-        <> go twentyfour <> go twentyfive <> go twentysix
-        <> go twentyseven <> go twentyeight <> go twentynine
-        <> go thirty <> go thirtyone
-      Invalid -> []
-      SelfDestruct -> []
-      Revert a -> go a
-      Return a b -> go a <> go b
-      ITE a b c -> go a <> go b <> go c
-      Add a b -> go a <> go b
-      Sub a b -> go a <> go b
-      Mul a b -> go a <> go b
-      Div a b -> go a <> go b
-      SDiv a b -> go a <> go b
-      Mod a b -> go a <> go b
-      AddMod a b c -> go a <> go b <> go c
-      MulMod a b c -> go a <> go b <> go c
-      Exp a b -> go a <> go b
-      SEx a b -> go a <> go b
-      Min a b -> go a <> go b
-      LT a b -> go a <> go b
-      GT a b -> go a <> go b
-      LEq a b -> go a <> go b
-      GEq a b -> go a <> go b
-      SLT a b -> go a <> go b
-      SGT a b -> go a <> go b
-      Eq a b -> go a <> go b
-      IsZero a -> go a
-      And a b -> go a <> go b
-      Or a b -> go a <> go b
-      Xor a b -> go a <> go b
-      Not a -> go a
-      SHL a b -> go a <> go b
-      SHR a b -> go a <> go b
-      SAR a b -> go a <> go b
-      Keccak a -> go a
-      SHA256 a -> go a
-      Origin -> []
-      BlockHash a -> go a
-      Coinbase -> []
-      Timestamp -> []
-      BlockNumber -> []
-      Difficulty -> []
-      GasLimit -> []
-      ChainId -> []
-      BaseFee -> []
-      EmptyStore -> []
-      ConcreteStore _ -> []
-      AbstractStore -> []
-      SLoad a b c -> go a <> go b <> go c
-      SStore a b c e -> go a <> go b <> go c <> go e
-      EmptyBuf -> []
-      ConcreteBuf _ -> []
-      ReadWord a b -> go a <> go b
-      ReadByte a b -> go a <> go b
-      WriteWord a b c -> go a <> go b <> go c
-      WriteByte a b c -> go a <> go b <> go c
-      CopySlice a b c e f -> go a <> go b <> go c <> go e <> go f
-      BufLength a -> go a
-      a -> error $ "TODO: implement: " <> show a
+      _ -> []
+
+declareVars :: [String] -> SMT2
+declareVars names = SMT2 $ ["; variables"] <> fmap declare names
+  where
+    declare n = "(declare-const " <> n <> " (_ BitVec 256))"
+
+referencedVars :: Expr a -> [String]
+referencedVars expr = nubOrd (foldExpr go [] expr)
+  where
+    go :: Expr a -> [String]
+    go = \case
+      Var s -> [s]
+      _ -> []
 
 -- encodes a word into smt
 exprToSMT :: Expr a -> String
