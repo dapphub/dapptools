@@ -7,7 +7,7 @@ Description: Helpers for repl driven hevm hacking
 -}
 module EVM.Dev where
 
-import Data.ByteString
+import Data.ByteString hiding (putStrLn)
 import Control.Monad.State.Strict hiding (state)
 import Data.Maybe (fromJust)
 
@@ -17,7 +17,7 @@ import Data.String.Here
 import Control.Lens
 
 import EVM
-import EVM.SMT (withSolvers, Solver(..))
+import EVM.SMT (withSolvers, Solver(..), formatSMT2)
 import EVM.Types
 import EVM.SymExec
 import EVM.Solidity
@@ -37,11 +37,11 @@ reachable' = do
   c <- testContract
   full <- simplify <$> buildExpr c
   withSolvers Z3 4 $ \solvers -> do
-    less <- reachable solvers full
-    Prelude.putStrLn "FULL AST\n\n"
-    Prelude.putStrLn $ formatExpr full
-    Prelude.putStrLn "\n\nReachable AST\n\n"
-    Prelude.putStrLn $ formatExpr less
+    (_, less) <- reachable solvers full
+    putStrLn "FULL AST\n\n"
+    putStrLn $ formatExpr full
+    putStrLn "\n\nReachable AST\n\n"
+    putStrLn $ formatExpr less
 
 testContract :: IO ByteString
 testContract = do
@@ -72,7 +72,7 @@ initVm bs = vm
     vm = makeVm $ VMOpts
       { EVM.vmoptContract      = c
       , EVM.vmoptCalldata      = AbstractBuf "txdata"
-      , EVM.vmoptValue         = Var "callvalue"
+      , EVM.vmoptValue         = CallValue 0
       , EVM.vmoptAddress       = Addr 0xffffffffffffffff
       , EVM.vmoptCaller        = Lit 0
       , EVM.vmoptOrigin        = Addr 0xffffffffffffffff

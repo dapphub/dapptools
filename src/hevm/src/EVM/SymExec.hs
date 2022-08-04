@@ -343,16 +343,26 @@ simplify e = if (mapExpr go e == e)
     go a = a
 
 -- | Strips unreachable branches from a given expr
+-- Returns a list of executed SMT queries alongside the reduced expression for debugging purposes
+-- Note that the reduced expression loses information relative to the original
+-- one if jump conditions are removed. This restriction can be removed once
+-- Expr supports attaching knowledge to AST nodes.
+-- Although this algorithm currently parallelizes nicely, it does not exploit
+-- the incremental nature of the task at hand. Introducing support for
+-- incremental queries might let us go even faster here.
 -- TODO: handle errors properly
-reachable :: SolverGroup -> Expr End -> IO (Expr End)
+reachable :: SolverGroup -> Expr End -> IO ([SMT2], Expr End)
 reachable solvers = go []
   where
-    go :: [Expr EWord] -> Expr End -> IO (Expr End)
+    go :: [Expr EWord] -> Expr End -> IO ([SMT2], Expr End)
     go pcs = \case
       ITE c t f -> do
+        let
+          tquery = assertWords (Eq c (Lit 1) : pcs)
+          fquery = assertWords (Eq c (Lit 0) : pcs)
         res <- concurrently
-          (checkSat' solvers (assertWords (Eq c (Lit 1) : pcs), []))
-          (checkSat' solvers (assertWords (Eq c (Lit 0) : pcs), []))
+          (checkSat' solvers (tquery, []))
+          (checkSat' solvers (fquery, []))
         case res of
           (Error tm, Error fm) -> error $ "Solver Errors: " <> unlines [tm, fm]
           (Error tm, _) -> error $ "Solver Error: " <> tm
@@ -363,14 +373,14 @@ reachable solvers = go []
           (Unsat, Sat _) -> go (Eq c (Lit 0) : pcs) f
           (Sat _, Unsat) -> go (Eq c (Lit 1) : pcs) t
           (Sat _, Sat _) -> do
-            (texp, fexp) <- concurrently
+            ((tqs, texp), (fqs, fexp)) <- concurrently
               (go (Eq c (Lit 1) : pcs) t)
               (go (Eq c (Lit 0) : pcs) f)
-            pure $ ITE c texp fexp
-      Invalid -> pure Invalid
-      SelfDestruct -> pure SelfDestruct
-      Revert msg -> pure (Revert msg)
-      Return msg store -> pure (Return msg store)
+            pure ([tquery, fquery] <> tqs <> fqs, ITE c texp fexp)
+      Invalid -> pure ([], Invalid)
+      SelfDestruct -> pure ([], SelfDestruct)
+      Revert msg -> pure ([], Revert msg)
+      Return msg store -> pure ([], Return msg store)
       TmpErr _ -> undefined
 
 

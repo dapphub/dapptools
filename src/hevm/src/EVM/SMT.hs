@@ -14,7 +14,7 @@ import Prelude hiding (LT, GT)
 
 import GHC.Natural
 import Control.Monad
-import GHC.IO.Handle (Handle, hGetLine, hIsEOF, hPutStr, hFlush, hGetContents)
+import GHC.IO.Handle (Handle, hGetLine, hPutStr, hFlush)
 import Control.Concurrent.Chan (Chan, newChan, writeChan, readChan)
 import Control.Concurrent (forkIO, killThread)
 import Data.List (singleton)
@@ -27,8 +27,6 @@ import System.Process (createProcess, cleanupProcess, proc, ProcessHandle, std_i
 import EVM.Types
 import EVM.Expr hiding (copySlice, writeWord, op1, op2)
 
-import Debug.Trace
-
 
 -- ** Encoding ** ----------------------------------------------------------------------------------
 
@@ -36,20 +34,31 @@ import Debug.Trace
 newtype SMT2 = SMT2 [String]
   deriving (Eq, Show, Semigroup, Monoid)
 
+formatSMT2 :: SMT2 -> String
+formatSMT2 (SMT2 ls) = unlines ls
+
 assertWord :: Expr EWord -> SMT2
 assertWord e = prelude
             <> (declareBufs $ referencedBufs e)
+            <> SMT2 [""]
             <> (declareVars $ referencedVars e)
+            <> SMT2 [""]
+            <> (declareFrameContext $ referencedFrameContext e)
+            <> SMT2 [""]
             <> (SMT2 . singleton $ "(assert (= " <> exprToSMT (Lit 1) <> " " <> exprToSMT e <> ")")
 
 assertWords :: [Expr EWord] -> SMT2
 assertWords es = prelude
             <> (declareBufs . nubOrd $ foldl (<>) [] (fmap (referencedBufs) es))
+            <> SMT2 [""]
             <> (declareVars . nubOrd $ foldl (<>) [] (fmap (referencedVars) es))
+            <> SMT2 [""]
+            <> (declareFrameContext . nubOrd $ foldl (<>) [] (fmap (referencedFrameContext) es))
+            <> SMT2 [""]
             <> (SMT2 $ fmap (\e -> "(assert (= " <> exprToSMT (Lit 1) <> " " <> exprToSMT e <> "))") es)
 
 prelude :: SMT2
-prelude = SMT2 . lines $ [i|
+prelude = SMT2 . fmap (dropWhile isSpace) . lines $ [i|
     ; hash functions
     (declare-fun keccak ((Array (_ BitVec 256) (_ BitVec 8))) (_ BitVec 256))
     (declare-fun sha256 ((Array (_ BitVec 256) (_ BitVec 8))) (_ BitVec 256))
@@ -98,6 +107,24 @@ referencedVars expr = nubOrd (foldExpr go [] expr)
       Var s -> [s]
       _ -> []
 
+declareFrameContext :: [String] -> SMT2
+declareFrameContext names = SMT2 $ ["; frame context"] <> fmap declare names
+  where
+    declare n = "(declare-const " <> n <> " (_ BitVec 256))"
+
+referencedFrameContext :: Expr a -> [String]
+referencedFrameContext expr = nubOrd (foldExpr go [] expr)
+  where
+    go :: Expr a -> [String]
+    go = \case
+      CallValue a -> ["callvalue_" <> show a]
+      Caller a -> ["caller_" <> show a]
+      Address a -> ["address_" <> show a]
+      Balance {} -> error "TODO: BALANCE"
+      SelfBalance {} -> error "TODO: SELFBALANCE"
+      Gas {} -> error "TODO: GAS"
+      _ -> []
+
 -- encodes a word into smt
 exprToSMT :: Expr a -> String
 exprToSMT = \case
@@ -136,11 +163,15 @@ exprToSMT = \case
   Xor a b -> exprToSMT $ And (Or a b) (Not (And a b))
   Not a -> op1 "bvnot" a
   SHL a b -> op2 "bvshl" a b
-  SHR a b -> op2 "bvlshr" a b -- TODO: is lshr the same as shr?
+  SHR a b -> op2 "bvlshr" b a -- TODO: is lshr the same as shr?
   EqByte a b -> "(= " <> exprToSMT a  <> " " <> exprToSMT b <> ")"
 
   Keccak a -> "(keccak " <> exprToSMT a <> ")"
   SHA256 a -> "(sha256 " <> exprToSMT a <> ")"
+
+  CallValue a -> "callvalue_" <> show a
+  Caller a -> "caller_" <> show a
+  Address a -> "address_" <> show a
 
   Origin -> "origin"
   BlockHash a -> "(blockhash " <> exprToSMT a <> ")"
