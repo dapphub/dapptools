@@ -57,6 +57,16 @@ assertWords es = prelude
             <> SMT2 [""]
             <> (SMT2 $ fmap (\e -> "(assert (= " <> exprToSMT (Lit 1) <> " " <> exprToSMT e <> "))") es)
 
+assertProps :: [Prop] -> SMT2
+assertProps ps = prelude
+            <> (declareBufs . nubOrd $ foldl (<>) [] (fmap (referencedBufs') ps))
+            <> SMT2 [""]
+            <> (declareVars . nubOrd $ foldl (<>) [] (fmap (referencedVars') ps))
+            <> SMT2 [""]
+            <> (declareFrameContext . nubOrd $ foldl (<>) [] (fmap (referencedFrameContext') ps))
+            <> SMT2 [""]
+            <> (SMT2 $ fmap (\p -> "(assert " <> propToSMT p <> ")") ps)
+
 prelude :: SMT2
 prelude = SMT2 . fmap (dropWhile isSpace) . lines $ [i|
     ; hash functions
@@ -94,6 +104,30 @@ referencedBufs expr = nubOrd (foldExpr go [] expr)
       AbstractBuf s -> [s]
       _ -> []
 
+referencedBufs' :: Prop -> [String]
+referencedBufs' = \case
+  (PEq a b) -> nubOrd $ referencedBufs a <> referencedBufs b
+  (PLT a b) -> nubOrd $ referencedBufs a <> referencedBufs b
+  (PGT a b) -> nubOrd $ referencedBufs a <> referencedBufs b
+  (PLEq a b) -> nubOrd $ referencedBufs a <> referencedBufs b
+  (PGEq a b) -> nubOrd $ referencedBufs a <> referencedBufs b
+
+referencedVars' :: Prop -> [String]
+referencedVars' = \case
+  (PEq a b) -> nubOrd $ referencedVars a <> referencedVars b
+  (PLT a b) -> nubOrd $ referencedVars a <> referencedVars b
+  (PGT a b) -> nubOrd $ referencedVars a <> referencedVars b
+  (PLEq a b) -> nubOrd $ referencedVars a <> referencedVars b
+  (PGEq a b) -> nubOrd $ referencedVars a <> referencedVars b
+
+referencedFrameContext' :: Prop -> [String]
+referencedFrameContext' = \case
+  (PEq a b) -> nubOrd $ referencedFrameContext a <> referencedFrameContext b
+  (PLT a b) -> nubOrd $ referencedFrameContext a <> referencedFrameContext b
+  (PGT a b) -> nubOrd $ referencedFrameContext a <> referencedFrameContext b
+  (PLEq a b) -> nubOrd $ referencedFrameContext a <> referencedFrameContext b
+  (PGEq a b) -> nubOrd $ referencedFrameContext a <> referencedFrameContext b
+
 declareVars :: [String] -> SMT2
 declareVars names = SMT2 $ ["; variables"] <> fmap declare names
   where
@@ -125,7 +159,6 @@ referencedFrameContext expr = nubOrd (foldExpr go [] expr)
       Gas {} -> error "TODO: GAS"
       _ -> []
 
--- encodes a word into smt
 exprToSMT :: Expr a -> String
 exprToSMT = \case
   Lit w -> "#x" <> (padLeftStr 64 . strip0x' . show $ w)
@@ -152,7 +185,7 @@ exprToSMT = \case
 
   LT a b -> "(ite " <> op2 "bvult" a b <> " " <> exprToSMT (Lit 1) <> " " <> exprToSMT (Lit 0) <> ")"
   SLT a b -> "(ite " <> op2 "bvslt" a b <> " " <> exprToSMT (Lit 1) <> " " <> exprToSMT (Lit 0) <> ")"
-  GT a b -> exprToSMT $ And (Not (LT a b)) (Not (Eq a b))
+  GT a b -> "(ite " <> op2 "bvugt" a b <> " " <> exprToSMT (Lit 1) <> " " <> exprToSMT (Lit 0) <> ")"
   LEq a b -> exprToSMT $ Not (LT b a)
   GEq a b -> exprToSMT $ Not (LT a b)
   Eq a b -> "(ite " <> op2 "=" a b <> " " <> exprToSMT (Lit 1) <> " " <> exprToSMT (Lit 0) <> ")"
@@ -183,11 +216,12 @@ exprToSMT = \case
   ChainId -> "chainid"
   BaseFee -> "basefee"
 
+  -- TODO: make me binary...
   LitByte b -> "#x" <> (strip0x' . show $ (num b :: W256))
   IndexWord w idx -> "((_ extract " <> exprToSMT (add idx (Lit 7)) <> " " <> exprToSMT idx  <> ") " <> exprToSMT w <> ")"
   ReadByte idx src -> op2 "select" src idx
 
-  EmptyBuf -> "((as const (Array (_ BitVec 256) (_ BitVec 8))) 0)"
+  EmptyBuf -> "((as const (Array (_ BitVec 256) (_ BitVec 8))) #b00000000)"
   ConcreteBuf bs -> error "TODO: concreteBuf"
   AbstractBuf s -> s
   WriteByte idx val prev -> op3 "store" prev idx val
@@ -196,16 +230,25 @@ exprToSMT = \case
   BufLength b -> op1 "bufLength" b
   CopySlice dstIdx srcIdx size src dst -> copySlice dstIdx srcIdx size src dst
 
-  EmptyStore -> "((as const (Array (_ BitVec 256) (Array (_ BitVec 256) (_ BitVec 256)))) 0)"
+  EmptyStore -> "((as const (Array (_ BitVec 256) (Array (_ BitVec 256) (_ BitVec 256)))) ((as const (Array (_ BitVec 256) (_ BitVec 256)))" <> exprToSMT (Lit 0) <> "))"
   ConcreteStore s -> error "TODO: concretestore"
   AbstractStore -> "storage"
-  SStore addr idx val store -> "(store " <> exprToSMT store <> " " <> exprToSMT addr <> "(store (select " <> exprToSMT addr <> " " <> exprToSMT store <> ") " <> exprToSMT idx <> " " <> exprToSMT val <> "))a"
+  SStore addr idx val store -> "(store " <> exprToSMT store <> " " <> exprToSMT addr <> " (store (select " <> exprToSMT addr <> " " <> exprToSMT store <> ") " <> exprToSMT idx <> " " <> exprToSMT val <> "))"
+  SLoad addr idx store -> "(select " <> exprToSMT idx <> " (select " <> exprToSMT addr <> " " <> exprToSMT store <> "))"
 
   a -> error $ "TODO: implement: " <> show a
   where
     op1 op a = "(" <> op <> " " <> exprToSMT a <> ")"
     op2 op a b = "(" <> op <> " " <> exprToSMT a <> " " <> exprToSMT b <> ")"
     op3 op a b c = "(" <> op <> " " <> exprToSMT a <> " " <> exprToSMT b <> " " <> exprToSMT c <> ")"
+
+propToSMT :: Prop -> String
+propToSMT = \case
+    PEq a b -> "(= " <> exprToSMT a <> " " <> exprToSMT b <> ")"
+    PLT a b -> "(< " <> exprToSMT a <> " " <> exprToSMT b <> ")"
+    PGT a b -> "(> " <> exprToSMT a <> " " <> exprToSMT b <> ")"
+    PLEq a b -> "(<= " <> exprToSMT a <> " " <> exprToSMT b <> ")"
+    PGEq a b -> "(>= " <> exprToSMT a <> " " <> exprToSMT b <> ")"
 
 
 -- ** Execution ** -------------------------------------------------------------------------------
@@ -313,7 +356,7 @@ withSolvers solver count cont = do
       _ <- forkIO $ runTask task inst avail
       orchestrate queue avail
 
-    runTask (Task (SMT2 cmds) ms r) inst availableInstances = do
+    runTask (Task s@(SMT2 cmds) ms r) inst availableInstances = do
       -- reset solver and send all lines of provided script
       out <- sendScript inst (SMT2 $ "(reset)" : cmds)
       case out of
@@ -426,11 +469,10 @@ readSExpr h = go 0 0 []
 writeWord :: Expr EWord -> Expr EWord -> Expr Buf -> String
 writeWord idx val buf = go buf 31
   where
-    -- TODO: endianess?
     go :: Expr Buf -> Int -> String
     go b n
       | n == 0 = "(store " <> exprToSMT b  <> " " <> exprToSMT idx <> exprToSMT (IndexWord val (Lit 0)) <> ")"
-      | otherwise = "(store (go b (n - 1)) (idx + n) (IndexWord val n))"
+      | otherwise = "(store " <> go b (n - 1) <> " " <> exprToSMT (add idx (Lit $ num n)) <> " " <> (exprToSMT $ IndexWord val (Lit $ num n)) <> ")"
 
 readWord :: Expr EWord -> Expr Buf -> String
 readWord idx buf = concatBytes $ go 0

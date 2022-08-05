@@ -219,12 +219,13 @@ data Expr (a :: EType) where
                  -> Expr EWord
   -- control flow
 
-  Invalid        :: Expr End
-  SelfDestruct   :: Expr End
-  Revert         :: Expr Buf     -> Expr End
-  Return         :: Expr Buf     -> Expr Storage -> Expr End
-  ITE            :: Expr EWord   -> Expr End     -> Expr End -> Expr End
-  TmpErr         :: String -> Expr End
+  Invalid         :: Expr End
+  IllegalOverflow :: Expr End
+  SelfDestruct    :: Expr End
+  Revert          :: Expr Buf     -> Expr End
+  Return          :: Expr Buf     -> Expr Storage -> Expr End
+  ITE             :: Expr EWord   -> Expr End     -> Expr End -> Expr End
+  TmpErr          :: String -> Expr End
 
   -- integers
 
@@ -431,6 +432,19 @@ deriving instance Show (Expr a)
 deriving instance Eq (Expr a)
 deriving instance Ord (Expr a)
 
+-- The language of assertable expressions.
+-- This is useful when generating SMT queries based on Expr instances, since
+-- the translation of Eq and other boolean operators from Expr to SMT is an
+-- (ite (eq a b) 1 0). We can use the boolean operators here to remove some
+-- unescessary `ite` statements from our SMT encoding.
+data Prop
+  = PEq (Expr EWord) (Expr EWord)
+  | PLT (Expr EWord) (Expr EWord)
+  | PGT (Expr EWord) (Expr EWord)
+  | PLEq (Expr EWord) (Expr EWord)
+  | PGEq (Expr EWord) (Expr EWord)
+  deriving (Eq, Show)
+
 -- | Recursively folds a given function over a given expression
 -- Recursion schemes do this & a lot more, but defining them over GADT's isn't worth the hassle
 foldExpr :: forall b c . Monoid b => (forall a . Expr a -> b) -> b -> Expr c -> b
@@ -470,6 +484,7 @@ foldExpr f acc expr = acc <> (go expr)
 
       e@Invalid -> f e
       e@SelfDestruct -> f e
+      e@IllegalOverflow -> f e
       e@(Revert a) -> f e <> (go a)
       e@(Return a b) -> f e <> (go a) <> (go b)
       e@(ITE a b c) -> f e <> (go a) <> (go b) <> (go c)
@@ -670,6 +685,7 @@ mapExpr f expr = case (f expr) of
 
   Invalid -> Invalid
   SelfDestruct -> SelfDestruct
+  IllegalOverflow -> IllegalOverflow
   Revert a -> Revert (mapExpr f (f a))
   Return a b -> Return (mapExpr f (f a)) (mapExpr f (f b))
   ITE a b c -> ITE (mapExpr f (f a)) (mapExpr f (f b)) (mapExpr f (f c))

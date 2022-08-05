@@ -178,6 +178,7 @@ interpret fetcher maxIter askSmtIters =
         Stepper.Ask (EVM.PleaseChoosePath cond continue) -> do
           assign result Nothing
           vm <- get
+          --liftIO $ print $ "BRANCH" <> show (view (state . pc) vm)
           case maxIterationsReached vm maxIter of
             -- TODO: parallelise
             Nothing -> do
@@ -298,6 +299,7 @@ runExpr = do
     Just (VMFailure e) -> case e of
       UnrecognizedOpcode _ -> Invalid
       SelfDestruction -> SelfDestruct
+      EVM.IllegalOverflow -> EVM.Types.IllegalOverflow
       EVM.Revert buf -> EVM.Types.Revert buf
       e' -> EVM.Types.TmpErr $ show e'
 
@@ -354,36 +356,42 @@ simplify e = if (mapExpr go e == e)
 reachable :: SolverGroup -> Expr End -> IO ([SMT2], Expr End)
 reachable solvers = go []
   where
-    go :: [Expr EWord] -> Expr End -> IO ([SMT2], Expr End)
+    go :: [Prop] -> Expr End -> IO ([SMT2], Expr End)
     go pcs = \case
       ITE c t f -> do
         let
-          tquery = assertWords (Eq c (Lit 1) : pcs)
-          fquery = assertWords (Eq c (Lit 0) : pcs)
+          tquery = assertProps (PEq c (Lit 1) : pcs)
+          fquery = assertProps (PEq c (Lit 0) : pcs)
         res <- concurrently
           (checkSat' solvers (tquery, []))
           (checkSat' solvers (fquery, []))
         case res of
-          (Error tm, Error fm) -> error $ "Solver Errors: " <> unlines [tm, fm]
+          (Error tm, Error fm) -> do
+            writeFile "tquery.smt2" (formatSMT2 tquery)
+            writeFile "fquery.smt2" (formatSMT2 fquery)
+            error $ "Solver Errors: " <> unlines [tm, fm]
           (Error tm, _) -> error $ "Solver Error: " <> tm
           (_ , Error fm) -> error $ "Solver Error: " <> fm
-          (Unsat, Unsat) -> error "Internal Error: two unsat branches found"
-          (EVM.SMT.Unknown, _) -> undefined
-          (_, EVM.SMT.Unknown) -> undefined
-          (Unsat, Sat _) -> go (Eq c (Lit 0) : pcs) f
-          (Sat _, Unsat) -> go (Eq c (Lit 1) : pcs) t
+          (EVM.SMT.Unknown, _) -> error "Solver timeout, unable to analyze reachability"
+          (_, EVM.SMT.Unknown) -> error "Solver timeout, unable to analyze reachability"
+          (Unsat, Sat _) -> go (PEq c (Lit 0) : pcs) f
+          (Sat _, Unsat) -> go (PEq c (Lit 1) : pcs) t
           (Sat _, Sat _) -> do
             ((tqs, texp), (fqs, fexp)) <- concurrently
-              (go (Eq c (Lit 1) : pcs) t)
-              (go (Eq c (Lit 0) : pcs) f)
+              (go (PEq c (Lit 1) : pcs) t)
+              (go (PEq c (Lit 0) : pcs) f)
             pure ([tquery, fquery] <> tqs <> fqs, ITE c texp fexp)
+          (Unsat, Unsat) -> do
+            putStrLn $ "pcs: " <> show pcs
+            putStrLn $ "tquery:\n " <> formatSMT2 tquery
+            putStrLn $ "fquery:\n " <> formatSMT2 fquery
+            error "Internal Error: two unsat branches found"
       Invalid -> pure ([], Invalid)
       SelfDestruct -> pure ([], SelfDestruct)
       Revert msg -> pure ([], Revert msg)
       Return msg store -> pure ([], Return msg store)
-      TmpErr _ -> undefined
-
-
+      EVM.Types.IllegalOverflow -> pure ([], EVM.Types.IllegalOverflow)
+      TmpErr e -> error $ "TmpErr: " <> show e
 
 
 -- | Symbolically execute the VM and check all endstates against the postcondition, if available.
