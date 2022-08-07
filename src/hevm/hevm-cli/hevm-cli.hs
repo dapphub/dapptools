@@ -15,7 +15,7 @@
 module Main where
 
 import EVM (StorageModel(..))
-import EVM.Dev (analyzeDai, dumpQueries)
+import EVM.Dev (analyzeDai, dumpQueries, analyzeVat)
 import qualified EVM
 import EVM.Concrete (createAddress)
 import qualified EVM.FeeSchedule as FeeSchedule
@@ -499,8 +499,9 @@ getSrcInfo cmd =
 -- If function signatures are known, they should always be given for best results.
 assert :: Command Options.Unwrapped -> IO ()
 assert cmd = do
-  dumpQueries
+  --dumpQueries
   --analyzeDai
+  analyzeVat
     {-
   srcInfo <- getSrcInfo cmd
   let block'  = maybe EVM.Fetch.Latest EVM.Fetch.BlockNumber (block cmd)

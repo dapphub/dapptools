@@ -27,15 +27,15 @@ dumpQueries :: IO ()
 dumpQueries = do
   d <- dai
   e <- buildExpr d
-  withSolvers Z3 1 $ \s -> do
+  withSolvers Z3 4 $ \s -> do
     qs <- reachableQueries s e
     forM_ (zip ([1..] :: [Int]) qs) $ \(idx, q) -> do
-      writeFile ("query_" <> show idx) (T.unpack $ T.append (formatSMT2 q) "(check-sat)")
+      writeFile ("query_" <> show idx <> ".smt2") (T.unpack $ T.append (formatSMT2 q) "(check-sat)")
 
 doTest :: IO ()
 doTest = do
   c <- testContract
-  reachable' True c
+  reachable' False c
   --e <- simplify <$> buildExpr c
   --Prelude.putStrLn (formatExpr e)
 
@@ -53,16 +53,16 @@ reachable' :: Bool -> ByteString -> IO ()
 reachable' smtdebug c = do
   full <- simplify <$> buildExpr c
   putStrLn "Explored contract"
-  putStrLn $ formatExpr full
-  --writeFile "full.ast" $ formatExpr full
-  --putStrLn "Dumped to full.ast"
-  withSolvers Z3 1 $ \solvers -> do
+  --putStrLn $ formatExpr full
+  writeFile "full.ast" $ formatExpr full
+  putStrLn "Dumped to full.ast"
+  withSolvers Z3 4 $ \solvers -> do
     putStrLn "Checking reachability"
     (qs, less) <- reachable solvers full
     putStrLn "Checked reachability"
-    --writeFile "reachable.ast" $ formatExpr less
-    --putStrLn "Dumped to reachable.ast"
-    putStrLn $ formatExpr less
+    writeFile "reachable.ast" $ formatExpr less
+    putStrLn "Dumped to reachable.ast"
+    --putStrLn $ formatExpr less
     when smtdebug $ do
       putStrLn "\n\nQueries\n\n"
       forM_ qs $ \q -> do

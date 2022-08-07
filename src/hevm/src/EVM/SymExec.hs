@@ -384,16 +384,17 @@ reachable solvers = go []
         let
           tquery = assertProps (PEq c (Lit 1) : pcs)
           fquery = assertProps (PEq c (Lit 0) : pcs)
-        putStrLn "starting query construction"
-        tres <- (checkSat' solvers (trace "built tquery" tquery, []))
-        fres <- (checkSat' solvers (trace "built fquery" fquery, []))
+        tres <- (checkSat' solvers (tquery, []))
+        fres <- (checkSat' solvers (fquery, []))
         print (tres, fres)
         case (tres, fres) of
           (Error tm, Error fm) -> do
             writeFile "tquery.smt2" (T.unpack $ formatSMT2 tquery)
             writeFile "fquery.smt2" (T.unpack $ formatSMT2 fquery)
             error $ "Solver Errors: " <> (T.unpack . T.unlines $ [tm, fm])
-          (Error tm, _) -> error $ "Solver Error: " <> T.unpack tm
+          (Error tm, _) -> do
+            putStrLn $ T.unpack $ formatSMT2 tquery
+            error $ "Solver Error: " <> T.unpack tm
           (_ , Error fm) -> error $ "Solver Error: " <> T.unpack fm
           (EVM.SMT.Unknown, _) -> error "Solver timeout, unable to analyze reachability"
           (_, EVM.SMT.Unknown) -> error "Solver timeout, unable to analyze reachability"
