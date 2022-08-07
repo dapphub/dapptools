@@ -5,6 +5,8 @@ module EVM.SymExec where
 
 import Prelude hiding (Word)
 
+import Debug.Trace
+
 import Control.Lens hiding (pre)
 import EVM hiding (Query, Revert, push)
 import qualified EVM
@@ -27,6 +29,7 @@ import Data.ByteString (ByteString)
 import qualified Control.Monad.State.Class as State
 import Data.Bifunctor (first, second)
 import Data.Text (Text)
+import qualified Data.Text as T
 import Data.List (find)
 import Data.Maybe (isJust, fromJust)
 
@@ -344,6 +347,25 @@ simplify e = if (mapExpr go e == e)
       | otherwise = o
     go a = a
 
+reachableQueries :: SolverGroup -> Expr End -> IO [SMT2]
+reachableQueries solvers = go []
+  where
+    go :: [Prop] -> Expr End -> IO [SMT2]
+    go pcs = \case
+      ITE c t f -> do
+        let
+          tquery = assertProps (PEq c (Lit 1) : pcs)
+          fquery = assertProps (PEq c (Lit 0) : pcs)
+        tchildren <- go (PEq c (Lit 1) : pcs) t
+        fchildren <- go (PEq c (Lit 0) : pcs) f
+        pure $ [tquery, fquery] <> tchildren <> fchildren
+      Invalid -> pure []
+      SelfDestruct -> pure []
+      Revert msg -> pure []
+      Return msg store -> pure []
+      EVM.Types.IllegalOverflow -> pure []
+      TmpErr e -> error $ "TmpErr: " <> show e
+
 -- | Strips unreachable branches from a given expr
 -- Returns a list of executed SMT queries alongside the reduced expression for debugging purposes
 -- Note that the reduced expression loses information relative to the original
@@ -362,16 +384,17 @@ reachable solvers = go []
         let
           tquery = assertProps (PEq c (Lit 1) : pcs)
           fquery = assertProps (PEq c (Lit 0) : pcs)
-        res <- concurrently
-          (checkSat' solvers (tquery, []))
-          (checkSat' solvers (fquery, []))
-        case res of
+        putStrLn "starting query construction"
+        tres <- (checkSat' solvers (trace "built tquery" tquery, []))
+        fres <- (checkSat' solvers (trace "built fquery" fquery, []))
+        print (tres, fres)
+        case (tres, fres) of
           (Error tm, Error fm) -> do
-            writeFile "tquery.smt2" (formatSMT2 tquery)
-            writeFile "fquery.smt2" (formatSMT2 fquery)
-            error $ "Solver Errors: " <> unlines [tm, fm]
-          (Error tm, _) -> error $ "Solver Error: " <> tm
-          (_ , Error fm) -> error $ "Solver Error: " <> fm
+            writeFile "tquery.smt2" (T.unpack $ formatSMT2 tquery)
+            writeFile "fquery.smt2" (T.unpack $ formatSMT2 fquery)
+            error $ "Solver Errors: " <> (T.unpack . T.unlines $ [tm, fm])
+          (Error tm, _) -> error $ "Solver Error: " <> T.unpack tm
+          (_ , Error fm) -> error $ "Solver Error: " <> T.unpack fm
           (EVM.SMT.Unknown, _) -> error "Solver timeout, unable to analyze reachability"
           (_, EVM.SMT.Unknown) -> error "Solver timeout, unable to analyze reachability"
           (Unsat, Sat _) -> go (PEq c (Lit 0) : pcs) f
@@ -383,8 +406,8 @@ reachable solvers = go []
             pure ([tquery, fquery] <> tqs <> fqs, ITE c texp fexp)
           (Unsat, Unsat) -> do
             putStrLn $ "pcs: " <> show pcs
-            putStrLn $ "tquery:\n " <> formatSMT2 tquery
-            putStrLn $ "fquery:\n " <> formatSMT2 fquery
+            putStrLn $ "tquery:\n " <> (T.unpack $ formatSMT2 tquery)
+            putStrLn $ "fquery:\n " <> (T.unpack $ formatSMT2 fquery)
             error "Internal Error: two unsat branches found"
       Invalid -> pure ([], Invalid)
       SelfDestruct -> pure ([], SelfDestruct)
@@ -407,13 +430,13 @@ verify preState maxIter askSmtIters rpcinfo maybepost = do
       findExpr s = fmap fst $ find (\(e,(s', _)) -> s == s') queries
   reachable <- withSolvers Z3 (num numCapabilities) $ \solvers -> do
     forM_ queries $ \(_, (SMT2 q,_)) -> do
-      putStrLn $ unlines q
+      putStrLn $ T.unpack $ T.unlines q
     rs <- checkSat solvers (fmap snd queries)
     let rs' = fmap (first findExpr) rs
         rs'' = fmap (first fromJust) (filter (isJust . fst) rs')
         rs''' = filter (isSat . snd) rs''
     pure rs'''
-  pure $ if null reachable then Qed () else Cex (fmap (second getModels) reachable)
+  pure $ if null reachable then Qed () else Cex (fmap (second (fmap T.unpack . getModels)) reachable)
   where
     getModels (Sat ms) = ms
     getModels _ = []

@@ -7,12 +7,12 @@ Description: Helpers for repl driven hevm hacking
 -}
 module EVM.Dev where
 
-import Data.Bifunctor (second)
-import Data.ByteString hiding (putStrLn)
+import Data.ByteString hiding (putStrLn, writeFile, zip)
 import Control.Monad.State.Strict hiding (state)
 import Data.Maybe (fromJust)
 
 import Data.String.Here
+import qualified Data.Text as T
 
 import EVM
 import EVM.SMT (withSolvers, Solver(..), formatSMT2)
@@ -23,11 +23,21 @@ import EVM.Format (formatExpr)
 import qualified EVM.Fetch as Fetch
 import qualified EVM.FeeSchedule as FeeSchedule
 
+dumpQueries :: IO ()
+dumpQueries = do
+  d <- dai
+  e <- buildExpr d
+  withSolvers Z3 1 $ \s -> do
+    qs <- reachableQueries s e
+    forM_ (zip ([1..] :: [Int]) qs) $ \(idx, q) -> do
+      writeFile ("query_" <> show idx) (T.unpack $ T.append (formatSMT2 q) "(check-sat)")
+
 doTest :: IO ()
 doTest = do
   c <- testContract
-  e <- simplify <$> buildExpr c
-  Prelude.putStrLn (formatExpr e)
+  reachable' True c
+  --e <- simplify <$> buildExpr c
+  --Prelude.putStrLn (formatExpr e)
 
 analyzeDai :: IO ()
 analyzeDai = do
@@ -42,21 +52,22 @@ analyzeVat = do
 reachable' :: Bool -> ByteString -> IO ()
 reachable' smtdebug c = do
   full <- simplify <$> buildExpr c
-  let f = formatExpr full
   putStrLn "Explored contract"
-  putStrLn "Full Expression:\n"
-  --print full
-  --putStrLn f
-  withSolvers Z3 4 $ \solvers -> do
+  putStrLn $ formatExpr full
+  --writeFile "full.ast" $ formatExpr full
+  --putStrLn "Dumped to full.ast"
+  withSolvers Z3 1 $ \solvers -> do
     putStrLn "Checking reachability"
     (qs, less) <- reachable solvers full
-    putStrLn "\n\nReachable AST\n\n"
+    putStrLn "Checked reachability"
+    --writeFile "reachable.ast" $ formatExpr less
+    --putStrLn "Dumped to reachable.ast"
     putStrLn $ formatExpr less
     when smtdebug $ do
       putStrLn "\n\nQueries\n\n"
       forM_ qs $ \q -> do
         putStrLn "\n\n-- Query --"
-        putStrLn $ formatSMT2 q
+        putStrLn $ T.unpack $ formatSMT2 q
 
 
 testContract :: IO ByteString

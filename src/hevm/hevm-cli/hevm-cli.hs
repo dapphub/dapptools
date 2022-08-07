@@ -15,6 +15,7 @@
 module Main where
 
 import EVM (StorageModel(..))
+import EVM.Dev (analyzeDai, dumpQueries)
 import qualified EVM
 import EVM.Concrete (createAddress)
 import qualified EVM.FeeSchedule as FeeSchedule
@@ -498,6 +499,9 @@ getSrcInfo cmd =
 -- If function signatures are known, they should always be given for best results.
 assert :: Command Options.Unwrapped -> IO ()
 assert cmd = do
+  dumpQueries
+  --analyzeDai
+    {-
   srcInfo <- getSrcInfo cmd
   let block'  = maybe EVM.Fetch.Latest EVM.Fetch.BlockNumber (block cmd)
       rpcinfo = (,) block' <$> rpc cmd
@@ -525,6 +529,7 @@ assert cmd = do
     let errCodes = fromMaybe defaultPanicCodes (assertions cmd)
     let res = verify preState (maxIterations cmd) (askSmtIterations cmd) rpcinfo (Just $ checkAssertions errCodes)
     print res
+    -}
     {-
     runSMTWithTimeOut (solver cmd) (smttimeout cmd) (smtdebug cmd) $ query $ do
       preState <- symvmFromCommand cmd
@@ -814,7 +819,7 @@ vmFromCommand cmd = do
           , EVM.vmoptSchedule      = FeeSchedule.berlin
           , EVM.vmoptChainId       = word chainid 1
           , EVM.vmoptCreate        = create cmd
-          , EVM.vmoptStorageModel  = ConcreteS
+          , EVM.vmoptStorageBase   = EVM.Concrete
           , EVM.vmoptTxAccessList  = mempty -- TODO: support me soon
           , EVM.vmoptAllowFFI      = False
           }

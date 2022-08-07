@@ -198,8 +198,8 @@ data Expr (a :: EType) where
 
   -- identifiers
 
-  Lit            :: W256   -> Expr EWord
-  Var            :: String -> Expr EWord
+  Lit            :: W256 -> Expr EWord
+  Var            :: Text -> Expr EWord
 
   -- bytes
 
@@ -397,7 +397,7 @@ data Expr (a :: EType) where
 
   EmptyBuf       :: Expr Buf
   ConcreteBuf    :: ByteString -> Expr Buf
-  AbstractBuf    :: String -> Expr Buf
+  AbstractBuf    :: Text -> Expr Buf
 
   ReadWord       :: Expr EWord         -- index
                  -> Expr Buf           -- src
