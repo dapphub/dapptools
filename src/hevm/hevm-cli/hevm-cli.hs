@@ -500,8 +500,8 @@ getSrcInfo cmd =
 assert :: Command Options.Unwrapped -> IO ()
 assert cmd = do
   --dumpQueries
-  --analyzeDai
-  analyzeVat
+  analyzeDai
+  --analyzeVat
     {-
   srcInfo <- getSrcInfo cmd
   let block'  = maybe EVM.Fetch.Latest EVM.Fetch.BlockNumber (block cmd)

@@ -54,12 +54,12 @@ reachable' smtdebug c = do
   full <- simplify <$> buildExpr c
   putStrLn "Explored contract"
   --putStrLn $ formatExpr full
-  writeFile "full.ast" $ formatExpr full
-  putStrLn "Dumped to full.ast"
+  --writeFile "full.ast" $ formatExpr full
+  --putStrLn "Dumped to full.ast"
   withSolvers Z3 4 $ \solvers -> do
     putStrLn "Checking reachability"
-    (qs, less) <- reachable solvers full
-    putStrLn "Checked reachability"
+    (qs, less) <- reachable2 solvers full
+    putStrLn $ "Checked reachability (" <> (show $ Prelude.length qs) <> " queries)"
     writeFile "reachable.ast" $ formatExpr less
     putStrLn "Dumped to reachable.ast"
     --putStrLn $ formatExpr less

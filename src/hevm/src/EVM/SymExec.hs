@@ -24,6 +24,7 @@ import qualified EVM.FeeSchedule as FeeSchedule
 import Data.DoubleWord (Word256)
 import GHC.Conc (numCapabilities)
 import Control.Concurrent.Async
+import Data.Maybe
 
 import Data.ByteString (ByteString)
 import qualified Control.Monad.State.Class as State
@@ -365,6 +366,46 @@ reachableQueries solvers = go []
       Return msg store -> pure []
       EVM.Types.IllegalOverflow -> pure []
       TmpErr e -> error $ "TmpErr: " <> show e
+
+-- | Strips unreachable branches from a given expr
+-- Returns a list of executed SMT queries alongside the reduced expression for debugging purposes
+-- Note that the reduced expression loses information relative to the original
+-- one if jump conditions are removed. This restriction can be removed once
+-- Expr supports attaching knowledge to AST nodes.
+-- Although this algorithm currently parallelizes nicely, it does not exploit
+-- the incremental nature of the task at hand. Introducing support for
+-- incremental queries might let us go even faster here.
+-- TODO: handle errors properly
+reachable2 :: SolverGroup -> Expr End -> IO ([SMT2], Expr End)
+reachable2 solvers e = do
+    res <- go [] e
+    pure $ second (fromMaybe (error "oops")) res
+  where
+    {-
+       walk down the tree and collect pcs.
+       dispatch a reachability query at each leaf.
+       if reachable return the expr wrapped in a Just. If not return Nothing.
+       when walking back up the tree drop unreachable subbranches.
+    -}
+    go :: [Prop] -> Expr End -> IO ([SMT2], Maybe (Expr End))
+    go pcs = \case
+      ITE c t f -> do
+        (tres, fres) <- concurrently
+          (go (PEq (Lit 1) c : pcs) t)
+          (go (PEq (Lit 0) c : pcs) f)
+        let subexpr = case (snd tres, snd fres) of
+              (Just t', Just f') -> Just $ ITE c t' f'
+              (Just t', Nothing) -> Just t'
+              (Nothing, Just f') -> Just f'
+              (Nothing, Nothing) -> Nothing
+        pure (fst tres <> fst fres, subexpr)
+      leaf -> do
+        let query = assertProps pcs
+        res <- checkSat' solvers (query, [])
+        case res of
+          Sat _ -> pure ([query], Just leaf)
+          Unsat -> pure ([query], Nothing)
+          r -> error $ "Invalid solver result: " <> show r
 
 -- | Strips unreachable branches from a given expr
 -- Returns a list of executed SMT queries alongside the reduced expression for debugging purposes
