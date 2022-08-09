@@ -499,9 +499,9 @@ getSrcInfo cmd =
 -- If function signatures are known, they should always be given for best results.
 assert :: Command Options.Unwrapped -> IO ()
 assert cmd = do
-  --dumpQueries
-  analyzeDai
-  --analyzeVat
+  --dumpQueries "/tmp/tmp.V5xsEj5oN9"
+  --analyzeDai
+  analyzeVat
     {-
   srcInfo <- getSrcInfo cmd
   let block'  = maybe EVM.Fetch.Latest EVM.Fetch.BlockNumber (block cmd)

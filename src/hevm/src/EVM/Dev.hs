@@ -10,6 +10,7 @@ module EVM.Dev where
 import Data.ByteString hiding (putStrLn, writeFile, zip)
 import Control.Monad.State.Strict hiding (state)
 import Data.Maybe (fromJust)
+import System.Directory
 
 import Data.String.Here
 import qualified Data.Text as T
@@ -17,20 +18,26 @@ import qualified Data.Text as T
 import EVM
 import EVM.SMT (withSolvers, Solver(..), formatSMT2)
 import EVM.Types
+import EVM.Expr (numBranches)
 import EVM.SymExec
 import EVM.Solidity
 import EVM.Format (formatExpr)
 import qualified EVM.Fetch as Fetch
 import qualified EVM.FeeSchedule as FeeSchedule
 
-dumpQueries :: IO ()
-dumpQueries = do
+dumpQueries :: FilePath -> IO ()
+dumpQueries root = withCurrentDirectory root $ do
   d <- dai
+  putStrLn "building expression"
   e <- buildExpr d
-  withSolvers Z3 4 $ \s -> do
-    qs <- reachableQueries s e
-    forM_ (zip ([1..] :: [Int]) qs) $ \(idx, q) -> do
-      writeFile ("query_" <> show idx <> ".smt2") (T.unpack $ T.append (formatSMT2 q) "(check-sat)")
+  putStrLn "built expression"
+  putStrLn "generating queries"
+  qs <- reachableQueries e
+  putStrLn $ "generated queries (" <> (show $ Prelude.length qs) <> " total)"
+  putStrLn "dumping queries"
+  forM_ (zip ([1..] :: [Int]) qs) $ \(idx, q) -> do
+    writeFile ("query_" <> show idx <> ".smt2") (T.unpack $ T.append (formatSMT2 q) "(check-sat)")
+  putStrLn "dumped queries"
 
 doTest :: IO ()
 doTest = do
@@ -51,8 +58,9 @@ analyzeVat = do
 
 reachable' :: Bool -> ByteString -> IO ()
 reachable' smtdebug c = do
+  putStrLn "Exploring contract"
   full <- simplify <$> buildExpr c
-  putStrLn "Explored contract"
+  putStrLn $ "Explored contract (" <> (show $ numBranches full) <> " branches)"
   --putStrLn $ formatExpr full
   --writeFile "full.ast" $ formatExpr full
   --putStrLn "Dumped to full.ast"

@@ -348,24 +348,17 @@ simplify e = if (mapExpr go e == e)
       | otherwise = o
     go a = a
 
-reachableQueries :: SolverGroup -> Expr End -> IO [SMT2]
-reachableQueries solvers = go []
+reachableQueries :: Expr End -> IO [SMT2]
+reachableQueries = go []
   where
     go :: [Prop] -> Expr End -> IO [SMT2]
     go pcs = \case
       ITE c t f -> do
-        let
-          tquery = assertProps (PEq c (Lit 1) : pcs)
-          fquery = assertProps (PEq c (Lit 0) : pcs)
-        tchildren <- go (PEq c (Lit 1) : pcs) t
-        fchildren <- go (PEq c (Lit 0) : pcs) f
-        pure $ [tquery, fquery] <> tchildren <> fchildren
-      Invalid -> pure []
-      SelfDestruct -> pure []
-      Revert msg -> pure []
-      Return msg store -> pure []
-      EVM.Types.IllegalOverflow -> pure []
-      TmpErr e -> error $ "TmpErr: " <> show e
+        (tres, fres) <- concurrently
+          (go (PEq (Lit 1) c : pcs) t)
+          (go (PEq (Lit 0) c : pcs) f)
+        pure (tres <> fres)
+      _ -> pure [assertProps pcs]
 
 -- | Strips unreachable branches from a given expr
 -- Returns a list of executed SMT queries alongside the reduced expression for debugging purposes
@@ -379,13 +372,13 @@ reachableQueries solvers = go []
 reachable2 :: SolverGroup -> Expr End -> IO ([SMT2], Expr End)
 reachable2 solvers e = do
     res <- go [] e
-    pure $ second (fromMaybe (error "oops")) res
+    pure $ second (fromMaybe (error "Internal Error: no reachable paths found")) res
   where
     {-
-       walk down the tree and collect pcs.
-       dispatch a reachability query at each leaf.
-       if reachable return the expr wrapped in a Just. If not return Nothing.
-       when walking back up the tree drop unreachable subbranches.
+       Walk down the tree and collect pcs.
+       Dispatch a reachability query at each leaf.
+       If reachable return the expr wrapped in a Just. If not return Nothing.
+       When walking back up the tree drop unreachable subbranches.
     -}
     go :: [Prop] -> Expr End -> IO ([SMT2], Maybe (Expr End))
     go pcs = \case

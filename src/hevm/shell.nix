@@ -8,6 +8,10 @@ let
       p.hevm
     ];
     buildInputs = with pkgs.haskellPackages; [
+      pkgs.z3
+      pkgs.cvc4
+      #pkgs.cvc5 # TODO: bump nixpkgs :(
+      pkgs.bitwuzla
       cabal-install
       haskell-language-server
     ];

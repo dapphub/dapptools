@@ -518,3 +518,7 @@ eqByte x y = EqByte x y
 min :: Expr EWord -> Expr EWord -> Expr EWord
 min (Lit x) (Lit y) = if x < y then Lit x else Lit y
 min x y = Min x y
+
+numBranches :: Expr End -> Int
+numBranches (ITE _ t f) = 2 + numBranches t + numBranches f
+numBranches _ = 0
