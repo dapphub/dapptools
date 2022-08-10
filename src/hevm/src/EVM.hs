@@ -88,7 +88,7 @@ data Error
   | MaxCodeSizeExceeded W256 W256
   | InvalidFormat
   | PrecompileFailure
-  | UnexpectedSymbolicArg Int String
+  | forall a . UnexpectedSymbolicArg Int String [Expr a]
   | DeadPath
   | NotUnique (Expr EWord)
   | SMTTimeout
@@ -591,11 +591,11 @@ exec1 = do
                     touchAccount self
                     out <- use (state . returndata)
                     finishFrame (FrameReturned out)
-              _ -> vmError $
-                UnexpectedSymbolicArg (view (state . pc) vmx) "precompile returned a symbolic value"
+              e -> vmError $
+                UnexpectedSymbolicArg (view (state . pc) vmx) "precompile returned a symbolic value" [e]
             _ ->
               underrun
-      _ -> vmError $ UnexpectedSymbolicArg (the state pc) "cannot call precompiles with symbolic data"
+      e -> vmError $ UnexpectedSymbolicArg (the state pc) "cannot call precompiles with symbolic data" [e]
 
   else if the state pc >= opslen (the state code)
     then doStop
@@ -966,7 +966,7 @@ exec1 = do
         -- op: MSTORE
         0x52 ->
           case stk of
-            (x':y:xs) -> forceConcrete x' "MSTORE" $ \x ->
+            (x':y:xs) -> forceConcrete x' "MSTORE index" $ \x ->
               burn g_verylow $
                 accessMemoryWord fees x $ do
                   next
@@ -1359,7 +1359,7 @@ precompiledContract this xGas precompileAddr recipient xValue inOffset inSize ou
           transfer self recipient xValue
           touchAccount self
           touchAccount recipient
-        _ -> vmError $ UnexpectedSymbolicArg pc' "symbolic return value from precompile"
+        _ -> vmError $ UnexpectedSymbolicArg pc' "symbolic return value from precompile" [x]
       _ -> underrun
 
 executePrecompile
@@ -1706,7 +1706,7 @@ finalize = do
       createe  <- use (state . contract)
       createeExists <- (Map.member createe) <$> use (env . contracts)
       case Expr.toList output of
-        Nothing -> vmError $ UnexpectedSymbolicArg pc' "runtime code cannot have an abstract lentgh"
+        Nothing -> vmError $ UnexpectedSymbolicArg pc' "runtime code cannot have an abstract lentgh" [output]
         Just ops ->
           when (creation && createeExists) $ replaceCode createe (RuntimeCode ops)
 
@@ -1812,7 +1812,7 @@ forceConcrete :: Expr EWord -> String -> (W256 -> EVM ()) -> EVM ()
 forceConcrete n msg continue = case maybeLitWord n of
   Nothing -> do
     vm <- get
-    vmError $ UnexpectedSymbolicArg (view (state . pc) vm) msg
+    vmError $ UnexpectedSymbolicArg (view (state . pc) vm) msg [n]
   Just c -> continue c
 
 forceConcrete2 :: (Expr EWord, Expr EWord) -> String -> ((W256, W256) -> EVM ()) -> EVM ()
@@ -1820,41 +1820,41 @@ forceConcrete2 (n,m) msg continue = case (maybeLitWord n, maybeLitWord m) of
   (Just c, Just d) -> continue (c, d)
   _ -> do
     vm <- get
-    vmError $ UnexpectedSymbolicArg (view (state . pc) vm) msg
+    vmError $ UnexpectedSymbolicArg (view (state . pc) vm) msg [n, m]
 
 forceConcrete3 :: (Expr EWord, Expr EWord, Expr EWord) -> String -> ((W256, W256, W256) -> EVM ()) -> EVM ()
 forceConcrete3 (k,n,m) msg continue = case (maybeLitWord k, maybeLitWord n, maybeLitWord m) of
   (Just c, Just d, Just f) -> continue (c, d, f)
   _ -> do
     vm <- get
-    vmError $ UnexpectedSymbolicArg (view (state . pc) vm) msg
+    vmError $ UnexpectedSymbolicArg (view (state . pc) vm) msg [k, n, m]
 
 forceConcrete4 :: (Expr EWord, Expr EWord, Expr EWord, Expr EWord) -> String -> ((W256, W256, W256, W256) -> EVM ()) -> EVM ()
 forceConcrete4 (k,l,n,m) msg continue = case (maybeLitWord k, maybeLitWord l, maybeLitWord n, maybeLitWord m) of
   (Just b, Just c, Just d, Just f) -> continue (b, c, d, f)
   _ -> do
     vm <- get
-    vmError $ UnexpectedSymbolicArg (view (state . pc) vm) msg
+    vmError $ UnexpectedSymbolicArg (view (state . pc) vm) msg [k, l, n, m]
 
 forceConcrete5 :: (Expr EWord, Expr EWord, Expr EWord, Expr EWord, Expr EWord) -> String -> ((W256, W256, W256, W256, W256) -> EVM ()) -> EVM ()
 forceConcrete5 (k,l,m,n,o) msg continue = case (maybeLitWord k, maybeLitWord l, maybeLitWord m, maybeLitWord n, maybeLitWord o) of
   (Just a, Just b, Just c, Just d, Just e) -> continue (a, b, c, d, e)
   _ -> do
     vm <- get
-    vmError $ UnexpectedSymbolicArg (view (state . pc) vm) msg
+    vmError $ UnexpectedSymbolicArg (view (state . pc) vm) msg [k, l, m, n, o]
 
 forceConcrete6 :: (Expr EWord, Expr EWord, Expr EWord, Expr EWord, Expr EWord, Expr EWord) -> String -> ((W256, W256, W256, W256, W256, W256) -> EVM ()) -> EVM ()
 forceConcrete6 (k,l,m,n,o,p) msg continue = case (maybeLitWord k, maybeLitWord l, maybeLitWord m, maybeLitWord n, maybeLitWord o, maybeLitWord p) of
   (Just a, Just b, Just c, Just d, Just e, Just f) -> continue (a, b, c, d, e, f)
   _ -> do
     vm <- get
-    vmError $ UnexpectedSymbolicArg (view (state . pc) vm) msg
+    vmError $ UnexpectedSymbolicArg (view (state . pc) vm) msg [k, l, m, n, o, p]
 
 forceConcreteBuf :: Expr Buf -> String -> (ByteString -> EVM ()) -> EVM ()
 forceConcreteBuf (ConcreteBuf b) _ continue = continue b
-forceConcreteBuf _ msg _ = do
+forceConcreteBuf b msg _ = do
     vm <- get
-    vmError $ UnexpectedSymbolicArg (view (state . pc) vm) msg
+    vmError $ UnexpectedSymbolicArg (view (state . pc) vm) msg [b]
 
 -- * Substate manipulation
 refund :: Integer -> EVM ()
@@ -1923,7 +1923,7 @@ cheat (inOffset, inSize) (outOffset, outSize) = do
     abi = readBytes 4 (Lit inOffset) mem
     input = readMemory (Lit $ inOffset + 4) (Lit $ inSize - 4) vm
   case maybeLitWord abi of
-    Nothing -> vmError $ UnexpectedSymbolicArg (view (state . pc) vm) "symbolic cheatcode selector"
+    Nothing -> vmError $ UnexpectedSymbolicArg (view (state . pc) vm) "symbolic cheatcode selector" [abi]
     Just (fromIntegral -> abi') ->
       case Map.lookup abi' cheatActions of
         Nothing ->
@@ -2146,6 +2146,7 @@ create self this xGas' xValue xs newAddr initCode = do
     -- unfortunately we have to apply some (pretty hacky)
     -- heuristics here to parse the unstructured buffer read
     -- from memory into a code and data section
+    -- TODO: comment explaining whats going on here
     let contract' = do
           minLength <- Expr.minLength initCode
           prefix <- Expr.toList $ Expr.take (num minLength) initCode
@@ -2154,7 +2155,7 @@ create self this xGas' xValue xs newAddr initCode = do
           pure $ InitCode (BS.pack conc) sym
     case contract' of
       Nothing ->
-        vmError $ UnexpectedSymbolicArg (view (state . pc) vm0) "initcode must have a concrete prefix"
+        vmError $ UnexpectedSymbolicArg (view (state . pc) vm0) "initcode must have a concrete prefix" []
       Just c -> do
         let
           newContract = initialContract c
@@ -2344,6 +2345,7 @@ finishFrame how = do
                     UnexpectedSymbolicArg
                       (view (state . pc) oldVm)
                       "runtime code cannot have an abstract length"
+                      [output]
                   Just newCode -> do
                     replaceCode createe (RuntimeCode newCode)
                     assign (state . returndata) mempty
