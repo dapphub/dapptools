@@ -51,6 +51,11 @@ analyzeDai = do
   d <- dai
   reachable' False d
 
+daiExpr :: IO (Expr End)
+daiExpr = do
+  d <- dai
+  buildExpr d
+
 analyzeVat :: IO ()
 analyzeVat = do
   v <- vat
@@ -62,8 +67,8 @@ reachable' smtdebug c = do
   full <- simplify <$> buildExpr c
   putStrLn $ "Explored contract (" <> (show $ numBranches full) <> " branches)"
   --putStrLn $ formatExpr full
-  --writeFile "full.ast" $ formatExpr full
-  --putStrLn "Dumped to full.ast"
+  writeFile "full.ast" $ formatExpr full
+  putStrLn "Dumped to full.ast"
   withSolvers Z3 4 $ \solvers -> do
     putStrLn "Checking reachability"
     (qs, less) <- reachable2 solvers full
@@ -85,7 +90,7 @@ testContract = do
           contract C {
             uint x;
             function set(uint v) public {
-              x = v;
+              x = v + v;
             }
           }
           |]

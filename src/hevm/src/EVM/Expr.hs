@@ -260,6 +260,8 @@ copySlice srcOffset dstOffset size src dst = CopySlice srcOffset dstOffset size 
 
 
 writeByte :: Expr EWord -> Expr Byte -> Expr Buf -> Expr Buf
+--writeByte (Lit offset) (LitByte val) EmptyBuf
+--  = ConcreteBuf $ BS.replicate (num offset) 0 <> BS.singleton val
 writeByte (Lit offset) (LitByte byte) (ConcreteBuf src)
   = ConcreteBuf $ BS.take (num offset) src
                <> BS.pack [byte]
@@ -268,6 +270,8 @@ writeByte offset byte src = WriteByte offset byte src
 
 
 writeWord :: Expr EWord -> Expr EWord -> Expr Buf -> Expr Buf
+-- writeWord (Lit offset) (Lit val) EmptyBuf
+--   = ConcreteBuf $ BS.replicate (num offset) 0 <> word256Bytes val
 writeWord (Lit offset) (Lit val) (ConcreteBuf src)
   = ConcreteBuf $ BS.take (num offset) src
                <> asBE val
@@ -374,6 +378,39 @@ instance Semigroup (Expr Buf) where
 
 instance Monoid (Expr Buf) where
   mempty = EmptyBuf
+
+-- | Removes any irrelevant writes when reading from a buffer
+simplifyReads :: Expr a -> Expr a
+simplifyReads = \case
+  ReadWord (Lit idx) b -> ReadWord (Lit idx) (stripWrites idx (idx + 31) b)
+  ReadByte (Lit idx) b -> ReadByte (Lit idx) (stripWrites idx idx b)
+  a -> a
+
+-- | Strips writes from the buffer that can be statically determined to be out of range
+-- TODO: are the bounds here correct? think there might be some off by one mistakes...
+stripWrites :: W256 -> W256 -> Expr Buf -> Expr Buf
+stripWrites bottom top = \case
+  EmptyBuf -> EmptyBuf
+  AbstractBuf s -> AbstractBuf s
+  ConcreteBuf b -> ConcreteBuf $ BS.take (num top) b
+  WriteByte (Lit idx) v prev
+    -> if idx < bottom || idx > top
+       then stripWrites bottom top prev
+       else WriteByte (Lit idx) v (stripWrites bottom top prev)
+  -- TODO: handle partial overlaps
+  WriteWord (Lit idx) v prev
+    -> if idx + 31 < bottom || idx > top
+       then stripWrites bottom top prev
+       else WriteWord (Lit idx) v (stripWrites bottom top prev)
+  CopySlice (Lit srcOff) (Lit dstOff) (Lit size) src dst
+    -> if dstOff + size < bottom || dstOff > top
+       then stripWrites bottom top dst
+       else CopySlice (Lit srcOff) (Lit dstOff) (Lit size)
+                      (stripWrites srcOff (srcOff + size) src)
+                      (stripWrites bottom top dst)
+  WriteByte i v prev -> WriteByte i v (stripWrites bottom top prev)
+  WriteWord i v prev -> WriteWord i v (stripWrites bottom top prev)
+  CopySlice srcOff dstOff size src dst -> CopySlice srcOff dstOff size src dst
 
 -- ** Storage ** -----------------------------------------------------------------------------------
 
@@ -520,5 +557,8 @@ min (Lit x) (Lit y) = if x < y then Lit x else Lit y
 min x y = Min x y
 
 numBranches :: Expr End -> Int
-numBranches (ITE _ t f) = 2 + numBranches t + numBranches f
-numBranches _ = 0
+numBranches (ITE _ t f) = numBranches t + numBranches f
+numBranches _ = 1
+
+allLit :: [Expr Byte] -> Bool
+allLit = Data.List.and . fmap (isLitByte)

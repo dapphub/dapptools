@@ -14,6 +14,7 @@ import EVM.Exec
 import qualified EVM.Fetch as Fetch
 import EVM.ABI
 import EVM.SMT
+import qualified EVM.Expr as Expr
 import EVM.Stepper (Stepper)
 import qualified EVM.Stepper as Stepper
 import qualified Control.Monad.Operational as Operational
@@ -331,6 +332,11 @@ simplify e = if (mapExpr go e == e)
     go :: Expr a -> Expr a
     -- redundant CopySlice
     go (CopySlice (Lit 0x0) (Lit 0x0) (Lit 0x0) _ dst) = dst
+
+    -- simplify buffers
+    go o@(ReadWord (Lit _) _) = Expr.simplifyReads o
+    go o@(ReadByte (Lit _) _) = Expr.simplifyReads o
+
     -- redundant Eq
     go o@(Eq a b)
       | a == b = (Lit 1)
@@ -345,6 +351,9 @@ simplify e = if (mapExpr go e == e)
     go o@(Sub (Add a b) c)
       | a == c = b
       | b == c = a
+      | otherwise = o
+    go o@(And a (And b c))
+      | a == b = (And b c)
       | otherwise = o
     go a = a
 

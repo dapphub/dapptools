@@ -10,7 +10,7 @@ import EVM.Dapp (DappContext (..), contextInfo, contextEnv)
 import EVM (VM, VMResult(..), cheatCode, traceForest, traceData, Error (..), result)
 import EVM (Trace, TraceData (..), Query (..), FrameContext (..))
 import EVM.SymExec
-import EVM.Types (maybeLitWord, W256 (..), num, word, Expr(..), EType(..))
+import EVM.Types (maybeLitWord, W256 (..), num, word, Expr(..), EType(..), hexByteString, foldExpr)
 import EVM.Types (Addr, ByteStringS(..))
 import EVM.ABI (AbiValue (..), Event (..), AbiType (..), SolError (..))
 import EVM.ABI (Indexed (NotIndexed), getAbiSeq)
@@ -36,11 +36,13 @@ import Data.Tree.View (showTree)
 import Data.Vector (Vector)
 import Data.Word (Word32)
 import Data.Char (isSpace)
+import Data.List (foldl')
 
 import qualified Data.ByteString as BS
 import qualified Data.Char as Char
 import qualified Data.Map as Map
 import qualified Data.Text as Text
+import qualified EVM.Expr as Expr
 
 data Signedness = Signed | Unsigned
   deriving (Show)
@@ -479,4 +481,13 @@ formatExpr = \case
     , indent' 2 (formatExpr t)
     , indent' 2 (formatExpr f)
     , ")"]
+  Lit a -> show a
+  e@(ConcreteBuf b) -> show $ hexByteString (show e) b
+  EVM.Types.Revert buf -> "(Revert " <> formatExpr buf <> ")"
+  Return buf store -> unlines
+      [ "(Return"
+      , indent' 2 ("Data: " <> formatExpr buf)
+      , indent' 2 ("Store: " <> formatExpr store)
+      , ")"
+      ]
   a -> show a
