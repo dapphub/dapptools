@@ -437,13 +437,29 @@ deriving instance Ord (Expr a)
 -- the translation of Eq and other boolean operators from Expr to SMT is an
 -- (ite (eq a b) 1 0). We can use the boolean operators here to remove some
 -- unescessary `ite` statements from our SMT encoding.
-data Prop
-  = PEq (Expr EWord) (Expr EWord)
-  | PLT (Expr EWord) (Expr EWord)
-  | PGT (Expr EWord) (Expr EWord)
-  | PLEq (Expr EWord) (Expr EWord)
-  | PGEq (Expr EWord) (Expr EWord)
-  deriving (Eq, Show)
+data Prop where
+  PEq :: forall a . Expr a -> Expr a -> Prop
+  PLT :: Expr EWord -> Expr EWord -> Prop
+  PGT :: Expr EWord -> Expr EWord -> Prop
+  PGEq :: Expr EWord -> Expr EWord -> Prop
+  PLEq :: Expr EWord -> Expr EWord -> Prop
+  PNeg :: Prop -> Prop
+  PAnd :: Prop -> Prop -> Prop
+  POr :: Prop -> Prop -> Prop
+  PBool :: Bool -> Prop
+deriving instance (Show Prop)
+
+instance Eq Prop where
+  PBool a == PBool b = a == b
+  PEq a b == PEq c d = a == b && c == d
+  PLT a b == PLT c d = a == b && c == d
+  PGT a b == PGT c d = a == b && c == d
+  PGEq a b == PGEq c d = a == b && c == d
+  PLEq a b == PLEq c d = a == b && c == d
+  PNeg a == PNeg b = a == b
+  PAnd a b == PAnd c d = a == b && c == d
+  POr a b == POr c d = a == b && c == d
+  _ == _ = False
 
 -- | Recursively folds a given function over a given expression
 -- Recursion schemes do this & a lot more, but defining them over GADT's isn't worth the hassle

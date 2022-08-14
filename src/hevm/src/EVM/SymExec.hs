@@ -26,6 +26,7 @@ import Data.DoubleWord (Word256)
 import GHC.Conc (numCapabilities)
 import Control.Concurrent.Async
 import Data.Maybe
+import Data.List (foldl')
 
 import Data.ByteString (ByteString)
 import qualified Control.Monad.State.Class as State
@@ -37,7 +38,7 @@ import Data.Maybe (isJust, fromJust)
 
 data ProofResult a b c = Qed a | Cex b | Timeout c
   deriving (Show)
-type VerifyResult = ProofResult () [(Expr End, [String])] ()
+type VerifyResult = ProofResult (Expr End) (Expr End, [Text]) (Expr End)
 type EquivalenceResult = ProofResult ([VM], [VM]) VM ()
 
 
@@ -226,12 +227,11 @@ maxIterationsReached vm (Just maxIter) =
      else Nothing
 
 -- TODO: do we need a predicate language here?
-type Precondition = VM -> Bool
-type Postcondition = Expr End -> Bool
+type Precondition = VM -> Prop
+type Postcondition = Expr End -> Prop
 
-checkAssert :: [Word256] -> ByteString -> Maybe (Text, [AbiType]) -> [String] -> (VerifyResult, VM)
-checkAssert errs c signature' concreteArgs = undefined
---checkAssert errs c signature' concreteArgs = verifyContract c signature' concreteArgs SymbolicS (const sTrue) (Just $ checkAssertions errs)
+checkAssert :: SolverGroup -> [Word256] -> ByteString -> Maybe (Text, [AbiType]) -> [String] -> IO [VerifyResult]
+checkAssert solvers errs c signature' concreteArgs = verifyContract solvers c signature' concreteArgs SymbolicS Nothing (Just $ checkAssertions errs)
 
 {- |Checks if an assertion violation has been encountered
 
@@ -253,11 +253,10 @@ checkAssert errs c signature' concreteArgs = undefined
   see: https://docs.soliditylang.org/en/v0.8.6/control-structures.html?highlight=Panic#panic-via-assert-and-error-via-require
 -}
 checkAssertions :: [Word256] -> Postcondition
-checkAssertions errs out = undefined
---checkAssertions errs (_, out) = case view result out of
-  --Just (EVM.VMFailure (EVM.UnrecognizedOpcode 254)) -> sFalse
-  --Just (EVM.VMFailure (EVM.Revert msg)) -> if msg `elem` (fmap panicMsg errs) then sFalse else sTrue
-  --_ -> sTrue
+checkAssertions errs = \case
+  Revert (ConcreteBuf msg) -> PBool $ msg `elem` (fmap panicMsg errs)
+  Revert b -> foldl' POr (PBool True) (fmap (PEq b . ConcreteBuf . panicMsg) errs)
+  _ -> PBool False
 
 -- |By default hevm checks for all assertions except those which result from arithmetic overflow
 defaultPanicCodes :: [Word256]
@@ -270,29 +269,16 @@ allPanicCodes = [ 0x00, 0x01, 0x11, 0x12, 0x21, 0x22, 0x31, 0x32, 0x41, 0x51 ]
 panicMsg :: Word256 -> ByteString
 panicMsg err = (selector "Panic(uint256)") <> (encodeAbiValue $ AbiUInt 256 err)
 
-verifyContract :: ByteString -> Maybe (Text, [AbiType]) -> [String] -> StorageModel -> Precondition -> Maybe Postcondition -> (VerifyResult, VM)
-verifyContract theCode signature' concreteArgs storagemodel pre maybepost = undefined
-    --preStateRaw <- abstractVM signature' concreteArgs theCode  storagemodel
-    ---- add the pre condition to the pathconditions to ensure that we are only exploring valid paths
-    --let preState = over constraints ((++) [(pre preStateRaw, Todo "assumptions" [])]) preStateRaw
-    --v <- verify preState Nothing Nothing Nothing maybepost
-    --return (v, preState)
+verifyContract :: SolverGroup -> ByteString -> Maybe (Text, [AbiType]) -> [String] -> StorageModel -> Maybe Precondition -> Maybe Postcondition -> IO [VerifyResult]
+verifyContract solvers theCode signature' concreteArgs storagemodel pre maybepost = do
+  let preState = abstractVM signature' concreteArgs theCode  storagemodel
+  verify solvers preState Nothing Nothing Nothing pre maybepost
 
 pruneDeadPaths :: [VM] -> [VM]
 pruneDeadPaths =
   filter $ \vm -> case view result vm of
     Just (VMFailure DeadPath) -> False
     _ -> True
-
-consistentPath :: VM -> Maybe VM
-consistentPath vm = undefined
-  --resetAssertions
-  --constrain $ sAnd $ fst <$> view constraints vm
-  --checkSat >>= \case
-    --Sat -> return $ Just vm
-    --Unk -> return $ Just vm -- the path may still be consistent
-    --Unsat -> return Nothing
-    --DSat _ -> error "unexpected DSAT"
 
 -- | Stepper that parses the result of Stepper.runFully into an Expr End
 runExpr :: Stepper.Stepper (Expr End)
@@ -310,17 +296,17 @@ runExpr = do
 
 
 -- | Converts a given top level expr into a list of final states and the associated path conditions for each state
-flattenExpr :: Expr End -> [(Expr End, [Expr EWord])]
+flattenExpr :: Expr End -> [([Prop], Expr End)]
 flattenExpr = go []
   where
-    go :: [Expr EWord] -> Expr End -> [(Expr End, [Expr EWord])]
+    go :: [Prop] -> Expr End -> [([Prop], Expr End)]
     go pcs = \case
-      ITE c t f -> go ((Eq c (Lit 1)) : pcs) t <> go ((Eq c (Lit 0)) : pcs) f
-      Invalid -> [(Invalid, pcs)]
-      SelfDestruct -> [(SelfDestruct, pcs)]
-      Revert buf -> [(Revert buf, pcs)]
-      Return  buf store -> [(Return buf store, pcs)]
-      _ -> undefined
+      ITE c t f -> go ((PEq c (Lit 1)) : pcs) t <> go ((PEq c (Lit 0)) : pcs) f
+      Invalid -> [(pcs, Invalid)]
+      SelfDestruct -> [(pcs, SelfDestruct)]
+      Revert buf -> [(pcs, Revert buf)]
+      Return  buf store -> [(pcs, Return buf store)]
+      e -> error $ "Internal Error: Unexpted end state: " <> show e
 
 -- | Simple recursive match based AST simplification
 -- Note: may not terminate!
@@ -460,63 +446,68 @@ reachable solvers = go []
       EVM.Types.IllegalOverflow -> pure ([], EVM.Types.IllegalOverflow)
       TmpErr e -> error $ "TmpErr: " <> show e
 
+-- | Evaluate the provided proposition down to it's most concrete result
+evalProp :: Prop -> Prop
+evalProp = \case
+  PBool b -> PBool b
+  PNeg (PBool b) -> PBool (not b)
+  PNeg p -> p
+  PEq l r -> if l == r
+             then PBool True
+             else PEq l r
+  PLT l r -> if l < r
+             then PBool True
+             else PEq l r
+  PGT l r -> if l > r
+             then PBool True
+             else PEq l r
+  PGEq l r -> if l >= r
+             then PBool True
+             else PEq l r
+  PLEq l r -> if l <= r
+             then PBool True
+             else PEq l r
+  PAnd l r -> case (evalProp l, evalProp r) of
+                (PBool True, PBool True) -> PBool True
+                (PBool _, PBool _) -> PBool False
+                _ -> PAnd l r
+  POr l r -> case (evalProp l, evalProp r) of
+                (PBool False, PBool False) -> PBool False
+                (PBool _, PBool _) -> PBool True
+                _ -> POr l r
+
 
 -- | Symbolically execute the VM and check all endstates against the postcondition, if available.
-verify :: VM -> Maybe Integer -> Maybe Integer -> Maybe (Fetch.BlockNumber, Text) -> Maybe Postcondition -> IO VerifyResult
-verify preState maxIter askSmtIters rpcinfo maybepost = do
+verify :: SolverGroup -> VM -> Maybe Integer -> Maybe Integer -> Maybe (Fetch.BlockNumber, Text) -> Maybe Precondition -> Maybe Postcondition -> IO [VerifyResult]
+verify solvers preState maxIter askSmtIters rpcinfo maybePre maybepost = do
   expr <- evalStateT (interpret (Fetch.oracle Nothing False) Nothing Nothing runExpr) preState
   let leaves = flattenExpr expr
-      -- we are only interested in end states where the postcondition has been violated
-      violated = case maybepost of
-                   Just p -> filter (p . fst) leaves
-                   Nothing -> leaves
-      queries = fmap (second (\pcs -> (assertWords pcs, ["txdata", "storage"]))) violated
-      findExpr s = fmap fst $ find (\(e,(s', _)) -> s == s') queries
-  reachable <- withSolvers Z3 (num numCapabilities) $ \solvers -> do
-    forM_ queries $ \(_, (SMT2 q,_)) -> do
-      putStrLn $ T.unpack $ T.unlines q
-    rs <- checkSat solvers (fmap snd queries)
-    let rs' = fmap (first findExpr) rs
-        rs'' = fmap (first fromJust) (filter (isJust . fst) rs')
-        rs''' = filter (isSat . snd) rs''
-    pure rs'''
-  pure $ if null reachable then Qed () else Cex (fmap (second (fmap T.unpack . getModels)) reachable)
+  case maybepost of
+    Nothing -> pure [Qed expr]
+    Just post -> do
+      let
+        -- Filter out any leaves that can be statically shown to be safe
+        canViolate = flip filter leaves $
+          \(_, leaf) -> case evalProp (post leaf) of
+            PBool False -> False
+            _ -> True
+        assumes = case maybePre of
+          Just pre -> [pre preState]
+          Nothing -> []
+        withQueries = fmap (\(pcs, leaf) -> (assertProps (PNeg (post leaf) : assumes <> pcs), leaf)) canViolate
+      -- Dispatch the remaining branches to the solver to check for violations
+      results <- flip mapConcurrently withQueries $ \(query, leaf) -> do
+        res <- checkSat' solvers (query, ["txdata", "storage"])
+        pure (res, leaf)
+      let cexs = filter (\(res, _) -> not . isUnsat $ res) results
+      pure $ fmap toVRes cexs
   where
-    getModels (Sat ms) = ms
-    getModels _ = []
-
-  -- check prop on each leaf
-  -- if prop violated then:
-  --   - gather path conditions
-  --   - check satisfiability of path conditions
-  --pure ()
-  --case maybepost of
-    --(Just post) -> do
-      --let livePaths = pruneDeadPaths $ leaves tree
-          ---- have we hit max iterations at any point in a given path
-          --maxReached :: VM -> Bool
-          --maxReached p = case maxIter of
-            --Just maxI -> any (>= (fromInteger maxI)) (view iterations p)
-            --Nothing -> False
-          ---- is there any path which can possibly violate the postcondition?
-          ---- can also do these queries individually (even concurrently!). Could save time and report multiple violations
-          --postC = sOr $ fmap (\postState -> (sAnd (fst <$> view constraints postState)) .&& sNot (post (preState, postState))) livePaths
-      --resetAssertions
-      --constrain postC
-      --io $ putStrLn "checking postcondition..."
-      --checkSat >>= \case
-        --Unk -> do io $ putStrLn "postcondition query timed out"
-                  --return $ Timeout tree
-        --Unsat -> do
-          --if any maxReached livePaths
-            --then io $ putStrLn "WARNING: max iterations reached, execution halted prematurely"
-            --else io $ putStrLn "Q.E.D."
-          --return $ Qed tree
-        --Sat -> return $ Cex tree
-        --DSat _ -> error "unexpected DSAT"
-
-    --Nothing -> do io $ putStrLn "Nothing to check"
-                  --return $ Qed tree
+    toVRes :: (CheckSatResult, Expr End) -> VerifyResult
+    toVRes (res, leaf) = case res of
+      Sat model -> Cex (leaf, model)
+      EVM.SMT.Unknown -> Timeout leaf
+      Unsat -> Qed leaf
+      Error e -> error $ "Internal Error: solver responded with error: " <> show e
 
 -- | Compares two contract runtimes for trace equivalence by running two VMs and comparing the end states.
 equivalenceCheck :: ByteString -> ByteString -> Maybe Integer -> Maybe Integer -> Maybe (Text, [AbiType]) -> EquivalenceResult

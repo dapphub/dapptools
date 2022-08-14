@@ -85,6 +85,20 @@ assertWords es = flip evalState initState $ do
        <> SMT2 [""]
        <> (SMT2 $ fmap (\e -> "(assert (= " <> e `sp` one <> "))") encs)
 
+assertProp :: Prop -> SMT2
+assertProp p = flip evalState initState $ do
+  enc <- propToSMT p
+  intermediates <- declareIntermediates
+  pure $ prelude
+       <> (declareBufs . referencedBufs' $ p)
+       <> SMT2 [""]
+       <> (declareVars . referencedVars' $ p)
+       <> SMT2 [""]
+       <> (declareFrameContext . referencedFrameContext' $ p)
+       <> intermediates
+       <> SMT2 [""]
+       <> SMT2 ["(assert " <> enc <> ")"]
+
 assertProps :: [Prop] -> SMT2
 assertProps ps = flip evalState initState $ do
   encs <- mapM propToSMT ps
@@ -267,27 +281,39 @@ referencedBufs expr = nubOrd (foldExpr go [] expr)
 
 referencedBufs' :: Prop -> [Text]
 referencedBufs' = \case
-  (PEq a b) -> nubOrd $ referencedBufs a <> referencedBufs b
-  (PLT a b) -> nubOrd $ referencedBufs a <> referencedBufs b
-  (PGT a b) -> nubOrd $ referencedBufs a <> referencedBufs b
-  (PLEq a b) -> nubOrd $ referencedBufs a <> referencedBufs b
-  (PGEq a b) -> nubOrd $ referencedBufs a <> referencedBufs b
+  PEq a b -> nubOrd $ referencedBufs a <> referencedBufs b
+  PLT a b -> nubOrd $ referencedBufs a <> referencedBufs b
+  PGT a b -> nubOrd $ referencedBufs a <> referencedBufs b
+  PLEq a b -> nubOrd $ referencedBufs a <> referencedBufs b
+  PGEq a b -> nubOrd $ referencedBufs a <> referencedBufs b
+  PAnd a b -> nubOrd $ referencedBufs' a <> referencedBufs' b
+  POr a b -> nubOrd $ referencedBufs' a <> referencedBufs' b
+  PNeg a -> referencedBufs' a
+  PBool _ -> []
 
 referencedVars' :: Prop -> [Text]
 referencedVars' = \case
-  (PEq a b) -> nubOrd $ referencedVars a <> referencedVars b
-  (PLT a b) -> nubOrd $ referencedVars a <> referencedVars b
-  (PGT a b) -> nubOrd $ referencedVars a <> referencedVars b
-  (PLEq a b) -> nubOrd $ referencedVars a <> referencedVars b
-  (PGEq a b) -> nubOrd $ referencedVars a <> referencedVars b
+  PEq a b -> nubOrd $ referencedVars a <> referencedVars b
+  PLT a b -> nubOrd $ referencedVars a <> referencedVars b
+  PGT a b -> nubOrd $ referencedVars a <> referencedVars b
+  PLEq a b -> nubOrd $ referencedVars a <> referencedVars b
+  PGEq a b -> nubOrd $ referencedVars a <> referencedVars b
+  PAnd a b -> nubOrd $ referencedVars' a <> referencedVars' b
+  POr a b -> nubOrd $ referencedVars' a <> referencedVars' b
+  PNeg a -> referencedVars' a
+  PBool _ -> []
 
 referencedFrameContext' :: Prop -> [Text]
 referencedFrameContext' = \case
-  (PEq a b) -> nubOrd $ referencedFrameContext a <> referencedFrameContext b
-  (PLT a b) -> nubOrd $ referencedFrameContext a <> referencedFrameContext b
-  (PGT a b) -> nubOrd $ referencedFrameContext a <> referencedFrameContext b
-  (PLEq a b) -> nubOrd $ referencedFrameContext a <> referencedFrameContext b
-  (PGEq a b) -> nubOrd $ referencedFrameContext a <> referencedFrameContext b
+  PEq a b -> nubOrd $ referencedFrameContext a <> referencedFrameContext b
+  PLT a b -> nubOrd $ referencedFrameContext a <> referencedFrameContext b
+  PGT a b -> nubOrd $ referencedFrameContext a <> referencedFrameContext b
+  PLEq a b -> nubOrd $ referencedFrameContext a <> referencedFrameContext b
+  PGEq a b -> nubOrd $ referencedFrameContext a <> referencedFrameContext b
+  PAnd a b -> nubOrd $ referencedFrameContext' a <> referencedFrameContext' b
+  POr a b -> nubOrd $ referencedFrameContext' a <> referencedFrameContext' b
+  PNeg a -> referencedFrameContext' a
+  PBool _ -> []
 
 declareVars :: [Text] -> SMT2
 declareVars names = SMT2 $ ["; variables"] <> fmap declare names
@@ -540,7 +566,22 @@ propToSMT = \case
   PGT a b -> op2 ">" a b
   PLEq a b -> op2 "<=" a b
   PGEq a b -> op2 ">=" a b
+  PNeg a -> do
+      enc <- propToSMT a
+      pure $ "(not " <> enc <> ")"
+  PAnd a b -> do
+      aenc <- propToSMT a
+      benc <- propToSMT b
+      pure $ "(and " <> aenc <> " " <> benc <> ")"
+  POr a b -> do
+      aenc <- propToSMT a
+      benc <- propToSMT b
+      pure $ "(or " <> aenc <> " " <> benc <> ")"
+  PBool b -> pure $ if b then "true" else "false"
   where
+    op1 op a = do
+      enc <- propToSMT a
+      pure $ "(" <> op <> " " <> enc <> ")"
     op2 op a b = do
       aenc <- exprToSMT a
       benc <- exprToSMT b
@@ -598,6 +639,10 @@ isSat _ = False
 isErr :: CheckSatResult -> Bool
 isErr (Error _) = True
 isErr _ = False
+
+isUnsat :: CheckSatResult -> Bool
+isUnsat Unsat = True
+isUnsat _ = False
 
 checkSat' :: SolverGroup -> (SMT2, [Text]) -> IO (CheckSatResult)
 checkSat' (SolverGroup taskQueue) (script, models) = do
