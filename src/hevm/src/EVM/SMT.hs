@@ -14,8 +14,6 @@ module EVM.SMT where
 
 import Prelude hiding (LT, GT)
 
-import Debug.Trace
-
 import GHC.Natural
 import Control.Monad
 import GHC.IO.Handle (Handle, hGetLine, hPutStr, hFlush, hSetBuffering, BufferMode(..))
@@ -448,7 +446,9 @@ exprToSMT = \case
   ReadByte idx src -> op2 "select" src idx
 
   EmptyBuf -> pure "emptyBuf"
-  ConcreteBuf bs -> error "TODO: concreteBuf"
+  e@(ConcreteBuf _) -> case toList e of
+    Just bs -> writeBytes bs EmptyBuf
+    Nothing -> error "Internal Error: could not convert concrete bytes to list"
   AbstractBuf s -> pure s
   ReadWord idx prev -> op2 "readWord" idx prev
   BufLength b -> op1 "bufLength" b
@@ -845,3 +845,15 @@ concatBytes (hd : tl) = do
   eTl <- concatBytes tl
   pure $ "(concat " <> eHd `sp` eTl <> ")"
 concatBytes [] = error "cannot concat an empty list of bytes" -- TODO: use nonempty here?
+
+-- | Concatenates a list of bytes into a larger bitvector
+writeBytes :: [Expr Byte] -> Expr Buf -> State BuilderState Text
+writeBytes [b] buf = do
+  eBuf <- exprToSMT buf
+  eByte <- exprToSMT b
+  pure $ "(store " <> eBuf `sp` eByte <> ")"
+writeBytes (hd : tl) buf = do
+  eHd <- exprToSMT hd
+  eTl <- writeBytes tl buf
+  pure $ "(store " <> eTl `sp` eHd <> ")"
+writeBytes [] buf = exprToSMT buf

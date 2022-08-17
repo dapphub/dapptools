@@ -260,20 +260,20 @@ copySlice srcOffset dstOffset size src dst = CopySlice srcOffset dstOffset size 
 
 
 writeByte :: Expr EWord -> Expr Byte -> Expr Buf -> Expr Buf
---writeByte (Lit offset) (LitByte val) EmptyBuf
---  = ConcreteBuf $ BS.replicate (num offset) 0 <> BS.singleton val
+writeByte (Lit offset) (LitByte val) EmptyBuf
+  = ConcreteBuf $ BS.replicate (num offset) 0 <> BS.singleton val
 writeByte (Lit offset) (LitByte byte) (ConcreteBuf src)
-  = ConcreteBuf $ BS.take (num offset) src
+  = ConcreteBuf $ (padRight (num offset) $ BS.take (num offset) src)
                <> BS.pack [byte]
-               <> BS.drop ((num offset) + 1) src
+               <> BS.drop (num offset + 1) src
 writeByte offset byte src = WriteByte offset byte src
 
 
 writeWord :: Expr EWord -> Expr EWord -> Expr Buf -> Expr Buf
--- writeWord (Lit offset) (Lit val) EmptyBuf
---   = ConcreteBuf $ BS.replicate (num offset) 0 <> word256Bytes val
+writeWord (Lit offset) (Lit val) EmptyBuf
+  = ConcreteBuf $ BS.replicate (num offset) 0 <> word256Bytes val
 writeWord (Lit offset) (Lit val) (ConcreteBuf src)
-  = ConcreteBuf $ BS.take (num offset) src
+  = ConcreteBuf $ (padRight (num offset) $ BS.take (num offset) src)
                <> asBE val
                <> BS.drop ((num offset) + 32) src
 writeWord offset val src = WriteWord offset val src
@@ -317,6 +317,9 @@ minLength = go 0
     go l (WriteWord _ _ b) = go l b
     go l (WriteByte _ _ b) = go l b
     go l (CopySlice _ _ _ _ dst) = go l dst
+
+    -- facts
+    go l (Fact _ e) = go l e
 
 
 word256At
@@ -390,6 +393,7 @@ simplifyReads = \case
 -- TODO: are the bounds here correct? think there might be some off by one mistakes...
 stripWrites :: W256 -> W256 -> Expr Buf -> Expr Buf
 stripWrites bottom top = \case
+  Fact _ e -> stripWrites bottom top e
   EmptyBuf -> EmptyBuf
   AbstractBuf s -> AbstractBuf s
   ConcreteBuf b -> ConcreteBuf $ BS.take (num top) b
@@ -423,6 +427,7 @@ stripWrites bottom top = \case
 -- storage lookups much easier. If the store is backed by an AbstractStore we
 -- always return a symbolic value.
 readStorage :: Expr EWord -> Expr EWord -> Expr Storage -> Maybe (Expr EWord)
+readStorage addr loc (Fact _ e) = readStorage addr loc e
 readStorage _ _ EmptyStore = Nothing
 readStorage addr loc store@(ConcreteStore s) = case (addr, loc) of
   (Lit a, Lit l) -> do

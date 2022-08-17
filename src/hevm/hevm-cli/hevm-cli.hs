@@ -30,6 +30,8 @@ import qualified EVM.VMTest as VMTest
 import EVM.SymExec
 import EVM.Debug
 import EVM.ABI
+import qualified EVM.Expr as Expr
+import EVM.SMT
 import EVM.Solidity
 import EVM.Expr (litAddr)
 import EVM.Types hiding (word)
@@ -470,7 +472,7 @@ checkForVMErrors :: [EVM.VM] -> [String]
 checkForVMErrors [] = []
 checkForVMErrors (vm:vms) =
   case view EVM.result vm of
-    Just (EVM.VMFailure (EVM.UnexpectedSymbolicArg pc msg)) ->
+    Just (EVM.VMFailure (EVM.UnexpectedSymbolicArg pc msg _)) ->
       ("Unexpected symbolic argument at opcode: "
       <> show pc
       <> ". "
@@ -499,9 +501,13 @@ getSrcInfo cmd =
 -- If function signatures are known, they should always be given for best results.
 assert :: Command Options.Unwrapped -> IO ()
 assert cmd = do
-  --dumpQueries "/tmp/tmp.V5xsEj5oN9"
-  --analyzeDai
-  analyzeVat
+  let block'  = maybe EVM.Fetch.Latest EVM.Fetch.BlockNumber (block cmd)
+      rpcinfo = (,) block' <$> rpc cmd
+  preState <- symvmFromCommand cmd
+  let errCodes = fromMaybe defaultPanicCodes (assertions cmd)
+  withSolvers EVM.SMT.Z3 4 $ \solvers -> do
+    res <- verify solvers preState (maxIterations cmd) (askSmtIterations cmd) rpcinfo Nothing (Just $ checkAssertions errCodes)
+    print res
     {-
   srcInfo <- getSrcInfo cmd
   let block'  = maybe EVM.Fetch.Latest EVM.Fetch.BlockNumber (block cmd)
@@ -828,14 +834,11 @@ vmFromCommand cmd = do
         addr f def = fromMaybe def (f cmd)
         bytes f def = maybe def decipher (f cmd)
 
-symvmFromCommand :: Command Options.Unwrapped -> EVM.VM
-symvmFromCommand = undefined
-  {-
+symvmFromCommand :: Command Options.Unwrapped -> IO (EVM.VM)
 symvmFromCommand cmd = do
-
   (miner,blockNum,baseFee,diff) <- case rpc cmd of
     Nothing -> return (0,0,0,0)
-    Just url -> io $ EVM.Fetch.fetchBlockFrom block' url >>= \case
+    Just url -> EVM.Fetch.fetchBlockFrom block' url >>= \case
       Nothing -> error "Could not fetch block"
       Just EVM.Block{..} -> return (_coinbase
                                    , _number
@@ -843,44 +846,38 @@ symvmFromCommand cmd = do
                                    , _difficulty
                                    )
 
-  caller' <- maybe (SAddr <$> freshVar_) (return . litAddr) (caller cmd)
-  ts <- maybe (var "Timestamp" <$> freshVar_) (return . w256lit) (timestamp cmd)
-  callvalue' <- maybe (var "CallValue" <$> freshVar_) (return . w256lit) (value cmd)
-  (calldata', cdlen, pathCond) <- case (calldata cmd, sig cmd) of
-    -- fully abstract calldata (up to 256 bytes)
-    (Nothing, Nothing) -> do
-      cd <- sbytes256
-      len' <- freshVar_
-      return (SymbolicBuffer cd, var "CALLDATALENGTH" len', (len' .<= 256, Todo "len < 256" []))
+  let
+    caller' = Caller 0
+    ts = maybe Timestamp Lit (timestamp cmd)
+    callvalue' = maybe (CallValue 0) Lit (value cmd)
+  calldata' <- case (calldata cmd, sig cmd) of
+    -- fully abstract calldata
+    (Nothing, Nothing) -> pure $ AbstractBuf "txdata"
     -- fully concrete calldata
-    (Just c, Nothing) ->
-      let cd = ConcreteBuffer $ decipher c
-      in return (cd, litWord (num $ len cd), (sTrue, Todo "" []))
+    (Just c, Nothing) -> pure $ ConcreteBuf (decipher c)
     -- calldata according to given abi with possible specializations from the `arg` list
     (Nothing, Just sig') -> do
-      method' <- io $ functionAbi sig'
+      method' <- functionAbi sig'
       let typs = snd <$> view methodInputs method'
-      (cd, cdlen) <- symCalldata (view methodSignature method') typs (arg cmd)
-      return (SymbolicBuffer cd, litWord (num cdlen), (sTrue, Todo "" []))
-
+      pure $ symCalldata (view methodSignature method') typs (arg cmd) EmptyBuf
     _ -> error "incompatible options: calldata and abi"
 
-  store <- undefined
-  --store <- case storageModel cmd of
-    -- InitialS and SymbolicS can read and write to symbolic locations
-    -- ConcreteS cannot (instead values can be fetched from rpc!)
-    -- Initial defaults to 0 for uninitialized storage slots,
-    -- whereas the values of SymbolicS are unconstrained.
-    --Just InitialS  -> EVM.Symbolic [] <$> freshArray_ (Just 0)
-    --Just ConcreteS -> return (EVM.Concrete mempty)
-    --Just SymbolicS -> EVM.Symbolic [] <$> freshArray_ Nothing
-    --Nothing -> EVM.Symbolic [] <$> freshArray_ (if create cmd then (Just 0) else Nothing)
+  -- TODO: rework this, ConcreteS not needed anymore
+  let store = case storageModel cmd of
+                -- InitialS and SymbolicS can read and write to symbolic locations
+                -- ConcreteS cannot (instead values can be fetched from rpc!)
+                -- Initial defaults to 0 for uninitialized storage slots,
+                -- whereas the values of SymbolicS are unconstrained.
+                Just InitialS  -> EmptyStore
+                Just ConcreteS -> ConcreteStore mempty
+                Just SymbolicS -> AbstractStore
+                Nothing -> if create cmd then EmptyStore else AbstractStore
 
-  withCache <- io $ applyCache (state cmd, cache cmd)
+  withCache <- applyCache (state cmd, cache cmd)
 
   contract' <- case (rpc cmd, address cmd, code cmd) of
     (Just url, Just addr', _) ->
-      io (EVM.Fetch.fetchContractFrom block' url addr') >>= \case
+      EVM.Fetch.fetchContractFrom block' url addr' >>= \case
         Nothing ->
           error "contract not found."
         Just contract' -> return contract''
@@ -889,31 +886,34 @@ symvmFromCommand cmd = do
               Nothing -> contract'
               -- if both code and url is given,
               -- fetch the contract and overwrite the code
-              Just c -> EVM.initialContract (codeType $ decipher c)
-                        & set EVM.origStorage (view EVM.origStorage contract')
+              Just c -> EVM.initialContract (mkCode $ decipher c)
+                        -- TODO: fix this
+                        -- & set EVM.origStorage (view EVM.origStorage contract')
                         & set EVM.balance     (view EVM.balance contract')
                         & set EVM.nonce       (view EVM.nonce contract')
                         & set EVM.external    (view EVM.external contract')
 
     (_, _, Just c)  ->
-      return (EVM.initialContract . codeType $ decipher c)
+      return (EVM.initialContract . mkCode $ decipher c)
     (_, _, Nothing) ->
       error "must provide at least (rpc + address) or code"
 
-  return $ (VMTest.initTx $ withCache $ vm0 baseFee miner ts blockNum diff cdlen calldata' callvalue' caller' contract')
-    & set (EVM.env . EVM.contracts . (ix address') . EVM.storage) store
+  return $ (VMTest.initTx $ withCache $ vm0 baseFee miner ts blockNum diff calldata' callvalue' caller' contract')
+    & set (EVM.env . EVM.storage) store
 
   where
     decipher = hexByteString "bytes" . strip0x
     block'   = maybe EVM.Fetch.Latest EVM.Fetch.BlockNumber (block cmd)
     origin'  = addr origin 0
-    codeType = (if create cmd then EVM.InitCode else EVM.RuntimeCode) . ConcreteBuffer
+    mkCode bs = if create cmd
+                   then EVM.InitCode bs EmptyBuf
+                   else EVM.RuntimeCode (fromJust . Expr.toList $ ConcreteBuf bs)
     address' = if create cmd
           then addr address (createAddress origin' (word nonce 0))
           else addr address 0xacab
-    vm0 baseFee miner ts blockNum diff cdlen calldata' callvalue' caller' c = EVM.makeVm $ EVM.VMOpts
+    vm0 baseFee miner ts blockNum diff calldata' callvalue' caller' c = EVM.makeVm $ EVM.VMOpts
       { EVM.vmoptContract      = c
-      , EVM.vmoptCalldata      = (calldata', cdlen)
+      , EVM.vmoptCalldata      = calldata'
       , EVM.vmoptValue         = callvalue'
       , EVM.vmoptAddress       = address'
       , EVM.vmoptCaller        = caller'
@@ -932,13 +932,12 @@ symvmFromCommand cmd = do
       , EVM.vmoptSchedule      = FeeSchedule.berlin
       , EVM.vmoptChainId       = word chainid 1
       , EVM.vmoptCreate        = create cmd
-      , EVM.vmoptStorageModel  = fromMaybe SymbolicS (storageModel cmd)
+      , EVM.vmoptStorageBase   = EVM.Symbolic
       , EVM.vmoptTxAccessList  = mempty
       , EVM.vmoptAllowFFI      = False
       }
     word f def = fromMaybe def (f cmd)
     addr f def = fromMaybe def (f cmd)
-  -}
 
 launchTest :: HasCallStack => Command Options.Unwrapped ->  IO ()
 launchTest cmd = do

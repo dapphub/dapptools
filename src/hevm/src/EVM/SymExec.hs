@@ -35,89 +35,96 @@ import Data.Text (Text)
 import qualified Data.Text as T
 import Data.List (find)
 import Data.Maybe (isJust, fromJust)
+import Debug.Trace
 
 data ProofResult a b c = Qed a | Cex b | Timeout c
   deriving (Show)
 type VerifyResult = ProofResult (Expr End) (Expr End, [Text]) (Expr End)
 type EquivalenceResult = ProofResult ([VM], [VM]) VM ()
 
+inRange :: Int -> Expr EWord -> Prop
+inRange sz e = PAnd (PGEq e (Lit 0)) (PLEq e (Lit $ 2 ^ sz - 1))
+
+bool :: Expr EWord -> Prop
+bool e = POr (PEq e (Lit 1)) (PEq e (Lit 0))
 
 -- | Abstract calldata argument generation
-symAbiArg :: AbiType -> Expr Buf
-symAbiArg = undefined
---symAbiArg (AbiUIntType n) | n `mod` 8 == 0 && n <= 256 =
-  --do x <- concatMapM (const mkByte) [0..(n `div` 8) - 1]
-     --return (padLeft' 32 x, 32)
-                          -- | otherwise = error "bad type"
+symAbiArg :: Text -> AbiType -> CalldataFragment
+symAbiArg name = \case
+  AbiUIntType n ->
+    if n `mod` 8 == 0 && n <= 256
+    then let v = Var name in St $ Fact (inRange n v) v
+    else error "bad type"
+  AbiIntType n ->
+    if n `mod` 8 == 0 && n <= 256
+    -- TODO: is this correct?
+    then let v = Var name in St $ Fact (inRange n v) v
+    else error "bad type"
+  AbiBoolType -> let v = Var name in St $ Fact (bool v) v
+  AbiAddressType -> let v = Var name in St $ Fact (inRange 160 v) v
+  AbiBytesType n
+    -> if n > 0 && n <= 32
+       then let v = Var name in St $ Fact (inRange (n * 8) v) v
+       else error "bad type"
+  AbiArrayType sz tp -> Comp $ fmap (\n -> symAbiArg (name <> n) tp) [T.pack (show n) | n <- [0..sz-1]]
+  t -> error $ "TODO: symbolic abi encoding for " <> show t
 
---symAbiArg (AbiIntType n)  | n `mod` 8 == 0 && n <= 256 =
-  --do x <- concatMapM (const mkByte) [(0 :: Int) ..(n `div` 8) - 1]
-     --return (padLeft' 32 x, 32)
 
-                          -- | otherwise = error "bad type"
---symAbiArg AbiBoolType =
-  --do x <- mkByte
-     --return (padLeft' 32 x, 32)
-
---symAbiArg AbiAddressType =
-  --do x <- concatMapM (const mkByte) [(0 :: Int)..19]
-     --return (padLeft' 32 x, 32)
-
---symAbiArg (AbiBytesType n) | n <= 32 =
-  --do x <- concatMapM (const mkByte) [0..n - 1]
-     --return (padLeft' 32 x, 32)
-
-                           -- | otherwise = error "bad type"
-
----- TODO: is this encoding correct?
---symAbiArg (AbiArrayType len typ) =
-  --do args <- replicateM len symAbiArg
-     --return (litBytes (encodeAbiValue (AbiUInt 256 (fromIntegral len))) <> (concat $ fst <$> args),
-             --32 + (sum $ snd <$> args))
-
---symAbiArg (AbiTupleType tuple) =
-  --do args <- mapM symAbiArg (toList tuple)
-     --return (concat $ fst <$> args, sum $ snd <$> args)
---symAbiArg n =
-  --error $ "Unsupported symbolic abiencoding for"
-    -- <> show n
-    -- <> ". Please file an issue at https://github.com/dapphub/dapptools if you really need this."
+data CalldataFragment
+  = St (Expr EWord)
+  | Dy (Expr EWord) (Expr Buf)
+  | Comp [CalldataFragment]
+  deriving (Show, Eq)
 
 -- | Generates calldata matching given type signature, optionally specialized
 -- with concrete arguments.
 -- Any argument given as "<symbolic>" or omitted at the tail of the list are
 -- kept symbolic.
-symCalldata :: Text -> [AbiType] -> [String] -> Expr Buf
-symCalldata sig typesignature concreteArgs = undefined
-  {-
-symCalldata sig typesignature concreteArgs =
+-- TODO: constrain calldata length
+symCalldata :: Text -> [AbiType] -> [String] -> Expr Buf -> Expr Buf
+symCalldata sig typesignature concreteArgs base =
   let args = concreteArgs <> replicate (length typesignature - length concreteArgs)  "<symbolic>"
-      mkArg typ "<symbolic>" = symAbiArg typ
-      mkArg typ arg = let n = litBytes . encodeAbiValue $ makeAbiValue typ arg
-                      in return (n, num (length n))
-      sig' = litBytes $ selector sig
-  in do calldatas <- zipWithM mkArg typesignature args
-        return (sig' <> concat (fst <$> calldatas), 4 + (sum $ snd <$> calldatas))
-  -}
+      mkArg :: AbiType -> String -> Int -> CalldataFragment
+      mkArg typ "<symbolic>" n = symAbiArg (T.pack $ "arg" <> show n) typ
+      mkArg typ arg _ = let v = makeAbiValue typ arg
+                        in case v of
+                             AbiUInt _ w -> St . Lit . num $ w
+                             AbiInt _ w -> St . Lit . num $ w
+                             AbiAddress w -> St . Lit . num $ w
+                             AbiBool w -> St . Lit $ if w then 1 else 0
+                             _ -> error "TODO"
+      calldatas = zipWith3 mkArg typesignature args [1..]
+  in combineFragments calldatas (writeSelector base sig)
+
+writeSelector :: Expr Buf -> Text -> Expr Buf
+writeSelector buf sig = writeSel (Lit 0) $ writeSel (Lit 1) $ writeSel (Lit 2) $ writeSel (Lit 3) buf
+  where
+    sel = ConcreteBuf $ selector sig
+    writeSel idx = Expr.writeByte idx (Expr.readByte idx sel)
+
+combineFragments :: [CalldataFragment] -> Expr Buf -> Expr Buf
+combineFragments = go (Lit 4)
+  where
+    go _ [] acc = acc
+    go idx (f:rest) acc = case f of
+                             St w -> go (Expr.add idx (Lit 32)) rest (Expr.writeWord idx w acc)
+                             s -> error $ "unsupported cd fragment: " <> show s
+
 
 abstractVM :: Maybe (Text, [AbiType]) -> [String] -> ByteString -> StorageModel -> VM
-abstractVM typesignature concreteArgs x storagemodel = undefined
-  {-
-  (cd', cdlen, cdconstraint) <-
-    case typesignature of
-      Nothing -> do cd <- sbytes256
-                    len <- freshVar_
-                    return (cd, var "calldataLength" len, (len .<= 256, Todo "calldatalength < 256" []))
-      Just (name, typs) -> do (cd, cdlen) <- symCalldata name typs concreteArgs
-                              return (cd, S (Literal cdlen) (literal $ num cdlen), (sTrue, Todo "Trivial" []))
-  symstore <- case storagemodel of
-    SymbolicS -> Symbolic [] <$> freshArray_ Nothing
-    InitialS -> Symbolic [] <$> freshArray_ (Just 0)
-    ConcreteS -> return $ Concrete mempty
-  c <- SAddr <$> freshVar_
-  value' <- var "CALLVALUE" <$> freshVar_
-  return $ loadSymVM (RuntimeCode (ConcreteBuffer x)) symstore storagemodel c value' (SymbolicBuffer cd', cdlen) & over constraints ((<>) [cdconstraint])
-  -}
+abstractVM typesignature concreteArgs contractCode storagemodel
+  = loadSymVM code' store caller' value' calldata'
+  where
+    calldata' = case typesignature of
+                 Nothing -> AbstractBuf "txdata"
+                 Just (name, typs) -> symCalldata name typs concreteArgs (AbstractBuf "txdata")
+    store = case storagemodel of
+              SymbolicS -> AbstractStore
+              InitialS -> EmptyStore
+              ConcreteS -> ConcreteStore mempty
+    caller' = Caller 0
+    value' = CallValue 0
+    code' = RuntimeCode $ fromJust $ Expr.toList (ConcreteBuf contractCode)
 
 loadSymVM :: ContractCode -> Expr Storage -> Expr EWord -> Expr EWord -> Expr Buf -> VM
 loadSymVM x initStore addr callvalue' calldata' =
@@ -301,12 +308,14 @@ flattenExpr = go []
   where
     go :: [Prop] -> Expr End -> [([Prop], Expr End)]
     go pcs = \case
+      Fact p e -> go (p : pcs) e
       ITE c t f -> go ((PEq c (Lit 1)) : pcs) t <> go ((PEq c (Lit 0)) : pcs) f
       Invalid -> [(pcs, Invalid)]
       SelfDestruct -> [(pcs, SelfDestruct)]
       Revert buf -> [(pcs, Revert buf)]
       Return  buf store -> [(pcs, Return buf store)]
-      e -> error $ "Internal Error: Unexpted end state: " <> show e
+      EVM.Types.IllegalOverflow -> [(pcs, EVM.Types.IllegalOverflow)]
+      TmpErr s -> error s
 
 -- | Simple recursive match based AST simplification
 -- Note: may not terminate!
@@ -377,6 +386,7 @@ reachable2 solvers e = do
     -}
     go :: [Prop] -> Expr End -> IO ([SMT2], Maybe (Expr End))
     go pcs = \case
+      Fact p e' -> go (p : pcs) e'
       ITE c t f -> do
         (tres, fres) <- concurrently
           (go (PEq (Lit 1) c : pcs) t)
@@ -409,6 +419,7 @@ reachable solvers = go []
   where
     go :: [Prop] -> Expr End -> IO ([SMT2], Expr End)
     go pcs = \case
+      Fact p e -> go (p : pcs) e
       ITE c t f -> do
         let
           tquery = assertProps (PEq c (Lit 1) : pcs)
@@ -480,7 +491,9 @@ evalProp = \case
 -- | Symbolically execute the VM and check all endstates against the postcondition, if available.
 verify :: SolverGroup -> VM -> Maybe Integer -> Maybe Integer -> Maybe (Fetch.BlockNumber, Text) -> Maybe Precondition -> Maybe Postcondition -> IO [VerifyResult]
 verify solvers preState maxIter askSmtIters rpcinfo maybePre maybepost = do
+  putStrLn "Exploring contract"
   expr <- evalStateT (interpret (Fetch.oracle Nothing False) Nothing Nothing runExpr) preState
+  putStrLn $ "Explored contract (" <> show (Expr.numBranches expr) <> " branches)"
   let leaves = flattenExpr expr
   case maybepost of
     Nothing -> pure [Qed expr]
@@ -496,8 +509,11 @@ verify solvers preState maxIter askSmtIters rpcinfo maybePre maybepost = do
           Nothing -> []
         withQueries = fmap (\(pcs, leaf) -> (assertProps (PNeg (post leaf) : assumes <> pcs), leaf)) canViolate
       -- Dispatch the remaining branches to the solver to check for violations
+      putStrLn $ "Checking for reachability of " <> show (length withQueries) <> " potential property violations"
       results <- flip mapConcurrently withQueries $ \(query, leaf) -> do
+        putStrLn "hi"
         res <- checkSat' solvers (query, ["txdata", "storage"])
+        putStrLn "ho"
         pure (res, leaf)
       let cexs = filter (\(res, _) -> not . isUnsat $ res) results
       pure $ fmap toVRes cexs

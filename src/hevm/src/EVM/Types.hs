@@ -1,5 +1,7 @@
 {-# Language CPP #-}
 {-# Language TemplateHaskell #-}
+{-# Language ScopedTypeVariables #-}
+{-# Language TypeApplications #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE DataKinds #-}
@@ -180,7 +182,11 @@ newtype W256 = W256 Word256
   type level shenanigans tends to complicate implementation, we skip this for
   now.
 
-  TODO: figure out how to attach knowledge to a term (e.g. on the potential bounds of a given word).
+  Knowledge can be attached to an expression using the `Fact` node. This
+  attaches a proposition to any point in the tree. When encoding a given Expr
+  instance as a constraint system for e.g. an SMT solver, these facts can be
+  recursively collected from a given Expr instance and added to help reduce the
+  solution search space.
 -}
 
 -- phantom type tags for AST construction
@@ -195,6 +201,9 @@ data EType
 
 -- add type level list of constraints
 data Expr (a :: EType) where
+
+  -- knowledge
+  Fact           :: Prop -> Expr a -> Expr a
 
   -- identifiers
 
@@ -427,8 +436,6 @@ data Expr (a :: EType) where
   BufLength      :: Expr Buf -> Expr EWord
 
 deriving instance Show (Expr a)
--- TODO: do we need a custom instance here?
---        e.g. what should AbstractBuf == AbstractBuf be? same q for Stores
 deriving instance Eq (Expr a)
 deriving instance Ord (Expr a)
 
@@ -438,7 +445,7 @@ deriving instance Ord (Expr a)
 -- (ite (eq a b) 1 0). We can use the boolean operators here to remove some
 -- unescessary `ite` statements from our SMT encoding.
 data Prop where
-  PEq :: forall a . Expr a -> Expr a -> Prop
+  PEq :: forall a . Typeable a => Expr a -> Expr a -> Prop
   PLT :: Expr EWord -> Expr EWord -> Prop
   PGT :: Expr EWord -> Expr EWord -> Prop
   PGEq :: Expr EWord -> Expr EWord -> Prop
@@ -451,15 +458,48 @@ deriving instance (Show Prop)
 
 instance Eq Prop where
   PBool a == PBool b = a == b
-  PEq a b == PEq c d = a == b && c == d
-  PLT a b == PLT c d = a == b && c == d
-  PGT a b == PGT c d = a == b && c == d
-  PGEq a b == PGEq c d = a == b && c == d
-  PLEq a b == PLEq c d = a == b && c == d
+  PEq (a :: Expr x) (b :: Expr x) == PEq (c :: Expr y) (d :: Expr y)
+    = case eqT @x @y of
+       Just Refl -> a == c && b == d
+       Nothing -> False
+  PLT a b == PLT c d = a == c && b == d
+  PGT a b == PGT c d = a == c && b == d
+  PGEq a b == PGEq c d = a == c && b == d
+  PLEq a b == PLEq c d = a == c && b == d
   PNeg a == PNeg b = a == b
-  PAnd a b == PAnd c d = a == b && c == d
-  POr a b == POr c d = a == b && c == d
+  PAnd a b == PAnd c d = a == c && b == d
+  POr a b == POr c d = a == c && b == d
   _ == _ = False
+
+instance Ord Prop where
+  PBool a <= PBool b = a <= b
+  PEq (a :: Expr x) (b :: Expr x) <= PEq (c :: Expr y) (d :: Expr y)
+    = case eqT @x @y of
+       Just Refl -> a <= c && b <= d
+       Nothing -> False
+  PLT a b <= PLT c d = a <= c && b <= d
+  PGT a b <= PGT c d = a <= c && b <= d
+  PGEq a b <= PGEq c d = a <= c && b <= d
+  PLEq a b <= PLEq c d = a <= c && b <= d
+  PNeg a <= PNeg b = a <= b
+  PAnd a b <= PAnd c d = a <= c && b <= d
+  POr a b <= POr c d = a <= c && b <= d
+  _ <= _ = False
+
+foldProp :: forall b . Monoid b => (forall a . Expr a -> b) -> b -> Prop -> b
+foldProp f acc p = acc <> (go p)
+  where
+    go :: Prop -> b
+    go = \case
+      PBool _ -> mempty
+      PEq a b -> (foldExpr f mempty a) <> (foldExpr f mempty b)
+      PLT a b -> foldExpr f mempty a <> foldExpr f mempty b
+      PGT a b -> foldExpr f mempty a <> foldExpr f mempty b
+      PGEq a b -> foldExpr f mempty a <> foldExpr f mempty b
+      PLEq a b -> foldExpr f mempty a <> foldExpr f mempty b
+      PNeg a -> go a
+      PAnd a b -> go a <> go b
+      POr a b -> go a <> go b
 
 -- | Recursively folds a given function over a given expression
 -- Recursion schemes do this & a lot more, but defining them over GADT's isn't worth the hassle
@@ -468,6 +508,9 @@ foldExpr f acc expr = acc <> (go expr)
   where
     go :: forall a . Expr a -> b
     go = \case
+      -- knowledge
+      e@(Fact p a) -> f e <> foldProp f mempty p <> go a
+
       -- literals & variables
 
       e@(Lit _) -> f e
@@ -663,11 +706,24 @@ foldExpr f acc expr = acc <> (go expr)
         <> (go g)
       e@(BufLength a) -> f e <> (go a)
 
+mapProp :: (forall a . Expr a -> Expr a) -> Prop -> Prop
+mapProp f = \case
+  PBool b -> PBool b
+  PEq a b -> PEq (mapExpr f (f a)) (mapExpr f (f b))
+  PLT a b -> PEq (mapExpr f (f a)) (mapExpr f (f b))
+  PGT a b -> PEq (mapExpr f (f a)) (mapExpr f (f b))
+  PLEq a b -> PEq (mapExpr f (f a)) (mapExpr f (f b))
+  PGEq a b -> PEq (mapExpr f (f a)) (mapExpr f (f b))
+  PNeg a -> PNeg (mapProp f a)
+  PAnd a b -> PAnd (mapProp f a) (mapProp f b)
+  POr a b -> POr (mapProp f a) (mapProp f b)
+
 -- | Recursively applies a given function to every node in a given expr instance
 -- Recursion schemes do this & a lot more, but defining them over GADT's isn't worth the hassle
--- TODO: can this be generalized into a recursive fold?
 mapExpr :: (forall a . Expr a -> Expr a) -> Expr b -> Expr b
 mapExpr f expr = case (f expr) of
+  -- knowledge
+  Fact p a -> Fact (mapProp f p) (mapExpr f (f a))
 
   -- literals & variables
 
