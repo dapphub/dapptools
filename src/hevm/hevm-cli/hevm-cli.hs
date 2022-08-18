@@ -507,7 +507,11 @@ assert cmd = do
   let errCodes = fromMaybe defaultPanicCodes (assertions cmd)
   withSolvers EVM.SMT.Z3 4 $ \solvers -> do
     res <- verify solvers preState (maxIterations cmd) (askSmtIterations cmd) rpcinfo Nothing (Just $ checkAssertions errCodes)
-    print res
+    case res of
+      [Qed _] -> putStrLn "QED: No reachable property violations discovered"
+      cexs -> do
+        putStrLn "Discovered the following counterexamples:"
+        putStrLn $ intercalate "\n" $ fmap show cexs
     {-
   srcInfo <- getSrcInfo cmd
   let block'  = maybe EVM.Fetch.Latest EVM.Fetch.BlockNumber (block cmd)

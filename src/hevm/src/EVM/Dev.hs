@@ -72,7 +72,7 @@ reachable' smtdebug c = do
   withSolvers Z3 4 $ \solvers -> do
     putStrLn "Checking reachability"
     (qs, less) <- reachable2 solvers full
-    putStrLn $ "Checked reachability (" <> (show $ Prelude.length qs) <> " queries)"
+    putStrLn $ "Checked reachability (" <> (show $ numBranches less) <> " reachable branches)"
     writeFile "reachable.ast" $ formatExpr less
     putStrLn "Dumped to reachable.ast"
     --putStrLn $ formatExpr less

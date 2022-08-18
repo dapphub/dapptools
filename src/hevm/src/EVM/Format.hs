@@ -10,7 +10,7 @@ import EVM.Dapp (DappContext (..), contextInfo, contextEnv)
 import EVM (VM, VMResult(..), cheatCode, traceForest, traceData, Error (..), result)
 import EVM (Trace, TraceData (..), Query (..), FrameContext (..))
 import EVM.SymExec
-import EVM.Types (maybeLitWord, W256 (..), num, word, Expr(..), EType(..), hexByteString, foldExpr)
+import EVM.Types (maybeLitWord, W256 (..), num, word, Expr(..), EType(..), hexByteString, foldExpr, mapExpr)
 import EVM.Types (Addr, ByteStringS(..))
 import EVM.ABI (AbiValue (..), Event (..), AbiType (..), SolError (..))
 import EVM.ABI (Indexed (NotIndexed), getAbiSeq)
@@ -39,6 +39,7 @@ import Data.Char (isSpace)
 import Data.List (foldl')
 
 import qualified Data.ByteString as BS
+import qualified Data.ByteString.Base16 as BS16
 import qualified Data.Char as Char
 import qualified Data.Map as Map
 import qualified Data.Text as Text
@@ -474,20 +475,28 @@ indent' n = rstrip . unlines . fmap (replicate n ' ' <>) . lines
 rstrip :: String -> String
 rstrip = reverse . dropWhile (=='\n') . reverse
 
+formatConcreteBufs :: Expr a -> Expr a
+formatConcreteBufs = mapExpr go
+  where
+    go :: forall a . Expr a -> Expr a
+    go = \case
+      ConcreteBuf b -> ConcreteBuf (BS16.encode b)
+      e -> e
+
 formatExpr :: Expr a -> String
-formatExpr = \case
-  ITE c t f -> rstrip . unlines $
-    [ "(ITE (" <> formatExpr c <> ")"
-    , indent' 2 (formatExpr t)
-    , indent' 2 (formatExpr f)
-    , ")"]
-  Lit a -> show a
-  e@(ConcreteBuf b) -> show $ hexByteString (show e) b
-  EVM.Types.Revert buf -> "(Revert " <> formatExpr buf <> ")"
-  Return buf store -> unlines
-      [ "(Return"
-      , indent' 2 ("Data: " <> formatExpr buf)
-      , indent' 2 ("Store: " <> formatExpr store)
-      , ")"
-      ]
-  a -> show a
+formatExpr = go . formatConcreteBufs
+  where
+    go = \case
+      ITE c t f -> rstrip . unlines $
+        [ "(ITE (" <> formatExpr c <> ")"
+        , indent' 2 (formatExpr t)
+        , indent' 2 (formatExpr f)
+        , ")"]
+      EVM.Types.Revert buf -> "(Revert " <> formatExpr buf <> ")"
+      Return buf store -> unlines
+          [ "(Return"
+          , indent' 2 ("Data: " <> formatExpr buf)
+          , indent' 2 ("Store: " <> formatExpr store)
+          , ")"
+          ]
+      a -> show a

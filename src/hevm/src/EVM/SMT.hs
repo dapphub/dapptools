@@ -360,7 +360,7 @@ initState = BuilderState
 
 exprToSMT :: Expr a -> State BuilderState Text
 exprToSMT = \case
-  Lit w -> pure $ "#x" <> (T.pack . padLeftStr 64 . strip0x' . show $ w)
+  Lit w -> pure $ "(_ bv" <> (T.pack $ show (num w :: Integer)) <> " 256)"
   Var s -> pure s
   JoinBytes
     z o two three four five six seven
@@ -435,7 +435,7 @@ exprToSMT = \case
   BaseFee -> pure "basefee"
 
   -- TODO: make me binary...
-  LitByte b -> pure $ "#x" <> (T.pack . strip0x' . show $ (num b :: W256))
+  LitByte b -> pure $ "(_ bv" <> T.pack (show (num b :: Integer)) <> " 8)"
   IndexWord w idx -> case idx of
     Lit n -> if n >= 0 && n < 32
              then do
@@ -447,7 +447,7 @@ exprToSMT = \case
 
   EmptyBuf -> pure "emptyBuf"
   e@(ConcreteBuf _) -> case toList e of
-    Just bs -> writeBytes bs EmptyBuf
+    Just bs -> writeBytes (Lit 0) bs EmptyBuf
     Nothing -> error "Internal Error: could not convert concrete bytes to list"
   AbstractBuf s -> pure s
   ReadWord idx prev -> op2 "readWord" idx prev
@@ -847,13 +847,15 @@ concatBytes (hd : tl) = do
 concatBytes [] = error "cannot concat an empty list of bytes" -- TODO: use nonempty here?
 
 -- | Concatenates a list of bytes into a larger bitvector
-writeBytes :: [Expr Byte] -> Expr Buf -> State BuilderState Text
-writeBytes [b] buf = do
+writeBytes :: Expr EWord -> [Expr Byte] -> Expr Buf -> State BuilderState Text
+writeBytes _ [] buf = exprToSMT buf
+writeBytes idx [b] buf = do
   eBuf <- exprToSMT buf
+  eIdx <- exprToSMT idx
   eByte <- exprToSMT b
-  pure $ "(store " <> eBuf `sp` eByte <> ")"
-writeBytes (hd : tl) buf = do
+  pure $ "(store " <> eBuf `sp` eIdx `sp` eByte <> ")"
+writeBytes idx (hd : tl) buf = do
   eHd <- exprToSMT hd
-  eTl <- writeBytes tl buf
-  pure $ "(store " <> eTl `sp` eHd <> ")"
-writeBytes [] buf = exprToSMT buf
+  eIdx <- exprToSMT idx
+  eTl <- writeBytes (add idx (Lit 1)) tl buf
+  pure $ "(store " <> eTl `sp` eIdx `sp` eHd <> ")"

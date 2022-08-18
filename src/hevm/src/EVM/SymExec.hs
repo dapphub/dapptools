@@ -191,7 +191,6 @@ interpret fetcher maxIter askSmtIters =
         Stepper.Ask (EVM.PleaseChoosePath cond continue) -> do
           assign result Nothing
           vm <- get
-          --liftIO $ print $ "BRANCH" <> show (view (state . pc) vm)
           case maxIterationsReached vm maxIter of
             -- TODO: parallelise
             Nothing -> do
@@ -511,12 +510,10 @@ verify solvers preState maxIter askSmtIters rpcinfo maybePre maybepost = do
       -- Dispatch the remaining branches to the solver to check for violations
       putStrLn $ "Checking for reachability of " <> show (length withQueries) <> " potential property violations"
       results <- flip mapConcurrently withQueries $ \(query, leaf) -> do
-        putStrLn "hi"
         res <- checkSat' solvers (query, ["txdata", "storage"])
-        putStrLn "ho"
         pure (res, leaf)
       let cexs = filter (\(res, _) -> not . isUnsat $ res) results
-      pure $ fmap toVRes cexs
+      pure $ if null cexs then [Qed expr] else fmap toVRes cexs
   where
     toVRes :: (CheckSatResult, Expr End) -> VerifyResult
     toVRes (res, leaf) = case res of
