@@ -234,7 +234,7 @@ tests = testGroup "hevm"
               let [x, y] = getStaticAbiArgs 2 prestate
               in case leaf of
                    Return b _ -> (ReadWord (Lit 0) b) .== (Add x y)
-                   _ -> PBool False
+                   _ -> PBool True
         [Qed res] <- withSolvers Z3 1 $ \s -> verifyContract s safeAdd (Just ("add(uint256,uint256)", [AbiUIntType 256, AbiUIntType 256])) [] SymbolicS (Just pre) (Just post)
         putStrLn $ "successfully explored: " <> show (Expr.numBranches res) <> " paths"
      ,
@@ -256,7 +256,7 @@ tests = testGroup "hevm"
               let [_, y] = getStaticAbiArgs 2 prestate
               in case leaf of
                    Return b _ -> (ReadWord (Lit 0) b) .== (Mul (Lit 2) y)
-                   _ -> PBool False
+                   _ -> PBool True
         [Qed res] <- withSolvers Z3 1 $ \s ->
           verifyContract s safeAdd (Just ("add(uint256,uint256)", [AbiUIntType 256, AbiUIntType 256])) [] SymbolicS (Just pre) (Just post)
         putStrLn $ "successfully explored: " <> show (Expr.numBranches res) <> " paths"
@@ -276,14 +276,15 @@ tests = testGroup "hevm"
           |]
         let pre vm = Lit 0 .== view (state . callvalue) vm
             post prestate leaf =
-              let [y] = getStaticAbiArgs 2 prestate
+              let [y] = getStaticAbiArgs 1 prestate
                   this = Expr.litAddr $ view (state . codeContract) prestate
                   prex = Expr.readStorage' this (Lit 0) (view (env . storage) prestate)
               in case leaf of
-                Return _ postStore -> Expr.mul (Expr.add (Lit 2) prex) y .== (Expr.readStorage' this (Lit 0) postStore)
-                _ -> PBool False
-        [Qed res] <- withSolvers Z3 1 $ \s -> verifyContract s c (Just ("f(uint256)", [AbiUIntType 256])) [] SymbolicS (Just pre) (Just post)
-        putStrLn $ "successfully explored: " <> show (Expr.numBranches res) <> " paths"
+                Return _ postStore -> Expr.add prex (Expr.mul (Lit 2) y) .== (Expr.readStorage' this (Lit 0) postStore)
+                _ -> PBool True
+        res <- withSolvers Z3 1 $ \s -> verifyContract s c (Just ("f(uint256)", [AbiUIntType 256])) [] SymbolicS (Just pre) (Just post)
+        print res
+        --putStrLn $ "successfully explored: " <> show (Expr.numBranches res) <> " paths"
         {-
         ,
         -- tests how whiffValue handles Neg via application of the triple IsZero simplification rule

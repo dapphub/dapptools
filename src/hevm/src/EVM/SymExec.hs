@@ -501,7 +501,7 @@ verify solvers preState maxIter askSmtIters rpcinfo maybePre maybepost = do
         -- Filter out any leaves that can be statically shown to be safe
         canViolate = flip filter leaves $
           \(_, leaf) -> case evalProp (post preState leaf) of
-            PBool False -> False
+            PBool True -> False
             _ -> True
         assumes = case maybePre of
           Just pre -> [pre preState]
