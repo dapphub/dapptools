@@ -440,6 +440,11 @@ readStorage addr' loc s@(SStore addr slot val prev) = case (addr, slot, addr', l
   (Lit _, Lit _, Lit _, Lit _) -> if loc == slot && addr == addr' then Just val else readStorage addr' loc prev
   _ -> Just $ SLoad addr' addr' s
 
+readStorage' :: Expr EWord -> Expr EWord -> Expr Storage -> Expr EWord
+readStorage' addr loc store = case readStorage addr loc store of
+                                Just v -> v
+                                Nothing -> Lit 0
+
 
 -- | Writes a value to a key in a storage expression.
 --
@@ -562,6 +567,7 @@ min (Lit x) (Lit y) = if x < y then Lit x else Lit y
 min x y = Min x y
 
 numBranches :: Expr End -> Int
+numBranches (Fact _ e) = numBranches e
 numBranches (ITE _ t f) = numBranches t + numBranches f
 numBranches _ = 1
 

@@ -1,4 +1,5 @@
 {-# Language OverloadedStrings #-}
+{-# Language GADTs #-}
 {-# Language ViewPatterns #-}
 {-# Language ScopedTypeVariables #-}
 {-# Language LambdaCase #-}
@@ -15,10 +16,13 @@ import Data.ByteString (ByteString)
 
 import Prelude hiding (fail)
 
+import Debug.Trace
+
 import qualified Data.Text as Text
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy as BS (fromStrict)
 import qualified Data.ByteString.Base16 as Hex
+import Data.Maybe
 import Test.Tasty
 import Test.Tasty.QuickCheck
 import Test.Tasty.HUnit
@@ -33,8 +37,6 @@ import Data.String.Here
 import Control.Monad.Fail
 
 import Data.Binary.Put (runPut)
-import Data.SBV hiding ((===), forAll, sList)
-import Data.SBV.Control
 import qualified Data.Map as Map
 import Data.Binary.Get (runGetOrFail)
 
@@ -47,9 +49,10 @@ import EVM.Precompiled
 import EVM.RLP
 import EVM.Solidity
 import EVM.Types
+import EVM.SMT
+import qualified EVM.Expr as Expr
+trace' msg x = trace (msg <> ": " <> show x) x
 
-instance MonadFail Query where
-    fail = io . fail
 
 main :: IO ()
 main = defaultMain tests
@@ -224,16 +227,17 @@ tests = testGroup "hevm"
             }
           }
           |]
-        let pre preVM = let [x, y] = getStaticAbiArgs preVM
-                        in x .<= x + y
-                           .&& view (state . callvalue) preVM .== 0
-            post = Just $ \(prestate, poststate) ->
-              let [x, y] = getStaticAbiArgs prestate
-              in case view result poststate of
-                Just (VMSuccess (SymbolicBuffer out)) -> (fromBytes out) .== x + y
-                _ -> sFalse
-        (Qed res, _) <- runSMT $ query $ verifyContract safeAdd (Just ("add(uint256,uint256)", [AbiUIntType 256, AbiUIntType 256])) [] SymbolicS pre post
-        putStrLn $ "successfully explored: " <> show (length res) <> " paths"
+        let pre preVM = let [x, y] = getStaticAbiArgs 2 preVM
+                        in (x .<= Expr.add x y)
+                           .&& view (state . callvalue) preVM .== Lit 0
+            post prestate leaf =
+              let [x, y] = getStaticAbiArgs 2 prestate
+              in case leaf of
+                   Return b _ -> (ReadWord (Lit 0) b) .== (Add x y)
+                   _ -> PBool False
+        res <- withSolvers Z3 1 $ \s -> verifyContract s safeAdd (Just ("add(uint256,uint256)", [AbiUIntType 256, AbiUIntType 256])) [] SymbolicS (Just pre) (Just post)
+        traceShowM res
+        --putStrLn $ "successfully explored: " <> show (Expr.numBranches res) <> " paths"
      ,
 
       testCase "x == y => x + y == 2 * y" $ do
@@ -245,18 +249,18 @@ tests = testGroup "hevm"
             }
           }
           |]
-        let pre preVM = let [x, y] = getStaticAbiArgs preVM
-                        in (x .<= x + y)
+        let pre preVM = let [x, y] = getStaticAbiArgs  2 preVM
+                        in (x .<= Expr.add x y)
                            .&& (x .== y)
-                           .&& view (state . callvalue) preVM .== 0
-            post (prestate, poststate) =
-              let [_, y] = getStaticAbiArgs prestate
-              in case view result poststate of
-                      Just (VMSuccess (SymbolicBuffer out)) -> fromBytes out .== 2 * y
-                      _ -> sFalse
-        (Qed res, _) <- runSMTWith z3 $ query $
-          verifyContract safeAdd (Just ("add(uint256,uint256)", [AbiUIntType 256, AbiUIntType 256])) [] SymbolicS pre (Just post)
-        putStrLn $ "successfully explored: " <> show (length res) <> " paths"
+                           .&& view (state . callvalue) preVM .== Lit 0
+            post prestate leaf =
+              let [_, y] = getStaticAbiArgs 2 prestate
+              in case leaf of
+                   Return b _ -> (ReadWord (Lit 0) b) .== (Mul (Lit 2) y)
+                   _ -> PBool False
+        [Qed res] <- withSolvers Z3 1 $ \s ->
+          verifyContract s safeAdd (Just ("add(uint256,uint256)", [AbiUIntType 256, AbiUIntType 256])) [] SymbolicS (Just pre) (Just post)
+        putStrLn $ "successfully explored: " <> show (Expr.numBranches res) <> " paths"
       ,
       testCase "summary storage writes" $ do
         Just c <- solcRuntime "A"
@@ -271,21 +275,17 @@ tests = testGroup "hevm"
             }
           }
           |]
-        let pre vm = 0 .== view (state . callvalue) vm
-            post = Just $ \(prestate, poststate) ->
-              let [y] = getStaticAbiArgs prestate
-                  this = view (state . codeContract) prestate
-                  Just preC = view (env.contracts . at this) prestate
-                  Just postC = view (env.contracts . at this) poststate
-                  Symbolic _ prestore = _storage preC
-                  Symbolic _ poststore = _storage postC
-                  prex = readArray prestore 0
-                  postx = readArray poststore 0
-              in case view result poststate of
-                Just (VMSuccess _) -> prex + 2 * y .== postx
-                _ -> sFalse
-        (Qed res, _) <- runSMT $ query $ verifyContract c (Just ("f(uint256)", [AbiUIntType 256])) [] SymbolicS pre post
-        putStrLn $ "successfully explored: " <> show (length res) <> " paths"
+        let pre vm = Lit 0 .== view (state . callvalue) vm
+            post prestate leaf =
+              let [y] = getStaticAbiArgs 2 prestate
+                  this = Expr.litAddr $ view (state . codeContract) prestate
+                  prex = Expr.readStorage' this (Lit 0) (view (env . storage) prestate)
+              in case leaf of
+                Return _ postStore -> Expr.mul (Expr.add (Lit 2) prex) y .== (Expr.readStorage' this (Lit 0) postStore)
+                _ -> PBool False
+        [Qed res] <- withSolvers Z3 1 $ \s -> verifyContract s c (Just ("f(uint256)", [AbiUIntType 256])) [] SymbolicS (Just pre) (Just post)
+        putStrLn $ "successfully explored: " <> show (Expr.numBranches res) <> " paths"
+        {-
         ,
         -- tests how whiffValue handles Neg via application of the triple IsZero simplification rule
         -- regression test for: https://github.com/dapphub/dapptools/pull/698
@@ -333,7 +333,7 @@ tests = testGroup "hevm"
             post (prestate, poststate) =
               let [x,y] = getStaticAbiArgs prestate
                   this = view (state . codeContract) prestate
-                  (Just preC, Just postC) = both' (view (env.contracts . at this)) (prestate, poststate)
+                  (Just preC, Just postC) = both' (view (env . contracts . at this)) (prestate, poststate)
                   --Just postC = view (env.contracts . at this) poststate
                   (Symbolic _ prestore, Symbolic _ poststore) = both' (view storage) (preC, postC)
                   (prex,  prey)  = both' (readArray prestore) (x, y)
@@ -632,7 +632,6 @@ tests = testGroup "hevm"
             vm <- abstractVM (Just ("distributivity(uint256,uint256,uint256)", [AbiUIntType 256, AbiUIntType 256, AbiUIntType 256])) [] c SymbolicS
             verify vm Nothing Nothing Nothing (Just $ checkAssertions defaultPanicCodes)
           putStrLn "Proven"
-
     ]
   , testGroup "Equivalence checking"
     [
@@ -661,6 +660,8 @@ tests = testGroup "hevm"
         runSMTWith z3 $ query $ do
           Cex _ <- equivalenceCheck aPrgm bPrgm Nothing Nothing Nothing
           return ()
+          -}
+
     ]
   ]
   where
@@ -670,17 +671,17 @@ tests = testGroup "hevm"
 runSimpleVM :: ByteString -> ByteString -> Maybe ByteString
 runSimpleVM x ins = case loadVM x of
                       Nothing -> Nothing
-                      Just vm -> let calldata' = (ConcreteBuffer ins, w256lit $ num $ BS.length ins)
+                      Just vm -> let calldata' = (ConcreteBuf ins)
                        in case runState (assign (state.calldata) calldata' >> exec) vm of
-                            (VMSuccess (ConcreteBuffer bs), _) -> Just bs
-                            _ -> Nothing
+                            (VMSuccess (ConcreteBuf bs), _) -> Just bs
+                            a -> trace (show a) Nothing
 
 loadVM :: ByteString -> Maybe VM
 loadVM x =
     case runState exec (vmForEthrunCreation x) of
-       (VMSuccess (ConcreteBuffer targetCode), vm1) -> do
+       (VMSuccess (ConcreteBuf targetCode), vm1) -> do
          let target = view (state . contract) vm1
-             vm2 = execState (replaceCodeOfSelf (RuntimeCode (ConcreteBuffer targetCode))) vm1
+             vm2 = execState (replaceCodeOfSelf (RuntimeCode (fromJust $ Expr.toList $ ConcreteBuf targetCode))) vm1
          return $ snd $ flip runState vm2
                 (do resetState
                     assign (state . gas) 0xffffffffffffffff -- kludge
@@ -736,14 +737,13 @@ runStatements stmts args t = do
     }
   |] (abiMethod s (AbiTuple $ Vector.fromList args))
 
-getStaticAbiArgs :: VM -> [SWord 256]
-getStaticAbiArgs vm =
-  let cd = view (state . calldata . _1) vm
+getStaticAbiArgs :: Int -> VM -> [Expr EWord]
+getStaticAbiArgs n vm =
+  let cd = view (state . calldata) vm
       bs = case cd of
-        ConcreteBuffer bs' -> ConcreteBuffer $ BS.drop 4 bs'
-        SymbolicBuffer bs' -> SymbolicBuffer $ drop 4 bs'
-      args = decodeStaticArgs bs
-  in fmap (\(S _ v) -> v) args
+        ConcreteBuf bs' -> ConcreteBuf $ BS.drop 4 bs'
+        b -> Expr.drop 4 b
+  in decodeStaticArgs n bs
 
 -- includes shaving off 4 byte function sig
 decodeAbiValues :: [AbiType] -> ByteString -> [AbiValue]

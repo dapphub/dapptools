@@ -234,7 +234,7 @@ maxIterationsReached vm (Just maxIter) =
 
 -- TODO: do we need a predicate language here?
 type Precondition = VM -> Prop
-type Postcondition = Expr End -> Prop
+type Postcondition = VM -> Expr End -> Prop
 
 checkAssert :: SolverGroup -> [Word256] -> ByteString -> Maybe (Text, [AbiType]) -> [String] -> IO [VerifyResult]
 checkAssert solvers errs c signature' concreteArgs = verifyContract solvers c signature' concreteArgs SymbolicS Nothing (Just $ checkAssertions errs)
@@ -259,7 +259,7 @@ checkAssert solvers errs c signature' concreteArgs = verifyContract solvers c si
   see: https://docs.soliditylang.org/en/v0.8.6/control-structures.html?highlight=Panic#panic-via-assert-and-error-via-require
 -}
 checkAssertions :: [Word256] -> Postcondition
-checkAssertions errs = \case
+checkAssertions errs _ = \case
   Revert (ConcreteBuf msg) -> PBool $ msg `elem` (fmap panicMsg errs)
   Revert b -> foldl' POr (PBool True) (fmap (PEq b . ConcreteBuf . panicMsg) errs)
   _ -> PBool False
@@ -500,15 +500,16 @@ verify solvers preState maxIter askSmtIters rpcinfo maybePre maybepost = do
       let
         -- Filter out any leaves that can be statically shown to be safe
         canViolate = flip filter leaves $
-          \(_, leaf) -> case evalProp (post leaf) of
+          \(_, leaf) -> case evalProp (post preState leaf) of
             PBool False -> False
             _ -> True
         assumes = case maybePre of
           Just pre -> [pre preState]
           Nothing -> []
-        withQueries = fmap (\(pcs, leaf) -> (assertProps (PNeg (post leaf) : assumes <> pcs), leaf)) canViolate
+        withQueries = fmap (\(pcs, leaf) -> (assertProps (PNeg (post preState leaf) : assumes <> pcs), leaf)) canViolate
       -- Dispatch the remaining branches to the solver to check for violations
       putStrLn $ "Checking for reachability of " <> show (length withQueries) <> " potential property violations"
+      putStrLn $ T.unpack . formatSMT2 . fst $ withQueries !! 0
       results <- flip mapConcurrently withQueries $ \(query, leaf) -> do
         res <- checkSat' solvers (query, ["txdata", "storage"])
         pure (res, leaf)

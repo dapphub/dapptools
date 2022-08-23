@@ -545,7 +545,7 @@ decodeBuf tps buf
     containsDynamic = or . fmap isDynamic
 
 decodeStaticArgs :: Int -> Expr Buf -> [Expr EWord]
-decodeStaticArgs n b = [readWord (Lit . num $ i) b | i <- [4,32 .. n*32]]
+decodeStaticArgs n b = [readWord (Lit . num $ i) b | i <- [0,32 .. (n-1)*32]]
 
 
 -- A modification of 'arbitrarySizedBoundedIntegral' quickcheck library

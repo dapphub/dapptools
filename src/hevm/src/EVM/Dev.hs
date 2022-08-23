@@ -58,8 +58,12 @@ daiExpr = do
 
 analyzeVat :: IO ()
 analyzeVat = do
+  putStrLn "starting"
   v <- vat
-  reachable' False v
+  e <- buildExpr v
+  putStrLn $ "done (" <> show (numBranches e) <> " branches)"
+  pure ()
+  --reachable' False v
 
 reachable' :: Bool -> ByteString -> IO ()
 reachable' smtdebug c = do
@@ -81,6 +85,19 @@ reachable' smtdebug c = do
       forM_ qs $ \q -> do
         putStrLn "\n\n-- Query --"
         putStrLn $ T.unpack $ formatSMT2 q
+
+safeAdd :: IO ByteString
+safeAdd = do
+  let src =
+        [i|
+          contract SafeAdd {
+            function add(uint x, uint y) public pure returns (uint z) {
+                 require((z = x + y) >= x);
+            }
+          }
+        |]
+  fmap fromJust (solcRuntime "SafeAdd" src)
+
 
 
 testContract :: IO ByteString

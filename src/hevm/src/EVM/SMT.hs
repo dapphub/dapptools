@@ -59,9 +59,16 @@ declareIntermediates = do
   where
     sortPred (_, (a, _)) (_, (b, _)) = compare a b
 
+declareFacts :: State BuilderState SMT2
+declareFacts = do
+  fs <- fmap facts get
+  let decls = nubOrd $ fmap (\f -> "(assert " <> f <> ")") fs
+  pure $ SMT2 decls
+
 assertWord :: Expr EWord -> SMT2
 assertWord e = flip evalState initState $ do
   enc <- exprToSMT e
+  fs <- declareFacts
   intermediates <- declareIntermediates
   pure $ prelude
       <> (declareVars $ referencedVars e)
@@ -69,11 +76,14 @@ assertWord e = flip evalState initState $ do
       <> (declareFrameContext $ referencedFrameContext e)
       <> intermediates
       <> SMT2 [""]
+      <> fs
+      <> SMT2 [""]
       <> SMT2 ["(assert (= " <> enc `sp` one <> "))"]
 
 assertWords :: [Expr EWord] -> SMT2
 assertWords es = flip evalState initState $ do
   encs <- mapM exprToSMT es
+  fs <- declareFacts
   intermediates <- declareIntermediates
   pure $ prelude
        <> (declareVars . nubOrd $ foldl (<>) [] (fmap (referencedVars) es))
@@ -81,11 +91,14 @@ assertWords es = flip evalState initState $ do
        <> (declareFrameContext . nubOrd $ foldl (<>) [] (fmap (referencedFrameContext) es))
        <> intermediates
        <> SMT2 [""]
+       <> fs
+       <> SMT2 [""]
        <> (SMT2 $ fmap (\e -> "(assert (= " <> e `sp` one <> "))") encs)
 
 assertProp :: Prop -> SMT2
 assertProp p = flip evalState initState $ do
   enc <- propToSMT p
+  fs <- declareFacts
   intermediates <- declareIntermediates
   pure $ prelude
        <> (declareBufs . referencedBufs' $ p)
@@ -95,11 +108,14 @@ assertProp p = flip evalState initState $ do
        <> (declareFrameContext . referencedFrameContext' $ p)
        <> intermediates
        <> SMT2 [""]
+       <> fs
+       <> SMT2 [""]
        <> SMT2 ["(assert " <> enc <> ")"]
 
 assertProps :: [Prop] -> SMT2
 assertProps ps = flip evalState initState $ do
   encs <- mapM propToSMT ps
+  fs <- declareFacts
   intermediates <- declareIntermediates
   pure $ prelude
        <> (declareBufs . nubOrd $ foldl (<>) [] (fmap (referencedBufs') ps))
@@ -108,6 +124,8 @@ assertProps ps = flip evalState initState $ do
        <> SMT2 [""]
        <> (declareFrameContext . nubOrd $ foldl (<>) [] (fmap (referencedFrameContext') ps))
        <> intermediates
+       <> SMT2 [""]
+       <> fs
        <> SMT2 [""]
        <> (SMT2 $ fmap (\p -> "(assert " <> p <> ")") encs)
 
@@ -349,6 +367,7 @@ referencedFrameContext expr = nubOrd (foldExpr go [] expr)
 data BuilderState = BuilderState
   { bufs :: (Int, Map (Expr Buf) (Int, Text))
   , stores :: (Int, Map (Expr Storage) (Int, Text))
+  , facts :: [Text]
   }
   deriving (Show)
 
@@ -356,10 +375,16 @@ initState :: BuilderState
 initState = BuilderState
   { bufs = (0, Map.empty)
   , stores = (0, Map.empty)
+  , facts = mempty
   }
 
 exprToSMT :: Expr a -> State BuilderState Text
 exprToSMT = \case
+  Fact p e -> do
+    encP <- propToSMT p
+    s <- get
+    put (s{facts = encP : (facts s)})
+    exprToSMT e
   Lit w -> pure $ "(_ bv" <> (T.pack $ show (num w :: Integer)) <> " 256)"
   Var s -> pure s
   JoinBytes
@@ -459,12 +484,19 @@ exprToSMT = \case
     let (count, bs) = bufs s
     case Map.lookup e bs of
       Just (n, _) -> pure . T.pack $ "buf" <> show n
-      Nothing -> do
-        let
-          (prevIdx, _) = fromMaybe (error "Internal error: unknown buffer encountered") $ Map.lookup prev bs
-          newBs = Map.insert e (count, "(store " <> (T.pack $ "buf" <> show prevIdx) `sp` encIdx `sp` encVal <> ")") bs
-        put $ s{bufs=(count + 1, newBs)}
-        pure . T.pack $ "buf" <> show count
+      Nothing -> case Map.lookup prev bs of
+        Just (prevName, _) -> do
+          let newBs = Map.insert e (count, "(store " <> (T.pack $ "buf" <> show prevName) `sp` encIdx `sp` encVal <> ")") bs
+          put $ s{bufs=(count + 1, newBs)}
+          pure . T.pack $ "buf" <> show count
+        Nothing -> do
+          prevName <- exprToSMT prev
+          s' <- get
+          let (count', bs') = bufs s'
+          let
+            newBs = Map.insert e (count', "(store " <> prevName `sp` encIdx `sp` encVal <> ")") bs'
+          put $ s{bufs=(count' + 1, newBs)}
+          pure . T.pack $ "buf" <> show count'
   e@(WriteWord idx val prev) -> do
     encIdx <- exprToSMT idx
     encVal <- exprToSMT val
@@ -562,10 +594,10 @@ one = "#x0000000000000000000000000000000000000000000000000000000000000001"
 propToSMT :: Prop -> State BuilderState Text
 propToSMT = \case
   PEq a b -> op2 "=" a b
-  PLT a b -> op2 "<" a b
-  PGT a b -> op2 ">" a b
-  PLEq a b -> op2 "<=" a b
-  PGEq a b -> op2 ">=" a b
+  PLT a b -> op2 "bvult" a b
+  PGT a b -> op2 "bvugt" a b
+  PLEq a b -> propToSMT $ PNeg (PGT a b)
+  PGEq a b -> propToSMT $ PNeg (PLT a b)
   PNeg a -> do
       enc <- propToSMT a
       pure $ "(not " <> enc <> ")"
@@ -579,9 +611,6 @@ propToSMT = \case
       pure $ "(or " <> aenc <> " " <> benc <> ")"
   PBool b -> pure $ if b then "true" else "false"
   where
-    op1 op a = do
-      enc <- propToSMT a
-      pure $ "(" <> op <> " " <> enc <> ")"
     op2 op a b = do
       aenc <- exprToSMT a
       benc <- exprToSMT b

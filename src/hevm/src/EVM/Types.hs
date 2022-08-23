@@ -456,6 +456,30 @@ data Prop where
   PBool :: Bool -> Prop
 deriving instance (Show Prop)
 
+infixr 3 .&&
+(.&&) :: Prop -> Prop -> Prop
+x .&& y = PAnd x y
+
+infixr 2 .||
+(.||) :: Prop -> Prop -> Prop
+x .|| y = POr x y
+
+infix 4 .<, .<=, .>, .>=
+(.<) :: Expr EWord -> Expr EWord -> Prop
+x .< y = PLT x y
+(.<=) :: Expr EWord -> Expr EWord -> Prop
+x .<= y = PLEq x y
+(.>) :: Expr EWord -> Expr EWord -> Prop
+x .> y = PGT x y
+(.>=) :: Expr EWord -> Expr EWord -> Prop
+x .>= y = PGEq x y
+
+infix 4 .==, ./=
+(.==) :: (Typeable a) => Expr a -> Expr a -> Prop
+x .== y = PEq x y
+(./=) :: (Typeable a) => Expr a -> Expr a -> Prop
+x ./= y = PNeg (PEq x y)
+
 instance Eq Prop where
   PBool a == PBool b = a == b
   PEq (a :: Expr x) (b :: Expr x) == PEq (c :: Expr y) (d :: Expr y)
