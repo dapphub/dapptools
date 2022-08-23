@@ -645,20 +645,21 @@ areAnyPrefixOf :: [Text] -> Text -> Bool
 areAnyPrefixOf prefixes t = any (flip Text.isPrefixOf t) prefixes
 
 launchExec :: Command Options.Unwrapped -> IO ()
-launchExec cmd = undefined
-  {-
 launchExec cmd = do
   dapp <- getSrcInfo cmd
   vm <- vmFromCommand cmd
   case optsMode cmd of
     Run -> do
       vm' <- execStateT (EVM.Stepper.interpret fetcher . void $ EVM.Stepper.execFully) vm
-      when (trace cmd) $ hPutStr stderr (showTraceTree dapp vm')
+      --when (trace cmd) $ hPutStr stderr (showTraceTree dapp vm')
       case view EVM.result vm' of
         Nothing ->
           error "internal error; no EVM result"
         Just (EVM.VMFailure (EVM.Revert msg)) -> do
-          print $ ByteStringS msg
+          let res = case msg of
+                      ConcreteBuf bs -> bs
+                      _ -> "<symbolic>"
+          print $ ByteStringS res
           exitWith (ExitFailure 2)
         Just (EVM.VMFailure err) -> do
           print err
@@ -666,7 +667,7 @@ launchExec cmd = do
         Just (EVM.VMSuccess buf) -> do
           let msg = case buf of
                 ConcreteBuf msg' -> msg'
-                msg' -> forceLitBytes msg'
+                _ -> "<symbolic>"
           print $ ByteStringS msg
           case state cmd of
             Nothing -> pure ()
@@ -679,10 +680,10 @@ launchExec cmd = do
 
     Debug -> undefined
     --Debug -> void $ EVM.TTY.runFromVM Nothing dapp fetcher vm
-    JsonTrace -> void $ execStateT (interpretWithTrace fetcher EVM.Stepper.runFully) vm
+    --JsonTrace -> void $ execStateT (interpretWithTrace fetcher EVM.Stepper.runFully) vm
+    _ -> error "TODO"
    where fetcher = maybe EVM.Fetch.zero (EVM.Fetch.http block') (rpc cmd)
          block'  = maybe EVM.Fetch.Latest EVM.Fetch.BlockNumber (block cmd)
--}
 
 data Testcase = Testcase {
   _entries :: [(Text, Maybe Text)],
@@ -783,11 +784,9 @@ vmFromCommand cmd = do
           error $ "contract not found: " <> show address'
         Just contract' -> return contract'
 
-    (_, _, Just c)  -> undefined
-      {-
+    (_, _, Just c)  ->
       return $
-        EVM.initialContract (codeType $ hexByteString "--code" $ strip0x c)
-      -}
+        EVM.initialContract (mkCode $ hexByteString "--code" $ strip0x c)
 
     (_, _, Nothing) ->
       error "must provide at least (rpc + address) or code"
@@ -804,7 +803,9 @@ vmFromCommand cmd = do
         caller'  = addr caller 0
         origin'  = addr origin 0
         calldata' = ConcreteBuf $ bytes calldata ""
-        --codeType = (if create cmd then EVM.InitCode else EVM.RuntimeCode) . ConcreteBuffer
+        mkCode bs = if create cmd
+                    then EVM.InitCode bs mempty
+                    else EVM.RuntimeCode (fromJust $ Expr.toList (ConcreteBuf bs))
         address' = if create cmd
               then addr address (createAddress origin' (word nonce 0))
               else addr address 0xacab

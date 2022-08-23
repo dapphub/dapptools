@@ -50,6 +50,7 @@ import EVM.RLP
 import EVM.Solidity
 import EVM.Types
 import EVM.SMT
+import qualified Data.ByteString.Base16 as BS16
 import qualified EVM.Expr as Expr
 trace' msg x = trace (msg <> ": " <> show x) x
 
@@ -714,6 +715,7 @@ defaultDataLocation t =
 runFunction :: Text -> ByteString -> IO (Maybe ByteString)
 runFunction c input = do
   Just x <- singleContract "X" c
+  print $ BS16.encode x
   return $ runSimpleVM x input
 
 runStatements
