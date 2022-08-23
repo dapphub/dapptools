@@ -104,6 +104,28 @@ copyTest = do
 
   putStrLn . T.unpack . formatSMT2 $ res
 
+summaryExpr :: IO ()
+summaryExpr = do
+  c <- summaryStore
+  e <- buildExpr c
+  putStrLn $ formatExpr e
+
+summaryStore :: IO ByteString
+summaryStore = do
+  let src =
+        [i|
+          contract A {
+            uint x;
+            function f(uint256 y) public {
+               unchecked {
+                 x += y;
+                 x += y;
+               }
+            }
+          }
+        |]
+  fmap fromJust (solcRuntime "A" src)
+
 safeAdd :: IO ByteString
 safeAdd = do
   let src =

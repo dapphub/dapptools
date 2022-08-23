@@ -282,9 +282,8 @@ tests = testGroup "hevm"
               in case leaf of
                 Return _ postStore -> Expr.add prex (Expr.mul (Lit 2) y) .== (Expr.readStorage' this (Lit 0) postStore)
                 _ -> PBool True
-        res <- withSolvers Z3 1 $ \s -> verifyContract s c (Just ("f(uint256)", [AbiUIntType 256])) [] SymbolicS (Just pre) (Just post)
-        print res
-        --putStrLn $ "successfully explored: " <> show (Expr.numBranches res) <> " paths"
+        [Qed res] <- withSolvers Z3 1 $ \s -> verifyContract s c (Just ("f(uint256)", [AbiUIntType 256])) [] SymbolicS (Just pre) (Just post)
+        putStrLn $ "successfully explored: " <> show (Expr.numBranches res) <> " paths"
         {-
         ,
         -- tests how whiffValue handles Neg via application of the triple IsZero simplification rule
@@ -740,10 +739,7 @@ runStatements stmts args t = do
 getStaticAbiArgs :: Int -> VM -> [Expr EWord]
 getStaticAbiArgs n vm =
   let cd = view (state . calldata) vm
-      bs = case cd of
-        ConcreteBuf bs' -> ConcreteBuf $ BS.drop 4 bs'
-        b -> Expr.drop 4 b
-  in decodeStaticArgs n bs
+  in decodeStaticArgs 4 n cd
 
 -- includes shaving off 4 byte function sig
 decodeAbiValues :: [AbiType] -> ByteString -> [AbiValue]

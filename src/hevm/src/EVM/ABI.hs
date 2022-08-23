@@ -539,13 +539,13 @@ decodeBuf tps (ConcreteBuf b)
 decodeBuf tps buf
   = if containsDynamic tps
     then NoVals
-    else SAbi $ decodeStaticArgs (length tps) buf
+    else SAbi $ decodeStaticArgs 0 (length tps) buf
   where
     isDynamic t = abiKind t == Dynamic
     containsDynamic = or . fmap isDynamic
 
-decodeStaticArgs :: Int -> Expr Buf -> [Expr EWord]
-decodeStaticArgs n b = [readWord (Lit . num $ i) b | i <- [0,32 .. (n-1)*32]]
+decodeStaticArgs :: Int -> Int -> Expr Buf -> [Expr EWord]
+decodeStaticArgs offset numArgs b = [readWord (Lit . num $ i) b | i <- [offset,(offset+32) .. (offset + (numArgs-1)*32)]]
 
 
 -- A modification of 'arbitrarySizedBoundedIntegral' quickcheck library

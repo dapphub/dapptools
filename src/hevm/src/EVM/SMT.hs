@@ -14,6 +14,8 @@ module EVM.SMT where
 
 import Prelude hiding (LT, GT)
 
+import Debug.Trace
+
 import GHC.Natural
 import Control.Monad
 import GHC.IO.Handle (Handle, hGetLine, hPutStr, hFlush, hSetBuffering, BufferMode(..))
@@ -519,6 +521,7 @@ exprToSMT = \case
           put $ s{bufs=(count' + 1, newBs)}
           pure . T.pack $ "buf" <> show count'
   e@(CopySlice dstIdx srcIdx size src dst) -> do
+    traceShowM e
     s <- get
     let (_, bs) = bufs s
     case Map.lookup e bs of

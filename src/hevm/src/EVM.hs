@@ -1965,17 +1965,17 @@ cheatActions =
               abiMethod "Error(string)" (AbiTuple . V.fromList $ [AbiString msg]),
 
       action "warp(uint256)" $
-        \sig _ _ input -> case decodeStaticArgs 1 input of
+        \sig _ _ input -> case decodeStaticArgs 0 1 input of
           [x]  -> assign (block . timestamp) x
           _ -> vmError (BadCheatCode sig),
 
       action "roll(uint256)" $
-        \sig _ _ input -> case decodeStaticArgs 1 input of
+        \sig _ _ input -> case decodeStaticArgs 0 1 input of
           [x] -> forceConcrete x "cannot roll to a symbolic block number" (assign (block . number))
           _ -> vmError (BadCheatCode sig),
 
       action "store(address,bytes32,bytes32)" $
-        \sig _ _ input -> case decodeStaticArgs 3 input of
+        \sig _ _ input -> case decodeStaticArgs 0 3 input of
           [a, slot, new] ->
             forceConcrete a "cannot store at a symbolic address" $ \(num -> a') ->
               fetchAccount a' $ \_ -> do
@@ -1983,7 +1983,7 @@ cheatActions =
           _ -> vmError (BadCheatCode sig),
 
       action "load(address,bytes32)" $
-        \sig outOffset _ input -> case decodeStaticArgs 2 input of
+        \sig outOffset _ input -> case decodeStaticArgs 0 2 input of
           [a, slot] ->
             forceConcrete a "cannot load from a symbolic address" $ \(num -> a') ->
               accessStorage a' slot $ \res -> do
@@ -1992,7 +1992,7 @@ cheatActions =
           _ -> vmError (BadCheatCode sig),
 
       action "sign(uint256,bytes32)" $
-        \sig outOffset _ input -> case decodeStaticArgs 2 input of
+        \sig outOffset _ input -> case decodeStaticArgs 0 2 input of
           [sk, hash] ->
             forceConcrete2 (sk, hash) "cannot sign symbolic data" $ \(sk', hash') -> let
               curve = getCurveByName SEC_p256k1
@@ -2015,7 +2015,7 @@ cheatActions =
           _ -> vmError (BadCheatCode sig),
 
       action "addr(uint256)" $
-        \sig outOffset _ input -> case decodeStaticArgs 1 input of
+        \sig outOffset _ input -> case decodeStaticArgs 0 1 input of
           [sk] -> forceConcrete sk "cannot derive address for a symbolic key" $ \sk' -> let
                 curve = getCurveByName SEC_p256k1
                 pubPoint = generateQ curve (num sk')

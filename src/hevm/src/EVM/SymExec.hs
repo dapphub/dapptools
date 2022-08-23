@@ -69,7 +69,6 @@ symAbiArg name = \case
   AbiArrayType sz tp -> Comp $ fmap (\n -> symAbiArg (name <> n) tp) [T.pack (show n) | n <- [0..sz-1]]
   t -> error $ "TODO: symbolic abi encoding for " <> show t
 
-
 data CalldataFragment
   = St (Expr EWord)
   | Dy (Expr EWord) (Expr Buf)
@@ -80,7 +79,6 @@ data CalldataFragment
 -- with concrete arguments.
 -- Any argument given as "<symbolic>" or omitted at the tail of the list are
 -- kept symbolic.
--- TODO: constrain calldata length
 symCalldata :: Text -> [AbiType] -> [String] -> Expr Buf -> Expr Buf
 symCalldata sig typesignature concreteArgs base =
   let args = concreteArgs <> replicate (length typesignature - length concreteArgs)  "<symbolic>"
@@ -94,7 +92,17 @@ symCalldata sig typesignature concreteArgs base =
                              AbiBool w -> St . Lit $ if w then 1 else 0
                              _ -> error "TODO"
       calldatas = zipWith3 mkArg typesignature args [1..]
-  in combineFragments calldatas (writeSelector base sig)
+      cdBuf = combineFragments calldatas (writeSelector base sig)
+  in Fact (Expr.bufLength cdBuf .>= cdLen calldatas) cdBuf
+
+cdLen :: [CalldataFragment] -> Expr EWord
+cdLen = go (Lit 4)
+  where
+    go acc = \case
+      [] -> acc
+      (hd:tl) -> case hd of
+                   St _ -> go (Expr.add acc (Lit 32)) tl
+                   _ -> error "unsupported"
 
 writeSelector :: Expr Buf -> Text -> Expr Buf
 writeSelector buf sig = writeSel (Lit 0) $ writeSel (Lit 1) $ writeSel (Lit 2) $ writeSel (Lit 3) buf
@@ -509,6 +517,7 @@ verify solvers preState maxIter askSmtIters rpcinfo maybePre maybepost = do
         withQueries = fmap (\(pcs, leaf) -> (assertProps (PNeg (post preState leaf) : assumes <> pcs), leaf)) canViolate
       -- Dispatch the remaining branches to the solver to check for violations
       putStrLn $ "Checking for reachability of " <> show (length withQueries) <> " potential property violations"
+      putStrLn $ T.unpack . formatSMT2 . fst $ withQueries !! 0
       results <- flip mapConcurrently withQueries $ \(query, leaf) -> do
         res <- checkSat' solvers (query, ["txdata", "storage"])
         pure (res, leaf)

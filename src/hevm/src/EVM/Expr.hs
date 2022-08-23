@@ -336,9 +336,9 @@ take :: W256 -> Expr Buf -> Expr Buf
 take n = slice (Lit 0) (Lit n)
 
 
--- | Returns the last n bytes of buf
+-- | Returns everything but the first n bytes of buf
 drop :: W256 -> Expr Buf -> Expr Buf
-drop n buf = slice (sub (Lit n) (sub (bufLength buf) (Lit 1))) (Lit n) buf
+drop n buf = slice (Lit n) (sub (bufLength buf) (Lit n)) buf
 
 
 slice :: Expr EWord -> Expr EWord -> Expr Buf -> Expr Buf
