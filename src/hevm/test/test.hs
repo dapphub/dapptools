@@ -235,9 +235,8 @@ tests = testGroup "hevm"
               in case leaf of
                    Return b _ -> (ReadWord (Lit 0) b) .== (Add x y)
                    _ -> PBool False
-        res <- withSolvers Z3 1 $ \s -> verifyContract s safeAdd (Just ("add(uint256,uint256)", [AbiUIntType 256, AbiUIntType 256])) [] SymbolicS (Just pre) (Just post)
-        traceShowM res
-        --putStrLn $ "successfully explored: " <> show (Expr.numBranches res) <> " paths"
+        [Qed res] <- withSolvers Z3 1 $ \s -> verifyContract s safeAdd (Just ("add(uint256,uint256)", [AbiUIntType 256, AbiUIntType 256])) [] SymbolicS (Just pre) (Just post)
+        putStrLn $ "successfully explored: " <> show (Expr.numBranches res) <> " paths"
      ,
 
       testCase "x == y => x + y == 2 * y" $ do

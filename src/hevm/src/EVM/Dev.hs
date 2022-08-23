@@ -16,7 +16,8 @@ import Data.String.Here
 import qualified Data.Text as T
 
 import EVM
-import EVM.SMT (withSolvers, Solver(..), formatSMT2)
+--import EVM.SMT (withSolvers, Solver(..), formatSMT2, exprToSMT, initState)
+import EVM.SMT
 import EVM.Types
 import EVM.Expr (numBranches)
 import EVM.SymExec
@@ -85,6 +86,23 @@ reachable' smtdebug c = do
       forM_ qs $ \q -> do
         putStrLn "\n\n-- Query --"
         putStrLn $ T.unpack $ formatSMT2 q
+
+copyTest :: IO ()
+copyTest = do
+  let e = CopySlice (Lit 0x80) (Lit 0x0) (Lit 0x20) (WriteWord (Lit 0x80) (Add (ReadWord (Lit 0x4) (WriteWord (Lit 0x24) (Fact (PAnd (PGEq (Var "arg2") (Lit 0x0)) (PLEq (Var "arg2") (Lit 0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff))) (Var "arg2")) (WriteWord (Lit 0x4) (Fact (PAnd (PGEq (Var "arg1") (Lit 0x0)) (PLEq (Var "arg1") (Lit 0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff))) (Var "arg1")) (WriteByte (Lit 0x0) (LitByte 119) (WriteByte (Lit 0x1) (LitByte 22) (WriteByte (Lit 0x2) (LitByte 2) (WriteByte (Lit 0x3) (LitByte 247) (AbstractBuf "txdata")))))))) (ReadWord (Lit 0x24) (WriteWord (Lit 0x24) (Fact (PAnd (PGEq (Var "arg2") (Lit 0x0)) (PLEq (Var "arg2") (Lit 0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff))) (Var "arg2")) (WriteWord (Lit 0x4) (Fact (PAnd (PGEq (Var "arg1") (Lit 0x0)) (PLEq (Var "arg1") (Lit 0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff))) (Var "arg1")) (WriteByte (Lit 0x0) (LitByte 119) (WriteByte (Lit 0x1) (LitByte 22) (WriteByte (Lit 0x2) (LitByte 2) (WriteByte (Lit 0x3) (LitByte 247) (AbstractBuf "txdata"))))))))) (ConcreteBuf "\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\NUL\128")) EmptyBuf
+  let res = flip evalState initState $ do
+              _ <- exprToSMT e
+              fs <- declareFacts
+              intermediates <- declareIntermediates
+              pure $ prelude
+                  <> (declareVars $ referencedVars e)
+                  <> SMT2 [""]
+                  <> (declareFrameContext $ referencedFrameContext e)
+                  <> intermediates
+                  <> SMT2 ["", ";facts"]
+                  <> fs
+
+  putStrLn . T.unpack . formatSMT2 $ res
 
 safeAdd :: IO ByteString
 safeAdd = do

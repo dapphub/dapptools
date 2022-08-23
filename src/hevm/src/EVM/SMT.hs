@@ -75,7 +75,7 @@ assertWord e = flip evalState initState $ do
       <> SMT2 [""]
       <> (declareFrameContext $ referencedFrameContext e)
       <> intermediates
-      <> SMT2 [""]
+      <> SMT2 ["", ";facts"]
       <> fs
       <> SMT2 [""]
       <> SMT2 ["(assert (= " <> enc `sp` one <> "))"]
@@ -90,7 +90,7 @@ assertWords es = flip evalState initState $ do
        <> SMT2 [""]
        <> (declareFrameContext . nubOrd $ foldl (<>) [] (fmap (referencedFrameContext) es))
        <> intermediates
-       <> SMT2 [""]
+      <> SMT2 ["", ";facts"]
        <> fs
        <> SMT2 [""]
        <> (SMT2 $ fmap (\e -> "(assert (= " <> e `sp` one <> "))") encs)
@@ -107,7 +107,7 @@ assertProp p = flip evalState initState $ do
        <> SMT2 [""]
        <> (declareFrameContext . referencedFrameContext' $ p)
        <> intermediates
-       <> SMT2 [""]
+       <> SMT2 ["", ";facts"]
        <> fs
        <> SMT2 [""]
        <> SMT2 ["(assert " <> enc <> ")"]
@@ -124,7 +124,7 @@ assertProps ps = flip evalState initState $ do
        <> SMT2 [""]
        <> (declareFrameContext . nubOrd $ foldl (<>) [] (fmap (referencedFrameContext') ps))
        <> intermediates
-       <> SMT2 [""]
+       <> SMT2 ["", ";facts"]
        <> fs
        <> SMT2 [""]
        <> (SMT2 $ fmap (\p -> "(assert " <> p <> ")") encs)
@@ -527,14 +527,15 @@ exprToSMT = \case
         srcName <- case Map.lookup src bs of
                      Just (_, n') -> pure n'
                      Nothing -> exprToSMT src
-        dstName <- case Map.lookup dst bs of
-                     Just (_, n') -> pure n'
-                     Nothing -> exprToSMT src
         s' <- get
+        let (_, bs') = bufs s'
+        dstName <- case Map.lookup dst bs' of
+                     Just (_, n') -> pure n'
+                     Nothing -> exprToSMT dst
+        s'' <- get
         enc <- copySlice dstIdx srcIdx size srcName dstName
-        let
-          (count, bs') = bufs s'
-        put $ s{bufs=(count + 1, Map.insert e (count, enc) bs')}
+        let (count, bs'') = bufs s''
+        put $ s{bufs=(count + 1, Map.insert e (count, enc) bs'')}
         pure . T.pack $ "buf" <> show count
   EmptyStore -> pure "emptyStore"
   ConcreteStore s -> error "TODO: concretestore"
@@ -575,21 +576,15 @@ exprToSMT = \case
       benc <- exprToSMT b
       cenc <- exprToSMT c
       pure $ "(" <> op `sp` aenc `sp` benc `sp` cenc <> ")"
-    op4 op a b c d = do
-      aenc <- exprToSMT a
-      benc <- exprToSMT b
-      cenc <- exprToSMT c
-      denc <- exprToSMT d
-      pure $ "(" <> op `sp` aenc `sp` benc `sp` cenc `sp` denc <> ")"
 
 sp :: Text -> Text -> Text
 a `sp` b = a <> " " <> b
 
 zero :: Text
-zero = "#x0000000000000000000000000000000000000000000000000000000000000000"
+zero = "(_ bv0 256)"
 
 one :: Text
-one = "#x0000000000000000000000000000000000000000000000000000000000000001"
+one = "(_ bv1 256)"
 
 propToSMT :: Prop -> State BuilderState Text
 propToSMT = \case
@@ -845,16 +840,12 @@ copySlice dstOffset srcOffset size@(Lit _) src dst
   | size == (Lit 0) = do
     encDstOff <- exprToSMT dstOffset
     encSrcOff <- exprToSMT srcOffset
-    pure $ "(store " <> dst `sp` encDstOff <> "(select " <> src `sp` encSrcOff <> "))"
+    pure $ "(store " <> dst `sp` encDstOff <> " (select " <> src `sp` encSrcOff <> "))"
   | otherwise = do
-    encDstOff <- exprToSMT dstOffset
-    encSize <- exprToSMT size
-    encIdx <- exprToSMT (add srcOffset size)
+    encDstOff <- exprToSMT (add dstOffset size)
+    encSrcOff <- exprToSMT (add srcOffset size)
     child <- copySlice dstOffset srcOffset (sub size (Lit 1)) src dst
-    pure $
-      "(store " <> child
-        <> "(bvadd " <> encDstOff `sp` encSize <> ")"
-        `sp` "(select " <> src `sp` encIdx <> "))"
+    pure $ "(store " <> child `sp` encDstOff `sp` "(select " <> src `sp` encSrcOff <> "))"
 copySlice _ _ _ _ _ = error "TODO: implement copySlice with a symbolically sized region"
 
 -- | Unrolls an exponentiation into a series of multiplications

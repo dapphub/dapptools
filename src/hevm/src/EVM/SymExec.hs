@@ -232,7 +232,7 @@ maxIterationsReached vm (Just maxIter) =
      then view (cache . path . at (codelocation, iters - 1)) vm
      else Nothing
 
--- TODO: do we need a predicate language here?
+
 type Precondition = VM -> Prop
 type Postcondition = VM -> Expr End -> Prop
 
@@ -509,7 +509,6 @@ verify solvers preState maxIter askSmtIters rpcinfo maybePre maybepost = do
         withQueries = fmap (\(pcs, leaf) -> (assertProps (PNeg (post preState leaf) : assumes <> pcs), leaf)) canViolate
       -- Dispatch the remaining branches to the solver to check for violations
       putStrLn $ "Checking for reachability of " <> show (length withQueries) <> " potential property violations"
-      putStrLn $ T.unpack . formatSMT2 . fst $ withQueries !! 0
       results <- flip mapConcurrently withQueries $ \(query, leaf) -> do
         res <- checkSat' solvers (query, ["txdata", "storage"])
         pure (res, leaf)
