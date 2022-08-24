@@ -285,7 +285,6 @@ tests = testGroup "hevm"
                 _ -> PBool True
         [Qed res] <- withSolvers Z3 1 $ \s -> verifyContract s c (Just ("f(uint256)", [AbiUIntType 256])) [] SymbolicS (Just pre) (Just post)
         putStrLn $ "successfully explored: " <> show (Expr.numBranches res) <> " paths"
-        {-
         ,
         -- tests how whiffValue handles Neg via application of the triple IsZero simplification rule
         -- regression test for: https://github.com/dapphub/dapptools/pull/698
@@ -309,46 +308,49 @@ tests = testGroup "hevm"
                     }
                     |]
             Just c <- yulRuntime "Neg" src
-            (Qed res, _) <- runSMTWith cvc4 $ query $ checkAssert defaultPanicCodes c (Just ("hello(address)", [AbiAddressType])) []
-            putStrLn $ "successfully explored: " <> show (length res) <> " paths"
+            [Qed res] <- withSolvers Z3 4 $ \s -> checkAssert s defaultPanicCodes c (Just ("hello(address)", [AbiAddressType])) []
+            putStrLn $ "successfully explored: " <> show (Expr.numBranches res) <> " paths"
         ,
 
         -- Inspired by these `msg.sender == to` token bugs
         -- which break linearity of totalSupply.
         testCase "catch storage collisions" $ do
-        Just c <- solcRuntime "A"
-          [i|
-          contract A {
-            function f(uint x, uint y) public {
-               assembly {
-                 let newx := sub(sload(x), 1)
-                 let newy := add(sload(y), 1)
-                 sstore(x,newx)
-                 sstore(y,newy)
-               }
+          Just c <- solcRuntime "A"
+            [i|
+            contract A {
+              function f(uint x, uint y) public {
+                 assembly {
+                   let newx := sub(sload(x), 1)
+                   let newy := add(sload(y), 1)
+                   sstore(x,newx)
+                   sstore(y,newy)
+                 }
+              }
             }
-          }
-          |]
-        let pre vm = 0 .== view (state . callvalue) vm
-            post (prestate, poststate) =
-              let [x,y] = getStaticAbiArgs prestate
-                  this = view (state . codeContract) prestate
-                  (Just preC, Just postC) = both' (view (env . contracts . at this)) (prestate, poststate)
-                  --Just postC = view (env.contracts . at this) poststate
-                  (Symbolic _ prestore, Symbolic _ poststore) = both' (view storage) (preC, postC)
-                  (prex,  prey)  = both' (readArray prestore) (x, y)
-                  (postx, posty) = both' (readArray poststore) (x, y)
-              in case view result poststate of
-                Just (VMSuccess _) -> prex + prey .== postx + (posty :: SWord 256)
-                _ -> sFalse
-        bs <- runSMT $ query $ do
-          (Cex _, vm) <- verifyContract c (Just ("f(uint256,uint256)", [AbiUIntType 256, AbiUIntType 256])) [] SymbolicS pre (Just post)
-          case view (state . calldata . _1) vm of
-            SymbolicBuffer bs -> BS.pack <$> mapM (getValue.fromSized) bs
-            ConcreteBuffer _ -> error "unexpected"
+            |]
+          let pre vm = (Lit 0) .== view (state . callvalue) vm
+              post prestate poststate =
+                let [x,y] = getStaticAbiArgs 2 prestate
+                    this = Expr.litAddr $ view (state . codeContract) prestate
+                    prestore =  view (env . storage) prestate
+                    prex = Expr.readStorage' this x prestore
+                    prey = Expr.readStorage' this y prestore
+                in case poststate of
+                     Return _ poststore -> let
+                           postx = Expr.readStorage' this x poststore
+                           posty = Expr.readStorage' this y poststore
+                       in Expr.add prex prey .== Expr.add postx posty
+                     _ -> PBool True
+          [Cex _] <- withSolvers Z3 1 $ \s -> verifyContract s c (Just ("f(uint256,uint256)", [AbiUIntType 256, AbiUIntType 256])) [] SymbolicS (Just pre) (Just post)
+          putStrLn "expected counterexample found"
+        -- TODO: check that the cex has the case where x == y once we have proper cex parsing
+        --case view (state . calldata . _1) vm of
+          --SymbolicBuffer bs -> BS.pack <$> mapM (getValue.fromSized) bs
+          --ConcreteBuffer _ -> error "unexpected"
 
-        let [AbiUInt 256 x, AbiUInt 256 y] = decodeAbiValues [AbiUIntType 256, AbiUIntType 256] bs
-        assertEqual "Catch storage collisions" x y
+        --let [AbiUInt 256 x, AbiUInt 256 y] = decodeAbiValues [AbiUIntType 256, AbiUIntType 256] bs
+        --assertEqual "Catch storage collisions" x y
+        {-
         ,
         testCase "Deposit contract loop (z3)" $ do
           Just c <- solcRuntime "Deposit"

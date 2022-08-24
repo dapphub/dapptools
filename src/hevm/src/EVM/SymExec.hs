@@ -268,9 +268,9 @@ checkAssert solvers errs c signature' concreteArgs = verifyContract solvers c si
 -}
 checkAssertions :: [Word256] -> Postcondition
 checkAssertions errs _ = \case
-  Revert (ConcreteBuf msg) -> PBool $ msg `elem` (fmap panicMsg errs)
-  Revert b -> foldl' POr (PBool True) (fmap (PEq b . ConcreteBuf . panicMsg) errs)
-  _ -> PBool False
+  Revert (ConcreteBuf msg) -> PBool $ msg `notElem` (fmap panicMsg errs)
+  Revert b -> foldl' POr (PBool True) (fmap (PNeg . PEq b . ConcreteBuf . panicMsg) errs)
+  _ -> PBool True
 
 -- |By default hevm checks for all assertions except those which result from arithmetic overflow
 defaultPanicCodes :: [Word256]
