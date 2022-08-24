@@ -115,6 +115,7 @@ data VM = VM
   , _cache          :: Cache
   , _burned         :: W256
   , _iterations     :: Map CodeLocation Int
+  , _constraints    :: [Prop]
   , _allowFFI       :: Bool
   }
   deriving (Show)
@@ -140,7 +141,7 @@ data Query where
   PleaseFetchContract :: Addr -> (Contract -> EVM ()) -> Query
   --PleaseMakeUnique    :: SBV a -> [SBool] -> (IsUnique a -> EVM ()) -> Query
   PleaseFetchSlot     :: Addr -> W256 -> (W256 -> EVM ()) -> Query
-  --PleaseAskSMT        :: SBool -> [SBool] -> (BranchCondition -> EVM ()) -> Query
+  PleaseAskSMT        :: Expr EWord -> [Prop] -> (BranchCondition -> EVM ()) -> Query
   PleaseDoFFI         :: [String] -> (ByteString -> EVM ()) -> Query
 
 data Choose where
@@ -154,10 +155,10 @@ instance Show Query where
       (("<EVM.Query: fetch slot "
         ++ show slot ++ " for "
         ++ show addr ++ ">") ++)
---     PleaseAskSMT condition constraints _ ->
---       (("<EVM.Query: ask SMT about "
---         ++ show condition ++ " in context "
---         ++ show constraints ++ ">") ++)
+    PleaseAskSMT condition constraints _ ->
+      (("<EVM.Query: ask SMT about "
+        ++ show condition ++ " in context "
+        ++ show constraints ++ ">") ++)
 --     PleaseMakeUnique val constraints _ ->
 --       (("<EVM.Query: make value "
 --         ++ show val ++ " unique in context "
@@ -525,7 +526,7 @@ makeVm o =
     }
   , _cache = Cache mempty mempty mempty
   , _burned = 0
-  --, _constraints = []
+  , _constraints = []
   , _iterations = mempty
   , _allowFFI = vmoptAllowFFI o
   }
@@ -880,7 +881,8 @@ exec1 = do
                         overflow = Expr.lt (Expr.add xFrom xSize') (xFrom)
                         jump True = vmError InvalidMemoryAccess
                         jump False = copyBytesToMemory (the state returndata) xSize' xFrom xTo'
-                    branch (Expr.or oob overflow) jump
+                    loc <- codeloc
+                    branch loc (Expr.or oob overflow) jump
             _ -> underrun
 
         -- op: EXTCODEHASH
@@ -1070,7 +1072,9 @@ exec1 = do
                   in case maybeLitWord y of
                       Just y' -> jump (1 == y')
                       -- if the jump condition is symbolic, we explore both sides
-                      Nothing -> branch y jump
+                      Nothing -> do
+                        loc <- codeloc
+                        branch loc y jump
             _ -> underrun
 
         -- op: PC
@@ -1192,8 +1196,9 @@ exec1 = do
                   if codesize > maxsize
                   then
                     finishFrame (FrameErrored (MaxCodeSizeExceeded maxsize codesize))
-                  else
-                    branch (Expr.eqByte (readByte (Lit 0) output) (LitByte 0xef)) $ \case
+                  else do
+                    loc <- codeloc
+                    branch loc (Expr.eqByte (readByte (Lit 0) output) (LitByte 0xef)) $ \case
                       True -> finishFrame $ FrameErrored InvalidFormat
                       False -> do
                         burn (g_codedeposit * num codesize) $
@@ -1609,8 +1614,22 @@ getCodeLocation vm = (view (state . contract) vm, view (state . pc) vm)
          ---- None of the paths are possible; fail this branch
          --choosePath Inconsistent = vmError DeadPath
 
-branch :: Expr EWord -> (Bool -> EVM ()) -> EVM ()
-branch cond jump = assign result . Just . VMFailure . Choose $ PleaseChoosePath cond jump
+branch :: CodeLocation -> Expr EWord -> (Bool -> EVM ()) -> EVM ()
+branch loc cond continue = do
+  pathconds <- use constraints
+  assign result . Just . VMFailure . Query $ PleaseAskSMT cond pathconds choosePath
+  where
+     choosePath (Case v) = do assign result Nothing
+                              pushTo constraints $ if v then (cond .== (Lit 1)) else (cond .== (Lit 0))
+                              iteration <- use (iterations . at loc . non 0)
+                              assign (cache . path . at (loc, iteration)) (Just v)
+                              assign (iterations . at loc) (Just (iteration + 1))
+                              continue v
+     -- Both paths are possible; we ask for more input
+     choosePath Unknown = assign result . Just . VMFailure . Choose . PleaseChoosePath cond $ choosePath . Case
+     -- None of the paths are possible; fail this branch
+     choosePath Inconsistent = vmError DeadPath
+
 
 -- | Construct RPC Query and halt execution until resolved
 fetchAccount :: Addr -> (Contract -> EVM ()) -> EVM ()
@@ -2869,6 +2888,12 @@ toBuf (InitCode ops args) = ConcreteBuf ops <> args
 toBuf (RuntimeCode ops) = Expr.fromList ops
 
 
+codeloc :: EVM CodeLocation
+codeloc = do
+  vm <- get
+  let self = view (state . contract) vm
+      loc = view (state . pc) vm
+  pure (self, loc)
 
 
 -- * Emacs setup

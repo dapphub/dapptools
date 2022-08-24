@@ -31,15 +31,16 @@ dumpQueries :: FilePath -> IO ()
 dumpQueries root = withCurrentDirectory root $ do
   d <- dai
   putStrLn "building expression"
-  e <- buildExpr d
-  putStrLn "built expression"
-  putStrLn "generating queries"
-  qs <- reachableQueries e
-  putStrLn $ "generated queries (" <> (show $ Prelude.length qs) <> " total)"
-  putStrLn "dumping queries"
-  forM_ (zip ([1..] :: [Int]) qs) $ \(idx, q) -> do
-    writeFile ("query_" <> show idx <> ".smt2") (T.unpack $ T.append (formatSMT2 q) "(check-sat)")
-  putStrLn "dumped queries"
+  withSolvers Z3 1 $ \s -> do
+    e <- buildExpr s d
+    putStrLn "built expression"
+    putStrLn "generating queries"
+    qs <- reachableQueries e
+    putStrLn $ "generated queries (" <> (show $ Prelude.length qs) <> " total)"
+    putStrLn "dumping queries"
+    forM_ (zip ([1..] :: [Int]) qs) $ \(idx, q) -> do
+      writeFile ("query_" <> show idx <> ".smt2") (T.unpack $ T.append (formatSMT2 q) "(check-sat)")
+    putStrLn "dumped queries"
 
 doTest :: IO ()
 doTest = do
@@ -56,16 +57,16 @@ analyzeDai = do
 daiExpr :: IO (Expr End)
 daiExpr = do
   d <- dai
-  buildExpr d
+  withSolvers Z3 1 $ \s -> buildExpr s d
 
 analyzeVat :: IO ()
 analyzeVat = do
   putStrLn "starting"
   v <- vat
-  e <- buildExpr v
-  putStrLn $ "done (" <> show (numBranches e) <> " branches)"
-  pure ()
-  --reachable' False v
+  withSolvers Z3 1 $ \s -> do
+    e <- buildExpr s v
+    putStrLn $ "done (" <> show (numBranches e) <> " branches)"
+    reachable' False v
 
 analyzeDeposit :: IO ()
 analyzeDeposit = do
@@ -88,21 +89,22 @@ analyzeDeposit = do
      }
     |]
   print . BS16.encode $ c
-  e <- simplify <$> buildExpr c
-  writeFile "full.ast" (formatExpr e)
+  withSolvers Z3 1 $ \s -> do
+    e <- simplify <$> buildExpr s c
+    writeFile "full.ast" (formatExpr e)
 
 
 reachable' :: Bool -> ByteString -> IO ()
 reachable' smtdebug c = do
   putStrLn "Exploring contract"
-  full <- simplify <$> buildExpr c
-  putStrLn $ "Explored contract (" <> (show $ numBranches full) <> " branches)"
-  --putStrLn $ formatExpr full
-  writeFile "full.ast" $ formatExpr full
-  putStrLn "Dumped to full.ast"
-  withSolvers Z3 4 $ \solvers -> do
+  withSolvers Z3 4 $ \s -> do
+    full <- simplify <$> buildExpr s c
+    putStrLn $ "Explored contract (" <> (show $ numBranches full) <> " branches)"
+    --putStrLn $ formatExpr full
+    writeFile "full.ast" $ formatExpr full
+    putStrLn "Dumped to full.ast"
     putStrLn "Checking reachability"
-    (qs, less) <- reachable2 solvers full
+    (qs, less) <- reachable2 s full
     putStrLn $ "Checked reachability (" <> (show $ numBranches less) <> " reachable branches)"
     writeFile "reachable.ast" $ formatExpr less
     putStrLn "Dumped to reachable.ast"
@@ -133,8 +135,9 @@ copyTest = do
 summaryExpr :: IO ()
 summaryExpr = do
   c <- summaryStore
-  e <- buildExpr c
-  putStrLn $ formatExpr e
+  withSolvers Z3 1 $ \s -> do
+    e <- buildExpr s c
+    putStrLn $ formatExpr e
 
 summaryStore :: IO ByteString
 summaryStore = do
@@ -380,8 +383,8 @@ initVm bs = vm
 
 
 -- | Builds the Expr for the given evm bytecode object
-buildExpr :: ByteString -> IO (Expr End)
-buildExpr bs = evalStateT (interpret (Fetch.oracle Nothing False) Nothing Nothing runExpr) (initVm bs)
+buildExpr :: SolverGroup -> ByteString -> IO (Expr End)
+buildExpr solvers bs = evalStateT (interpret (Fetch.oracle solvers Nothing) Nothing Nothing runExpr) (initVm bs)
 
 dai :: IO ByteString
 dai = do

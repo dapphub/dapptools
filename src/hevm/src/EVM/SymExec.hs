@@ -214,17 +214,17 @@ interpret fetcher maxIter askSmtIters =
                 interpret fetcher maxIter askSmtIters (Stepper.evm m >>= k)
 
           case q of
-            --PleaseAskSMT _ _ continue -> do
-              --codelocation <- getCodeLocation <$> get
-              --iteration <- num . fromMaybe 0 <$> use (iterations . at codelocation)
+            PleaseAskSMT _ _ continue -> do
+              codelocation <- getCodeLocation <$> get
+              iteration <- num . fromMaybe 0 <$> use (iterations . at codelocation)
 
-              ---- if this is the first time we are branching at this point,
-              ---- explore both branches without consulting SMT.
-              ---- Exploring too many branches is a lot cheaper than
-              ---- consulting our SMT solver.
-              --if iteration < (fromMaybe 5 askSmtIters)
-              --then interpret fetcher maxIter askSmtIters (Stepper.evm (continue EVM.Unknown) >>= k)
-              --else performQuery
+              -- if this is the first time we are branching at this point,
+              -- explore both branches without consulting SMT.
+              -- Exploring too many branches is a lot cheaper than
+              -- consulting our SMT solver.
+              if iteration < (fromMaybe 5 askSmtIters)
+              then interpret fetcher maxIter askSmtIters (Stepper.evm (continue EVM.Unknown) >>= k)
+              else performQuery
 
             _ -> performQuery
 
@@ -499,7 +499,7 @@ evalProp = \case
 verify :: SolverGroup -> VM -> Maybe Integer -> Maybe Integer -> Maybe (Fetch.BlockNumber, Text) -> Maybe Precondition -> Maybe Postcondition -> IO [VerifyResult]
 verify solvers preState maxIter askSmtIters rpcinfo maybePre maybepost = do
   putStrLn "Exploring contract"
-  expr <- simplify <$> evalStateT (interpret (Fetch.oracle Nothing False) Nothing Nothing runExpr) preState
+  expr <- simplify <$> evalStateT (interpret (Fetch.oracle solvers Nothing) Nothing Nothing runExpr) preState
   putStrLn $ "Explored contract (" <> show (Expr.numBranches expr) <> " branches)"
   let leaves = flattenExpr expr
   case maybepost of
