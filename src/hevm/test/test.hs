@@ -43,6 +43,7 @@ import Data.Binary.Get (runGetOrFail)
 import EVM hiding (Query)
 import EVM.SymExec
 import EVM.ABI
+import EVM.Format
 import EVM.Exec
 import qualified EVM.Patricia as Patricia
 import EVM.Precompiled
@@ -350,7 +351,6 @@ tests = testGroup "hevm"
 
         --let [AbiUInt 256 x, AbiUInt 256 y] = decodeAbiValues [AbiUIntType 256, AbiUIntType 256] bs
         --assertEqual "Catch storage collisions" x y
-        {-
         ,
         testCase "Deposit contract loop (z3)" $ do
           Just c <- solcRuntime "Deposit"
@@ -371,8 +371,10 @@ tests = testGroup "hevm"
               }
              }
             |]
-          (Qed res, _) <- runSMTWith z3 $ query $ checkAssert defaultPanicCodes c (Just ("deposit(uint256)", [AbiUIntType 256])) []
-          putStrLn $ "successfully explored: " <> show (length res) <> " paths"
+          [Qed res] <- withSolvers Z3 1 $ \s -> checkAssert s defaultPanicCodes c (Just ("deposit(uint256)", [AbiUIntType 256])) []
+          putStrLn $ "successfully explored: " <> show (Expr.numBranches res) <> " paths"
+          writeFile "full.ast" $ formatExpr res
+        {-
         ,
                 testCase "Deposit contract loop (cvc4)" $ do
           Just c <- solcRuntime "Deposit"

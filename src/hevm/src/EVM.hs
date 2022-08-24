@@ -1068,7 +1068,7 @@ exec1 = do
                       jump False = assign (state . stack) xs >> next
                       jump _    = checkJump x' xs
                   in case maybeLitWord y of
-                      Just y' -> jump (0 == y')
+                      Just y' -> jump (1 == y')
                       -- if the jump condition is symbolic, we explore both sides
                       Nothing -> branch y jump
             _ -> underrun

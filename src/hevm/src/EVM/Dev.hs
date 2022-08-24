@@ -23,6 +23,7 @@ import EVM.Expr (numBranches)
 import EVM.SymExec
 import EVM.Solidity
 import EVM.Format (formatExpr)
+import qualified Data.ByteString.Base16 as BS16
 import qualified EVM.Fetch as Fetch
 import qualified EVM.FeeSchedule as FeeSchedule
 
@@ -65,6 +66,31 @@ analyzeVat = do
   putStrLn $ "done (" <> show (numBranches e) <> " branches)"
   pure ()
   --reachable' False v
+
+analyzeDeposit :: IO ()
+analyzeDeposit = do
+  Just c <- solcRuntime "Deposit"
+    [i|
+    contract Deposit {
+      function deposit(uint256 deposit_count) external pure {
+        require(deposit_count < 2**32 - 1);
+        ++deposit_count;
+        bool found = false;
+        for (uint height = 0; height < 32; height++) {
+          if ((deposit_count & 1) == 1) {
+            found = true;
+            break;
+          }
+         deposit_count = deposit_count >> 1;
+         }
+        assert(found);
+      }
+     }
+    |]
+  print . BS16.encode $ c
+  e <- simplify <$> buildExpr c
+  writeFile "full.ast" (formatExpr e)
+
 
 reachable' :: Bool -> ByteString -> IO ()
 reachable' smtdebug c = do

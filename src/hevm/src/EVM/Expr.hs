@@ -416,6 +416,7 @@ stripWrites bottom top = \case
   WriteWord i v prev -> WriteWord i v (stripWrites bottom top prev)
   CopySlice srcOff dstOff size src dst -> CopySlice srcOff dstOff size src dst
 
+
 -- ** Storage ** -----------------------------------------------------------------------------------
 
 
