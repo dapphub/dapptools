@@ -475,16 +475,8 @@ indent' n = rstrip . unlines . fmap (replicate n ' ' <>) . lines
 rstrip :: String -> String
 rstrip = reverse . dropWhile (=='\n') . reverse
 
-formatConcreteBufs :: Expr a -> Expr a
-formatConcreteBufs = mapExpr go
-  where
-    go :: forall a . Expr a -> Expr a
-    go = \case
-      ConcreteBuf b -> ConcreteBuf (BS16.encode b)
-      e -> e
-
 formatExpr :: Expr a -> String
-formatExpr = go . formatConcreteBufs
+formatExpr = go
   where
     go = \case
       ITE c t f -> rstrip . unlines $

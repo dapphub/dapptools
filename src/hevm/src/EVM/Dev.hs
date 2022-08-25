@@ -88,9 +88,10 @@ analyzeDeposit = do
       }
      }
     |]
-  print . BS16.encode $ c
   withSolvers Z3 1 $ \s -> do
+    putStrLn "Exploring Contract"
     e <- simplify <$> buildExpr s c
+    putStrLn "Writing AST"
     writeFile "full.ast" (formatExpr e)
 
 

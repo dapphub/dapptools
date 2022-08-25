@@ -5,8 +5,6 @@ module EVM.SymExec where
 
 import Prelude hiding (Word)
 
-import Debug.Trace
-
 import Control.Lens hiding (pre)
 import EVM hiding (Query, Revert, push)
 import qualified EVM
@@ -347,7 +345,7 @@ simplify e = if (mapExpr go e == e)
     go o@(ITE c a b)
       | c == Lit 1 = a
       | c == Lit 0 = b
-      | a == b = a
+--      | a == b = trace ("a: " <> show a <> "\n\nb: " <> show b) a
       | otherwise = o
     -- redundant add / sub
     go o@(Sub (Add a b) c)

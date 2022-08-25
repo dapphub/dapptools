@@ -1617,6 +1617,8 @@ getCodeLocation vm = (view (state . contract) vm, view (state . pc) vm)
 branch :: CodeLocation -> Expr EWord -> (Bool -> EVM ()) -> EVM ()
 branch loc cond continue = do
   pathconds <- use constraints
+  loc' <- codeloc
+  iteration <- use (iterations . at loc' . non 0)
   assign result . Just . VMFailure . Query $ PleaseAskSMT cond pathconds choosePath
   where
      choosePath (Case v) = do assign result Nothing
