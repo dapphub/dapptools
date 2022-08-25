@@ -352,26 +352,40 @@ tests = testGroup "hevm"
         --let [AbiUInt 256 x, AbiUInt 256 y] = decodeAbiValues [AbiUIntType 256, AbiUIntType 256] bs
         --assertEqual "Catch storage collisions" x y
         ,
+        testCase "Simple Assert" $ do
+          Just c <- solcRuntime "C"
+            [i|
+            contract C {
+              function foo() external pure {
+                assert(false);
+              }
+             }
+            |]
+          [Cex (l, _)] <- withSolvers Z3 1 $ \s -> checkAssert s defaultPanicCodes c (Just ("foo()", [])) []
+          assertEqual "incorrect revert msg" l (EVM.Types.Revert (ConcreteBuf $ panicMsg 0x01))
+        ,
         testCase "Deposit contract loop (z3)" $ do
           Just c <- solcRuntime "Deposit"
             [i|
             contract Deposit {
               function deposit(uint256 deposit_count) external pure {
-                require(deposit_count < 2**32 - 1);
+                //require(deposit_count < 2**32 - 1);
                 //++deposit_count;
-                bool found = false;
-                for (uint height = 0; height < 32; height++) {
-                  if ((deposit_count & 1) == 1) {
-                    found = false;
-                    break;
-                  }
-                 deposit_count = deposit_count >> 1;
-                 }
-                assert(found);
+                //bool found = false;
+                // for (uint height = 0; height < 32; height++) {
+                //   if ((deposit_count & 1) == 1) {
+                //     found = false;
+                //     break;
+                //   }
+                //  deposit_count = deposit_count >> 1;
+                //  }
+                //assert(found);
+                assert(false);
               }
              }
             |]
           [Qed res] <- withSolvers Z3 1 $ \s -> checkAssert s defaultPanicCodes c (Just ("deposit(uint256)", [AbiUIntType 256])) []
+          putStrLn $ formatExpr res
           putStrLn $ "successfully explored: " <> show (Expr.numBranches res) <> " paths"
           writeFile "full.ast" $ formatExpr res
         {-

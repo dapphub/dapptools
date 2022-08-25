@@ -28,6 +28,7 @@ import Data.List (foldl')
 
 import Data.ByteString (ByteString)
 import qualified Control.Monad.State.Class as State
+import qualified Data.ByteString.Base16 as BS16
 import Data.Bifunctor (first, second)
 import Data.Text (Text)
 import qualified Data.Text as T
@@ -267,7 +268,7 @@ checkAssert solvers errs c signature' concreteArgs = verifyContract solvers c si
 checkAssertions :: [Word256] -> Postcondition
 checkAssertions errs _ = \case
   Revert (ConcreteBuf msg) -> PBool $ msg `notElem` (fmap panicMsg errs)
-  Revert b -> foldl' POr (PBool True) (fmap (PNeg . PEq b . ConcreteBuf . panicMsg) errs)
+  Revert b -> foldl' PAnd (PBool True) (fmap (PNeg . PEq b . ConcreteBuf . panicMsg) errs)
   _ -> PBool True
 
 -- |By default hevm checks for all assertions except those which result from arithmetic overflow
@@ -515,7 +516,7 @@ verify solvers preState maxIter askSmtIters rpcinfo maybePre maybepost = do
         withQueries = fmap (\(pcs, leaf) -> (assertProps (PNeg (post preState leaf) : assumes <> pcs), leaf)) canViolate
       -- Dispatch the remaining branches to the solver to check for violations
       putStrLn $ "Checking for reachability of " <> show (length withQueries) <> " potential property violations"
-      --putStrLn $ T.unpack . formatSMT2 . fst $ withQueries !! 0
+      putStrLn $ T.unpack . formatSMT2 . fst $ withQueries !! 0
       results <- flip mapConcurrently withQueries $ \(query, leaf) -> do
         res <- checkSat' solvers (query, ["txdata", "storage"])
         pure (res, leaf)

@@ -13,6 +13,8 @@ import Data.Word
 import Data.Maybe
 import Data.List
 
+import Debug.Trace
+
 import Control.Lens (lens)
 
 import EVM.Types
@@ -229,6 +231,7 @@ readWord idx buf = ReadWord idx buf
    dst: |   hd   |                  |       tl        |
         └--------┴------------------┴-----------------┘
 -}
+trace' msg x = trace (msg <> ": " <> show x) x
 copySlice :: Expr EWord -> Expr EWord -> Expr EWord -> Expr Buf -> Expr Buf -> Expr Buf
 
 -- copies from empty bufs
@@ -274,7 +277,7 @@ writeWord (Lit offset) (Lit val) EmptyBuf
   = ConcreteBuf $ BS.replicate (num offset) 0 <> word256Bytes val
 writeWord (Lit offset) (Lit val) (ConcreteBuf src)
   = ConcreteBuf $ (padRight (num offset) $ BS.take (num offset) src)
-               <> asBE val
+               <> word256Bytes val
                <> BS.drop ((num offset) + 32) src
 writeWord offset val src = WriteWord offset val src
 
