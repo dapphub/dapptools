@@ -335,6 +335,9 @@ simplify e = if (mapExpr go e == e)
     go (CopySlice (Lit 0x0) (Lit 0x0) (Lit 0x0) _ dst) = dst
 
     -- simplify buffers
+    go o@(ReadWord a (WriteWord b c d))
+      | a == b = c
+      | otherwise = o
     go o@(ReadWord (Lit _) _) = Expr.simplifyReads o
     go o@(ReadByte (Lit _) _) = Expr.simplifyReads o
 
@@ -358,6 +361,12 @@ simplify e = if (mapExpr go e == e)
       | otherwise = o
     go o@(SHR a v)
       | a == (Lit 0) = v
+      | otherwise = o
+    go o@(Add a b)
+      | a == (Lit 0) = b
+      | otherwise = o
+    go o@(Sub a b)
+      | a == (Lit 0) = b
       | otherwise = o
     go o@(And a (And b c))
       | a == b = (And b c)
