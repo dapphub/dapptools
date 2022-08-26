@@ -734,10 +734,10 @@ mapProp :: (forall a . Expr a -> Expr a) -> Prop -> Prop
 mapProp f = \case
   PBool b -> PBool b
   PEq a b -> PEq (mapExpr f (f a)) (mapExpr f (f b))
-  PLT a b -> PEq (mapExpr f (f a)) (mapExpr f (f b))
-  PGT a b -> PEq (mapExpr f (f a)) (mapExpr f (f b))
-  PLEq a b -> PEq (mapExpr f (f a)) (mapExpr f (f b))
-  PGEq a b -> PEq (mapExpr f (f a)) (mapExpr f (f b))
+  PLT a b -> PLT (mapExpr f (f a)) (mapExpr f (f b))
+  PGT a b -> PGT (mapExpr f (f a)) (mapExpr f (f b))
+  PLEq a b -> PLEq (mapExpr f (f a)) (mapExpr f (f b))
+  PGEq a b -> PGEq (mapExpr f (f a)) (mapExpr f (f b))
   PNeg a -> PNeg (mapProp f a)
   PAnd a b -> PAnd (mapProp f a) (mapProp f b)
   POr a b -> POr (mapProp f a) (mapProp f b)
