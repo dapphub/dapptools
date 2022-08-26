@@ -353,6 +353,12 @@ simplify e = if (mapExpr go e == e)
       | a == c = b
       | b == c = a
       | otherwise = o
+    go o@(SHL a v)
+      | a == (Lit 0) = v
+      | otherwise = o
+    go o@(SHR a v)
+      | a == (Lit 0) = v
+      | otherwise = o
     go o@(And a (And b c))
       | a == b = (And b c)
       | otherwise = o
