@@ -61,46 +61,33 @@ declareIntermediates = do
   where
     sortPred (_, (a, _)) (_, (b, _)) = compare a b
 
-declareFacts :: State BuilderState SMT2
-declareFacts = do
-  fs <- fmap facts get
-  let decls = nubOrd $ fmap (\f -> "(assert " <> f <> ")") fs
-  pure $ SMT2 decls
-
 assertWord :: Expr EWord -> SMT2
 assertWord e = flip evalState initState $ do
   enc <- exprToSMT e
-  fs <- declareFacts
   intermediates <- declareIntermediates
   pure $ prelude
       <> (declareVars $ referencedVars e)
       <> SMT2 [""]
       <> (declareFrameContext $ referencedFrameContext e)
       <> intermediates
-      <> SMT2 ["", ";facts"]
-      <> fs
       <> SMT2 [""]
       <> SMT2 ["(assert (= " <> enc `sp` one <> "))"]
 
 assertWords :: [Expr EWord] -> SMT2
 assertWords es = flip evalState initState $ do
   encs <- mapM exprToSMT es
-  fs <- declareFacts
   intermediates <- declareIntermediates
   pure $ prelude
        <> (declareVars . nubOrd $ foldl (<>) [] (fmap (referencedVars) es))
        <> SMT2 [""]
        <> (declareFrameContext . nubOrd $ foldl (<>) [] (fmap (referencedFrameContext) es))
        <> intermediates
-      <> SMT2 ["", ";facts"]
-       <> fs
        <> SMT2 [""]
        <> (SMT2 $ fmap (\e -> "(assert (= " <> e `sp` one <> "))") encs)
 
 assertProp :: Prop -> SMT2
 assertProp p = flip evalState initState $ do
   enc <- propToSMT p
-  fs <- declareFacts
   intermediates <- declareIntermediates
   pure $ prelude
        <> (declareBufs . referencedBufs' $ p)
@@ -109,15 +96,12 @@ assertProp p = flip evalState initState $ do
        <> SMT2 [""]
        <> (declareFrameContext . referencedFrameContext' $ p)
        <> intermediates
-       <> SMT2 ["", ";facts"]
-       <> fs
        <> SMT2 [""]
        <> SMT2 ["(assert " <> enc <> ")"]
 
 assertProps :: [Prop] -> SMT2
 assertProps ps = flip evalState initState $ do
   encs <- mapM propToSMT ps
-  fs <- declareFacts
   intermediates <- declareIntermediates
   pure $ prelude
        <> (declareBufs . nubOrd $ foldl (<>) [] (fmap (referencedBufs') ps))
@@ -126,8 +110,6 @@ assertProps ps = flip evalState initState $ do
        <> SMT2 [""]
        <> (declareFrameContext . nubOrd $ foldl (<>) [] (fmap (referencedFrameContext') ps))
        <> intermediates
-       <> SMT2 ["", ";facts"]
-       <> fs
        <> SMT2 [""]
        <> (SMT2 $ fmap (\p -> "(assert " <> p <> ")") encs)
 
@@ -369,7 +351,6 @@ referencedFrameContext expr = nubOrd (foldExpr go [] expr)
 data BuilderState = BuilderState
   { bufs :: (Int, Map (Expr Buf) (Int, Text))
   , stores :: (Int, Map (Expr Storage) (Int, Text))
-  , facts :: [Text]
   }
   deriving (Show)
 
@@ -377,16 +358,10 @@ initState :: BuilderState
 initState = BuilderState
   { bufs = (0, Map.empty)
   , stores = (0, Map.empty)
-  , facts = mempty
   }
 
 exprToSMT :: Expr a -> State BuilderState Text
 exprToSMT = \case
-  Fact p e -> do
-    encP <- propToSMT p
-    s <- get
-    put (s{facts = encP : (facts s)})
-    exprToSMT e
   Lit w -> pure $ "(_ bv" <> (T.pack $ show (num w :: Integer)) <> " 256)"
   Var s -> pure s
   JoinBytes

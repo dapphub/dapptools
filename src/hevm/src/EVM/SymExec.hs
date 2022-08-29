@@ -52,25 +52,25 @@ symAbiArg :: Text -> AbiType -> CalldataFragment
 symAbiArg name = \case
   AbiUIntType n ->
     if n `mod` 8 == 0 && n <= 256
-    then let v = Var name in St $ Fact (inRange n v) v
+    then let v = Var name in St [inRange n v] v
     else error "bad type"
   AbiIntType n ->
     if n `mod` 8 == 0 && n <= 256
     -- TODO: is this correct?
-    then let v = Var name in St $ Fact (inRange n v) v
+    then let v = Var name in St [inRange n v] v
     else error "bad type"
-  AbiBoolType -> let v = Var name in St $ Fact (bool v) v
-  AbiAddressType -> let v = Var name in St $ Fact (inRange 160 v) v
+  AbiBoolType -> let v = Var name in St [bool v] v
+  AbiAddressType -> let v = Var name in St [inRange 160 v] v
   AbiBytesType n
     -> if n > 0 && n <= 32
-       then let v = Var name in St $ Fact (inRange (n * 8) v) v
+       then let v = Var name in St [inRange (n * 8) v] v
        else error "bad type"
   AbiArrayType sz tp -> Comp $ fmap (\n -> symAbiArg (name <> n) tp) [T.pack (show n) | n <- [0..sz-1]]
   t -> error $ "TODO: symbolic abi encoding for " <> show t
 
 data CalldataFragment
-  = St (Expr EWord)
-  | Dy (Expr EWord) (Expr Buf)
+  = St [Prop] (Expr EWord)
+  | Dy [Prop] (Expr EWord) (Expr Buf)
   | Comp [CalldataFragment]
   deriving (Show, Eq)
 
@@ -78,21 +78,21 @@ data CalldataFragment
 -- with concrete arguments.
 -- Any argument given as "<symbolic>" or omitted at the tail of the list are
 -- kept symbolic.
-symCalldata :: Text -> [AbiType] -> [String] -> Expr Buf -> Expr Buf
+symCalldata :: Text -> [AbiType] -> [String] -> Expr Buf -> (Expr Buf, [Prop])
 symCalldata sig typesignature concreteArgs base =
   let args = concreteArgs <> replicate (length typesignature - length concreteArgs)  "<symbolic>"
       mkArg :: AbiType -> String -> Int -> CalldataFragment
       mkArg typ "<symbolic>" n = symAbiArg (T.pack $ "arg" <> show n) typ
       mkArg typ arg _ = let v = makeAbiValue typ arg
                         in case v of
-                             AbiUInt _ w -> St . Lit . num $ w
-                             AbiInt _ w -> St . Lit . num $ w
-                             AbiAddress w -> St . Lit . num $ w
-                             AbiBool w -> St . Lit $ if w then 1 else 0
+                             AbiUInt _ w -> St [] . Lit . num $ w
+                             AbiInt _ w -> St [] . Lit . num $ w
+                             AbiAddress w -> St [] . Lit . num $ w
+                             AbiBool w -> St [] . Lit $ if w then 1 else 0
                              _ -> error "TODO"
       calldatas = zipWith3 mkArg typesignature args [1..]
-      cdBuf = combineFragments calldatas (writeSelector base sig)
-  in Fact (Expr.bufLength cdBuf .>= cdLen calldatas) cdBuf
+      (cdBuf, props) = combineFragments calldatas (writeSelector base sig)
+  in (cdBuf, (Expr.bufLength cdBuf .>= cdLen calldatas) : props)
 
 cdLen :: [CalldataFragment] -> Expr EWord
 cdLen = go (Lit 4)
@@ -100,7 +100,7 @@ cdLen = go (Lit 4)
     go acc = \case
       [] -> acc
       (hd:tl) -> case hd of
-                   St _ -> go (Expr.add acc (Lit 32)) tl
+                   St _ _ -> go (Expr.add acc (Lit 32)) tl
                    _ -> error "unsupported"
 
 writeSelector :: Expr Buf -> Text -> Expr Buf
@@ -109,21 +109,21 @@ writeSelector buf sig = writeSel (Lit 0) $ writeSel (Lit 1) $ writeSel (Lit 2) $
     sel = ConcreteBuf $ selector sig
     writeSel idx = Expr.writeByte idx (Expr.readByte idx sel)
 
-combineFragments :: [CalldataFragment] -> Expr Buf -> Expr Buf
-combineFragments = go (Lit 4)
+combineFragments :: [CalldataFragment] -> Expr Buf -> (Expr Buf, [Prop])
+combineFragments fragments base = go (Lit 4) fragments (base, [])
   where
+    go :: Expr EWord -> [CalldataFragment] -> (Expr Buf, [Prop]) -> (Expr Buf, [Prop])
     go _ [] acc = acc
-    go idx (f:rest) acc = case f of
-                             St w -> go (Expr.add idx (Lit 32)) rest (Expr.writeWord idx w acc)
+    go idx (f:rest) (buf, ps) = case f of
+                             St p w -> go (Expr.add idx (Lit 32)) rest (Expr.writeWord idx w buf, p <> ps)
                              s -> error $ "unsupported cd fragment: " <> show s
 
 
-abstractVM :: Maybe (Text, [AbiType]) -> [String] -> ByteString -> StorageModel -> VM
-abstractVM typesignature concreteArgs contractCode storagemodel
-  = loadSymVM code' store caller' value' calldata'
+abstractVM :: Maybe (Text, [AbiType]) -> [String] -> ByteString -> Maybe Precondition -> StorageModel -> VM
+abstractVM typesignature concreteArgs contractCode maybepre storagemodel = finalVm
   where
-    calldata' = case typesignature of
-                 Nothing -> AbstractBuf "txdata"
+    (calldata', calldataProps) = case typesignature of
+                 Nothing -> (AbstractBuf "txdata", [])
                  Just (name, typs) -> symCalldata name typs concreteArgs (AbstractBuf "txdata")
     store = case storagemodel of
               SymbolicS -> AbstractStore
@@ -132,6 +132,11 @@ abstractVM typesignature concreteArgs contractCode storagemodel
     caller' = Caller 0
     value' = CallValue 0
     code' = RuntimeCode $ fromJust $ Expr.toList (ConcreteBuf contractCode)
+    vm' = loadSymVM code' store caller' value' calldata'
+    precond = case maybepre of
+                Nothing -> []
+                Just p -> [p vm']
+    finalVm = vm' & set constraints (precond <> calldataProps)
 
 loadSymVM :: ContractCode -> Expr Storage -> Expr EWord -> Expr EWord -> Expr Buf -> VM
 loadSymVM x initStore addr callvalue' calldata' =
@@ -283,9 +288,9 @@ panicMsg :: Word256 -> ByteString
 panicMsg err = (selector "Panic(uint256)") <> (encodeAbiValue $ AbiUInt 256 err)
 
 verifyContract :: SolverGroup -> ByteString -> Maybe (Text, [AbiType]) -> [String] -> StorageModel -> Maybe Precondition -> Maybe Postcondition -> IO [VerifyResult]
-verifyContract solvers theCode signature' concreteArgs storagemodel pre maybepost = do
-  let preState = abstractVM signature' concreteArgs theCode  storagemodel
-  verify solvers preState Nothing Nothing Nothing pre maybepost
+verifyContract solvers theCode signature' concreteArgs storagemodel maybepre maybepost = do
+  let preState = abstractVM signature' concreteArgs theCode maybepre storagemodel
+  verify solvers preState Nothing Nothing Nothing maybepost
 
 pruneDeadPaths :: [VM] -> [VM]
 pruneDeadPaths =
@@ -314,7 +319,6 @@ flattenExpr = go []
   where
     go :: [Prop] -> Expr End -> [([Prop], Expr End)]
     go pcs = \case
-      Fact p e -> go (p : pcs) e
       ITE c t f -> go ((PEq c (Lit 1)) : pcs) t <> go ((PEq c (Lit 0)) : pcs) f
       Invalid -> [(pcs, Invalid)]
       SelfDestruct -> [(pcs, SelfDestruct)]
@@ -398,7 +402,6 @@ reachable2 solvers e = do
     -}
     go :: [Prop] -> Expr End -> IO ([SMT2], Maybe (Expr End))
     go pcs = \case
-      Fact p e' -> go (p : pcs) e'
       ITE c t f -> do
         (tres, fres) <- concurrently
           (go (PEq (Lit 1) c : pcs) t)
@@ -431,7 +434,6 @@ reachable solvers = go []
   where
     go :: [Prop] -> Expr End -> IO ([SMT2], Expr End)
     go pcs = \case
-      Fact p e -> go (p : pcs) e
       ITE c t f -> do
         let
           tquery = assertProps (PEq c (Lit 1) : pcs)
@@ -501,8 +503,8 @@ evalProp = \case
 
 
 -- | Symbolically execute the VM and check all endstates against the postcondition, if available.
-verify :: SolverGroup -> VM -> Maybe Integer -> Maybe Integer -> Maybe (Fetch.BlockNumber, Text) -> Maybe Precondition -> Maybe Postcondition -> IO [VerifyResult]
-verify solvers preState maxIter askSmtIters rpcinfo maybePre maybepost = do
+verify :: SolverGroup -> VM -> Maybe Integer -> Maybe Integer -> Maybe (Fetch.BlockNumber, Text) -> Maybe Postcondition -> IO [VerifyResult]
+verify solvers preState maxIter askSmtIters rpcinfo maybepost = do
   putStrLn "Exploring contract"
   expr <- simplify <$> evalStateT (interpret (Fetch.oracle solvers Nothing) Nothing Nothing runExpr) preState
   putStrLn $ "Explored contract (" <> show (Expr.numBranches expr) <> " branches)"
@@ -516,9 +518,7 @@ verify solvers preState maxIter askSmtIters rpcinfo maybePre maybepost = do
           \(_, leaf) -> case evalProp (post preState leaf) of
             PBool True -> False
             _ -> True
-        assumes = case maybePre of
-          Just pre -> [pre preState]
-          Nothing -> []
+        assumes = view constraints preState
         withQueries = fmap (\(pcs, leaf) -> (assertProps (PNeg (post preState leaf) : assumes <> pcs), leaf)) canViolate
       -- Dispatch the remaining branches to the solver to check for violations
       putStrLn $ "Checking for reachability of " <> show (length withQueries) <> " potential property violations"

@@ -181,12 +181,6 @@ newtype W256 = W256 Word256
   concreteness of a given term directly in the type of that term, since such
   type level shenanigans tends to complicate implementation, we skip this for
   now.
-
-  Knowledge can be attached to an expression using the `Fact` node. This
-  attaches a proposition to any point in the tree. When encoding a given Expr
-  instance as a constraint system for e.g. an SMT solver, these facts can be
-  recursively collected from a given Expr instance and added to help reduce the
-  solution search space.
 -}
 
 -- phantom type tags for AST construction
@@ -201,9 +195,6 @@ data EType
 
 -- add type level list of constraints
 data Expr (a :: EType) where
-
-  -- knowledge
-  Fact           :: Prop -> Expr a -> Expr a
 
   -- identifiers
 
@@ -532,8 +523,6 @@ foldExpr f acc expr = acc <> (go expr)
   where
     go :: forall a . Expr a -> b
     go = \case
-      -- knowledge
-      e@(Fact p a) -> f e <> foldProp f mempty p <> go a
 
       -- literals & variables
 
@@ -746,8 +735,6 @@ mapProp f = \case
 -- Recursion schemes do this & a lot more, but defining them over GADT's isn't worth the hassle
 mapExpr :: (forall a . Expr a -> Expr a) -> Expr b -> Expr b
 mapExpr f expr = case (f expr) of
-  -- knowledge
-  Fact p a -> Fact (mapProp f p) (mapExpr f (f a))
 
   -- literals & variables
 

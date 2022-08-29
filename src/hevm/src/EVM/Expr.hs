@@ -231,7 +231,6 @@ readWord idx buf = ReadWord idx buf
    dst: |   hd   |                  |       tl        |
         └--------┴------------------┴-----------------┘
 -}
-trace' msg x = trace (msg <> ": " <> show x) x
 copySlice :: Expr EWord -> Expr EWord -> Expr EWord -> Expr Buf -> Expr Buf -> Expr Buf
 
 -- copies from empty bufs
@@ -321,9 +320,6 @@ minLength = go 0
     go l (WriteByte _ _ b) = go l b
     go l (CopySlice _ _ _ _ dst) = go l dst
 
-    -- facts
-    go l (Fact _ e) = go l e
-
 
 word256At
   :: Functor f
@@ -396,7 +392,6 @@ simplifyReads = \case
 -- TODO: are the bounds here correct? think there might be some off by one mistakes...
 stripWrites :: W256 -> W256 -> Expr Buf -> Expr Buf
 stripWrites bottom top = \case
-  Fact _ e -> stripWrites bottom top e
   EmptyBuf -> EmptyBuf
   AbstractBuf s -> AbstractBuf s
   ConcreteBuf b -> ConcreteBuf $ BS.take (num top) b
@@ -431,7 +426,6 @@ stripWrites bottom top = \case
 -- storage lookups much easier. If the store is backed by an AbstractStore we
 -- always return a symbolic value.
 readStorage :: Expr EWord -> Expr EWord -> Expr Storage -> Maybe (Expr EWord)
-readStorage addr loc (Fact _ e) = readStorage addr loc e
 readStorage _ _ EmptyStore = Nothing
 readStorage addr loc store@(ConcreteStore s) = case (addr, loc) of
   (Lit a, Lit l) -> do
@@ -571,7 +565,6 @@ min (Lit x) (Lit y) = if x < y then Lit x else Lit y
 min x y = Min x y
 
 numBranches :: Expr End -> Int
-numBranches (Fact _ e) = numBranches e
 numBranches (ITE _ t f) = numBranches t + numBranches f
 numBranches _ = 1
 

@@ -526,7 +526,7 @@ makeVm o =
     }
   , _cache = Cache mempty mempty mempty
   , _burned = 0
-  , _constraints = []
+  , _constraints = mempty
   , _iterations = mempty
   , _allowFFI = vmoptAllowFFI o
   }
