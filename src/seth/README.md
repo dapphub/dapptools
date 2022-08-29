@@ -135,7 +135,7 @@ options by exporting environment variables.
     export SETH_CHAIN=ethlive
 
     # Set an address as the default sender
-    export ETH_FROM=0xd08f67044c53d723686e002c5b880f73674e164c
+    export ETH_FROM=0x3E62E50C4FAFCb5589e1682683ce38e8645541e8
 
     # Look for my key files in a custom directory
     export ETH_KEYSTORE=~/secrets/ethereum
@@ -146,7 +146,7 @@ options by exporting environment variables.
     export ETH_RPC_URL=https://kovan.infura.io/v3/<API-KEY>
 
     # Set an address as the default sender
-    export ETH_FROM=0xd08f67044c53d723686e002c5b880f73674e164c
+    export ETH_FROM=0x3E62E50C4FAFCb5589e1682683ce38e8645541e8
 
 Note that flags given to the `seth` command will override
 these settings.
@@ -238,10 +238,10 @@ wei—the smallest possible amount of ether—to the [Ethereum
 Foundation's donation address]:
 
     $ seth send --value 1 0xfB6916095ca1df60bB79Ce92cE3Ea74c37c5d359
-    seth-send: warning: `ETH_GAS' not set; using default gas amount
+    seth-send: warning: `ETH_GAS' not set; using default gas
     Ethereum account passphrase (not echoed):
     seth-send: Published transaction with 0 bytes of calldata.
-    seth-send: 0xe428d4bb148ded426777ae892578507e4f394f608ad9d3a9d0229e8348ba72e3
+    seth-send: 0x7253C2D9f5BE25b7b3676880FD49c41B13070039
     seth-send: Waiting for transaction receipt...
     seth-send: Transaction included in block 4908738.
 
@@ -256,7 +256,7 @@ fractional amounts of ether. You can convert an ether amount into a
 wei amount using [`seth --to-wei`]. Here, we send 1.5
 ETH:
 
-    $ fund=0xfB6916095ca1df60bB79Ce92cE3Ea74c37c5d359
+    $ fund=0x3E62E50C4FAFCb5589e1682683ce38e8645541e8
     $ seth send --value $(seth --to-wei 1.5 eth) $fund
 
 There is also [`seth --from-wei`] for converting wei amounts into a
@@ -271,8 +271,7 @@ also useful.
 You can use [`seth balance`] to see how much is in the donation
 fund:
 
-    $ seth balance 0xfB6916095ca1df60bB79Ce92cE3Ea74c37c5d359
-    4595456374254502385669
+    $ seth balance : 0x7253C2D9f5BE25b7b3676880FD49c41B13070039
 
 You can use [`seth ls`] to check the ether balances of your own
 accounts:
@@ -287,9 +286,9 @@ The basic tool to read information from a contract is [`seth call`],
 which performs a call without publishing a transaction.
 
 For example, you can read the total supply of the [MakerDAO]
-governance token using the ERC20 ABI:
+governance token using the ERC20 ABI:0x3E62E50C4FAFCb5589e1682683ce38e8645541e8
 
-    $ MKR_TOKEN=0x9f8F72aA9304c8B593d555F12eF6589cC3A579A2
+    
     $ seth call $MKR_TOKEN "totalSupply()(uint)"
     995238778286468792512963
 
