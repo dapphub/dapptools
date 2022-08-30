@@ -364,6 +364,20 @@ tests = testGroup "hevm"
           [Cex (l, _)] <- withSolvers Z3 1 $ \s -> checkAssert s defaultPanicCodes c (Just ("foo()", [])) []
           assertEqual "incorrect revert msg" l (EVM.Types.Revert (ConcreteBuf $ panicMsg 0x01))
         ,
+        testCase "assert-fail" $ do
+          Just c <- solcRuntime "AssertFail"
+            [i|
+            contract AssertFail {
+              function fun(uint256 deposit_count) external pure {
+                assert(deposit_count == 1);
+                assert(deposit_count == 0);
+              }
+             }
+            |]
+          putStrLn "-----------------------\n"
+          [Cex _] <- withSolvers Z3 1 $ \s -> checkAssert s defaultPanicCodes c (Just ("fun(uint256)", [AbiUIntType 256])) []
+          putStrLn "expected counterexample found"
+        ,
         testCase "Deposit contract loop (z3)" $ do
           Just c <- solcRuntime "Deposit"
             [i|
