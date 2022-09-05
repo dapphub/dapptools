@@ -19,7 +19,9 @@
           in
           {
             packages = pkgs.solc-static-versions // {
-              inherit (pkgs) solc hevm hevmUnwrapped jays jshon
+              inherit (pkgs)
+                solidityPackage buildDappPackage
+                solc hevm hevmUnwrapped jays jshon
                 seth dapp ethsign token go-ethereum-unlimited
                 qrtx qrtx-term secp256k1;
             };
