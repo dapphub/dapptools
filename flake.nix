@@ -9,8 +9,9 @@
 
   outputs = { self, nixpkgs, flake-utils }:
     let
+      supportedSystems = [ "x86_64-linux" "x86_64-darwin" ];
       systems =
-        flake-utils.lib.eachDefaultSystem (system:
+        flake-utils.lib.eachSystem supportedSystems (system:
           let
             pkgs = import nixpkgs {
               inherit system;
@@ -20,7 +21,6 @@
           {
             packages = pkgs.solc-static-versions // {
               inherit (pkgs)
-                solidityPackage buildDappPackage
                 solc hevm hevmUnwrapped jays jshon
                 seth dapp ethsign token go-ethereum-unlimited
                 qrtx qrtx-term secp256k1;
@@ -30,7 +30,7 @@
     in
     systems // {
       overlays = {
-        default = import ./overlay.nix;
+        default = (final: prev: (import ./overlay.nix) final prev);
       };
     };
 }
