@@ -4,24 +4,6 @@ on:
   push:
 
 jobs:
-  flake-check:
-    strategy:
-      matrix:
-        os: [ubuntu-latest, macos-latest]
-      fail-fast: false
-    runs-on: ${{ matrix.os }}
-
-    steps:
-      - uses: actions/checkout@v3
-      - uses: cachix/install-nix-action@v17
-      - name: Setup Cachix
-        uses: cachix/cachix-action@v10
-        with:
-          name: dapp
-          signingKey: "${{ secrets.CACHIX_SIGNING_KEY }}"
-      - name: Check flake
-        run: nix flake check -v --show-trace --no-update-lock-file
-
   build-packages:
     strategy:
       matrix:
