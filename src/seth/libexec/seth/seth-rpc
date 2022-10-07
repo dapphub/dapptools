@@ -13,6 +13,7 @@ rpc-error() { jshon -Q -e error -j; }
 
 request=$(seth rpc-request -- "$@")
 response=$(seth rpc-curl <<<"$request")
+[[ $SETH_VERBOSE ]] && SETH_KEY_WIDTH=10 seth --show-json <<< "$request" | sed >&2 "s/^/${0##*/}:   /"
 
 if result=$(rpc-result <<<"$response"); then
   seth --show-json <<<"$result"
