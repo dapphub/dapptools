@@ -6,8 +6,8 @@ buildGoModule rec {
 
   src = ./.;
 
-  vendorSha256 = "1zbsq1lyqinyzv5x4p1xgkxsyb7y92fbmf44gyaix34xrag5s27m";
-  runVend = true;
+  vendorSha256 = "sha256-LSnwKW79m70RiVv9INJb8oEzDmouJtiqYLHNBD8KAzY=";
+  proxyVendor = true;
 
   meta = {
     homepage = http://github.com/dapphub/dapptools;

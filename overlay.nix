@@ -10,27 +10,16 @@ in rec {
   haskellPackages =
     super.haskellPackages.override (old: {
     overrides = lib.composeExtensions (old.overrides or (_: _: {})) (
-      import ./haskell.nix { inherit lib; pkgs = self;}
-    );
-  });
-
-  unwrappedHaskellPackages =
-    super.haskellPackages.override (old: {
-    overrides = lib.composeExtensions (old.overrides or (_: _: {})) (
-      import ./haskell.nix { inherit lib; pkgs = self; wrapped = false;}
-    );
-  });
-
-  sharedHaskellPackages =
-    super.haskellPackages.override (old: {
-    overrides = lib.composeExtensions (old.overrides or (_: _: {})) (
-      import ./haskell.nix { inherit lib; pkgs = self; wrapped = false; shared = true; }
+      import ./haskell.nix { inherit lib; pkgs = self; }
     );
   });
 
   solidityPackage = import ./nix/solidity-package.nix {
     inherit (self) pkgs;
   };
+
+  # 2.4 changed the interface here to a flakes based one which broke the various --nix-run subcommands
+  nix = self.nixVersions.nix_2_3;
 
   # experimental dapp builder, allows for easy overriding of phases
   buildDappPackage = import ./nix/build-dapp-package.nix { inherit (self) pkgs; };
@@ -95,9 +84,6 @@ in rec {
 
   # uses solc, z3 and cvc4 from nix
   hevm = self.pkgs.haskell.lib.justStaticExecutables self.haskellPackages.hevm;
-
-  # uses solc, z3 and cvc4 from PATH
-  hevmUnwrapped = self.pkgs.haskell.lib.justStaticExecutables self.unwrappedHaskellPackages.hevm;
 
   libff = self.callPackage (import ./nix/libff.nix) {};
 

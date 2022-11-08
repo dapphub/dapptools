@@ -78,8 +78,8 @@ geth \
   2> >(tee "$chaindir/geth.log" | grep --line-buffered Success | sed 's/^/geth: /' >&2) \
   --datadir "$chaindir" --networkid "$DAPP_TESTNET_CHAINID" --port="$port" \
   --mine --miner.threads=1 --allow-insecure-unlock \
-  --rpc --rpcapi "web3,eth,net,debug,personal" --rpccorsdomain '*' --nodiscover \
-  --rpcaddr="$DAPP_TESTNET_RPC_ADDRESS" --rpcport="$DAPP_TESTNET_RPC_PORT" --unlock="$(IFS=,; echo "${address[*]}")" --password=<(exit) &
+  --http --http.api "web3,eth,net,debug,personal" --http.corsdomain '*' --nodiscover \
+  --http.addr="$DAPP_TESTNET_RPC_ADDRESS" --http.port="$DAPP_TESTNET_RPC_PORT" --unlock="$(IFS=,; echo "${address[*]}")" --password=<(exit) &
 
 gethpid=$!
 

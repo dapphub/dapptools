@@ -18,12 +18,10 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v2
-      # v12
       - uses: cachix/install-nix-action@v14.1
         with:
           # https://discourse.nixos.org/t/understanding-binutils-darwin-wrapper-nix-support-bad-substitution/11475/2
           nix_path: nixpkgs=channel:nixos-unstable
-      # v8
       - uses: cachix/cachix-action@v10
         with:
           name: dapp

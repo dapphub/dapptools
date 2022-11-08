@@ -9,18 +9,18 @@ nonce=$(seth --to-hex "$2")
 
 # manually create the rlp encoding of [sender,nonce], with length prefix
 # `192+len(sender)+len(nonce):len(sender):sender:128+len(nonce):nonce`
-if [[ $nonce -eq 0x00 ]]; then
+if [[ $nonce -eq $((0x00)) ]]; then
   # encoding of scalar 0 is special and requires the length prefix
   rlp="0xd694${sender##0x}80"
-elif [[ $nonce -lt 0x80 ]]; then
+elif [[ $nonce -lt $((0x80)) ]]; then
   nonce=$(printf "0x%02x" "$nonce")
   # no length prefix if nonce < 128
   rlp="0xd694${sender##0x}${nonce##0x}"
-elif [[ $nonce -lt 0x100 ]]; then
+elif [[ $nonce -lt $((0x100)) ]]; then
   # even padding for hex
   nonce=$(printf "0x%02x" "$nonce")
   rlp="0xd794${sender##0x}81${nonce##0x}"
-elif [[ $nonce -lt 0x10000 ]]; then
+elif [[ $nonce -lt $((0x10000)) ]]; then
   # even padding for hex
   nonce=$(printf "0x%04x" "$nonce")
   rlp="0xd894${sender##0x}82${nonce##0x}"
