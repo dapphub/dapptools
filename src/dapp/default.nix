@@ -20,6 +20,7 @@
 , solc
 , tre
 , dapptoolsSrc
+, eth-utils
 }:
 
 stdenv.mkDerivation rec {
@@ -37,6 +38,7 @@ stdenv.mkDerivation rec {
     let
       path = lib.makeBinPath [
         coreutils
+        eth-utils
         git
         gnugrep
         gnumake

@@ -20,6 +20,7 @@
 , hevm
 , shellcheck
 , dapptoolsSrc
+, eth-utils
 }:
 
 stdenv.mkDerivation rec {
@@ -40,6 +41,7 @@ stdenv.mkDerivation rec {
         coreutils
         curl
         ethsign
+        eth-utils
         git
         gnugrep
         gnused

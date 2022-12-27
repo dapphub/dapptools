@@ -21,7 +21,7 @@ in self-hs: super-hs:
       repo = "nixpkgs";
       rev = "dac57a4eccf1442e8bf4030df6fcbb55883cb682";
       sha256 = "sha256-C15oAtyupmLB3coZY7qzEHXjhtUx/+77olVdqVMruAg=";
-    }) {};
+    }) { system = pkgs.system; };
     myHaskell = pkgs-2022-11.haskellPackages.override {
       overrides = self: super: {
         hevm = pkgs.haskell.lib.dontCheck (self.callHackageDirect {

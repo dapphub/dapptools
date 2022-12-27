@@ -8,8 +8,6 @@
   };
 
   nixConfig = {
-    # required to build hevm
-    allow-import-from-derivation = true;
     extra-substituters = [ "https://dapp.cachix.org" ];
     extra-trusted-public-keys = [ "dapp.cachix.org-1:9GJt9Ja8IQwR7YW/aF0QvCa6OmjGmsKoZIist0dG+Rs=" ];
     log-lines = 50;

@@ -25,7 +25,6 @@ import EVM.ABI
 import EVM.Solidity
 import EVM.Types hiding (word)
 import EVM.Dapp (dappInfo)
-import EVM.RLP (rlpdecode)
 
 import qualified EVM.Flatten
 
@@ -37,15 +36,9 @@ data Command w
     , jsonFile   :: w ::: Maybe String <?> "Filename or path to dapp build output (default: out/*.solc.json)"
     , dappRoot   :: w ::: Maybe String <?> "Path to dapp project root directory (default: . )"
     }
-  | Rlp  -- RLP decode a string and print the result
-    { decode :: w ::: ByteString <?> "RLP encoded hexstring"
-    }
   | Abiencode
     { abi  :: w ::: Maybe String <?> "Signature of types to decode / encode"
     , arg  :: w ::: [String]     <?> "Values to encode"
-    }
-  | StripMetadata -- Remove metadata from contract bytecode
-    { code        :: w ::: Maybe ByteString       <?> "Program bytecode"
     }
 
   deriving (Options.Generic)
@@ -72,13 +65,6 @@ main = do
               EVM.Flatten.flatten dapp (T.pack (sourceFile cmd))
             Nothing ->
               error ("Failed to read Solidity JSON for `" ++ theJson ++ "'")
-    Rlp {} ->
-      case rlpdecode $ hexByteString "--decode" $ strip0x $ decode cmd of
-        Nothing -> error "Malformed RLP string"
-        Just c -> print c
-    StripMetadata {} -> print .
-      ByteStringS . stripBytecodeMetadata . hexByteString "bytecode" . strip0x $ fromJust $ code cmd
-
 
 findJsonFile :: Maybe String -> IO String
 findJsonFile (Just s) = pure s

@@ -28,5 +28,5 @@ for input in $inputs; do
 done
 
 # Use dummy args generate calldata and only keep the function selector
-calldata=$(hevm abiencode --abi "$abi" "${args[@]}")
+calldata=$(eth-utils abiencode --abi "$abi" "${args[@]}")
 echo "${calldata:0:10}"
