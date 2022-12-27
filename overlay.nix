@@ -38,10 +38,6 @@ in rec {
   # Here we can make e.g. integration tests for Dappsys.
   dapp-tests = import ./src/dapp-tests { inherit (self) pkgs; };
 
-  # These are tests that verify the correctness of hevm symbolic using various
-  # external test suites (e.g. the solc tests)
-  hevm-tests = import ./nix/hevm-tests { pkgs = self.pkgs; };
-
   bashScript = { name, version ? "0", deps ? [], text, check ? true } :
     self.pkgs.writeTextFile {
       name = "${name}-${version}";
