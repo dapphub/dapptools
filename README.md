@@ -26,7 +26,7 @@ Install Nix if you haven't already ([instructions](https://nixos.org/download.ht
 ### With flakes
 
 ```
-nix profile install github:dapphub/dapptools
+nix profile install github:dapphub/dapptools#dapp # or ethsign, hevm, seth
 ```
 
 ### Legacy
