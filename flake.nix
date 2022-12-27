@@ -39,5 +39,12 @@
             hevm = ethereum-hevm.packages.${system}.hevm;
             seth = pkgs.callPackage (import ./src/seth) { inherit dapptoolsSrc hevm ethsign; };
           });
+
+      apps =
+        forAllSystems (system:
+          nixpkgs.lib.genAttrs [ "dapp" "ethsign" "hevm" "seth" ] (name: {
+            type = "app";
+            program = "${self.packages.${system}.${name}}/bin/${name}";
+          }));
     };
 }
