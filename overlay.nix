@@ -1,10 +1,12 @@
-self: super:
+{ hevm }: self: super:
 
 let
   lib = self.pkgs.lib;
   stdenv = self.pkgs.stdenv;
 
 in rec {
+  inherit hevm;
+
   dapptoolsSrc = self.callPackage (import ./nix/dapptools-src.nix) {};
 
   haskellPackages =

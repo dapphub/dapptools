@@ -22,9 +22,10 @@
       ];
 
       forAllSystems = nixpkgs.lib.genAttrs supportedSystems;
+      hevm = ethereum-hevm.packages.${system}.hevm;
       nixpkgsFor = forAllSystems (system: import nixpkgs {
         inherit system;
-        overlays = [ (import ./overlay.nix) ];
+        overlays = [ (import ./overlay.nix) { inherit hevm }; ];
       });
     in
     {
@@ -35,10 +36,10 @@
             dapptoolsSrc = pkgs.callPackage (import ./nix/dapptools-src.nix) { };
           in
           rec {
-            dapp = pkgs.callPackage (import ./src/dapp) { inherit dapptoolsSrc hevm seth; };
+            hevm = pkgs.hevm;
+            dapp = pkgs.callPackage (import ./src/dapp) { inherit dapptoolsSrc seth; };
             ethsign = pkgs.callPackage (import ./src/ethsign) { };
-            hevm = ethereum-hevm.packages.${system}.hevm;
-            seth = pkgs.callPackage (import ./src/seth) { inherit dapptoolsSrc hevm ethsign; };
+            seth = pkgs.callPackage (import ./src/seth) { inherit dapptoolsSrc ethsign; };
           });
 
       apps =
