@@ -7,6 +7,11 @@
     ethereum-hevm.url = "github:ethereum/hevm";
   };
 
+  nixConfig = {
+    extra-substituters = [ "https://dapp.cachix.org" ];
+    extra-substituters-public-keys = [ "dapp.cachix.org-1:9GJt9Ja8IQwR7YW/aF0QvCa6OmjGmsKoZIist0dG+Rs=" ];
+  };
+
   outputs = { self, nixpkgs, ethereum-hevm }:
     let
       supportedSystems = [
