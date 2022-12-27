@@ -93,11 +93,7 @@ in rec {
     in builtins.mapAttrs make-solc-drv
         (builtins.getAttr super.system (import ./nix/solc-static-versions.nix));
 
-  # uses solc, z3 and cvc4 from nix
-  hevm = self.pkgs.haskell.lib.justStaticExecutables self.haskellPackages.hevm;
-
-  # uses solc, z3 and cvc4 from PATH
-  hevmUnwrapped = self.pkgs.haskell.lib.justStaticExecutables self.unwrappedHaskellPackages.hevm;
+  eth-utils = self.pkgs.haskell.lib.justStaticExecutables self.haskellPackages.eth-utils;
 
   libff = self.callPackage (import ./nix/libff.nix) {};
 
