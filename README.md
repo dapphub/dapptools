@@ -23,6 +23,17 @@ explore using foundry as an alternative
 
 Install Nix if you haven't already ([instructions](https://nixos.org/download.html)). Then install dapptools:
 
+### With flakes
+
+```
+nix profile install github:dapphub/dapptools#dapp # or ethsign, hevm, seth
+```
+
+Nix will offer to use the dapptools binary cache, which will speed up installs,
+but requires you to trust both us and the Cachix infrastructure.
+
+### Legacy
+
 ```
 curl https://dapp.tools/install | sh
 ```

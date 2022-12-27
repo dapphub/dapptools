@@ -9,7 +9,6 @@ set -eo pipefail
 export SKIP_SETUP=${SKIP_SETUP:-0}
 export FUZZ_RUNS=${FUZZ_RUNS:-100}
 export TESTNET_SLEEP=${TESTNET_SLEEP:-5}
-export RINKEBY_RPC_URL=${RINKEBY_RPC_URL:-https://rinkeby.infura.io/v3/84842078b09946638c03157f83405213}
 export ARCHIVE_NODE_URL=${ARCHIVE_NODE_URL:-https://eth-mainnet.alchemyapi.io/v2/vpeKFsEF6PHifHzdtcwXSDbhV3ym5Ro4}
 export ETHERSCAN_API_KEY=${ETHERSCAN_API_KEY:-15IS6MMRAYB19NZN9VHH6H6P57892Z664M}
 
@@ -584,32 +583,6 @@ test_namehash_6() {
 
 test_namehash_7() {
     assert_equals "$(seth namehash seth-test.eth)" "$(seth namehash sEtH-tESt.etH)"
-}
-
-test_resolve_name1() {
-    # using example from ethers docs: https://docs.ethers.io/v5/single-page/#/v5/api/providers/provider/-%23-Provider-ResolveName
-    local output
-    output=$(seth resolve-name seth-test.eth --rpc-url="$RINKEBY_RPC_URL")
-    assert_equals "0x49c92F2cE8F876b070b114a6B2F8A60b83c281Ad" "$output"
-}
-
-test_resolve_name2() {
-    assert_equals \
-      "$(seth resolve-name seth-test.eth --rpc-url="$RINKEBY_RPC_URL")" \
-      "$(seth resolve-name sEtH-tESt.etH --rpc-url="$RINKEBY_RPC_URL")"
-}
-
-test_lookup_address1() {
-    # using example from ethers docs: https://docs.ethers.io/v5/single-page/#/v5/api/providers/provider/-%23-Provider-lookupAddress
-    local output
-    output=$(seth lookup-address 0x49c92F2cE8F876b070b114a6B2F8A60b83c281Ad --rpc-url="$RINKEBY_RPC_URL")
-    assert_equals "seth-test.eth" "$output"
-}
-
-test_lookup_address2() {
-    assert_equals \
-      "$(seth lookup-address 0x49c92F2cE8F876b070b114a6B2F8A60b83c281Ad --rpc-url="$RINKEBY_RPC_URL")" \
-      "$(seth lookup-address 0x49c92f2ce8f876b070b114a6b2f8a60b83c281ad --rpc-url="$RINKEBY_RPC_URL")"
 }
 
 # SETH 4BYTE TESTS
