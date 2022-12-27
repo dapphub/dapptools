@@ -24,7 +24,7 @@ fi
 if [[ $flatten == 1 && ! $x =~ \.t(\.[a-z0-9]+)*\.sol$ ]]; then
     flat_file="$DAPP_OUT/$dir/${x##*/}.flat"
     (set -x; solc $REMAPPINGS --allow-paths $DAPP_SRC $solcFlags $jsonopts "$x" >"$json_file")
-    (set -x; hevm flatten --source-file "$x" --json-file "$json_file" >"$flat_file")
+    (set -x; eth-utils flatten --source-file "$x" --json-file "$json_file" >"$flat_file")
     x="$flat_file"
 fi
 
