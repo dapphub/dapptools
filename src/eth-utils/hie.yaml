@@ -1,8 +1,4 @@
 cradle:
   cabal:
     - path: "./src"
-      component: "lib:hevm"
-    - path: "./hevm-cli"
-      component: "exe:hevm"
-    - path: "./test"
-      component: "test:test"
+      component: "eth-utils"

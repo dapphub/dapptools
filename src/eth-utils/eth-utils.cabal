@@ -1,0 +1,56 @@
+cabal-version: 3.0
+name:
+  eth-utils
+version:
+  0.1.0
+synopsis:
+  Ethereum related utilities
+description:
+  eth-utils implements the following:
+    - source code flattening
+    - abi encoding
+    - rlp encoding
+    - solidity metadata stripping
+homepage:
+  https://github.com/dapphub/dapptools
+license:
+  AGPL-3.0-only
+author:
+  Mikael Brockman, Martin Lundfall, dxo
+maintainer:
+  mikael@brockman.se, martin.lundfall@gmail.com, git@d-xo.org
+category:
+  Ethereum
+build-type:
+  Simple
+extra-source-files:
+  CHANGELOG.md
+
+source-repository head
+  type:     git
+  location: https://github.com/dapphub/dapptools.git
+
+executable eth-utils
+  hs-source-dirs:
+    src
+  main-is:
+    Main.hs
+  ghc-options:
+    -Wall -threaded -with-rtsopts=-N -Wno-unticked-promoted-constructors -Wno-orphans
+  if os(darwin)
+    extra-libraries: c++
+    ld-options: -Wl,-keep_dwarf_unwind
+  else
+    extra-libraries: stdc++
+  build-depends:
+    hevm,
+    aeson,
+    directory,
+    lens,
+    lens-aeson,
+    vector,
+    optparse-generic,
+    bytestring,
+    containers,
+    base,
+    text

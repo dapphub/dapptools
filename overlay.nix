@@ -92,6 +92,8 @@ in rec {
     in builtins.mapAttrs make-solc-drv
         (builtins.getAttr super.system (import ./nix/solc-static-versions.nix));
 
+  eth-utils = self.pkgs.haskell.lib.justStaticExecutables self.haskellPackages.eth-utils;
+
   libff = self.callPackage (import ./nix/libff.nix) {};
 
   jays = (
