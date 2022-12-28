@@ -24,11 +24,7 @@
       forAllSystems = nixpkgs.lib.genAttrs supportedSystems;
       nixpkgsFor = forAllSystems (system: import nixpkgs {
         inherit system;
-        overlays = [
-          (import ./overlay.nix {
-            hevm = ethereum-hevm.packages.${system}.hevm;
-          })
-        ];
+        overlays = [ (import ./overlay.nix) ];
       });
     in
     {

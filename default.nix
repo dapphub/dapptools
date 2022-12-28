@@ -18,5 +18,5 @@ in
   import nixpkgs {
     inherit system;
 
-    overlays = [(import ./overlay.nix { inherit hevm; })];
+    overlays = [ (import ./overlay.nix) ];
   }

@@ -1,32 +1,16 @@
-{ hevm }: self: super:
+self: super:
 
 let
   lib = self.pkgs.lib;
   stdenv = self.pkgs.stdenv;
 
 in rec {
-  inherit hevm;
-
   dapptoolsSrc = self.callPackage (import ./nix/dapptools-src.nix) {};
 
   haskellPackages =
     super.haskellPackages.override (old: {
     overrides = lib.composeExtensions (old.overrides or (_: _: {})) (
       import ./haskell.nix { inherit lib; pkgs = self;}
-    );
-  });
-
-  unwrappedHaskellPackages =
-    super.haskellPackages.override (old: {
-    overrides = lib.composeExtensions (old.overrides or (_: _: {})) (
-      import ./haskell.nix { inherit lib; pkgs = self; wrapped = false;}
-    );
-  });
-
-  sharedHaskellPackages =
-    super.haskellPackages.override (old: {
-    overrides = lib.composeExtensions (old.overrides or (_: _: {})) (
-      import ./haskell.nix { inherit lib; pkgs = self; wrapped = false; shared = true; }
     );
   });
 
@@ -92,6 +76,7 @@ in rec {
         (builtins.getAttr super.system (import ./nix/solc-static-versions.nix));
 
   eth-utils = self.pkgs.haskell.lib.justStaticExecutables self.haskellPackages.eth-utils;
+  hevm = self.pkgs.haskell.lib.justStaticExecutables self.haskellPackages.hevm;
 
   libff = self.callPackage (import ./nix/libff.nix) {};
 
