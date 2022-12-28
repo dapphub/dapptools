@@ -4,7 +4,6 @@
   inputs = {
     # same as in default.nix
     nixpkgs.url = "github:NixOS/nixpkgs/aa576357673d609e618d87db43210e49d4bb1789";
-    ethereum-hevm.url = "github:ethereum/hevm";
   };
 
   nixConfig = {
@@ -12,7 +11,7 @@
     extra-substituters-public-keys = [ "dapp.cachix.org-1:9GJt9Ja8IQwR7YW/aF0QvCa6OmjGmsKoZIist0dG+Rs=" ];
   };
 
-  outputs = { self, nixpkgs, ethereum-hevm }:
+  outputs = { self, nixpkgs }:
     let
       supportedSystems = [
         "aarch64-linux"
