@@ -3,14 +3,6 @@
 }:
 
 with pkgs;
-let
-  my-python-packages = python-packages: with python-packages; [
-    hypothesis
-    pytest
-    # other python packages you want
-  ];
-  python-with-pkgs = python3.withPackages my-python-packages;
-in
 
 mkShell {
   name = "dapp-tests";
@@ -28,7 +20,6 @@ mkShell {
     jq
     killall
     procps
-    python-with-pkgs
     seth
     solc
     util-linux

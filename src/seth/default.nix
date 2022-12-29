@@ -1,6 +1,6 @@
 { lib, stdenv, fetchFromGitHub, makeWrapper, glibcLocales, solc, nix
 , bc, coreutils, curl, ethsign, git, gnused, jq, jshon, nodejs, tre, perl
-, gnugrep, hevm, shellcheck, dapptoolsSrc }:
+, gnugrep, hevm, shellcheck, dapptoolsSrc, eth-utils }:
 
 stdenv.mkDerivation rec {
   name = "seth-${version}";
@@ -17,7 +17,7 @@ stdenv.mkDerivation rec {
     let
       path = lib.makeBinPath [
         bc coreutils curl ethsign git gnused nix jq hevm jshon nodejs tre perl solc
-        gnugrep
+        gnugrep eth-utils
       ];
     in
       ''
