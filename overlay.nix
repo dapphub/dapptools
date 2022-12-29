@@ -76,7 +76,17 @@ in rec {
         (builtins.getAttr super.system (import ./nix/solc-static-versions.nix));
 
   eth-utils = self.pkgs.haskell.lib.justStaticExecutables self.haskellPackages.eth-utils;
-  hevm = self.pkgs.haskell.lib.justStaticExecutables self.haskellPackages.hevm;
+  hevmUnwrapped = self.pkgs.haskell.lib.justStaticExecutables self.haskellPackages.hevm;
+  hevm = with self.pkgs; symlinkJoin {
+    name = "hevm";
+    paths = [ hevmUnwrapped ];
+    buildInputs = [ makeWrapper ];
+    postBuild = ''
+      wrapProgram $out/bin/hevm \
+        --prefix PATH : "${lib.makeBinPath ([ solc z3 /* TODO: cvc5 */ ])}"
+    '';
+  };
+
 
   libff = self.callPackage (import ./nix/libff.nix) {};
 
