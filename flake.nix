@@ -31,12 +31,12 @@
     {
       packages =
         forAllSystems (system: {
-          inherit (nixpkgsFor.${system}) dapp ethsign hevm seth;
+          inherit (nixpkgsFor.${system}) dapp ethsign hevm seth solc;
         });
 
       apps =
         forAllSystems (system:
-          nixpkgs.lib.genAttrs [ "dapp" "ethsign" "hevm" "seth" ] (name: {
+          nixpkgs.lib.genAttrs [ "dapp" "ethsign" "hevm" "seth" "solc" ] (name: {
             type = "app";
             program = "${self.packages.${system}.${name}}/bin/${name}";
           }));
