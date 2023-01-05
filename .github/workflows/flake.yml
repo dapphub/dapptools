@@ -17,8 +17,4 @@ jobs:
     steps:
       - uses: actions/checkout@v3
       - uses: cachix/install-nix-action@v18
-      - uses: cachix/cachix-action@v12
-        with:
-          name: dapp
-          signingKey: '${{ secrets.CACHIX_SIGNING_KEY }}'
-      - run: nix build .#{dapp,ethsign,hevm,seth,solc}
+      - run: nix build --accept-flake-config .#{dapp,ethsign,hevm,seth,solc}
