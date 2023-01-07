@@ -1,11 +1,11 @@
 { system ? builtins.currentSystem , ... }:
 
 let
-  rev = "aa576357673d609e618d87db43210e49d4bb1789";
-  nixpkgs = builtins.fetchTarball {
-    name = "nixpkgs-release-21.05";
-    url = "https://github.com/nixos/nixpkgs/tarball/${rev}";
-    sha256 = "1868s3mp0lwg1jpxsgmgijzddr90bjkncf6k6zhdjqihf0i1n2np";
+  nixpkgs = builtins.fetchGit {
+    url = "https://github.com/NixOS/nixpkgs.git";
+    rev = "2dea8991d89b9f1e78d874945f78ca15f6954289";
+    ref = "nixos-22.11";
+    shallow = true;
   };
 in
   # Now return the Nixpkgs configured to use our overlay.

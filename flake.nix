@@ -3,7 +3,7 @@
 
   inputs = {
     # same as in default.nix
-    nixpkgs.url = "github:NixOS/nixpkgs/aa576357673d609e618d87db43210e49d4bb1789";
+    nixpkgs.url = "github:NixOS/nixpkgs/2dea8991d89b9f1e78d874945f78ca15f6954289";
   };
 
   nixConfig = {
