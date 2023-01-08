@@ -18,7 +18,8 @@ import Text.Read (readMaybe)
 
 import qualified Data.Aeson.Encode.Pretty as Encode
 import qualified Data.ByteString.Lazy as BS
-import qualified Data.HashMap.Lazy as Map
+import qualified Data.Aeson.KeyMap as KM
+import qualified Data.Aeson.Key as K
 
 data Op
   = OpNewValue Value
@@ -147,7 +148,7 @@ work stk ops =
     (xs, OpNewValue v : ops') -> work (v : xs) ops'
 
     (v : Object o : xs, OpInsert k : ops') ->
-      work (Object (Map.insert k v o) : xs) ops'
+      work (Object (KM.insert (K.fromText k) v o) : xs) ops'
     (v : Array o : xs, OpInsert "append" : ops') ->
       work (Array (snoc o v) : xs) ops'
     (_, OpInsert "append" : _) ->
@@ -156,7 +157,7 @@ work stk ops =
       Left "error in -i"
 
     (Object o : xs, OpExtract k : ops') ->
-      case Map.lookup k o of
+      case KM.lookup (K.fromText k) o of
         Nothing ->
           Left ("error in -e: no such key: " <> k)
         Just x ->
@@ -185,7 +186,7 @@ work stk ops =
       Left "error in -t"
 
     (Object o : xs, OpKeys : ops') ->
-      (map (fromStrict . encodeUtf8) (sort (Map.keys o)) ++) <$> work xs ops'
+      (map (fromStrict . encodeUtf8) (sort (map K.toText $ KM.keys o)) ++) <$> work xs ops'
     (_, OpKeys : _) ->
       Left "error in -k"
 
