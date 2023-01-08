@@ -1,6 +1,6 @@
-{path, version, sha256}:
+{ path, version, sha256 }:
 
-{stdenv, fetchurl, lib, z3, makeWrapper, autoPatchelfHook}:
+{ stdenv, fetchurl, lib, z3, makeWrapper, autoPatchelfHook }:
 let
   # solc uses dlopen to look for z3 at runtime, and expects to find a library
   # called libz3.so.4.8 exactly. The z3.lib provided by nixpkgs only has a
@@ -27,9 +27,10 @@ stdenv.mkDerivation rec {
   inherit version;
 
   platform =
-    if lib.strings.hasPrefix "solc-linux-amd64" "${path}"
-    then "linux-amd64"
-    else "macosx-amd64";
+    if lib.strings.hasPrefix "solc-linux-amd64" "${path}" then
+      "linux-amd64"
+    else
+      "macosx-amd64";
 
   dontUnpack = true;
   dontConfigure = true;
@@ -40,12 +41,12 @@ stdenv.mkDerivation rec {
     sha256 = "${sha256}";
   };
 
-  nativeBuildInputs = [ autoPatchelfHook makeWrapper ];
+  nativeBuildInputs = [ makeWrapper ] ++ lib.optionals stdenv.isLinux [ autoPatchelfHook ];
 
-  postFixup = if (platform == "linux-amd64") then ''
-      wrapProgram $out/bin/solc-${version} \
-        --prefix LD_LIBRARY_PATH : ${lib.makeLibraryPath [ z3-exact ]}
-  '' else "";
+  postFixup = lib.optionals (platform == "linux-amd64") ''
+    wrapProgram $out/bin/solc-${version} \
+      --prefix LD_LIBRARY_PATH : ${lib.makeLibraryPath [ z3-exact ]}
+  '';
 
   installPhase = ''
     mkdir -p $out/bin
