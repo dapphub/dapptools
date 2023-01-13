@@ -4,6 +4,7 @@
   inputs = {
     # same as in default.nix
     nixpkgs.url = "github:NixOS/nixpkgs/2dea8991d89b9f1e78d874945f78ca15f6954289";
+    ethereum-hevm.url = "github:ethereum/hevm";
   };
 
   nixConfig = {
@@ -14,7 +15,7 @@
     log-lines = 50;
   };
 
-  outputs = { self, nixpkgs }:
+  outputs = { self, nixpkgs, ethereum-hevm }:
     let
       supportedSystems = [
         "aarch64-linux"
@@ -26,7 +27,12 @@
       forAllSystems = nixpkgs.lib.genAttrs supportedSystems;
       nixpkgsFor = forAllSystems (system: import nixpkgs {
         inherit system;
-        overlays = [ (import ./overlay.nix) ];
+        overlays = [
+          (import ./overlay.nix)
+          (final: prev: {
+            hevm = ethereum-hevm.packages.${system}.hevm;
+          })
+        ];
       });
     in
     {
