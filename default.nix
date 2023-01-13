@@ -1,17 +1,16 @@
 { system ? builtins.currentSystem, ... }:
 
 let
+  lock = builtins.fromJSON (builtins.readFile ./flake.lock);
+
   nixpkgs = builtins.fetchGit {
     url = "https://github.com/NixOS/nixpkgs.git";
-    rev = "2dea8991d89b9f1e78d874945f78ca15f6954289";
-    ref = "nixos-22.11";
+    rev = lock.nodes.nixpkgs_2.locked.rev;
     shallow = true;
   };
   ethereum-hevm = import (builtins.fetchGit {
-    name = "ethereum-hevm";
     url = "https://github.com/ethereum/hevm.git";
-    # TODO get from lock filr
-    rev = "3a2465ddf39df868d5f4f69b219a9a584c6a60da";
+    rev = lock.nodes.ethereum-hevm.locked.rev;
     shallow = true;
   });
 in
