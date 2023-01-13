@@ -28,6 +28,9 @@ case $1 in
     solc="solc-${1#solc:}"
     if store_path=$(query "solc-${1#solc:}"); then
       bin="$store_path/bin/solc"
+    elif output=$(query_nix3 "solc-${1#solc:}"); then
+      store_path=$(echo "$output" | cut -d " " -f 4)
+      bin="$store_path/bin/solc"
     elif store_path=$(query "solc-static-${1#solc:}"); then
       bin="$store_path/bin/$solc"
     elif output=$(query_nix3 "solc-static-${1#solc:}"); then
