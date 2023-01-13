@@ -1,4 +1,4 @@
-{ system ? builtins.currentSystem , ... }:
+{ system ? builtins.currentSystem, ... }:
 
 let
   nixpkgs = builtins.fetchGit {
@@ -7,10 +7,23 @@ let
     ref = "nixos-22.11";
     shallow = true;
   };
+  ethereum-hevm = import (builtins.fetchGit {
+    name = "ethereum-hevm";
+    url = "https://github.com/ethereum/hevm.git";
+    # TODO get from lock filr
+    rev = "3a2465ddf39df868d5f4f69b219a9a584c6a60da";
+    shallow = true;
+  });
 in
-  # Now return the Nixpkgs configured to use our overlay.
-  import nixpkgs {
-    inherit system;
 
-    overlays = [(import ./overlay.nix)];
-  }
+# Now return the Nixpkgs configured to use our overlay.
+import nixpkgs {
+  inherit system;
+
+  overlays = [
+    (import ./overlay.nix)
+    (final: prev: {
+      hevm = ethereum-hevm.packages.${system}.hevm;
+    })
+  ];
+}
