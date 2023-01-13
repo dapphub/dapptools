@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# shellcheck disable=SC2309
 ### dapp-address -- determine address of newly generated contract
 ### Usage: dapp address <sender> <nonce>
 set -e
