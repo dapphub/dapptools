@@ -15,6 +15,11 @@ function usage() {
 query() {
   nix-env -q --installed --out-path --no-name "$1" 2>/dev/null
 }
+#
+# Profiles created with the experimental nix commands are incompatible with nix-env ones, so we need to handle them separately.
+query_nix3() {
+  nix profile list 2>/dev/null | grep "$1"
+}
 
 shopt -s extglob
 case $1 in
@@ -24,6 +29,9 @@ case $1 in
     if store_path=$(query "solc-${1#solc:}"); then
       bin="$store_path/bin/solc"
     elif store_path=$(query "solc-static-${1#solc:}"); then
+      bin="$store_path/bin/$solc"
+    elif output=$(query_nix3 "solc-static-${1#solc:}"); then
+      store_path=$(echo "$output" | cut -d " " -f 4)
       bin="$store_path/bin/$solc"
     else
       bin=""
