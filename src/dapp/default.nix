@@ -1,32 +1,66 @@
-{ lib, stdenv, fetchFromGitHub, makeWrapper, glibcLocales
-, coreutils, git, gnugrep, gnused, gnumake, hevm, jshon, jq, nix
-, nodejs, perl, python3, seth, shellcheck, solc, tre, dapptoolsSrc }:
+{ lib
+, stdenv
+, fetchFromGitHub
+, makeWrapper
+, glibcLocales
+, coreutils
+, git
+, gnugrep
+, gnused
+, gnumake
+, hevm
+, jshon
+, jq
+, nix
+, nodejs
+, perl
+, python3
+, seth
+, shellcheck
+, solc
+, tre
+, dapptoolsSrc
+}:
 
 stdenv.mkDerivation rec {
   name = "dapp-${version}";
   version = "0.35.0";
   src = ./.;
 
-  nativeBuildInputs = [makeWrapper shellcheck coreutils nodejs python3];
+  nativeBuildInputs = [ makeWrapper shellcheck coreutils nodejs python3 ];
   buildPhase = "true";
   doCheck = true;
   checkPhase = "make test";
-  makeFlags = ["prefix=$(out)"];
+  makeFlags = [ "prefix=$(out)" ];
 
   postInstall =
     let
       path = lib.makeBinPath [
-        coreutils git gnugrep gnused gnumake hevm jshon jq nix nodejs perl seth solc tre python3
+        coreutils
+        git
+        gnugrep
+        gnumake
+        gnused
+        hevm
+        jq
+        jshon
+        nix
+        nodejs
+        perl
+        python3
+        seth
+        solc
+        tre
       ];
     in
-      ''
+    ''
         wrapProgram "$out/bin/dapp" \
           --prefix PATH : ${path} \
           --set DAPPTOOLS ${dapptoolsSrc} \
         ${lib.optionalString (glibcLocales != null) ''
           --set LOCALE_ARCHIVE ${glibcLocales}/lib/locale/locale-archive
       ''}
-  '';
+    '';
 
   # the patching of python shebangs is needed by the python invocations in
   # src/dapp-tests/integration/tests.sh.
@@ -39,7 +73,7 @@ stdenv.mkDerivation rec {
   meta = {
     description = "Simple tool for creating Ethereum-based dapps";
     homepage = https://github.com/dapphub/dapptools/src/dapp/;
-    maintainers = [lib.maintainers.dbrock];
+    maintainers = [ lib.maintainers.dbrock ];
     license = lib.licenses.gpl3;
     inherit version;
   };
