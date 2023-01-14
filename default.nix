@@ -3,15 +3,15 @@
 let
   lock = builtins.fromJSON (builtins.readFile ./flake.lock);
 
-  nixpkgs = builtins.fetchGit {
-    url = "https://github.com/NixOS/nixpkgs.git";
-    rev = lock.nodes.nixpkgs_2.locked.rev;
-    shallow = true;
+  nixpkgs = builtins.fetchTarball {
+    name = "nixpkgs-release-21.05";
+    url = "https://github.com/nixos/nixpkgs/tarball/${lock.nodes.nixpkgs_2.locked.rev}";
+    sha256 = lock.nodes.nixpkgs_2.locked.narHash;
   };
-  ethereum-hevm = import (builtins.fetchGit {
-    url = "https://github.com/ethereum/hevm.git";
-    rev = lock.nodes.ethereum-hevm.locked.rev;
-    shallow = true;
+  ethereum-hevm = import (builtins.fetchTarball {
+    name = "ethereum-hevm";
+    url = "https://github.com/ethereum/hevm/tarball/${lock.nodes.ethereum-hevm.locked.rev}";
+    sha256 = lock.nodes.ethereum-hevm.locked.narHash;
   });
 in
 
