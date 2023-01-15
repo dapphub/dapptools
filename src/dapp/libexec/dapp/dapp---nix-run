@@ -16,4 +16,4 @@ have() { command -v "$1" >/dev/null; }
 
 expr="$1"; shift
 
-nix run "(with import $DAPPTOOLS {}; $expr)" -c "$@"
+nix run --impure --expr "with import $DAPPTOOLS {}; $expr" -- "$@"
