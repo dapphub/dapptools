@@ -111,9 +111,15 @@ in rec {
 
   token = self.callPackage (import ./src/token) {};
 
+  # Needed for --nix-run subcommands to work,
+  # see `nix help run` for more info.
+  go-ethereum = super.go-ethereum.overrideAttrs (geth: {
+    meta = geth.meta // { mainProgram = "geth"; };
+  });
+
   # We use this to run private testnets without
   # the pesky transaction size limit.
-  go-ethereum-unlimited = (self.callPackage (import ./nix/geth.nix) {}).overrideAttrs (geth: rec {
+  go-ethereum-unlimited = (self.callPackage (import ./nix/geth.nix) { }).overrideAttrs (geth: {
     name = "${geth.pname}-unlimited-${geth.version}";
     preConfigure = ''
       # Huge transaction calldata
@@ -129,6 +135,9 @@ in rec {
         'GasLimit:   11500000,' \
         'GasLimit:   0xffffffffffffffff,'
     '';
+    # Needed for --nix-run subcommands to work,
+    # see `nix help run` for more info.
+    meta = geth.meta // { mainProgram = "geth"; };
   });
 
   qrtx = self.bashScript {
