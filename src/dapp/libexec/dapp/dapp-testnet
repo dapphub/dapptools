@@ -1,4 +1,4 @@
 #!/usr/bin/env bash
 ### dapp-testnet -- launch a testnet
 ### Usage: dapp testnet [<file>]
-dapp --nix-run go-ethereum-unlimited dapp --testnet-launch "$@"
+dapp --testnet-launch "$@"
