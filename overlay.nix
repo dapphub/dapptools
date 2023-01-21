@@ -119,7 +119,7 @@ in rec {
 
   # We use this to run private testnets without
   # the pesky transaction size limit.
-  go-ethereum-unlimited = (self.callPackage (import ./nix/geth.nix) { }).overrideAttrs (geth: {
+  go-ethereum-unlimited = super.go-ethereum.overrideAttrs (geth: {
     name = "${geth.pname}-unlimited-${geth.version}";
     preConfigure = ''
       # Huge transaction calldata
@@ -134,6 +134,8 @@ in rec {
       substituteInPlace core/genesis.go --replace \
         'GasLimit:   11500000,' \
         'GasLimit:   0xffffffffffffffff,'
+
+      substituteInPlace params/version.go --replace stable unlimited
     '';
     # Needed for --nix-run subcommands to work,
     # see `nix help run` for more info.
