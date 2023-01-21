@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity >=0.5.15; 
 contract A {
   function factor(uint x, uint y) public pure {
