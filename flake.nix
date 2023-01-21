@@ -43,5 +43,19 @@
             type = "app";
             program = "${self.packages.${system}.${name}}/bin/${name}";
           }));
+
+      devShells =
+        forAllSystems (system: {
+          default = nixpkgs.legacyPackages.${system}.mkShellNoCC {
+            name = "dapp";
+            buildInputs = with nixpkgsFor.${system}; [
+              dapp
+              ethsign
+              hevm
+              seth
+              solc
+            ];
+          };
+        });
     };
 }
