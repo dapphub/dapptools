@@ -105,7 +105,7 @@ in rec {
   jshon = self.jays;
 
   seth = self.callPackage (import ./src/seth) {};
-  dapp = self.callPackage (import ./src/dapp) {};
+  dapp = self.callPackage (import ./src/dapp) { geth = go-ethereum-unlimited; };
 
   ethsign = (self.callPackage (import ./src/ethsign) {});
 

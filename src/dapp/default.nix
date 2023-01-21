@@ -4,6 +4,7 @@
 , makeWrapper
 , glibcLocales
 , coreutils
+, geth
 , git
 , gnugrep
 , gnused
@@ -39,6 +40,7 @@ stdenv.mkDerivation rec {
       path = lib.makeBinPath [
         coreutils
         eth-utils
+        geth
         git
         gnugrep
         gnumake
