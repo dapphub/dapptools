@@ -1,4 +1,116 @@
 #!/usr/bin/env bash
 ### dapp-testnet -- launch a testnet
 ### Usage: dapp testnet [<file>]
-dapp --testnet-launch "$@"
+
+# shellcheck disable=SC2261
+set -e
+
+DAPP_TESTNET_RPC_PORT=${DAPP_TESTNET_RPC_PORT-8545}
+DAPP_TESTNET_RPC_ADDRESS=${DAPP_TESTNET_RPC_ADDRESS-127.0.0.1}
+DAPP_TESTNET_PERIOD=${DAPP_TESTNET_PERIOD-0}
+DAPP_TESTNET_CHAINID=${DAPP_TESTNET_CHAINID-99}
+DAPP_TESTNET_ACCOUNTS=${DAPP_TESTNET_ACCOUNTS-0}
+DAPP_TESTNET_gethdir=${DAPP_TESTNET_gethdir-$HOME/.dapp/testnet}
+
+chaindir=$DAPP_TESTNET_gethdir/$DAPP_TESTNET_RPC_PORT
+
+if [[ $DAPP_TESTNET_LOAD ]]; then
+  mkdir -p "$chaindir"
+  cp -r "$DAPP_TESTNET_gethdir/snapshots/$DAPP_TESTNET_LOAD"/{keystore,config} "$chaindir"
+  geth >/dev/null 2>&1 --datadir "$chaindir" init "$chaindir/config/genesis.json"
+  geth >/dev/null 2>&1 --datadir "$chaindir" import "$DAPP_TESTNET_gethdir/snapshots/$DAPP_TESTNET_LOAD/backup"
+  keys=$(jq <"$chaindir/config/genesis.json" -r '.alloc | keys | join(" ")')
+  IFS=" " read -r -a address <<< "$keys"
+  DAPP_TESTNET_CHAINID=$(jq <"$chaindir/config/genesis.json" -r ".config.chainId")
+else
+  while true; do
+    if [[ ! -d "$DAPP_TESTNET_gethdir/$DAPP_TESTNET_CHAINID" ]]; then break; fi
+    DAPP_TESTNET_CHAINID=$((DAPP_TESTNET_CHAINID + 1))
+  done
+
+  mkdir -p "$chaindir/config"
+  for i in $(seq 0 "$DAPP_TESTNET_ACCOUNTS"); do
+    address+=( "$(
+      geth 2>/dev/null account new --datadir "$chaindir" --password=<(exit) 2>/dev/null \
+        | grep -o -E "0x[A-Fa-f0-9]*" )" )
+    balance+=(-n {} -s "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff" -i balance \
+      -i "${address[i]}")
+  done
+  jshon >"$chaindir/config/genesis.json" \
+    -n {} \
+    -n {} \
+      -n "$DAPP_TESTNET_CHAINID" -i chainId \
+      -n 0 -i homesteadBlock \
+      -n 0 -i eip150Block \
+      -n 0 -i eip155Block \
+      -n 0 -i eip158Block \
+      -n 0 -i eip160Block \
+      -n 0 -i byzantiumBlock \
+      -n 0 -i constantinopleBlock \
+      -n 0 -i petersburgBlock \
+      -n 0 -i istanbulBlock \
+      -n 0 -i berlinBlock \
+      -n 0 -i londonBlock \
+      -n {} -n "$DAPP_TESTNET_PERIOD" -i period -n 3000 -i epoch -i clique \
+      -i config \
+    -s 0x1 -i difficulty \
+    -s 0xffffffffffffffff -i gaslimit \
+    -s "0x3132333400000000000000000000000000000000000000000000000000000000""${address[0]#0x}""0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000" -i extraData \
+    -n {} \
+      "${balance[@]}" \
+    -i alloc
+  geth 2>/dev/null --datadir "$chaindir" init "$chaindir/config/genesis.json"
+fi
+
+export ETH_RPC_URL=http://$DAPP_TESTNET_RPC_ADDRESS:$DAPP_TESTNET_RPC_PORT
+
+port=$((DAPP_TESTNET_RPC_PORT + 30000))
+
+echo >&2 "dapp-testnet:   RPC URL: $ETH_RPC_URL"
+echo >&2 "dapp-testnet:  TCP port: $port"
+echo >&2 "dapp-testnet:  Chain ID: $DAPP_TESTNET_CHAINID"
+echo >&2 "dapp-testnet:  Database: $chaindir"
+echo >&2 "dapp-testnet:  Geth log: $chaindir/geth.log"
+
+printf "%s\n" "${address[@]}" > "$chaindir/config/account"
+echo "$ETH_RPC_URL"           > "$chaindir/config/rpc-url"
+echo "$port"                  > "$chaindir/config/node-port"
+
+set +m
+geth \
+  2> >(tee "$chaindir/geth.log" | grep --line-buffered Success | sed 's/^/geth: /' >&2) \
+  --datadir "$chaindir" --networkid "$DAPP_TESTNET_CHAINID" --port="$port" \
+  --mine --miner.threads=1 --allow-insecure-unlock \
+  --rpc --rpcapi "web3,eth,net,debug,personal" --rpccorsdomain '*' --nodiscover \
+  --rpcaddr="$DAPP_TESTNET_RPC_ADDRESS" --rpcport="$DAPP_TESTNET_RPC_PORT" --unlock="$(IFS=,; echo "${address[*]}")" --password=<(exit) &
+
+gethpid=$!
+
+clean() {
+  ( set -x; kill -INT $gethpid; wait )
+  if [[ $DAPP_TESTNET_SAVE ]]; then
+    echo >&2 "dapp-testnet: saving $DAPP_TESTNET_gethdir/snapshots/$DAPP_TESTNET_SAVE"
+    mkdir -p "$DAPP_TESTNET_gethdir/snapshots/$DAPP_TESTNET_SAVE"
+    cp -r "$chaindir/keystore" "$DAPP_TESTNET_gethdir/snapshots/$DAPP_TESTNET_SAVE"
+    cp -r "$chaindir/config" "$DAPP_TESTNET_gethdir/snapshots/$DAPP_TESTNET_SAVE"
+    geth >/dev/null 2>&1 --datadir "$chaindir" \
+       export "$DAPP_TESTNET_gethdir/snapshots/$DAPP_TESTNET_SAVE/backup"
+  fi
+  ( set -x; rm -rf "$chaindir" )
+}
+trap clean EXIT
+
+until curl -s "$ETH_RPC_URL"; do sleep 1; done
+
+ETH_FROM=$(seth --rpc-url="$ETH_RPC_URL" rpc eth_coinbase)
+export ETH_FROM
+export ETH_KEYSTORE=$chaindir/keystore
+export ETH_PASSWORD=/dev/null
+printf 'dapp-testnet:   Account: %s (default)\n' "${address[0]}" >&2
+[[ "${#address[@]}" -gt 1 ]] && printf 'dapp-testnet:   Account: %s\n' "${address[@]:1}" >&2
+
+if [[ $1 ]]; then
+  "$@"
+else
+  while true; do sleep 3600; done
+fi
