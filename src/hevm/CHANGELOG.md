@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Support for solc 0.8.15
 - Support for solc 0.8.16
 - Support for solc 0.8.17
+- Support for solc 0.8.18
 
 ### Fixed
 
