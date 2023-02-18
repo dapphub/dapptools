@@ -347,7 +347,7 @@ surrounded in single quotes will be inerpreted literally - you won't be able
 to use variables (`$FOO`) in them.
 
     $ export AMOUNT=$(seth --to-wei 5 ether)
-    $ export TEST=$(seth calldata "f(uint256[])" "[$AMOUNT]"
+    $ export TEST=$(seth calldata "f(uint256[])" "[$AMOUNT]")
     $ seth --calldata-decode "f(uint256[])" $TEST
     5000000000000000000
 
