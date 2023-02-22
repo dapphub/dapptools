@@ -32,6 +32,8 @@
       packages =
         forAllSystems (system: {
           inherit (nixpkgsFor.${system}) dapp ethsign hevm seth;
+
+          solc-versions = pkgs.solc-static-versions;
         });
 
       apps =
