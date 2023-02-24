@@ -26,7 +26,7 @@ Install Nix if you haven't already ([instructions](https://nixos.org/download.ht
 ### With flakes
 
 ```
-nix profile install github:dapphub/dapptools#dapp # or ethsign, hevm, seth
+nix profile install github:dapphub/dapptools#{dapp,ethsign,hevm,seth}
 ```
 
 Nix will offer to use the dapptools binary cache, which will speed up installs,

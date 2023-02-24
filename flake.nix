@@ -10,7 +10,7 @@
     # required to build hevm
     allow-import-from-derivation = true;
     extra-substituters = [ "https://dapp.cachix.org" ];
-    extra-substituters-public-keys = [ "dapp.cachix.org-1:9GJt9Ja8IQwR7YW/aF0QvCa6OmjGmsKoZIist0dG+Rs=" ];
+    extra-trusted-public-keys = [ "dapp.cachix.org-1:9GJt9Ja8IQwR7YW/aF0QvCa6OmjGmsKoZIist0dG+Rs=" ];
   };
 
   outputs = { self, nixpkgs }:
@@ -30,18 +30,9 @@
     in
     {
       packages =
-        forAllSystems (system:
-          let
-            pkgs = nixpkgsFor.${system};
-
-            dapptoolsSrc = pkgs.callPackage (import ./nix/dapptools-src.nix) { };
-          in
-          rec {
-            dapp = pkgs.callPackage (import ./src/dapp) { inherit dapptoolsSrc hevm seth; };
-            ethsign = pkgs.callPackage (import ./src/ethsign) { };
-            hevm = pkgs.hevm;
-            seth = pkgs.callPackage (import ./src/seth) { inherit dapptoolsSrc hevm ethsign; };
-          });
+        forAllSystems (system: {
+          inherit (nixpkgsFor.${system}) dapp ethsign hevm seth;
+        });
 
       apps =
         forAllSystems (system:
