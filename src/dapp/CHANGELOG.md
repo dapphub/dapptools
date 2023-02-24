@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - Support for compilation pipeline going through the Yul intermediate representation
+- Support for installing and running with experimental nix3 commands
 
 ## [0.35.0] - 2021-11-12
 
