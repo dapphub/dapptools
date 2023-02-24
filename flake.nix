@@ -30,18 +30,9 @@
     in
     {
       packages =
-        forAllSystems (system:
-          let
-            pkgs = nixpkgsFor.${system};
-
-            dapptoolsSrc = pkgs.callPackage (import ./nix/dapptools-src.nix) { };
-          in
-          rec {
-            dapp = pkgs.callPackage (import ./src/dapp) { inherit dapptoolsSrc hevm seth; };
-            ethsign = pkgs.callPackage (import ./src/ethsign) { };
-            hevm = pkgs.hevm;
-            seth = pkgs.callPackage (import ./src/seth) { inherit dapptoolsSrc hevm ethsign; };
-          });
+        forAllSystems (system: {
+          inherit (nixpkgsFor.${system}) dapp ethsign hevm seth;
+        });
 
       apps =
         forAllSystems (system:
