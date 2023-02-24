@@ -60,11 +60,9 @@ shift
 
 if [[ -z "$bin" ]]; then
   dapp --nix-run "dapp.override {solc = pkgs.runCommand \"solc\" { } \"mkdir -p \$out/bin; ln -s \${solc-static-versions.${solc//[-.]/_}}/bin/${solc} \$out/bin/solc\";}" out "$@"
-
-  exit 0
 else
   set -e
   SOLCBIN="$(realpath -e "${bin}")"
-fi
 
-DAPP_SOLC="$SOLCBIN" dapp "$@"
+  DAPP_SOLC="$SOLCBIN" dapp "$@"
+fi
