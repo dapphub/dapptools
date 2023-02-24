@@ -51,7 +51,6 @@
             buildInputs = with nixpkgsFor.${system}; [
               dapp
               ethsign
-              hevm
               seth
               solc
             ];
