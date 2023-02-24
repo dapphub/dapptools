@@ -60,6 +60,6 @@ if [[ -z "$bin" ]]; then
 else
   set -e
   SOLCBIN="$(realpath -e "${bin}")"
-fi
 
-DAPP_SOLC="$SOLCBIN" seth "$@"
+  DAPP_SOLC="$SOLCBIN" seth "$@"
+fi
