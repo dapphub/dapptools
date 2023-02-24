@@ -10,7 +10,7 @@
     # required to build hevm
     allow-import-from-derivation = true;
     extra-substituters = [ "https://dapp.cachix.org" ];
-    extra-substituters-public-keys = [ "dapp.cachix.org-1:9GJt9Ja8IQwR7YW/aF0QvCa6OmjGmsKoZIist0dG+Rs=" ];
+    extra-trusted-public-keys = [ "dapp.cachix.org-1:9GJt9Ja8IQwR7YW/aF0QvCa6OmjGmsKoZIist0dG+Rs=" ];
   };
 
   outputs = { self, nixpkgs }:
