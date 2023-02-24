@@ -15,7 +15,7 @@ function usage() {
 query() {
   nix-env -q --installed --out-path --no-name "$1" 2>/dev/null
 }
-#
+
 # Profiles created with the experimental nix commands are incompatible with nix-env ones, so we need to handle them separately.
 query_nix3() {
   nix profile list 2>/dev/null | grep "$1"
