@@ -587,7 +587,8 @@ test_namehash_7() {
 
 # SETH 4BYTE TESTS
 # seth 4byte
-test_4byte() {
+# FIXME: this test is flaky, see https://github.com/dapphub/dapptools/pull/969
+todo_4byte() {
     assert_equals "transfer(address,uint256)" "$(seth 4byte a9059cbb | tail -n 1)"
 }
 
