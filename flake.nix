@@ -30,11 +30,12 @@
     in
     {
       packages =
-        forAllSystems (system: {
-          inherit (nixpkgsFor.${system}) dapp ethsign hevm seth;
+        forAllSystems (system:
+          let pkgs = nixpkgsFor.${system}; in
+          {
+            inherit (pkgs) dapp ethsign hevm seth;
 
-          solc-versions = pkgs.solc-static-versions;
-        });
+          } // pkgs.solc-static-versions);
 
       apps =
         forAllSystems (system:
