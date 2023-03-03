@@ -8,7 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- Support for installing and running with experimental nix3 commands
+- Support for installing and running with [experimental nix commands](https://nixos.org/manual/nix/stable/command-ref/experimental-commands.html)
 
 ## [0.12.0] - 2021-11-12
 
