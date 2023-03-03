@@ -16,8 +16,6 @@
   outputs = { self, nixpkgs }:
     let
       supportedSystems = [
-        "aarch64-linux"
-
         "x86_64-darwin"
         "x86_64-linux"
       ];
@@ -30,9 +28,12 @@
     in
     {
       packages =
-        forAllSystems (system: {
-          inherit (nixpkgsFor.${system}) dapp ethsign hevm seth;
-        });
+        forAllSystems (system:
+          let pkgs = nixpkgsFor.${system}; in
+          {
+            inherit (pkgs) dapp ethsign hevm seth;
+
+          } // pkgs.solc-static-versions);
 
       apps =
         forAllSystems (system:
