@@ -2,7 +2,7 @@
   description = "dapptools";
 
   inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs/2dea8991d89b9f1e78d874945f78ca15f6954289";
+    nixpkgs.url = "github:NixOS/nixpkgs";
     ethereum-hevm.url = "github:ethereum/hevm";
   };
 
