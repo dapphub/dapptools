@@ -24,7 +24,7 @@ jobs:
     steps:
       - uses: actions/checkout@v3
       # v12
-      - uses: cachix/install-nix-action@v18
+      - uses: cachix/install-nix-action@v20
         with:
           # https://discourse.nixos.org/t/understanding-binutils-darwin-wrapper-nix-support-bad-substitution/11475/2
           nix_path: nixpkgs=channel:nixos-unstable

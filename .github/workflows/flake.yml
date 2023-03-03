@@ -16,5 +16,5 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v3
-      - uses: cachix/install-nix-action@v18
+      - uses: cachix/install-nix-action@v20
       - run: nix build --accept-flake-config .#{dapp,ethsign,hevm,seth,solc}
