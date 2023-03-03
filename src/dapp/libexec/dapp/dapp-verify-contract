@@ -77,7 +77,7 @@ address=${2?contractaddress}
 # combined-json has a sourceList field
 if [[ $(jq .sourceList "$DAPP_JSON") == null ]]; then
     contract=$(<"$DAPP_JSON" jq -r ".contracts[\"${path/:*/}\"][\"$name\"]")
-else 
+else
     contract=$(<"$DAPP_JSON" jq -r ".contracts[\"$path\"]")
 fi
 meta=$(jshon <<<"$contract" -e metadata -u)
@@ -131,7 +131,7 @@ params=(
   "apikey=$ETHERSCAN_API_KEY"
 )
 
-source=$(hevm flatten --source-file "$file" --json-file "$DAPP_JSON" --dapp-root "$DAPP_ROOT")
+source=$(eth-utils flatten --source-file "$file" --json-file "$DAPP_JSON" --dapp-root "$DAPP_ROOT")
 
 source=$(cat <<.
 // Verified using https://dapp.tools

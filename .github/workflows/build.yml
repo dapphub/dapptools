@@ -22,20 +22,18 @@ jobs:
       fail-fast: false
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
       # v12
-      - uses: cachix/install-nix-action@v14.1
+      - uses: cachix/install-nix-action@v20
         with:
           # https://discourse.nixos.org/t/understanding-binutils-darwin-wrapper-nix-support-bad-substitution/11475/2
           nix_path: nixpkgs=channel:nixos-unstable
       # v8
-      - uses: cachix/cachix-action@v10
+      - uses: cachix/cachix-action@v12
         with:
           name: dapp
           signingKey: '${{ secrets.CACHIX_SIGNING_KEY }}'
       - name: run dapp tests
         run: nix-shell --pure src/dapp-tests/shell.nix --command 'make ci --directory src/dapp-tests'
-      - name: run hevm symbolic tests
-        run: nix-build -j 1 -A hevm-tests
       - run: nix-collect-garbage
       - run: nix-build release.nix -A dapphub.${{ matrix.os_attr }}.stable

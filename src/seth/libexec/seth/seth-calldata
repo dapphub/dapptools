@@ -19,7 +19,7 @@ if [[ $1 =~ ^([^\(]+)\( ]]; then
     args+=(--arg "$arg")
   done
   calldata=$(
-    hevm abiencode --abi "$abi" "${args[@]}"
+    eth-utils abiencode --abi "$abi" "${args[@]}"
   )
   if [[ $calldata = error* ]]; then
     echo >&2 "hevm: $calldata"

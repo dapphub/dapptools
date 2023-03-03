@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Usage: dapp --nix-run PKG COMMAND...
 # Example:
-#   $ dapp --nix-run go-ethereum geth --version
+#   $ dapp --nix-run go-ethereum geth version
 #
 # Runs a command with the binaries from a named Nix package in PATH.
 
@@ -16,4 +16,4 @@ have() { command -v "$1" >/dev/null; }
 
 expr="$1"; shift
 
-nix run "(with import $DAPPTOOLS {}; $expr)" -c "$@"
+nix run --impure --expr "with import $DAPPTOOLS {}; $expr" -- "$@"

@@ -38,10 +38,6 @@ in rec {
   # Here we can make e.g. integration tests for Dappsys.
   dapp-tests = import ./src/dapp-tests { inherit (self) pkgs; };
 
-  # These are tests that verify the correctness of hevm symbolic using various
-  # external test suites (e.g. the solc tests)
-  hevm-tests = import ./nix/hevm-tests { pkgs = self.pkgs; };
-
   bashScript = { name, version ? "0", deps ? [], text, check ? true } :
     self.pkgs.writeTextFile {
       name = "${name}-${version}";
@@ -79,7 +75,10 @@ in rec {
           fetchSolcVersions { owner = "dapphub"; attr = "unreleased_" + super.system; }
         );
 
-  solc = self.pkgs.runCommand "solc" { } "mkdir -p $out/bin; ln -s ${solc-static-versions.solc_0_8_6}/bin/solc-0.8.6 $out/bin/solc";
+  solc = self.pkgs.runCommand "solc" { } ''
+    mkdir -p $out/bin
+    ln -s ${solc-static-versions.solc_0_8_6}/bin/solc-0.8.6 $out/bin/solc
+  '';
 
   solc-static-versions =
     let
@@ -93,11 +92,7 @@ in rec {
     in builtins.mapAttrs make-solc-drv
         (builtins.getAttr super.system (import ./nix/solc-static-versions.nix));
 
-  # uses solc, z3 and cvc4 from nix
-  hevm = self.pkgs.haskell.lib.justStaticExecutables self.haskellPackages.hevm;
-
-  # uses solc, z3 and cvc4 from PATH
-  hevmUnwrapped = self.pkgs.haskell.lib.justStaticExecutables self.unwrappedHaskellPackages.hevm;
+  eth-utils = self.pkgs.haskell.lib.justStaticExecutables self.haskellPackages.eth-utils;
 
   libff = self.callPackage (import ./nix/libff.nix) {};
 
@@ -110,15 +105,21 @@ in rec {
   jshon = self.jays;
 
   seth = self.callPackage (import ./src/seth) {};
-  dapp = self.callPackage (import ./src/dapp) {};
+  dapp = self.callPackage (import ./src/dapp) { geth = go-ethereum-unlimited; };
 
   ethsign = (self.callPackage (import ./src/ethsign) {});
 
   token = self.callPackage (import ./src/token) {};
 
+  # Needed for --nix-run subcommands to work,
+  # see `nix help run` for more info.
+  go-ethereum = super.go-ethereum.overrideAttrs (geth: {
+    meta = geth.meta // { mainProgram = "geth"; };
+  });
+
   # We use this to run private testnets without
   # the pesky transaction size limit.
-  go-ethereum-unlimited = (self.callPackage (import ./nix/geth.nix) {}).overrideAttrs (geth: rec {
+  go-ethereum-unlimited = super.go-ethereum.overrideAttrs (geth: {
     name = "${geth.pname}-unlimited-${geth.version}";
     preConfigure = ''
       # Huge transaction calldata
@@ -133,7 +134,12 @@ in rec {
       substituteInPlace core/genesis.go --replace \
         'GasLimit:   11500000,' \
         'GasLimit:   0xffffffffffffffff,'
+
+      substituteInPlace params/version.go --replace stable unlimited
     '';
+    # Needed for --nix-run subcommands to work,
+    # see `nix help run` for more info.
+    meta = geth.meta // { mainProgram = "geth"; };
   });
 
   qrtx = self.bashScript {

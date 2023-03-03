@@ -16,6 +16,11 @@ query() {
   nix-env -q --installed --out-path --no-name "$1" 2>/dev/null
 }
 
+# Profiles created with the experimental nix commands are incompatible with nix-env ones, so we need to handle them separately.
+query_nix3() {
+  nix profile list 2>/dev/null | grep "$1"
+}
+
 shopt -s extglob
 case $1 in
   # package spec e.g. solc:0.4.12
@@ -23,7 +28,13 @@ case $1 in
     solc="solc-${1#solc:}"
     if store_path=$(query "solc-${1#solc:}"); then
       bin="$store_path/bin/solc"
+    elif output=$(query_nix3 "solc-${1#solc:}"); then
+      store_path=$(echo "$output" | cut -d " " -f 4)
+      bin="$store_path/bin/solc"
     elif store_path=$(query "solc-static-${1#solc:}"); then
+      bin="$store_path/bin/$solc"
+    elif output=$(query_nix3 "solc-static-${1#solc:}"); then
+      store_path=$(echo "$output" | cut -d " " -f 4)
       bin="$store_path/bin/$solc"
     else
       bin=""
@@ -48,15 +59,10 @@ shift
 [[ "$#" -gt 0 ]] || usage
 
 if [[ -z "$bin" ]]; then
-  echo >&2 "${0##*/}: Could not find ${solc} in your path or nix store."
-  echo >&2 "Temporarily installing ${solc}..."
-  echo >&2 "Tip: run \`nix-env -f https://github.com/dapphub/dapptools/archive/master.tar.gz -iA solc-static-versions.${solc//[-.]/_}\` for a lasting installation of this version."
-  dapp --nix-run "dapp.override {solc = pkgs.runCommand \"solc\" { } \"mkdir -p \$out/bin; ln -s \${solc-static-versions.${solc//[-.]/_}}/bin/${solc} \$out/bin/solc\";}" dapp "$@"
-
-  exit 0
+  dapp --nix-run "dapp.override {solc = pkgs.runCommand \"solc\" { } \"mkdir -p \$out/bin; ln -s \${solc-static-versions.${solc//[-.]/_}}/bin/${solc} \$out/bin/solc\";}" out "$@"
 else
   set -e
   SOLCBIN="$(realpath -e "${bin}")"
-fi
 
-DAPP_SOLC="$SOLCBIN" dapp "$@"
+  DAPP_SOLC="$SOLCBIN" dapp "$@"
+fi
