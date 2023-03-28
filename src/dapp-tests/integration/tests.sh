@@ -226,6 +226,24 @@ test_custom_solc_json() {
     assert "[[ -f out/dapp.sol.json ]]"
 }
 
+test_dapp_use() {
+    # init custom json
+    dapp mk-standard-json > config.json
+
+    # build with custom json
+    DAPP_STANDARD_JSON="config.json" dapp --use solc:"0.5.15" build
+    assert "[[ -f out/dapp.sol.json ]]"
+}
+
+test_seth_use() {
+    # init custom json
+    dapp mk-standard-json > config.json
+
+    # build with custom json
+    DAPP_STANDARD_JSON="config.json" dapp --use solc:"0.5.15" build
+    assert "[[ -f out/dapp.sol.json ]]"
+}
+
 test_gas_snapshots() {
     tmp=$(mktemp -d)
 
