@@ -244,6 +244,16 @@ test_seth_use() {
     assert "[[ -f out/dapp.sol.json ]]"
 }
 
+test_dapp_nix_run_geth_version() {
+  dapp --nix-run go-ethereum geth version
+}
+
+test_dapp_nix_run_solc_version() {
+  VERSION=$(dapp --nix-run "solc-versions.solc_0_5_12" solc --version | tail -1 | cut -d: -f2 | cut -d+ -f1)
+
+  assert_equals "$VERSION" " 0.5.12"
+}
+
 test_gas_snapshots() {
     tmp=$(mktemp -d)
 
