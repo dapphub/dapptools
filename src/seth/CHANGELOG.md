@@ -10,6 +10,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Support for installing and running with [experimental nix commands](https://nixos.org/manual/nix/stable/command-ref/experimental-commands.html)
 
+### Fixed
+
+- `seth --nix-run` invocations
+
 ## [0.12.0] - 2021-11-12
 
 ### Changed
