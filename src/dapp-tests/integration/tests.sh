@@ -628,7 +628,8 @@ test_to_fix4() {
 }
 
 # SETH RUN-TX TESTS
-test_run_tx_source_fetching() {
+# currently broken on the hevm side: https://github.com/ethereum/hevm/issues/243
+todo_run_tx_source_fetching() {
     export ETH_RPC_URL=$ARCHIVE_NODE_URL
     local out err
     out=$(mktemp)
