@@ -31,7 +31,7 @@
 ###
 ###   SMT options:
 ### smttimeout=<number>        timeout passed to the smt solver in ms (default 60000)
-### solver=<string>            name of the smt solver to use (either 'z3' or 'cvc4')
+### solver=<string>            name of the smt solver to use (either 'z3' or 'cvc5')
 ### max-iterations=<number>    number of times we may revisit a particular branching point
 ### smtdebug                   print the SMT queries produced by hevm
 ###
@@ -80,7 +80,7 @@ rpc-block=<number>   block number (latest if not specified)
 
   SMT options:
 smttimeout=<number>        timeout passed to the smt solver in ms (default 60000)
-solver=<string>            name of the smt solver to use (either 'z3' or 'cvc4')
+solver=<string>            name of the smt solver to use (either 'z3' or 'cvc5')
 max-iterations=<number>    number of times we may revisit a particular branching point
 smtdebug                   print the SMT queries produced by hevm
 

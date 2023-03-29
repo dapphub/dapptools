@@ -18,7 +18,7 @@
 ###
 ### SMT options:
 ###   --smttimeout <number>     timeout passed to the smt solver in ms (default 600000)
-###   --solver <string>         name of the smt solver to use (either "z3" or "cvc4")
+###   --solver <string>         name of the smt solver to use (either "z3" or "cvc5")
 ###   --max-iterations <number> number of times we may revisit a particular branching point
 set -e
 have() { command -v "$1" >/dev/null; }

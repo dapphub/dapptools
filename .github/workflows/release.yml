@@ -50,7 +50,7 @@ jobs:
         run: |
           .github/scripts/install-solc.sh
           .github/scripts/install-z3.sh
-          .github/scripts/install-cvc4.sh
+          .github/scripts/install-cvc5.sh
         env:
           HOST_OS: ${{ runner.os }}
 

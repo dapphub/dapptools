@@ -16,6 +16,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `dapp --nix-run` invocations
 
+### Changed
+
+- Switch SMT solver from cvc4 to cvc5
+
 ## [0.35.0] - 2021-11-12
 
 ### Added

@@ -326,7 +326,7 @@ variables](../hevm/README.md#environment-variables).
 | `DAPP_TEST_DEPTH`          | `20`                       | Number of transactions to sequence per invariant cycle                                                                                             |
 | `DAPP_TEST_SMTTIMEOUT`     | `60000`                    | Timeout passed to the smt solver for symbolic tests (in ms, and per smt query)                                                                     |
 | `DAPP_TEST_MAX_ITERATIONS` | n/a                        | The number of times hevm will revisit a particular branching point when symbolically executing                                                     |
-| `DAPP_TEST_SOLVER`         | `z3`                       | Solver to use for symbolic execution (`cvc4` or `z3`)                                                                                              |
+| `DAPP_TEST_SOLVER`         | `z3`                       | Solver to use for symbolic execution (`cvc5` or `z3`)                                                                                              |
 | `DAPP_TEST_MATCH`          | n/a                        | Regex used to determine test methods to run                                                                                                        |
 | `DAPP_TEST_COV_MATCH`      | n/a                        | Regex used to determine which files to print coverage reports for. Prints all imported files by default (excluding tests and libs).                |
 | `DAPP_TEST_REPLAY`         | n/a                        | Calldata for a specific property test case to replay in the debugger                                                                               |
@@ -447,7 +447,7 @@ You can override this with the `DAPP_REMAPPINGS` environment variable.
 
     SMT options:
         --smttimeout <number>     timeout passed to the smt solver in ms (default 60000)
-        --solver <string>         name of the smt solver to use (either "z3" or "cvc4")
+        --solver <string>         name of the smt solver to use (either "z3" or "cvc5")
         --max-iterations <number> number of times we may revisit a particular branching point during symbolic execution
 
 dapp tests are written in Solidity using the `ds-test` module. To install it, run

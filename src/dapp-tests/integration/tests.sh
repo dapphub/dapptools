@@ -190,16 +190,16 @@ test_hevm_symbolic() {
 
     solc --bin-runtime -o . --overwrite "$CONTRACTS/factor.sol"
     # should find counterexample
-    hevm symbolic --code "$(<A.bin-runtime)" --sig "factor(uint x, uint y)" --smttimeout 40000 --solver cvc4 && fail || echo "hevm success: found counterexample"
+    hevm symbolic --code "$(<A.bin-runtime)" --sig "factor(uint x, uint y)" --smttimeout 40000 --solver cvc5 && fail || echo "hevm success: found counterexample"
     hevm symbolic --code "$(<"$CONTRACTS/dstoken.bin-runtime")" --sig "transferFrom(address, address, uint)" --get-models &> /dev/null || fail
 
     solc --bin-runtime -o . --overwrite "$CONTRACTS/token.sol"
-    # This one explores all paths (cvc4 is better at this)
-    hevm symbolic --code "$(<Token.bin-runtime)" --solver cvc4 || fail
+    # This one explores all paths (cvc5 is better at this)
+    hevm symbolic --code "$(<Token.bin-runtime)" --solver cvc5 || fail
 
     # The contracts A and B should be equivalent:
     solc --bin-runtime -o . --overwrite "$CONTRACTS/AB.sol"
-    hevm equivalence --code-a "$(<A.bin-runtime)" --code-b "$(<B.bin-runtime)" --solver cvc4 || fail
+    hevm equivalence --code-a "$(<A.bin-runtime)" --code-b "$(<B.bin-runtime)" --solver cvc5 || fail
 }
 
 test_custom_solc_json() {
