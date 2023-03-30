@@ -34,6 +34,6 @@ jobs:
           name: dapp
           signingKey: '${{ secrets.CACHIX_SIGNING_KEY }}'
       - name: run dapp tests
-        run: nix-shell --pure src/dapp-tests/shell.nix --command 'make ci --directory src/dapp-tests'
+        run: FORCE_COLOR=true nix-shell --pure src/dapp-tests/shell.nix --command 'make ci --directory src/dapp-tests'
       - run: nix-collect-garbage
-      - run: FORCE_COLOR=true nix-build release.nix -A dapphub.${{ matrix.os_attr }}.stable
+      - run: nix-build release.nix -A dapphub.${{ matrix.os_attr }}.stable
