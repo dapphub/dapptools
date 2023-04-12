@@ -2,6 +2,6 @@ test:
 	bash_unit integration/tests.sh
 
 ci:
-	FUZZ_RUNS=10000 TESTNET_SLEEP=90 bash_unit -r integration/tests.sh
+	FUZZ_RUNS=10000 TESTNET_SLEEP=90 bash_unit -r integration/tests.sh -f tap
 
 .PHONY: test
