@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Usage: seth --nix-run PKG COMMAND...
 # Example:
-#   $ seth --nix-run go-ethereum geth version
+#   $ seth --nix-run go-ethereum version
 #
 # Runs a command with the binaries from a named Nix package in PATH.
 
