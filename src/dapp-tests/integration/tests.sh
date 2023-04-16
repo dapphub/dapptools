@@ -292,7 +292,9 @@ test_nonce_1() {
     assert_equals 1 "$(seth nonce "$account")"
 }
 
-test_block_1() {
+# FIXME: another flaky test, see
+# https://github.com/dapphub/dapptools/actions/runs/4697496702/jobs/8328631285
+todo_block_1() {
     local account
     account=$(fresh_account)
 
