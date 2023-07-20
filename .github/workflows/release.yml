@@ -30,18 +30,18 @@ jobs:
           apt-get: ${{ matrix.apt-get }}
 
       - name: Checkout
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
 
       - name: Cache Local
         id: cache-local
-        uses: actions/cache@v1
+        uses: actions/cache@v3
         with:
           path: ~/.local/
           key: ${{ runner.os }}-local-v3
 
       - name: Cache Stack
         id: cache-stack
-        uses: actions/cache@v1
+        uses: actions/cache@v3
         with:
           path: ~/.stack
           key: ${{ runner.os }}-stack-v3
@@ -82,7 +82,7 @@ jobs:
         run: .github/scripts/build-macos-release.sh
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v1
+        uses: actions/upload-artifact@v3
         with:
           name: hevm-${{ runner.os }}
           path: hevm.tar.gz
@@ -92,17 +92,17 @@ jobs:
     needs: macosRelease
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
+      # v22
+      - uses: cachix/install-nix-action@v22
       # v12
-      - uses: cachix/install-nix-action@v20
-      # v8
-      - uses: cachix/cachix-action@v10
+      - uses: cachix/cachix-action@v12
         with:
           name: dapp
           signingKey: '${{ secrets.CACHIX_SIGNING_KEY }}'
       - run: nix-build -A hevmUnwrapped --out-link hevmLinux
 
-      - uses: actions/download-artifact@master
+      - uses: actions/download-artifact@v3
         with:
           name: hevm-macOS
           path: hevm-macOS
