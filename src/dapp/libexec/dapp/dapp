@@ -23,7 +23,7 @@
 ### cache=<string>       use the cache at directory
 ### ffi                  allow the use of the ffi cheatcode (WARNING: allows test authors to execute arbitrary code on your machine)
 ### coverage             print coverage data
-
+###
 ###   RPC options:
 ### rpc                  fetch remote state via ETH_RPC_URL
 ### rpc-url=<string>     fetch remote state via <url>
@@ -40,7 +40,7 @@
 ###
 ###   Contract verifying options:
 ### async                      don't wait for confirmation
-
+###
 ###   Dapp testnet options:
 ### rpc-port=port      change RPC port (default: 8545)
 ### rpc-addr=address   change RPC address (default: 127.0.0.1)
@@ -50,6 +50,11 @@
 ### save=name          after finishing, save snapshot
 ### load=name          start from a previously saved snapshot
 ### dir=directory      testnet directory
+###
+###   Mutate Options:
+### mutants-dir=<string>  the directory in which mutants should be stored
+### test-command=<string> the command to use for test execution when filtering mutants
+### timeout=<number>      timeout to use when filtering mutants
 
 
 OPTS="dapp [<options>] <command> [<args>]
@@ -99,6 +104,11 @@ accounts=number    create multiple accounts (default: 1)
 save=name          after finishing, save snapshot
 load=name          start from a previously saved snapshot
 dir=directory      testnet directory
+
+  Mutate Options:
+mutants-dir=<string>  the directory in which mutants should be stored
+test-command=<string> the command to use for test execution when filtering mutants
+timeout=<number>      timeout to use when filtering mutants
 "
 
 set -e
@@ -180,6 +190,9 @@ while [[ $1 ]]; do
     --load)            shift; export DAPP_TESTNET_LOAD=$1;;
     --dir)             shift; export DAPP_TESTNET_gethdir=$1;;
 
+    --mutants-dir)     shift; export DAPP_MUTANTS_DIR=$1;;
+    --test-command)    shift; export DAPP_MUTANTS_TEST_COMMAND=$1;;
+    --timoeut)         shift; export DAPP_MUTANTS_TIMEOUT=$1;;
 
     *) printf "${0##*/}: internal error: %q\\n" "$1"; exit 1
   esac; shift

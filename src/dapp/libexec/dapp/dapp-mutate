@@ -1,0 +1,95 @@
+#!/usr/bin/env bash
+### dapp mutate -- mutation testing framework
+### Usage: dapp mutate <cmd> [<options>]
+###
+### dapp mutate provides utilities for mutation testing. Four subcommands are available:
+###
+### gen:        apply mutations and store them in --mutants-dir
+### filter:     run the project test suite against each mutant, keep the ones where the test suite passes
+### show-diffs: display the mutatations that were not detected by the test suite
+### status:     display the current status of the mutation campaign
+###
+### To begin a mutation testing campaign, run dapp mutate gen, this will
+### generate mutated versions of all non test source files in your project and
+### place them in ./mutants.
+### Once you have some mutants you can run dapp mutate filter to check if the
+### mutations are detected by the test suite. You can run dapp mutate show-diffs
+### to display the undetected mutations and dapp mutate status to display the current
+### progress of the mutation campgaign.
+###
+### Options:
+###   -m, --match <string>    only operate on files matching the given regex
+###   --timeout <number>      maximum time given for the test command when filtering
+###   --test-command <string> the command to use for test execution when filtering mutants
+###   --mutants-dir <string>  the directory in which mutants should be stored
+
+set -euo pipefail
+
+export DAPP_TEST_MATCH=${DAPP_TEST_MATCH:-".+[^\.][^t]\.sol$"}
+export DAPP_MUTANTS_DIR=${DAPP_MUTANTS_DIR:-mutants}
+export DAPP_MUTANTS_TEST_COMMAND=${DAPP_MUTANTS_TEST_COMMAND:-"dapp test"}
+export DAPP_MUTANTS_TIMEOUT=${DAPP_MUTANTS_TIMEOUT:-60}
+export DAPP_SOLC=${DAPP_SOLC:-"solc"}
+
+mkdir -p "./$DAPP_MUTANTS_DIR"
+
+[[ -z $1 ]] && dapp help mutate && exit 0
+
+export root
+root=$(pwd)
+
+case "$1" in
+    "gen")
+        # shellcheck disable=SC2153
+        files=$(find "$root/$DAPP_SRC" -type f -regex "$DAPP_TEST_MATCH")
+
+        # we run in a tmpdir since universalmutator spams tmp files in the cwd...
+        tmp=$(mktemp -d)
+        cd "$tmp" || exit
+        # shellcheck disable=SC2064
+        trap "rm -rf $tmp; exit 1" EXIT
+
+        for f in $files; do
+            mutate \
+                --mutantDir "$root/$DAPP_MUTANTS_DIR" \
+                --cmd "eval $DAPP_SOLC $(dapp remappings) MUTANT --asm --optimize --allow-paths ." \
+                "$f"
+        done
+    ;;
+
+    "filter")
+        files=$(find "$root/$DAPP_SRC" -type f -regex "$DAPP_TEST_MATCH")
+
+        for f in $files; do
+            analyze_mutants "$f" "$DAPP_MUTANTS_TEST_COMMAND" \
+                --mutantDir "./$DAPP_MUTANTS_DIR" \
+                --timeout "$DAPP_MUTANTS_TIMEOUT" \
+                --prefix mutants \
+                --show \
+                --resume
+        done
+    ;;
+
+    "status")
+        total=$(find "$DAPP_MUTANTS_DIR" -type f | wc -l)
+        killed=$(wc -l < mutants.killed.txt)
+        notkilled=$(wc -l < mutants.notkilled.txt)
+        tested=$(bc <<< "$killed + $notkilled")
+
+        echo "$total mutants generated, $tested were tested"
+        echo "$killed mutations were detected by the test suite"
+        echo "$notkilled mutations were undetected by the test suite"
+    ;;
+
+    "show-diffs")
+        mapfile -t notkilled < <(cat mutants.notkilled.txt)
+        for f in "${notkilled[@]}"; do
+            echo
+            src="$DAPP_SRC/$(echo "$f" | sed -e 's|\.mutant\..*\.sol$|\.sol|g')"
+            echo "$f -> $src"
+            diff --color "$DAPP_MUTANTS_DIR/$f" "$src" || :
+        done
+    ;;
+
+    *) printf "${0##*/}: unrecognised subcommand: %q\\n" "$1"; exit 1
+esac
