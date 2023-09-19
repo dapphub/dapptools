@@ -592,6 +592,8 @@ Spins up a geth testnet.
 
     dapp-verify-contract -- verify contract source on etherscan
     Usage: dapp verify-contract <path>:<contractname> <address> [constructorArgs]
+    
+Example: `dapp verify-contract src/auth/authorities/RolesAuthority.sol:RolesAuthority 0x9ed0e..`
 
 Example: `dapp verify-contract src/auth/authorities/RolesAuthority.sol:RolesAuthority 0x9ed0e..`
 
