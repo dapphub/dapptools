@@ -23,8 +23,6 @@ set -e
 
 [[ $ETH_FROM ]] ||
 seth --fail "${0##*/}: error: \`ETH_FROM' not set; send from which account?"
-[[ $ETH_GAS ]] ||
-echo >&2 "${0##*/}: warning: \`ETH_GAS' not set; using default gas amount"
 if [[ $SETH_RESEND ]]; then
   nonce=$(seth nonce "$ETH_FROM")
   export ETH_NONCE=$nonce
@@ -44,9 +42,18 @@ else
   fi
 fi
 
+if [[ -z "$ETH_GAS" ]]; then
+  if [[ $SETH_CREATE ]]; then
+    ETH_GAS=$(seth estimate --create $DATA)
+  else
+    ETH_GAS=$(seth estimate $TO ${DATA:-0x})
+  fi
+fi
+
 jshon+=(-n {})
 [[ $TO ]] && jshon+=(-s "$TO" -i to)
 [[ $DATA ]] && jshon+=(-s "$DATA" -i data)
+[[ $ETH_GAS ]] && jshon+=(-s "$ETH_GAS" -i gas)
 # shellcheck disable=SC2207
 jshon+=($(seth --send-params))
 jshon+=(-i append)

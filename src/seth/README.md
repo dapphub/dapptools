@@ -238,7 +238,6 @@ wei—the smallest possible amount of ether—to the [Ethereum
 Foundation's donation address]:
 
     $ seth send --value 1 0xfB6916095ca1df60bB79Ce92cE3Ea74c37c5d359
-    seth-send: warning: `ETH_GAS' not set; using default gas amount
     Ethereum account passphrase (not echoed):
     seth-send: Published transaction with 0 bytes of calldata.
     seth-send: 0xe428d4bb148ded426777ae892578507e4f394f608ad9d3a9d0229e8348ba72e3
@@ -667,6 +666,7 @@ node's gas estimation.
     seth estimate [<options>] <to> <sig> [<args>]
     seth estimate [<options>] --create <code> <sig> [<args>]
     seth estimate [<options>] --create <code> <data>
+    seth estimate [<options>] --create <data>
 
 Options are similar to [`seth send`], but no transaction is published.
 
@@ -836,7 +836,7 @@ Sign and publish a transaction to the blockchain.
 | ------------- | --------------- | ------------ | ---------------                   |
 | `--block`     | `ETH_BLOCK`     | `latest`     | block number                      |
 | `--from`      | `ETH_FROM`      | n/a          | sender                            |
-| `--gas`       | `ETH_GAS`       | `200000`     | gas quantity                      |
+| `--gas`       | `ETH_GAS`       | estimated    | gas quantity                      |
 | `--gas-price` | `ETH_GAS_PRICE` |              | gas price                         |
 | `--prio-fee`  | `ETH_PRIO_FEE`  |              | EIP-1559 priority fee (miner tip) |
 | `--value`     | `ETH_VALUE`     | `0`          | ether value                       |

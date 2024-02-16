@@ -4,6 +4,7 @@
 ###    or: seth estimate [<options>] <receiver> <data>
 ###    or: seth estimate [<options>] --create <code> <sig> [<args>]
 ###    or: seth estimate [<options>] --create <code> <data>
+###    or: seth estimate [<options>] --create <data>
 ###
 ### Perform a local call to <receiver> and return the gas usage.
 ###
@@ -15,7 +16,7 @@
 ### With `-F <sender>', simulate calling <receiver> from <sender>
 ### With `-V <value>', simulate transferring <value> to <receiver>.
 set -e
-[[ $2 ]] || seth --fail-usage "$0"
+[[ $1 ]] || seth --fail-usage "$0"
 
 if [[ $SETH_CREATE ]]; then
   DATA=$(seth --to-hexdata "$1")

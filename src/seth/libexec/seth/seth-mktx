@@ -13,20 +13,34 @@ if [[ $2 ]]; then
   data=$(seth calldata "${@:2}")
 fi
 
+data=${data:-0x}
+
+if [[ -z "$SETH_CREATE" ]]; then
+  TO=$(seth --to-address "$1")
+fi
+
+if [[ -z "$ETH_GAS" ]]; then
+  if [[ $SETH_CREATE ]]; then
+    ETH_GAS=$(seth estimate --create $data)
+  else
+    ETH_GAS=$(seth estimate $TO $data)
+  fi
+fi
+
 args=(
   --from "$(seth --to-address "$ETH_FROM")"
   --nonce "${ETH_NONCE:-$(seth nonce "$ETH_FROM")}"
   --chain-id "$(seth chain-id)"
   --gas-price "${ETH_GAS_PRICE:-$(seth gas-price)}"
-  --gas-limit "${ETH_GAS:-200000}"
+  --gas-limit "$ETH_GAS"
   --value "$value"
-  --data "${data:-0x}"
+  --data "$data"
 )
 
 if [[ $SETH_CREATE ]]; then
   args+=(--create)
 else
-  args+=(--to "$(seth --to-address "$1")")
+  args+=(--to "$TO")
 fi
 
 if [[ $ETH_PRIO_FEE ]]; then
