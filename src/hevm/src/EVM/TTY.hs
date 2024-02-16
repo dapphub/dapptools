@@ -838,7 +838,12 @@ isNextSourcePosition
 isNextSourcePosition ui vm =
   let dapp' = dapp (view uiTestOpts ui)
       initialPosition = currentSrcMap dapp' (view uiVm ui)
-  in currentSrcMap dapp' vm /= initialPosition
+      currentPosition = currentSrcMap dapp' vm
+  in (not . isNullPosition $ currentPosition) && (currentPosition /= initialPosition)
+
+isNullPosition :: Maybe SrcMap -> Bool
+isNullPosition (Just (SM{..})) = srcMapOffset == -1 && srcMapLength == -1 && srcMapFile == -1
+isNullPosition Nothing = True
 
 isNextSourcePositionWithoutEntering
   :: UiVmState -> Pred VM
