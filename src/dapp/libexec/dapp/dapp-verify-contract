@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-### dapp-verify-contract -- verify contract souce on etherscan
+### dapp-verify-contract -- verify contract source on etherscan
 ### Usage: dapp verify-contract <path>:<contractname> <address> [constructorArgs]
 
 set -e
@@ -149,8 +149,8 @@ while [ $count -lt 5 ]; do
   response=$(curl -fsS "$ETHERSCAN_API_URL" -d "$query" \
   --data-urlencode "compilerversion=$version" \
   --data-urlencode "sourceCode@"<(echo "$source") \
-  --data-urlencode "constructorArguements=$constructorArguments" -X POST)
-  # NOTE: the Arguements typo is in etherscan's API
+  --data-urlencode "constructorArguments=$constructorArguments" -X POST)
+  # NOTE: the Arguments typo is in etherscan's API
 
   status=$(jshon <<<"$response" -e status -u)
   guid=$(jshon <<<"$response" -e result -u)

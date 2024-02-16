@@ -59,12 +59,12 @@ contract SolidityTest is DSTest, DSMath {
 
         uint expected = usr == address(this)
                         ? 0    // self transfer is a noop
-                        : amt; // otherwise `amt` has been transfered to `usr`
+                        : amt; // otherwise `amt` has been transferred to `usr`
         assertEq(expected, postbal - prebal);
     }
 
     function prove_burn(uint supply, uint amt) public {
-        if (amt > supply) return; // no undeflow
+        if (amt > supply) return; // no underflow
 
         token.mint(supply);
         token.burn(amt);
