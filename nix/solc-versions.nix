@@ -49,6 +49,7 @@ rec {
     solc_0_6_8  = { rev = "9d68154c4128d6abb435083c527f4b4570a0c4cb"; sha256 = "0pm3x1nwxlbk04hhp15azr2c34rhawalji8g730p1i01i9icq3lz"; };
     solc_0_6_12  ={ rev = "d8136afba5e0442b5bd5f4c83a670e6696f6f350"; sha256 = "01v6vzq57c5l8i79cmhxvf50hi9r75mbqggd0wand9sjzz9q72fi"; };
     solc_0_8_1   ={ rev = "a8d654271e4ca5109083892906325765cf988808"; sha256 = "1c5fsj8j9x14fprnjicayhlak6hj401kqjj92q2hrg3k90gziq92"; };
+    solc_0_8_21   ={ rev = "66867a88354d9db75a72e0d1460b1437f12ed5df"; sha256 = "0dri2fyq722y3yfslhmzy3j5nhwkckhn8dqp9m8c44vs3nbf7ndq"; };
   };
 
   unreleased_x86_64-darwin = removeAttrs unreleased_x86_64-linux [ "solc_0_4_18" "solc_0_6_12" "solc_0_8_1" ];
