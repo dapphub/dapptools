@@ -40,7 +40,7 @@ stdenv.mkDerivation rec {
     sha256 = "${sha256}";
   };
 
-  nativeBuildInputs = [ autoPatchelfHook makeWrapper ];
+  nativeBuildInputs = [ makeWrapper ] ++ lib.optional stdenv.isLinux autoPatchelfHook;
 
   postFixup = if (platform == "linux-amd64") then ''
       wrapProgram $out/bin/solc-${version} \
