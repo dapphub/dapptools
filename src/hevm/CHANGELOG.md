@@ -42,6 +42,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Test contracts with no code (e.g. `abstract` contracts) are now skipped
 - Replay data for invariant tests is now displayed in a form that does not cause errors when used with `dapp test --replay`
+- Stepping through the debugger with `shift + n` now always skips positions in the bytecode that do not have a corresponding position in the solidity source map
 
 ## [0.48.1] - 2021-09-08
 
