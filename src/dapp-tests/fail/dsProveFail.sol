@@ -68,7 +68,7 @@ contract SolidityTest is DSTest, DSMath {
 
         uint expected = usr == address(this)
                         ? 0    // self transfer is a noop
-                        : amt; // otherwise `amt` has been transfered to `usr`
+                        : amt; // otherwise `amt` has been transferred to `usr`
         assertEq(expected, postbal - prebal);
     }
 

@@ -104,7 +104,7 @@ Available options:
                            point
   --solver TEXT            Used SMT solver: z3 (default) or cvc4
   --smtdebug               Print smt queries sent to the solver
-  --assertions [WORD256]   Comma seperated list of solc panic codes to check for
+  --assertions [WORD256]   Comma separated list of solc panic codes to check for
                            (default: everything except arithmetic overflow)
   --ask-smt-iterations INTEGER
                            Number of times we may revisit a particular branching

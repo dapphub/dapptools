@@ -132,7 +132,7 @@ data Command w
       , maxIterations :: w ::: Maybe Integer      <?> "Number of times we may revisit a particular branching point"
       , solver        :: w ::: Maybe Text         <?> "Used SMT solver: z3 (default) or cvc4"
       , smtdebug      :: w ::: Bool               <?> "Print smt queries sent to the solver"
-      , assertions    :: w ::: Maybe [Word256]    <?> "Comma seperated list of solc panic codes to check for (default: everything except arithmetic overflow)"
+      , assertions    :: w ::: Maybe [Word256]    <?> "Comma separated list of solc panic codes to check for (default: everything except arithmetic overflow)"
       , askSmtIterations :: w ::: Maybe Integer   <?> "Number of times we may revisit a particular branching point before we consult the smt solver to check reachability (default: 5)"
       }
   | Equivalence -- prove equivalence between two programs

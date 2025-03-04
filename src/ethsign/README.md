@@ -26,4 +26,4 @@ COMMANDS:
 ```
 ## Installation
 
-`ethsign` is distrubuted as part of the [Dapp tools suite](../../README.md).
+`ethsign` is distributed as part of the [Dapp tools suite](../../README.md).

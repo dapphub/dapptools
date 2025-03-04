@@ -40,7 +40,7 @@ namespace ethjet_ff {
   // for loading an element of F_{q^2} (a coordinate of G_2)
   // consumes 64 bytes
   alt_bn128_Fq2 read_Fq2_element (uint8_t *in) {
-    // suprising "big-endian" encoding
+    // surprising "big-endian" encoding
     alt_bn128_Fq x0 = read_Fq_element(in+32);
     alt_bn128_Fq x1 = read_Fq_element(in);
 

@@ -3,7 +3,7 @@ set -e
 shopt -s nullglob
 
 # To run the unit tests as fast as possible, we need to avoid serial
-# blockchain interactions.  Preferrably we would be done in two
+# blockchain interactions.  Preferably we would be done in two
 # blocks, one for creating contracts, one for running the tests
 # against them.
 #
